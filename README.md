@@ -28,3 +28,7 @@ kitchen one. It runs without a model and escalates only on errors.
 
 The product and architecture decision and the R&D plan live in a design
 document (private for now).
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).
