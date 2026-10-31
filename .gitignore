@@ -1,0 +1,6 @@
+/bin/
+/dist/
+*.wasm
+*.db
+*.sqlite3
+.env
