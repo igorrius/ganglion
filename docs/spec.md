@@ -476,7 +476,7 @@ physical action, notification — all without an LLM.
 | Condition | Only while the grid is down. If the inverter drains the battery even with grid, drop this condition |
 | Restore | +10% hysteresis: big at ≥ 60%, kitchen at ≥ 50%; or when the grid returns — one at a time, 1 min apart |
 | Debounce | Each plug switches at most once per 15 min |
-| Polling | 30 min with grid, 5 min without (at 5 kW, 10% of a 10 kWh battery is gone in ≈ 12 min). Check DeyeCloud rate limits in P0 |
+| Polling | 30 min with grid, 5 min without (at 5 kW, 10% of a 10 kWh battery is gone in ≈ 12 min); at most 288 calls a day, about 9% of DeyeCloud's free 100,000 calls a month in the worst case. On HTTP 429 back off, honouring `Retry-After` (task 0.7) |
 | Data freshness | Older than 20 min — switch nothing, report it |
 | Manual override | Someone switched a plug on by hand — automation stays off it for 2 hours and reports it |
 | Kill switches | KV flag per plug and a global one; off means notifications only. Telegram command |
@@ -501,9 +501,11 @@ The bot still answers "how is the battery?" through the `deye.status` tool.
 - **Local (LAN protocol, device key)** — only from a runner at home, but no
   dependency on the cloud or the internet.
 
-The flow matters precisely during a power cut. The cloud path works only
-while the home internet is powered by the inverter; otherwise a home runner
-with local access is needed — a natural reason for P2.
+The flow matters precisely during a power cut. The home router runs on the
+inverter and its own battery, and on 2026-11-01 DeyeCloud kept serving fresh
+data during an outage, so the cloud path works when it is needed (task 0.7).
+A home runner with LAN access (P2) adds independence from the cloud but is
+not required for the first flow.
 
 ### 8.4. Checks before enabling
 
@@ -702,7 +704,7 @@ with a gate; the next phase does not start until the gate is passed.
 | 0.4 | Read the MCP transport (Streamable HTTP) and A2A specs | Recorded what part of the 9.1 protocol they cover |
 | 0.5 | Measure runner RAM (wazero + embedded NATS) on a Pi or in a container limited to 128 MB | Estimates in the 7.5 table replaced with measurements |
 | 0.6 | Access to Tuya plugs: cloud or local key | A plug switches on/off from Go code; path chosen |
-| 0.7 | Does the home internet stay up on the inverter during an outage; DeyeCloud limits for polling every 5 min | Answers recorded; they inform 0.6 and the P2 timeline |
+| 0.7 | Does the home internet stay up on the inverter during an outage; DeyeCloud limits for polling every 5 min | Done: [research note](research/2026-11-01-outage-connectivity-and-deye-limits.md); internet outlasts the inverter; DeyeCloud quota 100,000 calls a month, worst case uses ~10% |
 
 ### 10.2. P1 · All-in-one — scope and acceptance
 
@@ -730,7 +732,7 @@ fallback until the gate is passed.
 | Question | Options | Leaning towards | Decided by |
 |---|---|---|---|
 | Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Not chosen; P0 numbers (ADR-0011) favour Rust or TinyGo over standard Go | Start of P3: how reliably the model writes and fixes each, plus the P0 numbers |
-| Tuya access | Cloud · LAN | — | P0, tasks 0.6–0.7 |
+| Tuya access | Cloud · LAN | Cloud for P1: the internet stays up during outages (0.7); LAN later with a home runner | P0, task 0.6 |
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
 | History and tool format | Own · Anthropic Messages · OpenAI | Neutral own format + MCP for tools | Two providers in P1 |
 | First API provider | Anthropic · Gemini · OpenAI-compatible | OpenAI-compatible | Price and quality of a cheap model on real turns |
