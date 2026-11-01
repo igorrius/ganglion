@@ -28,6 +28,11 @@ Start here when coming back to the project.
   `cells/virtual`, `sqlitedb` ([plan](plans/p1-m1-cells.md)).
 - **Next:** M2 delivery and Telegram, then the agent (M3) — agent first
   after its foundations ([ADR-0015](adr/0015-agent-first-p1.md)).
+  - Start M2 by writing its step-by-step plan (`docs/plans/p1-m2-*.md`) from
+    the M2 table in the [phase plan](plans/p1-all-in-one.md), with decision
+    D-2 (own Bot API client) as an ADR.
+  - Live checks need a separate test bot: `TELEGRAM_TEST_BOT_TOKEN` in
+    `.env`. Everything before that runs against a fake Bot API in tests.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.
