@@ -20,9 +20,20 @@ How to read it:
 
 ## 1. What we are building
 
-ganglion is an open-source distributed agent network in Go for self-hosted
-and edge/IoT setups. The name means a nerve node: reflexes are handled
-locally, without the "brain".
+ganglion is an **agent**: a model-driven assistant that talks to people,
+remembers, and designs and maintains its own automations. It is open source,
+written in Go, for self-hosted and edge/IoT setups. Everything else in this
+spec is the agent's body:
+
+| Part | Role in the agent | Where |
+|---|---|---|
+| Brain | Agent loop, router, models, memory, skills | Core and workers |
+| Nervous system | Guaranteed delivery: inbox/outbox, later NATS between nodes | All roles |
+| Senses and hands | State cells: sensors, switches, confirmation requests (ADR-0014) | Core and edges |
+| Reflexes | WASM modules that run without the model and escalate exceptions | Edge runners |
+
+The name means a nerve node: reflexes are handled locally, without the
+"brain" — but the brain designs them, watches them and changes them.
 
 - **Core** holds conversation history, memory, the model router and
   guaranteed delivery.
@@ -37,9 +48,11 @@ there itself. The basic assistant features — conversation, memory,
 reminders — exist too and use the same mechanisms: chat is one transport,
 skills are skills and modules, reminders are flows.
 
-**Core hypothesis:** a regular task runs as a WASM module without a model and
-calls the model only on exceptions. Tested in P1 on the real Deye battery
-monitor.
+**Core hypothesis:** the agent can hand a regular task to a reflex — a WASM
+module that runs without a model and calls the model only on exceptions —
+and keep improving the system on request. Tested in P1 on the real Deye
+battery monitor and on configuration changes the agent proposes and the
+owner approves; in P3 the agent writes the modules itself.
 
 **First user** — the author: a family Telegram bot and Deye inverter
 monitoring with load shedding.
@@ -164,7 +177,7 @@ core process.
 | Agent loop | core | Model → tool calls → next step, with a step limit | own, in Go | P1 |
 | Router | core | Choice of model and tool execution location, fallback chain | rules from `SKILL.md` + node registry | P1 (rules) |
 | Model providers | core or worker | OpenAI-compatible (incl. Ollama), later Anthropic Messages; translating MCP tools to the API's format | net/http | P1 (one API) |
-| claude CLI worker | worker | Tasks on the owner's subscription: write a module, analyse logs | unmodified `claude -p` | P1 |
+| claude CLI worker | worker | Tasks on the owner's subscription: write a module, analyse logs | unmodified `claude -p` | P2 (ADR-0015) |
 | Tools and MCP | core, edge | `memory.*`, `schedule.*`, `message.send` in the core; `device.*` on the edge | MCP stdio / HTTP | P1 |
 | WASM runtime | edge | Running modules with host functions from the manifest | wazero, own ABI (ADR-0011) | P0 (spike), P1 |
 | Action policies | core defines, edge enforces | Autonomous / confirm / forbid, limits, `ttl`, audit | declarative config | P1 (base), P2 |
@@ -697,6 +710,7 @@ replay on history → approval → shadow → rollout.
 
 | Level | What the agent creates | Core rebuild | Isolation | Decision |
 |---|---|---|---|---|
+| 0. Configuration | Changes to bindings, thresholds, observers, cell backends — proposed, approved by the owner, validated, committed to git | no | validation + approval; rollback | Yes, P1 (ADR-0015) |
 | 1. Skills | Markdown instructions | no | not needed | Yes, P1 |
 | 2. Scripts | Python/sh next to a skill | no | filesystem and network sandbox | Yes, P1 |
 | 3. MCP modules | A separate process + manifest with permissions | no | process, limits, granted secrets | Yes, the main path, P3 |
@@ -716,8 +730,8 @@ with a gate; the next phase does not start until the gate is passed.
 | Phase | What we do | Exit gate |
 |---|---|---|
 | **P0 · Recon** | Repository skeleton; Deye monitor hand-written in WASM with `http.fetch`; evaluate Extism, MCP transports and A2A; compare module languages (TinyGo, Go, Rust); measure runner RAM | The module runs in wazero; resources measured; ABI decided (done: own ABI, ADR-0011) |
-| **P1 · All-in-one** | Core + runner in one process: Telegram, inbox/outbox, history, rule-based router, one API provider + claude CLI worker; Deye module and load-shedding flow in production after a week of shadow mode; migrate the family bot | Deye runs 2 weeks without the model; the bot replaces the current one and costs less |
-| **P2 · Network** | Runner on a separate Pi; protocol v0 over NATS (leaf + JetStream, JWT/NKeys); desired state; watchdog; MQTT devices; policies on the runner; embedding memory; router classifier | Link loss without data loss; module update on an edge and rollback with one command |
+| **P1 · All-in-one** | Core + runner in one process: state cells, inbox/outbox and Telegram, then the agent (history, rule-based router, one API provider, memory, skills, policies); Deye module and load-shedding flow as its reflexes, in production after a week of shadow mode; the agent changes the system's configuration with the owner's approval; migrate the family bot ([plan](plans/p1-all-in-one.md)) | Deye runs 2 weeks without the model; the bot replaces the current one and costs less |
+| **P2 · Network** | claude CLI worker; runner on a separate Pi; protocol v0 over NATS (leaf + JetStream, JWT/NKeys); desired state; watchdog; MQTT devices; policies on the runner; embedding memory; router classifier | Link loss without data loss; module update on an edge and rollback with one command |
 | **P3 · Skill compilation** | The model writes contract, code and tests; build on a worker; signed one-click install; repair on `module.crashloop`; agent-written MCP modules; Home Assistant | The model compiled and updated a module on its own; public release 0.1 |
 
 ### 10.1. P0 · Recon — tasks and acceptance
@@ -734,7 +748,8 @@ with a gate; the next phase does not start until the gate is passed.
 
 ### 10.2. P1 · All-in-one — scope and acceptance
 
-Scope: sections 7.1–7.8 and 8 in full.
+Scope: sections 7.1–7.8 and 8 in full. Milestones, tasks, decisions and the
+cut list are in the [P1 phase plan](plans/p1-all-in-one.md).
 
 Acceptance:
 
@@ -746,6 +761,9 @@ Acceptance:
 - The Deye module runs on cron without the model; the load-shedding flow has
   passed a week of shadow mode and is enabled; R-LS-2 invariants are covered
   by tests.
+- The agent applies a configuration change the owner approved (for example
+  where boiler notices go), refuses one that breaks a flow invariant, and
+  rolls back on request.
 - **Gate:** Deye runs two weeks without the model; the family bot has
   migrated and costs less than the current setup.
 

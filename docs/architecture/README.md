@@ -16,6 +16,9 @@ Related: [the spec](../spec.md) says what we build and in which phase;
 
 ## The idea in one picture
 
+ganglion is an agent: the core and the workers are its brain, the rest is its
+body (spec section 1).
+
 ```mermaid
 flowchart LR
     people["People<br/>Telegram"] --> core

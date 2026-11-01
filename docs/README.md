@@ -24,8 +24,9 @@ Start here when coming back to the project.
     ([ADR-0014](adr/0014-state-cells.md)).
   - 0.7 home internet outlasts the inverter; DeyeCloud quota is ample
     ([research](research/2026-11-01-outage-connectivity-and-deye-limits.md)).
-- **Next:** P1 — state cells, SQLite inbox/outbox, Telegram, the
-  load-shedding flow on `virtual` cells.
+- **Next:** P1 per the [phase plan](plans/p1-all-in-one.md): M1 state cells
+  and M2 delivery and Telegram, then the agent (M3) — agent first after its
+  foundations ([ADR-0015](adr/0015-agent-first-p1.md)).
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.
@@ -39,6 +40,7 @@ Update this block when a task or phase closes.
 | Why was it decided this way, and what else was considered? | [adr/](adr/README.md) |
 | Where is X in the code, and does it exist yet? | [architecture/05-code-map.md](architecture/05-code-map.md) |
 | What did we find out before deciding? | [research/](research/) |
+| What is the plan for the current phase? | [plans/](plans/) |
 
 Suggested path after a long break: this page → the
 [one-picture overview](architecture/README.md#the-idea-in-one-picture) →

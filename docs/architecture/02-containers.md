@@ -54,7 +54,7 @@ flowchart LR
 | WASM modules | Compiled reflexes with manifests | TinyGo / Rust / AssemblyScript | P0 (Deye by hand), P3 (by the model) |
 | State cells | Desired and reported state of loads, sensors, kill switches, confirmations; backends and observers (ADR-0014) | KV: memory or SQLite in P1, NATS KV in P2 | P1 |
 | API provider client | Chat completions | net/http | P1 |
-| claude CLI worker | Standalone heavy tasks | unmodified `claude -p` | P1 |
+| claude CLI worker | Standalone heavy tasks | unmodified `claude -p` | P2 (ADR-0015) |
 | Bus | Messages between roles; across nodes buffering, KV, object store | in-process (P1), NATS (P2) | P1 / P2 |
 
 ## Deployment: P1, all-in-one
@@ -73,7 +73,7 @@ flowchart TB
         db[("SQLite file")]
         repo[("memory git repo")]
     end
-    pc["Owner's PC<br/>claude CLI worker"]
+    pc["Owner's PC<br/>claude CLI worker, P2"]
     c --- e
     c --- w
     c --- db
