@@ -81,6 +81,11 @@ We build from scratch. Neighbours are a source of ideas, not a base.
 7. **Build little where something ready exists.** Chat, providers and
    channels stay minimal; the effort goes into the tool pool and skill
    compilation.
+8. **Minimal memory is a design goal.** Every role must run comfortably on the
+   cheapest hosts: a Raspberry Pi or a small container of about 128 MB. Memory
+   is measured (`cmd/modbench`) and weighed in every decision about
+   dependencies, runtimes and module languages; a Pi is one target among
+   others, not the reference.
 
 ## 3. Deliberately NOT in 0.x
 
@@ -370,15 +375,21 @@ escalate:                    # when to call the model
   and a failed request is an error the module handles, not a trap. Module
   glue exists for Go/TinyGo (`pdk/guest`) and Rust (`modules/deye-rs`); a new
   language needs its own small glue.
+- **R-RUN-6.** The runner process sets a soft memory limit (`GOMEMLIMIT`) from
+  its config, and edge JetStream streams have explicit size limits, so a long
+  outage cannot grow memory or the backlog without bound (task 0.5).
 
-Target resources (estimates, measured in P0):
+Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
+[research note](research/2026-11-01-runner-memory.md)); arm64 confirmation
+on a Pi is pending:
 
 | What | Memory | Note |
 |---|---|---|
-| Runner with no modules | 15–25 MB RAM, 20–30 MB binary | Go + wazero + NATS client |
-| Embedded leaf node with JetStream | +10–30 MB RAM | Depends on buffer size and stream count |
-| One module | As the manifest allows, usually 1–16 MB | |
-| Minimum hardware | Pi Zero 2 W (512 MB, arm64) | |
+| Runner with one module | 17–38 MiB steady, 23–78 MiB peak at load | Rust lowest, standard Go highest; the peak is wazero compiling the module |
+| Leaf node with JetStream | 18 MiB idle; 45 MiB with 117 MB buffered and `GOMEMLIMIT=40MiB` (80 MiB without) | Set a soft limit and stream size limits |
+| Edge binary | ~9 MB runner + wazero today; ~25–30 MB with embedded NATS (estimate) | Cross-compiled for arm64 |
+| One module | 161 KB (Rust) to 3.6 MB (Go) of `.wasm` | Memory per manifest limit |
+| Target hosts | A small container of about 128 MB, or a Pi Zero 2 W (512 MB, arm64) | Principle 8 |
 | Microcontrollers | — | A runner does not fit; they connect over MQTT |
 
 ### 7.6. Action policies and risk classes
@@ -702,7 +713,7 @@ with a gate; the next phase does not start until the gate is passed.
 | 0.2 | Rewrite `deye.py` in TinyGo → WASM; run it in wazero with `http.fetch`, `state`, `secret.get` | The module returns the same SOC as `deye.py` against the real API |
 | 0.3 | The same through Extism; build the Deye reader with TinyGo, Go and Rust under both ABIs | [ADR-0011](adr/0011-module-abi.md) accepted: own ABI or Extism, backed by a 2 × 3 table of module size, call time and runner RAM |
 | 0.4 | Read the MCP transport (Streamable HTTP) and A2A specs | Recorded what part of the 9.1 protocol they cover |
-| 0.5 | Measure runner RAM (wazero + embedded NATS) on a Pi or in a container limited to 128 MB | Estimates in the 7.5 table replaced with measurements |
+| 0.5 | Measure runner RAM (wazero + embedded NATS) on a Pi or in a container limited to 128 MB | Done: fits a 128 MB container ([research note](research/2026-11-01-runner-memory.md)); a Pi run later confirms arm64 timings, not a gate |
 | 0.6 | Access to Tuya plugs: cloud or local key | A plug switches on/off from Go code; path chosen |
 | 0.7 | Does the home internet stay up on the inverter during an outage; DeyeCloud limits for polling every 5 min | Done: [research note](research/2026-11-01-outage-connectivity-and-deye-limits.md); internet outlasts the inverter; DeyeCloud quota 100,000 calls a month, worst case uses ~10% |
 

@@ -60,6 +60,7 @@ type report struct {
 	RSSBaseMiB       float64 `json:"rss_base_mib"`
 	RSSAfterLoadMiB  float64 `json:"rss_after_load_mib"`
 	RSSAfterCallsMiB float64 `json:"rss_after_calls_mib"`
+	RSSPeakMiB       float64 `json:"rss_peak_mib"` // high-water mark, includes compilation
 	HeapInuseMiB     float64 `json:"heap_inuse_mib"`
 	LastResult       string  `json:"last_result"`
 }
@@ -175,6 +176,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	runtime.ReadMemStats(&ms)
 	r.HeapInuseMiB = float64(ms.HeapInuse) / (1 << 20)
 	r.RSSAfterCallsMiB = rssMiB()
+	r.RSSPeakMiB = peakRSSMiB()
 
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
@@ -254,6 +256,24 @@ func rssMiB() float64 {
 	}
 	pages, _ := strconv.ParseFloat(f[1], 64)
 	return pages * float64(os.Getpagesize()) / (1 << 20)
+}
+
+// peakRSSMiB reads the process's peak resident set size (VmHWM) from /proc.
+func peakRSSMiB() float64 {
+	b, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return -1
+	}
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if rest, ok := strings.CutPrefix(line, "VmHWM:"); ok {
+			f := strings.Fields(rest) // "12345 kB"
+			if len(f) == 2 {
+				kb, _ := strconv.ParseFloat(f[0], 64)
+				return kb / 1024
+			}
+		}
+	}
+	return -1
 }
 
 func millis(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }

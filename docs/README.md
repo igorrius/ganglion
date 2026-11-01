@@ -16,7 +16,10 @@ Start here when coming back to the project.
   [ADR-0013](adr/0013-protocol-envelope-around-stateless-mcp.md)
   0.7 home internet outlasts the inverter; DeyeCloud quota is ample —
   [research note](research/2026-11-01-outage-connectivity-and-deye-limits.md)
-- **Next:** 0.5 runner RAM on a Pi; 0.6 Tuya plug access (cloud first)
+  0.5 runner memory — fits a 128 MB container with room to spare
+  ([research note](research/2026-11-01-runner-memory.md)); a Pi run later is a
+  confirmation, not a gate
+- **Next:** 0.6 Tuya plug access (cloud first)
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

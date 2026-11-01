@@ -84,6 +84,9 @@ func TestBenchDeyeModuleEndToEnd(t *testing.T) {
 	if r.Calls != 5 || r.Failures != 0 || r.WasmBytes == 0 || r.CallP50Micros <= 0 || r.RSSAfterCallsMiB <= 0 {
 		t.Fatalf("report = %+v", r)
 	}
+	if r.RSSPeakMiB < r.RSSAfterCallsMiB {
+		t.Fatalf("peak RSS %.1f MiB is below the final RSS %.1f MiB", r.RSSPeakMiB, r.RSSAfterCallsMiB)
+	}
 	if !strings.Contains(r.LastResult, `"soc"`) {
 		t.Fatalf("last result %q lacks a sample", r.LastResult)
 	}
