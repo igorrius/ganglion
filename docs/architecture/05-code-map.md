@@ -22,8 +22,10 @@ interfaces only; **planned** — not in the repository yet.
 | Agent loop and actors | — | planned (P1) | 7.2 | — |
 | Policies | — | planned (P1) | 7.6 | — |
 | Memory | — | planned (P1) | 7.7 | — |
-| Runner (wazero, supervisor) | — | planned (P0 spike, P1) | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md) |
-| Deye monitor module | — | planned (P0, task 0.2) | 8 | — |
+| Runner: wazero host, manifest, limits | `runner` | done (P0 spike, own ABI); supervisor and scheduler planned (P1) | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md), [0012](../adr/0012-yaml-manifests.md) |
+| Module-side kit: `Host`, wire types, WASM glue | `pdk` | done (P0, own ABI) | 7.5 | [0011](../adr/0011-module-abi.md) |
+| Deye reader module | `modules/deye` (logic), `modules/deye/wasm` (module), `modules/deye/deye-reader.yaml` | done; live acceptance pending | 8.3 | [0005](../adr/0005-wasm-on-wazero-for-modules.md) |
+| Run a module once (dev and acceptance tool) | `cmd/modrun` | done (P0) | 10.1 | — |
 | Load-shedding flow | — | planned (P1) | 8 | — |
 | Core ↔ edge protocol, NATS | — | planned (P2) | 9.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 
@@ -38,9 +40,15 @@ flowchart BT
     router["router"]
     node["node"]
     cmd["cmd/ganglion"] --> node
+    pdk["pdk"]
+    deye["modules/deye"] --> pdk
+    runner["runner"] --> pdk
+    modrun["cmd/modrun"] --> runner
 ```
 
-- `event` is the leaf: it imports nothing from the project.
+- `event` and `pdk` are leaves: they import nothing from the project.
+- Module code (`modules/*`) depends only on `pdk`, never on `runner`, so it
+  compiles to WASM.
 - Interface packages (`transport`, `queue`, `provider`, `router`) depend only
   on `event` and the standard library, so a node can be embedded as a
   library (spec principle 5).

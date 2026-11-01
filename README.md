@@ -32,7 +32,14 @@ Requires Go 1.26 and, for linting, golangci-lint v2.
 make check                      # lint, test, build
 ./bin/ganglion --version
 ./bin/ganglion --roles core,edge,worker
+
+make modules modrun             # build the Deye module (Go) and the module runner
+./bin/modrun -wasm bin/deye-reader.go.wasm \
+  -manifest modules/deye/deye-reader.yaml -config inverter_sn=<serial>
 ```
+
+`make modules-tinygo` builds the same module with TinyGo 0.44+. Module
+secrets are read from `.env`.
 
 ## Design
 
