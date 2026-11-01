@@ -227,3 +227,5 @@ func TestWatchClosesWhenContextEnds(t *testing.T) {
 		t.Fatal("watch did not close")
 	}
 }
+
+func jsonUnmarshal(b []byte, v any) error { return json.Unmarshal(b, v) }
