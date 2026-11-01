@@ -1,6 +1,6 @@
 // Package runnertest is the conformance suite every module host must pass:
 // each host function, each manifest restriction and each limit, exercised
-// through the probe module. ADR-0011 compares hosts that pass it.
+// through the probe module.
 package runnertest
 
 import (
@@ -31,9 +31,9 @@ type Instance interface {
 // Loader loads a module the way a host under test does.
 type Loader func(ctx context.Context, wasm []byte, m runner.Manifest, deps runner.Deps) (Instance, error)
 
-// BuildProbe compiles the probe module for an ABI ("own" or "extism") with
-// the standard Go toolchain and returns the .wasm bytes.
-func BuildProbe(abi string) ([]byte, error) {
+// BuildProbe compiles the probe module with the standard Go toolchain and
+// returns the .wasm bytes.
+func BuildProbe() ([]byte, error) {
 	dir, err := os.MkdirTemp("", "ganglion-probe")
 	if err != nil {
 		return nil, err
@@ -41,10 +41,10 @@ func BuildProbe(abi string) ([]byte, error) {
 	defer func() { _ = os.RemoveAll(dir) }()
 	out := filepath.Join(dir, "probe.wasm")
 	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", out,
-		"github.com/igorrius/ganglion/runner/runnertest/probe/"+abi)
+		"github.com/igorrius/ganglion/runner/runnertest/probe/wasm")
 	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm")
 	if b, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("build probe/%s: %v\n%s", abi, err, b)
+		return nil, fmt.Errorf("build probe: %v\n%s", err, b)
 	}
 	return os.ReadFile(out)
 }
@@ -95,8 +95,7 @@ func result(t *testing.T, out pdk.Output) map[string]any {
 	return m
 }
 
-// Run runs the suite against a host. probe is the probe module built for
-// that host's ABI.
+// Run runs the suite against a host. probe is the module from BuildProbe.
 func Run(t *testing.T, load Loader, probe []byte) {
 	fresh := func() *env {
 		return &env{

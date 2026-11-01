@@ -38,7 +38,8 @@ make modules modrun             # build the Deye module (Go) and the module runn
   -manifest modules/deye/deye-reader.yaml -config inverter_sn=<serial>
 ```
 
-`make modules-tinygo` builds the same module with TinyGo 0.44+. Module
+`make modules-tinygo` and `make modules-rust` build the same module with
+TinyGo 0.44+ and Rust (`wasm32-wasip1`); `make bench` compares them. Module
 secrets are read from `.env`.
 
 ## Design

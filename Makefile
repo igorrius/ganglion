@@ -13,19 +13,18 @@ lint:
 
 check: lint test build
 
-# WASM modules: deye-reader for both ABIs (own, extism) and three
-# toolchains (Go, TinyGo, Rust). TinyGo and Rust are optional and must be on
-# PATH; they are compared in ADR-0011 but not built in CI.
-ABIS := own extism
-
+# The deye-reader module, built with three toolchains (Go, TinyGo, Rust) to
+# compare them (ADR-0011). TinyGo and Rust are optional, must be on PATH,
+# and are not built in CI.
 modules:
-	for abi in $(ABIS); do GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o bin/deye-reader.$$abi-go.wasm ./modules/deye/$$abi || exit 1; done
+	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o bin/deye-reader.go.wasm ./modules/deye/wasm
 
 modules-tinygo:
-	for abi in $(ABIS); do tinygo build -target=wasip1 -buildmode=c-shared -opt=2 -no-debug -o bin/deye-reader.$$abi-tinygo.wasm ./modules/deye/$$abi || exit 1; done
+	tinygo build -target=wasip1 -buildmode=c-shared -opt=2 -no-debug -o bin/deye-reader.tinygo.wasm ./modules/deye/wasm
 
 modules-rust:
-	for abi in $(ABIS); do (cd modules/deye-rs && cargo build --quiet --release --target wasm32-wasip1 --features $$abi) && cp modules/deye-rs/target/wasm32-wasip1/release/deye_reader.wasm bin/deye-reader.$$abi-rust.wasm || exit 1; done
+	cd modules/deye-rs && cargo build --quiet --release --target wasm32-wasip1
+	cp modules/deye-rs/target/wasm32-wasip1/release/deye_reader.wasm bin/deye-reader.rust.wasm
 
 modrun:
 	go build -o bin/modrun ./cmd/modrun
@@ -35,6 +34,6 @@ modbench:
 
 # Measure every built deye-reader variant, one process each.
 bench: modbench
-	for f in bin/deye-reader.*.wasm; do abi=$$(basename $$f .wasm | cut -d. -f2 | cut -d- -f1); \
-	  ./bin/modbench -wasm $$f -abi $$abi -manifest modules/deye/deye-reader.yaml \
+	for f in bin/deye-reader.*.wasm; do \
+	  ./bin/modbench -wasm $$f -manifest modules/deye/deye-reader.yaml \
 	    -replay cmd/modbench/testdata/deye-replay.json -config inverter_sn=2400000001 -n 300 || exit 1; done

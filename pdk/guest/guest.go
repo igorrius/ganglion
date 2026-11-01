@@ -1,9 +1,9 @@
 //go:build wasip1
 
-// Package ownabi implements pdk.Host for ganglion's own module ABI: host
-// functions in the "ganglion" import module, JSON across the boundary.
-// One of the two variants compared in ADR-0011; see runner for the host side.
-package ownabi
+// Package guest is the module side of the ganglion ABI (ADR-0011): it
+// implements pdk.Host on top of the host functions in the "ganglion" import
+// module, with JSON across the boundary. The host side is package runner.
+package guest
 
 import (
 	"encoding/json"
@@ -123,7 +123,7 @@ var out []byte
 // Serve runs one handle call. A module's exported handle function calls it:
 //
 //	//go:wasmexport handle
-//	func handle(inLen uint32) uint64 { return ownabi.Serve(inLen, run) }
+//	func handle(inLen uint32) uint64 { return guest.Serve(inLen, run) }
 //
 // The result packs the Output's address (high 32 bits) and length.
 func Serve(inLen uint32, fn func(pdk.Host, pdk.Input) (any, error)) uint64 {

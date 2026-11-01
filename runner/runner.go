@@ -1,7 +1,7 @@
 // Package runner runs WASM modules (reflexes) on wazero with only the host
 // functions their manifest grants (docs/spec.md, section 7.5).
 //
-// P0 status: this is the "own ABI" variant of the spike for ADR-0011. The
+// The ABI (ADR-0011): the
 // module exports handle(inLen u32) u64 and imports host functions from the
 // "ganglion" module; data crosses the boundary as JSON (see package pdk).
 // Each call gets a fresh module instance, so a trap or timeout never leaves

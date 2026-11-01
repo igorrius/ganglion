@@ -1,6 +1,6 @@
 # ADR-0011: Module ABI — own host interface or Extism
 
-- **Status:** Proposed — recommendation below, awaiting the owner's decision
+- **Status:** Accepted (own ABI)
 - **Date:** 2026-11-01
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules), R-RUN-5, P0 task 0.3
@@ -21,8 +21,9 @@ P0 built both variants end to end and measured them with three toolchains.
 
 Host functions in a `ganglion` import module; JSON across the boundary;
 variable-length answers copied out with `take` so the host never allocates
-in module memory. Host side: `runner`. Module side: `pdk/ownabi` (Go,
-TinyGo), `modules/deye-rs/src/own.rs` (Rust).
+in module memory. Host side: `runner`. Module side: `pdk/guest` (Go,
+TinyGo), `modules/deye-rs/src/guest.rs` (Rust); named `pdk/ownabi` and
+`own.rs` during the comparison.
 
 ### B. Extism
 
@@ -30,7 +31,8 @@ A plugin framework on wazero. Go SDK v1.7.1 (BSD-3) on the host; PDKs for
 Go/TinyGo, Rust and other languages. HTTP, config and log are built in;
 state and secrets are custom host functions in `extism:host/user`. Host
 side: `runner/extismrun`. Module side: `pdk/extismabi`,
-`modules/deye-rs/src/extism_glue.rs`.
+`modules/deye-rs/src/extism_glue.rs`. Removed after this decision; the code
+is in commit 89db64f.
 
 ## What was built and checked
 
@@ -74,9 +76,10 @@ RSS includes the Go host process (about 12 MiB before loading anything).
 | Dependency health | None | Go SDK: last release 2025-03, last commit 2025-05, built against wazero 1.9; ~186 stars. The Extism core is active (2026-10) |
 | Extra dependencies | None beyond wazero | gobwas/glob, OpenTelemetry protos, protobuf, wabin |
 
-## Recommendation
+## Decision
 
-**A, own ABI.** Both variants work, but the deciding differences favour A:
+**A, own ABI** (accepted 2026-11-01). Both variants work, but the deciding
+differences favour A:
 
 1. **Policies need to see every request.** Physical-action and network
    policies are enforced by the node that executes (R-POL-1). With Extism the
@@ -95,13 +98,13 @@ What we give up: ready-made PDKs for languages we have not covered
 (AssemblyScript, Zig, JavaScript…). If P3 shows the model needs one of those,
 writing its PDK is part of that work.
 
-## Consequences (if accepted)
+## Consequences
 
 - `runner` (own ABI) is the module host from P1 on; the wire format becomes
   versioned and documented in `pdk`.
-- `runner/extismrun`, `pdk/extismabi`, `modules/deye/extism` and the Extism
-  Rust glue are removed together with the Extism dependencies; the
-  conformance suite stays for future hosts.
+- Done: `runner/extismrun`, `pdk/extismabi`, `modules/deye/extism` and the
+  Extism Rust glue were removed together with the Extism dependencies; the
+  conformance suite (`runner/runnertest`) stays for future hosts.
 - Language for model-written modules stays open (spec section 11) and is
   decided at the start of P3. These numbers favour Rust or TinyGo for edge
   modules: standard Go modules are 5–20× larger, slower to load, and cost

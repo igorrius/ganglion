@@ -3,8 +3,7 @@
 //
 // Module logic depends only on the Host interface, so it can be tested with
 // plain `go test` and then compiled to WASM unchanged. The WASM glue that
-// implements Host lives in two subpackages, one per ABI compared in
-// ADR-0011: ownabi (ganglion's own host functions) and extismabi (Extism).
+// implements Host is package guest (ADR-0011).
 package pdk
 
 import (

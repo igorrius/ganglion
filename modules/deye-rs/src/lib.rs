@@ -1,14 +1,11 @@
 //! The deye-reader module in Rust: the same logic as `modules/deye` (Go),
-//! built for ganglion's own ABI (feature `own`) or for Extism (feature
-//! `extism`). It exists to compare module size and speed for ADR-0011.
+//! kept to compare module toolchains (ADR-0011). The ABI glue is compiled
+//! only for wasm32.
 
 pub mod logic;
 
-#[cfg(feature = "own")]
-mod own;
-
-#[cfg(feature = "extism")]
-mod extism_glue;
+#[cfg(target_arch = "wasm32")]
+mod guest;
 
 use logic::{Error, Host};
 

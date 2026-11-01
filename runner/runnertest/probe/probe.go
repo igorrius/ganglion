@@ -1,6 +1,6 @@
 // Package probe is a test module for runners. Its payload names one
 // operation, so the conformance suite can exercise each host function and
-// each limit. The own and extism subpackages wrap it for each ABI.
+// each limit. Subpackage wasm builds it as a module.
 package probe
 
 import (

@@ -159,7 +159,7 @@ core process.
 | Model providers | core or worker | OpenAI-compatible (incl. Ollama), later Anthropic Messages; translating MCP tools to the API's format | net/http | P1 (one API) |
 | claude CLI worker | worker | Tasks on the owner's subscription: write a module, analyse logs | unmodified `claude -p` | P1 |
 | Tools and MCP | core, edge | `memory.*`, `schedule.*`, `message.send` in the core; `device.*` on the edge | MCP stdio / HTTP | P1 |
-| WASM runtime | edge | Running modules with host functions from the manifest | wazero (possibly via Extism) | P0 (spike), P1 |
+| WASM runtime | edge | Running modules with host functions from the manifest | wazero, own ABI (ADR-0011) | P0 (spike), P1 |
 | Action policies | core defines, edge enforces | Autonomous / confirm / forbid, limits, `ttl`, audit | declarative config | P1 (base), P2 |
 | Scheduler | core, edge | Crons, catch-up after downtime; on the edge, modules run without a link | `cron_runs` table | P1 |
 | Memory | core | Facts, skills, semantic search; slices for edges | markdown in git; embeddings | P1 (files), P2 |
@@ -321,8 +321,8 @@ Modules always run inside a runner. A runner consists of:
 - **scheduler** — module cron triggers work without a link to the core;
 - **MCP subprocess host** — for non-WASM modules (Python and so on).
 
-**Module ABI.** A module exports `init`, `handle(trigger, payload) → result`
-and `health`. It sees only the host functions its manifest grants:
+**Module ABI.** A module exports `handle(trigger, payload) → result` (`init`
+and `health` are planned for P1, with the supervisor). It sees only the host functions its manifest grants:
 
 | Host function | Provides |
 |---|---|
@@ -364,12 +364,12 @@ escalate:                    # when to call the model
   event to the agent.
 - **R-RUN-4.** One artifact for ARM, x86 and RISC-V. On amd64/arm64 wazero
   compiles to native code; on 32-bit ARM and RISC-V it interprets.
-- **R-RUN-5.** "Own ABI or Extism" is decided in P0. The Extism Go SDK (on
-  wazero, BSD-3) already supports `allowed_hosts`, `max_pages`,
-  `max_http_response_bytes`, `timeout_ms`, host functions and a config map.
-  The downside is a small community (~190 stars), so the dependency is
-  assessed. Signing, desired state, supervisor and policies are ours either
-  way.
+- **R-RUN-5.** Modules use ganglion's own ABI on wazero, not Extism
+  ([ADR-0011](adr/0011-module-abi.md)): every host call, HTTP included, goes
+  through our code, so policies, audit and timeouts apply to each request,
+  and a failed request is an error the module handles, not a trap. Module
+  glue exists for Go/TinyGo (`pdk/guest`) and Rust (`modules/deye-rs`); a new
+  language needs its own small glue.
 
 Target resources (estimates, measured in P0):
 
@@ -684,7 +684,7 @@ with a gate; the next phase does not start until the gate is passed.
 
 | Phase | What we do | Exit gate |
 |---|---|---|
-| **P0 · Recon** | Repository skeleton; Deye monitor hand-written in WASM with `http.fetch`; evaluate Extism, MCP transports and A2A; compare module languages (TinyGo, Go, Rust); measure runner RAM | The module runs in wazero; resources measured; ABI decided (own or Extism) |
+| **P0 · Recon** | Repository skeleton; Deye monitor hand-written in WASM with `http.fetch`; evaluate Extism, MCP transports and A2A; compare module languages (TinyGo, Go, Rust); measure runner RAM | The module runs in wazero; resources measured; ABI decided (done: own ABI, ADR-0011) |
 | **P1 · All-in-one** | Core + runner in one process: Telegram, inbox/outbox, history, rule-based router, one API provider + claude CLI worker; Deye module and load-shedding flow in production after a week of shadow mode; migrate the family bot | Deye runs 2 weeks without the model; the bot replaces the current one and costs less |
 | **P2 · Network** | Runner on a separate Pi; protocol v0 over NATS (leaf + JetStream, JWT/NKeys); desired state; watchdog; MQTT devices; policies on the runner; embedding memory; router classifier | Link loss without data loss; module update on an edge and rollback with one command |
 | **P3 · Skill compilation** | The model writes contract, code and tests; build on a worker; signed one-click install; repair on `module.crashloop`; agent-written MCP modules; Home Assistant | The model compiled and updated a module on its own; public release 0.1 |
@@ -726,7 +726,6 @@ fallback until the gate is passed.
 
 | Question | Options | Leaning towards | Decided by |
 |---|---|---|---|
-| Module ABI | Own · Extism | Own ABI, measured and recommended in ADR-0011 | P0, task 0.3 |
 | Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Not chosen; P0 numbers (ADR-0011) favour Rust or TinyGo over standard Go | Start of P3: how reliably the model writes and fixes each, plus the P0 numbers |
 | Tuya access | Cloud · LAN | — | P0, tasks 0.6–0.7 |
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
@@ -740,7 +739,8 @@ fallback until the gate is passed.
 Each question becomes an ADR (status Proposed) when work on it starts and is
 accepted when decided; see [docs/adr](adr/README.md). Already decided: one
 process per node ([ADR-0004](adr/0004-one-binary-with-roles.md)); building
-from scratch ([ADR-0003](adr/0003-build-from-scratch.md)).
+from scratch ([ADR-0003](adr/0003-build-from-scratch.md)); the module ABI
+([ADR-0011](adr/0011-module-abi.md)).
 
 ## 12. Risks
 

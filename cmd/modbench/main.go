@@ -1,9 +1,9 @@
-// Command modbench measures a WASM module under a host ABI: module size,
+// Command modbench measures a WASM module: module size,
 // cold load time, per-call latency with a fresh instance, and the runner's
-// memory. HTTP is answered from a replay file, so the numbers compare hosts
-// and toolchains rather than the network (P0, task 0.3, ADR-0011).
+// memory. HTTP is answered from a replay file, so the numbers compare
+// modules and toolchains rather than the network (P0, ADR-0011).
 //
-//	modbench -wasm bin/deye-reader.own-tinygo.wasm -abi own \
+//	modbench -wasm bin/deye-reader.tinygo.wasm \
 //	         -manifest modules/deye/deye-reader.yaml \
 //	         -replay cmd/modbench/testdata/deye-replay.json \
 //	         -config inverter_sn=2400000001 -n 200
@@ -35,7 +35,6 @@ import (
 
 	"github.com/igorrius/ganglion/pdk"
 	"github.com/igorrius/ganglion/runner"
-	"github.com/igorrius/ganglion/runner/extismrun"
 )
 
 func main() {
@@ -51,7 +50,6 @@ func main() {
 
 type report struct {
 	Wasm             string  `json:"wasm"`
-	ABI              string  `json:"abi"`
 	WasmBytes        int     `json:"wasm_bytes"`
 	LoadMillis       float64 `json:"load_ms"`
 	FirstCallMillis  float64 `json:"first_call_ms"`
@@ -64,11 +62,6 @@ type report struct {
 	RSSAfterCallsMiB float64 `json:"rss_after_calls_mib"`
 	HeapInuseMiB     float64 `json:"heap_inuse_mib"`
 	LastResult       string  `json:"last_result"`
-}
-
-type instance interface {
-	Handle(ctx context.Context, in pdk.Input) (pdk.Output, error)
-	Close(ctx context.Context) error
 }
 
 type kvFlag map[string]string
@@ -87,7 +80,6 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("modbench", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	wasmPath := fs.String("wasm", "", "module .wasm file (required)")
-	abi := fs.String("abi", "own", "host ABI: own or extism")
 	manifestPath := fs.String("manifest", "", "module manifest .yaml (required)")
 	replayPath := fs.String("replay", "", "JSON object mapping URL paths to response bodies; __NOW__ becomes the current Unix time (required)")
 	n := fs.Int("n", 100, "number of measured calls")
@@ -129,9 +121,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	defer srv.Close()
 
 	// Every host name the module may reach is answered by the replay server.
-	// Extism always uses http.DefaultClient, so it is redirected too.
 	client := &http.Client{Transport: redirect(srv.URL), Timeout: m.Limits.Timeout}
-	http.DefaultClient.Transport = client.Transport
 
 	deps := runner.Deps{
 		// Any granted secret gets a placeholder value: the replay server
@@ -142,19 +132,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		Logger:  slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
 	}
 
-	r := report{Wasm: *wasmPath, ABI: *abi, WasmBytes: len(wasm), Calls: *n}
+	r := report{Wasm: *wasmPath, WasmBytes: len(wasm), Calls: *n}
 	r.RSSBaseMiB = rssMiB()
 
 	start := time.Now()
-	var inst instance
-	switch *abi {
-	case "own":
-		inst, err = runner.Load(ctx, wasm, m, deps)
-	case "extism":
-		inst, err = extismrun.Load(ctx, wasm, m, deps)
-	default:
-		return fmt.Errorf("unknown -abi %q (want own or extism)", *abi)
-	}
+	inst, err := runner.Load(ctx, wasm, m, deps)
 	if err != nil {
 		return err
 	}

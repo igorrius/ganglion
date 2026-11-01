@@ -2,23 +2,18 @@
 name = "deye-reader"
 version = "0.1.0"
 edition = "2024"
-description = "deye-reader module in Rust, for the ADR-0011 comparison (own ABI and Extism)"
+description = "deye-reader module in Rust (P0 comparison of module toolchains, ADR-0011)"
 license = "Apache-2.0"
 publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[features]
-own = []
-extism = ["dep:extism-pdk"]
-
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
 base64 = "0.23"
-extism-pdk = { version = "1.4.1", optional = true }
 
 [profile.release]
 opt-level = "z"

@@ -9,7 +9,7 @@ import (
 )
 
 func TestConformance(t *testing.T) {
-	probe, err := runnertest.BuildProbe("own")
+	probe, err := runnertest.BuildProbe()
 	if err != nil {
 		t.Fatal(err)
 	}

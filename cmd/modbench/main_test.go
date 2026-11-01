@@ -64,14 +64,14 @@ func TestRedirectSendsEveryHostToTheReplayServer(t *testing.T) {
 func TestBenchDeyeModuleEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	wasm := filepath.Join(dir, "deye.wasm")
-	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", wasm, "../../modules/deye/own")
+	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", wasm, "../../modules/deye/wasm")
 	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm")
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, b)
 	}
 	var stdout, stderr bytes.Buffer
 	err := run(context.Background(), []string{
-		"-wasm", wasm, "-abi", "own", "-manifest", "../../modules/deye/deye-reader.yaml",
+		"-wasm", wasm, "-manifest", "../../modules/deye/deye-reader.yaml",
 		"-replay", "testdata/deye-replay.json", "-config", "inverter_sn=2400000001", "-n", "5",
 	}, &stdout, &stderr)
 	if err != nil {

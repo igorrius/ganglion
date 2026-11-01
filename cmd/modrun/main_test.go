@@ -39,7 +39,7 @@ func TestParseEnvRejectsLinesWithoutEquals(t *testing.T) {
 func TestRunModuleEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	wasm := filepath.Join(dir, "probe.wasm")
-	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", wasm, "../../runner/runnertest/probe/own")
+	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", wasm, "../../runner/runnertest/probe/wasm")
 	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm")
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build probe: %v\n%s", err, b)
@@ -85,26 +85,5 @@ func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestRunExtismModule(t *testing.T) {
-	dir := t.TempDir()
-	wasm := filepath.Join(dir, "probe.wasm")
-	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", wasm, "../../runner/runnertest/probe/extism")
-	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm")
-	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build probe: %v\n%s", err, b)
-	}
-	manifest := filepath.Join(dir, "probe.yaml")
-	writeFile(t, manifest, "name: probe\nversion: 1\n")
-	var stdout, stderr bytes.Buffer
-	args := []string{"-abi", "extism", "-wasm", wasm, "-manifest", manifest, "-env", filepath.Join(dir, "none"),
-		"-state", filepath.Join(dir, "state.json"), "-payload", `{"op":"echo"}`}
-	if err := run(context.Background(), args, &stdout, &stderr); err != nil {
-		t.Fatalf("run: %v\n%s", err, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), `"trigger": "cron"`) && !strings.Contains(stdout.String(), `"trigger":"cron"`) {
-		t.Fatalf("output = %s, want the echoed trigger", stdout.String())
 	}
 }
