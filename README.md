@@ -24,6 +24,16 @@ The Deye battery monitor as a WASM module, plus staged load shedding through
 Tuya smart plugs: below 50% charge the big boiler turns off, below 40% the
 kitchen one. It runs without a model and escalates only on errors.
 
+## Building
+
+Requires Go 1.26 and, for linting, golangci-lint v2.
+
+```sh
+make check                      # lint, test, build
+./bin/ganglion --version
+./bin/ganglion --roles core,edge,worker
+```
+
 ## Design
 
 The implementation spec — requirements, architecture, protocol drafts and
