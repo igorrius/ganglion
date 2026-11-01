@@ -66,7 +66,7 @@ pinned by a test in the task that owns the code.
 
 | # | Milestone | Delivers | Estimate |
 |---|---|---|---|
-| M1 | State cells | Switch, sensor and request cells; `virtual` backend with fault injection; SQLite store | 0.5 weekend |
+| M1 | State cells — **done** ([plan](p1-m1-cells.md)) | Switch, sensor and request cells; `virtual` backend with fault injection; SQLite store | 0.5 weekend |
 | M2 | Delivery and Telegram | Inbox/outbox, outbox sender, Telegram transport; crash-tested echo bot | 1 weekend |
 | M3 | **The agent** | History, actors, provider, router, agent loop, memory, skills, policies; a talking agent on the test bot | 1–1.5 weekends |
 | M4 | Reflexes: runner and Deye | Config, scheduler, modules on cron writing sensor cells, exposed to the agent as tools; deployed next to the current bot | 0.5 weekend |
@@ -94,7 +94,11 @@ M1 and M2 are independent. After M3 the agent talks on the test bot; from
 M4 on, every reflex is wired to it as a tool. The "Deye two weeks without
 the model" clock of the gate starts at M4.
 
-### M1 · State cells (ADR-0014)
+### M1 · State cells (ADR-0014) — done
+
+Measured: 50 cells and 10,000 changes on a SQLite file with a watcher —
+peak RSS 17.5 MiB for the whole process, ~4,400 writes/s, no change lost
+(15,050 delivered). A binary with cells and SQLite is about 10 MB.
 
 | Task | Done when |
 |---|---|

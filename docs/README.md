@@ -24,9 +24,10 @@ Start here when coming back to the project.
     ([ADR-0014](adr/0014-state-cells.md)).
   - 0.7 home internet outlasts the inverter; DeyeCloud quota is ample
     ([research](research/2026-11-01-outage-connectivity-and-deye-limits.md)).
-- **Next:** P1 per the [phase plan](plans/p1-all-in-one.md): M1 state cells
-  and M2 delivery and Telegram, then the agent (M3) — agent first after its
-  foundations ([ADR-0015](adr/0015-agent-first-p1.md)).
+- **P1 progress:** M1 state cells done — `cells`, `cells/sqlstore`,
+  `cells/virtual`, `sqlitedb` ([plan](plans/p1-m1-cells.md)).
+- **Next:** M2 delivery and Telegram, then the agent (M3) — agent first
+  after its foundations ([ADR-0015](adr/0015-agent-first-p1.md)).
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

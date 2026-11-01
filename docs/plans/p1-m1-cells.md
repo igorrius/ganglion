@@ -18,7 +18,7 @@ sequence number, so a slow observer never loses a change.
 **Tech stack:** Go 1.26, `database/sql`, `modernc.org/sqlite` v1.60.1 (pure
 Go, ADR-0006).
 
-**Spec:** [ADR-0014](../adr/0014-state-cells.md), [phase plan M1](p1-all-in-one.md#m1--state-cells-adr-0014),
+**Spec:** [ADR-0014](../adr/0014-state-cells.md), [phase plan M1](p1-all-in-one.md#m1--state-cells-adr-0014--done),
 spec principle 8, R-POL-5, spec 8.2 (manual override).
 
 ## Global constraints
