@@ -30,8 +30,9 @@ type Def struct {
 // Service enforces the rules of each kind on top of a Store, calls
 // backends and wakes watchers.
 type Service struct {
-	store Store
-	now   func() time.Time
+	store    Store
+	now      func() time.Time
+	backends map[string]Backend
 
 	mu   sync.Mutex
 	wake chan struct{} // closed and replaced after every write
@@ -78,6 +79,9 @@ func (s *Service) Define(ctx context.Context, d Def) error {
 	case KindSwitch, KindSensor:
 	default:
 		return fmt.Errorf("%w: cannot define a %q cell", ErrWrongKind, d.Kind)
+	}
+	if _, ok := s.backends[d.Backend]; d.Backend != "" && !ok {
+		return fmt.Errorf("%w: backend %q of %s is not registered", ErrInvalidValue, d.Backend, d.ID)
 	}
 	_, err := s.store.Create(ctx, Cell{ID: d.ID, Kind: d.Kind, Backend: d.Backend, Version: 1, Updated: s.now().UTC()}, "config")
 	if errors.Is(err, ErrExists) {
@@ -145,8 +149,11 @@ func (s *Service) update(ctx context.Context, id string, expectVersion int64, fn
 // SetDesired sets the desired value of a switch ("on" or "off").
 // expectVersion 0 accepts any current version; otherwise the cell must be
 // at that version or ErrConflict is returned.
+//
+// If the switch has a backend, the backend is asked to act once the desired
+// value is stored; a backend failure is recorded and returned.
 func (s *Service) SetDesired(ctx context.Context, id string, v json.RawMessage, src string, expectVersion int64) (Cell, error) {
-	return s.update(ctx, id, expectVersion, func(c *Cell) (Change, error) {
+	c, err := s.update(ctx, id, expectVersion, func(c *Cell) (Change, error) {
 		if c.Kind != KindSwitch {
 			return Change{}, fmt.Errorf("%w: %s is a %s", ErrWrongKind, id, c.Kind)
 		}
@@ -156,6 +163,10 @@ func (s *Service) SetDesired(ctx context.Context, id string, v json.RawMessage, 
 		c.Desired = v
 		return Change{Field: FieldDesired, Value: v, Source: src}, nil
 	})
+	if err != nil || c.Backend == "" {
+		return c, err
+	}
+	return s.apply(ctx, c)
 }
 
 // Report records the reported value of a switch or a sensor and why it
