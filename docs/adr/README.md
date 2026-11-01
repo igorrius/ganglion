@@ -16,7 +16,7 @@ considered, how they compare, the decision and its consequences. See
 | [0008](0008-agent-never-rebuilds-core.md) | The agent extends the system but never rebuilds the core | Accepted | 2026-10-31 |
 | [0009](0009-claude-subscription-only-via-cli-worker.md) | Use a Claude subscription only through an unmodified claude CLI worker | Accepted | 2026-10-31 |
 | [0010](0010-documentation-in-english.md) | Write all documentation in English | Accepted | 2026-11-01 |
-| [0011](0011-module-abi.md) | Module ABI — own host interface or Extism | Proposed (P0, task 0.3) | 2026-11-01 |
+| [0011](0011-module-abi.md) | Module ABI — own host interface or Extism | Proposed: own ABI recommended | 2026-11-01 |
 | [0012](0012-yaml-manifests.md) | Write module manifests in YAML, parsed strictly with go.yaml.in/yaml/v3 | Accepted | 2026-11-01 |
 
 Open questions that will become ADRs are listed in

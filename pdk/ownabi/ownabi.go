@@ -1,4 +1,9 @@
-package pdk
+//go:build wasip1
+
+// Package ownabi implements pdk.Host for ganglion's own module ABI: host
+// functions in the "ganglion" import module, JSON across the boundary.
+// One of the two variants compared in ADR-0011; see runner for the host side.
+package ownabi
 
 import (
 	"encoding/json"
@@ -6,6 +11,8 @@ import (
 	"runtime"
 	"time"
 	"unsafe"
+
+	"github.com/igorrius/ganglion/pdk"
 )
 
 // Host functions provided by the runner in the "ganglion" import module.
@@ -54,16 +61,16 @@ func take(n int32) []byte {
 
 type wasmHost struct{}
 
-func (wasmHost) Fetch(req Request) (Response, error) {
+func (wasmHost) Fetch(req pdk.Request) (pdk.Response, error) {
 	b, err := json.Marshal(req)
 	if err != nil {
-		return Response{}, err
+		return pdk.Response{}, err
 	}
 	n := hostHTTPFetch(ptr(b), uint32(len(b)))
 	runtime.KeepAlive(b)
-	var resp Response
+	var resp pdk.Response
 	if err := json.Unmarshal(take(int32(n)), &resp); err != nil {
-		return Response{}, err
+		return pdk.Response{}, err
 	}
 	if resp.Error != "" {
 		return resp, errors.New(resp.Error)
@@ -116,16 +123,16 @@ var out []byte
 // Serve runs one handle call. A module's exported handle function calls it:
 //
 //	//go:wasmexport handle
-//	func handle(inLen uint32) uint64 { return pdk.Serve(inLen, run) }
+//	func handle(inLen uint32) uint64 { return ownabi.Serve(inLen, run) }
 //
 // The result packs the Output's address (high 32 bits) and length.
-func Serve(inLen uint32, fn func(Host, Input) (any, error)) uint64 {
-	var o Output
-	var in Input
+func Serve(inLen uint32, fn func(pdk.Host, pdk.Input) (any, error)) uint64 {
+	var o pdk.Output
+	var in pdk.Input
 	if err := json.Unmarshal(take(int32(inLen)), &in); err != nil {
-		o = Encode(nil, err)
+		o = pdk.Encode(nil, err)
 	} else {
-		o = Encode(fn(wasmHost{}, in))
+		o = pdk.Encode(fn(wasmHost{}, in))
 	}
 	b, err := json.Marshal(o)
 	if err != nil {

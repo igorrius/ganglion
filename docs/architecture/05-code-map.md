@@ -23,8 +23,13 @@ interfaces only; **planned** — not in the repository yet.
 | Policies | — | planned (P1) | 7.6 | — |
 | Memory | — | planned (P1) | 7.7 | — |
 | Runner: wazero host, manifest, limits | `runner` | done (P0 spike, own ABI); supervisor and scheduler planned (P1) | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md), [0012](../adr/0012-yaml-manifests.md) |
-| Module-side kit: `Host`, wire types, WASM glue | `pdk` | done (P0, own ABI) | 7.5 | [0011](../adr/0011-module-abi.md) |
-| Deye reader module | `modules/deye` (logic), `modules/deye/wasm` (module), `modules/deye/deye-reader.yaml` | done; matches `deye.py` on the live API | 8.3 | [0005](../adr/0005-wasm-on-wazero-for-modules.md) |
+| Module-side kit: `Host`, wire types | `pdk` | done (P0) | 7.5 | [0011](../adr/0011-module-abi.md) |
+| Module glue, own ABI (Go, TinyGo) | `pdk/ownabi` | done (P0) | 7.5 | [0011](../adr/0011-module-abi.md) |
+| Module glue and host, Extism (P0 comparison) | `pdk/extismabi`, `runner/extismrun` | done; to be removed if ADR-0011 picks the own ABI | 7.5 | [0011](../adr/0011-module-abi.md) |
+| Host conformance suite and probe module | `runner/runnertest`, `runner/runnertest/probe` | done | 7.5 | [0011](../adr/0011-module-abi.md) |
+| Deye reader module | `modules/deye` (logic), `modules/deye/own`, `modules/deye/extism` (mains), `modules/deye/deye-reader.yaml` | done; matches `deye.py` on the live API | 8.3 |
+| Deye reader in Rust (P0 comparison) | `modules/deye-rs` (cargo; not built in CI) | done | 8.3 |
+| Measure modules (size, load, latency, RSS) | `cmd/modbench` | done (P0) | 10.1 | [0005](../adr/0005-wasm-on-wazero-for-modules.md) |
 | Run a module once (dev and acceptance tool) | `cmd/modrun` | done (P0) | 10.1 | — |
 | Load-shedding flow | — | planned (P1) | 8 | — |
 | Core ↔ edge protocol, NATS | — | planned (P2) | 9.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
@@ -44,6 +49,8 @@ flowchart BT
     deye["modules/deye"] --> pdk
     runner["runner"] --> pdk
     modrun["cmd/modrun"] --> runner
+    extismrun["runner/extismrun"] --> runner
+    modbench["cmd/modbench"] --> extismrun
 ```
 
 - `event` and `pdk` are leaves: they import nothing from the project.

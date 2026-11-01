@@ -726,8 +726,8 @@ fallback until the gate is passed.
 
 | Question | Options | Leaning towards | Decided by |
 |---|---|---|---|
-| Module ABI | Own · Extism | Extism, if the dependency is acceptable | P0, task 0.3 |
-| Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Not chosen; P0 task 0.3 supplies size and speed numbers | Start of P3: how reliably the model writes and fixes each, plus the P0 numbers |
+| Module ABI | Own · Extism | Own ABI, measured and recommended in ADR-0011 | P0, task 0.3 |
+| Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Not chosen; P0 numbers (ADR-0011) favour Rust or TinyGo over standard Go | Start of P3: how reliably the model writes and fixes each, plus the P0 numbers |
 | Tuya access | Cloud · LAN | — | P0, tasks 0.6–0.7 |
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
 | History and tool format | Own · Anthropic Messages · OpenAI | Neutral own format + MCP for tools | Two providers in P1 |

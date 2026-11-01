@@ -1,8 +1,7 @@
-//go:build wasip1
-
-// Command probe is a test module for the runner. Its payload names one
-// operation, so tests can exercise each host function and each limit.
-package main
+// Package probe is a test module for runners. Its payload names one
+// operation, so the conformance suite can exercise each host function and
+// each limit. The own and extism subpackages wrap it for each ABI.
+package probe
 
 import (
 	"encoding/json"
@@ -19,9 +18,13 @@ type op struct {
 	MiB   int    `json:"mib,omitempty"`
 }
 
-var sink [][]byte
+var (
+	sink  [][]byte
+	spins int
+)
 
-func run(h pdk.Host, in pdk.Input) (any, error) {
+// Run executes the operation named in the payload.
+func Run(h pdk.Host, in pdk.Input) (any, error) {
 	var o op
 	if err := json.Unmarshal(in.Payload, &o); err != nil {
 		return nil, err
@@ -53,7 +56,8 @@ func run(h pdk.Host, in pdk.Input) (any, error) {
 		h.Log(o.Value)
 		return map[string]bool{"ok": true}, nil
 	case "spin":
-		for {
+		for spins >= 0 { // spin until the host's timeout stops the module
+			spins++
 		}
 	case "alloc":
 		for i := 0; i < o.MiB; i++ {
@@ -65,10 +69,3 @@ func run(h pdk.Host, in pdk.Input) (any, error) {
 	}
 	return nil, errors.New("unknown op " + o.Op)
 }
-
-// handle is called by the runner; go:wasmexport makes it reachable.
-//
-//go:wasmexport handle
-func handle(inLen uint32) uint64 { return pdk.Serve(inLen, run) }
-
-func main() {}

@@ -9,8 +9,9 @@ Start here when coming back to the project.
   0.2 Deye reader in WASM on wazero — on 2026-11-01 the module (Go and TinyGo
   builds) returned the same sample as `deye.py`, 12 of 12 fields, same
   collection time
-- **Next:** 0.3 the same via Extism, each ABI built with TinyGo, Go and Rust;
-  the numbers decide [ADR-0011](adr/0011-module-abi.md)
+- **In progress:** 0.3 — both ABIs built and measured with Go, TinyGo and Rust;
+  [ADR-0011](adr/0011-module-abi.md) recommends the own ABI and awaits a decision
+- **Next:** 0.4 MCP transports and A2A; 0.5 runner RAM on a Pi
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

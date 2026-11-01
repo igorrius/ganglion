@@ -28,6 +28,7 @@ import (
 
 	"github.com/igorrius/ganglion/pdk"
 	"github.com/igorrius/ganglion/runner"
+	"github.com/igorrius/ganglion/runner/extismrun"
 )
 
 func main() {
@@ -57,6 +58,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("modrun", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	wasmPath := fs.String("wasm", "", "module .wasm file (required)")
+	abi := fs.String("abi", "own", "host ABI: own or extism")
 	manifestPath := fs.String("manifest", "", "module manifest .yaml (required)")
 	envPath := fs.String("env", ".env", "file with secrets as KEY=VALUE lines; missing is fine")
 	statePath := fs.String("state", ".ganglion/modrun-state.json", "module state file, kept between runs")
@@ -98,7 +100,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
-	mod, err := runner.Load(ctx, wasm, m, runner.Deps{
+	deps := runner.Deps{
 		Secrets: func(name string) (string, bool) {
 			if v, ok := os.LookupEnv(name); ok {
 				return v, v != ""
@@ -108,7 +110,19 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		},
 		State:  state,
 		Logger: logger,
-	})
+	}
+	var mod interface {
+		Handle(context.Context, pdk.Input) (pdk.Output, error)
+		Close(context.Context) error
+	}
+	switch *abi {
+	case "own":
+		mod, err = runner.Load(ctx, wasm, m, deps)
+	case "extism":
+		mod, err = extismrun.Load(ctx, wasm, m, deps)
+	default:
+		return fmt.Errorf("unknown -abi %q (want own or extism)", *abi)
+	}
 	if err != nil {
 		return err
 	}

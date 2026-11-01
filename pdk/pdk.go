@@ -3,10 +3,8 @@
 //
 // Module logic depends only on the Host interface, so it can be tested with
 // plain `go test` and then compiled to WASM unchanged. The WASM glue that
-// implements Host on top of the runner's host functions lives in
-// wasm_wasip1.go and is built only for GOOS=wasip1.
-//
-// This is the P0 "own ABI" variant; ADR-0011 decides between it and Extism.
+// implements Host lives in two subpackages, one per ABI compared in
+// ADR-0011: ownabi (ganglion's own host functions) and extismabi (Extism).
 package pdk
 
 import (
