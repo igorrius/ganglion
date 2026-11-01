@@ -34,6 +34,10 @@ func TestSQLStore(t *testing.T) {
 	})
 }
 
+func TestSQLStoreInMemory(t *testing.T) {
+	storetest.Run(t, func(t *testing.T) cells.Store { return open(t, ":memory:") })
+}
+
 func TestReopenKeepsState(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "cells.db")

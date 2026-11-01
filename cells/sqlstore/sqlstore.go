@@ -163,8 +163,15 @@ func (s *Store) Update(ctx context.Context, c cells.Cell, prevVersion int64, ch 
 		return cells.Change{}, fmt.Errorf("sqlstore: update %s: %w", c.ID, err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		if _, err := s.Get(ctx, c.ID); errors.Is(err, cells.ErrNotFound) {
+		// Check inside the transaction: on a single-connection database
+		// (":memory:") a second query through s.db would wait forever.
+		var one int
+		err := tx.QueryRowContext(ctx, `SELECT 1 FROM cells WHERE id = ?`, c.ID).Scan(&one)
+		if errors.Is(err, sql.ErrNoRows) {
 			return cells.Change{}, cells.ErrNotFound
+		}
+		if err != nil {
+			return cells.Change{}, err
 		}
 		return cells.Change{}, cells.ErrConflict
 	}

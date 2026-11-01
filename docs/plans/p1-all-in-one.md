@@ -136,7 +136,7 @@ peak RSS 17.5 MiB for the whole process, ~4,400 writes/s, no change lost
 | 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets from the environment; `GOMEMLIMIT` (R-RUN-6) | Config tests; a bad config fails at start with a clear message |
 | 4.2 Scheduler: cron in Europe/Kyiv, `cron_runs` table, catch-up after downtime runs each missed job once; `idemKey` = job + scheduled time; the agent's `schedule.*` uses it | Tests across a DST change and a simulated downtime |
 | 4.3 Cell host functions for modules (`cell.get`, `cell.report`, `cell.set`), granted per cell in the manifest; `pdk` and `pdk/guest` updated | Runner conformance suite extended and green |
-| 4.4 Runner in `node.Run`: modules from config, triggered by the scheduler or called by the agent as tools (`deye.status`); optional `init` and `health` exports (spec 7.5); a minimal supervisor — backoff after failures, N failures in M minutes disable the module and emit `module.crashloop`; failures and `auth_failed` reach the agent as events | `deye-reader` writes the `grid` and `soc` sensor cells on schedule; the agent answers "how is the battery?" through the tool; a failing probe module is disabled |
+| 4.4 Runner in `node.Run`: modules from config, triggered by the scheduler or called by the agent as tools (`deye.status`); optional `init` and `health` exports (spec 7.5); a minimal supervisor — backoff after failures, N failures in M minutes disable the module and emit `module.crashloop`; failures and `auth_failed` reach the agent as events; `cells.Reconcile` at start and periodically, `ExpireDue` on a short tick (M1 review) | `deye-reader` writes the `grid` and `soc` sensor cells on schedule; the agent answers "how is the battery?" through the tool; a failing probe module is disabled |
 | 4.5 Deye cadence and limits: 30 min with grid, 5 min without; HTTP 429 backs off honouring `Retry-After`; stale data reported once | Tests with the replay server from `cmd/modbench` |
 | 4.6 Deploy: container image, a Railway service next to the current bot, test bot token; compare with `deye.py` for a few days (R-LS-4) | Samples match `deye.py`; RSS within budget; the two-week clock starts |
 
@@ -144,7 +144,7 @@ peak RSS 17.5 MiB for the whole process, ~4,400 writes/s, no change lost
 
 | Task | Done when |
 |---|---|
-| 5.1 The flow as a WASM module using cell host functions (decision D-4) with the 8.1 states and 8.2 rules: thresholds from config, hysteresis, debounce, freshness, manual override for 2 h, kill switches, staged restore 1 min apart | Unit tests of the state machine |
+| 5.1 The flow as a WASM module using cell host functions (decision D-4) with the 8.1 states and 8.2 rules: thresholds from config, hysteresis, debounce, freshness, manual override for 2 h (time of the external change from the cell's history), kill switches, staged restore 1 min apart; the flow sets desired only on a decision, never re-asserts it on every poll (each `SetDesired` is a change and a notice) | Unit tests of the state machine |
 | 5.2 Telegram notifier as an observer of load cells; kill switches toggled through the agent ("pause the boiler automation") with confirmation | Tests with a fake Bot API |
 | 5.3 Tests: R-LS-1 replay of SOC history (the real history stays a local, uncommitted fixture; synthetic outage curves are committed) and R-LS-2 invariants on `virtual` cells with fault injection | Suites green; invariants hold under injected failures |
 | 5.4 Shadow week (R-LS-3) to a test topic, reviewed by the owner; then enabled on `virtual` cells with notifications to the real topic | A week without a wrong decision |
@@ -156,7 +156,7 @@ peak RSS 17.5 MiB for the whole process, ~4,400 writes/s, no change lost
 | 6.1 Configuration as versioned data: the node config lives in a git repo next to memory; every change is a commit with a reason | History of changes is visible; a restart picks up the latest commit |
 | 6.2 `config.propose` tool: the agent turns a request ("send boiler notices to me privately", "shed the big boiler at 45%") into a structured change with a human-readable diff; the owner approves through a request cell | A proposal without approval is never applied; an expired request discards it |
 | 6.3 Validation and rollback: a change must parse, pass config checks and, for the flow, keep the R-LS-2 invariants on `virtual` cells before it applies; `config.rollback` restores the previous commit | A change that breaks an invariant is rejected with the reason; rollback restores behaviour |
-| 6.4 Risk class on backend changes: moving a cell to a backend of a higher class (e.g. `virtual` → `tuya`) is always a separate, explicitly worded approval (ADR-0014) | Test: such a change cannot be bundled into a routine approval |
+| 6.4 Risk class on backend changes: moving a cell to a backend of a higher class (e.g. `virtual` → `tuya`) is always a separate, explicitly worded approval (ADR-0014); needs a rebind path in `cells` — today `Define` with another backend is `ErrConflict` | Test: such a change cannot be bundled into a routine approval |
 
 ### M7 · Migration (spec 7.7, 7.8, 10.2)
 

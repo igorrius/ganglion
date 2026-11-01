@@ -21,6 +21,7 @@ type Backend struct {
 	mu      sync.Mutex
 	failN   int
 	failErr error
+	gen     map[string]uint64 // per cell: number of the latest command
 }
 
 // Option configures a Backend.
@@ -33,7 +34,7 @@ func WithDelay(d time.Duration) Option {
 
 // New returns a virtual backend.
 func New(opts ...Option) *Backend {
-	b := &Backend{}
+	b := &Backend{gen: map[string]uint64{}}
 	for _, o := range opts {
 		o(b)
 	}
@@ -56,19 +57,33 @@ func (b *Backend) Apply(ctx context.Context, c cells.Cell, r cells.Reporter) err
 		b.mu.Unlock()
 		return err
 	}
+	b.gen[c.ID]++
+	g := b.gen[c.ID]
 	b.mu.Unlock()
 
 	if b.delay == 0 {
-		_, err := r.Report(ctx, c.ID, c.Desired, cells.CauseCommanded, source)
-		return err
+		return b.report(ctx, r, c.ID, c.Desired, g)
 	}
 	v := c.Desired
 	time.AfterFunc(b.delay, func() {
 		// The caller's context may be gone by now; the device would still
 		// have switched.
-		_, _ = r.Report(context.Background(), c.ID, v, cells.CauseCommanded, source)
+		_ = b.report(context.Background(), r, c.ID, v, g)
 	})
 	return nil
+}
+
+// report sends the result of command g unless a newer command superseded
+// it. The check and the report happen under one lock, so reports of one
+// cell never overtake each other and the last command always wins.
+func (b *Backend) report(ctx context.Context, r cells.Reporter, id string, v json.RawMessage, g uint64) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.gen[id] != g {
+		return nil
+	}
+	_, err := r.Report(ctx, id, v, cells.CauseCommanded, source)
+	return err
 }
 
 // Flip changes the state from outside, as a person would by hand.

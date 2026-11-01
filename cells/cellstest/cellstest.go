@@ -65,6 +65,19 @@ func Run(t *testing.T, newBackend func(t *testing.T) (cells.Backend, Flipper)) {
 		Eventually(t, "in sync off", func() bool { c := get(t, s); return c.InSync() && string(c.Reported) == `"off"` })
 	})
 
+	t.Run("quick successive changes converge to the last desired", func(t *testing.T) {
+		for i := range 50 {
+			s, _ := setup(t)
+			_, _ = s.SetDesired(t.Context(), "load.a", json.RawMessage(`"on"`), "test", 0)
+			_, _ = s.SetDesired(t.Context(), "load.a", json.RawMessage(`"off"`), "test", 0)
+			Eventually(t, "in sync off", func() bool { c := get(t, s); return c.InSync() && string(c.Reported) == `"off"` })
+			time.Sleep(30 * time.Millisecond) // a late report must not undo it
+			if c := get(t, s); !c.InSync() || string(c.Reported) != `"off"` {
+				t.Fatalf("run %d: ended with %+v", i, c)
+			}
+		}
+	})
+
 	t.Run("an external flip is manual", func(t *testing.T) {
 		s, f := setup(t)
 		_, _ = s.SetDesired(t.Context(), "load.a", json.RawMessage(`"off"`), "test", 0)

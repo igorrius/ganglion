@@ -31,7 +31,10 @@ func change(id string, field string, v string) cells.Change {
 
 // Run runs the suite. newStore must return an empty store.
 func Run(t *testing.T, newStore func(t *testing.T) cells.Store) {
-	ctx := context.Background()
+	// A deadline turns a hang (for example a deadlock on a single
+	// connection) into a failure.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	t.Run("create and get", func(t *testing.T) {
 		s := newStore(t)

@@ -51,8 +51,8 @@ type Cell struct {
 	Backend       string          // backend name; "" for none
 	Desired       json.RawMessage // nil when unset
 	Reported      json.RawMessage // nil when unset
-	ReportedCause Cause
-	Version       int64 // 1 on create, +1 on every change
+	ReportedCause Cause           // cause of the last report; "" if none since the last command
+	Version       int64           // 1 on create, +1 on every change
 	Updated       time.Time
 	Expires       time.Time // requests only; zero otherwise
 }

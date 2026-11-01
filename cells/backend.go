@@ -3,6 +3,7 @@ package cells
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -38,7 +39,9 @@ func (s *Service) apply(ctx context.Context, c Cell) (Cell, error) {
 	}
 	err := b.Apply(ctx, c, s)
 	if err == nil {
-		return c, nil
+		// The backend may already have reported; return the stored cell so
+		// callers can chain its version.
+		return s.store.Get(ctx, c.ID)
 	}
 	msg := mustJSON(map[string]string{"error": err.Error()})
 	recorded, rerr := s.update(ctx, c.ID, 0, func(*Cell) (Change, error) {
@@ -59,14 +62,17 @@ func (s *Service) Reconcile(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	n := 0
+	var errs []error
 	for _, c := range all {
 		if c.Kind != KindSwitch || c.Backend == "" || c.Desired == nil || c.InSync() || c.Manual() {
 			continue
 		}
+		// One offline device must not block the others.
 		if _, err := s.apply(ctx, c); err != nil {
-			return n, err
+			errs = append(errs, err)
+			continue
 		}
 		n++
 	}
-	return n, nil
+	return n, errors.Join(errs...)
 }

@@ -31,10 +31,14 @@ func (c *fakeClock) Add(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
+// newStore makes the store the service tests run on; TestServiceOnSQLite
+// swaps it for SQLite.
+var newStore = func(*testing.T) cells.Store { return cells.NewMemStore() }
+
 func newService(t *testing.T, opts ...cells.Option) (*cells.Service, *fakeClock) {
 	t.Helper()
 	clk := newClock()
-	return cells.NewService(cells.NewMemStore(), append([]cells.Option{cells.WithClock(clk.Now)}, opts...)...), clk
+	return cells.NewService(newStore(t), append([]cells.Option{cells.WithClock(clk.Now)}, opts...)...), clk
 }
 
 var (

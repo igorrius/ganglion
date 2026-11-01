@@ -161,6 +161,9 @@ func (s *Service) SetDesired(ctx context.Context, id string, v json.RawMessage, 
 			return Change{}, fmt.Errorf("%w: a switch takes \"on\" or \"off\", got %s", ErrInvalidValue, v)
 		}
 		c.Desired = v
+		// A new command: whatever was reported before is no longer evidence
+		// of a manual change. Only an external report after this command is.
+		c.ReportedCause = ""
 		return Change{Field: FieldDesired, Value: v, Source: src}, nil
 	})
 	if err != nil || c.Backend == "" {
@@ -236,11 +239,13 @@ func (c Cell) InSync() bool {
 	return c.Desired != nil && c.Reported != nil && jsonEqual(c.Desired, c.Reported)
 }
 
-// Manual reports whether the cell is out of sync because the state was
-// changed externally (for example by hand), not by a late report of an
-// earlier command.
+// Manual reports whether a commanded switch is out of sync because its
+// state was changed externally (for example by hand) after the last
+// command — not by a late report of an earlier command, and not by a report
+// that predates the command.
 func (c Cell) Manual() bool {
-	return c.Reported != nil && !c.InSync() && c.ReportedCause == CauseExternal
+	return c.Kind == KindSwitch && c.Desired != nil && c.Reported != nil &&
+		!c.InSync() && c.ReportedCause == CauseExternal
 }
 
 func jsonEqual(a, b json.RawMessage) bool {
