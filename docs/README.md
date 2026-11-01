@@ -6,8 +6,11 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon ([plan](spec.md#10-plan-phases-and-gates))
 - **Done:** 0.1 repository skeleton — `cmd/ganglion`, interface packages, CI
-- **Next:** 0.2 Deye monitor in TinyGo → WASM on wazero; 0.3 the same via
-  Extism, which decides [ADR-0011](adr/0011-module-abi.md)
+- **In progress:** 0.2 Deye reader in WASM on wazero — module, runner and
+  `cmd/modrun` done and tested; live comparison with `deye.py` pending
+  (needs `DEYE_APP_SECRET` and `DEYE_PASSWORD` in `.env`)
+- **Next:** 0.3 the same via Extism, each ABI built with TinyGo, Go and Rust;
+  the numbers decide [ADR-0011](adr/0011-module-abi.md)
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

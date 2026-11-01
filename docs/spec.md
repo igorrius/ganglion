@@ -332,6 +332,7 @@ and `health`. It sees only the host functions its manifest grants:
 | `event.emit` | Events from an allowed list |
 | `tool.call` | Tool calls, through policies |
 | `secret.get` | Secrets from an allowed list; the model never sees them |
+| `config.get` | Values from the manifest's `config` block (e.g. a device serial number) |
 | `now` | Current time |
 
 Example manifest:
@@ -683,7 +684,7 @@ with a gate; the next phase does not start until the gate is passed.
 
 | Phase | What we do | Exit gate |
 |---|---|---|
-| **P0 · Recon** | Repository skeleton; Deye monitor hand-written in WASM (TinyGo) with `http.fetch`; evaluate Extism, MCP transports and A2A; measure runner RAM | The module runs in wazero; resources measured; ABI decided (own or Extism) |
+| **P0 · Recon** | Repository skeleton; Deye monitor hand-written in WASM with `http.fetch`; evaluate Extism, MCP transports and A2A; compare module languages (TinyGo, Go, Rust); measure runner RAM | The module runs in wazero; resources measured; ABI decided (own or Extism) |
 | **P1 · All-in-one** | Core + runner in one process: Telegram, inbox/outbox, history, rule-based router, one API provider + claude CLI worker; Deye module and load-shedding flow in production after a week of shadow mode; migrate the family bot | Deye runs 2 weeks without the model; the bot replaces the current one and costs less |
 | **P2 · Network** | Runner on a separate Pi; protocol v0 over NATS (leaf + JetStream, JWT/NKeys); desired state; watchdog; MQTT devices; policies on the runner; embedding memory; router classifier | Link loss without data loss; module update on an edge and rollback with one command |
 | **P3 · Skill compilation** | The model writes contract, code and tests; build on a worker; signed one-click install; repair on `module.crashloop`; agent-written MCP modules; Home Assistant | The model compiled and updated a module on its own; public release 0.1 |
@@ -694,7 +695,7 @@ with a gate; the next phase does not start until the gate is passed.
 |---|---|---|
 | 0.1 | Repository skeleton: `cmd/ganglion` with `--roles`, packages for the interfaces in section 6, CI (build + test + lint) | `go build ./...` and tests are green in CI |
 | 0.2 | Rewrite `deye.py` in TinyGo → WASM; run it in wazero with `http.fetch`, `state`, `secret.get` | The module returns the same SOC as `deye.py` against the real API |
-| 0.3 | The same through Extism | [ADR-0011](adr/0011-module-abi.md) accepted: own ABI or Extism |
+| 0.3 | The same through Extism; build the Deye reader with TinyGo, Go and Rust under both ABIs | [ADR-0011](adr/0011-module-abi.md) accepted: own ABI or Extism, backed by a 2 × 3 table of module size, call time and runner RAM |
 | 0.4 | Read the MCP transport (Streamable HTTP) and A2A specs | Recorded what part of the 9.1 protocol they cover |
 | 0.5 | Measure runner RAM (wazero + embedded NATS) on a Pi or in a container limited to 128 MB | Estimates in the 7.5 table replaced with measurements |
 | 0.6 | Access to Tuya plugs: cloud or local key | A plug switches on/off from Go code; path chosen |
@@ -726,6 +727,7 @@ fallback until the gate is passed.
 | Question | Options | Leaning towards | Decided by |
 |---|---|---|---|
 | Module ABI | Own · Extism | Extism, if the dependency is acceptable | P0, task 0.3 |
+| Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Not chosen; P0 task 0.3 supplies size and speed numbers | Start of P3: how reliably the model writes and fixes each, plus the P0 numbers |
 | Tuya access | Cloud · LAN | — | P0, tasks 0.6–0.7 |
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
 | History and tool format | Own · Anthropic Messages · OpenAI | Neutral own format + MCP for tools | Two providers in P1 |
