@@ -4,7 +4,9 @@ Status: draft v0.1, 2026-11-01. Versions are 0.x; the API is unstable.
 Source: the product and architecture decision and R&D plan of 2026-10-31
 (a private design document). This file distills it for implementation: what
 we build, from what, under which rules and in what order. When a decision
-changes, update this file first, then the code.
+changes, update this file first, then the code. The architecture views are
+in [architecture/](architecture/README.md), the reasoning behind decisions
+in [adr/](adr/README.md).
 
 How to read it:
 
@@ -692,7 +694,7 @@ with a gate; the next phase does not start until the gate is passed.
 |---|---|---|
 | 0.1 | Repository skeleton: `cmd/ganglion` with `--roles`, packages for the interfaces in section 6, CI (build + test + lint) | `go build ./...` and tests are green in CI |
 | 0.2 | Rewrite `deye.py` in TinyGo → WASM; run it in wazero with `http.fetch`, `state`, `secret.get` | The module returns the same SOC as `deye.py` against the real API |
-| 0.3 | The same through Extism | Decision recorded: own ABI or Extism, with reasons (section 11) |
+| 0.3 | The same through Extism | [ADR-0011](adr/0011-module-abi.md) accepted: own ABI or Extism |
 | 0.4 | Read the MCP transport (Streamable HTTP) and A2A specs | Recorded what part of the 9.1 protocol they cover |
 | 0.5 | Measure runner RAM (wazero + embedded NATS) on a Pi or in a container limited to 128 MB | Estimates in the 7.5 table replaced with measurements |
 | 0.6 | Access to Tuya plugs: cloud or local key | A plug switches on/off from Go code; path chosen |
@@ -733,8 +735,10 @@ fallback until the gate is passed.
 | Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Not chosen | What works in a container and on a Pi |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
 
-Decided: one process per node with modules as subprocesses; distribution
-happens between nodes. Everything is written from scratch.
+Each question becomes an ADR (status Proposed) when work on it starts and is
+accepted when decided; see [docs/adr](adr/README.md). Already decided: one
+process per node ([ADR-0004](adr/0004-one-binary-with-roles.md)); building
+from scratch ([ADR-0003](adr/0003-build-from-scratch.md)).
 
 ## 12. Risks
 
@@ -750,7 +754,7 @@ the "Not now" list.
 | Self-modification breaks the bot | A regression scenario fails | Automatic git rollback, admin alert |
 | Tokens cost more than the saved RAM | Hosting + API cost more than the current setup | Cheap model for routine, subscription worker for heavy tasks, daily limit |
 
-## 13. Stop criteria and decision log
+## 13. Stop criteria and decisions
 
 If any criterion fires, we stay on the current setup and count the R&D as a
 successful study:
@@ -759,15 +763,8 @@ successful study:
 - after P1 the bill is higher than the current setup with a memory cap;
 - the bot has noticeably got worse and it is not fixed within 2 weeks.
 
-Decision log (appended as we go):
-
-| Date | Decision | Why |
-|---|---|---|
-| 2026-10-31 | Build from scratch; PicoClaw is a source of ideas | The project's difference is distribution and routing |
-| 2026-10-31 | First provider is an OpenAI-compatible client | One client covers cloud, Ollama, OpenRouter |
-| 2026-10-31 | The agent never rebuilds the core | Fragile; blue/green modules give the same benefit |
-| 2026-10-31 | One process per node, distribution between nodes | MVP simplicity |
-| 2026-11-01 | All documentation is in English | The repository is meant to go public |
+Decisions, with the options considered and the reasoning, are recorded as
+ADRs in [docs/adr](adr/README.md).
 
 ## 14. Not now
 
