@@ -26,8 +26,11 @@ kitchen one. It runs without a model and escalates only on errors.
 
 ## Design
 
-The product and architecture decision and the R&D plan live in a design
-document (private for now).
+The implementation spec — requirements, architecture, protocol drafts and
+the phased plan with exit gates — is in [docs/spec.md](docs/spec.md).
+
+The underlying product and architecture decision lives in a design document
+(private for now).
 
 ## License
 
