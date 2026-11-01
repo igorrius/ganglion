@@ -81,8 +81,10 @@ We build from scratch. Neighbours are a source of ideas, not a base.
 7. **Build little where something ready exists.** Chat, providers and
    channels stay minimal; the effort goes into the tool pool and skill
    compilation.
-8. **Minimal memory is a design goal.** Every role must run comfortably on the
-   cheapest hosts: a Raspberry Pi or a small container of about 128 MB. Memory
+8. **Minimal memory is a design goal.** The core and edge roles must run
+   comfortably on the cheapest hosts: a Raspberry Pi or a small container of
+   about 128 MB. Workers that host heavy model runtimes (claude CLI, Ollama)
+   are exempt: they run where the resources are (ADR-0009). Memory
    is measured (`cmd/modbench`) and weighed in every decision about
    dependencies, runtimes and module languages; a Pi is one target among
    others, not the reference.
