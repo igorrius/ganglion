@@ -4,22 +4,28 @@ Start here when coming back to the project.
 
 ## Where we are
 
-- **Phase:** P0 · Recon ([plan](spec.md#10-plan-phases-and-gates))
-- **Done:** 0.1 repository skeleton — `cmd/ganglion`, interface packages, CI;
-  0.2 Deye reader in WASM on wazero — on 2026-11-01 the module (Go and TinyGo
-  builds) returned the same sample as `deye.py`, 12 of 12 fields, same
-  collection time
-  0.3 module ABI and toolchains — own ABI chosen
-  ([ADR-0011](adr/0011-module-abi.md)); Rust and TinyGo modules are 5–20×
-  smaller than standard Go; 0.4 MCP and A2A coverage of the protocol —
-  [research note](research/2026-11-01-mcp-a2a-coverage.md), direction decided in
-  [ADR-0013](adr/0013-protocol-envelope-around-stateless-mcp.md)
-  0.7 home internet outlasts the inverter; DeyeCloud quota is ample —
-  [research note](research/2026-11-01-outage-connectivity-and-deye-limits.md)
-  0.5 runner memory — fits a 128 MB container with room to spare
-  ([research note](research/2026-11-01-runner-memory.md)); a Pi run later is a
-  confirmation, not a gate
-- **Next:** 0.6 Tuya plug access (cloud first)
+- **Phase:** P0 · Recon is complete; P1 · All-in-one is next
+  ([plan](spec.md#10-plan-phases-and-gates)).
+- **P0 results:**
+  - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
+  - 0.2 Deye reader in WASM on wazero: matched `deye.py` on the live API,
+    12 of 12 fields.
+  - 0.3 module ABI and toolchains: own ABI
+    ([ADR-0011](adr/0011-module-abi.md)); Rust and TinyGo modules are 5–20×
+    smaller than standard Go.
+  - 0.4 MCP and A2A: our envelope over NATS carrying stateless MCP
+    ([ADR-0013](adr/0013-protocol-envelope-around-stateless-mcp.md),
+    [research](research/2026-11-01-mcp-a2a-coverage.md)).
+  - 0.5 runner memory: fits a 128 MB container with room to spare
+    ([research](research/2026-11-01-runner-memory.md)); a Pi run later
+    confirms arm64 timings.
+  - 0.6 Tuya access: moved to P1; loads are state cells with a `virtual`
+    backend until the plugs are linked
+    ([ADR-0014](adr/0014-state-cells.md)).
+  - 0.7 home internet outlasts the inverter; DeyeCloud quota is ample
+    ([research](research/2026-11-01-outage-connectivity-and-deye-limits.md)).
+- **Next:** P1 — state cells, SQLite inbox/outbox, Telegram, the
+  load-shedding flow on `virtual` cells.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

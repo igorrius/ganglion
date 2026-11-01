@@ -19,7 +19,8 @@ flowchart LR
 
     subgraph edgerole["edge role"]
         runner["Runner<br/>wazero, supervisor,<br/>policies, scheduler"]
-        mods["WASM modules<br/>deye-reader, tuya-plug,<br/>load-shedding"]
+        mods["WASM modules<br/>deye-reader, load-shedding"]
+        cells[("State cells<br/>desired / reported<br/>P1")]
     end
 
     subgraph workerrole["worker role"]
@@ -35,6 +36,7 @@ flowchart LR
     corep <--> bus
     runner <--> bus
     runner --> mods
+    mods <--> cells
     api <--> bus
     cli <--> bus
     mqttdev -.-> bus
@@ -50,6 +52,7 @@ flowchart LR
 | Memory repo | `memory/*.md`, skills; later embeddings | git | P1 (files), P2 (embeddings) |
 | Runner | Module runtime, local policies, offline scheduler | wazero, embedded NATS in P2 | P0 (spike), P1 |
 | WASM modules | Compiled reflexes with manifests | TinyGo / Rust / AssemblyScript | P0 (Deye by hand), P3 (by the model) |
+| State cells | Desired and reported state of loads, sensors, kill switches, confirmations; backends and observers (ADR-0014) | KV: memory or SQLite in P1, NATS KV in P2 | P1 |
 | API provider client | Chat completions | net/http | P1 |
 | claude CLI worker | Standalone heavy tasks | unmodified `claude -p` | P1 |
 | Bus | Messages between roles; across nodes buffering, KV, object store | in-process (P1), NATS (P2) | P1 / P2 |

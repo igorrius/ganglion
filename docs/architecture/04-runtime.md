@@ -74,8 +74,10 @@ sequenceDiagram
 
 ## Load-shedding flow (P1)
 
-The first real flow (spec section 8): staged switching of Tuya plugs by
-battery state of charge during a power cut.
+The first real flow (spec section 8): staged shedding of loads by battery
+state of charge during a power cut. The flow sets the desired state of load
+cells; their backend (`virtual` in P1, Tuya plugs later) makes it real, and a
+Telegram notifier observes the changes ([ADR-0014](../adr/0014-state-cells.md)).
 
 ```mermaid
 stateDiagram-v2
@@ -90,13 +92,14 @@ stateDiagram-v2
     note right of BigOff
         In every state: data older than 20 min means no switching,
         a manual switch-on is respected for 2 h,
-        each plug switches at most once per 15 min,
-        kill switch per plug and a global one.
+        each load changes at most once per 15 min,
+        kill switch per load and a global one.
     end note
 ```
 
-Escalation to the model: Tuya or Deye auth error, a plug not responding, no
-data for over an hour. The first week runs in shadow mode.
+Escalation to the model: Deye or backend auth error, a backend not
+converging desired and reported state, no data for over an hour. Shadow mode
+is simply the `virtual` backend.
 
 ## Module rollout via desired state (P2)
 

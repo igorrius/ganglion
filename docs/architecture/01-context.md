@@ -36,7 +36,7 @@ flowchart TB
 | Owner / admin | Talks to the bot, approves dangerous actions and module installs, toggles kill switches | Role `admin` in the `allowed` table |
 | Family members | Ask questions | Cannot install modules or approve physical-safety actions |
 | Home devices | Read state, switch loads | Via a runner at home (LAN) or MQTT; microcontrollers never run a runner |
-| Vendor clouds | DeyeCloud for battery data, Tuya OpenAPI for plugs | Cloud path works only while home internet has power (spec 8.3) |
+| Vendor clouds | DeyeCloud for battery data, Tuya OpenAPI for plugs | Home internet outlasts the inverter during outages (task 0.7) |
 | Model APIs | Routine turns on a cheap model; local models for `privacy: local-only` | [ADR-0007](../adr/0007-openai-compatible-first-provider.md) |
 | Claude Code CLI | Heavy standalone tasks on the owner's subscription | Unmodified binary, the project never touches tokens; [ADR-0009](../adr/0009-claude-subscription-only-via-cli-worker.md) |
 | Git remote and S3 | Memory history and backups | Memory is Markdown in git; rollback with `git revert` |

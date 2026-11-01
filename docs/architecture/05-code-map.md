@@ -30,7 +30,8 @@ interfaces only; **planned** — not in the repository yet.
 | Deye reader in Rust (toolchain comparison) | `modules/deye-rs` (cargo; not built in CI) | done | 8.3 |
 | Measure modules (size, load, latency, RSS) | `cmd/modbench` | done (P0) | 10.1 | [0005](../adr/0005-wasm-on-wazero-for-modules.md) |
 | Run a module once (dev and acceptance tool) | `cmd/modrun` | done (P0) | 10.1 | — |
-| Load-shedding flow | — | planned (P1) | 8 | — |
+| State cells: switch, sensor, request; virtual backend | — | planned (P1) | 8 | [0014](../adr/0014-state-cells.md) |
+| Load-shedding flow | — | planned (P1) | 8 | [0014](../adr/0014-state-cells.md) |
 | Core ↔ edge protocol, NATS | — | planned (P2) | 9.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 
 ## Dependency rules

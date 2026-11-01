@@ -424,8 +424,9 @@ human); module install — tests + reviewer + admin.
 - **R-POL-4.** Side-effecting tools require human confirmation by default;
   external text (messages, web pages, emails) is marked as data (prompt
   injection defence).
-- **R-POL-5.** Kill switches are KV flags per action/device plus a global
-  one; toggled by a Telegram command.
+- **R-POL-5.** Kill switches are switch cells per action/device plus a
+  global one ([ADR-0014](adr/0014-state-cells.md)); toggled by a Telegram
+  command.
 
 ### 7.7. Memory
 
@@ -464,9 +465,16 @@ undone with `git revert`.
 
 ## 8. First flow: Deye and load shedding (P1)
 
-Deye battery monitoring plus staged switching of Tuya smart plugs by battery
-state of charge (SOC). A scaled-down reference scenario: sensor, rules,
-physical action, notification — all without an LLM.
+Deye battery monitoring plus staged shedding of loads by battery state of
+charge (SOC). A scaled-down reference scenario: sensor, rules, action,
+notification — all without an LLM.
+
+The flow acts on **state cells**, not on devices
+([ADR-0014](adr/0014-state-cells.md)): each load is a switch cell with a
+*desired* state the flow sets and a *reported* state from its backend. In
+P1 the loads use the `virtual` backend and a Telegram notifier observes
+their changes; Tuya plugs become the backend when they are linked, without
+changing the flow.
 
 ### 8.1. States
 
@@ -478,7 +486,7 @@ physical action, notification — all without an LLM.
  └──────────────┘ SOC ≥ 60%    └──────────────────┘ SOC≥50% └──────────────────┘
                   or grid back                      or grid back
  In every state: data older than 20 min → touch nothing;
- respect a manual switch-on for 2 h; a kill switch per plug and a global one.
+ respect a manual switch-on for 2 h; a kill switch per load and a global one.
 ```
 
 ### 8.2. Rules
@@ -488,26 +496,29 @@ physical action, notification — all without an LLM.
 | Thresholds | 50% — big boiler, 40% — kitchen boiler. In the flow config, not in code |
 | Condition | Only while the grid is down. If the inverter drains the battery even with grid, drop this condition |
 | Restore | +10% hysteresis: big at ≥ 60%, kitchen at ≥ 50%; or when the grid returns — one at a time, 1 min apart |
-| Debounce | Each plug switches at most once per 15 min |
+| Debounce | Each load cell changes desired state at most once per 15 min |
 | Polling | 30 min with grid, 5 min without (at 5 kW, 10% of a 10 kWh battery is gone in ≈ 12 min); at most 288 calls a day, about 9% of DeyeCloud's free 100,000 calls a month in the worst case. On HTTP 429 back off, honouring `Retry-After` (task 0.7) |
 | Data freshness | Older than 20 min — switch nothing, report it |
-| Manual override | Someone switched a plug on by hand — automation stays off it for 2 hours and reports it |
-| Kill switches | KV flag per plug and a global one; off means notifications only. Telegram command |
-| Notifications | Silent message to the notifications topic on every switch |
-| Escalation to the model | Tuya or Deye auth error, plug not responding, no data for over an hour |
+| Manual override | A load's reported state changed without our command (someone switched it by hand) — automation stays off it for 2 hours and reports it. Applies only to backends that report state |
+| Kill switches | Switch cells per load and a global one; off means notifications only. Telegram command sets their desired state |
+| Notifications | A Telegram observer posts silently to the notifications topic on every change of a load cell |
+| Escalation to the model | Deye or backend auth error, a backend not converging desired and reported, no data for over an hour |
 
 ### 8.3. Blocks
 
-Three reusable blocks:
+Reusable blocks:
 
-- `deye-reader` — reads SOC and grid status (today a Python script
-  `deye.py` in the current bot; rewritten in WASM in P0);
-- `tuya-plug` — on / off / state of a plug;
-- `load-shedding` — the flow itself, the state machine from 8.1.
+- `deye-reader` — reads SOC and grid status into sensor cells (done in P0 as
+  a WASM module);
+- load cells `load.big_boiler`, `load.kitchen_boiler` — switch cells; backend
+  `virtual` in P1, `tuya` once the plugs are linked;
+- a Telegram notifier — an observer of the load cells;
+- `load-shedding` — the flow itself, the state machine from 8.1, which only
+  reads sensor cells and writes the desired state of load cells.
 
 The bot still answers "how is the battery?" through the `deye.status` tool.
 
-**Tuya access** (chosen in P0):
+**Tuya access** (when the plugs are linked; P1):
 
 - **Cloud (Tuya OpenAPI)** — a project on the Tuya developer platform plus a
   linked Smart Life account; works from cloud hosting, like DeyeCloud.
@@ -525,11 +536,13 @@ not required for the first flow.
 - **R-LS-1.** Replay of the SOC history (samples every 30 min already
   accumulate in `deye.sqlite3`) and synthetic discharge curves during an
   outage.
-- **R-LS-2.** Invariants covered by tests: a plug never switches more often
-  than once per 15 min; never switches on while SOC is below the threshold
-  and the grid is down; does nothing on stale data.
-- **R-LS-3.** The first week is shadow mode: the flow writes "would switch
-  off the big boiler" but does not call Tuya.
+- **R-LS-2.** Invariants covered by tests on `virtual` cells, including
+  injected failures and manual changes: a load never changes more often than
+  once per 15 min; never switches on while SOC is below the threshold and the
+  grid is down; nothing happens on stale data.
+- **R-LS-3.** Shadow mode is the `virtual` backend: the flow runs for real,
+  the notifier reports every change, no device is touched. Moving a load to
+  the `tuya` backend raises its risk class and needs the owner's approval.
 - **R-LS-4.** Until the bot migrates, the WASM module runs alongside
   `deye.py` and their outputs are compared.
 
@@ -716,7 +729,7 @@ with a gate; the next phase does not start until the gate is passed.
 | 0.3 | The same through Extism; build the Deye reader with TinyGo, Go and Rust under both ABIs | [ADR-0011](adr/0011-module-abi.md) accepted: own ABI or Extism, backed by a 2 × 3 table of module size, call time and runner RAM |
 | 0.4 | Read the MCP transport (Streamable HTTP) and A2A specs | Recorded what part of the 9.1 protocol they cover |
 | 0.5 | Measure runner RAM (wazero + embedded NATS) on a Pi or in a container limited to 128 MB | Done: fits a 128 MB container ([research note](research/2026-11-01-runner-memory.md)); a Pi run later confirms arm64 timings, not a gate |
-| 0.6 | Access to Tuya plugs: cloud or local key | A plug switches on/off from Go code; path chosen |
+| 0.6 | Access to Tuya plugs: cloud or local key | Moved to P1: loads are state cells with a `virtual` backend until the plugs are linked ([ADR-0014](adr/0014-state-cells.md)) |
 | 0.7 | Does the home internet stay up on the inverter during an outage; DeyeCloud limits for polling every 5 min | Done: [research note](research/2026-11-01-outage-connectivity-and-deye-limits.md); internet outlasts the inverter; DeyeCloud quota 100,000 calls a month, worst case uses ~10% |
 
 ### 10.2. P1 · All-in-one — scope and acceptance
@@ -745,7 +758,7 @@ fallback until the gate is passed.
 | Question | Options | Leaning towards | Decided by |
 |---|---|---|---|
 | Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Not chosen; P0 numbers (ADR-0011) favour Rust or TinyGo over standard Go | Start of P3: how reliably the model writes and fixes each, plus the P0 numbers |
-| Tuya access | Cloud · LAN | Cloud for P1: the internet stays up during outages (0.7); LAN later with a home runner | P0, task 0.6 |
+| Tuya access | Cloud · LAN | Cloud: the internet stays up during outages (0.7); LAN later with a home runner | P1, when the plugs are linked |
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
 | History and tool format | Own · Anthropic Messages · OpenAI | Neutral own format + MCP for tools | Two providers in P1 |
 | First API provider | Anthropic · Gemini · OpenAI-compatible | OpenAI-compatible | Price and quality of a cheap model on real turns |
