@@ -10,6 +10,7 @@ the ADRs.
 - [docs/architecture/](docs/architecture/README.md) — C4 views from context
   down to the code map.
 - [docs/adr/](docs/adr/README.md) — why things are the way they are.
+- [docs/research/](docs/research/) — dated research notes that ADRs cite.
 
 ## Rules
 

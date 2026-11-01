@@ -561,13 +561,16 @@ Rules: NATS as the transport (subjects `a.<network>.<node>.<type>`, queue
 groups for identical tools on several edges), MQTT and WebSocket adapters;
 JSON to start, CBOR for microcontrollers, one schema for both; an unknown
 `type` gets an `unsupported` reply, each type is versioned separately,
-extensions live under `x.<author>.*`; at-least-once + `idemKey`; every command
+extensions use reverse-DNS identifiers, as in MCP (ADR-0013); at-least-once + `idemKey`; every command
 has a `ttl` ("open the gate" delivered two hours late must expire); an edge
 without a link keeps running on its modules and local policies, events queue
 up in JetStream.
 
-Before fixing the format: check MCP transports (Streamable HTTP) and the A2A
-protocol so we do not reinvent what is already standardised.
+Checked in P0 task 0.4 against MCP 2026-07-28 and A2A 1.0
+([research note](research/2026-11-01-mcp-a2a-coverage.md)): MCP covers tool
+discovery and calls and is carried as-is; the rest of this table is ours.
+The decision, including how connectivity and trust come from NATS, is
+[ADR-0013](adr/0013-protocol-envelope-around-stateless-mcp.md).
 
 ### 9.2. Module updates: desired state (P2)
 
@@ -778,3 +781,4 @@ Reviewed at each gate.
 - Compiling flows into Home Assistant automations.
 - CBOR and microcontroller adapters.
 - OpenTelemetry instead of slog + `turns`.
+- An A2A endpoint on the core for external agents (after P3, ADR-0013).
