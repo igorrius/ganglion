@@ -69,6 +69,7 @@ pinned by a test in the task that owns the code.
 | M1 | State cells — **done** ([plan](p1-m1-cells.md)) | Switch, sensor and request cells; `virtual` backend with fault injection; SQLite store | 0.5 weekend |
 | M2 | Delivery and Telegram | Inbox/outbox, outbox sender, Telegram transport; crash-tested echo bot | 1 weekend |
 | M3 | **The agent** | History, actors, provider, router, agent loop, memory, skills, policies; a talking agent on the test bot | 1–1.5 weekends |
+| M3r | Refactoring before M3b ([plan](p1-refactor.md)) | Go conventions and lint guardrails, the agent as a stage pipeline, `config` with `samber/do`, `ganglion run` on urfave/cli; no behaviour change | 0.25 weekend |
 | M4 | Reflexes: runner and Deye | Config, scheduler, modules on cron writing sensor cells, exposed to the agent as tools; deployed next to the current bot | 0.5 weekend |
 | M5 | Load-shedding flow | The 8.1 state machine on `virtual` load cells; Telegram notifier; shadow week | 0.5 weekend |
 | M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback | 0.25–0.5 weekend |

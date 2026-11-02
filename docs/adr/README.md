@@ -32,6 +32,9 @@ considered, how they compare, the decision and its consequences. See
 | [0024](0024-persona-as-workspace-files.md) | Keep the agent's persona in Markdown files of the workspace; the core keeps only its rules in code | Accepted | 2026-11-02 |
 | [0025](0025-markdown-rendered-to-telegram-entities.md) | Agents write Markdown; the Telegram transport renders it to message entities with goldmark | Accepted | 2026-11-02 |
 | [0026](0026-opentelemetry-prometheus-and-promtop.md) | Instrument with OpenTelemetry; serve metrics to Prometheus with the promtop dashboard, export traces over OTLP | Accepted | 2026-11-02 |
+| [0027](0027-written-go-conventions-and-lint-guardrails.md) | Write the Go conventions down and enforce what a linter can | Accepted | 2026-11-02 |
+| [0028](0028-samber-do-composition-root-in-config.md) | Assemble the node in a `config` package of `samber/do` providers | Accepted | 2026-11-02 |
+| [0029](0029-urfave-cli-for-commands-and-bootstrap-flags.md) | Use urfave/cli v3 for commands and bootstrap flags, with `main.go` at the root and the command tree in `cmd` | Accepted | 2026-11-02 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).
