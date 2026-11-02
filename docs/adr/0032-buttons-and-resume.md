@@ -83,7 +83,8 @@ How it works:
   key, so a rerun turn parks the same call.
 - `tool/pending` stores the call (its turn id and number, tool,
   arguments, the redacted question), a request cell
-  `request:call:<id>` (ADR-0014) and two buttons. A button id is 26
+  `request.call.<id>` (ADR-0014; lower case, like every cell id) and two
+  buttons. A button id is 26
   characters of Crockford base32 from 16 random bytes; callback data is
   `c:<id>`.
 - The Telegram transport asks for `callback_query` updates, answers each
@@ -96,7 +97,9 @@ How it works:
   moves the call from waiting to approved or denied and spends the other
   button. Approve runs the stored call through the journal and the
   registry, not the policy (it was decided), with the original key;
-  Deny records "the owner declined". The outcome is stored, the question
+  Deny records "the owner declined". The whole outcome (the result,
+  whether it is outside content, the messages the call produced) is
+  stored, so a rerun of the turn gives back the same; the question
   edited ("Approved." / "Declined."), and the model runs on a new
   user-role note `[confirmation] <tool>: <result>` (outside content
   wrapped as data and the session tainted). No tool message appears
@@ -107,7 +110,9 @@ How it works:
   not answer in time", if the call is still in its session.
 - Quick-action buttons (Delete, Details; later tasks) are stored the same
   way with an action name; a press runs the registered action, edits the
-  message and starts no model turn.
+  message and starts no model turn. A refused press on one removes only
+  its buttons (an `Edit` without text, `editMessageReplyMarkup`), so the
+  list entry keeps its text.
 
 The abuse cases:
 
@@ -144,6 +149,9 @@ The abuse cases:
   is recorded without a model turn.
 - Pending ids that no longer wait are dropped from the state at the
   start of every message turn and on `/resume`.
+- An `Ask` that half-fails (the call stored, its request cell not) fails
+  the call: the model gets the error and no question is sent. The stored
+  call waits unseen and expires silently, leaving a journal entry.
 - The confirmed call's arguments sit in SQLite until the call is done,
   like the history that holds them anyway; the question shown is
   redacted.

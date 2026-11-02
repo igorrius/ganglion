@@ -143,7 +143,7 @@ ADRs:
 |---|---|---|
 | Tool names | `<area>.<verb>`; the MCP name replaces `.` with `_` | `schedule.create` / `schedule_create` |
 | Call key (R-DLV-6) | `<event id>:<call number>`; the call number counts calls within the turn from 1 | `01JD…:2` |
-| Pending call id | ULID; the request cell id is `request:call:<pending id>` | `request:call:01JD…` |
+| Pending call id | ULID; the request cell id is `request.call.<pending id in lower case>`, following the cell id rule (lower case, dot-separated) | `request.call.01jd…` |
 | Callback data | `c:<button id>`, where the button id is a random 16-byte base32 string, 26 chars | `c:3J7Q…` |
 | Decision event | `Kind "decision"`, `Source` = the transport, `Conv` = the conversation of the button, payload `{"button":"<id>","from":"<principal>","ref":"<message ref>"}` | — |
 | Resume event | `Kind "tool.result"`, payload `{"pending":"<id>","status":"approved\|denied\|expired"}` | — |
@@ -462,7 +462,7 @@ It records the callback abuse cases of design 5.2.
   type Item struct { ID, Conv, Principal, TurnID string; N int; Tool string; Args json.RawMessage; Question string; Status Status; Expires time.Time; Result string }
   type Button struct { ID, Pending, Action string /* approve | deny | <quick action name> */; Principal, Conv string; Args json.RawMessage; Expires time.Time; Used bool }
   func New(ctx context.Context, db *sql.DB, cells *cells.Service, now func() time.Time, ttl time.Duration /* default 15m */) (*Store, error)
-  func (s *Store) Ask(ctx context.Context, c tool.Call, question string) (string, error) // implements policy.Asker: stores the item, a request cell "request:call:<id>", two buttons; returns the id
+  func (s *Store) Ask(ctx context.Context, c tool.Call, question string) (string, error) // implements policy.Asker: stores the item, a request cell "request.call.<id in lower case>", two buttons; returns the id
   func (s *Store) Outgoing(ctx context.Context, id string) (event.Outgoing, error)       // the question with Approve / Deny buttons, addressed to c.Conv
   func (s *Store) Press(ctx context.Context, buttonID, from string) (Press, error)        // atomically marks the button used; ErrUsed, ErrExpired, ErrNotYours
   type Press struct { Button Button; Item Item } // Item zero for quick actions

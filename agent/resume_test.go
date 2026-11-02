@@ -363,3 +363,103 @@ func TestResumeDropsStalePendingIDs(t *testing.T) {
 		t.Fatalf("state %+v", st)
 	}
 }
+
+// outTool is an approved tool whose result is outside content and that
+// sends a message, from a class that does not say so.
+type outTool struct{ sideTool }
+
+func (o *outTool) Run(_ context.Context, c tool.Call) (tool.Result, error) {
+	o.calls = append(o.calls, c)
+	return tool.Result{Text: "remote text", External: true,
+		Out: []event.Outgoing{{IdemKey: c.Key() + ":send", Transport: "telegram", Conv: "telegram:7", Text: "hi"}}}, nil
+}
+
+// A rerun after the outcome was stored gives back the call's messages and
+// its outside-content flag, though the call does not run again.
+func TestRerunKeepsTheOutcome(t *testing.T) {
+	o := &outTool{name: "message.send", class: tool.ClassSideEffect}
+	e := newConfirmEnv(t, o)
+	q, ev := e.ask(t, "message.send")
+	pr := press(owner, q.Buttons[0].ID, "77")
+	e.smart.push(say("Sent."), say("Sent."))
+	if _, _, err := e.a.Handle(context.Background(), pr); err != nil {
+		t.Fatal(err)
+	}
+	out := e.turn(t, pr)
+	if len(o.calls) != 1 {
+		t.Fatalf("the call ran %d times", len(o.calls))
+	}
+	if sent, ok := findOut(out, func(m event.Outgoing) bool { return m.IdemKey == ev.ID+":1:send" }); !ok || sent.Text != "hi" {
+		t.Fatalf("the call's message is lost on the rerun: %+v", out)
+	}
+	reqs := e.smart.requests()
+	if got := lastUser(reqs[len(reqs)-1]); got != "[confirmation] message.send: "+tool.WrapExternal("message.send", "remote text") {
+		t.Fatalf("the rerun told the model %q", got)
+	}
+	if !e.state(t).Tainted {
+		t.Fatal("the rerun did not taint")
+	}
+}
+
+// A refused press on a quick-action button removes the buttons only: the
+// message is a list entry the agent cannot write again.
+func TestRefusedQuickPressKeepsTheText(t *testing.T) {
+	e := newConfirmEnv(t)
+	e.deps.QuickActions = map[string]QuickAction{"test.delete": func(context.Context, pending.Button) (string, error) { return "Deleted.", nil }}
+	e.a = New(overDefaults(Config{}), e.deps)
+	ctx := context.Background()
+	mk := func(action string, expires time.Time) pending.Button {
+		b := pending.Button{ID: pending.NewButtonID(), Action: action, Label: "Delete", Principal: owner, Conv: "telegram:42", Expires: expires}
+		if err := e.pending.AddButtons(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	used := mk("test.delete", e.now.Add(time.Hour))
+	e.turn(t, press(owner, used.ID, "90"))
+	late := mk("test.delete", e.now.Add(time.Minute))
+	unknown := mk("test.gone", e.now.Add(time.Hour))
+	e.now = e.now.Add(2 * time.Minute)
+	for name, b := range map[string]pending.Button{"used": used, "expired": late, "no action": unknown} {
+		out := e.turn(t, press(owner, b.ID, "90"))
+		if len(out) != 1 || out[0].Edit != "90" || out[0].Text != "" || len(out[0].Buttons) != 0 {
+			t.Errorf("%s: out %+v, want an edit of the buttons only", name, out)
+		}
+	}
+}
+
+// An expiry event for a call that was answered meanwhile tells what
+// happened, not "expired".
+func TestExpiryOfAnAnsweredCallUsesItsOutcome(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	q, _ := e.ask(t, "schedule.create")
+	e.smart.push(say("Done."))
+	e.turn(t, press(owner, q.Buttons[0].ID, "77"))
+	it, err := e.pending.Get(context.Background(), e.pendingID(t, q))
+	if err != nil || it.Status != pending.StatusDone {
+		t.Fatalf("item %+v, %v", it, err)
+	}
+	// Put the id back as if the press turn had not been stored, then
+	// deliver an expiry event for it.
+	raw, _ := json.Marshal(State{V: 2, Session: "s", Started: t0, Last: t0, Pending: []string{it.ID}})
+	e.states.m["telegram:42"] = raw
+	p, _ := json.Marshal(event.ToolResult{Pending: it.ID})
+	e.smart.push(say("ok"))
+	e.turn(t, event.Event{ID: "01EXPDONE", IdemKey: "pending:" + it.ID + ":expired", Source: "telegram", Conv: "telegram:42",
+		Kind: event.KindToolResult, Payload: p, At: e.now})
+	reqs := e.smart.requests()
+	if got := lastUser(reqs[len(reqs)-1]); got != "[confirmation] schedule.create: created" {
+		t.Fatalf("the model saw %q", got)
+	}
+}
+
+// pendingID finds the pending call of question q.
+func (e *confirmEnv) pendingID(t *testing.T, q event.Outgoing) string {
+	t.Helper()
+	var id string
+	if err := e.db.QueryRow(`SELECT pending FROM pending_buttons WHERE id = ?`, q.Buttons[0].ID).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}

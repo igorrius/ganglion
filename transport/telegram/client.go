@@ -233,6 +233,12 @@ func (c *client) editMessageText(ctx context.Context, p editParams) error {
 	return c.call(ctx, "editMessageText", p, nil)
 }
 
+// editMessageReplyMarkup changes only the buttons of a message the bot
+// sent.
+func (c *client) editMessageReplyMarkup(ctx context.Context, p markupParams) error {
+	return c.call(ctx, "editMessageReplyMarkup", p, nil)
+}
+
 // answerCallbackQuery tells Telegram a button press was received, so the
 // client stops its spinner. No text is shown.
 func (c *client) answerCallbackQuery(ctx context.Context, id string) error {

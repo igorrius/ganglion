@@ -61,8 +61,12 @@ func (s *Service) Ask(ctx context.Context, r Request, ttl time.Duration, src str
 
 // AskAs creates a pending request with the given id, for a caller that
 // names its requests after its own records (a pending tool call is
-// "request:call:<id>"). An existing id is ErrExists.
+// "request.call.<id>"). The id follows the rule of every cell id
+// (lower case, dot-separated; ErrInvalidID); an existing id is ErrExists.
 func (s *Service) AskAs(ctx context.Context, id string, r Request, ttl time.Duration, src string) (Cell, error) {
+	if !idPattern.MatchString(id) {
+		return Cell{}, fmt.Errorf("%w: %q", ErrInvalidID, id)
+	}
 	if r.Question == "" || ttl <= 0 {
 		return Cell{}, fmt.Errorf("%w: a request needs a question and a positive ttl", ErrInvalidValue)
 	}

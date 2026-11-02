@@ -35,7 +35,8 @@ func (t *turn) reply(text string) {
 }
 
 // edit changes the message holding the pressed button to text and removes
-// its buttons. A turn edits once, so the key is fixed.
+// its buttons; "" keeps the text and removes only the buttons. A turn
+// edits once, so the key is fixed.
 func (t *turn) edit(text string) {
 	if t.decision.Ref == "" {
 		return

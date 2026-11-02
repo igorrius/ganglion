@@ -162,3 +162,23 @@ func TestPartsKeepButtonsOnTheLastPart(t *testing.T) {
 		t.Fatalf("an edit was split into %d parts", len(edit))
 	}
 }
+
+// An edit without text changes only the buttons: the text stays.
+func TestEditButtonsOnly(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	ref := sendOne(t, tr, fake)
+	edit := event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42", Edit: ref}
+	for i := range 2 { // the second changes nothing: still success
+		if err := tr.Send(context.Background(), edit); err != nil {
+			t.Fatalf("edit %d: %v", i, err)
+		}
+	}
+	edits := fake.Edits()
+	if len(edits) != 1 || edits[0].Text != "Run?" || edits[0].Keyboard != "" || strconv.FormatInt(edits[0].MessageID, 10) != ref {
+		t.Fatalf("edits %+v", edits)
+	}
+	if err := tr.Send(context.Background(), event.Outgoing{IdemKey: "e2", Transport: "telegram", Conv: "telegram:42", Edit: "999"}); !errors.Is(err, transport.ErrPermanent) {
+		t.Fatalf("buttons of a missing message: %v", err)
+	}
+}

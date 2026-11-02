@@ -58,7 +58,7 @@ type Callback struct {
 	Data      string // the button's callback_data
 }
 
-// Edit is one successful editMessageText call.
+// Edit is one successful edit; an edit of the buttons only keeps the text.
 type Edit struct {
 	ChatID    int64
 	MessageID int64
@@ -223,7 +223,8 @@ func (s *Server) Answered() []string {
 	return append([]string(nil), s.answered...)
 }
 
-// Edits returns the successful editMessageText calls, in order.
+// Edits returns the successful edits (editMessageText and
+// editMessageReplyMarkup), in order.
 func (s *Server) Edits() []Edit {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -330,6 +331,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.sendMessage(w, params)
 	case "editMessageText":
 		s.editMessageText(w, params)
+	case "editMessageReplyMarkup":
+		s.editMessageReplyMarkup(w, params)
 	case "answerCallbackQuery":
 		var id string
 		_ = json.Unmarshal(params["callback_query_id"], &id)
@@ -573,6 +576,33 @@ func (s *Server) editMessageText(w http.ResponseWriter, params map[string]json.R
 	s.messages[p.ChatID][p.MessageID] = shown{text: e.Text, entities: e.Entities, keyboard: e.Keyboard}
 	s.edits = append(s.edits, e)
 	writeOK(w, map[string]any{"message_id": p.MessageID, "date": time.Now().Unix(), "chat": map[string]any{"id": p.ChatID, "type": "private"}, "text": p.Text})
+}
+
+// editMessageReplyMarkup changes only the buttons of a message the bot
+// sent; the Edit it records keeps the message's text.
+func (s *Server) editMessageReplyMarkup(w http.ResponseWriter, params map[string]json.RawMessage) {
+	var p struct {
+		ChatID      int64   `json:"chat_id"`
+		MessageID   int64   `json:"message_id"`
+		ReplyMarkup *markup `json:"reply_markup"`
+	}
+	raw, _ := json.Marshal(params)
+	_ = json.Unmarshal(raw, &p)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur, ok := s.messages[p.ChatID][p.MessageID]
+	next := shown{text: cur.text, entities: cur.entities, keyboard: p.ReplyMarkup.keyboard()}
+	switch {
+	case !ok:
+		writeErr(w, http.StatusBadRequest, "Bad Request: message to edit not found", 0)
+		return
+	case cur == next:
+		writeErr(w, http.StatusBadRequest, "Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message", 0)
+		return
+	}
+	s.messages[p.ChatID][p.MessageID] = next
+	s.edits = append(s.edits, Edit{ChatID: p.ChatID, MessageID: p.MessageID, Text: next.text, Entities: next.entities, Keyboard: next.keyboard})
+	writeOK(w, true)
 }
 
 func writeOK(w http.ResponseWriter, result any) {

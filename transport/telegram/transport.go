@@ -272,8 +272,8 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 
 // Send implements transport.Transport. The Markdown text is sent with
 // entities, and Buttons as an inline keyboard; a message with Edit
-// changes that message instead (editMessageText), where "not modified"
-// counts as done. A 429 becomes transport.RetryAfterError; 400 and 403
+// changes that message instead (editMessageText, or editMessageReplyMarkup
+// for an Edit without Text), where "not modified" counts as done. A 429 becomes transport.RetryAfterError; 400 and 403
 // (a message to edit that is gone among them, and a conversation that is
 // not a Telegram one) wrap transport.ErrPermanent; anything else is
 // returned as is and retried by the sender.
@@ -281,6 +281,9 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 	chat, thread, err := ParseConv(msg.Conv)
 	if err != nil {
 		return fmt.Errorf("%w: %w", err, transport.ErrPermanent)
+	}
+	if msg.Edit != "" && msg.Text == "" {
+		return sendError(t.editButtons(ctx, chat, msg.Edit, msg.Buttons))
 	}
 	text, ents := render(msg.Text)
 	if strings.TrimSpace(text) == "" {

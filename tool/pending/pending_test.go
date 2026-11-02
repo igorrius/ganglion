@@ -142,7 +142,7 @@ func TestAskCreatesRequestCell(t *testing.T) {
 	f := newFixture(t)
 	id, q := f.ask(t, 1)
 	ctx := context.Background()
-	c, err := f.cells.Get(ctx, "request:call:"+id)
+	c, err := f.cells.Get(ctx, "request.call."+strings.ToLower(id))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestAskCreatesRequestCell(t *testing.T) {
 	if _, err := f.s.Press(ctx, q.Buttons[0].ID, by("ev1")); err != nil {
 		t.Fatal(err)
 	}
-	c, _ = f.cells.Get(ctx, "request:call:"+id)
+	c, _ = f.cells.Get(ctx, "request.call."+strings.ToLower(id))
 	if d, _ := cells.DecisionOf(c); d.Status != cells.StatusApproved || d.By != owner {
 		t.Fatalf("after approve the cell says %+v", d)
 	}
@@ -310,7 +310,7 @@ func TestExpireDue(t *testing.T) {
 	if err != nil || len(items) != 1 || items[0].ID != a || items[0].Status != pending.StatusExpired {
 		t.Fatalf("ExpireDue = %+v, %v", items, err)
 	}
-	c, _ := f.cells.Get(ctx, "request:call:"+a)
+	c, _ := f.cells.Get(ctx, "request.call."+strings.ToLower(a))
 	if d, _ := cells.DecisionOf(c); d.Status != cells.StatusExpired {
 		t.Fatalf("cell %+v", d)
 	}
@@ -413,5 +413,48 @@ func TestNewButtonID(t *testing.T) {
 	a, b := pending.NewButtonID(), pending.NewButtonID()
 	if len(a) != 26 || a == b || len("c:"+a) > 64 {
 		t.Fatalf("ids %q %q", a, b)
+	}
+}
+
+func TestPressNeedsTheEvent(t *testing.T) {
+	f := newFixture(t)
+	_, q := f.ask(t, 1)
+	if _, err := f.s.Press(context.Background(), q.Buttons[0].ID, pending.By{Principal: owner, Conv: "telegram:42"}); err == nil {
+		t.Fatal("a press without an event was accepted")
+	}
+}
+
+// A spent sibling is not "pressed by" anyone: no event can take it for a
+// rerun of its own press.
+func TestSpentSiblingIsNotARerun(t *testing.T) {
+	f := newFixture(t)
+	_, q := f.ask(t, 1)
+	ctx := context.Background()
+	if _, err := f.s.Press(ctx, q.Buttons[0].ID, by("ev1")); err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range []string{"ev1", "spent", "-"} {
+		if _, err := f.s.Press(ctx, q.Buttons[1].ID, by(ev)); !errors.Is(err, pending.ErrUsed) {
+			t.Errorf("sibling pressed by %q: %v, want ErrUsed", ev, err)
+		}
+	}
+}
+
+// The whole outcome is stored, so a rerun can give back what the first
+// run produced: the messages and whether the text is outside content.
+func TestFinishStoresTheOutcome(t *testing.T) {
+	f := newFixture(t)
+	id, _ := f.ask(t, 1)
+	ctx := context.Background()
+	out := []event.Outgoing{{IdemKey: "01TURN:1:send", Transport: "telegram", Conv: "telegram:7", Text: "hi"}}
+	if err := f.s.Finish(ctx, id, pending.Outcome{Result: "page", External: true, Out: out}); err != nil {
+		t.Fatal(err)
+	}
+	it, err := f.s.Get(ctx, id)
+	if err != nil || it.Status != pending.StatusDone || it.Result != "page" || !it.External || len(it.Out) != 1 || it.Out[0].IdemKey != "01TURN:1:send" {
+		t.Fatalf("item %+v, %v", it, err)
+	}
+	if err := f.s.Finish(ctx, "nope", pending.Outcome{}); !errors.Is(err, pending.ErrNotFound) {
+		t.Fatalf("Finish(unknown) = %v", err)
 	}
 }

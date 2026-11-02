@@ -109,12 +109,37 @@ func rows(buttons []event.Button) [][]inlineButton {
 // them). "Message is not modified" is success; a ref that is not a
 // message id is a permanent failure.
 func (t *Transport) edit(ctx context.Context, chat int64, ref, text string, ents []entity, buttons []event.Button) error {
+	id, err := messageID(ref)
+	if err != nil {
+		return err
+	}
+	return modified(t.c.editMessageText(ctx, editParams{ChatID: chat, MessageID: id, Text: text, Entities: ents,
+		ReplyMarkup: inlineMarkup{InlineKeyboard: rows(buttons)}}))
+}
+
+// editButtons changes only the buttons of message ref in chat (none
+// removes them); the text stays.
+func (t *Transport) editButtons(ctx context.Context, chat int64, ref string, buttons []event.Button) error {
+	id, err := messageID(ref)
+	if err != nil {
+		return err
+	}
+	return modified(t.c.editMessageReplyMarkup(ctx, markupParams{ChatID: chat, MessageID: id,
+		ReplyMarkup: inlineMarkup{InlineKeyboard: rows(buttons)}}))
+}
+
+// messageID reads a message ref; one that is not a message id is a
+// permanent failure.
+func messageID(ref string) (int64, error) {
 	id, err := strconv.ParseInt(ref, 10, 64)
 	if err != nil || id <= 0 {
-		return fmt.Errorf("telegram: edit: message ref %q is not a message id: %w", ref, transport.ErrPermanent)
+		return 0, fmt.Errorf("telegram: edit: message ref %q is not a message id: %w", ref, transport.ErrPermanent)
 	}
-	err = t.c.editMessageText(ctx, editParams{ChatID: chat, MessageID: id, Text: text, Entities: ents,
-		ReplyMarkup: inlineMarkup{InlineKeyboard: rows(buttons)}})
+	return id, nil
+}
+
+// modified treats "message is not modified" as a done edit.
+func modified(err error) error {
 	if ae, ok := errors.AsType[*apiError](err); ok && ae.Code == http.StatusBadRequest && strings.Contains(ae.Description, notModified) {
 		return nil
 	}

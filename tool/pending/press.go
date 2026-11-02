@@ -13,6 +13,10 @@ import (
 // says why.
 var errRefused = errors.New("pending: press refused")
 
+// spentBy is the used_by of a button spent by a press of its sibling: no
+// event pressed it, and no event id has this form.
+const spentBy = "spent:sibling"
+
 // statusOf is what a press of a confirmation button decides.
 var statusOf = map[string]Status{ActionApprove: StatusApproved, ActionDeny: StatusDenied}
 
@@ -28,6 +32,9 @@ var statusOf = map[string]Status{ActionApprove: StatusApproved, ActionDeny: Stat
 //
 // The call's request cell gets the answer.
 func (s *Store) Press(ctx context.Context, buttonID string, by By) (Press, error) {
+	if by.Event == "" || by.Principal == "" || by.Conv == "" {
+		return Press{}, fmt.Errorf("pending: press %s: a press needs a principal, a conversation and an event", buttonID)
+	}
 	p, err := s.press(ctx, buttonID, by)
 	if errors.Is(err, errRefused) {
 		p, err = s.refused(ctx, buttonID, by)
@@ -84,7 +91,7 @@ func decideByPress(ctx context.Context, c *sql.Conn, b Button) (Item, error) {
 	if n, err := res.RowsAffected(); err != nil || n == 0 {
 		return Item{}, errRefused
 	}
-	if _, err := c.ExecContext(ctx, `UPDATE pending_buttons SET used = 1 WHERE pending = ? AND used = 0`, b.Pending); err != nil {
+	if _, err := c.ExecContext(ctx, `UPDATE pending_buttons SET used = 1, used_by = ? WHERE pending = ? AND used = 0`, spentBy, b.Pending); err != nil {
 		return Item{}, err
 	}
 	return scanItem(c.QueryRowContext(ctx, `SELECT `+itemColumns+` FROM pending_calls WHERE id = ?`, b.Pending))

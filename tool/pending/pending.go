@@ -89,6 +89,16 @@ type Item struct {
 	Status                                 Status
 	Expires                                time.Time
 	Result                                 string
+	External                               bool             // Result is outside content
+	Out                                    []event.Outgoing // messages the call produced
+}
+
+// Outcome is how a call ended: what the model reads and what the call
+// produced. It is stored whole, so a rerun gives back the same.
+type Outcome struct {
+	Result   string
+	External bool
+	Out      []event.Outgoing
 }
 
 // Call rebuilds the stored call with its original turn and number, so its
@@ -153,12 +163,13 @@ func New(ctx context.Context, db *sql.DB, cs *cells.Service, now func() time.Tim
 // 26 characters, so "c:"+id fits Telegram's 64-byte callback data.
 func NewButtonID() string { return event.RandomID() }
 
-// cellID is the request cell of pending call id.
-func cellID(id string) string { return "request:call:" + id }
+// cellID is the request cell of pending call id: "request.call.<id>" in
+// lower case, as cell ids are.
+func cellID(id string) string { return "request.call." + strings.ToLower(id) }
 
 // Ask implements policy.Asker: it stores the call, two buttons (approve,
 // deny) for the call's principal and a request cell
-// "request:call:<id>", and returns the id. The same call key asked again
+// "request.call.<id>", and returns the id. The same call key asked again
 // (a turn rerun after a crash) returns the stored id. It never returns an
 // empty id without an error.
 func (s *Store) Ask(ctx context.Context, c tool.Call, question string) (string, error) {
@@ -296,6 +307,27 @@ func (s *Store) Decide(ctx context.Context, id string, st Status, result string)
 	return nil
 }
 
+// Finish stores the outcome of pending call id and marks it done.
+func (s *Store) Finish(ctx context.Context, id string, o Outcome) error {
+	out := ""
+	if len(o.Out) > 0 {
+		b, err := json.Marshal(o.Out)
+		if err != nil {
+			return fmt.Errorf("pending: finish %s: %w", id, err)
+		}
+		out = string(b)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE pending_calls SET status = ?, result = ?, external = ?, out = ? WHERE id = ?`,
+		string(StatusDone), o.Result, o.External, out, id)
+	if err != nil {
+		return fmt.Errorf("pending: finish %s: %w", id, err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return fmt.Errorf("pending: finish %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
 // Waiting returns those of ids whose calls still wait for an answer, in
 // their order; ids of answered, expired or unknown calls are left out.
 func (s *Store) Waiting(ctx context.Context, ids []string) ([]string, error) {
@@ -364,17 +396,22 @@ func (s *Store) ExpireDue(ctx context.Context) ([]Item, error) {
 	return out, rows.Err()
 }
 
-const itemColumns = `id, conv, transport, principal, turn_id, n, tool, args, question, status, expires_ms, result`
+const itemColumns = `id, conv, transport, principal, turn_id, n, tool, args, question, status, expires_ms, result, external, out`
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanItem(r scanner) (Item, error) {
 	var it Item
-	var args, status string
+	var args, status, out string
 	var expires int64
 	if err := r.Scan(&it.ID, &it.Conv, &it.Transport, &it.Principal, &it.TurnID, &it.N, &it.Tool, &args, &it.Question,
-		&status, &expires, &it.Result); err != nil {
+		&status, &expires, &it.Result, &it.External, &out); err != nil {
 		return Item{}, err
+	}
+	if out != "" {
+		if err := json.Unmarshal([]byte(out), &it.Out); err != nil {
+			return Item{}, fmt.Errorf("outgoing messages of %s: %w", it.ID, err)
+		}
 	}
 	it.Args, it.Status, it.Expires = json.RawMessage(args), Status(status), time.UnixMilli(expires).UTC()
 	return it, nil

@@ -58,7 +58,7 @@ type Outgoing struct {
 	Buttons []Button `json:",omitempty"`
 	// Edit is a Message.Ref of a message to change in place instead of
 	// sending a new one; its buttons are replaced by Buttons (none removes
-	// them).
+	// them). An Edit without Text changes only the buttons.
 	Edit string `json:",omitempty"`
 }
 

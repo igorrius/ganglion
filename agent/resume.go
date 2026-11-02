@@ -19,7 +19,7 @@ import (
 type Confirmations interface {
 	Press(ctx context.Context, buttonID string, by pending.By) (pending.Press, error)
 	Get(ctx context.Context, id string) (pending.Item, error)
-	Decide(ctx context.Context, id string, st pending.Status, result string) error
+	Finish(ctx context.Context, id string, o pending.Outcome) error
 	Waiting(ctx context.Context, ids []string) ([]string, error)
 }
 
@@ -41,11 +41,10 @@ const (
 
 // Lines added to the question when it is answered (or not).
 const (
-	lineApproved    = "Approved."
-	lineDeclined    = "Declined."
-	lineUsed        = "Already handled."
-	lineExpired     = "Expired."
-	lineUnavailable = "This action is no longer available."
+	lineApproved = "Approved."
+	lineDeclined = "Declined."
+	lineUsed     = "Already handled."
+	lineExpired  = "Expired."
 )
 
 // resume handles a press of a button and the expiry of a pending call,
@@ -86,10 +85,10 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 		a.log.Info("agent: press refused", "conv", t.event.Conv, "principal", t.msg.From, "err", err)
 		return nil
 	case errors.Is(err, pending.ErrUsed):
-		t.edit(answered(p.Item.Question, lineUsed))
+		t.closeButtons(p.Item.Question, lineUsed)
 		return nil
 	case errors.Is(err, pending.ErrExpired):
-		t.edit(answered(p.Item.Question, lineExpired))
+		t.closeButtons(p.Item.Question, lineExpired)
 		return nil
 	case err != nil:
 		return err
@@ -98,6 +97,17 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 		return a.quick(ctx, t, p.Button)
 	}
 	return a.confirmed(ctx, t, p.Item, p.Button.Action)
+}
+
+// closeButtons removes the buttons of a message whose press did not take.
+// A question gets a line saying why; any other message (a quick action's
+// list entry, whose text the agent cannot write again) keeps its text.
+func (t *turn) closeButtons(question, line string) {
+	if question == "" {
+		t.edit("")
+		return
+	}
+	t.edit(answered(question, line))
 }
 
 // answered is the question with a line saying how it ended.
@@ -113,7 +123,7 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 	run, ok := a.d.QuickActions[b.Action]
 	if !ok {
 		a.log.Warn("agent: no quick action", "action", b.Action, "conv", t.event.Conv)
-		t.edit(lineUnavailable)
+		t.closeButtons("", "")
 		return nil
 	}
 	text, err := run(ctx, b)
@@ -122,12 +132,6 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 	}
 	t.edit(text)
 	return nil
-}
-
-// outcome is how a pending call ended, for the model.
-type outcome struct {
-	text     string
-	external bool // outside content: wrapped as data, the session tainted
 }
 
 // confirmed runs an approved call or declines a denied one, stores the
@@ -146,49 +150,56 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 		line = lineApproved
 	}
 	t.edit(answered(it.Question, line))
+	t.out = append(t.out, o.Out...) // again on a rerun: the outbox keeps one per key
 	return a.continueWith(ctx, t, it, o)
 }
 
 // decide runs or declines the call, through the journal and without the
-// policy, and stores the outcome as done.
-func (a *Agent) decide(ctx context.Context, t *turn, it pending.Item, action string) (outcome, error) {
+// policy, and stores the whole outcome as done.
+func (a *Agent) decide(ctx context.Context, t *turn, it pending.Item, action string) (pending.Outcome, error) {
 	if it.Status == pending.StatusDone { // a rerun: the outcome is stored
-		return outcome{text: it.Result, external: action == pending.ActionApprove && a.external(it.Tool, false)}, nil
+		return a.stored(it, action == pending.ActionApprove), nil
 	}
-	var o outcome
+	var o pending.Outcome
 	if action == pending.ActionApprove {
 		o = a.runApproved(ctx, t, it)
 	} else {
 		o = a.settle(ctx, t, it, journal.DecisionDenied, resultDeclined)
 	}
-	if err := a.d.Pending.Decide(ctx, it.ID, pending.StatusDone, o.text); err != nil {
-		return outcome{}, fmt.Errorf("agent: store the outcome of %s: %w", it.ID, err)
+	if err := a.d.Pending.Finish(ctx, it.ID, o); err != nil {
+		return pending.Outcome{}, fmt.Errorf("agent: store the outcome of %s: %w", it.ID, err)
 	}
 	return o, nil
 }
 
+// stored is the outcome of a done call as the first run stored it; the
+// tool's spec still marks outside content when the call ran.
+func (a *Agent) stored(it pending.Item, ran bool) pending.Outcome {
+	return pending.Outcome{Result: it.Result, External: it.External || ran && a.external(it.Tool, false), Out: it.Out}
+}
+
 // runApproved runs the stored call as it was asked, with its original key
 // (R-DLV-6), journalled as approved.
-func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) outcome {
+func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pending.Outcome {
 	c := it.Call()
 	c.Admin, c.Tainted = t.admin, t.state.Tainted
 	c.KnownURL = knownURLs(t.state.Messages).has
 	res, err := a.journalled(journal.DecisionApproved, a.d.Tools.Run)(ctx, c)
-	t.out = append(t.out, res.Out...)
 	if err != nil {
-		return outcome{text: "error: " + err.Error()}
+		// A failed call can still carry messages, as in runTool.
+		return pending.Outcome{Result: "error: " + err.Error(), Out: res.Out}
 	}
-	return outcome{text: res.Text, external: a.external(it.Tool, res.External)}
+	return pending.Outcome{Result: res.Text, External: a.external(it.Tool, res.External), Out: res.Out}
 }
 
 // settle records a call that does not run, with decision d, and returns
 // text as its outcome.
-func (a *Agent) settle(ctx context.Context, t *turn, it pending.Item, d journal.Decision, text string) outcome {
+func (a *Agent) settle(ctx context.Context, t *turn, it pending.Item, d journal.Decision, text string) pending.Outcome {
 	c := it.Call()
 	c.Admin, c.Tainted = t.admin, t.state.Tainted
 	skip := func(context.Context, tool.Call) (tool.Result, error) { return tool.Result{Text: text}, nil }
 	_, _ = a.journalled(d, skip)(ctx, c)
-	return outcome{text: text}
+	return pending.Outcome{Result: text}
 }
 
 // journalled is f behind tracing and the journal, with decision d: the
@@ -209,7 +220,9 @@ func (a *Agent) external(name string, flagged bool) bool {
 }
 
 // expired resumes the conversation of a call nobody answered in time. A
-// call whose session has moved on is closed without a model turn.
+// call whose session has moved on is closed without a model turn. A call
+// that is done already (a rerun, or answered after all) resumes with its
+// stored outcome; its messages went out with the turn that stored it.
 func (a *Agent) expired(ctx context.Context, t *turn) error {
 	t.record.Outcome = turns.OutcomeCommand
 	it, err := a.d.Pending.Get(ctx, t.toolResult.Pending)
@@ -227,10 +240,10 @@ func (a *Agent) expired(ctx context.Context, t *turn) error {
 	if err := a.setAdmin(ctx, t); err != nil {
 		return err
 	}
-	o := outcome{text: resultExpired}
+	o := a.stored(it, false)
 	if it.Status == pending.StatusExpired {
 		o = a.settle(ctx, t, it, journal.DecisionExpired, resultExpired)
-		if err := a.d.Pending.Decide(ctx, it.ID, pending.StatusDone, o.text); err != nil {
+		if err := a.d.Pending.Finish(ctx, it.ID, o); err != nil {
 			return fmt.Errorf("agent: store the outcome of %s: %w", it.ID, err)
 		}
 	}
@@ -244,11 +257,11 @@ func (a *Agent) expired(ctx context.Context, t *turn) error {
 // history as a user-role note after the placeholder result the call got
 // in its own turn, so no tool message appears without its call, and the
 // model answers as it does a message.
-func (a *Agent) continueWith(ctx context.Context, t *turn, it pending.Item, o outcome) error {
+func (a *Agent) continueWith(ctx context.Context, t *turn, it pending.Item, o pending.Outcome) error {
 	t.record.Outcome = turns.OutcomeOK
 	t.state.Pending = slices.DeleteFunc(slices.Clone(t.state.Pending), func(id string) bool { return id == it.ID })
-	text := o.text
-	if o.external {
+	text := o.Result
+	if o.External {
 		t.state.Tainted = true
 		text = tool.WrapExternal(it.Tool, text)
 	}

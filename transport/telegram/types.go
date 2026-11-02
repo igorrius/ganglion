@@ -67,6 +67,13 @@ type editParams struct {
 	ReplyMarkup inlineMarkup `json:"reply_markup"` // always sent: an empty keyboard removes the buttons
 }
 
+// markupParams are the parameters of editMessageReplyMarkup.
+type markupParams struct {
+	ChatID      int64        `json:"chat_id"`
+	MessageID   int64        `json:"message_id"`
+	ReplyMarkup inlineMarkup `json:"reply_markup"`
+}
+
 // inlineMarkup is an InlineKeyboardMarkup.
 type inlineMarkup struct {
 	InlineKeyboard [][]inlineButton `json:"inline_keyboard"`
