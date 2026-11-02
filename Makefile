@@ -16,11 +16,14 @@ check: lint test build
 # The M2 echo bot on the owner's test bot (docs/README.md, owner setup).
 # .env holds TELEGRAM_TEST_BOT_TOKEN and GANGLION_ADMIN; stop any other
 # process polling that bot first, or this one gets 409 and stops polling.
+# A second instance needs its own database: make live-echo LIVE_DB=bin/live2.db
+LIVE_DB ?= bin/live.db
+
 live-echo: build
 	@test -f .env || { echo "live-echo: no .env (see docs/README.md, owner setup)"; exit 1; }
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-echo: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
-	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=bin/live.db ./bin/ganglion --roles core
+	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) ./bin/ganglion --roles core
 
 # RSS of the echo bot, idle and after 1,000 messages through the fake Bot API.
 memory:

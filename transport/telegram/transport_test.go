@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -294,9 +295,15 @@ func TestSendMapsErrors(t *testing.T) {
 }
 
 func TestNewRejectsMalformedToken(t *testing.T) {
-	for _, tok := range []string{"", "secret", ":secret", "abc:secret"} {
-		if _, err := New(tok); err == nil {
+	for _, tok := range []string{"", "secret", ":secret", "abc:secret",
+		"7001:abc\n", "7001:abc ", "7001:a b", "7001:abc\r", " 7001:abc", "7001:a/b"} {
+		_, err := New(tok)
+		if err == nil {
 			t.Errorf("New(%q) succeeded", tok)
+			continue
+		}
+		if secret, ok := strings.CutPrefix(tok, "7001:"); ok && strings.Contains(err.Error(), strings.TrimSpace(secret)) {
+			t.Errorf("New(%q) error leaks the secret: %v", tok, err)
 		}
 	}
 }

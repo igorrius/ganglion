@@ -85,3 +85,10 @@ func TestConfigTokenBothFormsRejected(t *testing.T) {
 		t.Fatalf("both forms: %v", err)
 	}
 }
+
+func TestConfigTokenWhitespaceTrimmed(t *testing.T) {
+	cfg, err := ConfigFromEnv(env(map[string]string{"TELEGRAM_BOT_TOKEN": " 7001:abc\r\n"}), files(nil))
+	if err != nil || cfg.BotToken != "7001:abc" {
+		t.Fatalf("token %q, %v; want surrounding whitespace trimmed", cfg.BotToken, err)
+	}
+}

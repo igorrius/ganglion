@@ -10,7 +10,7 @@ interfaces only; **planned** — not in the repository yet.
 | Concept | Package | Status | Spec | ADR |
 |---|---|---|---|---|
 | Binary, flags, signals; the kill -9 crash harness | `cmd/ganglion` | done (P0); crash harness (P1 M2) | 5.1 | [0004](../adr/0004-one-binary-with-roles.md) |
-| Roles and node assembly; config from the environment until D-3 | `node` | done: core role runs the M2 echo bot (queue, loop, sender, Telegram behind the access list, 409 alert, daily prune); edge and worker are stubs | 5.1 | [0004](../adr/0004-one-binary-with-roles.md) |
+| Roles and node assembly; config from the environment until D-3 | `node` | done: core role runs the M2 echo bot (database lock, queue, loop, sender, Telegram behind the access list, 409 alert, daily prune); edge and worker are stubs | 5.1 | [0004](../adr/0004-one-binary-with-roles.md) |
 | `Event`, `Outgoing`, TTL expiry, ULID ids, the neutral `Message` payload | `event` | done | 6, 9.1 | — |
 | Transport interface, send errors (`ErrPermanent`, `RetryAfterError`), `Parter` | `transport` | interface | 6, 7.1 | [0017](../adr/0017-extension-points.md) |
 | Inbox / outbox: `Queue`, `Outbox` | `queue` | interface | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
@@ -52,6 +52,10 @@ flowchart BT
     node["node"]
     cmd["cmd/ganglion"] --> node
     corep["core"] --> queue
+    corep --> event
+    tgtest["transport/telegram/telegramtest"]
+    tgp -. tests .-> tgtest
+    cmd -. tests .-> tgtest
     node --> corep
     node --> sqlqueue
     node --> outboxp

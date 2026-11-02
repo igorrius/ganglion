@@ -302,7 +302,7 @@ could collide with old ones and be dropped as duplicates.
   // outbox
   func NewSender(ob queue.Outbox, wake <-chan struct{}, logger *slog.Logger, opts ...Option) *Sender
   // Options: WithClock, WithBackoff(func(attempt int) time.Duration), WithPoll(d) — safety re-check, default 30s
-  func (s *Sender) Register(t transport.Transport)          // by t.Name(); a message for an unknown transport is Fail-ed
+  func (s *Sender) Register(t transport.Transport)          // by t.Name(); a message for an unknown transport waits (as built; the plan first said Fail)
   func (s *Sender) Run(ctx context.Context) error           // until ctx ends
   func DefaultBackoff(attempt int) time.Duration            // 1s·2^(attempt-1), capped at 5m, ±20% jitter
   ```
@@ -619,6 +619,13 @@ could collide with old ones and be dropped as duplicates.
     instead of failing the turn forever.
   - The harness sends a message every `K × 1.25 ms`, so the messages arrive
     during the kills rather than after them.
+  - After the whole-branch review: the core locks `<db>.lock` (ADR-0019);
+    `sqlitedb` fsyncs every commit (`synchronous=FULL`, R-DLV-3) so a
+    confirmed update survives a power loss; the transport accepts only
+    `^[1-9][0-9]*:[A-Za-z0-9_-]+$` tokens and the config trims whitespace,
+    because an escaped token in a URL error escapes redaction; the sender
+    keeps messages for an unregistered transport pending instead of
+    failing them, so a start without a token loses nothing.
 - [x] **Step 2: Run** `go test ./core/ ./node/ ./cmd/ganglion/` — FAIL.
 - [x] **Step 3: Implement**; `cmd/ganglion/main.go` passes
   `node.ConfigFromEnv(os.Getenv, os.ReadFile)`.
@@ -643,8 +650,10 @@ could collide with old ones and be dropped as duplicates.
   2. A message in a forum topic is echoed into the same topic.
   3. A message from a second, unlisted account gets no reply and leaves a
      warn log without the text.
-  4. Start a second instance: the newer poll wins, and the instance that
-     got 409 stops polling and sends one alert.
+  4. Start a second instance with its own database
+     (`make live-echo LIVE_DB=bin/live2.db`; the same file is refused by the
+     lock of ADR-0019): the newer poll wins, and the instance that got 409
+     stops polling and sends one alert.
   5. Kill and restart during a burst of 20 messages: none is lost.
 - [x] **Step 3: Measure memory.** Record the RSS of the echo bot when idle
   and after 1,000 messages through the fake, plus the binary size. It must

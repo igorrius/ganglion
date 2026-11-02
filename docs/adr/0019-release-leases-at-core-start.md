@@ -26,7 +26,13 @@ Facts:
 - In P1 a node is one process, and its core is the only writer of its
   SQLite file (ADR-0006: SQLite inside a node, NATS between nodes).
 - Telegram's `409` stops a second poller (R-DLV-8), but nothing stops a
-  second process from opening the same database file.
+  second process from opening the same database file. The `409` loser
+  keeps running on purpose (M2 task 7), so two processes on one file would
+  last until someone stops one.
+- Two processes on one file break more than leases: both senders deliver
+  the same outbox rows, so a message retried at the same `not_before` is
+  sent twice with no crash at all, and a `429` pause held in one
+  process's memory does not hold the other.
 
 ## Options
 
@@ -55,8 +61,8 @@ variable.
 |---|---|---|---|
 | Silence after a crash and restart | None | Up to ~1 min | Up to 10 min |
 | Silence if the process hangs without dying | 10 min (lease) | ~1 min | 10 min |
-| Several processes on one database | Breaks leases: needs one owner | Works | Works |
-| Code | One `UPDATE` at start, one test | `Extend`, ticker, cancellation, tests | A test-only knob |
+| Several processes on one database | Breaks leases: needs one owner, enforced by a lock | Leases work; the two senders still duplicate | Same as B |
+| Code | One `UPDATE` at start and a lock file | `Extend`, ticker, cancellation, tests | A test-only knob |
 | Harness passes reliably | Yes | Yes, with a 60 s deadline barely above the lease | Only with the knob |
 
 ## Decision
@@ -64,16 +70,21 @@ variable.
 **A.** In P1 the core is one process per database, and the crash that
 matters is the one a supervisor restarts. A gives zero silence after that
 restart at the cost of one statement. The rule it relies on, one core
-process per database file, is stated in R-DLV-3.
+process per database file, is stated in R-DLV-3 and enforced: the core
+takes an exclusive `flock` on `<db>.lock` before it opens the database and
+refuses to start if another process holds it. The kernel drops the lock
+when the process dies, even on `kill -9`.
 
 ## Consequences
 
 - `sqlqueue.Queue.ReleaseLeases` clears the leases of pending events;
   `node` calls it once at start, before the loop, and logs how many it
   released.
-- A second core process on the same file would steal the first one's
-  leases and could run a turn twice. Nothing prevents that yet; a lock is
-  on the spec's "Not now" list.
+- A second core process on the same file fails at start with a message
+  naming the database. On systems without `flock` (not a target today)
+  the lock is a no-op and the rule is the operator's.
+- Running two instances side by side, as in the M2 live check of `409`,
+  needs a second database path (`make live-echo LIVE_DB=…`).
 - A hung but living process still holds its lease for the full 10
   minutes; the supervisor's restart is what frees it.
 

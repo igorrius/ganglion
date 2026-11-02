@@ -43,21 +43,23 @@ func ConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte, er
 
 // secret reads a secret from the variable name, or from the file named by
 // name_FILE (as Docker and Kubernetes mount secrets). A trailing newline
-// is trimmed. Errors name the variable and never include the file content.
+// is trimmed, as is surrounding whitespace. Errors name the variable and never include the file content.
 func secret(getenv func(string) string, readFile func(string) ([]byte, error), name string) (string, error) {
 	value, file := getenv(name), getenv(name+"_FILE")
 	switch {
 	case value != "" && file != "":
 		return "", fmt.Errorf("both %s and %s_FILE are set; set one", name, name)
 	case file == "":
-		return value, nil
+		// A value pasted with a newline or a CRLF .env line must not reach
+		// the transport: whitespace in the token defeats its redaction.
+		return strings.TrimSpace(value), nil
 	}
 	b, err := readFile(file)
 	if err != nil {
 		// os.ReadFile errors name the path, never the content.
 		return "", fmt.Errorf("%s_FILE: %w", name, err)
 	}
-	v := strings.TrimRight(string(b), "\r\n")
+	v := strings.TrimSpace(string(b))
 	if v == "" {
 		return "", fmt.Errorf("%s_FILE: %s is empty", name, file)
 	}

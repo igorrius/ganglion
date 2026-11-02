@@ -193,3 +193,49 @@ func TestRestartReleasesDeadLeases(t *testing.T) {
 		return len(sent) == 1 && sent[0].Text == "echo: before the crash"
 	})
 }
+
+func TestNoTransportKeepsRepliesPending(t *testing.T) {
+	cfg := testConfig(t)
+	ctx := context.Background()
+	db, err := sqlitedb.Open(ctx, cfg.DB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, err := sqlqueue.New(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := q.Enqueue(ctx, event.Outgoing{IdemKey: "r1", Transport: "telegram", Conv: "telegram:42", Text: "queued"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r := runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler)) // no token: no transport
+	time.Sleep(300 * time.Millisecond)
+	r.cancel()
+	if err := r.result(t); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err = sqlitedb.Open(ctx, cfg.DB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	var status string
+	if err := db.QueryRow(`SELECT status FROM outbox WHERE idem_key = 'r1'`).Scan(&status); err != nil || status != "pending" {
+		t.Fatalf("reply status %q (%v) after a start without a token, want pending", status, err)
+	}
+}
+
+func TestSecondCoreOnSameDBRefused(t *testing.T) {
+	cfg := testConfig(t)
+	runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler))
+	time.Sleep(200 * time.Millisecond)
+	err := runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler)).result(t)
+	if err == nil || !strings.Contains(err.Error(), "another") || !strings.Contains(err.Error(), cfg.DB) {
+		t.Fatalf("second core on %s: %v, want a refusal naming the database", cfg.DB, err)
+	}
+}

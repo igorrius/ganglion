@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,8 @@ import (
 // process polls with this token, or a webhook is set. Polling stops and is
 // not retried, so the two processes do not fight (R-DLV-8).
 var ErrConflict = errors.New("telegram: another poller or a webhook holds this bot (409)")
+
+var tokenRE = regexp.MustCompile(`^[1-9][0-9]*:[A-Za-z0-9_-]+$`)
 
 // Transport is the Telegram transport.
 type Transport struct {
@@ -67,9 +70,10 @@ func WithLogger(l *slog.Logger) Option { return func(c *config) { c.log = l } }
 // New returns a transport for token, which must look like
 // <bot_id>:<secret>. It does not contact Telegram; Run does.
 func New(token string, opts ...Option) (*Transport, error) {
-	prefix, secret, ok := strings.Cut(token, ":")
-	if id, err := strconv.ParseInt(prefix, 10, 64); !ok || err != nil || id <= 0 || secret == "" {
-		return nil, errors.New("telegram: token is not <bot_id>:<secret>")
+	// Strict: a token with whitespace or other characters would be escaped
+	// inside URL errors, where redaction cannot find it.
+	if !tokenRE.MatchString(token) {
+		return nil, errors.New("telegram: token is not <bot_id>:<secret> (digits, a colon, then letters, digits, _ or -)")
 	}
 	cfg := config{now: time.Now, pollTimeout: pollTimeout, log: slog.New(slog.DiscardHandler)}
 	for _, o := range opts {

@@ -61,6 +61,11 @@ type component struct {
 
 func runCore(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	started := time.Now()
+	unlock, err := lockDB(cfg.DB)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	db, err := sqlitedb.Open(ctx, cfg.DB)
 	if err != nil {
 		return err

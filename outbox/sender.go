@@ -54,6 +54,7 @@ type Sender struct {
 	poll       time.Duration
 	transports map[string]transport.Transport
 	paused     map[string]time.Time // transport name → end of its retry_after pause
+	missing    map[string]bool      // unregistered transports already logged
 }
 
 // Option configures a Sender.
@@ -89,6 +90,7 @@ func NewSender(ob queue.Outbox, wake <-chan struct{}, logger *slog.Logger, opts 
 		poll:       DefaultPoll,
 		transports: map[string]transport.Transport{},
 		paused:     map[string]time.Time{},
+		missing:    map[string]bool{},
 	}
 	for _, o := range opts {
 		o(s)
@@ -97,7 +99,7 @@ func NewSender(ob queue.Outbox, wake <-chan struct{}, logger *slog.Logger, opts 
 }
 
 // Register adds a transport by its Name. A message for a transport that is
-// not registered fails for good. Register before Run.
+// not registered waits in the outbox; it is not failed. Register before Run.
 func (s *Sender) Register(t transport.Transport) { s.transports[t.Name()] = t }
 
 // Run delivers the outbox until ctx ends. Outbox errors are logged and
@@ -171,8 +173,13 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	log := s.log.With("id", msg.ID, "transport", msg.Transport, "conv", msg.Conv, "attempts", p.Attempts)
 	t, ok := s.transports[msg.Transport]
 	if !ok {
-		log.Error("outbox: unknown transport, giving up")
-		return true, s.ob.Fail(ctx, msg.ID, "unknown transport "+msg.Transport)
+		// The transport may be off for now (no token after a config slip):
+		// keep the message for when it is back, never fail it.
+		if !s.missing[msg.Transport] {
+			s.missing[msg.Transport] = true
+			log.Warn("outbox: transport not registered; its messages wait")
+		}
+		return false, nil
 	}
 	if until, ok := s.paused[msg.Transport]; ok && s.now().Before(until) {
 		return false, nil
