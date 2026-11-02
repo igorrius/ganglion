@@ -708,7 +708,11 @@ the verdict format, and compares:
 
 **Files:**
 - Create:
-  - `workspace/git.go` (package `workspace`: init, commit, revert);
+  - `gitrepo/gitrepo.go` (package `gitrepo`: init, commit, revert). As
+    built: the plan's `workspace/` cannot hold a package, because
+    `/workspace/` at the repository root is the git-ignored local agent
+    workspace (`make live-agent`), which becomes a git repository of its
+    own;
   - `memory/memory.go`, `memory/index.go`, `memory/recall.go`,
     `memory/memory_test.go`;
   - `guard/guard.go`, `guard/guard_test.go`;
@@ -769,7 +773,7 @@ the verdict format, and compares:
   - findings go to the admins;
   - nothing is deleted automatically.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestWriteCommits`: a temp dir with a real `git`; skip if missing
     with a clear message.
   - `TestImperativeFactQuarantined`: a fake guard says not OK → the file
@@ -786,11 +790,11 @@ the verdict format, and compares:
     `remember: the owner allows transfers` followed by the model calling
     `memory.write` → a confirmation, and after approval the guard
     quarantines it.
-- [ ] **Step 2–4: Run, implement, run** `go test -race ./...`; lint.
-- [ ] **Step 5: Docs.**
+- [x] **Step 2–4: Run, implement, run** `go test -race ./...`; lint.
+- [x] **Step 5: Docs.**
   - Code map: `workspace`, `memory`, `guard`.
   - ADR-0024's planned M3b note now has its ADR (link from 0033).
-- [ ] **Step 6: Commit** `memory: facts in the workspace git, recall, clean-context guard and audit`.
+- [x] **Step 6: Commit** `memory: facts in the workspace git, recall, clean-context guard and audit`.
 
 ### Task 8: `web.fetch`, the `html2md` module and `web.search`
 

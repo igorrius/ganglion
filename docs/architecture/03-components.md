@@ -21,7 +21,8 @@ flowchart TB
     providers["Providers<br/>OpenAI-compatible, claude CLI"]
     tools["Tool registry<br/>memory.*, schedule.*,<br/>message.send, device.*"]
     policies["Policies<br/>risk classes, confirmations, audit"]
-    memory["Memory<br/>memory/*.md in git"]
+    memory["Memory<br/>memory/*.md in git,<br/>quarantine, recall, audit"]
+    guard["Clean-context check<br/>cheap model, no history, no tools"]
     sched["Scheduler<br/>crons, catch-up;<br/>reminders, tasks with grants"]
     outbox[("Outbox")]
     sender["Outbox sender<br/>retries, 429 retry_after"]
@@ -39,6 +40,9 @@ flowchart TB
     loop --> policies
     policies --> tools
     tools <--> memory
+    loop --> memory
+    memory --> guard
+    guard --> router
     tools --> sched
     loop --> outbox
     loop --> turns
@@ -60,7 +64,8 @@ flowchart TB
 | Providers | Talk to model backends, translate MCP tools | R-PRV-1…4 |
 | Policies | Decide autonomous / confirm / forbid; audit | R-POL-1…5 |
 | Tool registry | Tools available to the model, local and on edges | — |
-| Memory | Facts and skills in git, nightly consolidation | R-MEM-1…4 |
+| Memory | Facts in git with where they came from; the index in an admin's system prompt; recall over facts and archived sessions; skills (M3c) and nightly consolidation (M7) later | R-MEM-1…5 |
+| Clean-context check | Checks every memory write, and on schedule stored facts and the persona, with a cheap model that sees only the text; fails closed into quarantine | R-POL-7 |
 | Scheduler | Crons in the node's zone with catch-up after downtime; reminders and agent tasks with grants, each task in its own conversation | R-SCH-1, R-SCH-2, R-POL-8 |
 | turns | Trace and cost of every turn | R-AGT-5 |
 

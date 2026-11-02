@@ -28,7 +28,7 @@ type Bootstrap struct {
 type AgentSettings struct {
 	Catalog        *rules.Catalog    // GANGLION_MODELS_FILE; nil = no agent
 	Keys           map[string]string // provider name → API key, from each provider's key_env
-	Workspace      string            // GANGLION_WORKSPACE, default "workspace": the agent's files (persona/*.md; memory in M3b)
+	Workspace      string            // GANGLION_WORKSPACE, default "workspace": the agent's files (persona/*.md, memory/*.md), a git repository (ADR-0033)
 	DailyBudgetUSD float64           // GANGLION_DAILY_BUDGET_USD, default 1.0
 	DailyTurns     int               // GANGLION_DAILY_TURNS per person; unset = the agent's default (300), 0 = off
 	DailyTokens    int               // GANGLION_DAILY_TOKENS per person; unset = the agent's default (1M), 0 = off

@@ -68,6 +68,7 @@ func Agent() do.Provider[*agent.Agent] {
 			Archive:      do.MustInvoke[agent.SessionStore](i),
 			Alerts:       do.MustInvoke[alert.Admins](i),
 			Persona:      agent.PersonaDir(b.Agent.Workspace),
+			Facts:        do.MustInvoke[Remembering](i).Facts,
 			Log:          do.MustInvoke[*slog.Logger](i),
 		}), nil
 	}
@@ -108,7 +109,7 @@ func Tools() do.Provider[*tool.Registry] {
 // toolHandlers lists the tools the agent has; each tool joins by one line.
 func toolHandlers(i do.Injector) []tool.Handler {
 	cs := do.MustInvoke[*cells.Service](i)
-	return []tool.Handler{
+	return append([]tool.Handler{
 		builtin.NewMessageSend(do.MustInvoke[builtin.Convs](i)),
 		builtin.NewCellsGet(cs),
 		builtin.NewCellsSet(cs),
@@ -116,7 +117,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleList(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
-	}
+	}, do.MustInvoke[Remembering](i).Tools...)
 }
 
 // Scheduler provides the scheduler of the jobs in the node's zone, which

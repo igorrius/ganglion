@@ -40,7 +40,7 @@ func TestCoreContainerBuildsAndShutsDown(t *testing.T) {
 			b := testConfig(t)
 			b.BotToken, b.BotAPIURL, b.Admin = tc.token, fake.URL(), tc.admin
 			if tc.agent {
-				b.Agent = AgentSettings{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, TZ: time.UTC}
+				b.Agent = AgentSettings{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, TZ: time.UTC, Workspace: t.TempDir()}
 			}
 			for range 2 { // the second build proves the first released the lock
 				i := New(context.Background(), b, slog.New(slog.DiscardHandler))

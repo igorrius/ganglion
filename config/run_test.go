@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -254,7 +255,8 @@ func TestAgentOverTelegram(t *testing.T) {
 	}
 	cfg := testConfig(t)
 	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
-	cfg.Agent = AgentSettings{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, DailyBudgetUSD: 1, TZ: time.UTC}
+	cfg.Agent = AgentSettings{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, DailyBudgetUSD: 1, TZ: time.UTC,
+		Workspace: t.TempDir()}
 	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
 
 	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Name: "Igor", Text: "hi"})
@@ -272,7 +274,12 @@ func TestAgentOverTelegram(t *testing.T) {
 	for _, tl := range reqs[0].Tools {
 		offered = append(offered, tl["function"].(map[string]any)["name"].(string))
 	}
-	if got := strings.Join(offered, ","); got != "cells.get,cells.set,message.send,schedule.create,schedule.delete,schedule.list,schedule.run_now" {
+	want := "cells.get,cells.set,memory.audit,memory.forget,memory.read,memory.recall,memory.write,message.send," +
+		"schedule.create,schedule.delete,schedule.list,schedule.run_now"
+	if _, err := exec.LookPath("git"); err != nil {
+		want = "cells.get,cells.set,message.send,schedule.create,schedule.delete,schedule.list,schedule.run_now"
+	}
+	if got := strings.Join(offered, ","); got != want {
 		t.Fatalf("the admin was offered %q", got)
 	}
 }

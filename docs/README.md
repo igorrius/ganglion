@@ -82,7 +82,9 @@ Start here when coming back to the project.
     - confirmations and quick actions on buttons;
     - the scheduler with reminders and scheduled agent tasks, moved up
       from M4;
-    - memory with a clean-context check;
+    - memory with a clean-context check
+      ([ADR-0033](adr/0033-memory-in-the-workspace-git-with-the-git-binary.md),
+      [ADR-0034](adr/0034-clean-context-guard.md), Proposed);
     - reading the web (`web.fetch` with an `html2md` WASM module,
       `web.search`);
     - the tool-call journal;

@@ -27,8 +27,17 @@ type StateReader interface {
 // every turn so edits apply at once. "" means DefaultPersona.
 type PersonaFunc func() (string, error)
 
+// FactsFunc returns the known-facts block of the memory for the system
+// prompt (memory.Memory.Index); "" when nothing is stored. It must give
+// the same text for the same memory, so the prompt's cache keeps
+// hitting.
+type FactsFunc func() string
+
+// NoFacts is the FactsFunc of an agent without memory.
+func NoFacts() string { return "" }
+
 // Deps are the agent's collaborators. All are required except Middleware,
-// QuickActions, Now and Log; the composition root passes no-op
+// QuickActions, Facts, Now and Log; the composition root passes no-op
 // implementations where a part is off (ADR-0028).
 type Deps struct {
 	States     StateReader
@@ -49,8 +58,11 @@ type Deps struct {
 	Archive      SessionStore
 	Alerts       alert.Admins // who hears about a reached daily limit
 	Persona      PersonaFunc
-	Now          func() time.Time
-	Log          *slog.Logger
+	// Facts is the memory's index, shown to admins only (design section
+	// 4, rule 8); NoFacts when unset.
+	Facts FactsFunc
+	Now   func() time.Time
+	Log   *slog.Logger
 }
 
 // Agent handles conversation turns; Handle is a core.Handler.
@@ -68,6 +80,9 @@ type Agent struct {
 func New(cfg Config, d Deps) *Agent {
 	if d.Now == nil {
 		d.Now = time.Now
+	}
+	if d.Facts == nil {
+		d.Facts = NoFacts
 	}
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)

@@ -55,6 +55,7 @@ func measure(t *testing.T, label string, extraEnv []string) {
 	cmd := exec.Command(bin, "run", "--roles", "core")
 	cmd.Env = append(append(os.Environ(), extraEnv...),
 		"GANGLION_DB="+filepath.Join(dir, "mem.db"),
+		"GANGLION_WORKSPACE="+filepath.Join(dir, "workspace"),
 		"TELEGRAM_BOT_TOKEN="+crashToken,
 		"TELEGRAM_BOT_TOKEN_FILE=",
 		"TELEGRAM_API_URL="+fake.URL(),
