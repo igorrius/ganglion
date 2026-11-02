@@ -70,6 +70,12 @@ dependencies.
 - Message text and model output are never logged at info level or above;
   log ids, lengths, models, token counts.
 - Migrations live next to the owning package (ADR-0016).
+- Prompts keep a stable prefix so provider caches hit:
+  - the system prompt holds nothing that changes per turn (no clock, no
+    date);
+  - the summary comes before the messages;
+  - messages are only appended;
+  - per-turn context (the current time) goes into the last user message.
 - Daily limits and budgets count the day in the node's time zone
   (`GANGLION_TZ`, default `Europe/Kyiv`).
 - Docs and comments in English.
@@ -132,6 +138,8 @@ dependencies.
   func (e *Error) Error() string                    // "provider <name>: <kind>: <msg>"
   func Fallback(err error) bool                     // rate_limit, timeout, unavailable → true; auth, bad_request → false; context.Canceled → false; context.DeadlineExceeded → true
   ```
+  `Usage` gains `CacheReadTokens` and `CacheWriteTokens` (both included in
+  `InputTokens`), so the trace shows whether caching works.
   `ModelCaps` moves to the router (task 4) and is deleted here.
 
 - [ ] **Step 1: Write failing tests.** `TestMessageJSONRoundTrip` (a tool
@@ -173,7 +181,10 @@ dependencies.
 - Wire mapping (Chat Completions): tools → `{"type":"function","function":{"name","description","parameters":<InputSchema>}}`;
   an assistant message with tool calls → `tool_calls:[{"id","type":"function","function":{"name","arguments":<Args as string>}}]`;
   a tool result → `{"role":"tool","tool_call_id","content"}`; usage from
-  `prompt_tokens`/`completion_tokens`; `MaxTokens` → `max_tokens` when > 0.
+  `prompt_tokens`/`completion_tokens`, cached tokens from
+  `prompt_tokens_details.cached_tokens`; `MaxTokens` → `max_tokens` when > 0.
+  Messages stay separate on the wire, so providers with automatic prefix
+  caching (OpenAI, DeepSeek, Gemini) also cache the history.
 - Error mapping: 429 → `KindRateLimit` with `Retry-After` seconds; 401,
   403 → `KindAuth`; 400, 404, 422 → `KindBadRequest`; 5xx and network
   errors → `KindUnavailable`; `ctx` deadline or client timeout →
@@ -226,7 +237,10 @@ dependencies.
   (the CLI finds its own login); stdout is parsed as the JSON result.
 - Result: `result` → reply text; `usage.input_tokens +
   cache_creation_input_tokens + cache_read_input_tokens` → input tokens,
-  `output_tokens` → output. `req.Tools` non-empty → `KindBadRequest`
+  of which `cache_read_input_tokens` → `CacheReadTokens` and
+  `cache_creation_input_tokens` → `CacheWriteTokens`; `output_tokens` →
+  output. No `--resume`: the history is the core's (ADR-0020); the
+  system prompt is cached by prefix anyway (measured in ADR-0021). `req.Tools` non-empty → `KindBadRequest`
   ("tools arrive in M3b"); the catalogue marks CLI models `tools: false`,
   so the router never sends them a tool task.
 - Errors: binary missing → `KindUnavailable`; `ctx` deadline → kill the
@@ -342,7 +356,7 @@ dependencies.
       Steps int
       Route []Attempt
       Tools []ToolUse
-      InputTokens, OutputTokens int
+      InputTokens, CacheReadTokens, CacheWriteTokens, OutputTokens int
       CostUSD float64
       Outcome string // "ok" | "limit" | "no_model" | "error"
       Error   string
@@ -355,7 +369,8 @@ dependencies.
   ```
   Table `turns(event_id TEXT PRIMARY KEY, conv, principal, started_ms,
   finished_ms, steps, route TEXT json, tools TEXT json, input_tokens,
-  output_tokens, cost_usd REAL, outcome, error)`, index on `started_ms`.
+  cache_read_tokens, cache_write_tokens, output_tokens, cost_usd REAL,
+  outcome, error)`, index on `started_ms`.
   The trace holds no message text in M3a (the input and reply arrive with
   memory in M3b, where consolidation needs them).
 - [ ] **Step 1: Write failing tests.** `TestRecordAndTotals`,

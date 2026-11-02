@@ -29,6 +29,21 @@ Facts, checked 2026-11-02 with Claude Code 2.1.316:
 - Haiku answered a short Russian question in 2.9 s end to end (1.2 s of API
   time). `--output-format json` returns the text, token usage and a
   notional `total_cost_usd`.
+- Prompt caching works without a session, because the cache matches on the
+  prompt prefix, not on the session. Two calls were made with the same
+  ~4.7k-token system prompt. The second call read 4,732 tokens from the
+  cache and wrote 645: the transcript, which is one text block on stdin and
+  is written to the cache again on every call. The CLI writes 1-hour cache
+  entries.
+- `--resume` would cache the history too. It would also make the CLI's
+  session a second copy of the history next to the core's (ADR-0020), and
+  that copy goes wrong in three ways:
+  - a turn rerun after a crash already sits in the session;
+  - turns answered by a fallback provider are missing from it;
+  - the core's compaction never reaches it.
+
+  The history block is capped by compaction (about 6k tokens), so the
+  saving is small.
 - Each call starts a Node.js process of a few hundred MB for a few
   seconds. That memory belongs to the host, not to the node's 128 MB
   (principle 8).
