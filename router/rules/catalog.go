@@ -87,6 +87,9 @@ func LoadCatalog(r io.Reader) (Catalog, error) {
 		}
 		types[p.Name] = p.Type
 	}
+	if len(c.Models) == 0 {
+		return Catalog{}, fmt.Errorf("models: no models: list at least one under models")
+	}
 	seen := map[string]bool{}
 	for i, m := range c.Models {
 		at := fmt.Sprintf("models: models[%d] %q", i, m.Name)

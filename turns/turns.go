@@ -45,14 +45,14 @@ type Turn struct {
 	CacheWriteTokens         int
 	OutputTokens             int
 	CostUSD                  float64
-	Outcome                  string // ok | limit | no_model | command | error
+	Outcome                  string // ok | step_limit | daily_limit | no_model | command | error
 	Error                    string
 }
 
 // Totals sums turns.
 type Totals struct {
-	Turns   int
-	Tokens  int // input + output
+	Turns   int // turns a model answered (ok, step_limit)
+	Tokens  int // input + output of every call, compaction included
 	CostUSD float64
 }
 
@@ -126,13 +126,18 @@ func (l *Log) Get(ctx context.Context, eventID string) (Turn, error) {
 	return t, nil
 }
 
-// Totals sums the turns started at or after since; principal "" counts
-// everyone.
-func (l *Log) Totals(ctx context.Context, since time.Time, principal string) (Totals, error) {
+// Totals sums the turns started at or after since. principal "" counts
+// everyone; except leaves one event out, so a turn that reruns does not
+// count its own earlier row. Refusals, apologies and commands spend no
+// turn.
+func (l *Log) Totals(ctx context.Context, since time.Time, principal, except string) (Totals, error) {
 	var t Totals
-	err := l.db.QueryRowContext(ctx, `SELECT count(*), COALESCE(sum(input_tokens + output_tokens), 0), COALESCE(sum(cost_usd), 0)
-		FROM turns WHERE started_ms >= ? AND (? = '' OR principal = ?)`,
-		since.UnixMilli(), principal, principal).Scan(&t.Turns, &t.Tokens, &t.CostUSD)
+	err := l.db.QueryRowContext(ctx, `SELECT
+		COALESCE(sum(outcome IN ('ok', 'step_limit')), 0),
+		COALESCE(sum(input_tokens + output_tokens), 0),
+		COALESCE(sum(cost_usd), 0)
+		FROM turns WHERE started_ms >= ? AND (? = '' OR principal = ?) AND event_id != ?`,
+		since.UnixMilli(), principal, principal, except).Scan(&t.Turns, &t.Tokens, &t.CostUSD)
 	if err != nil {
 		return Totals{}, fmt.Errorf("turns: totals: %w", err)
 	}
@@ -141,6 +146,6 @@ func (l *Log) Totals(ctx context.Context, since time.Time, principal string) (To
 
 // SpentSince implements the router's Budget.
 func (l *Log) SpentSince(ctx context.Context, t time.Time) (float64, error) {
-	tot, err := l.Totals(ctx, t, "")
+	tot, err := l.Totals(ctx, t, "", "")
 	return tot.CostUSD, err
 }

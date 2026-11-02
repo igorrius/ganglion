@@ -31,7 +31,7 @@ func TestIdleStartsNewSession(t *testing.T) {
 	if st := e.state(t); st.Session != morning.ID || !st.Started.Equal(e.now) {
 		t.Fatalf("new session %+v", st)
 	}
-	list, _ := e.archive.List(context.Background(), "telegram:42", 5)
+	list, _ := e.archive.List(context.Background(), "telegram:42", 5, "")
 	if len(list) != 1 || list[0].Session != first.ID || list[0].Turns != 1 || list[0].Title != "Igor: вечер" {
 		t.Fatalf("archive %+v", list)
 	}
@@ -60,7 +60,7 @@ func TestNewArchivesAndResets(t *testing.T) {
 	if st := e.state(t); st.Session != "" || len(st.Messages) != 0 {
 		t.Fatalf("state after /new %+v; the next message opens the session", st)
 	}
-	if list, _ := e.archive.List(context.Background(), "telegram:42", 5); len(list) != 1 {
+	if list, _ := e.archive.List(context.Background(), "telegram:42", 5, ""); len(list) != 1 {
 		t.Fatalf("archive %+v", list)
 	}
 	e.turn(t, message("telegram:user:42", "Igor", "два"))
@@ -72,7 +72,7 @@ func TestNewArchivesAndResets(t *testing.T) {
 func TestNewOnEmptySessionArchivesNothing(t *testing.T) {
 	e := newEnv(t, Config{}, nil)
 	e.turn(t, message("telegram:user:42", "Igor", "/reset"))
-	if list, _ := e.archive.List(context.Background(), "telegram:42", 5); len(list) != 0 {
+	if list, _ := e.archive.List(context.Background(), "telegram:42", 5, ""); len(list) != 0 {
 		t.Fatalf("archive %+v", list)
 	}
 }
@@ -118,7 +118,7 @@ func TestResumeSwapsSessions(t *testing.T) {
 	if strings.Join(got, "|") != "Igor: про бойлер|Igor: и что с ним?" {
 		t.Fatalf("after /resume the model saw %q", got)
 	}
-	list, _ := e.archive.List(context.Background(), "telegram:42", 5)
+	list, _ := e.archive.List(context.Background(), "telegram:42", 5, "")
 	titles := []string{}
 	for _, s := range list {
 		titles = append(titles, s.Title)
@@ -146,7 +146,46 @@ func TestArchiveRerunIsIdempotent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if list, _ := e.archive.List(ctx, "telegram:42", 5); len(list) != 1 {
+	if list, _ := e.archive.List(ctx, "telegram:42", 5, ""); len(list) != 1 {
 		t.Fatalf("%d rows after a rerun", len(list))
+	}
+}
+
+func TestSessionsListExcludesTheCurrentSession(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.turn(t, message("telegram:user:42", "Igor", "A1"))
+	e.turn(t, message("telegram:user:42", "Igor", "/new"))
+	e.turn(t, message("telegram:user:42", "Igor", "B1"))
+	e.turn(t, message("telegram:user:42", "Igor", "/resume 1")) // back on A, B archived
+	e.turn(t, message("telegram:user:42", "Igor", "A2"))
+	if out := e.turn(t, message("telegram:user:42", "Igor", "/sessions")); strings.Contains(out[0].Text, "A1") {
+		t.Fatalf("the current session is offered as an earlier one:\n%s", out[0].Text)
+	}
+	e.turn(t, message("telegram:user:42", "Igor", "/resume 2"))
+	var users []string
+	for _, m := range e.state(t).Messages {
+		if m.Role == "user" {
+			users = append(users, m.Content)
+		}
+	}
+	if strings.Join(users, "|") != "Igor: A1|Igor: A2" {
+		t.Fatalf("/resume of a missing index changed the session: %q", users)
+	}
+}
+
+func TestResumeRerunPicksTheSameSession(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	for _, txt := range []string{"A1", "/new", "B1", "/new", "C1"} {
+		e.turn(t, message("telegram:user:42", "Igor", txt))
+	}
+	ev := message("telegram:user:42", "Igor", "/resume 2")
+	o1, _, err1 := e.a.Handle(context.Background(), ev)
+	o2, s2, err2 := e.a.Handle(context.Background(), ev) // the same event again, as after a crash
+	if err1 != nil || err2 != nil || o1[0].Text != o2[0].Text || o1[0].Text != "Resumed: Igor: A1" {
+		t.Fatalf("first %q, rerun %q", o1[0].Text, o2[0].Text)
+	}
+	st, _ := DecodeState(s2.Data)
+	if st.Messages[0].Content != "Igor: A1" {
+		t.Fatalf("rerun state %+v", st.Messages)
 	}
 }

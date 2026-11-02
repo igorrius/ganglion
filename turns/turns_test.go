@@ -2,6 +2,7 @@ package turns_test
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -47,7 +48,7 @@ func TestRecordAndTotals(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got, err := l.Totals(ctx, t0, "")
+	got, err := l.Totals(ctx, t0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func TestRerunReplacesRow(t *testing.T) {
 	ctx := context.Background()
 	_ = l.Record(ctx, turn("e1", "telegram:user:1", t0, 100, 20, 0.01))
 	_ = l.Record(ctx, turn("e1", "telegram:user:1", t0, 300, 40, 0.03))
-	got, _ := l.Totals(ctx, t0, "")
+	got, _ := l.Totals(ctx, t0, "", "")
 	if got.Turns != 1 || got.Tokens != 340 {
 		t.Fatalf("after a rerun %+v", got)
 	}
@@ -80,7 +81,7 @@ func TestTotalsPerPrincipal(t *testing.T) {
 	ctx := context.Background()
 	_ = l.Record(ctx, turn("e1", "telegram:user:1", t0, 100, 20, 0.01))
 	_ = l.Record(ctx, turn("e2", "telegram:user:2", t0, 200, 30, 0.02))
-	got, _ := l.Totals(ctx, t0, "telegram:user:2")
+	got, _ := l.Totals(ctx, t0, "telegram:user:2", "")
 	if got.Turns != 1 || got.Tokens != 230 {
 		t.Fatalf("per principal %+v", got)
 	}
@@ -94,5 +95,29 @@ func TestSpentSince(t *testing.T) {
 	usd, err := l.SpentSince(ctx, t0.Add(-time.Hour))
 	if err != nil || usd != 0.25 {
 		t.Fatalf("SpentSince = %v, %v", usd, err)
+	}
+}
+
+func TestTotalsCountOnlyModelTurns(t *testing.T) {
+	l := newLog(t)
+	ctx := context.Background()
+	for i, outcome := range []string{"ok", "step_limit", "daily_limit", "no_model", "command"} {
+		tr := turn(fmt.Sprintf("e%d", i), "telegram:user:1", t0, 10, 1, 0)
+		tr.Outcome = outcome
+		_ = l.Record(ctx, tr)
+	}
+	got, _ := l.Totals(ctx, t0, "telegram:user:1", "")
+	if got.Turns != 2 || got.Tokens != 55 {
+		t.Fatalf("totals %+v: turns count only answered turns, tokens count every call", got)
+	}
+}
+
+func TestTotalsExceptEvent(t *testing.T) {
+	l := newLog(t)
+	ctx := context.Background()
+	_ = l.Record(ctx, turn("e1", "telegram:user:1", t0, 100, 20, 0.01))
+	_ = l.Record(ctx, turn("e2", "telegram:user:1", t0, 100, 20, 0.01))
+	if got, _ := l.Totals(ctx, t0, "telegram:user:1", "e2"); got.Turns != 1 || got.Tokens != 120 {
+		t.Fatalf("totals except e2 %+v", got)
 	}
 }

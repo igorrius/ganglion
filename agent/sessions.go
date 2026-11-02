@@ -79,10 +79,12 @@ func (a *Archive) Put(ctx context.Context, conv string, s State, endedBy string)
 	return nil
 }
 
-// List returns the last n archived sessions of conv, newest first.
-func (a *Archive) List(ctx context.Context, conv string, n int) ([]SessionInfo, error) {
+// List returns the last n archived sessions of conv, newest first,
+// leaving out the session except (the current one: it may sit in the
+// archive as an older copy after a /resume).
+func (a *Archive) List(ctx context.Context, conv string, n int, except string) ([]SessionInfo, error) {
 	rows, err := a.db.QueryContext(ctx, `SELECT session, started_ms, ended_ms, turns, title FROM sessions
-		WHERE conv = ? ORDER BY ended_ms DESC, rowid DESC LIMIT ?`, conv, n)
+		WHERE conv = ? AND session != ? ORDER BY ended_ms DESC, rowid DESC LIMIT ?`, conv, except, n)
 	if err != nil {
 		return nil, fmt.Errorf("agent: list sessions: %w", err)
 	}
@@ -170,7 +172,7 @@ func (a *Agent) sessions(ctx context.Context, e event.Event, st State, m event.M
 		if a.d.Archive == nil {
 			return st, []event.Outgoing{reply(replyNoSessions)}, true, nil
 		}
-		list, err := a.d.Archive.List(ctx, e.Conv, sessionsShown)
+		list, err := a.d.Archive.List(ctx, e.Conv, sessionsShown, st.Session)
 		if err != nil {
 			return st, nil, false, err
 		}

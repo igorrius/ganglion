@@ -72,14 +72,27 @@ func (c *Client) workDir() (string, error) {
 	return c.dir, c.dirErr
 }
 
-// prompt splits the history into the system prompt and the transcript sent
-// on stdin.
-func prompt(msgs []provider.Message) (system, transcript string) {
-	var sys, parts []string
+// UsageLimitCooldown is the RetryAfter of a subscription usage limit: such
+// limits last hours, so the router should not try the CLI again every
+// minute.
+const UsageLimitCooldown = 15 * time.Minute
+
+// prompt splits the history into the system prompt and the text sent on
+// stdin. Only the first system message (the operator's static prompt)
+// goes to --system-prompt, which is argv and shows in ps. Later system
+// messages, such as the conversation summary, hold family text and go to
+// stdin ahead of the transcript.
+func prompt(msgs []provider.Message) (system, stdin string) {
+	var head, parts []string
+	seenSystem := false
 	for _, m := range msgs {
 		switch m.Role {
 		case "system":
-			sys = append(sys, m.Content)
+			if !seenSystem {
+				system, seenSystem = m.Content, true
+				continue
+			}
+			head = append(head, m.Content)
 		case "user":
 			parts = append(parts, "User: "+m.Content)
 		case "assistant":
@@ -93,7 +106,11 @@ func prompt(msgs []provider.Message) (system, transcript string) {
 			parts = append(parts, "Tool result: "+m.Content)
 		}
 	}
-	return strings.Join(sys, "\n\n"), "Conversation so far, oldest first:\n\n" + strings.Join(parts, "\n\n")
+	stdin = "Conversation so far, oldest first:\n\n" + strings.Join(parts, "\n\n")
+	if len(head) > 0 {
+		stdin = strings.Join(head, "\n\n") + "\n\n" + stdin
+	}
+	return system, stdin
 }
 
 type result struct {
@@ -150,7 +167,12 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 		return provider.ChatResponse{}, c.fail(provider.KindUnavailable, "no result: "+truncate(msg, 200))
 	}
 	if r.IsError {
-		return provider.ChatResponse{}, c.fail(classify(r.Result), truncate(r.Result, 200))
+		kind := classify(r.Result)
+		e := &provider.Error{Provider: c.name, Kind: kind, Msg: truncate(r.Result, 200)}
+		if kind == provider.KindRateLimit {
+			e.RetryAfter = UsageLimitCooldown
+		}
+		return provider.ChatResponse{}, e
 	}
 	u := r.Usage
 	return provider.ChatResponse{

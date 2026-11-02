@@ -15,7 +15,7 @@ CREATE TABLE turns (
     cache_write_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens      INTEGER NOT NULL DEFAULT 0,
     cost_usd           REAL    NOT NULL DEFAULT 0,
-    outcome            TEXT    NOT NULL,              -- ok | limit | no_model | command | error
+    outcome            TEXT    NOT NULL,              -- ok | step_limit | daily_limit | no_model | command | error
     error              TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX turns_started ON turns (started_ms);

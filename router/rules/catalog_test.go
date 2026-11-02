@@ -47,6 +47,7 @@ func TestCatalogErrors(t *testing.T) {
 		{"providers: [{name: x, type: claude-cli}]\nmodels: [{provider: x, name: m, tier: cheap, tools: true}]", "tools"},
 		{"providers: [{name: x, type: claude-cli}, {name: x, type: claude-cli}]\nmodels: []", "duplicate"},
 		{"providers: [{name: x, type: claude-cli}]\nmodels: [{provider: x, name: m, tier: cheap, prise_in: 1}]", "prise_in"},
+		{"providers: [{name: x, type: claude-cli}]\nmodels: []", "no models"},
 	} {
 		_, err := LoadCatalog(strings.NewReader(tc.yaml))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

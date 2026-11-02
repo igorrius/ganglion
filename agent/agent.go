@@ -137,6 +137,9 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, msgs []provider.M
 		callCtx, cancel := context.WithTimeout(ctx, a.cfg.CallTimeout)
 		resp, err := p.Chat(callCtx, provider.ChatRequest{Model: c.Model, Messages: msgs, Tools: tools})
 		cancel()
+		if err == nil && strings.TrimSpace(resp.Message.Content) == "" && len(resp.Message.ToolCalls) == 0 {
+			err = &provider.Error{Provider: c.Provider, Kind: provider.KindUnavailable, Msg: "empty answer"}
+		}
 		a.d.Router.Report(c, err)
 		if err == nil {
 			tr.Route = append(tr.Route, turns.Attempt{Provider: c.Provider, Model: c.Model})
@@ -144,7 +147,11 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, msgs []provider.M
 			return resp, true
 		}
 		tr.Route = append(tr.Route, turns.Attempt{Provider: c.Provider, Model: c.Model, Error: errorKind(err)})
-		a.log.Warn("agent: model call failed", "conv", tr.Conv, "provider", c.Provider, "model", c.Model, "kind", errorKind(err))
+		attrs := []any{"conv", tr.Conv, "provider", c.Provider, "model", c.Model, "kind", errorKind(err)}
+		if pe, ok := errors.AsType[*provider.Error](err); ok {
+			attrs = append(attrs, "status", pe.Status, "msg", pe.Msg) // provider text, keys redacted; never the prompt
+		}
+		a.log.Warn("agent: model call failed", attrs...)
 	}
 	return provider.ChatResponse{}, false
 }
@@ -179,7 +186,11 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 	}
 	finish := func(out []event.Outgoing, st State) ([]event.Outgoing, queue.StateUpdate, error) {
 		tr.Finished = a.d.Now()
-		if err := a.d.Turns.Record(ctx, tr.Turn); err != nil {
+		// The turn's context may have run out during compaction; the trace
+		// still counts for the budget and the limits.
+		rctx, rcancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer rcancel()
+		if err := a.d.Turns.Record(rctx, tr.Turn); err != nil {
 			a.log.Warn("agent: trace not recorded", "id", e.ID, "err", err)
 		}
 		data, err := json.Marshal(st)
@@ -197,8 +208,8 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 		return finish(out, st)
 	}
 
-	if alerts, over := a.overLimit(ctx, now, m.From); over {
-		tr.Outcome = "limit"
+	if alerts, over := a.overLimit(ctx, now, m.From, e.ID); over {
+		tr.Outcome = "daily_limit"
 		return finish(append([]event.Outgoing{reply(replyDailyLimit)}, alerts...), st)
 	}
 
@@ -251,7 +262,7 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 		}
 	}
 	if answer == "" {
-		tr.Outcome = "limit"
+		tr.Outcome = "step_limit"
 		answer = lastText
 		if answer == "" {
 			answer = replyStepLimit
@@ -277,12 +288,12 @@ func speaker(m event.Message) string {
 // overLimit checks the principal's daily turns and tokens. Over a limit it
 // returns one alert per admin; their keys repeat for the day, so the outbox
 // sends each alert once.
-func (a *Agent) overLimit(ctx context.Context, now time.Time, principal string) ([]event.Outgoing, bool) {
+func (a *Agent) overLimit(ctx context.Context, now time.Time, principal, eventID string) ([]event.Outgoing, bool) {
 	if a.cfg.DailyTurns < 0 && a.cfg.DailyTokens < 0 {
 		return nil, false
 	}
 	day := dayStart(now, a.cfg.Location)
-	tot, err := a.d.Turns.Totals(ctx, day, principal)
+	tot, err := a.d.Turns.Totals(ctx, day, principal, eventID)
 	if err != nil {
 		a.log.Warn("agent: daily totals unavailable; limit not checked", "err", err)
 		return nil, false

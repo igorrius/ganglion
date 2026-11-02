@@ -89,7 +89,8 @@ dependencies.
 | Commands (first word of a message; `@<bot username>` suffix allowed) | `/new`, `/reset`, `/sessions`, `/resume <n>` | `/resume 2` |
 | User message content | `<Name>: <text>`; no name → the principal | `Igor: what is the battery level?` |
 | Reply `IdemKey` | `<event IdemKey>:reply:0` (unchanged from M2) | `telegram:7001:883920:reply:0` |
-| Daily-limit alert `IdemKey` | `alert:daily-limit:<YYYY-MM-DD>:<principal>` | `alert:daily-limit:2026-11-03:telegram:user:1` |
+| Daily-limit alert `IdemKey` | `alert:daily-limit:<YYYY-MM-DD>:<principal>:<admin>`; one per admin, so the outbox does not fold them into one | `alert:daily-limit:2026-11-03:telegram:user:5:telegram:user:1` |
+| `turns.outcome` | `ok`, `step_limit`, `daily_limit`, `no_model`, `command`, `error`; only `ok` and `step_limit` spend a daily turn | — |
 | Give-up alert `IdemKey` | `alert:give-up:<event id>:<principal>` | — |
 | `turns.route` | JSON list of attempts `{"provider","model","error"}` | `[{"provider":"or","model":"a","error":"rate_limit"},{"provider":"or","model":"b"}]` |
 
@@ -223,8 +224,9 @@ dependencies.
 - One unmodified `claude` process per call, arguments exactly:
   `-p --model <req.Model> --output-format json --no-session-persistence
   --tools "" --strict-mcp-config --setting-sources "" --system-prompt <S>`.
-  `S` is all `system` messages joined by a blank line. The rest of the
-  history goes to **stdin**, never argv (argv shows in `ps`), as a
+  `S` is the first `system` message only, the operator's static prompt.
+  Later system messages (the summary holds family text) and the rest of
+  the history go to **stdin**, never argv (argv shows in `ps`), as a
   transcript:
   ```
   Conversation so far, oldest first:
@@ -248,7 +250,7 @@ dependencies.
 - Errors: binary missing → `KindUnavailable`; `ctx` deadline → kill the
   process, `KindTimeout`; `ctx` cancelled → `context.Canceled`;
   `is_error` with a result mentioning a usage or rate limit →
-  `KindRateLimit`; mentioning login or authentication → `KindAuth`;
+  `KindRateLimit` with `RetryAfter` 15 min (subscription limits last hours); mentioning login or authentication → `KindAuth`;
   anything else, or a non-zero exit without JSON → `KindUnavailable` with
   at most 200 characters of stderr. Prompt text never goes into errors or
   logs.
@@ -311,7 +313,8 @@ dependencies.
      unless the task asked for `smart` explicitly; local models are never
      dropped.
   4. Cooldown: a model reported with `KindRateLimit` moves to the end of the
-     list until `now + max(RetryAfter, cooldown)`.
+     list until `now + max(RetryAfter, cooldown)`; `KindAuth` sends every
+     model of that provider to the end for 10 minutes.
   5. Within a group: lower `PriceInMTok + PriceOutMTok` first, then lower
      latency, then catalogue order.
 - `LoadCatalog` errors name the field: unknown provider in a model, empty
@@ -431,7 +434,8 @@ dependencies.
 - `Handle`, in order:
   1. Not `Kind "message"` or an unreadable payload → no reply, no state
      change, nil error (as `core.Echo`).
-  2. Daily limits from `turns.Totals(since start of today, principal)`:
+  2. Daily limits from `turns.Totals(since start of today, principal,
+     except this event)`; refusals, apologies and commands spend no turn:
      over either limit → reply `Daily limit reached; the bot answers again
      tomorrow.`, plus one alert per admin with the daily-limit key, record
      outcome `limit`, keep the state.
@@ -441,8 +445,10 @@ dependencies.
   4. Step loop, up to `MaxSteps` model calls, all under `TurnTimeout`:
      route `TaskReq{Kind: "message", Tools: len(tools) > 0}`; try
      candidates in order, each call under `CallTimeout`; `Report` every
-     outcome; `provider.Fallback(err)` → next candidate, otherwise stop
-     trying. An answer with tool calls → run each through `Tools.Call` (an
+     outcome. As built: any error moves to the next candidate, an empty
+     answer counts as a failed call, and only a cancelled turn stops
+     (spec 7.3 layer 3 says "error"; a wrong key on one provider must not
+     silence the others). An answer with tool calls → run each through `Tools.Call` (an
      error becomes the tool result text `error: <msg>`), append, next step.
      An answer without tool calls is the reply.
   5. No candidate answered → reply `Sorry, no model is reachable right now.
@@ -522,9 +528,10 @@ dependencies.
      archive it (`endedBy "idle"`) and start an empty state with
      `Session = e.ID`; the message is then handled as usual.
   2. `/new` or `/reset` → archive the current state if it has messages
-     (`endedBy "new"`), reply `New session started.`, state empty with
-     `Session = e.ID`. No model call; `turns` outcome `command`.
-  3. `/sessions` → reply a numbered list of the last 5:
+     (`endedBy "new"`), reply `New session started.`, state empty; the next
+     real message opens the session (its id and start). No model call; `turns` outcome `command`.
+  3. `/sessions` → reply a numbered list of the last 5, the current
+     session left out (it may sit in the archive as an older copy):
      `1. 2 Nov 21:40–22:15 · 6 turns · <title>`, or `No earlier sessions.`.
   4. `/resume <n>` → the n-th of that list: archive the current state
      (`endedBy "resume"`) if it has messages, load the chosen one as the
@@ -599,7 +606,8 @@ dependencies.
   - Each provider's `key_env` is read with the `secret` helper (value or
     `<NAME>_FILE`), trimmed.
   - `GANGLION_SYSTEM_PROMPT_FILE` (optional), `GANGLION_DAILY_BUDGET_USD`
-    (default 1.0), `GANGLION_DAILY_TURNS`, `GANGLION_DAILY_TOKENS`,
+    (default 1.0), `GANGLION_DAILY_TURNS`, `GANGLION_DAILY_TOKENS` (unset:
+    300 and 1,000,000 per person; `0` turns a limit off),
     `GANGLION_TZ` (default `Europe/Kyiv`).
   ```go
   type AgentConfig struct { ModelsFile, SystemPromptFile string; DailyBudgetUSD float64; DailyTurns, DailyTokens int; TZ *time.Location }

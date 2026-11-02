@@ -145,6 +145,10 @@ func TestConfigAgent(t *testing.T) {
 			t.Errorf("%v accepted", bad)
 		}
 	}
+	if cfg, err := ConfigFromEnv(env(map[string]string{"GANGLION_DAILY_TURNS": "0", "GANGLION_DAILY_TOKENS": "0"}), files(nil)); err != nil ||
+		cfg.Agent.DailyTurns >= 0 || cfg.Agent.DailyTokens >= 0 {
+		t.Errorf("0 must turn the daily limits off: %+v, %v", cfg.Agent, err)
+	}
 	if cfg, err := ConfigFromEnv(env(map[string]string{"GANGLION_SESSION_IDLE": "off"}), files(nil)); err != nil || cfg.Agent.SessionIdle >= 0 {
 		t.Errorf("idle off: %v, %v", cfg.Agent.SessionIdle, err)
 	}

@@ -1,11 +1,11 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -126,6 +126,7 @@ type env struct {
 	now     time.Time
 	router  *rules.Router
 	archive *Archive
+	logs    *bytes.Buffer
 }
 
 func newEnv(t *testing.T, cfg Config, tools Tools) *env {
@@ -144,7 +145,7 @@ func newEnv(t *testing.T, cfg Config, tools Tools) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0}
+	e := &env{logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0}
 	e.router, err = rules.New([]router.Model{
 		{Provider: "p1", Name: "smart", Tier: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 2}},
 		{Provider: "p2", Name: "cheap", Tier: "cheap", Caps: router.ModelCaps{Tools: true}},
@@ -167,7 +168,7 @@ func newEnv(t *testing.T, cfg Config, tools Tools) *env {
 			return "telegram", "telegram:" + id, ok
 		},
 		Now: func() time.Time { return e.now },
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log: slog.New(slog.NewTextHandler(e.logs, nil)),
 	})
 	return e
 }
@@ -278,7 +279,7 @@ func TestStepLimit(t *testing.T) {
 	if len(e.smart.requests()) != 3 || out[0].Text != "Sorry, I could not finish that." {
 		t.Fatalf("%d calls, out %+v", len(e.smart.requests()), out)
 	}
-	if tr, _ := e.turns.Get(context.Background(), ev.ID); tr.Outcome != "limit" || tr.Steps != 3 {
+	if tr, _ := e.turns.Get(context.Background(), ev.ID); tr.Outcome != "step_limit" || tr.Steps != 3 {
 		t.Fatalf("turn %+v", tr)
 	}
 }
@@ -417,7 +418,7 @@ func TestRerunSameEventSameResult(t *testing.T) {
 	if err1 != nil || err2 != nil || o1[0].IdemKey != o2[0].IdemKey || string(s1.Data) != string(s2.Data) {
 		t.Fatalf("rerun differs: %+v %+v", o1, o2)
 	}
-	tot, _ := e.turns.Totals(context.Background(), t0.Add(-time.Hour), "")
+	tot, _ := e.turns.Totals(context.Background(), t0.Add(-time.Hour), "", "")
 	if tot.Turns != 1 {
 		t.Fatalf("%d turns rows, want 1", tot.Turns)
 	}
@@ -428,5 +429,74 @@ func TestNonMessageIgnored(t *testing.T) {
 	out, st, err := e.a.Handle(context.Background(), event.Event{ID: "x", Kind: "cron.tick", Conv: "cron:x"})
 	if err != nil || len(out) != 0 || st.Conv != "" || len(e.smart.requests()) != 0 {
 		t.Fatalf("non-message: %+v %+v %v", out, st, err)
+	}
+}
+
+func TestDailyLimitIgnoresApologiesAndCommands(t *testing.T) {
+	e := newEnv(t, Config{DailyTurns: 1}, nil)
+	e.smart.push(fail(provider.KindUnavailable))
+	e.cheap.push(fail(provider.KindUnavailable))
+	e.turn(t, message("telegram:user:42", "Igor", "during an outage"))
+	e.turn(t, message("telegram:user:42", "Igor", "/sessions"))
+	if out := e.turn(t, message("telegram:user:42", "Igor", "back?")); out[0].Text != "ok" {
+		t.Fatalf("an apology or a command used up the quota: %+v", out)
+	}
+	ev := message("telegram:user:42", "Igor", "over")
+	if out := e.turn(t, ev); out[0].Text != replyDailyLimit {
+		t.Fatalf("over the limit: %+v", out)
+	}
+	if tr, _ := e.turns.Get(context.Background(), ev.ID); tr.Outcome != "daily_limit" {
+		t.Fatalf("outcome %q", tr.Outcome)
+	}
+}
+
+func TestRerunAtLimitBoundaryNotRefused(t *testing.T) {
+	e := newEnv(t, Config{DailyTurns: 1}, nil)
+	ev := message("telegram:user:42", "Igor", "the only turn today")
+	e.turn(t, ev)
+	out, _, err := e.a.Handle(context.Background(), ev) // the same event again, as after a crash
+	if err != nil || out[0].Text != "ok" {
+		t.Fatalf("a rerun counted its own earlier row: %+v, %v", out, err)
+	}
+}
+
+func TestEmptyAnswerMovesOn(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.smart.push(say(""))
+	e.cheap.push(say("from cheap"))
+	if out := e.turn(t, message("telegram:user:42", "Igor", "hi")); out[0].Text != "from cheap" {
+		t.Fatalf("an empty answer ended the turn: %+v", out)
+	}
+	for _, m := range e.state(t).Messages {
+		if m.Role == "assistant" && m.Content == "" && len(m.ToolCalls) == 0 {
+			t.Fatal("an empty assistant message entered history")
+		}
+	}
+}
+
+func TestFailedCallLogsProviderMessage(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.smart.push(func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+		return provider.ChatResponse{}, &provider.Error{Provider: "p1", Kind: provider.KindBadRequest, Status: 404, Msg: "model not found"}
+	})
+	e.turn(t, message("telegram:user:42", "Igor", "секрет"))
+	logs := e.logs.String()
+	if !strings.Contains(logs, "status=404") || !strings.Contains(logs, `msg="model not found"`) || strings.Contains(logs, "секрет") {
+		t.Fatalf("logs %s", logs)
+	}
+}
+
+func TestTraceRecordedWhenTheTurnContextRunsOut(t *testing.T) {
+	e := newEnv(t, Config{HistoryTokens: 5, KeepRecent: 1}, nil)
+	e.turn(t, message("telegram:user:42", "Igor", strings.Repeat("a ", 40)))
+	e.cheap.push(hang) // compaction hangs until the turn's context ends
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	ev := message("telegram:user:42", "Igor", strings.Repeat("b ", 40)) // long enough to compact again
+	if _, _, err := e.a.Handle(ctx, ev); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.turns.Get(context.Background(), ev.ID); err != nil {
+		t.Fatalf("the trace was lost with the context: %v", err)
 	}
 }

@@ -22,6 +22,10 @@ const LongContext = 100_000
 // list when the provider names no shorter Retry-After.
 const DefaultCooldown = 60 * time.Second
 
+// AuthCooldown is how long every model of a provider goes to the back after
+// an auth error: a wrong key or a lost login is not fixed in a minute.
+const AuthCooldown = 10 * time.Minute
+
 // Budget reports money spent since a moment (the turns trace).
 type Budget interface {
 	SpentSince(ctx context.Context, t time.Time) (usd float64, err error)
@@ -153,16 +157,28 @@ func (r *Router) Route(ctx context.Context, t router.TaskReq) ([]router.Candidat
 }
 
 // Report implements router.Router: a rate limit sends the model to the
-// back of the list until max(Retry-After, cooldown) has passed.
+// back of the list until max(Retry-After, cooldown) has passed; an auth
+// error sends every model of the provider back for AuthCooldown.
 func (r *Router) Report(c router.Candidate, err error) {
 	e, ok := errors.AsType[*provider.Error](err)
-	if !ok || e.Kind != provider.KindRateLimit {
+	if !ok {
 		return
 	}
-	until := r.now().Add(max(e.RetryAfter, r.cooldown))
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if until.After(r.cooling[key(c.Provider, c.Model)]) {
-		r.cooling[key(c.Provider, c.Model)] = until
+	cool := func(k string, until time.Time) {
+		if until.After(r.cooling[k]) {
+			r.cooling[k] = until
+		}
+	}
+	switch e.Kind {
+	case provider.KindRateLimit:
+		cool(key(c.Provider, c.Model), r.now().Add(max(e.RetryAfter, r.cooldown)))
+	case provider.KindAuth:
+		for _, m := range r.models {
+			if m.Provider == c.Provider {
+				cool(key(m.Provider, m.Name), r.now().Add(AuthCooldown))
+			}
+		}
 	}
 }

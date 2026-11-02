@@ -29,8 +29,8 @@ type AgentConfig struct {
 	Keys           map[string]string // provider name → API key, from each provider's key_env
 	SystemPrompt   string            // GANGLION_SYSTEM_PROMPT_FILE; "" = the agent's default
 	DailyBudgetUSD float64           // GANGLION_DAILY_BUDGET_USD, default 1.0
-	DailyTurns     int               // GANGLION_DAILY_TURNS per person; 0 = the agent's default
-	DailyTokens    int               // GANGLION_DAILY_TOKENS per person; 0 = the agent's default
+	DailyTurns     int               // GANGLION_DAILY_TURNS per person; unset = the agent's default (300), 0 = off
+	DailyTokens    int               // GANGLION_DAILY_TOKENS per person; unset = the agent's default (1M), 0 = off
 	SessionIdle    time.Duration     // GANGLION_SESSION_IDLE: a duration or "off"; 0 = the default 6h
 	TZ             *time.Location    // GANGLION_TZ, default Europe/Kyiv
 }
@@ -82,8 +82,11 @@ func agentFromEnv(getenv func(string) string, readFile func(string) ([]byte, err
 	}
 	for name, dst := range map[string]*int{"GANGLION_DAILY_TURNS": &a.DailyTurns, "GANGLION_DAILY_TOKENS": &a.DailyTokens} {
 		if v := getenv(name); v != "" {
-			if *dst, err = strconv.Atoi(v); err != nil {
-				return a, fmt.Errorf("%s=%q is not a whole number", name, v)
+			if *dst, err = strconv.Atoi(v); err != nil || *dst < 0 {
+				return a, fmt.Errorf("%s=%q is not a whole number (0 turns the limit off)", name, v)
+			}
+			if *dst == 0 {
+				*dst = -1 // the agent's "off"; its 0 means "default"
 			}
 		}
 	}

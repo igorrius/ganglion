@@ -100,16 +100,17 @@ func TestArgsAndStdin(t *testing.T) {
 	}
 	wantArgs := []string{"-p", "--model", "haiku", "--output-format", "json", "--no-session-persistence",
 		"--tools", "", "--strict-mcp-config", "--setting-sources", "",
-		"--system-prompt", "You are the family assistant.\n\nSummary of the conversation so far:\nThey talked about the boiler."}
+		"--system-prompt", "You are the family assistant."}
 	if !slices.Equal(got.Args, wantArgs) {
 		t.Fatalf("args\n got %q\nwant %q", got.Args, wantArgs)
 	}
 	for _, a := range got.Args {
-		if strings.Contains(a, "секретный") {
-			t.Fatal("the user's text is in argv, visible in ps")
+		if strings.Contains(a, "секретный") || strings.Contains(a, "boiler") {
+			t.Fatal("family text (a message or the summary) is in argv, visible in ps")
 		}
 	}
-	wantStdin := "Conversation so far, oldest first:\n\nUser: Igor: hi\n\nAssistant: Hello!\n\nUser: Igor: секретный вопрос про дом"
+	wantStdin := "Summary of the conversation so far:\nThey talked about the boiler.\n\n" +
+		"Conversation so far, oldest first:\n\nUser: Igor: hi\n\nAssistant: Hello!\n\nUser: Igor: секретный вопрос про дом"
 	if got.Stdin != wantStdin {
 		t.Fatalf("stdin\n got %q\nwant %q", got.Stdin, wantStdin)
 	}
@@ -149,6 +150,10 @@ func TestUsageLimitIsRateLimit(t *testing.T) {
 	_, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history})
 	if k := kind(t, err); k != provider.KindRateLimit {
 		t.Fatalf("kind %s, want rate_limit", k)
+	}
+	// A subscription limit lasts hours: the router must not retry it every minute.
+	if e, _ := errors.AsType[*provider.Error](err); e.RetryAfter != UsageLimitCooldown {
+		t.Fatalf("RetryAfter %v, want %v", e.RetryAfter, UsageLimitCooldown)
 	}
 }
 

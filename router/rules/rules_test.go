@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -177,5 +178,19 @@ func TestNoCandidate(t *testing.T) {
 	_, err := r.Route(context.Background(), router.TaskReq{Privacy: "local-only", Vision: true})
 	if !errors.Is(err, router.ErrNoCandidate) {
 		t.Fatalf("err %v, want ErrNoCandidate", err)
+	}
+}
+
+func TestAuthErrorCoolsLonger(t *testing.T) {
+	r, c := newRouter(t)
+	r.Report(router.Candidate{Provider: "claude", Model: "sonnet"}, &provider.Error{Kind: provider.KindAuth})
+	c.now = t0.Add(9 * time.Minute)
+	got := route(t, r, router.TaskReq{Kind: "message"})
+	if tail := strings.Join(got[len(got)-2:], ","); tail != "claude/sonnet,claude/haiku" {
+		t.Fatalf("a wrong key or login is the provider's, all its models wait 10 min: %v", got)
+	}
+	c.now = t0.Add(11 * time.Minute)
+	if got := route(t, r, router.TaskReq{Kind: "message"}); got[0] != "claude/sonnet" {
+		t.Fatalf("auth cooldown did not end: %v", got)
 	}
 }
