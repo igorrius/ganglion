@@ -37,6 +37,18 @@ var (
 	ErrInvalid = errors.New("memory: invalid")
 )
 
+// errFrontmatter is an entry whose frontmatter does not parse.
+var errFrontmatter = errors.New("the frontmatter is not readable")
+
+// errorKind names what made an entry unreadable, for the log: never the
+// error's text, which could quote the entry.
+func errorKind(err error) string {
+	if errors.Is(err, errFrontmatter) {
+		return "frontmatter"
+	}
+	return "io"
+}
+
 // Check is the outcome of the clean-context check of an entry. It is
 // stored in the entry's file, so its values never change.
 type Check string
@@ -297,14 +309,15 @@ func (m *Memory) read(slug string, check Check) (Entry, error) {
 }
 
 // Notice returns the alerts about e: one to every admin when it was
-// quarantined, once per entry (the outbox keeps one message per key),
-// none otherwise.
+// quarantined, none otherwise. The key holds the slug and a short hash
+// of the body, so the same held-back write (a rerun) alerts once and
+// another one under the same title alerts again.
 func (m *Memory) Notice(ctx context.Context, e Entry) ([]event.Outgoing, error) {
 	if e.Checked != CheckQuarantined {
 		return nil, nil
 	}
 	text := fmt.Sprintf("A fact was held back as a possible injection: %s — %s.", e.Title, strings.TrimRight(e.Reason, ". "))
-	out, err := m.alerts.Messages(ctx, "alert:memory:quarantine:"+e.Slug, text)
+	out, err := m.alerts.Messages(ctx, "alert:memory:quarantine:"+e.Slug+":"+shortHash(e.Body), text)
 	if err != nil {
 		return nil, fmt.Errorf("memory: quarantine alert: %w", err)
 	}
@@ -358,7 +371,7 @@ func (m *Memory) list(check Check) ([]Entry, error) {
 		}
 		e, err := m.read(slug, check)
 		if err != nil {
-			m.log.Warn("memory: entry unreadable", "slug", slug, "err", err)
+			m.log.Warn("memory: entry unreadable", "slug", slug, "kind", errorKind(err))
 			continue
 		}
 		out = append(out, e)
@@ -401,11 +414,12 @@ func decode(slug string, check Check, data []byte) (Entry, error) {
 	}
 	head, body, ok := bytes.Cut(rest, []byte("\n"+fence))
 	if !ok {
-		return Entry{}, fmt.Errorf("memory: %s: the frontmatter does not end", slug)
+		return Entry{}, fmt.Errorf("memory: %s: %w: it does not end", slug, errFrontmatter)
 	}
 	var f front
 	if err := yaml.Unmarshal(head, &f); err != nil {
-		return Entry{}, fmt.Errorf("memory: %s: frontmatter: %w", slug, err)
+		// The parser's message can quote the file's values: it stays out.
+		return Entry{}, fmt.Errorf("memory: %s: %w", slug, errFrontmatter)
 	}
 	if t := oneLine(f.Title); t != "" {
 		e.Title = t

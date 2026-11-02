@@ -19,6 +19,7 @@ import (
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
+	"github.com/igorrius/ganglion/tool/journal"
 )
 
 const knownFacts = memory.IndexHeader + "- Car (car)\n"
@@ -80,15 +81,21 @@ func newMemoryEnv(t *testing.T, hs ...tool.Handler) *memoryEnv {
 	// the guard reads them through the env.
 	var e *confirmEnv
 	g := lateGuard{get: func() *guard.Guard { return guard.New(e.router, e.deps.Providers) }}
-	me.mem = memory.New(repo, g, func() time.Time { return e.now }, memory.WithAlerts(alert.Admins{List: func(context.Context) ([]string, error) { return []string{owner}, nil },
+	me.mem = memory.New(repo, g, func() time.Time { return e.now }, memory.WithEpisodes(lateEpisodes{func() *Archive { return e.archive }}), memory.WithAlerts(alert.Admins{List: func(context.Context) ([]string, error) { return []string{owner}, nil },
 		Private: func(p string) (string, string, bool) {
 			return "telegram", "telegram:" + strings.TrimPrefix(p, "telegram:user:"), true
 		}}))
-	e = newConfirmEnv(t, append(builtin.MemoryTools(me.mem), hs...)...)
+	e = newConfirmEnv(t, append(builtin.MemoryTools(me.mem, privateOf), hs...)...)
 	e.deps.Facts = me.mem.Index
 	e.a = New(overDefaults(Config{}), e.deps)
 	me.confirmEnv = e
 	return me
+}
+
+// privateOf is telegram.PrivateConv in miniature.
+func privateOf(p string) (string, string, bool) {
+	id, ok := strings.CutPrefix(p, "telegram:user:")
+	return "telegram", "telegram:" + id, ok
 }
 
 // lateGuard builds the guard when it is first asked.
@@ -100,6 +107,13 @@ func (g lateGuard) CheckFact(ctx context.Context, f string) (guard.Verdict, erro
 
 func (g lateGuard) CheckPersona(ctx context.Context, p string) (guard.Verdict, error) {
 	return g.get().CheckPersona(ctx, p)
+}
+
+// lateEpisodes reads the env's archive when first asked.
+type lateEpisodes struct{ get func() *Archive }
+
+func (l lateEpisodes) Search(ctx context.Context, q string, convs []string, limit int) ([]memory.Episode, error) {
+	return l.get().Search(ctx, q, convs, limit)
 }
 
 func (m *memoryEnv) exists(rel string) bool {
@@ -215,5 +229,61 @@ func TestInjectedFactIsAskedThenQuarantined(t *testing.T) {
 	reqs := m.smart.requests()
 	if got := lastUser(reqs[len(reqs)-1]); !strings.Contains(got, "not stored") {
 		t.Fatalf("the model saw %q", got)
+	}
+}
+
+// A write parked in a tainted session keeps that taint when the owner
+// approves it after the session ended (/new): the entry and the journal
+// say tainted.
+func TestApprovedWriteKeepsTheTaintAfterNew(t *testing.T) {
+	m := newMemoryEnv(t)
+	m.taint(t)
+	q, ev := m.askWith(t, writeCar)
+	m.turn(t, message(owner, "Igor", "/new"))
+	if m.state(t).Tainted {
+		t.Fatal("the new session is tainted")
+	}
+	m.cheap.push(say(`{"ok":true,"reason":"a fact"}`))
+	m.turn(t, press(owner, q.Buttons[0].ID, "77"))
+	e, err := m.mem.Read("car")
+	if err != nil || !e.Tainted {
+		t.Fatalf("entry %+v, %v: the taint was lost", e, err)
+	}
+	entries, err := m.journal.Entries(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved := false
+	for _, en := range entries {
+		if en.Key == ev.ID+":1" && en.Decision == journal.DecisionApproved {
+			approved = true
+			if !en.Tainted {
+				t.Fatalf("the journal says untainted: %+v", en)
+			}
+		}
+	}
+	if !approved {
+		t.Fatal("no approved entry in the journal")
+	}
+}
+
+// Recall searches the caller's own chat, also after /new, but never
+// another person's chat.
+func TestRecallStaysInTheCallersChats(t *testing.T) {
+	m := newMemoryEnv(t)
+	m.turn(t, message(owner, "Igor", "the plumber Петро comes on Friday"))
+	m.turn(t, message(owner, "Igor", "/new"))
+	family := State{V: StateVersion, Session: "f1", Started: t0, Last: t0,
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "Olena: Петро owes me money"}}}
+	if err := m.archive.Put(context.Background(), "telegram:7", family, "new"); err != nil {
+		t.Fatal(err)
+	}
+	m.smart.push(callWith("memory.recall", `{"query":"петро"}`), say("Found it."))
+	m.turn(t, message(owner, "Igor", "who is Петро?"))
+	reqs := m.smart.requests()
+	msgs := reqs[len(reqs)-1].Messages
+	result := msgs[len(msgs)-1].Content
+	if !strings.Contains(result, "comes on Friday") || strings.Contains(result, "owes me money") {
+		t.Fatalf("recall gave %q", result)
 	}
 }

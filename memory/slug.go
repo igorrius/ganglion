@@ -59,8 +59,7 @@ func Slug(title string) string {
 		b.WriteString(s)
 	}
 	if b.Len() == 0 {
-		sum := sha256.Sum256([]byte(title))
-		return "fact-" + hex.EncodeToString(sum[:4])
+		return "fact-" + shortHash(title)
 	}
 	return cut(b.String(), MaxSlugLen)
 }
@@ -101,4 +100,10 @@ func allocate(title string, all []Entry) (slug string, same []Entry) {
 			return slug, same
 		}
 	}
+}
+
+// shortHash is 8 hex digits of the SHA-256 of s.
+func shortHash(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:4])
 }

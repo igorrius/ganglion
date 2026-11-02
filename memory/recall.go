@@ -20,16 +20,16 @@ type Episode struct {
 
 // Episodes searches the archived sessions (agent.Archive).
 type Episodes interface {
-	// Search returns at most limit sessions whose text holds q, case
-	// insensitive, newest first.
-	Search(ctx context.Context, q string, limit int) ([]Episode, error)
+	// Search returns at most limit sessions of the conversations convs
+	// whose text holds q, case insensitive, newest first.
+	Search(ctx context.Context, q string, convs []string, limit int) ([]Episode, error)
 }
 
 // NoEpisodes is an archive with nothing in it.
 type NoEpisodes struct{}
 
 // Search implements Episodes.
-func (NoEpisodes) Search(context.Context, string, int) ([]Episode, error) { return nil, nil }
+func (NoEpisodes) Search(context.Context, string, []string, int) ([]Episode, error) { return nil, nil }
 
 // Hit is one result of a recall.
 type Hit struct {
@@ -41,8 +41,10 @@ type Hit struct {
 }
 
 // Recall finds q, case insensitive, in the stored facts (title and
-// body) and in the archived sessions, newest first, at most limit hits.
-func (m *Memory) Recall(ctx context.Context, q string, limit int) ([]Hit, error) {
+// body) and in the archived sessions of the conversations convs (the
+// caller's own: another person's chat is not searched), newest first, at
+// most limit hits.
+func (m *Memory) Recall(ctx context.Context, q string, convs []string, limit int) ([]Hit, error) {
 	q = strings.TrimSpace(q)
 	if q == "" || limit <= 0 {
 		return nil, fmt.Errorf("%w: recall needs a query and a limit", ErrInvalid)
@@ -58,7 +60,7 @@ func (m *Memory) Recall(ctx context.Context, q string, limit int) ([]Hit, error)
 			hits = append(hits, Hit{Source: dirFacts + "/" + e.Slug, Title: e.Title, Text: e.Body, When: e.Created, Tainted: e.Tainted})
 		}
 	}
-	eps, err := m.episodes.Search(ctx, q, limit)
+	eps, err := m.episodes.Search(ctx, q, convs, limit)
 	if err != nil {
 		return nil, fmt.Errorf("memory: recall: %w", err)
 	}

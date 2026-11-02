@@ -95,9 +95,12 @@ Package `guard`:
 - **On write** (`memory.Memory.Write`, for every write, also after the
   owner approved one): OK → `memory/<slug>.md`; not OK →
   `memory/quarantine/<slug>.md`, committed, not indexed, not readable by
-  the model, and every admin gets once per entry (key
-  `alert:memory:quarantine:<slug>`): "A fact was held back as a possible
-  injection: <title> — <reason>."
+  the model, and every admin gets, once per held-back write (key
+  `alert:memory:quarantine:<slug>:<short hash of the body>`, so a rerun
+  alerts once and a second write under the same title alerts again): "A
+  fact was held back as a possible injection: <title> — <reason>." The
+  model is told only that the fact was held back; the reason, a model's
+  words about outside text, goes to the owner and not into its context.
 - **On schedule.** A system task (`system:memory-audit`, daily at 04:00
   in the node's zone, owned by the first admin, answering in their
   private chat) runs the `memory.audit` tool, whose grant is that tool

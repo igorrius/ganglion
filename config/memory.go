@@ -15,6 +15,7 @@ import (
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
+	"github.com/igorrius/ganglion/transport/telegram"
 	"github.com/samber/do/v2"
 )
 
@@ -65,6 +66,6 @@ func Remember() do.Provider[Remembering] {
 		}
 		err = builtin.EnsureAudit(do.MustInvoke[Startup](i), do.MustInvoke[*schedule.Store](i), do.MustInvoke[alert.Admins](i),
 			time.Now(), do.MustInvoke[*slog.Logger](i))
-		return Remembering{Tools: builtin.MemoryTools(m), Facts: m.Index}, err
+		return Remembering{Tools: builtin.MemoryTools(m, telegram.PrivateConv), Facts: m.Index}, err
 	}
 }

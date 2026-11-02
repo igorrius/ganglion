@@ -181,7 +181,7 @@ func (a *Agent) stored(it pending.Item, ran bool) pending.Outcome {
 // (R-DLV-6), journalled as approved.
 func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pending.Outcome {
 	c := it.Call()
-	c.Admin, c.Tainted = t.admin, t.state.Tainted
+	c.Admin, c.Tainted = t.admin, it.Tainted || t.state.Tainted
 	c.KnownURL = knownURLs(t.state.Messages).has
 	res, err := a.journalled(journal.DecisionApproved, a.d.Tools.Run)(ctx, c)
 	if err != nil {
@@ -195,7 +195,7 @@ func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pendi
 // text as its outcome.
 func (a *Agent) settle(ctx context.Context, t *turn, it pending.Item, d journal.Decision, text string) pending.Outcome {
 	c := it.Call()
-	c.Admin, c.Tainted = t.admin, t.state.Tainted
+	c.Admin, c.Tainted = t.admin, it.Tainted || t.state.Tainted
 	skip := func(context.Context, tool.Call) (tool.Result, error) { return tool.Result{Text: text}, nil }
 	_, _ = a.journalled(d, skip)(ctx, c)
 	return pending.Outcome{Result: text}

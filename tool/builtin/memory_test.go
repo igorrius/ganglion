@@ -46,7 +46,7 @@ func memoryTools(t *testing.T) map[string]tool.Handler {
 	}
 	m := memory.New(repo, wordGuard{}, func() time.Time { return time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC) }, memory.WithAlerts(oneAdmin))
 	out := map[string]tool.Handler{}
-	for _, h := range builtin.MemoryTools(m) {
+	for _, h := range builtin.MemoryTools(m, private) {
 		out[h.Spec().Name] = h
 	}
 	return out

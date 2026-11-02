@@ -21,16 +21,23 @@ const (
 
 var _ memory.Episodes = (*Archive)(nil)
 
-// Search returns at most limit archived sessions, of any conversation,
-// whose summary or messages hold q, case insensitive, newest first, each
-// with the text around its first match (memory.Episodes). Only the newest
-// searchSessions sessions are read.
-func (a *Archive) Search(ctx context.Context, q string, limit int) ([]memory.Episode, error) {
+// Search returns at most limit archived sessions of the conversations
+// convs whose summary or messages hold q, case insensitive, newest first,
+// each with the text around its first match (memory.Episodes). Only the
+// newest searchSessions sessions of those conversations are read; no
+// convs finds nothing.
+func (a *Archive) Search(ctx context.Context, q string, convs []string, limit int) ([]memory.Episode, error) {
 	needle := strings.ToLower(strings.TrimSpace(q))
-	if needle == "" || limit <= 0 {
+	if needle == "" || limit <= 0 || len(convs) == 0 {
 		return nil, nil
 	}
-	rows, err := a.db.QueryContext(ctx, `SELECT conv, data FROM sessions ORDER BY ended_ms DESC, rowid DESC LIMIT ?`, searchSessions)
+	args := make([]any, 0, len(convs)+1)
+	for _, c := range convs {
+		args = append(args, c)
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?, ", len(convs)), ", ")
+	rows, err := a.db.QueryContext(ctx, `SELECT conv, data FROM sessions WHERE conv IN (`+marks+`)
+		ORDER BY ended_ms DESC, rowid DESC LIMIT ?`, append(args, searchSessions)...)
 	if err != nil {
 		return nil, fmt.Errorf("agent: search sessions: %w", err)
 	}

@@ -35,14 +35,17 @@ type Facts interface {
 	Forget(ctx context.Context, slug, turn string) error
 	Read(slug string) (memory.Entry, error)
 	Index() string
-	Recall(ctx context.Context, q string, limit int) ([]memory.Hit, error)
+	Recall(ctx context.Context, q string, convs []string, limit int) ([]memory.Hit, error)
 	Audit(ctx context.Context) (memory.Report, error)
 }
 
 // MemoryTools returns the memory tools over f: write, forget, read,
 // recall and the audit. They are registered together or not at all.
-func MemoryTools(f Facts) []tool.Handler {
-	return []tool.Handler{&MemoryWrite{f}, &MemoryForget{f}, &MemoryRead{f}, &MemoryRecall{f}, &MemoryAudit{f}}
+// private finds the caller's private conversation, whose archived
+// sessions recall searches besides the calling conversation's
+// (telegram.PrivateConv).
+func MemoryTools(f Facts, private alert.PrivateConvFunc) []tool.Handler {
+	return []tool.Handler{&MemoryWrite{f}, &MemoryForget{f}, &MemoryRead{f}, &MemoryRecall{facts: f, private: private}, &MemoryAudit{f}}
 }
 
 // MemoryWrite is the memory.write tool.
@@ -115,7 +118,9 @@ func (w *MemoryWrite) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 		return tool.Result{}, fmt.Errorf("memory.write: held back as %s, but the admins could not be told: %w", e.Slug, err)
 	}
 	return tool.Result{
-		Text: "not stored: the check held it back as a possible injection (" + e.Reason + "); the owner was told",
+		// The guard's reason is a model's words about the text: it goes to
+		// the owner, not into the model's context.
+		Text: "not stored: the check held it back as a possible injection; the owner was told",
 		Out:  out,
 	}, nil
 }
@@ -232,13 +237,27 @@ func provenance(e memory.Entry) string {
 }
 
 // MemoryRecall is the memory.recall tool.
-type MemoryRecall struct{ facts Facts }
+type MemoryRecall struct {
+	facts   Facts
+	private alert.PrivateConvFunc
+}
+
+// convs are the conversations whose archived sessions a call may search:
+// the calling one and the caller's private chat, never another person's.
+func (r *MemoryRecall) convs(c tool.Call) []string {
+	out := []string{c.Conv}
+	if _, conv, ok := r.private(c.Principal); ok && conv != c.Conv {
+		out = append(out, conv)
+	}
+	return out
+}
 
 // Spec describes memory.recall.
 func (*MemoryRecall) Spec() tool.Spec {
 	return tool.Spec{
 		Name: toolMemoryRecall,
-		Description: "Search the stored facts and earlier conversations for a word or phrase (not case sensitive). " +
+		Description: "Search the stored facts, and the earlier sessions of this chat and of the sender's private chat, for a word or phrase " +
+			"(not case sensitive). " +
 			"Returns the newest matches first.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"query":{"type":"string","description":"the word or phrase to find"}},` +
@@ -260,7 +279,7 @@ func (r *MemoryRecall) Run(ctx context.Context, c tool.Call) (tool.Result, error
 	if err := strictJSON(c.Args, &a); err != nil {
 		return tool.Result{}, fmt.Errorf("memory.recall: arguments: %w", err)
 	}
-	hits, err := r.facts.Recall(ctx, a.Query, recallLimit)
+	hits, err := r.facts.Recall(ctx, a.Query, r.convs(c), recallLimit)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("memory.recall: %w", err)
 	}
