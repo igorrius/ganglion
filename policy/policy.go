@@ -123,7 +123,7 @@ func (p *Policy) Middleware() tool.Middleware {
 				return tool.Result{}, fmt.Errorf("policy: %s: %w", c.Name, tool.ErrUnknown)
 			}
 			s := p.spec(h.Spec())
-			pol, d := p.decide(s, c)
+			pol, d := Decide(p.cfg.MaxDepth, s, c)
 			journal.Annotate(ctx, d)
 			switch {
 			case d == journal.DecisionOutOfGrant:
@@ -147,10 +147,6 @@ func (p *Policy) spec(s tool.Spec) tool.Spec {
 		s.Policy = o
 	}
 	return s
-}
-
-func (p *Policy) decide(s tool.Spec, c tool.Call) (tool.Policy, journal.Decision) {
-	return decide(p.cfg.MaxDepth, s, c)
 }
 
 // confirm parks the call for the owner and returns its pending id.
@@ -183,30 +179,26 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 	return tool.Result{Out: msgs}, err
 }
 
-// Decide applies the rules to a call with the default depth limit; the
-// order is in decide. A Policy uses its Config.MaxDepth instead.
-func Decide(s tool.Spec, c tool.Call) (tool.Policy, journal.Decision) {
-	return decide(DefaultMaxDepth, s, c)
-}
-
-// decide returns what to do with call c of tool s and the journal's name
+// Decide returns what to do with call c of tool s and the journal's name
 // for the decision. The rules run in order and the first that applies
 // wins (design section 4):
 //
 //  1. deeper than maxDepth: forbidden (R-AGT-4);
 //  2. an admin-only tool for a non-admin: forbidden;
-//  3. a scheduled task's call: outside its grant is out_of_grant, inside
+//  3. a forbidden tool: forbidden, whatever a grant says;
+//  4. a scheduled task's call: outside its grant is out_of_grant, inside
 //     it is auto, even in a tainted session (R-POL-8);
-//  4. a forbidden tool: forbidden;
-//  5. a side effect: confirm;
-//  6. a memory write in a tainted session: confirm;
+//  5. memory.write and memory.forget: confirm in a tainted session, auto
+//     otherwise (the memory guard still checks the entry), though they
+//     are side effects;
+//  6. any other side effect: confirm;
 //  7. message.send to another conversation: confirm;
 //  8. web.fetch of an address the owner or a search did not bring: confirm;
 //  9. the tool's own policy.
 //
 // An argument a rule needs that does not parse makes the call confirm,
 // never auto.
-func decide(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision) {
+func Decide(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision) {
 	for _, r := range rules {
 		if pol, d, ok := r(maxDepth, s, c); ok {
 			return pol, d
@@ -218,8 +210,8 @@ func decide(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisi
 // rule returns a decision when it applies to the call.
 type rule func(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool)
 
-// rules are the rules of decide, in order.
-var rules = []rule{ruleDepth, ruleAdminOnly, ruleGrant, ruleForbidden, ruleSideEffect, ruleMemoryWrite, ruleMessageSend, ruleWebFetch}
+// rules are the rules of Decide, in order.
+var rules = []rule{ruleDepth, ruleAdminOnly, ruleForbidden, ruleGrant, ruleMemoryWrite, ruleSideEffect, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -327,10 +319,13 @@ func ruleSideEffect(_ int, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decis
 }
 
 func ruleMemoryWrite(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
-	if (s.Name == toolMemoryWrite || s.Name == toolMemoryForget) && c.Tainted {
+	if s.Name != toolMemoryWrite && s.Name != toolMemoryForget {
+		return "", "", false
+	}
+	if c.Tainted {
 		return confirm()
 	}
-	return "", "", false
+	return tool.PolicyAuto, journal.DecisionAllowed, true
 }
 
 func ruleMessageSend(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {

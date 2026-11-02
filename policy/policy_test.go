@@ -47,8 +47,8 @@ func TestDecide(t *testing.T) {
 	side := spec("schedule.create", tool.ClassSideEffect, tool.PolicyConfirm)
 	sideAuto := spec("odd.side", tool.ClassSideEffect, tool.PolicyAuto)
 	denied := spec("danger", tool.ClassRead, tool.PolicyForbidden)
-	memory := spec("memory.write", tool.ClassRead, tool.PolicyAuto)
-	forget := spec("memory.forget", tool.ClassRead, tool.PolicyAuto)
+	memory := spec("memory.write", tool.ClassSideEffect, tool.PolicyAuto)
+	forget := spec("memory.forget", tool.ClassSideEffect, tool.PolicyAuto)
 	send := spec("message.send", tool.ClassRead, tool.PolicyAuto)
 	fetch := spec("web.fetch", tool.ClassExternal, tool.PolicyAuto)
 	grant := &tool.Grant{Tools: []string{"clock", "web.fetch", "schedule.create"}, Hosts: []string{"Example.com"}}
@@ -79,6 +79,8 @@ func TestDecide(t *testing.T) {
 			c.Args = args("url", "https://example.com/")
 		}), tool.PolicyForbidden, journal.DecisionOutOfGrant},
 		{"grant covers a side effect in a tainted session (R-POL-8)", side, with(base(), func(c *tool.Call) { c.Grant = grant; c.Tainted = true }), tool.PolicyAuto, journal.DecisionAllowed},
+		{"grant naming a forbidden tool is still forbidden", denied, with(base(), func(c *tool.Call) { c.Grant = &tool.Grant{Tools: []string{"danger"}} }), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"memory forget, clean, is auto", forget, base(), tool.PolicyAuto, journal.DecisionAllowed},
 		{"forbidden tool", denied, base(), tool.PolicyForbidden, journal.DecisionForbidden},
 		{"side effect confirms", side, base(), tool.PolicyConfirm, journal.DecisionConfirm},
 		{"side effect confirms even if the tool says auto", sideAuto, base(), tool.PolicyConfirm, journal.DecisionConfirm},
@@ -99,7 +101,7 @@ func TestDecide(t *testing.T) {
 		{"unknown policy fails closed", spec("x", tool.ClassRead, "weird"), base(), tool.PolicyForbidden, journal.DecisionForbidden},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			pol, dec := policy.Decide(tc.s, tc.c)
+			pol, dec := policy.Decide(policy.DefaultMaxDepth, tc.s, tc.c)
 			if pol != tc.pol || dec != tc.dec {
 				t.Fatalf("Decide = %s, %s; want %s, %s", pol, dec, tc.pol, tc.dec)
 			}
