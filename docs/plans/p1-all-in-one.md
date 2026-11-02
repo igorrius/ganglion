@@ -132,6 +132,19 @@ Step-by-step plans: [M3a, the talking agent](p1-m3a-talking-agent.md)
 (3.1–3.4 and a live run that picks the first model); M3b (memory, tools
 and policies, skills, 3.8 acceptance) is planned after M3a.
 
+**M3a built 2026-11-02**:
+- **Providers:** the operator chooses them (ADR-0021): OpenAI-compatible
+  APIs and the claude CLI.
+- **Router:** a rules router over a YAML catalogue.
+- **Agent:** fallback, step and daily limits, compaction and sessions,
+  with the turns trace.
+- **Turns:** parallel, with a timeout and give-up.
+- **First model:** Haiku through the CLI first, DeepSeek V4.1 Flash as the
+  fallback (ADR-0022).
+- **Memory:** the agent is 24.2 MB after 1,000 turns.
+
+The live run on the test bot closes it.
+
 | Task | Done when |
 |---|---|
 | 3.1 History store and conversation actors: one turn at a time, timeout, cancel; provider-neutral history; compaction to a summary (R-AGT-1, 2) | Tests; concurrent messages in one chat are serialised |

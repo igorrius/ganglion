@@ -34,21 +34,29 @@ Start here when coming back to the project.
     test bot. Decisions: [ADR-0018](adr/0018-own-telegram-bot-api-client.md)
     (own Bot API client), [ADR-0019](adr/0019-release-leases-at-core-start.md)
     (leases released at core start, database lock).
-- **Next:** the agent (M3), first after its foundations
-  ([ADR-0015](adr/0015-agent-first-p1.md)); it replaces `core.Echo`.
-  - M3 is split in two plans. M3a, the talking agent, has its
-    step-by-step plan ([p1-m3a-talking-agent.md](plans/p1-m3a-talking-agent.md));
-    it rests on [ADR-0020](adr/0020-neutral-history-as-conversation-state.md)
-    (history in a neutral format, stored as the conversation state,
-    Accepted). The operator picks one or more providers, the local claude
-    CLI included ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md),
-    Accepted); the owner's node talks through the CLI, OpenRouter as a
-    fallback.
-  - A cap on attempts for a turn that always fails is M3a task 6.
-  - Deferred minors from the M2 review: record a send's outcome with
-    `context.WithoutCancel` on shutdown; keep the seeded admin's name and
-    plan admin removal; do not end the node when the `409` alert cannot be
-    stored.
+  - M3a, the talking agent, built — `provider/openai`, `provider/claudecli`,
+    `router/rules`, `turns`, `agent`, core workers
+    ([plan](plans/p1-m3a-talking-agent.md)). The bot answers through
+    models the operator lists in a catalogue: Haiku through the claude CLI
+    first, DeepSeek V4.1 Flash on OpenRouter as the fallback. Sessions
+    (`/new`, idle reset, `/sessions`, `/resume`), daily limits, a
+    turns trace; 24 MB RSS. Decisions: [ADR-0020](adr/0020-neutral-history-as-conversation-state.md)
+    (history as conversation state), [ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)
+    (operator-chosen providers, CLI included), [ADR-0022](adr/0022-haiku-first-during-development.md)
+    (Haiku first during development). Waiting for the owner's live run
+    (`make live-agent`).
+- **Next:** M3b — memory, tools and policies, skills, and the 3.8
+  acceptance under the crash harness; planned after M3a's live run.
+  - Scope stays one operator, one agent, one bot (spec 14).
+  - Carried into M3b: the current time in the last user message (the
+    model does not know the date); tools for the claude CLI through MCP
+    config; the depth limit (R-AGT-4) and tool placement (R-RTR-3).
+  - Deferred minors from the reviews:
+    - M2: record a send's outcome with `context.WithoutCancel` on
+      shutdown; keep the seeded admin's name and plan admin removal; do
+      not end the node when the `409` alert cannot be stored.
+    - M3a: remove or document `provider.Fallback`; clean up the claude
+      work dir; name people, not ids, in limit alerts.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

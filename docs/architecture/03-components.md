@@ -14,7 +14,7 @@ flowchart TB
 
     acl["Access list<br/>strangers dropped, no reply"]
     inbox[("Inbox<br/>idemKey unique")]
-    actors["Conversation actors<br/>one goroutine per conversation"]
+    actors["Turn workers<br/>parallel; one turn per conversation at a time;<br/>sessions"]
     loop["Agent loop<br/>model, tools, next step"]
     history["History<br/>neutral format, summaries"]
     router["Router<br/>filters, rules, weights, fallback"]
