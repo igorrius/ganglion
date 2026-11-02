@@ -1,6 +1,6 @@
 # ADR-0021: Let the operator choose one or more providers, the claude CLI included, for conversation
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-02
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.3](../spec.md#73-model-router), [7.4](../spec.md#74-providers-and-model-access) (R-PRV-1, R-PRV-4)

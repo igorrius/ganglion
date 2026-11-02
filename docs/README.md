@@ -42,7 +42,7 @@ Start here when coming back to the project.
     (history in a neutral format, stored as the conversation state,
     Accepted). The operator picks one or more providers, the local claude
     CLI included ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md),
-    Proposed); the owner's node talks through the CLI, OpenRouter as a
+    Accepted); the owner's node talks through the CLI, OpenRouter as a
     fallback.
   - A cap on attempts for a turn that always fails is M3a task 6.
   - Deferred minors from the M2 review: record a send's outcome with
