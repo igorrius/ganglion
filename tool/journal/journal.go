@@ -29,7 +29,7 @@ const (
 	writeTimeout = 5 * time.Second
 )
 
-// DefaultRetain is how long entries are kept when New gets no retention.
+// DefaultRetain is how long entries are normally kept.
 const DefaultRetain = 30 * 24 * time.Hour
 
 // Decision is what the policy decided about a call. Decisions are stored,
@@ -78,7 +78,8 @@ type Option func(*Journal)
 func WithLogger(l *slog.Logger) Option { return func(j *Journal) { j.log = l } }
 
 // New migrates the "tool_journal" component. Entries older than retain are
-// removed by Prune; retain <= 0 means DefaultRetain.
+// removed by Prune; retain <= 0 keeps them forever (Prune does nothing).
+// DefaultRetain is the usual value, passed by the composition root.
 func New(ctx context.Context, db *sql.DB, now func() time.Time, retain time.Duration, opts ...Option) (*Journal, error) {
 	sub, err := fs.Sub(migrations, "migrations")
 	if err != nil {
@@ -86,9 +87,6 @@ func New(ctx context.Context, db *sql.DB, now func() time.Time, retain time.Dura
 	}
 	if err := sqlitedb.Migrate(ctx, db, "tool_journal", sub); err != nil {
 		return nil, err
-	}
-	if retain <= 0 {
-		retain = DefaultRetain
 	}
 	j := &Journal{db: db, now: now, retain: retain, log: slog.New(slog.DiscardHandler)}
 	for _, o := range opts {
@@ -198,8 +196,12 @@ func (j *Journal) Entries(ctx context.Context) ([]Entry, error) {
 	return out, rows.Err()
 }
 
-// Prune deletes entries older than the retention and returns how many.
+// Prune deletes entries older than the retention and returns how many; with
+// no retention it deletes nothing.
 func (j *Journal) Prune(ctx context.Context) (int, error) {
+	if j.retain <= 0 {
+		return 0, nil
+	}
 	res, err := j.db.ExecContext(ctx, `DELETE FROM tool_calls WHERE at_ms < ?`, j.now().Add(-j.retain).UnixMilli())
 	if err != nil {
 		return 0, fmt.Errorf("journal: prune: %w", err)

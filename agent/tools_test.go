@@ -164,7 +164,7 @@ func TestKnownURLComesFromUserAndSearchResults(t *testing.T) {
 
 func TestExtractURLs(t *testing.T) {
 	got := extractURLs(`a https://x.example/a?b=1, (http://y.example/p) <https://z.example> "http://q.example/r" ftp://no.example`)
-	want := []string{"https://x.example/a?b=1,", "http://y.example/p", "https://z.example", "http://q.example/r"}
+	want := []string{"https://x.example/a?b=1", "http://y.example/p", "https://z.example", "http://q.example/r"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -228,5 +228,14 @@ func TestMiddlewareFromDepsRunsAfterTracing(t *testing.T) {
 	e.turn(t, message("telegram:user:42", "Igor", "go"))
 	if len(seen) != 1 || seen[0] != "clock" {
 		t.Fatalf("middleware saw %v", seen)
+	}
+}
+
+func TestKnownURLIgnoresSentencePunctuation(t *testing.T) {
+	set := knownURLs([]provider.Message{{Role: provider.RoleUser, Content: "see https://x/a. Also https://y/b, and https://z/c!"}})
+	for _, u := range []string{"https://x/a", "https://y/b", "https://z/c"} {
+		if !set.has(u) {
+			t.Errorf("%s is not known", u)
+		}
 	}
 }

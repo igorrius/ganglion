@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/igorrius/ganglion/internal/urlnorm"
@@ -93,8 +94,15 @@ func (a *Agent) toolCall(t *turn, call provider.ToolCall) tool.Call {
 // or a closing ")", ">" or quote.
 var urlPattern = regexp.MustCompile(`(?i)https?://[^\s)>"]+`)
 
-// extractURLs returns the addresses in text, as written.
-func extractURLs(text string) []string { return urlPattern.FindAllString(text, -1) }
+// extractURLs returns the addresses in text; punctuation that ends a
+// sentence after an address is not part of it.
+func extractURLs(text string) []string {
+	found := urlPattern.FindAllString(text, -1)
+	for i, u := range found {
+		found[i] = strings.TrimRight(u, ".,;:!?")
+	}
+	return found
+}
 
 // urlSet is the normalised addresses a turn may fetch without asking: the
 // ones in the user's messages and in earlier web.search results.

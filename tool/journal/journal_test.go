@@ -118,6 +118,43 @@ func TestAnnotateWithoutJournalIsNoop(*testing.T) {
 	journal.Annotate(context.Background(), journal.DecisionDenied)
 }
 
+func TestJournalRedactsResultHeadAndError(t *testing.T) {
+	e := newEnv(t)
+	run := e.j.Middleware()(func(context.Context, tool.Call) (tool.Result, error) {
+		return tool.Result{Text: "Authorization: Bearer B3ARER from https://u:P4SS@h/?token=T0K"}, errors.New("failed at https://x/?api_key=S3CR")
+	})
+	_, _ = run(context.Background(), call(1, "x", `{"url":"https://x/?api_key=S3CR"}`))
+	en := e.rows(t)[0]
+	for _, field := range []string{en.Args, en.ResultHead, en.Err} {
+		for _, secret := range []string{"B3ARER", "P4SS", "T0K", "S3CR"} {
+			if strings.Contains(field, secret) {
+				t.Errorf("%q still holds %s", field, secret)
+			}
+		}
+	}
+}
+
+func TestJournalWithoutRetentionKeepsForever(t *testing.T) {
+	ctx := context.Background()
+	db, err := sqlitedb.Open(ctx, filepath.Join(t.TempDir(), "j.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	j, err := journal.New(ctx, db, func() time.Time { return t0 }, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := j.Middleware()(func(context.Context, tool.Call) (tool.Result, error) { return tool.Result{}, nil })
+	_, _ = run(ctx, call(1, "x", `{}`))
+	if n, err := j.Prune(ctx); err != nil || n != 0 {
+		t.Fatalf("Prune = %d, %v; want nothing deleted", n, err)
+	}
+	if rows, _ := j.Entries(ctx); len(rows) != 1 {
+		t.Fatalf("%d entries left", len(rows))
+	}
+}
+
 func TestJournalPrune(t *testing.T) {
 	e := newEnv(t)
 	run := e.j.Middleware()(func(context.Context, tool.Call) (tool.Result, error) { return tool.Result{}, nil })
@@ -144,6 +181,17 @@ func TestRedact(t *testing.T) {
 		{"text", "curl --data password=hunter2 https://x", "hunter2"},
 		{"bot url", "https://api.telegram.org/bot123456:ABC-def_ghi/getMe", "ABC-def_ghi"},
 		{"truncated json", `{"q":"x","secret":"abc-5`, "abc-5"},
+		{"query string in a json value", `{"url":"https://x/a?api_key=S3CR&q=1"}`, "S3CR"},
+		{"bearer header line", "Authorization: Bearer B3ARER", "B3ARER"},
+		{"bearer in json headers", `{"headers":{"Authorization":"Bearer B3ARER"}}`, "B3ARER"},
+		{"bearer in a json string", `{"note":"send Bearer B3ARER now"}`, "B3ARER"},
+		{"userinfo", "fetch https://user:P4SS@host/path", "P4SS"},
+		{"userinfo in json", `{"url":"https://user:P4SS@host/"}`, "P4SS"},
+		{"cookie key", `{"Cookie":"sid=C00K; other=1"}`, "C00K"},
+		{"cookie header line", "Cookie: a=1; sid=C00K", "C00K"},
+		{"passwd key", `{"passwd":"PW5"}`, "PW5"},
+		{"passwd text", "passwd=PW5", "PW5"},
+		{"authorization key", `{"authorization":"Basic AUTH1"}`, "AUTH1"},
 	} {
 		if got := journal.Redact(tc.in); strings.Contains(got, tc.gone) {
 			t.Errorf("%s: %q still holds %q", tc.name, got, tc.gone)
