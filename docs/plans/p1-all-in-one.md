@@ -128,6 +128,10 @@ core start, database lock).
 
 ### M3 · The agent (spec 7.2–7.4, 7.6, 7.7)
 
+Step-by-step plans: [M3a, the talking agent](p1-m3a-talking-agent.md)
+(3.1–3.4 and a live run that picks the first model); M3b (memory, tools
+and policies, skills, 3.8 acceptance) is planned after M3a.
+
 | Task | Done when |
 |---|---|
 | 3.1 History store and conversation actors: one turn at a time, timeout, cancel; provider-neutral history; compaction to a summary (R-AGT-1, 2) | Tests; concurrent messages in one chat are serialised |

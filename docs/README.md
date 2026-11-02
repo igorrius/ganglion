@@ -36,8 +36,12 @@ Start here when coming back to the project.
     (leases released at core start, database lock).
 - **Next:** the agent (M3), first after its foundations
   ([ADR-0015](adr/0015-agent-first-p1.md)); it replaces `core.Echo`.
-  - Before M3's handler: a cap on attempts for a turn that always fails
-    (today it is retried every 10 minutes forever).
+  - M3 is split in two plans. M3a, the talking agent, has its
+    step-by-step plan ([p1-m3a-talking-agent.md](plans/p1-m3a-talking-agent.md));
+    it rests on [ADR-0020](adr/0020-neutral-history-as-conversation-state.md)
+    (history in a neutral format, stored as the conversation state,
+    Proposed). Its live run needs an API key for a cheap model.
+  - A cap on attempts for a turn that always fails is M3a task 6.
   - Deferred minors from the M2 review: record a send's outcome with
     `context.WithoutCancel` on shutdown; keep the seeded admin's name and
     plan admin removal; do not end the node when the `409` alert cannot be
