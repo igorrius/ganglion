@@ -171,3 +171,14 @@ func TestConfigTelegramReply(t *testing.T) {
 		t.Error("a bad reply mode was accepted")
 	}
 }
+
+func TestConfigMetricsAddr(t *testing.T) {
+	cfg, err := ConfigFromEnv(env(nil), files(nil))
+	if err != nil || cfg.MetricsAddr != "127.0.0.1:9464" {
+		t.Fatalf("default %q, %v", cfg.MetricsAddr, err)
+	}
+	cfg, _ = ConfigFromEnv(env(map[string]string{"GANGLION_METRICS_ADDR": "off"}), files(nil))
+	if cfg.MetricsAddr != "off" {
+		t.Fatalf("off: %q", cfg.MetricsAddr)
+	}
+}

@@ -191,7 +191,7 @@ func TestClientTelemetry(t *testing.T) {
 	for _, s := range rec.Spans.Ended() {
 		names[s.Name()] = true
 		for _, a := range s.Attributes() {
-			if strings.Contains(a.Value.Emit(), "secret_token") {
+			if strings.Contains(a.Value.String(), "secret_token") {
 				t.Fatalf("span %s carries the token", s.Name())
 			}
 		}

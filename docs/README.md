@@ -48,6 +48,14 @@ Start here when coming back to the project.
     (persona in workspace files), [ADR-0025](adr/0025-markdown-rendered-to-telegram-entities.md)
     (Markdown rendered to Telegram entities; typing; replies). Run live
     on the test bot by the owner; formatting checked after task 11.
+  - Observability ([plan](plans/p1-observability.md),
+    [ADR-0026](adr/0026-opentelemetry-prometheus-and-promtop.md)):
+    - one info log line per turn;
+    - OpenTelemetry metrics at `http://127.0.0.1:9464/metrics` with the
+      promtop dashboard at `/webmetrics/`;
+    - OTLP traces when `OTEL_EXPORTER_OTLP_ENDPOINT` is set;
+    - Go 1.27.3;
+    - the node is 33 MB on disk and 35 MB RSS after 1,000 turns.
 - **Next:** M3b — memory, tools and policies, skills, and the 3.8
   acceptance under the crash harness; planned after M3a's live run.
   - Scope stays one operator, one agent, one bot (spec 14).

@@ -619,7 +619,7 @@ func TestAgentTelemetry(t *testing.T) {
 			calls++
 		}
 		for _, a := range s.Attributes() {
-			if strings.Contains(a.Value.Emit(), "екретн") {
+			if strings.Contains(a.Value.String(), "екретн") {
 				t.Fatalf("span %s carries message text in %s", s.Name(), a.Key)
 			}
 		}

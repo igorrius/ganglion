@@ -20,6 +20,9 @@ type Config struct {
 	BotAPIURL string // TELEGRAM_API_URL, default "https://api.telegram.org"
 	Admin     string // GANGLION_ADMIN, e.g. "telegram:user:123"; seeded as admin at start
 	Agent     AgentConfig
+	// MetricsAddr is GANGLION_METRICS_ADDR: where /metrics and the promtop
+	// dashboard are served (default 127.0.0.1:9464), or "off" (ADR-0026).
+	MetricsAddr string
 	// TelegramReply is GANGLION_TELEGRAM_REPLY: when answers quote the
 	// person's message — auto (default), always or off (ADR-0025).
 	TelegramReply string
@@ -60,6 +63,9 @@ func ConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte, er
 	var err error
 	if cfg.BotToken, err = secret(getenv, readFile, "TELEGRAM_BOT_TOKEN"); err != nil {
 		return Config{}, err
+	}
+	if cfg.MetricsAddr = getenv("GANGLION_METRICS_ADDR"); cfg.MetricsAddr == "" {
+		cfg.MetricsAddr = "127.0.0.1:9464"
 	}
 	switch cfg.TelegramReply = getenv("GANGLION_TELEGRAM_REPLY"); cfg.TelegramReply {
 	case "":

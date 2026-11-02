@@ -69,7 +69,7 @@ Prometheus names after the exporter's conversion:
   - `TestLogHandlerAddsIDs`;
   - `TestMetricsOff` (`Addr` "off": no listener).
 
-### Task 2: instrument core, agent, outbox, Telegram, access
+### Task 2: instrument core, agent, outbox, Telegram, access — done
 
 - Each package takes meters and tracers from the global providers
   (`otel.Meter("ganglion/<pkg>")`), so tests can install an in-memory
@@ -80,7 +80,7 @@ Prometheus names after the exporter's conversion:
   checks the metric and its labels after the action, plus the agent's
   "no text in spans" check: span attributes never contain the message.
 
-### Task 3: node wiring, config, live check
+### Task 3: node wiring, config, live check — done but the live check
 
 - `GANGLION_METRICS_ADDR` (default `127.0.0.1:9464`; `off`).
 - `node.Run` sets telemetry up first and shuts it down last, and wraps the
@@ -89,3 +89,13 @@ Prometheus names after the exporter's conversion:
   `http://127.0.0.1:9464/webmetrics/` and see the turn and model metrics
   move. `make memory` records the new size.
 - **Docs:** code map, component diagram, "Where we are".
+
+As built:
+- **Wiring.** `cmd/ganglion` sets telemetry up after reading the config
+  and wraps the logger. A busy metrics port logs "telemetry: metrics are
+  off" and the node runs on; watching must never stop it. Test binaries
+  use `GANGLION_METRICS_ADDR=127.0.0.1:0`.
+- **Measured 2026-11-02** (`make memory`):
+  - binary 32.8 MB (18.3 before);
+  - the agent 26.7 MB idle and 34.6 MB after 1,000 turns (17.6 and 25.6
+    before).

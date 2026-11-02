@@ -59,6 +59,7 @@ func measure(t *testing.T, label string, extraEnv []string) {
 		"TELEGRAM_BOT_TOKEN_FILE=",
 		"TELEGRAM_API_URL="+fake.URL(),
 		"GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID),
+		"GANGLION_METRICS_ADDR=127.0.0.1:0",
 	)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)

@@ -43,7 +43,7 @@ func Install(t testing.TB) *Recorder {
 func matches(set attribute.Set, want map[string]string) bool {
 	for k, v := range want {
 		got, ok := set.Value(attribute.Key(k))
-		if !ok || got.Emit() != v {
+		if !ok || got.String() != v {
 			return false
 		}
 	}

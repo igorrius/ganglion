@@ -28,6 +28,7 @@ interfaces only; **planned** — not in the repository yet.
 | Turn loop: parallel workers, lease → handler → atomic complete, turn timeout, give up after max attempts; echo handler | `core` | done (P1 M2, workers M3a); the agent is the handler when a catalogue is set | 7.1, 7.2 | [0019](../adr/0019-release-leases-at-core-start.md) |
 | Agent: turn loop with fallback, step and daily limits, compaction, sessions (`/new`, idle, `/sessions`, `/resume`), core rules + persona from `workspace/persona/*.md` | `agent` | done (P1 M3a); tools, memory, depth limit, first-run introduction in M3b | 7.2 | [0020](../adr/0020-neutral-history-as-conversation-state.md), [0024](../adr/0024-persona-as-workspace-files.md) |
 | Compare models on scripted conversations (D-6 tool) | `cmd/modelcompare` | done (P1 M3a) | 7.4 | [0022](../adr/0022-haiku-first-during-development.md) |
+| Telemetry: OpenTelemetry setup, Prometheus `/metrics`, the promtop dashboard, OTLP traces, trace ids in logs; in-memory providers for tests | `telemetry`, `telemetry/telemetrytest` | done (P1) | 7.9 | [0026](../adr/0026-opentelemetry-prometheus-and-promtop.md) |
 | JSON Schemas of the YAML files (model catalogue, module manifest), embedded | `schemas` | done (P1 M3a); node config schema with D-3 in M4 | 7.3, 7.5 | [0023](../adr/0023-json-schemas-for-yaml-files.md) |
 | Policies | — | planned (P1) | 7.6 | — |
 | Memory | — | planned (P1) | 7.7 | — |
@@ -70,6 +71,7 @@ flowchart BT
     node --> claudecli
     node["node"]
     cmd["cmd/ganglion"] --> node
+    cmd --> telemetryp["telemetry"]
     corep["core"] --> queue
     corep --> event
     tgtest["transport/telegram/telegramtest"]
