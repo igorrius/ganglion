@@ -1,6 +1,6 @@
 # Level 2 — Containers and deployment
 
-ganglion is one binary; `--roles` decides which roles a process hosts
+ganglion is one binary; `ganglion run --roles` decides which roles a process hosts
 ([ADR-0004](../adr/0004-one-binary-with-roles.md)). A "container" here is a
 role or a data store, not a Docker container.
 
@@ -65,7 +65,7 @@ in-process; there is no NATS yet.
 ```mermaid
 flowchart TB
     subgraph host["one host: Pi or cloud instance"]
-        subgraph proc["ganglion --roles core,edge,worker"]
+        subgraph proc["ganglion run --roles core,edge,worker"]
             c["core"]
             e["edge runner"]
             w["worker: API client"]
@@ -91,17 +91,17 @@ policies; events queue up in JetStream and are delivered later.
 ```mermaid
 flowchart LR
     subgraph server["server or cloud"]
-        cn["ganglion --roles core<br/>+ NATS server, JetStream"]
+        cn["ganglion run --roles core<br/>+ NATS server, JetStream"]
     end
     subgraph home["home"]
-        e1["ganglion --roles edge<br/>Pi next to the inverter<br/>+ NATS leaf node"]
+        e1["ganglion run --roles edge<br/>Pi next to the inverter<br/>+ NATS leaf node"]
         esp["ESP32, relays<br/>MQTT"]
     end
     subgraph garage["garage, later"]
-        e2["ganglion --roles edge<br/>+ NATS leaf node"]
+        e2["ganglion run --roles edge<br/>+ NATS leaf node"]
     end
     subgraph pc["owner's PC"]
-        wk["ganglion --roles worker<br/>claude CLI"]
+        wk["ganglion run --roles worker<br/>claude CLI"]
     end
     e1 -- "leaf connection, TLS" --> cn
     e2 -.-> cn

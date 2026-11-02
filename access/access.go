@@ -42,10 +42,14 @@ type List struct {
 	db      *sql.DB
 	now     func() time.Time
 	dropped metric.Int64Counter
+	admin   string // seeded at start
 }
 
 // Option configures a List.
 type Option func(*List)
+
+// WithAdmin seeds principal as an admin at start; "" seeds nobody.
+func WithAdmin(principal string) Option { return func(l *List) { l.admin = principal } }
 
 // WithClock sets the clock; the default is time.Now.
 func WithClock(now func() time.Time) Option { return func(l *List) { l.now = now } }
@@ -64,6 +68,11 @@ func New(ctx context.Context, db *sql.DB, opts ...Option) (*List, error) {
 		metric.WithDescription("Messages kept out of the inbox, by reason."))
 	for _, o := range opts {
 		o(l)
+	}
+	if l.admin != "" {
+		if err := l.Allow(ctx, l.admin, RoleAdmin, ""); err != nil {
+			return nil, err
+		}
 	}
 	return l, nil
 }
@@ -134,7 +143,7 @@ func (l *List) Admins(ctx context.Context) ([]string, error) {
 // the transport offers the update again later.
 func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 	return func(ctx context.Context, e event.Event) error {
-		if e.Kind != "message" {
+		if e.Kind != event.KindMessage {
 			return next(ctx, e)
 		}
 		var m event.Message

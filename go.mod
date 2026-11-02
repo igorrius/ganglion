@@ -5,7 +5,9 @@ go 1.27.3
 require (
 	github.com/igorrius/promtop v0.3.2
 	github.com/prometheus/client_golang v1.25.0
+	github.com/samber/do/v2 v2.1.0
 	github.com/tetratelabs/wazero v1.12.0
+	github.com/urfave/cli/v3 v3.14.0
 	github.com/yuin/goldmark v1.8.7
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0
@@ -35,6 +37,7 @@ require (
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/samber/go-type-to-string v1.8.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.47.0 // indirect
 	go.opentelemetry.io/otel/log v1.47.0 // indirect

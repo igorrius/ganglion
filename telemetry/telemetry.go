@@ -34,6 +34,7 @@ type Config struct {
 	Addr    string // host:port for /metrics and /webmetrics/; "off" serves nothing
 	Service string // service.name
 	Version string // service.version
+	Commit  string // vcs.ref.head.revision; empty for a build without VCS stamps
 	Getenv  func(string) string
 }
 
@@ -52,10 +53,11 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
-	res := resource.NewSchemaless(
-		attribute.String("service.name", cfg.Service),
-		attribute.String("service.version", cfg.Version),
-	)
+	attrs := []attribute.KeyValue{attribute.String("service.name", cfg.Service), attribute.String("service.version", cfg.Version)}
+	if cfg.Commit != "" {
+		attrs = append(attrs, attribute.String("vcs.ref.head.revision", cfg.Commit))
+	}
+	res := resource.NewSchemaless(attrs...)
 	reg := prometheus.NewRegistry()
 	exp, err := otelprom.New(otelprom.WithRegisterer(reg))
 	if err != nil {

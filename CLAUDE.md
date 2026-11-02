@@ -11,6 +11,8 @@ the ADRs.
   down to the code map.
 - [docs/adr/](docs/adr/README.md) — why things are the way they are.
 - [docs/research/](docs/research/) — dated research notes that ADRs cite.
+- [docs/conventions.md](docs/conventions.md) — how Go code is written here:
+  read it before writing or changing code.
 - [docs/plans/](docs/plans/) — the phase plan and per-milestone
   implementation plans; tick tasks off as they are done.
 

@@ -58,8 +58,20 @@ Start here when coming back to the project.
     - OTLP traces when `OTEL_EXPORTER_OTLP_ENDPOINT` is set;
     - Go 1.27.3;
     - the node is 33 MB on disk and 35 MB RSS after 1,000 turns.
+  - Refactoring before M3b done ([plan](plans/p1-refactor.md)); no
+    behaviour change:
+    - the [Go conventions](conventions.md) with lint guardrails
+      ([ADR-0027](adr/0027-written-go-conventions-and-lint-guardrails.md));
+    - the agent as a pipeline of stages, a command table, tool
+      middleware;
+    - the node assembled in `config` with `samber/do`; `node` runs roles
+      ([ADR-0028](adr/0028-samber-do-composition-root-in-config.md));
+    - `ganglion run` and `ganglion version` on urfave/cli, `main.go` at
+      the root, development tools in `tools/`
+      ([ADR-0029](adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md));
+    - 34 MB on disk, 35 MB RSS after 1,000 agent turns.
 - **Next:** M3b — memory, tools and policies, skills, and the 3.8
-  acceptance under the crash harness; planned after M3a's live run.
+  acceptance under the crash harness.
   - Scope stays one operator, one agent, one bot (spec 14).
   - Carried into M3b: a first-run "introduction" conversation that
     writes the persona ([ADR-0024](adr/0024-persona-as-workspace-files.md));
@@ -117,6 +129,7 @@ is needed for tests: they run against a fake Bot API.
 | Why was it decided this way, and what else was considered? | [adr/](adr/README.md) |
 | Where is X in the code, and does it exist yet? | [architecture/05-code-map.md](architecture/05-code-map.md) |
 | What did we find out before deciding? | [research/](research/) |
+| How do we write Go code here? | [conventions.md](conventions.md) |
 | What is the plan for the current phase? | [plans/](plans/) |
 
 Suggested path after a long break: this page → the

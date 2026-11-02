@@ -1,0 +1,37 @@
+package config
+
+import (
+	"time"
+
+	"github.com/igorrius/ganglion/router/rules"
+)
+
+// Bootstrap is what a node needs to start: where its data lives, its
+// channels and its agent's settings, with the secrets already read. The
+// command line fills it; the providers read it (ADR-0028, ADR-0029).
+type Bootstrap struct {
+	DB        string // GANGLION_DB, default "ganglion.db"
+	BotToken  string // TELEGRAM_BOT_TOKEN or the file named by TELEGRAM_BOT_TOKEN_FILE; empty → no Telegram transport
+	BotAPIURL string // TELEGRAM_API_URL, default "https://api.telegram.org"
+	Admin     string // GANGLION_ADMIN, e.g. "telegram:user:123"; seeded as admin at start
+	Agent     AgentSettings
+	// MetricsAddr is GANGLION_METRICS_ADDR: where /metrics and the promtop
+	// dashboard are served (default 127.0.0.1:9464), or "off" (ADR-0026).
+	MetricsAddr string
+	// TelegramReply is GANGLION_TELEGRAM_REPLY: when answers quote the
+	// person's message — auto (default), always or off (ADR-0025).
+	TelegramReply string
+}
+
+// AgentSettings turns the agent on. Without a catalogue the core echoes, as
+// in M2.
+type AgentSettings struct {
+	Catalog        *rules.Catalog    // GANGLION_MODELS_FILE; nil = no agent
+	Keys           map[string]string // provider name → API key, from each provider's key_env
+	Workspace      string            // GANGLION_WORKSPACE, default "workspace": the agent's files (persona/*.md; memory in M3b)
+	DailyBudgetUSD float64           // GANGLION_DAILY_BUDGET_USD, default 1.0
+	DailyTurns     int               // GANGLION_DAILY_TURNS per person; unset = the agent's default (300), 0 = off
+	DailyTokens    int               // GANGLION_DAILY_TOKENS per person; unset = the agent's default (1M), 0 = off
+	SessionIdle    time.Duration     // GANGLION_SESSION_IDLE: a duration, or "off" (0); unset = the agent's default (6h)
+	TZ             *time.Location    // GANGLION_TZ, default Europe/Kyiv
+}

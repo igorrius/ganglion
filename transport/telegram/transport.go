@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/backoff"
 	"github.com/igorrius/ganglion/transport"
 )
 
@@ -36,14 +36,17 @@ const (
 	ReplyOff    ReplyMode = "off"
 )
 
+// Name is the transport's name: the Source of its events and the
+// Transport of messages for it.
+const Name = "telegram"
+
 // Transport is the Telegram transport.
 type Transport struct {
 	c           *client
 	log         *slog.Logger
 	now         func() time.Time
 	pollTimeout time.Duration
-	backoffMin  time.Duration
-	backoffMax  time.Duration
+	retry       backoff.Policy // between failed polls and failed sinks
 	replyMode   ReplyMode
 	typingEvery time.Duration
 
@@ -110,8 +113,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 		log:         cfg.log,
 		now:         cfg.now,
 		pollTimeout: cfg.pollTimeout,
-		backoffMin:  time.Second,
-		backoffMax:  time.Minute,
+		retry:       backoff.Policy{Min: time.Second, Max: time.Minute},
 		replyMode:   cfg.replyMode,
 		typingEvery: 4 * time.Second,
 		last:        map[int64]int64{},
@@ -120,7 +122,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 }
 
 // Name implements transport.Transport.
-func (t *Transport) Name() string { return "telegram" }
+func (t *Transport) Name() string { return Name }
 
 // Run implements transport.Transport. It polls updates and hands each
 // message to sink in order. The offset moves past an update only after
@@ -129,58 +131,68 @@ func (t *Transport) Name() string { return "telegram" }
 // Run returns ErrConflict on 409, the error on 401, and ctx.Err() when ctx
 // ends; other errors are retried with backoff.
 func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
-	pollBackoff := t.newBackoff()
-	var me user
-	for {
-		var err error
-		if me, err = t.c.getMe(ctx); err == nil {
-			break
-		}
-		if stop := t.onError(ctx, err, pollBackoff); stop != nil {
-			return stop
-		}
+	poll := backoff.New(t.retry)
+	me, err := t.whoAmI(ctx, poll)
+	if err != nil {
+		return err
 	}
-	botID := me.ID
-	t.log.Info("telegram: polling", "bot_id", botID, "username", me.Username)
-
-	sinkBackoff := t.newBackoff()
+	t.log.Info("telegram: polling", "bot_id", me.ID, "username", me.Username)
+	sinkRetry := backoff.New(t.retry)
 	var offset int64
 	for {
 		ups, err := t.c.getUpdates(ctx, offset, t.pollTimeout)
 		if err != nil {
-			if stop := t.onError(ctx, err, pollBackoff); stop != nil {
+			if stop := t.onError(ctx, err, poll); stop != nil {
 				return stop
 			}
 			continue
 		}
-		pollBackoff.reset()
-		for _, u := range ups {
-			t.seen(u)
-			if e, ok := t.toEvent(botID, u); ok {
-				if err := sink(ctx, e); err != nil {
-					if ctx.Err() != nil {
-						return ctx.Err()
-					}
-					// Keep the offset at this update: Telegram sends it
-					// again on the next poll.
-					d := sinkBackoff.next()
-					t.log.Warn("telegram: sink failed, update not confirmed",
-						"update_id", u.UpdateID, "conv", e.Conv, "err", err, "retry_in", d)
-					if err := sleep(ctx, d); err != nil {
-						return err
-					}
-					break
-				}
-				sinkBackoff.reset()
-			}
-			offset = u.UpdateID + 1
+		poll.Reset()
+		if offset, err = t.hand(ctx, sink, me.ID, ups, offset, sinkRetry); err != nil {
+			return err
 		}
 	}
 }
 
+// whoAmI asks for the bot's identity until it gets it or onError stops.
+func (t *Transport) whoAmI(ctx context.Context, b *backoff.Backoff) (user, error) {
+	for {
+		me, err := t.c.getMe(ctx)
+		if err == nil {
+			return me, nil
+		}
+		if stop := t.onError(ctx, err, b); stop != nil {
+			return user{}, stop
+		}
+	}
+}
+
+// hand gives the updates to sink in order and returns the offset past the
+// last one handled. When sink fails, the offset stays at that update, so
+// Telegram sends it again on the next poll, after a wait.
+func (t *Transport) hand(ctx context.Context, sink transport.Sink, botID int64, ups []update, offset int64, b *backoff.Backoff) (int64, error) {
+	for _, u := range ups {
+		t.seen(u)
+		if e, ok := t.toEvent(botID, u); ok {
+			if err := sink(ctx, e); err != nil {
+				if ctx.Err() != nil {
+					return offset, ctx.Err()
+				}
+				d := b.Next()
+				t.log.Warn("telegram: sink failed, update not confirmed",
+					"update_id", u.UpdateID, "conv", e.Conv, "err", err, "retry_in", d)
+				return offset, sleep(ctx, d)
+			}
+			b.Reset()
+		}
+		offset = u.UpdateID + 1
+	}
+	return offset, nil
+}
+
 // onError decides what a failed Bot API call means for Run: a non-nil
 // result stops Run, nil means poll again (after waiting).
-func (t *Transport) onError(ctx context.Context, err error, b *backoff) error {
+func (t *Transport) onError(ctx context.Context, err error, b *backoff.Backoff) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -198,7 +210,7 @@ func (t *Transport) onError(ctx context.Context, err error, b *backoff) error {
 			return sleep(ctx, d)
 		}
 	}
-	d := b.next()
+	d := b.Next()
 	t.log.Warn("telegram: poll failed", "err", err, "retry_in", d)
 	return sleep(ctx, d)
 }
@@ -240,9 +252,9 @@ func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
 	return event.Event{
 		ID:      event.NewID(now),
 		IdemKey: "telegram:" + strconv.FormatInt(botID, 10) + ":" + strconv.FormatInt(u.UpdateID, 10),
-		Source:  "telegram",
+		Source:  Name,
 		Conv:    ConvKey(m.Chat.ID, thread),
-		Kind:    "message",
+		Kind:    event.KindMessage,
 		Payload: payload,
 		At:      at,
 	}, true
@@ -314,6 +326,17 @@ func (t *Transport) replyTo(chat int64, ref string) *replyParameters {
 	return &replyParameters{MessageID: id, AllowSendingWithoutReply: true}
 }
 
+// TypingHook is a core.TurnHook: "typing…" for the length of a turn that
+// answers a Telegram message, nothing for other events.
+func (t *Transport) TypingHook(ctx context.Context, e event.Event) (stop func()) {
+	if e.Source != Name || e.Kind != event.KindMessage {
+		return func() {}
+	}
+	ctx, stop = context.WithCancel(ctx)
+	go t.Typing(ctx, e.Conv)
+	return stop
+}
+
 // Typing shows "typing…" in conv until ctx ends, renewing it every few
 // seconds (Telegram shows it for about five). Errors are only logged.
 func (t *Transport) Typing(ctx context.Context, conv string) {
@@ -334,24 +357,6 @@ func (t *Transport) Typing(ctx context.Context, conv string) {
 		}
 	}
 }
-
-// backoff grows from min to max, doubling, with ±20% jitter.
-type backoff struct {
-	min, max, cur time.Duration
-}
-
-func (t *Transport) newBackoff() *backoff { return &backoff{min: t.backoffMin, max: t.backoffMax} }
-
-func (b *backoff) next() time.Duration {
-	if b.cur == 0 {
-		b.cur = b.min
-	} else {
-		b.cur = min(2*b.cur, b.max)
-	}
-	return min(time.Duration(float64(b.cur)*(0.8+0.4*rand.Float64())), b.max)
-}
-
-func (b *backoff) reset() { b.cur = 0 }
 
 func sleep(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)

@@ -1,4 +1,4 @@
-package node
+package config
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/router/rules"
@@ -21,9 +22,9 @@ import (
 
 const testToken = "7001:test-secret"
 
-func testConfig(t *testing.T) Config {
+func testConfig(t *testing.T) Bootstrap {
 	t.Helper()
-	return Config{DB: filepath.Join(t.TempDir(), "node.db"), BotAPIURL: "http://127.0.0.1:1"}
+	return Bootstrap{DB: filepath.Join(t.TempDir(), "node.db"), BotAPIURL: "http://127.0.0.1:1"}
 }
 
 type running struct {
@@ -31,7 +32,7 @@ type running struct {
 	done   chan error
 }
 
-func runNode(t *testing.T, roles []Role, cfg Config, logger *slog.Logger) running {
+func runNode(t *testing.T, roles []node.Role, cfg Bootstrap, logger *slog.Logger) running {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	r := running{cancel: cancel, done: make(chan error, 1)}
@@ -75,7 +76,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 func TestRunStopsWhenContextIsCancelled(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&syncWriter{w: &logs}, nil))
-	r := runNode(t, []Role{Core, Edge}, testConfig(t), logger)
+	r := runNode(t, []node.Role{node.Core, node.Edge}, testConfig(t), logger)
 	time.Sleep(50 * time.Millisecond)
 	r.cancel()
 	if err := r.result(t); err != nil {
@@ -96,7 +97,7 @@ func TestEchoOverTelegram(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	cfg := testConfig(t)
 	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
-	runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler))
+	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
 
 	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hi"})
 	fake.AddMessage(telegramtest.Incoming{ChatID: 66, UserID: 66, Text: "stranger"})
@@ -114,7 +115,7 @@ func TestConflictSendsOneAlert(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
 	var logs bytes.Buffer
-	r := runNode(t, []Role{Core}, cfg, slog.New(slog.NewTextHandler(&syncWriter{w: &logs}, nil)))
+	r := runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.NewTextHandler(&syncWriter{w: &logs}, nil)))
 
 	eventually(t, "the alert", func() bool { return len(fake.Sent()) >= 1 })
 	time.Sleep(300 * time.Millisecond)
@@ -155,7 +156,7 @@ func TestWrongTokenEndsRun(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	cfg := testConfig(t)
 	cfg.BotToken, cfg.BotAPIURL = "7001:wrong", fake.URL()
-	err := runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler)).result(t)
+	err := runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler)).result(t)
 	if err == nil || !strings.Contains(err.Error(), "401") {
 		t.Fatalf("Run = %v, want the 401", err)
 	}
@@ -189,7 +190,7 @@ func TestRestartReleasesDeadLeases(t *testing.T) {
 
 	fake := telegramtest.NewServer(t, testToken)
 	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
-	runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler))
+	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
 	eventually(t, "the echo of the event the dead process held", func() bool {
 		sent := fake.Sent()
 		return len(sent) == 1 && sent[0].Text == "echo: before the crash"
@@ -214,7 +215,7 @@ func TestNoTransportKeepsRepliesPending(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler)) // no token: no transport
+	r := runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler)) // no token: no transport
 	time.Sleep(300 * time.Millisecond)
 	r.cancel()
 	if err := r.result(t); err != nil {
@@ -234,9 +235,9 @@ func TestNoTransportKeepsRepliesPending(t *testing.T) {
 
 func TestSecondCoreOnSameDBRefused(t *testing.T) {
 	cfg := testConfig(t)
-	runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler))
+	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
 	time.Sleep(200 * time.Millisecond)
-	err := runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler)).result(t)
+	err := runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler)).result(t)
 	if err == nil || !strings.Contains(err.Error(), "another") || !strings.Contains(err.Error(), cfg.DB) {
 		t.Fatalf("second core on %s: %v, want a refusal naming the database", cfg.DB, err)
 	}
@@ -253,8 +254,8 @@ func TestAgentOverTelegram(t *testing.T) {
 	}
 	cfg := testConfig(t)
 	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
-	cfg.Agent = AgentConfig{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, DailyBudgetUSD: 1, TZ: time.UTC}
-	runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler))
+	cfg.Agent = AgentSettings{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, DailyBudgetUSD: 1, TZ: time.UTC}
+	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
 
 	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Name: "Igor", Text: "hi"})
 	eventually(t, "the model's reply", func() bool { return len(fake.Sent()) == 1 })

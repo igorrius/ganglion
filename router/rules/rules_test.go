@@ -14,9 +14,9 @@ import (
 
 var t0 = time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 
-type clock struct{ now time.Time }
+type fakeClock struct{ now time.Time }
 
-func (c *clock) Now() time.Time { return c.now }
+func (c *fakeClock) Now() time.Time { return c.now }
 
 type budget struct {
 	usd   float64
@@ -28,7 +28,7 @@ func (b *budget) SpentSince(_ context.Context, t time.Time) (float64, error) {
 	return b.usd, nil
 }
 
-func m(provider, name, tier string, caps router.ModelCaps) router.Model {
+func m(provider, name string, tier router.Tier, caps router.ModelCaps) router.Model {
 	return router.Model{Provider: provider, Name: name, Tier: tier, Caps: caps}
 }
 
@@ -42,9 +42,9 @@ var catalogue = []router.Model{
 	m("or", "vision", "smart", router.ModelCaps{Tools: true, Vision: true, ContextTokens: 128000, PriceInMTok: 1, PriceOutMTok: 4}),
 }
 
-func newRouter(t *testing.T, opts ...Option) (*Router, *clock) {
+func newRouter(t *testing.T, opts ...Option) (*Router, *fakeClock) {
 	t.Helper()
-	c := &clock{now: t0}
+	c := &fakeClock{now: t0}
 	r, err := New(catalogue, append([]Option{WithClock(c.Now)}, opts...)...)
 	if err != nil {
 		t.Fatal(err)

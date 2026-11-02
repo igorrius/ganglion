@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/igorrius/ganglion/internal/text"
+	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/provider"
 )
 
@@ -37,8 +39,15 @@ var _ provider.Provider = (*Client)(nil)
 // Option configures a Client.
 type Option func(*Client)
 
-// WithCommand sets the claude binary; the default is "claude" on PATH.
-func WithCommand(path string) Option { return func(c *Client) { c.command = path } }
+// WithCommand sets the claude binary; the default, and "", is "claude" on
+// PATH.
+func WithCommand(path string) Option {
+	return func(c *Client) {
+		if path != "" {
+			c.command = path
+		}
+	}
+}
 
 // WithMaxConcurrent caps the claude processes alive at once; default 2.
 func WithMaxConcurrent(n int) Option {
@@ -83,29 +92,18 @@ const UsageLimitCooldown = 15 * time.Minute
 // messages, such as the conversation summary, hold family text and go to
 // stdin ahead of the transcript.
 func prompt(msgs []provider.Message) (system, stdin string) {
-	var head, parts []string
+	var head []string
 	seenSystem := false
 	for _, m := range msgs {
-		switch m.Role {
-		case "system":
-			if !seenSystem {
-				system, seenSystem = m.Content, true
-				continue
-			}
+		switch {
+		case m.Role != provider.RoleSystem:
+		case !seenSystem:
+			system, seenSystem = m.Content, true
+		default:
 			head = append(head, m.Content)
-		case "user":
-			parts = append(parts, "User: "+m.Content)
-		case "assistant":
-			if m.Content != "" {
-				parts = append(parts, "Assistant: "+m.Content)
-			}
-			for _, tc := range m.ToolCalls {
-				parts = append(parts, fmt.Sprintf("Assistant called tool %s with %s", tc.Name, tc.Args))
-			}
-		case "tool":
-			parts = append(parts, "Tool result: "+m.Content)
 		}
 	}
+	parts := transcript.Lines(msgs, transcript.WithToolCalls)
 	stdin = "Conversation so far, oldest first:\n\n" + strings.Join(parts, "\n\n")
 	if len(head) > 0 {
 		stdin = strings.Join(head, "\n\n") + "\n\n" + stdin
@@ -164,11 +162,11 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 		if msg == "" && runErr != nil {
 			msg = runErr.Error()
 		}
-		return provider.ChatResponse{}, c.fail(provider.KindUnavailable, "no result: "+truncate(msg, 200))
+		return provider.ChatResponse{}, c.fail(provider.KindUnavailable, "no result: "+text.Truncate(msg, 200))
 	}
 	if r.IsError {
 		kind := classify(r.Result)
-		e := &provider.Error{Provider: c.name, Kind: kind, Msg: truncate(r.Result, 200)}
+		e := &provider.Error{Provider: c.name, Kind: kind, Msg: text.Truncate(r.Result, 200)}
 		if kind == provider.KindRateLimit {
 			e.RetryAfter = UsageLimitCooldown
 		}
@@ -176,7 +174,7 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 	}
 	u := r.Usage
 	return provider.ChatResponse{
-		Message: provider.Message{Role: "assistant", Content: r.Result},
+		Message: provider.Message{Role: provider.RoleAssistant, Content: r.Result},
 		Usage: provider.Usage{
 			InputTokens:      u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens,
 			CacheReadTokens:  u.CacheReadInputTokens,
@@ -207,13 +205,6 @@ func (c *Client) ctxError(ctx context.Context) error {
 
 func (c *Client) fail(kind provider.ErrorKind, msg string) error {
 	return &provider.Error{Provider: c.name, Kind: kind, Msg: msg}
-}
-
-func truncate(s string, n int) string {
-	if r := []rune(s); len(r) > n {
-		return string(r[:n]) + "…"
-	}
-	return s
 }
 
 // limited keeps the first n bytes written and drops the rest.

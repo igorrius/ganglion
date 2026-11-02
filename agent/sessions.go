@@ -7,19 +7,46 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/text"
+	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/sqlitedb"
 )
 
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-// Archive keeps the ended sessions of every conversation (R-AGT-6).
+// SessionStore keeps the ended sessions of every conversation (R-AGT-6).
+type SessionStore interface {
+	// Put archives s, ended at s.Last, by endedBy (idle, new, resume).
+	Put(ctx context.Context, conv string, s State, endedBy string) error
+	// List returns the last n archived sessions of conv, newest first,
+	// leaving out the session except.
+	List(ctx context.Context, conv string, n int, except string) ([]SessionInfo, error)
+	// Get returns an archived session.
+	Get(ctx context.Context, conv, session string) (State, error)
+}
+
+// NoArchive is a SessionStore that keeps nothing: ended sessions are
+// dropped and /sessions finds none.
+type NoArchive struct{}
+
+// Put implements SessionStore.
+func (NoArchive) Put(context.Context, string, State, string) error { return nil }
+
+// List implements SessionStore.
+func (NoArchive) List(context.Context, string, int, string) ([]SessionInfo, error) { return nil, nil }
+
+// Get implements SessionStore.
+func (NoArchive) Get(_ context.Context, _, session string) (State, error) {
+	return State{}, fmt.Errorf("agent: get session %s: no archive", session)
+}
+
+// Archive is the SQLite SessionStore.
 type Archive struct{ db *sql.DB }
+
+var _ SessionStore = (*Archive)(nil)
 
 // SessionInfo is one line of /sessions.
 type SessionInfo struct {
@@ -43,18 +70,11 @@ func NewArchive(ctx context.Context, db *sql.DB) (*Archive, error) {
 
 func title(s State) string {
 	for _, m := range s.Messages {
-		if m.Role == "user" {
-			return truncate(m.Content, 60)
+		if m.Role == provider.RoleUser {
+			return text.Truncate(m.Content, 60)
 		}
 	}
 	return ""
-}
-
-func truncate(s string, n int) string {
-	if r := []rune(s); len(r) > n {
-		return string(r[:n]) + "…"
-	}
-	return s
 }
 
 // Put archives s, ended at s.Last. It is keyed by (conv, session), so a
@@ -66,7 +86,7 @@ func (a *Archive) Put(ctx context.Context, conv string, s State, endedBy string)
 	}
 	turns := 0
 	for _, m := range s.Messages {
-		if m.Role == "user" {
+		if m.Role == provider.RoleUser {
 			turns++
 		}
 	}
@@ -109,98 +129,4 @@ func (a *Archive) Get(ctx context.Context, conv, session string) (State, error) 
 		return State{}, fmt.Errorf("agent: get session %s: %w", session, err)
 	}
 	return DecodeState(json.RawMessage(data))
-}
-
-// command returns the command word of text ("/new@bot" → "/new") and the
-// rest, or "" when text is not a command.
-func command(text string) (string, string) {
-	text = strings.TrimSpace(text)
-	if !strings.HasPrefix(text, "/") {
-		return "", ""
-	}
-	word, rest, _ := strings.Cut(text, " ")
-	word, _, _ = strings.Cut(word, "@")
-	return strings.ToLower(word), strings.TrimSpace(rest)
-}
-
-const (
-	replyNewSession   = "New session started."
-	replyNoSessions   = "No earlier sessions."
-	replyNoSuchResume = "No such session; see /sessions."
-	sessionsShown     = 5
-)
-
-func (a *Agent) archive(ctx context.Context, conv string, st State, by string) error {
-	if a.d.Archive == nil || len(st.Messages) == 0 {
-		return nil
-	}
-	return a.d.Archive.Put(ctx, conv, st, by)
-}
-
-func (a *Agent) formatSpan(s SessionInfo) string {
-	start, end := s.Started.In(a.cfg.Location), s.Ended.In(a.cfg.Location)
-	if start.YearDay() == end.YearDay() && start.Year() == end.Year() {
-		return start.Format("2 Jan 15:04") + "–" + end.Format("15:04")
-	}
-	return start.Format("2 Jan 15:04") + "–" + end.Format("2 Jan 15:04")
-}
-
-// sessions starts a new session after a long silence and handles the
-// session commands. handled means the event is answered without a model.
-func (a *Agent) sessions(ctx context.Context, e event.Event, st State, m event.Message, now time.Time, tr *turnRecord,
-	reply func(string) event.Outgoing) (State, []event.Outgoing, bool, error) {
-	fresh := State{V: StateVersion, Session: e.ID, Started: now, Last: now}
-	if a.cfg.SessionIdle > 0 && len(st.Messages) > 0 && !st.Last.IsZero() && now.Sub(st.Last) > a.cfg.SessionIdle {
-		if err := a.archive(ctx, e.Conv, st, "idle"); err != nil {
-			return st, nil, false, err
-		}
-		a.log.Info("agent: new session after silence", "conv", e.Conv, "silent_for", now.Sub(st.Last).Round(time.Minute))
-		st = fresh
-	}
-
-	cmd, arg := command(m.Text)
-	switch cmd {
-	case "/new", "/reset":
-		if err := a.archive(ctx, e.Conv, st, "new"); err != nil {
-			return st, nil, false, err
-		}
-		tr.Outcome = "command"
-		// The next real message opens the session and sets its id and start.
-		return State{V: StateVersion}, []event.Outgoing{reply(replyNewSession)}, true, nil
-	case "/sessions", "/resume":
-		tr.Outcome = "command"
-		if a.d.Archive == nil {
-			return st, []event.Outgoing{reply(replyNoSessions)}, true, nil
-		}
-		list, err := a.d.Archive.List(ctx, e.Conv, sessionsShown, st.Session)
-		if err != nil {
-			return st, nil, false, err
-		}
-		if cmd == "/sessions" {
-			if len(list) == 0 {
-				return st, []event.Outgoing{reply(replyNoSessions)}, true, nil
-			}
-			lines := make([]string, len(list))
-			for i, s := range list {
-				lines[i] = fmt.Sprintf("%d. %s · %d turns · %s", i+1, a.formatSpan(s), s.Turns, s.Title)
-			}
-			return st, []event.Outgoing{reply(strings.Join(lines, "\n"))}, true, nil
-		}
-		n, err := strconv.Atoi(arg)
-		if err != nil || n < 1 || n > len(list) {
-			return st, []event.Outgoing{reply(replyNoSuchResume)}, true, nil
-		}
-		chosen, err := a.d.Archive.Get(ctx, e.Conv, list[n-1].Session)
-		if err != nil {
-			return st, nil, false, err
-		}
-		if st.Session != chosen.Session {
-			if err := a.archive(ctx, e.Conv, st, "resume"); err != nil {
-				return st, nil, false, err
-			}
-		}
-		chosen.Last = now
-		return chosen, []event.Outgoing{reply("Resumed: " + list[n-1].Title)}, true, nil
-	}
-	return st, nil, false, nil
 }

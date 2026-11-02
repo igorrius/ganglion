@@ -47,8 +47,8 @@ type Loop struct {
 	workers     int
 	turnTimeout time.Duration
 	maxAttempts int
-	giveUp      func(e event.Event) []event.Outgoing
-	hook        func(ctx context.Context, e event.Event) (stop func())
+	giveUp      GiveUp
+	hook        TurnHook
 
 	wake chan struct{} // a worker that got an event wakes an idle one
 
@@ -75,16 +75,29 @@ func WithWorkers(n int) Option { return func(l *Loop) { l.workers = max(n, 1) } 
 // The default is DefaultTurnTimeout.
 func WithTurnTimeout(d time.Duration) Option { return func(l *Loop) { l.turnTimeout = d } }
 
+// GiveUp returns the replies for an event that failed every one of its
+// attempts; the event is completed with them instead of being retried.
+type GiveUp func(e event.Event, attempts int) []event.Outgoing
+
+// NoGiveUp gives up without replies.
+func NoGiveUp(event.Event, int) []event.Outgoing { return nil }
+
 // WithMaxAttempts stops retrying an event leased more than n times: it is
-// completed with giveUp's replies (nil: none) instead of reaching the
-// handler again. The default is DefaultMaxAttempts with no replies.
-func WithMaxAttempts(n int, giveUp func(e event.Event) []event.Outgoing) Option {
+// completed with giveUp's replies instead of reaching the handler again.
+// The default is DefaultMaxAttempts with NoGiveUp.
+func WithMaxAttempts(n int, giveUp GiveUp) Option {
 	return func(l *Loop) { l.maxAttempts, l.giveUp = n, giveUp }
 }
 
-// WithTurnHook runs h when a turn starts and the stop it returns when the
-// turn ends; the node uses it to show "typing…" (ADR-0025).
-func WithTurnHook(h func(ctx context.Context, e event.Event) (stop func())) Option {
+// TurnHook runs when a turn starts; the stop it returns runs when the
+// turn ends. The node uses it to show "typing…" (ADR-0025).
+type TurnHook func(ctx context.Context, e event.Event) (stop func())
+
+// NoTurnHook does nothing.
+func NoTurnHook(context.Context, event.Event) func() { return func() {} }
+
+// WithTurnHook sets the turn hook; the default is NoTurnHook.
+func WithTurnHook(h TurnHook) Option {
 	return func(l *Loop) { l.hook = h }
 }
 
@@ -92,7 +105,7 @@ func WithTurnHook(h func(ctx context.Context, e event.Event) (stop func())) Opti
 // (sqlqueue.Queue.InboxReady).
 func NewLoop(q queue.Queue, ready <-chan struct{}, h Handler, logger *slog.Logger, opts ...Option) *Loop {
 	l := &Loop{q: q, ready: ready, h: h, log: logger, lease: DefaultLease, poll: DefaultPoll,
-		workers: DefaultWorkers, turnTimeout: DefaultTurnTimeout, maxAttempts: DefaultMaxAttempts}
+		workers: DefaultWorkers, turnTimeout: DefaultTurnTimeout, maxAttempts: DefaultMaxAttempts, hook: NoTurnHook, giveUp: NoGiveUp}
 	for _, o := range opts {
 		o(l)
 	}
@@ -149,24 +162,18 @@ func (l *Loop) turn(ctx context.Context, lease queue.Lease) {
 	e := lease.Event
 	log := l.log.With("id", e.ID, "kind", e.Kind, "conv", e.Conv)
 	ctx, span := l.tracer.Start(ctx, "turn", trace.WithAttributes(
-		attribute.String("event.id", e.ID), attribute.String("event.kind", e.Kind), attribute.Int("attempt", lease.Attempts)))
+		attribute.String("event.id", e.ID), attribute.String("event.kind", string(e.Kind)), attribute.Int("attempt", lease.Attempts)))
 	defer span.End()
 	if l.maxAttempts > 0 && lease.Attempts > l.maxAttempts {
 		l.givenUp.Add(ctx, 1)
 		span.SetAttributes(attribute.String("outcome", "given_up"))
-		var out []event.Outgoing
-		if l.giveUp != nil {
-			out = l.giveUp(e)
-		}
+		out := l.giveUp(e, lease.Attempts-1)
 		log.Error("core: giving up on an event that failed every attempt", "attempts", lease.Attempts-1)
 		l.complete(ctx, log, lease, out, queue.StateUpdate{})
 		return
 	}
 	turnCtx, cancel := context.WithTimeout(ctx, l.turnTimeout)
-	stop := func() {}
-	if l.hook != nil {
-		stop = l.hook(turnCtx, e)
-	}
+	stop := l.hook(turnCtx, e)
 	out, st, err := l.h(turnCtx, e)
 	stop()
 	cancel()

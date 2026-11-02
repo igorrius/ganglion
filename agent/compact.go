@@ -4,8 +4,10 @@ import (
 	"context"
 	"strings"
 
+	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/turns"
 )
 
 // compactSplit returns where the kept part of msgs starts: keep the last
@@ -16,37 +18,40 @@ func compactSplit(msgs []provider.Message, keep int) int {
 	if split <= 0 {
 		return 0
 	}
-	for split > 0 && msgs[split].Role == "tool" {
+	for split > 0 && msgs[split].Role == provider.RoleTool {
 		split--
 	}
 	return split
 }
 
+// compactInput is the text the compaction model folds: the earlier
+// summary, if any, and the old messages as a transcript without tool
+// calls.
+func compactInput(summary string, old []provider.Message) string {
+	var b strings.Builder
+	if summary != "" {
+		b.WriteString("Earlier summary:\n" + summary + "\n\nNew part of the conversation:\n")
+	}
+	for _, line := range transcript.Lines(old, transcript.WithoutToolCalls) {
+		b.WriteString(line + "\n")
+	}
+	return b.String()
+}
+
 // compact folds all but the last KeepRecent messages into the summary with
 // a cheap model. On failure the state is returned unchanged.
-func (a *Agent) compact(ctx context.Context, st State, tr *turnRecord) State {
+func (a *Agent) compact(ctx context.Context, st State, rec *turns.Turn) State {
 	split := compactSplit(st.Messages, a.cfg.KeepRecent)
 	if split == 0 {
 		return st
 	}
-	var b strings.Builder
-	if st.Summary != "" {
-		b.WriteString("Earlier summary:\n" + st.Summary + "\n\nNew part of the conversation:\n")
+	msgs := []provider.Message{
+		{Role: provider.RoleSystem, Content: compactPrompt},
+		{Role: provider.RoleUser, Content: compactInput(st.Summary, st.Messages[:split])},
 	}
-	for _, m := range st.Messages[:split] {
-		switch {
-		case m.Role == "user":
-			b.WriteString("User: " + m.Content + "\n")
-		case m.Role == "assistant" && m.Content != "":
-			b.WriteString("Assistant: " + m.Content + "\n")
-		case m.Role == "tool":
-			b.WriteString("Tool result: " + m.Content + "\n")
-		}
-	}
-	msgs := []provider.Message{{Role: "system", Content: compactPrompt}, {Role: "user", Content: b.String()}}
-	resp, ok := a.call(ctx, router.TaskReq{Tier: "cheap", Kind: "compaction"}, msgs, nil, tr)
+	resp, ok := a.call(ctx, router.TaskReq{Tier: router.TierCheap, Kind: router.TaskCompaction}, msgs, nil, rec)
 	if !ok || strings.TrimSpace(resp.Message.Content) == "" {
-		a.log.Warn("agent: compaction failed; history kept", "conv", tr.Conv, "messages", len(st.Messages))
+		a.log.Warn("agent: compaction failed; history kept", "conv", rec.Conv, "messages", len(st.Messages))
 		return st
 	}
 	st.Summary = strings.TrimSpace(resp.Message.Content)

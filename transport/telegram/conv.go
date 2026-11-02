@@ -43,3 +43,18 @@ func ParseConv(conv string) (chatID, threadID int64, err error) {
 func Principal(userID int64) string {
 	return "telegram:user:" + strconv.FormatInt(userID, 10)
 }
+
+// PrivateConv returns the private chat of a Telegram principal (a user's
+// private chat has the user's id), with this transport's name. ok is false
+// for a principal of another transport or a malformed one.
+func PrivateConv(principal string) (transport, conv string, ok bool) {
+	idStr, ok := strings.CutPrefix(principal, "telegram:user:")
+	if !ok {
+		return "", "", false
+	}
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		return "", "", false
+	}
+	return Name, ConvKey(id, 0), true
+}

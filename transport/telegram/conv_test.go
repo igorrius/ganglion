@@ -37,3 +37,21 @@ func TestPrincipal(t *testing.T) {
 		t.Fatalf("Principal = %q", got)
 	}
 }
+
+func TestPrivateConvOfAPrincipal(t *testing.T) {
+	for _, tc := range []struct {
+		principal string
+		conv      string
+		ok        bool
+	}{
+		{Principal(42), ConvKey(42, 0), true},
+		{"telegram:user:x", "", false},
+		{"mqtt:user:42", "", false},
+		{"", "", false},
+	} {
+		transport, conv, ok := PrivateConv(tc.principal)
+		if ok != tc.ok || conv != tc.conv || (ok && transport != Name) {
+			t.Errorf("PrivateConv(%q) = %q, %q, %v", tc.principal, transport, conv, ok)
+		}
+	}
+}

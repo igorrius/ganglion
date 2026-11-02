@@ -69,6 +69,7 @@ pinned by a test in the task that owns the code.
 | M1 | State cells — **done** ([plan](p1-m1-cells.md)) | Switch, sensor and request cells; `virtual` backend with fault injection; SQLite store | 0.5 weekend |
 | M2 | Delivery and Telegram | Inbox/outbox, outbox sender, Telegram transport; crash-tested echo bot | 1 weekend |
 | M3 | **The agent** | History, actors, provider, router, agent loop, memory, skills, policies; a talking agent on the test bot | 1–1.5 weekends |
+| M3r | Refactoring before M3b ([plan](p1-refactor.md)) | Go conventions and lint guardrails, the agent as a stage pipeline, `config` with `samber/do`, `ganglion run` on urfave/cli; no behaviour change | 0.25 weekend |
 | M4 | Reflexes: runner and Deye | Config, scheduler, modules on cron writing sensor cells, exposed to the agent as tools; deployed next to the current bot | 0.5 weekend |
 | M5 | Load-shedding flow | The 8.1 state machine on `virtual` load cells; Telegram notifier; shadow week | 0.5 weekend |
 | M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback | 0.25–0.5 weekend |
@@ -164,7 +165,7 @@ Closed 2026-11-02 after the live run on the test bot.
 | 4.2 Scheduler: cron in Europe/Kyiv, `cron_runs` table, catch-up after downtime runs each missed job once; `idemKey` = job + scheduled time; the agent's `schedule.*` uses it | Tests across a DST change and a simulated downtime |
 | 4.3 Cell host functions for modules (`cell.get`, `cell.report`, `cell.set`), granted per cell in the manifest; `pdk` and `pdk/guest` updated | Runner conformance suite extended and green |
 | 4.4 Runner in `node.Run`: modules from config, triggered by the scheduler or called by the agent as tools (`deye.status`); optional `init` and `health` exports (spec 7.5); a minimal supervisor — backoff after failures, N failures in M minutes disable the module and emit `module.crashloop`; failures and `auth_failed` reach the agent as events; `cells.Reconcile` at start and periodically, `ExpireDue` on a short tick (M1 review) | `deye-reader` writes the `grid` and `soc` sensor cells on schedule; the agent answers "how is the battery?" through the tool; a failing probe module is disabled |
-| 4.5 Deye cadence and limits: 30 min with grid, 5 min without; HTTP 429 backs off honouring `Retry-After`; stale data reported once | Tests with the replay server from `cmd/modbench` |
+| 4.5 Deye cadence and limits: 30 min with grid, 5 min without; HTTP 429 backs off honouring `Retry-After`; stale data reported once | Tests with the replay server from `tools/modbench` |
 | 4.6 Deploy: container image, a Railway service next to the current bot, test bot token; compare with `deye.py` for a few days (R-LS-4) | Samples match `deye.py`; RSS within budget; the two-week clock starts |
 
 ### M5 · Load-shedding flow (spec 8)

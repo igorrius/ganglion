@@ -30,16 +30,16 @@ type ProviderDef struct {
 
 // ModelDef is a model in the catalogue.
 type ModelDef struct {
-	Provider  string  `yaml:"provider"`
-	Name      string  `yaml:"name"`
-	Tier      string  `yaml:"tier"`
-	Tools     bool    `yaml:"tools"`
-	Vision    bool    `yaml:"vision"`
-	Local     bool    `yaml:"local"`
-	Context   int     `yaml:"context"`
-	PriceIn   float64 `yaml:"price_in"`  // USD per million tokens
-	PriceOut  float64 `yaml:"price_out"` // USD per million tokens
-	LatencyMS int     `yaml:"latency_ms"`
+	Provider  string      `yaml:"provider"`
+	Name      string      `yaml:"name"`
+	Tier      router.Tier `yaml:"tier"`
+	Tools     bool        `yaml:"tools"`
+	Vision    bool        `yaml:"vision"`
+	Local     bool        `yaml:"local"`
+	Context   int         `yaml:"context"`
+	PriceIn   float64     `yaml:"price_in"`  // USD per million tokens
+	PriceOut  float64     `yaml:"price_out"` // USD per million tokens
+	LatencyMS int         `yaml:"latency_ms"`
 }
 
 // Catalog is the models file: which providers a node uses and their models
@@ -67,48 +67,67 @@ func LoadCatalog(r io.Reader) (Catalog, error) {
 		return Catalog{}, fmt.Errorf("models: %w", err)
 	}
 
+	types, err := checkProviders(c.Providers)
+	if err != nil {
+		return Catalog{}, err
+	}
+	if err := checkModels(c.Models, types); err != nil {
+		return Catalog{}, err
+	}
+	return c, nil
+}
+
+// checkProviders checks the providers, defaults an empty type to openai
+// in place, and returns each provider's type by name.
+func checkProviders(providers []ProviderDef) (map[string]string, error) {
 	types := map[string]string{}
-	for i, p := range c.Providers {
+	for i := range providers {
+		p := &providers[i]
 		at := fmt.Sprintf("models: providers[%d] %q", i, p.Name)
 		if p.Type == "" {
-			c.Providers[i].Type, p.Type = TypeOpenAI, TypeOpenAI
+			p.Type = TypeOpenAI
 		}
 		switch {
 		case p.Name == "":
-			return Catalog{}, fmt.Errorf("%s: name is empty", at)
+			return nil, fmt.Errorf("%s: name is empty", at)
 		case types[p.Name] != "":
-			return Catalog{}, fmt.Errorf("%s: duplicate provider", at)
+			return nil, fmt.Errorf("%s: duplicate provider", at)
 		case p.Type != TypeOpenAI && p.Type != TypeClaudeCLI:
-			return Catalog{}, fmt.Errorf("%s: type %q is not openai or claude-cli", at, p.Type)
+			return nil, fmt.Errorf("%s: type %q is not openai or claude-cli", at, p.Type)
 		case p.Type == TypeOpenAI && p.BaseURL == "":
-			return Catalog{}, fmt.Errorf("%s: base_url is empty", at)
+			return nil, fmt.Errorf("%s: base_url is empty", at)
 		case p.Type == TypeOpenAI && p.KeyEnv == "" && !isLocalURL(p.BaseURL):
-			return Catalog{}, fmt.Errorf("%s: key_env is empty (only a localhost base_url may go without a key)", at)
+			return nil, fmt.Errorf("%s: key_env is empty (only a localhost base_url may go without a key)", at)
 		}
 		types[p.Name] = p.Type
 	}
-	if len(c.Models) == 0 {
-		return Catalog{}, fmt.Errorf("models: no models: list at least one under models")
+	return types, nil
+}
+
+// checkModels checks the models against the providers' types.
+func checkModels(models []ModelDef, types map[string]string) error {
+	if len(models) == 0 {
+		return fmt.Errorf("models: no models: list at least one under models")
 	}
 	seen := map[string]bool{}
-	for i, m := range c.Models {
+	for i, m := range models {
 		at := fmt.Sprintf("models: models[%d] %q", i, m.Name)
 		typ := types[m.Provider]
 		switch {
 		case typ == "":
-			return Catalog{}, fmt.Errorf("%s: provider %q is not in providers", at, m.Provider)
+			return fmt.Errorf("%s: provider %q is not in providers", at, m.Provider)
 		case m.Name == "":
-			return Catalog{}, fmt.Errorf("%s: name is empty", at)
-		case m.Tier != "cheap" && m.Tier != "smart":
-			return Catalog{}, fmt.Errorf("%s: tier %q is not cheap or smart", at, m.Tier)
+			return fmt.Errorf("%s: name is empty", at)
+		case m.Tier != router.TierCheap && m.Tier != router.TierSmart:
+			return fmt.Errorf("%s: tier %q is not cheap or smart", at, m.Tier)
 		case seen[m.Provider+"/"+m.Name]:
-			return Catalog{}, fmt.Errorf("%s: duplicate model %s/%s", at, m.Provider, m.Name)
+			return fmt.Errorf("%s: duplicate model %s/%s", at, m.Provider, m.Name)
 		case typ == TypeClaudeCLI && m.Tools:
-			return Catalog{}, fmt.Errorf("%s: tools: true is not supported by claude-cli yet (M3b)", at)
+			return fmt.Errorf("%s: tools: true is not supported by claude-cli yet (M3b)", at)
 		}
 		seen[m.Provider+"/"+m.Name] = true
 	}
-	return c, nil
+	return nil
 }
 
 // RouterModels converts the catalogue's models for rules.New.

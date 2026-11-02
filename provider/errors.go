@@ -1,8 +1,6 @@
 package provider
 
 import (
-	"context"
-	"errors"
 	"time"
 )
 
@@ -29,23 +27,4 @@ type Error struct {
 
 func (e *Error) Error() string {
 	return "provider " + e.Provider + ": " + string(e.Kind) + ": " + e.Msg
-}
-
-// Fallback reports whether the next candidate should be tried after err:
-// rate limits, timeouts and outages are the provider's trouble; a wrong
-// key, a bad request or a cancelled turn are not helped by another model.
-func Fallback(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) {
-		return false
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	if e, ok := errors.AsType[*Error](err); ok {
-		switch e.Kind {
-		case KindRateLimit, KindTimeout, KindUnavailable:
-			return true
-		}
-	}
-	return false
 }

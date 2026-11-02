@@ -33,6 +33,20 @@ type ToolUse struct {
 	Ms   int64  `json:"ms"`
 }
 
+// Outcome is how a turn ended. Outcomes are stored in the turns table and
+// label metrics, so their values never change.
+type Outcome string
+
+// Outcomes.
+const (
+	OutcomeOK         Outcome = "ok"
+	OutcomeStepLimit  Outcome = "step_limit"
+	OutcomeDailyLimit Outcome = "daily_limit"
+	OutcomeNoModel    Outcome = "no_model"
+	OutcomeCommand    Outcome = "command"
+	OutcomeError      Outcome = "error"
+)
+
 // Turn is one row of the trace.
 type Turn struct {
 	EventID, Conv, Principal string
@@ -45,7 +59,7 @@ type Turn struct {
 	CacheWriteTokens         int
 	OutputTokens             int
 	CostUSD                  float64
-	Outcome                  string // ok | step_limit | daily_limit | no_model | command | error
+	Outcome                  Outcome
 	Error                    string
 }
 

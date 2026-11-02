@@ -108,45 +108,56 @@ func (w *writer) block(n ast.Node, indent string) {
 		w.span(entity{Type: "bold"}, func() { w.inlines(n) })
 	case *ast.FencedCodeBlock:
 		code := strings.TrimRight(w.lines(n), "\n")
-		w.span(entity{Type: "pre", Language: string(n.Language(w.src))}, func() { w.write(code) })
+		w.span(entity{Type: entityPre, Language: string(n.Language(w.src))}, func() { w.write(code) })
 	case *ast.CodeBlock:
 		code := strings.TrimRight(w.lines(n), "\n")
-		w.span(entity{Type: "pre"}, func() { w.write(code) })
+		w.span(entity{Type: entityPre}, func() { w.write(code) })
 	case *ast.Blockquote:
-		start, ents := w.n, len(w.ents)
-		w.blocks(n, indent, "\n")
-		typ := "blockquote"
-		if w.n-start > expandableQuote {
-			typ = "expandable_blockquote"
-		}
-		if w.n > start {
-			q := entity{Type: typ, Offset: start, Length: w.n - start}
-			w.ents = append(w.ents[:ents], append([]entity{q}, w.ents[ents:]...)...)
-		}
+		w.quote(n, indent)
 	case *ast.List:
-		num := n.Start
-		first := true
-		for item := n.FirstChild(); item != nil; item = item.NextSibling() {
-			if !first {
-				w.write("\n" + indent)
-			}
-			first = false
-			marker := "• "
-			if n.IsOrdered() {
-				marker = strconv.Itoa(num) + ". "
-				num++
-			}
-			w.write(marker)
-			w.blocks(item, indent+"  ", "\n"+indent+"  ")
-		}
+		w.list(n, indent)
 	case *ast.ThematicBreak:
 		w.write("———")
 	case *ast.HTMLBlock:
 		w.write(strings.TrimRight(w.lines(n), "\n"))
 	case *east.Table:
-		w.span(entity{Type: "pre"}, func() { w.write(w.table(n)) })
+		w.span(entity{Type: entityPre}, func() { w.write(w.table(n)) })
 	default:
 		w.blocks(n, indent, "\n")
+	}
+}
+
+// entityPre is Telegram's preformatted block: code and tables.
+const entityPre = "pre"
+
+// quote renders a blockquote; a long one is expandable.
+func (w *writer) quote(n *ast.Blockquote, indent string) {
+	start, ents := w.n, len(w.ents)
+	w.blocks(n, indent, "\n")
+	typ := "blockquote"
+	if w.n-start > expandableQuote {
+		typ = "expandable_blockquote"
+	}
+	if w.n > start {
+		q := entity{Type: typ, Offset: start, Length: w.n - start}
+		w.ents = append(w.ents[:ents], append([]entity{q}, w.ents[ents:]...)...)
+	}
+}
+
+// list renders a list with bullets or numbers, items on their own lines.
+func (w *writer) list(n *ast.List, indent string) {
+	num := n.Start
+	for item := n.FirstChild(); item != nil; item = item.NextSibling() {
+		if item != n.FirstChild() {
+			w.write("\n" + indent)
+		}
+		marker := "• "
+		if n.IsOrdered() {
+			marker = strconv.Itoa(num) + ". "
+			num++
+		}
+		w.write(marker)
+		w.blocks(item, indent+"  ", "\n"+indent+"  ")
 	}
 }
 

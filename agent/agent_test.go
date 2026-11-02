@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/queue"
@@ -44,7 +45,7 @@ func (f *fakeProvider) Chat(ctx context.Context, req provider.ChatRequest) (prov
 	}
 	f.mu.Unlock()
 	if step == nil {
-		return text("ok"), nil
+		return answerText("ok"), nil
 	}
 	return step(ctx, req)
 }
@@ -61,12 +62,12 @@ func (f *fakeProvider) requests() []provider.ChatRequest {
 	return append([]provider.ChatRequest(nil), f.reqs...)
 }
 
-func text(s string) provider.ChatResponse {
+func answerText(s string) provider.ChatResponse {
 	return provider.ChatResponse{Message: provider.Message{Role: "assistant", Content: s}, Usage: provider.Usage{InputTokens: 100, OutputTokens: 10}}
 }
 
 func say(s string) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
-	return func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) { return text(s), nil }
+	return func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) { return answerText(s), nil }
 }
 
 func fail(kind provider.ErrorKind) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
@@ -127,6 +128,7 @@ type env struct {
 	now        time.Time
 	router     *rules.Router
 	archive    *Archive
+	deps       Deps
 	logs       *bytes.Buffer
 	persona    string
 	personaErr error
@@ -159,22 +161,46 @@ func newEnv(t *testing.T, cfg Config, tools Tools) *env {
 	if tools == nil {
 		tools = NoTools{}
 	}
-	if cfg.Location == nil {
-		cfg.Location = time.UTC
-	}
-	e.a = New(cfg, Deps{
+	e.deps = Deps{
 		States: e.states, Router: e.router, Tools: tools, Turns: tl, Archive: arch,
 		Providers: map[string]provider.Provider{"p1": e.smart, "p2": e.cheap},
-		Admins:    func(context.Context) ([]string, error) { return []string{"telegram:user:1"}, nil },
-		AlertConv: func(p string) (string, string, bool) {
+		Alerts: alert.Admins{List: func(context.Context) ([]string, error) { return []string{"telegram:user:1"}, nil }, Private: func(p string) (string, string, bool) {
 			id, ok := strings.CutPrefix(p, "telegram:user:")
 			return "telegram", "telegram:" + id, ok
-		},
+		}},
 		Now:     func() time.Time { return e.now },
 		Persona: func() (string, error) { return e.persona, e.personaErr },
 		Log:     slog.New(slog.NewTextHandler(e.logs, nil)),
-	})
+	}
+	e.a = New(overDefaults(cfg), e.deps)
 	return e
+}
+
+// overDefaults is DefaultConfig with the non-zero fields of cfg.
+func overDefaults(cfg Config) Config {
+	d := DefaultConfig()
+	set := func(dst *int, v int) {
+		if v != 0 {
+			*dst = v
+		}
+	}
+	setD := func(dst *time.Duration, v time.Duration) {
+		if v != 0 {
+			*dst = v
+		}
+	}
+	set(&d.MaxSteps, cfg.MaxSteps)
+	setD(&d.TurnTimeout, cfg.TurnTimeout)
+	setD(&d.CallTimeout, cfg.CallTimeout)
+	set(&d.HistoryTokens, cfg.HistoryTokens)
+	set(&d.KeepRecent, cfg.KeepRecent)
+	set(&d.DailyTurns, cfg.DailyTurns)
+	set(&d.DailyTokens, cfg.DailyTokens)
+	setD(&d.SessionIdle, cfg.SessionIdle)
+	if cfg.Location != nil {
+		d.Location = cfg.Location
+	}
+	return d
 }
 
 var seq int
@@ -235,7 +261,7 @@ func TestHistoryReachesTheModel(t *testing.T) {
 	msgs := e.smart.requests()[1].Messages
 	got := []string{}
 	for _, m := range msgs {
-		got = append(got, m.Role+":"+m.Content)
+		got = append(got, string(m.Role)+":"+m.Content)
 	}
 	want := "system:" + CoreRules + "\n\nSYS|user:Igor: первое|assistant:ok|user:Igor: второе"
 	if strings.Join(got, "|") != want {

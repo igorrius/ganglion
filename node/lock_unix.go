@@ -9,10 +9,10 @@ import (
 	"syscall"
 )
 
-// lockDB takes an exclusive lock on <db>.lock, so a second core process
+// LockDB takes an exclusive lock on <db>.lock, so a second core process
 // cannot open the same database (ADR-0019). The lock goes away with the
 // process, even after kill -9.
-func lockDB(db string) (release func(), err error) {
+func LockDB(db string) (release func(), err error) {
 	if db == ":memory:" {
 		return func() {}, nil
 	}

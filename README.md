@@ -30,8 +30,8 @@ Requires Go 1.27 and, for linting, golangci-lint v2 built with Go 1.27.
 
 ```sh
 make check                      # lint, test, build
-./bin/ganglion --version
-./bin/ganglion --roles core,edge,worker
+./bin/ganglion version          # version, commit, toolchain
+./bin/ganglion run --roles core,edge,worker
 
 make modules modrun             # build the Deye module (Go) and the module runner
 ./bin/modrun -wasm bin/deye-reader.go.wasm \

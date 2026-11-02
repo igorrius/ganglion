@@ -2,7 +2,7 @@
 // of a catalogue and writes a Markdown report: answers side by side,
 // latency, tokens, cache and cost (M3a task 10, decision D-6).
 //
-//	modelcompare -models models.local.yaml -prompts cmd/modelcompare/prompts.yaml \
+//	modelcompare -models models.local.yaml -prompts tools/modelcompare/prompts.yaml \
 //	  -only claude:haiku,openrouter:deepseek/deepseek-v4.1-flash -out report.md
 //
 // Provider keys come from each provider's key_env (or <key_env>_FILE).
@@ -59,10 +59,10 @@ type Result struct {
 func run(ctx context.Context, p provider.Provider, m router.Model, convs []Conversation, timeout time.Duration) Result {
 	res := Result{Model: m}
 	for _, c := range convs {
-		history := []provider.Message{{Role: "system", Content: agent.CoreRules + "\n\n" + agent.DefaultPersona}}
+		history := []provider.Message{{Role: provider.RoleSystem, Content: agent.CoreRules + "\n\n" + agent.DefaultPersona}}
 		var answers []Answer
 		for _, turn := range c.Turns {
-			history = append(history, provider.Message{Role: "user", Content: "Igor: " + turn})
+			history = append(history, provider.Message{Role: provider.RoleUser, Content: "Igor: " + turn})
 			callCtx, cancel := context.WithTimeout(ctx, timeout)
 			start := time.Now()
 			resp, err := p.Chat(callCtx, provider.ChatRequest{Model: m.Name, Messages: history})
@@ -73,7 +73,7 @@ func run(ctx context.Context, p provider.Provider, m router.Model, convs []Conve
 			} else {
 				a.Text = resp.Message.Content
 				a.CostUSD = (float64(resp.Usage.InputTokens)*m.Caps.PriceInMTok + float64(resp.Usage.OutputTokens)*m.Caps.PriceOutMTok) / 1e6
-				history = append(history, provider.Message{Role: "assistant", Content: resp.Message.Content})
+				history = append(history, provider.Message{Role: provider.RoleAssistant, Content: resp.Message.Content})
 			}
 			answers = append(answers, a)
 		}
@@ -158,7 +158,7 @@ func key(p rules.ProviderDef) (string, error) {
 
 func main() {
 	models := flag.String("models", "models.local.yaml", "model catalogue")
-	prompts := flag.String("prompts", "cmd/modelcompare/prompts.yaml", "conversations")
+	prompts := flag.String("prompts", "tools/modelcompare/prompts.yaml", "conversations")
 	only := flag.String("only", "", "comma-separated provider:model to compare (default: every model)")
 	out := flag.String("out", "", "report file (default: stdout)")
 	timeout := flag.Duration("timeout", 90*time.Second, "per call")

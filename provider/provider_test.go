@@ -1,10 +1,7 @@
 package provider
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"testing"
 )
 
@@ -35,28 +32,6 @@ func TestToolJSONIsMCPShape(t *testing.T) {
 	b, _ := json.Marshal(Tool{Name: "memory.read", Description: "d", InputSchema: json.RawMessage(`{"type":"object"}`)})
 	if string(b) != `{"name":"memory.read","description":"d","inputSchema":{"type":"object"}}` {
 		t.Fatalf("tool = %s", b)
-	}
-}
-
-func TestFallback(t *testing.T) {
-	for _, tc := range []struct {
-		err  error
-		want bool
-	}{
-		{&Error{Kind: KindRateLimit}, true},
-		{&Error{Kind: KindTimeout}, true},
-		{&Error{Kind: KindUnavailable}, true},
-		{&Error{Kind: KindAuth}, false},
-		{&Error{Kind: KindBadRequest}, false},
-		{fmt.Errorf("wrapped: %w", &Error{Kind: KindRateLimit}), true},
-		{context.Canceled, false},
-		{fmt.Errorf("call: %w", context.DeadlineExceeded), true},
-		{errors.New("plain"), false},
-		{nil, false},
-	} {
-		if got := Fallback(tc.err); got != tc.want {
-			t.Errorf("Fallback(%v) = %v, want %v", tc.err, got, tc.want)
-		}
 	}
 }
 

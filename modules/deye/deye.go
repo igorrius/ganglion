@@ -66,38 +66,10 @@ func Read(h pdk.Host, sn string) (Sample, error) {
 	if err != nil {
 		return Sample{}, err
 	}
-	var r struct {
-		Success bool            `json:"success"`
-		Code    json.RawMessage `json:"code"`
-		Msg     string          `json:"msg"`
-		Devices []struct {
-			CollectionTime json.Number `json:"collectionTime"`
-			DataList       []struct {
-				Key   string `json:"key"`
-				Value any    `json:"value"`
-			} `json:"dataList"`
-		} `json:"deviceDataList"`
-	}
-	if err := post(h, "/device/latest", map[string]any{"deviceList": []string{sn}}, tok, &r); err != nil {
+	dev, err := latest(h, sn, tok)
+	if err != nil {
 		return Sample{}, err
 	}
-	if !r.Success {
-		if code(r.Code) == tokenInvalid {
-			h.StatePut(keyToken, "")
-		}
-		return Sample{}, fmt.Errorf("deye: cloud read failed: %s %s", code(r.Code), r.Msg)
-	}
-	if len(r.Devices) == 0 {
-		return Sample{}, errors.New("deye: cloud returned no device data")
-	}
-	dev := r.Devices[0]
-	values := make(map[string]string, len(dev.DataList))
-	for _, d := range dev.DataList {
-		if d.Value != nil {
-			values[d.Key] = fmt.Sprint(d.Value)
-		}
-	}
-
 	ts, err := dev.CollectionTime.Int64()
 	if err != nil {
 		return Sample{}, fmt.Errorf("deye: bad collectionTime %q", dev.CollectionTime)
@@ -105,7 +77,55 @@ func Read(h pdk.Host, sn string) (Sample, error) {
 	if age := h.Now().Sub(time.Unix(ts, 0)); age > staleAfter {
 		return Sample{}, fmt.Errorf("%w (%.0f min old)", ErrStale, age.Minutes())
 	}
+	return sample(ts, dev.values())
+}
 
+// deviceData is one device of the cloud's /device/latest answer.
+type deviceData struct {
+	CollectionTime json.Number `json:"collectionTime"`
+	DataList       []struct {
+		Key   string `json:"key"`
+		Value any    `json:"value"`
+	} `json:"dataList"`
+}
+
+// values returns the device's readings by key, as text.
+func (d deviceData) values() map[string]string {
+	out := make(map[string]string, len(d.DataList))
+	for _, v := range d.DataList {
+		if v.Value != nil {
+			out[v.Key] = fmt.Sprint(v.Value)
+		}
+	}
+	return out
+}
+
+// latest asks the cloud for the inverter's latest data. A rejected token
+// is forgotten, so the next run logs in again.
+func latest(h pdk.Host, sn, tok string) (deviceData, error) {
+	var r struct {
+		Success bool            `json:"success"`
+		Code    json.RawMessage `json:"code"`
+		Msg     string          `json:"msg"`
+		Devices []deviceData    `json:"deviceDataList"`
+	}
+	if err := post(h, "/device/latest", map[string]any{"deviceList": []string{sn}}, tok, &r); err != nil {
+		return deviceData{}, err
+	}
+	if !r.Success {
+		if code(r.Code) == tokenInvalid {
+			h.StatePut(keyToken, "")
+		}
+		return deviceData{}, fmt.Errorf("deye: cloud read failed: %s %s", code(r.Code), r.Msg)
+	}
+	if len(r.Devices) == 0 {
+		return deviceData{}, errors.New("deye: cloud returned no device data")
+	}
+	return r.Devices[0], nil
+}
+
+// sample parses the readings taken at ts.
+func sample(ts int64, values map[string]string) (Sample, error) {
 	p := parser{values: values}
 	s := Sample{
 		TS:     ts,

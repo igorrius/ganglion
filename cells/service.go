@@ -200,38 +200,61 @@ func (s *Service) Watch(ctx context.Context, fromSeq int64) <-chan Change {
 	out := make(chan Change, 64)
 	go func() {
 		defer close(out)
-		seq := fromSeq
-		const page = 100
-		for {
-			wake := s.wakeup() // taken before reading, so no write is missed
-			changes, err := s.store.ChangesSince(ctx, seq, page)
-			if err != nil {
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(100 * time.Millisecond):
-					continue
-				}
-			}
-			for _, c := range changes {
-				select {
-				case out <- c:
-					seq = c.Seq
-				case <-ctx.Done():
-					return
-				}
-			}
-			if len(changes) == page {
-				continue
-			}
-			select {
-			case <-wake:
-			case <-ctx.Done():
-				return
-			}
-		}
+		s.stream(ctx, fromSeq, out)
 	}()
 	return out
+}
+
+// stream sends the changes after seq to out, page by page, then waits for
+// new ones, until ctx ends. A failed read is retried shortly.
+func (s *Service) stream(ctx context.Context, seq int64, out chan<- Change) {
+	const page = 100
+	for {
+		wake := s.wakeup() // taken before reading, so no write is missed
+		changes, err := s.store.ChangesSince(ctx, seq, page)
+		if err != nil {
+			if !pause(ctx, 100*time.Millisecond) {
+				return
+			}
+			continue
+		}
+		var ok bool
+		if seq, ok = send(ctx, out, changes, seq); !ok {
+			return
+		}
+		if len(changes) == page {
+			continue
+		}
+		select {
+		case <-wake:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// pause waits d; it reports false when ctx ended first.
+func pause(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
+	}
+}
+
+// send delivers changes in order and returns the last delivered Seq; ok
+// is false when ctx ended first.
+func send(ctx context.Context, out chan<- Change, changes []Change, seq int64) (int64, bool) {
+	for _, c := range changes {
+		select {
+		case out <- c:
+			seq = c.Seq
+		case <-ctx.Done():
+			return seq, false
+		}
+	}
+	return seq, true
 }
 
 // InSync reports whether the reported value equals the desired one.
