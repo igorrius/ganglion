@@ -185,7 +185,7 @@ core process.
 | Memory | core | Facts, skills, semantic search; slices for edges | markdown in git; embeddings | P1 (files), P2 |
 | Core ↔ edge protocol | all | Registration, calls, events, modules, policies, context | envelope + MCP over NATS | P2 |
 | Bus | all | Delivery, buffering during outages, module object store | NATS: leaf node + JetStream | P2 |
-| Observability | all | Turn trace: input, route, tools, cost, reply | slog + `turns` table, later OpenTelemetry | P1 (logs) |
+| Observability | all | Turn trace: input, route, tools, cost, reply; metrics; traces | slog + `turns` table + OpenTelemetry (Prometheus `/metrics` with the promtop dashboard, OTLP traces) | P1 |
 
 ## 6. Key interfaces (draft)
 
@@ -501,6 +501,26 @@ undone with `git revert`.
 | Exhausted limits | Crons and consolidation on a cheap model; usage counter in `turns` | P1 |
 | Self-modification broke something | Regression scenarios (question → expected tool call) after every change | P3 |
 | Lost volume or corrupted DB | Daily backup of SQLite (`VACUUM INTO`) and the memory git repo to S3 or a private remote | P1 |
+
+### 7.9. Observability
+
+[ADR-0026](adr/0026-opentelemetry-prometheus-and-promtop.md).
+
+- **R-OBS-1.** The code is instrumented through the OpenTelemetry API:
+  - spans for a turn, a model call, a tool call, an outbox send and a
+    Telegram API call;
+  - metrics for turns, model calls, tokens, cost, sends, retries and
+    dropped messages.
+- **R-OBS-2.** Metrics are served in the Prometheus text format at
+  `/metrics` on a local address (`GANGLION_METRICS_ADDR`, default
+  `127.0.0.1:9464`). The promtop web dashboard is at `/webmetrics/`, for
+  localhost only.
+- **R-OBS-3.** Traces go out over OTLP/HTTP when the standard
+  `OTEL_EXPORTER_OTLP_ENDPOINT` (or `…_TRACES_ENDPOINT`) is set; otherwise
+  they are not recorded.
+- **R-OBS-4.** Logs are slog. A line written inside a span carries
+  `trace_id` and `span_id`. Message text and model output are never
+  logged, traced or exported as metric labels.
 
 ## 8. First flow: Deye and load shedding (P1)
 
@@ -857,7 +877,6 @@ Reviewed at each gate.
 - Channels other than Telegram and MQTT; HTTP API; web UI.
 - Compiling flows into Home Assistant automations.
 - CBOR and microcontroller adapters.
-- OpenTelemetry instead of slog + `turns`.
 - An A2A endpoint on the core for external agents (after P3, ADR-0013).
 - Bot features contributed by tools and modules: commands, menus and
   buttons declared in the manifest in a channel-neutral form; a press is a
