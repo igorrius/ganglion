@@ -18,6 +18,9 @@ type turn struct {
 	now    time.Time
 	record turns.Turn // the trace: route, tools, tokens, outcome
 	out    []event.Outgoing
+	admin  bool   // the sender may use tools
+	calls  int    // tool calls so far in this turn; the next is calls+1
+	known  urlSet // addresses the sender gave or a search returned
 }
 
 // reply adds the answer to the person's message. A turn answers once, so

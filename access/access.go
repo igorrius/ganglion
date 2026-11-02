@@ -118,6 +118,13 @@ func (l *List) Role(ctx context.Context, principal string) (Role, bool, error) {
 	return Role(role), true, nil
 }
 
+// IsAdmin reports whether principal is listed with the admin role. A
+// principal that is not listed is not an admin.
+func (l *List) IsAdmin(ctx context.Context, principal string) (bool, error) {
+	role, ok, err := l.Role(ctx, principal)
+	return ok && role == RoleAdmin, err
+}
+
 // Admins returns the admin principals, sorted.
 func (l *List) Admins(ctx context.Context) ([]string, error) {
 	rows, err := l.db.QueryContext(ctx, `SELECT principal FROM allowed WHERE role = ? ORDER BY principal`, string(RoleAdmin))

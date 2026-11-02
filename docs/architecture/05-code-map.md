@@ -11,7 +11,7 @@ interfaces only; **planned** — not in the repository yet.
 |---|---|---|---|---|
 | Binary: `main.go` (signals) at the root; the command tree (`run`, `version`) in `cmd`, the flags with their environment variables in `cmd/flags`; the kill -9 crash harness and the memory test in `cmd` | `.` (main), `cmd`, `cmd/flags` | done (P0); crash harness (P1 M2); urfave/cli (P1 refactor) | 5.1 | [0004](../adr/0004-one-binary-with-roles.md), [0029](../adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md) |
 | Build information: version, commit, toolchain of this binary | `internal/buildinfo` | done (P1 refactor) | — | [0029](../adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md) |
-| Composition root, dependency logic only: one `samber/do` provider per component; extension points (handler, give-up, turn hook, transports, receivers) as an interface provider that selects and one named provider per implementation, no-ops included; a `do.Package` per role, `Run`; `Bootstrap`, filled by the command line | `config` | done (P1 refactor) | 5.1 | [0028](../adr/0028-samber-do-composition-root-in-config.md) |
+| Composition root, dependency logic only: one `samber/do` provider per component; extension points (handler, give-up, turn hook, transports, receivers, housekeeping) as an interface provider that selects and one named provider per implementation, no-ops included; a `do.Package` per role, `Run`; `Bootstrap`, filled by the command line | `config` | done (P1 refactor) | 5.1 | [0028](../adr/0028-samber-do-composition-root-in-config.md) |
 | Role runner: `Component`, `RunAll`, `Run` by roles; the database lock; Telegram polling as a component with the 409 alert | `node` | done; edge and worker are stubs | 5.1 | [0004](../adr/0004-one-binary-with-roles.md), [0019](../adr/0019-release-leases-at-core-start.md) |
 | `Event`, `Outgoing`, TTL expiry, ULID ids, the neutral `Message` payload | `event` | done | 6, 9.1 | — |
 | Transport interface, send errors (`ErrPermanent`, `RetryAfterError`), `Parter` | `transport` | interface | 6, 7.1 | [0017](../adr/0017-extension-points.md) |
@@ -28,13 +28,16 @@ interfaces only; **planned** — not in the repository yet.
 | Outbox sender: order per conversation, backoff, `retry_after` pause, resumable parts | `outbox` | done (P1 M2) | 7.1 | — |
 | Telegram transport: own Bot API client, long polling (offset after the sink), conversation keys, Markdown rendered to entities (goldmark), block-aware split, replies (auto/always/off), typing; fake Bot API for tests | `transport/telegram`, `transport/telegram/telegramtest` | done (P1 M2) | 7.1 | [0018](../adr/0018-own-telegram-bot-api-client.md) |
 | Turn loop: parallel workers, lease → handler → atomic complete, turn timeout, give up after max attempts; echo handler | `core` | done (P1 M2, workers M3a); the agent is the handler when a catalogue is set | 7.1, 7.2 | [0019](../adr/0019-release-leases-at-core-start.md) |
-| Agent: a turn is a pipeline of stages (idle session, commands, daily limits, answer, compaction); model calls with fallback; tools through `ToolMiddleware`; a command table (`/new`, `/sessions`, `/resume`); sessions archive (`SessionStore`, `NoArchive`); core rules + persona from `workspace/persona/*.md` | `agent` | done (P1 M3a); tools, memory, depth limit, first-run introduction in M3b | 7.2 | [0020](../adr/0020-neutral-history-as-conversation-state.md), [0024](../adr/0024-persona-as-workspace-files.md) |
+| Agent: a turn is a pipeline of stages (idle session, commands, daily limits, answer, compaction); model calls with fallback; tools run through `tool.Middleware` (tracing, then the journal) with a numbered `tool.Call` per call; an external result taints the session and reaches the model wrapped as data; the known-URL set for `web.fetch`; tools only for admins (`AdminFunc`); a command table (`/new`, `/sessions`, `/resume`); sessions archive (`SessionStore`, `NoArchive`); core rules + persona from `workspace/persona/*.md`; conversation state v2 (adds `Tainted` and `Pending`, reads v1; compaction keeps the taint and stores the summary wrapped) | `agent` | done (P1 M3a); tool context, taint and state v2 (P1 M3b task 2); memory, depth limit, first-run introduction later in M3b | 7.2 | [0020](../adr/0020-neutral-history-as-conversation-state.md), [0024](../adr/0024-persona-as-workspace-files.md), [0031](../adr/0031-agent-security-baseline.md) |
+| Tools: `Spec`, `Call`, `Result` (text, external flag, pending id, outgoing messages), `Handler`, `Registry` (admin-only tools hidden from others and refused at run), `Middleware`, `Grant`, `WrapExternal` | `tool` | done (P1 M3b task 2); the tools themselves in later tasks | 7.6 | [0031](../adr/0031-agent-security-baseline.md) |
+| Tool-call journal: one row per decision on a call, arguments and results redacted and capped, daily prune component | `tool/journal` | done (P1 M3b task 2) | 7.6 | [0031](../adr/0031-agent-security-baseline.md) |
+| Web address normalisation for the known-URL check | `internal/urlnorm` | done (P1 M3b task 2) | 7.6 | [0031](../adr/0031-agent-security-baseline.md) |
 | Compare models on scripted conversations (D-6 tool) | `tools/modelcompare` | done (P1 M3a) | 7.4 | [0022](../adr/0022-haiku-first-during-development.md) |
 | Telemetry: OpenTelemetry setup, Prometheus `/metrics`, the promtop dashboard, OTLP traces, trace ids in logs; in-memory providers for tests | `telemetry`, `telemetry/telemetrytest` | done (P1) | 7.9 | [0026](../adr/0026-opentelemetry-prometheus-and-promtop.md) |
 | JSON Schemas of the YAML files (model catalogue, module manifest), embedded | `schemas` | done (P1 M3a); node config schema with D-3 in M4 | 7.3, 7.5 | [0023](../adr/0023-json-schemas-for-yaml-files.md) |
 | Alerts to every admin's private chat (daily limit, give-up, 409) | `alert` | done (P1 refactor) | 7.8 | — |
 | Secret source: the environment and `*_FILE` files; an encrypted store later | `secrets` | done (P1 refactor) | D-3 | [0029](../adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md) |
-| Shared helpers, not library API: backoff with jitter, rune truncation, plain transcript, start of day | `internal/backoff`, `internal/text`, `internal/transcript`, `internal/clock` | done (P1 refactor) | — | [0027](../adr/0027-written-go-conventions-and-lint-guardrails.md) |
+| Shared helpers, not library API: backoff with jitter, rune truncation, plain transcript, start of day, URL normalisation | `internal/backoff`, `internal/text`, `internal/transcript`, `internal/clock`, `internal/urlnorm` | done (P1 refactor) | — | [0027](../adr/0027-written-go-conventions-and-lint-guardrails.md) |
 | Policies | — | planned (P1) | 7.6 | — |
 | Memory | — | planned (P1) | 7.7 | — |
 | Runner: wazero host, manifest, limits | `runner` | done (P0 spike, own ABI); supervisor and scheduler planned (P1) | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md), [0012](../adr/0012-yaml-manifests.md) |
@@ -69,6 +72,11 @@ flowchart BT
     agentp["agent"] --> provider
     agentp --> router
     agentp --> turnsp
+    agentp --> toolp["tool"]
+    toolp --> event
+    journalp["tool/journal"] --> toolp
+    journalp --> sqlitedb
+    configp --> journalp
     agentp --> queue
     configp --> agentp
     configp --> rulesp

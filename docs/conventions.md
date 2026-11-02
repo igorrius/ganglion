@@ -115,8 +115,8 @@ A `switch` over such a type lists every constant or says why not
   audit wrap the thing they guard, the way `net/http` handlers are wrapped:
 
   ```go
-  type ToolFunc func(ctx context.Context, call provider.ToolCall) (string, error)
-  type ToolMiddleware func(next ToolFunc) ToolFunc
+  type Func func(ctx context.Context, c tool.Call) (tool.Result, error)
+  type Middleware func(next Func) Func
   ```
 
   A policy is a function that decides; it does not edit the code it guards
@@ -172,6 +172,9 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Principal → private conversation | the transport (`telegram.PrivateConv`) |
 | Secrets from the environment and `*_FILE` | `secrets` |
 | Version, commit, toolchain of this binary | `internal/buildinfo` |
+| Comparing web addresses (lower-case host, no fragment, no default port) | `internal/urlnorm` |
+| Marking outside content as data for the model | `tool.WrapExternal` |
+| Removing secrets before anything is journalled | `journal.Redact` |
 
 (The table describes the state after the [refactoring plan](plans/p1-refactor.md).)
 

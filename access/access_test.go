@@ -200,3 +200,16 @@ func TestWithAdminSeedsTheAdmin(t *testing.T) {
 		t.Fatalf("an empty admin is no admin: %v", err)
 	}
 }
+
+func TestIsAdmin(t *testing.T) {
+	l := newList(t)
+	ctx := context.Background()
+	_ = l.Allow(ctx, "telegram:user:1", access.RoleAdmin, "Igor")
+	_ = l.Allow(ctx, "telegram:user:2", access.RoleFamily, "Anna")
+	for p, want := range map[string]bool{"telegram:user:1": true, "telegram:user:2": false, "telegram:user:3": false} {
+		got, err := l.IsAdmin(ctx, p)
+		if err != nil || got != want {
+			t.Errorf("IsAdmin(%s) = %v, %v; want %v", p, got, err, want)
+		}
+	}
+}

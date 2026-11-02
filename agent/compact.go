@@ -7,6 +7,7 @@ import (
 	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -30,12 +31,25 @@ func compactSplit(msgs []provider.Message, keep int) int {
 func compactInput(summary string, old []provider.Message) string {
 	var b strings.Builder
 	if summary != "" {
-		b.WriteString("Earlier summary:\n" + summary + "\n\nNew part of the conversation:\n")
+		b.WriteString("Earlier summary:\n" + unwrapSummary(summary) + "\n\nNew part of the conversation:\n")
 	}
 	for _, line := range transcript.Lines(old, transcript.WithoutToolCalls) {
 		b.WriteString(line + "\n")
 	}
 	return b.String()
+}
+
+// summarySource names the summary in its external wrapper.
+const summarySource = "summary"
+
+// unwrapSummary returns the summary without the external wrapper a
+// tainted compaction put around it, so a later compaction does not nest
+// wrappers.
+func unwrapSummary(s string) string {
+	if inner, ok := tool.Unwrap(summarySource, s); ok {
+		return inner
+	}
+	return s
 }
 
 // compact folds all but the last KeepRecent messages into the summary with
@@ -55,6 +69,12 @@ func (a *Agent) compact(ctx context.Context, st State, rec *turns.Turn) State {
 		return st
 	}
 	st.Summary = strings.TrimSpace(resp.Message.Content)
+	if st.Tainted {
+		// External content may have shaped the summary: it stays data, so
+		// an injection cannot come back as the agent's own words (design
+		// section 4, rule 4).
+		st.Summary = tool.WrapExternal(summarySource, st.Summary)
+	}
 	st.Messages = append([]provider.Message(nil), st.Messages[split:]...)
 	return st
 }

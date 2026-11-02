@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"fmt"
+	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/core"
@@ -13,6 +14,8 @@ import (
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/turns"
 	"github.com/samber/do/v2"
 )
@@ -45,15 +48,37 @@ func Agent() do.Provider[*agent.Agent] {
 			States:    do.MustInvoke[*sqlqueue.Queue](i),
 			Router:    do.MustInvoke[router.Router](i),
 			Providers: do.MustInvoke[map[string]provider.Provider](i),
-			Tools:     agent.NoTools{},
-			Turns:     do.MustInvoke[*turns.Log](i),
-			Archive:   do.MustInvoke[agent.SessionStore](i),
-			Alerts:    do.MustInvoke[alert.Admins](i),
-			Persona:   agent.PersonaDir(b.Agent.Workspace),
-			Log:       do.MustInvoke[*slog.Logger](i),
+			Tools:     do.MustInvoke[*tool.Registry](i),
+			// Around every tool call, outermost first; the policy joins in M3b.
+			Middleware: []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
+			IsAdmin:    do.MustInvoke[agent.AdminFunc](i),
+			Turns:      do.MustInvoke[*turns.Log](i),
+			Archive:    do.MustInvoke[agent.SessionStore](i),
+			Alerts:     do.MustInvoke[alert.Admins](i),
+			Persona:    agent.PersonaDir(b.Agent.Workspace),
+			Log:        do.MustInvoke[*slog.Logger](i),
 		}), nil
 	}
 }
+
+// IsAdmin provides the agent's role check, backed by the access list.
+func IsAdmin() do.Provider[agent.AdminFunc] {
+	return func(i do.Injector) (agent.AdminFunc, error) {
+		return do.MustInvoke[*access.List](i).IsAdmin, nil
+	}
+}
+
+// Tools provides the tool registry. Each tool joins by one line in
+// toolHandlers.
+func Tools() do.Provider[*tool.Registry] {
+	return func(i do.Injector) (*tool.Registry, error) {
+		return tool.NewRegistry(toolHandlers(i)...)
+	}
+}
+
+// toolHandlers lists the tools the agent has. None yet: each tool of M3b
+// adds a line here.
+func toolHandlers(do.Injector) []tool.Handler { return nil }
 
 // Router provides the rules router over the catalogue, with the daily
 // budget from the turn trace.

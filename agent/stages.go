@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -45,7 +46,13 @@ func (a *Agent) answer(ctx context.Context, t *turn) (bool, error) {
 	if t.state.Session == "" {
 		t.state.Session, t.state.Started = t.event.ID, t.now
 	}
+	admin, err := a.d.IsAdmin(ctx, t.msg.From)
+	if err != nil {
+		return false, fmt.Errorf("agent: role of %s: %w", t.msg.From, err)
+	}
+	t.admin = admin
 	user := provider.Message{Role: provider.RoleUser, Content: speaker(t.msg) + ": " + t.msg.Text}
+	t.known = knownURLs(append(slices.Clone(t.state.Messages), user))
 	turnCtx, cancel := context.WithTimeout(ctx, a.cfg.TurnTimeout)
 	defer cancel()
 	added, text, ok, err := a.steps(ctx, turnCtx, t, append(a.prompt(t.state), user))
@@ -74,7 +81,7 @@ func (a *Agent) answer(ctx context.Context, t *turn) (bool, error) {
 // model answered a step. A cancelled ctx (shutdown) is an error, so the
 // event is offered again.
 func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Message) (added []provider.Message, text string, ok bool, err error) {
-	tools := a.d.Tools.List()
+	tools := a.toolSpecs(t)
 	task := router.TaskReq{Kind: router.TaskMessage, Tools: len(tools) > 0}
 	for t.record.Steps < a.cfg.MaxSteps {
 		t.record.Steps++

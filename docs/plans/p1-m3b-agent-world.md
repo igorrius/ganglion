@@ -321,7 +321,7 @@ ADRs:
   - its summary is stored wrapped with `WrapExternal("summary", …)`, so
     an injection cannot come back as the agent's own words.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestRegistryDuplicate`.
   - `TestSpecsHideAdminOnly`.
   - `TestCallKey` (`"E1:3"`).
@@ -339,16 +339,16 @@ ADRs:
     N = 1, 2, 3, 4.
   - `TestCompactionKeepsTaint`: the summary is wrapped and the state stays
     tainted.
-- [ ] **Step 2: Run** `go test ./tool/... ./agent/` — FAIL.
-- [ ] **Step 3: Implement.**
+- [x] **Step 2: Run** `go test ./tool/... ./agent/` — FAIL.
+- [x] **Step 3: Implement.**
   - Wire `tool.Registry` and `journal.Journal` in `config`. With the
     agent on, the registry is empty until later tasks register tools.
   - `config` gets a `Tools()` provider listing handlers. Each later task
     adds one line.
-- [ ] **Step 4: Run** `go test -race ./...` and `golangci-lint run` — PASS.
-- [ ] **Step 5: Code map.** Add `tool`, `tool/journal`; note `State` v2 in
+- [x] **Step 4: Run** `go test -race ./...` and `golangci-lint run` — PASS.
+- [x] **Step 5: Code map.** Add `tool`, `tool/journal`; note `State` v2 in
   ADR-0020's key formats row of the M3b plan.
-- [ ] **Step 6: Commit** `tool: registry, call context, journal; agent state v2 with taint`.
+- [x] **Step 6: Commit** `tool: registry, call context, journal; agent state v2 with taint`.
 
 ### Task 3: policies, taint, grants and the depth limit
 

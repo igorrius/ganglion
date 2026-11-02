@@ -12,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -24,20 +25,22 @@ type StateReader interface {
 // every turn so edits apply at once. "" means DefaultPersona.
 type PersonaFunc func() (string, error)
 
-// Deps are the agent's collaborators. All are required except Now and
-// Log; the composition root passes no-op implementations where a part is
+// Deps are the agent's collaborators. All are required except Middleware,
+// Now and Log; the composition root passes no-op implementations where a part is
 // off (ADR-0028).
 type Deps struct {
-	States    StateReader
-	Router    router.Router
-	Providers map[string]provider.Provider
-	Tools     Tools
-	Turns     *turns.Log
-	Archive   SessionStore
-	Alerts    alert.Admins // who hears about a reached daily limit
-	Persona   PersonaFunc
-	Now       func() time.Time
-	Log       *slog.Logger
+	States     StateReader
+	Router     router.Router
+	Providers  map[string]provider.Provider
+	Tools      *tool.Registry
+	Middleware []tool.Middleware // around every tool call, after tracing; the first runs first
+	IsAdmin    AdminFunc
+	Turns      *turns.Log
+	Archive    SessionStore
+	Alerts     alert.Admins // who hears about a reached daily limit
+	Persona    PersonaFunc
+	Now        func() time.Time
+	Log        *slog.Logger
 }
 
 // Agent handles conversation turns; Handle is a core.Handler.
@@ -48,7 +51,7 @@ type Agent struct {
 	in       instruments
 	stages   []stage
 	commands map[string]command
-	tool     ToolFunc
+	tool     tool.Func
 }
 
 // New returns an agent.
@@ -68,7 +71,7 @@ func New(cfg Config, d Deps) *Agent {
 		"/new": a.newSession, "/reset": a.newSession,
 		"/sessions": a.listSessions, "/resume": a.resume,
 	}
-	a.tool = chain(d.Tools.Call, a.traced)
+	a.tool = tool.Chain(d.Tools.Run, append([]tool.Middleware{a.traced}, d.Middleware...)...)
 	return a
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/outbox"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/transport"
 	"github.com/igorrius/ganglion/transport/telegram"
 	"github.com/samber/do/v2"
@@ -104,15 +105,33 @@ func TelegramReceivers() do.Provider[Inbound] {
 	}
 }
 
+// Housekeeping are the components that clean up after the parts that are
+// on.
+type Housekeeping []node.Component
+
+// Housekeepers provides the cleanup components that are on.
+func Housekeepers() do.Provider[Housekeeping] {
+	return choose[Housekeeping](agentOn, housekeepingAgent, housekeepingNone)
+}
+
+// AgentHousekeepers provides the daily prune of the tool-call journal.
+func AgentHousekeepers() do.Provider[Housekeeping] {
+	return func(i do.Injector) (Housekeeping, error) {
+		return Housekeeping{journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: do.MustInvoke[*slog.Logger](i)}}, nil
+	}
+}
+
 // CoreComponents provides the core role's components: the sender, the
-// turn loop, the pruner and the inbound components.
+// turn loop, the pruners and the inbound components.
 func CoreComponents() do.Provider[[]node.Component] {
 	return func(i do.Injector) ([]node.Component, error) {
 		q := do.MustInvoke[*sqlqueue.Queue](i)
-		return append([]node.Component{
+		comps := []node.Component{
 			node.Named("sender", do.MustInvoke[*outbox.Sender](i).Run),
 			node.Named("loop", do.MustInvoke[*core.Loop](i).Run),
 			sqlqueue.Pruner{Queue: q, Every: pruneEvery, Log: do.MustInvoke[*slog.Logger](i)},
-		}, do.MustInvoke[Inbound](i)...), nil
+		}
+		comps = append(comps, do.MustInvoke[Housekeeping](i)...)
+		return append(comps, do.MustInvoke[Inbound](i)...), nil
 	}
 }

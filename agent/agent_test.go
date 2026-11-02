@@ -21,6 +21,7 @@ import (
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
+	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -108,15 +109,38 @@ func (s *states) apply(st queue.StateUpdate) {
 	}
 }
 
-type fakeTools struct{ calls []string }
-
-func (f *fakeTools) List() []provider.Tool {
-	return []provider.Tool{{Name: "clock", Description: "time", InputSchema: json.RawMessage(`{"type":"object"}`)}}
+// fakeTool is a tool.Handler named "clock" (or name) that records its calls
+// and answers with result.
+type fakeTool struct {
+	name   string
+	result tool.Result
+	calls  []tool.Call
 }
 
-func (f *fakeTools) Call(_ context.Context, c provider.ToolCall) (string, error) {
-	f.calls = append(f.calls, c.Name)
-	return "12:00", nil
+func (f *fakeTool) Spec() tool.Spec {
+	name := f.name
+	if name == "" {
+		name = "clock"
+	}
+	return tool.Spec{Name: name, Description: "time", InputSchema: json.RawMessage(`{"type":"object"}`),
+		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true}
+}
+
+func (f *fakeTool) Run(_ context.Context, c tool.Call) (tool.Result, error) {
+	f.calls = append(f.calls, c)
+	return f.result, nil
+}
+
+// newClock is a fakeTool that answers "12:00".
+func newClock() *fakeTool { return &fakeTool{result: tool.Result{Text: "12:00"}} }
+
+func registry(t *testing.T, hs ...tool.Handler) *tool.Registry {
+	t.Helper()
+	r, err := tool.NewRegistry(hs...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
 }
 
 type env struct {
@@ -131,10 +155,11 @@ type env struct {
 	deps       Deps
 	logs       *bytes.Buffer
 	persona    string
+	admin      bool // the sender is an admin (default true)
 	personaErr error
 }
 
-func newEnv(t *testing.T, cfg Config, tools Tools) *env {
+func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 	t.Helper()
 	ctx := context.Background()
 	db, err := sqlitedb.Open(ctx, filepath.Join(t.TempDir(), "agent.db"))
@@ -150,7 +175,7 @@ func newEnv(t *testing.T, cfg Config, tools Tools) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0}
+	e := &env{logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0, admin: true}
 	e.router, err = rules.New([]router.Model{
 		{Provider: "p1", Name: "smart", Tier: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 2}},
 		{Provider: "p2", Name: "cheap", Tier: "cheap", Caps: router.ModelCaps{Tools: true}},
@@ -159,10 +184,10 @@ func newEnv(t *testing.T, cfg Config, tools Tools) *env {
 		t.Fatal(err)
 	}
 	if tools == nil {
-		tools = NoTools{}
+		tools = registry(t)
 	}
 	e.deps = Deps{
-		States: e.states, Router: e.router, Tools: tools, Turns: tl, Archive: arch,
+		States: e.states, Router: e.router, Tools: tools, IsAdmin: func(context.Context, string) (bool, error) { return e.admin, nil }, Turns: tl, Archive: arch,
 		Providers: map[string]provider.Provider{"p1": e.smart, "p2": e.cheap},
 		Alerts: alert.Admins{List: func(context.Context) ([]string, error) { return []string{"telegram:user:1"}, nil }, Private: func(p string) (string, string, bool) {
 			id, ok := strings.CutPrefix(p, "telegram:user:")
@@ -283,12 +308,12 @@ func TestSummaryGoesBeforeMessages(t *testing.T) {
 }
 
 func TestToolCallLoop(t *testing.T) {
-	tools := &fakeTools{}
-	e := newEnv(t, Config{}, tools)
+	tools := newClock()
+	e := newEnv(t, Config{}, registry(t, tools))
 	e.smart.push(callTool("clock"), say("It is noon."))
 	out := e.turn(t, message("telegram:user:42", "Igor", "time?"))
 	if out[0].Text != "It is noon." || len(tools.calls) != 1 {
-		t.Fatalf("out %+v, calls %v", out, tools.calls)
+		t.Fatalf("out %+v, calls %v", out, len(tools.calls))
 	}
 	second := e.smart.requests()[1]
 	last := second.Messages[len(second.Messages)-1]
@@ -302,7 +327,7 @@ func TestToolCallLoop(t *testing.T) {
 }
 
 func TestStepLimit(t *testing.T) {
-	e := newEnv(t, Config{MaxSteps: 3}, &fakeTools{})
+	e := newEnv(t, Config{MaxSteps: 3}, registry(t, newClock()))
 	for range 5 {
 		e.smart.push(callTool("clock"))
 	}
@@ -384,7 +409,7 @@ func TestCancelledTurnReturnsError(t *testing.T) {
 }
 
 func TestCompaction(t *testing.T) {
-	e := newEnv(t, Config{HistoryTokens: 60, KeepRecent: 4}, &fakeTools{})
+	e := newEnv(t, Config{HistoryTokens: 60, KeepRecent: 4}, registry(t, newClock()))
 	long := strings.Repeat("слово ", 20)
 	e.turn(t, message("telegram:user:42", "Igor", long))
 	e.smart.push(callTool("clock"), say("answer"))
