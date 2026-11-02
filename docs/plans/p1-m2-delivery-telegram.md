@@ -543,11 +543,11 @@ could collide with old ones and be dropped as duplicates.
   // node
   type Config struct {
       DB         string // GANGLION_DB, default "ganglion.db"
-      BotToken   string // TELEGRAM_BOT_TOKEN; empty → no Telegram transport
+      BotToken   string // TELEGRAM_BOT_TOKEN, or read from the file named by TELEGRAM_BOT_TOKEN_FILE; empty → no Telegram transport
       BotAPIURL  string // TELEGRAM_API_URL, default "https://api.telegram.org"
       Admin      string // GANGLION_ADMIN, e.g. "telegram:user:123"; seeded as admin at start
   }
-  func ConfigFromEnv(getenv func(string) string) (Config, error) // Admin must look like a principal
+  func ConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte, error)) (Config, error) // Admin must look like a principal
   func Run(ctx context.Context, roles []Role, cfg Config, logger *slog.Logger) error
   ```
 - `node.Run` with the core role:
@@ -568,6 +568,11 @@ could collide with old ones and be dropped as duplicates.
   5. Once a day, `Prune(7 * 24h)`.
 
   This environment-based config lasts until D-3 (YAML node config) in M4.
+  A secret can come from the variable itself, or from a file named by
+  `<NAME>_FILE` (Docker and Kubernetes mount secrets as files under
+  `/run/secrets`). A trailing newline is trimmed, and setting both forms is
+  an error. Today this covers only `TELEGRAM_BOT_TOKEN`; the same helper
+  serves every later secret until D-3 replaces it with a secret source.
 - Crash harness (`cmd/ganglion/crash_test.go`, `//go:build unix`; skipped
   with `-short`):
   1. Build `cmd/ganglion` into a temp dir once.
@@ -590,12 +595,14 @@ could collide with old ones and be dropped as duplicates.
     `TestLoopWaitsOnReadyNotBusy` (counts `Lease` calls over a fake
     second).
   - `node`: `TestConfigFromEnv` (defaults; a bad `GANGLION_ADMIN` is
-    rejected with a clear message); `TestConflictSendsOneAlert` (the fake
+    rejected with a clear message); `TestConfigTokenFromFile` (the
+    trailing newline is trimmed; a missing file is an error naming the
+    variable, not the file content); `TestConfigTokenBothFormsRejected`; `TestConflictSendsOneAlert` (the fake
     has a webhook set; the admin gets exactly one alert and polling stops).
   - The crash harness as above.
 - [ ] **Step 2: Run** `go test ./core/ ./node/ ./cmd/ganglion/` — FAIL.
 - [ ] **Step 3: Implement**; `cmd/ganglion/main.go` passes
-  `node.ConfigFromEnv(os.Getenv)`.
+  `node.ConfigFromEnv(os.Getenv, os.ReadFile)`.
 - [ ] **Step 4: Run** `go test -race ./...` — PASS, including the harness
   with 40 kills. Run it once locally with `GANGLION_CRASH_ITERS=500`.
 - [ ] **Step 5: Commit** `core, node: echo bot on the queue and a kill -9 crash harness`.

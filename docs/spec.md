@@ -838,3 +838,11 @@ Reviewed at each gate.
   in the transport (P3, [ADR-0017](adr/0017-extension-points.md)).
 - Telegram Mini Apps (web pages inside the chat): an HTTP server and
   `initData` validation in the core; a web UI, excluded from 0.x (ADR-0017).
+- Packaging and install paths for other users: a Docker image, a Railway
+  template, a Helm chart, a systemd unit for a Pi, `ganglion init` (closer
+  to the public release in P3).
+- First-run onboarding without hand-written ids: the node prints a one-time
+  pairing code, and the first person to send it to the bot becomes the
+  admin (the same idea as node enrolment with a one-time token, 9.3).
+- An encrypted secret store on the node's key, behind the secret source of
+  D-3; secrets set and rotated without a restart.

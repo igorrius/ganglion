@@ -135,7 +135,7 @@ Step-by-step plan: [p1-m2-delivery-telegram.md](p1-m2-delivery-telegram.md).
 
 | Task | Done when |
 |---|---|
-| 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets from the environment; `GOMEMLIMIT` (R-RUN-6) | Config tests; a bad config fails at start with a clear message |
+| 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets through a secret source (environment and `*_FILE` first), never in the YAML; `GOMEMLIMIT` (R-RUN-6) | Config tests; a bad config fails at start with a clear message |
 | 4.2 Scheduler: cron in Europe/Kyiv, `cron_runs` table, catch-up after downtime runs each missed job once; `idemKey` = job + scheduled time; the agent's `schedule.*` uses it | Tests across a DST change and a simulated downtime |
 | 4.3 Cell host functions for modules (`cell.get`, `cell.report`, `cell.set`), granted per cell in the manifest; `pdk` and `pdk/guest` updated | Runner conformance suite extended and green |
 | 4.4 Runner in `node.Run`: modules from config, triggered by the scheduler or called by the agent as tools (`deye.status`); optional `init` and `health` exports (spec 7.5); a minimal supervisor — backoff after failures, N failures in M minutes disable the module and emit `module.crashloop`; failures and `auth_failed` reach the agent as events; `cells.Reconcile` at start and periodically, `ExpireDue` on a short tick (M1 review) | `deye-reader` writes the `grid` and `soc` sensor cells on schedule; the agent answers "how is the battery?" through the tool; a failing probe module is disabled |
@@ -183,7 +183,7 @@ starting point, not a decision.
 | D-5 | Sandbox for level-2 scripts | P1: subprocess, environment allowlist, timeout; Landlock or bubblewrap later (spec 11) | M3 |
 | D-6 | First cloud model for routine turns | Chosen on cost and quality of real turns (spec 11) | M3 |
 | D-7 | Git for memory and config: the `git` binary or go-git | The binary: smaller process (principle 8) | M3 |
-| D-3 | Node config format | YAML, like manifests (ADR-0012); secrets only from the environment | M4 |
+| D-3 | Node config and secrets | YAML, like manifests (ADR-0012), for the node config. Requirements: (1) three kinds of data — bootstrap (data directory, roles) from flags or environment; node config (chats, cells, modules, policies) as YAML in a git repo that the agent changes only with approval (M6); secrets never in the YAML; (2) secrets come through one secret-source interface: environment and `*_FILE` files (Docker and Kubernetes secrets) in P1, an encrypted store later; the runner's `secret.get` reads from it; (3) the same binary works on Railway, in Docker or Kubernetes and as a local install | M4 |
 | D-4 | The flow as a WASM module with cell host functions, or native Go | WASM module: it is the project's core hypothesis | M5 |
 
 ## Cut list
