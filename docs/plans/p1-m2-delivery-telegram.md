@@ -518,17 +518,17 @@ could collide with old ones and be dropped as duplicates.
     offset and the stranger gets no reply.
 
   A malformed payload is dropped the same way.
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestAllowAndRole`.
   - `TestUnknownRoleRejected`.
   - `TestFilterPassesKnown`.
   - `TestFilterDropsStranger`: `next` is not called; nil is returned; the
     log record has no text field.
   - `TestFilterPassesNonMessages`.
-- [ ] **Step 2: Run** `go test ./access/` — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./access/` — PASS.
-- [ ] **Step 5: Commit** `access: allowed table with roles and a sink filter for strangers`.
+- [x] **Step 2: Run** `go test ./access/` — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./access/` — PASS.
+- [x] **Step 5: Commit** `access: allowed table with roles and a sink filter for strangers`.
 
 ### Task 7: core loop, echo bot wiring and the crash harness (2.5)
 

@@ -33,8 +33,9 @@ Start here when coming back to the project.
     ([ADR-0018](adr/0018-own-telegram-bot-api-client.md)). Done: task 1
     (shared types), task 2 (SQLite inbox, `queue/sqlqueue`), task 3 (outbox
     and its sender, `outbox`), task 4 (Bot API client and fake Bot API),
-    task 5 (Telegram transport, `transport/telegram`). Next: task 6, the
-    access list.
+    task 5 (Telegram transport, `transport/telegram`), task 6 (access
+    list, `access`). Next: task 7, the core loop, echo bot and crash
+    harness.
   - Live checks need a separate test bot: `TELEGRAM_TEST_BOT_TOKEN` in
     `.env`. Everything before that runs against a fake Bot API in tests.
     See [owner setup](#owner-setup-for-live-checks) below.

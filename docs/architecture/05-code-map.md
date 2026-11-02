@@ -16,7 +16,8 @@ interfaces only; **planned** — not in the repository yet.
 | Inbox / outbox: `Queue`, `Outbox` | `queue` | interface | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 | Model providers | `provider` | interface | 7.4 | [0007](../adr/0007-openai-compatible-first-provider.md), [0009](../adr/0009-claude-subscription-only-via-cli-worker.md) |
 | Model router | `router` | interface | 7.3 | — |
-| Store (history, turns, cron_runs, allowed) | — | planned (P1) | 6 | — |
+| Store (history, turns, cron_runs) | — | planned (P1) | 6 | — |
+| Access list: `allowed` table with roles; sink filter that drops strangers | `access` | done (P1 M2) | 7.8 | — |
 | SQLite queue: inbox (ordered leases, atomic `Complete`), outbox (heads per conversation, retries, parts), conversation state, prune | `queue/sqlqueue` | done (P1 M2) | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 | Outbox sender: order per conversation, backoff, `retry_after` pause, resumable parts | `outbox` | done (P1 M2) | 7.1 | — |
 | Telegram transport: own Bot API client, long polling (offset after the sink), conversation keys, send, split; fake Bot API for tests | `transport/telegram`, `transport/telegram/telegramtest` | done (P1 M2) | 7.1 | [0018](../adr/0018-own-telegram-bot-api-client.md) |
@@ -63,6 +64,8 @@ flowchart BT
     sqlqueue --> sqlitedb
     outboxp["outbox"] --> queue
     outboxp --> transport
+    accessp["access"] --> transport
+    accessp --> sqlitedb
 ```
 
 - `event` and `pdk` are leaves: they import nothing from the project.
