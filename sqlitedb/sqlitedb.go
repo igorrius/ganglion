@@ -19,12 +19,14 @@ import (
 )
 
 // Open opens (creating if needed) the SQLite database at path with WAL,
-// a busy timeout, foreign keys and synchronous=NORMAL. The special path
+// a busy timeout, foreign keys and synchronous=FULL: a commit survives a
+// power loss, which the inbox relies on once Telegram has been told the
+// update is stored (R-DLV-2). The special path
 // ":memory:" gives a private in-memory database on a single connection.
 func Open(ctx context.Context, path string) (*sql.DB, error) {
 	dsn := "file:" + path +
 		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)" +
-		"&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)"
+		"&_pragma=foreign_keys(1)&_pragma=synchronous(FULL)"
 	if path == ":memory:" {
 		dsn = "file::memory:?_pragma=foreign_keys(1)"
 	}

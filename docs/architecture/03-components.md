@@ -12,6 +12,7 @@ flowchart TB
         mqt["MQTT<br/>P2"]
     end
 
+    acl["Access list<br/>strangers dropped, no reply"]
     inbox[("Inbox<br/>idemKey unique")]
     actors["Conversation actors<br/>one goroutine per conversation"]
     loop["Agent loop<br/>model, tools, next step"]
@@ -26,7 +27,8 @@ flowchart TB
     sender["Outbox sender<br/>retries, 429 retry_after"]
     turns[("turns<br/>trace, cost")]
 
-    tgt --> inbox
+    tgt --> acl
+    acl --> inbox
     mqt -.-> inbox
     sched --> inbox
     inbox --> actors

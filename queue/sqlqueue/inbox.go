@@ -189,3 +189,19 @@ func insertOutgoing(ctx context.Context, c *sql.Conn, m event.Outgoing, now time
 	n, err := res.RowsAffected()
 	return n > 0, err
 }
+
+// ReleaseLeases clears the lease of every pending event, so events taken
+// by a process that died are leasable at once. Call it when the one core
+// process that owns this database starts, before its loop runs
+// (ADR-0019). A cleared token makes a late Complete by the old holder
+// return queue.ErrLeaseLost. It returns how many leases it released.
+func (q *Queue) ReleaseLeases(ctx context.Context) (int, error) {
+	res, err := q.db.ExecContext(ctx,
+		`UPDATE inbox SET lease_token = '', lease_until_ms = 0
+		 WHERE status = 'pending' AND lease_token != ''`)
+	if err != nil {
+		return 0, fmt.Errorf("sqlqueue: release leases: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return int(n), err
+}

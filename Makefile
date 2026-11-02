@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check modules modules-tinygo modules-rust modrun modbench bench
+.PHONY: build test lint check live-echo memory modules modules-tinygo modules-rust modrun modbench bench
 
 build:
 	go build -ldflags "-X main.version=$(VERSION)" -o bin/ganglion ./cmd/ganglion
@@ -12,6 +12,22 @@ lint:
 	golangci-lint run
 
 check: lint test build
+
+# The M2 echo bot on the owner's test bot (docs/README.md, owner setup).
+# .env holds TELEGRAM_TEST_BOT_TOKEN and GANGLION_ADMIN; stop any other
+# process polling that bot first, or this one gets 409 and stops polling.
+# A second instance needs its own database: make live-echo LIVE_DB=bin/live2.db
+LIVE_DB ?= bin/live.db
+
+live-echo: build
+	@test -f .env || { echo "live-echo: no .env (see docs/README.md, owner setup)"; exit 1; }
+	@set -a; . ./.env; set +a; \
+	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-echo: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
+	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) ./bin/ganglion --roles core
+
+# RSS of the echo bot, idle and after 1,000 messages through the fake Bot API.
+memory:
+	GANGLION_MEASURE=1 go test -count=1 -run TestMemoryEcho -v ./cmd/ganglion/
 
 # The deye-reader module, built with three toolchains (Go, TinyGo, Rust) to
 # compare them (ADR-0011). TinyGo and Rust are optional, must be on PATH,

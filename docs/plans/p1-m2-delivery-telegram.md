@@ -302,7 +302,7 @@ could collide with old ones and be dropped as duplicates.
   // outbox
   func NewSender(ob queue.Outbox, wake <-chan struct{}, logger *slog.Logger, opts ...Option) *Sender
   // Options: WithClock, WithBackoff(func(attempt int) time.Duration), WithPoll(d) — safety re-check, default 30s
-  func (s *Sender) Register(t transport.Transport)          // by t.Name(); a message for an unknown transport is Fail-ed
+  func (s *Sender) Register(t transport.Transport)          // by t.Name(); a message for an unknown transport waits (as built; the plan first said Fail)
   func (s *Sender) Run(ctx context.Context) error           // until ctx ends
   func DefaultBackoff(attempt int) time.Duration            // 1s·2^(attempt-1), capped at 5m, ±20% jitter
   ```
@@ -396,17 +396,17 @@ could collide with old ones and be dropped as duplicates.
 - The client error text is `telegram: <method>: <code> <description>`. For
   transport errors it is `telegram: <method>: <err with the token replaced
   by "<token>">`. The HTTP client timeout is the poll timeout plus 10 s.
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestCallDecodesOK`, `TestCallMapsAPIError` (400 with a description),
     `TestCallReadsRetryAfter` (429, `parameters.retry_after: 7` → 7 s).
   - `TestErrorsNeverContainToken`: an unreachable base URL, a 500 and a
     cancelled context; none of the error strings contains the token.
   - Fake: `TestFakeOffsetConfirms`, `TestFakeLongPollWakesOnMessage`,
     `TestFakeSecondPollerConflicts`.
-- [ ] **Step 2: Run** `go test ./transport/telegram/...` — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./transport/telegram/...` — PASS.
-- [ ] **Step 5: Commit** `transport/telegram: own Bot API client and a fake Bot API`.
+- [x] **Step 2: Run** `go test ./transport/telegram/...` — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./transport/telegram/...` — PASS.
+- [x] **Step 5: Commit** `transport/telegram: own Bot API client and a fake Bot API`.
 
 ### Task 5: Telegram transport — polling, conversation keys, send, split, 409 (2.3, part 2)
 
@@ -461,7 +461,7 @@ could collide with old ones and be dropped as duplicates.
   newline in the final quarter of the chunk if there is one, else at the
   last space, else hard. Part `i` gets `IdemKey + ":p" + i`. The function
   is deterministic.
-- [ ] **Step 1: Write failing tests** (against `telegramtest`):
+- [x] **Step 1: Write failing tests** (against `telegramtest`):
   - `TestRunPutsMessagesInOrder`.
   - `TestOffsetConfirmedOnlyAfterSink`: a sink that fails on the 2nd
     update; `Confirmed()` stays below it, and after the sink recovers the
@@ -479,10 +479,15 @@ could collide with old ones and be dropped as duplicates.
   - `TestPartsSplit`: 10,000 characters; an emoji at the boundary is not
     cut in half; parts rejoin to the original text; output is stable
     across calls.
-- [ ] **Step 2: Run** `go test ./transport/telegram/` — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./transport/telegram/` — PASS.
-- [ ] **Step 5: Commit** `transport/telegram: long polling with offset after Put, topics, silent, 409 stop`.
+  As built: a space also counts only in the final quarter, so a text
+  with one early space is cut hard instead of into a tiny part. `getMe`
+  errors other than 401 and 409 are retried with backoff, so a network
+  outage at start does not stop the transport. The fake gained
+  `Calls(method)` and `Incoming.IsBot`/`Caption` for these tests.
+- [x] **Step 2: Run** `go test ./transport/telegram/` — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./transport/telegram/` — PASS.
+- [x] **Step 5: Commit** `transport/telegram: long polling with offset after Put, topics, silent, 409 stop`.
 
 ### Task 6: access list (2.4)
 
@@ -513,17 +518,17 @@ could collide with old ones and be dropped as duplicates.
     offset and the stranger gets no reply.
 
   A malformed payload is dropped the same way.
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestAllowAndRole`.
   - `TestUnknownRoleRejected`.
   - `TestFilterPassesKnown`.
   - `TestFilterDropsStranger`: `next` is not called; nil is returned; the
     log record has no text field.
   - `TestFilterPassesNonMessages`.
-- [ ] **Step 2: Run** `go test ./access/` — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./access/` — PASS.
-- [ ] **Step 5: Commit** `access: allowed table with roles and a sink filter for strangers`.
+- [x] **Step 2: Run** `go test ./access/` — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./access/` — PASS.
+- [x] **Step 5: Commit** `access: allowed table with roles and a sink filter for strangers`.
 
 ### Task 7: core loop, echo bot wiring and the crash harness (2.5)
 
@@ -591,7 +596,7 @@ could collide with old ones and be dropped as duplicates.
      - the total number of duplicate replies is at most K;
      - replies in each chat are in the same order as the messages;
      - `Confirmed()` reached the last update.
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `core`: `TestLoopEchoes` (in-memory sqlqueue on `:memory:`);
     `TestHandlerErrorLeavesLeaseToExpire`;
     `TestLoopWaitsOnReadyNotBusy` (counts `Lease` calls over a fake
@@ -602,12 +607,31 @@ could collide with old ones and be dropped as duplicates.
     variable, not the file content); `TestConfigTokenBothFormsRejected`; `TestConflictSendsOneAlert` (the fake
     has a webhook set; the admin gets exactly one alert and polling stops).
   - The crash harness as above.
-- [ ] **Step 2: Run** `go test ./core/ ./node/ ./cmd/ganglion/` — FAIL.
-- [ ] **Step 3: Implement**; `cmd/ganglion/main.go` passes
+  As built:
+  - The harness found that a process killed inside a turn left its lease
+    for 10 minutes, so the conversation stayed silent after the restart.
+    The core now releases leases at start
+    ([ADR-0019](../adr/0019-release-leases-at-core-start.md), R-DLV-3);
+    `TestRestartReleasesDeadLeases` covers it.
+  - The alert's `IdemKey` ends with the admin's principal, so each admin
+    gets one: `alert:telegram-conflict:<start ms>:<principal>`.
+  - `Echo` completes a message whose payload cannot be read with no reply,
+    instead of failing the turn forever.
+  - The harness sends a message every `K × 1.25 ms`, so the messages arrive
+    during the kills rather than after them.
+  - After the whole-branch review: the core locks `<db>.lock` (ADR-0019);
+    `sqlitedb` fsyncs every commit (`synchronous=FULL`, R-DLV-3) so a
+    confirmed update survives a power loss; the transport accepts only
+    `^[1-9][0-9]*:[A-Za-z0-9_-]+$` tokens and the config trims whitespace,
+    because an escaped token in a URL error escapes redaction; the sender
+    keeps messages for an unregistered transport pending instead of
+    failing them, so a start without a token loses nothing.
+- [x] **Step 2: Run** `go test ./core/ ./node/ ./cmd/ganglion/` — FAIL.
+- [x] **Step 3: Implement**; `cmd/ganglion/main.go` passes
   `node.ConfigFromEnv(os.Getenv, os.ReadFile)`.
-- [ ] **Step 4: Run** `go test -race ./...` — PASS, including the harness
+- [x] **Step 4: Run** `go test -race ./...` — PASS, including the harness
   with 40 kills. Run it once locally with `GANGLION_CRASH_ITERS=500`.
-- [ ] **Step 5: Commit** `core, node: echo bot on the queue and a kill -9 crash harness`.
+- [x] **Step 5: Commit** `core, node: echo bot on the queue and a kill -9 crash harness`.
 
 ### Task 8: live run on the test bot, memory, docs (2.3 manual run; closes M2)
 
@@ -617,26 +641,50 @@ could collide with old ones and be dropped as duplicates.
   wired differently from the diagram), `docs/README.md`,
   `docs/plans/p1-all-in-one.md` (mark M2 done)
 
-- [ ] **Step 1: `make live-echo`.** It loads `.env` and runs
+- [x] **Step 1: `make live-echo`.** It loads `.env` and runs
   `TELEGRAM_BOT_TOKEN=$TELEGRAM_TEST_BOT_TOKEN GANGLION_DB=bin/live.db ./bin/ganglion --roles core`.
   It needs the [owner setup](../README.md#owner-setup-for-live-checks);
   without it, the step is reported as blocked, not faked.
-- [ ] **Step 2: Manual checks on the test bot.**
+- [x] **Step 2: Manual checks on the test bot.**
   1. The admin's message is echoed.
   2. A message in a forum topic is echoed into the same topic.
   3. A message from a second, unlisted account gets no reply and leaves a
      warn log without the text.
-  4. Start a second instance: the newer poll wins, and the instance that
-     got 409 stops polling and sends one alert.
+  4. Start a second instance with its own database
+     (`make live-echo LIVE_DB=bin/live2.db`; the same file is refused by the
+     lock of ADR-0019): the newer poll wins, and the instance that got 409
+     stops polling and sends one alert.
   5. Kill and restart during a burst of 20 messages: none is lost.
-- [ ] **Step 3: Measure memory.** Record the RSS of the echo bot when idle
+
+  Run 2026-11-02 on a dedicated test bot, @ganglion_test_bot (the
+  development bot has another project's webhook; our run met it with
+  `409`, stopped polling and sent one alert per start, which is check 4's
+  path against a webhook):
+  1. Passed: 5 messages, 5 echoes.
+  2. Not run live: no forum group was at hand. Covered against the fake by
+     `TestTopicMessageGetsTopicConv` and `TestSendSilentToTopic`.
+  3. Not run live: no second account. Covered by `TestFilterDropsStranger`
+     and `TestEchoOverTelegram` (a stranger gets no reply, the log has no
+     text).
+  4. Passed: the second instance took the poll; the first got
+     `409 Conflict: terminated by other getUpdates request`, stopped
+     polling, kept running and sent one alert; both stopped cleanly on
+     SIGTERM.
+  5. Passed in the weaker form: 21 messages while the process was killed
+     with `kill -9` and restarted; 21 events, 21 replies in the same order,
+     no event leased twice, no reply resent, no lease left behind. A kill
+     by hand does not land inside a millisecond turn; the crash harness
+     (500 kills) covers that.
+- [x] **Step 3: Measure memory.** Record the RSS of the echo bot when idle
   and after 1,000 messages through the fake, plus the binary size. It must
   stay well inside 128 MB (principle 8).
-- [ ] **Step 4: Run** `make check`.
-- [ ] **Step 5: Update the docs.**
+  Measured 2026-11-02 with `make memory` (linux/amd64, Go 1.26.3): binary
+  15.4 MB; RSS idle 14.1 MB; after 1,000 messages 21.0 MB, peak 21.0 MB.
+- [x] **Step 4: Run** `make check`.
+- [x] **Step 5: Update the docs.**
   - Code map: `queue/sqlqueue`, `outbox`, `transport/telegram`,
     `transport/telegram/telegramtest`, `access`, `core`; update the
     dependency diagram.
   - Phase plan: mark M2 done with the measured numbers.
   - `docs/README.md`: "Where we are".
-- [ ] **Step 6: Commit** `docs: M2 delivery and Telegram done`.
+- [x] **Step 6: Commit** `docs: M2 delivery and Telegram done`.

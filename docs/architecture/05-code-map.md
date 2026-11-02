@@ -9,17 +9,19 @@ interfaces only; **planned** — not in the repository yet.
 
 | Concept | Package | Status | Spec | ADR |
 |---|---|---|---|---|
-| Binary, flags, signals | `cmd/ganglion` | done (P0) | 5.1 | [0004](../adr/0004-one-binary-with-roles.md) |
-| Roles and node assembly | `node` | done: role parsing; `Run` is a stub until P1 | 5.1 | [0004](../adr/0004-one-binary-with-roles.md) |
+| Binary, flags, signals; the kill -9 crash harness | `cmd/ganglion` | done (P0); crash harness (P1 M2) | 5.1 | [0004](../adr/0004-one-binary-with-roles.md) |
+| Roles and node assembly; config from the environment until D-3 | `node` | done: core role runs the M2 echo bot (database lock, queue, loop, sender, Telegram behind the access list, 409 alert, daily prune); edge and worker are stubs | 5.1 | [0004](../adr/0004-one-binary-with-roles.md) |
 | `Event`, `Outgoing`, TTL expiry, ULID ids, the neutral `Message` payload | `event` | done | 6, 9.1 | — |
 | Transport interface, send errors (`ErrPermanent`, `RetryAfterError`), `Parter` | `transport` | interface | 6, 7.1 | [0017](../adr/0017-extension-points.md) |
 | Inbox / outbox: `Queue`, `Outbox` | `queue` | interface | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 | Model providers | `provider` | interface | 7.4 | [0007](../adr/0007-openai-compatible-first-provider.md), [0009](../adr/0009-claude-subscription-only-via-cli-worker.md) |
 | Model router | `router` | interface | 7.3 | — |
-| Store (history, turns, cron_runs, allowed) | — | planned (P1) | 6 | — |
+| Store (history, turns, cron_runs) | — | planned (P1) | 6 | — |
+| Access list: `allowed` table with roles; sink filter that drops strangers | `access` | done (P1 M2) | 7.8 | — |
 | SQLite queue: inbox (ordered leases, atomic `Complete`), outbox (heads per conversation, retries, parts), conversation state, prune | `queue/sqlqueue` | done (P1 M2) | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 | Outbox sender: order per conversation, backoff, `retry_after` pause, resumable parts | `outbox` | done (P1 M2) | 7.1 | — |
-| Telegram transport | — | planned (P1) | 7.1 | — |
+| Telegram transport: own Bot API client, long polling (offset after the sink), conversation keys, send, split; fake Bot API for tests | `transport/telegram`, `transport/telegram/telegramtest` | done (P1 M2) | 7.1 | [0018](../adr/0018-own-telegram-bot-api-client.md) |
+| Turn loop: lease → handler → atomic complete; echo handler of M2 | `core` | done (P1 M2); the agent replaces `Echo` in M3 | 7.1, 7.2 | [0019](../adr/0019-release-leases-at-core-start.md) |
 | Agent loop and actors | — | planned (P1) | 7.2 | — |
 | Policies | — | planned (P1) | 7.6 | — |
 | Memory | — | planned (P1) | 7.7 | — |
@@ -49,6 +51,17 @@ flowchart BT
     router["router"]
     node["node"]
     cmd["cmd/ganglion"] --> node
+    corep["core"] --> queue
+    corep --> event
+    tgtest["transport/telegram/telegramtest"]
+    tgp -. tests .-> tgtest
+    cmd -. tests .-> tgtest
+    node --> corep
+    node --> sqlqueue
+    node --> outboxp
+    node --> accessp
+    node --> tgp["transport/telegram"]
+    tgp --> transport
     pdk["pdk"]
     deye["modules/deye"] --> pdk
     runner["runner"] --> pdk
@@ -63,6 +76,8 @@ flowchart BT
     sqlqueue --> sqlitedb
     outboxp["outbox"] --> queue
     outboxp --> transport
+    accessp["access"] --> transport
+    accessp --> sqlitedb
 ```
 
 - `event` and `pdk` are leaves: they import nothing from the project.

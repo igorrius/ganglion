@@ -110,6 +110,14 @@ peak RSS 17.5 MiB for the whole process, ~4,400 writes/s, no change lost
 
 Step-by-step plan: [p1-m2-delivery-telegram.md](p1-m2-delivery-telegram.md).
 
+**Done 2026-11-02.** Crash harness: 500 `kill -9` with every message
+answered, in order, at most one duplicate per kill. Echo bot memory: binary
+15.4 MB, RSS 14.1 MB idle and 21.0 MB after 1,000 messages. Live run on the
+test bot: echo, `409` from a webhook and from a second poller, kill and
+restart. Decision on the way:
+[ADR-0019](../adr/0019-release-leases-at-core-start.md) (leases released at
+core start, database lock).
+
 | Task | Done when |
 |---|---|
 | 2.1 SQLite `queue.Queue`: inbox with unique `idemKey`, leases, `Complete` writing replies, state and the processed mark in one transaction (R-DLV-1, 3, 4, 7) | Duplicate put is a no-op; an expired lease is redelivered; `Complete` is atomic |

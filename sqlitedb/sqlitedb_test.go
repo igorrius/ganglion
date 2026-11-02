@@ -30,6 +30,12 @@ func TestOpenSetsWAL(t *testing.T) {
 	if err := db.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk); err != nil || fk != 1 {
 		t.Fatalf("foreign_keys = %d (%v), want 1", fk, err)
 	}
+	// FULL: a commit survives a power loss, not only a process kill. A
+	// message confirmed to Telegram must not roll back (R-DLV-2).
+	var sync int
+	if err := db.QueryRowContext(ctx, "PRAGMA synchronous").Scan(&sync); err != nil || sync != 2 {
+		t.Fatalf("synchronous = %d (%v), want 2 (FULL)", sync, err)
+	}
 }
 
 func TestMigrateAppliesInOrderOnce(t *testing.T) {

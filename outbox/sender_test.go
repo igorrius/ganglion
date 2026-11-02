@@ -331,7 +331,7 @@ func TestPermanentErrorFails(t *testing.T) {
 	}
 }
 
-func TestUnknownTransportFails(t *testing.T) {
+func TestUnknownTransportWaits(t *testing.T) {
 	e := newEnv(t)
 	other := out("telegram:a", "x1")
 	other.Transport = "carrier-pigeon"
@@ -339,9 +339,12 @@ func TestUnknownTransportFails(t *testing.T) {
 	tr := newFake(e.clock, nil)
 	e.start(t, tr)
 	e.runUntil(t, t0.Add(time.Minute), func() bool { return len(tr.delivered()) == 1 })
+	// One more idle cycle: the unknown transport's message must still wait.
+	e.clock.advance(e.clock.wait(t))
+	e.clock.wait(t)
 	ps, _, err := e.q.Due(context.Background(), 10)
-	if err != nil || len(ps) != 0 {
-		t.Fatalf("still due: %+v, %v", ps, err)
+	if err != nil || len(ps) != 1 || ps[0].Msg.IdemKey != "x1" || ps[0].Attempts != 0 {
+		t.Fatalf("due = %+v, %v; want x1 still pending, untouched", ps, err)
 	}
 }
 

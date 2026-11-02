@@ -483,3 +483,30 @@ func TestConcurrentLeasesNeverShareAnEvent(t *testing.T) {
 		t.Errorf("done events = %d, want %d", done, n)
 	}
 }
+
+func TestReleaseLeasesAfterCrash(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "queue.db")
+	clock := &fakeClock{now: t0}
+	f := openAt(t, path, clock)
+	put(t, f, msg("telegram:1", "k1"), msg("telegram:1", "k2"), msg("telegram:2", "k3"))
+	ghost := lease(t, f)
+	if err := f.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	f = openAt(t, path, clock)
+	ctx := context.Background()
+	n, err := f.q.ReleaseLeases(ctx)
+	if err != nil || n != 1 {
+		t.Fatalf("ReleaseLeases = %d, %v; want 1", n, err)
+	}
+	if l := lease(t, f); l.Event.ID != ghost.Event.ID {
+		t.Fatalf("after release got %s, want the released %s at once", l.Event.IdemKey, ghost.Event.IdemKey)
+	}
+	if err := f.q.Complete(ctx, ghost, nil, queue.StateUpdate{}); !errors.Is(err, queue.ErrLeaseLost) {
+		t.Fatalf("the dead holder's Complete = %v, want ErrLeaseLost", err)
+	}
+	if n, err := f.q.ReleaseLeases(ctx); err != nil || n != 1 {
+		t.Fatalf("second ReleaseLeases = %d, %v; want 1 (the new lease)", n, err)
+	}
+}

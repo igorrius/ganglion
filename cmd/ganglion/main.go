@@ -54,6 +54,10 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	cfg, err := node.ConfigFromEnv(os.Getenv, os.ReadFile)
+	if err != nil {
+		return err
+	}
 	logger := slog.New(slog.NewTextHandler(out, nil)).With("version", version)
-	return node.Run(ctx, roles, logger)
+	return node.Run(ctx, roles, cfg, logger)
 }

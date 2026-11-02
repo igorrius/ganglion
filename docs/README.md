@@ -24,19 +24,24 @@ Start here when coming back to the project.
     ([ADR-0014](adr/0014-state-cells.md)).
   - 0.7 home internet outlasts the inverter; DeyeCloud quota is ample
     ([research](research/2026-11-01-outage-connectivity-and-deye-limits.md)).
-- **P1 progress:** M1 state cells done — `cells`, `cells/sqlstore`,
-  `cells/virtual`, `sqlitedb` ([plan](plans/p1-m1-cells.md)).
-- **Next:** M2 delivery and Telegram, then the agent (M3) — agent first
-  after its foundations ([ADR-0015](adr/0015-agent-first-p1.md)).
-  - M2 has its step-by-step plan ([p1-m2-delivery-telegram.md](plans/p1-m2-delivery-telegram.md));
-    D-2 is decided: our own Bot API client
-    ([ADR-0018](adr/0018-own-telegram-bot-api-client.md)). Done: task 1
-    (shared types), task 2 (SQLite inbox, `queue/sqlqueue`), task 3 (outbox
-    and its sender, `outbox`). Next: task 4, our Bot API client and a fake
-    Bot API.
-  - Live checks need a separate test bot: `TELEGRAM_TEST_BOT_TOKEN` in
-    `.env`. Everything before that runs against a fake Bot API in tests.
-    See [owner setup](#owner-setup-for-live-checks) below.
+- **P1 progress:**
+  - M1 state cells done — `cells`, `cells/sqlstore`, `cells/virtual`,
+    `sqlitedb` ([plan](plans/p1-m1-cells.md)).
+  - M2 delivery and Telegram done — `queue/sqlqueue`, `outbox`,
+    `transport/telegram`, `access`, `core`, the core role in `node`
+    ([plan](plans/p1-m2-delivery-telegram.md)). An echo bot that survives
+    500 `kill -9` without losing a message; 21 MB RSS; run live on the
+    test bot. Decisions: [ADR-0018](adr/0018-own-telegram-bot-api-client.md)
+    (own Bot API client), [ADR-0019](adr/0019-release-leases-at-core-start.md)
+    (leases released at core start, database lock).
+- **Next:** the agent (M3), first after its foundations
+  ([ADR-0015](adr/0015-agent-first-p1.md)); it replaces `core.Echo`.
+  - Before M3's handler: a cap on attempts for a turn that always fails
+    (today it is retried every 10 minutes forever).
+  - Deferred minors from the M2 review: record a send's outcome with
+    `context.WithoutCancel` on shutdown; keep the seeded admin's name and
+    plan admin removal; do not end the node when the `409` alert cannot be
+    stored.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.
@@ -47,10 +52,10 @@ What the owner sets up by hand before the first live run on the test bot
 (M2 task 8 of the [M2 plan](plans/p1-m2-delivery-telegram.md)). Nothing here
 is needed for tests: they run against a fake Bot API.
 
-- **Test bot:** the owner's existing development bot, which local
-  services share; it uses long polling, no webhook, and one process at a
-  time (confirmed 2026-11-02). Before a live run, stop any other local
-  service polling it, or the run gets `409 Conflict` and stops (R-DLV-8).
+- **Test bot:** @ganglion_test_bot, used only by ganglion (since
+  2026-11-02; the development bot has another project's webhook). Its
+  token is `TELEGRAM_TEST_BOT_TOKEN`. Two runs at once get `409 Conflict`,
+  and the older one stops polling (R-DLV-8).
 - **Your Telegram user id:** needed for the admin entry in the access list
   (`GANGLION_ADMIN=telegram:user:<id>`); strangers get no reply. Any
   "user info" bot shows it, or the `from.id` of your message in

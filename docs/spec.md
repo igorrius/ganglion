@@ -242,7 +242,12 @@ Guarantee: **at-least-once + idempotency.**
   `idemKey`; duplicates are rejected by a unique index.
 - **R-DLV-2.** The Telegram offset advances only after the write to `inbox`.
 - **R-DLV-3.** An actor takes an event under a lease (10 min by default). If
-  the process dies, the lease expires and the event is processed again.
+  the process dies, the event is processed again: a restarted core
+  releases the leases left in its database at start, and otherwise the
+  lease expires. One core process owns a database file; a lock file stops
+  a second one ([ADR-0019](adr/0019-release-leases-at-core-start.md)).
+  Commits are fsynced (`synchronous=FULL`), so an event confirmed to the
+  channel survives a power loss.
 - **R-DLV-4.** The agent's reply, the new session state and the "incoming
   event processed" mark are written in one transaction (outbox pattern).
 - **R-DLV-5.** A separate sender delivers the outbox with retries, honours
