@@ -31,7 +31,9 @@ type Incoming struct {
 	ThreadID int64 // forum topic; 0 for none
 	UserID   int64
 	Name     string
-	Text     string
+	Text     string // empty: a message without text, such as a sticker
+	Caption  string // caption of a photo or document
+	IsBot    bool   // the sender is a bot
 }
 
 // Outgoing is a message the bot sent.
@@ -65,6 +67,7 @@ type Server struct {
 	kick       chan struct{}            // closed to end the getUpdates call in flight
 	notify     chan struct{}            // closed and replaced when a message arrives
 	threads    map[int64]map[int64]bool // chat → known forum topics
+	calls      map[string]int
 }
 
 // NewServer starts a fake Bot API for token (<bot_id>:<secret>). It is
@@ -84,6 +87,7 @@ func NewServer(t testing.TB, token string) *Server {
 		fail:       map[string]failure{},
 		notify:     make(chan struct{}),
 		threads:    map[int64]map[int64]bool{},
+		calls:      map[string]int{},
 	}
 	s.ts = httptest.NewServer(http.HandlerFunc(s.serve))
 	t.Cleanup(func() {
@@ -114,8 +118,13 @@ func (s *Server) AddMessage(m Incoming) int64 {
 		"message_id": s.nextMsg,
 		"date":       time.Now().Unix(),
 		"chat":       map[string]any{"id": m.ChatID, "type": chatType, "is_forum": m.ThreadID != 0},
-		"from":       map[string]any{"id": m.UserID, "is_bot": false, "first_name": name},
-		"text":       m.Text,
+		"from":       map[string]any{"id": m.UserID, "is_bot": m.IsBot, "first_name": name},
+	}
+	if m.Text != "" {
+		msg["text"] = m.Text
+	}
+	if m.Caption != "" {
+		msg["caption"] = m.Caption
 	}
 	if m.ThreadID != 0 {
 		msg["message_thread_id"] = m.ThreadID
@@ -143,6 +152,13 @@ func (s *Server) Confirmed() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.confirmed
+}
+
+// Calls returns how many times method was called with the right token.
+func (s *Server) Calls(method string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls[method]
 }
 
 // FailNext makes the next call of method fail with code; retryAfter > 0
@@ -180,6 +196,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
+	s.calls[method]++
 	if f, ok := s.fail[method]; ok {
 		delete(s.fail, method)
 		s.mu.Unlock()

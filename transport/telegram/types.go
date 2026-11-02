@@ -14,6 +14,8 @@ type update struct {
 type message struct {
 	MessageID       int64  `json:"message_id"`
 	MessageThreadID int64  `json:"message_thread_id,omitempty"`
+	IsTopicMessage  bool   `json:"is_topic_message,omitempty"`
+	Date            int64  `json:"date"` // Unix seconds
 	Chat            chat   `json:"chat"`
 	From            *user  `json:"from,omitempty"`
 	Text            string `json:"text,omitempty"`

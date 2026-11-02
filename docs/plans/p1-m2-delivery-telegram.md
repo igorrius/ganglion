@@ -461,7 +461,7 @@ could collide with old ones and be dropped as duplicates.
   newline in the final quarter of the chunk if there is one, else at the
   last space, else hard. Part `i` gets `IdemKey + ":p" + i`. The function
   is deterministic.
-- [ ] **Step 1: Write failing tests** (against `telegramtest`):
+- [x] **Step 1: Write failing tests** (against `telegramtest`):
   - `TestRunPutsMessagesInOrder`.
   - `TestOffsetConfirmedOnlyAfterSink`: a sink that fails on the 2nd
     update; `Confirmed()` stays below it, and after the sink recovers the
@@ -479,10 +479,15 @@ could collide with old ones and be dropped as duplicates.
   - `TestPartsSplit`: 10,000 characters; an emoji at the boundary is not
     cut in half; parts rejoin to the original text; output is stable
     across calls.
-- [ ] **Step 2: Run** `go test ./transport/telegram/` — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./transport/telegram/` — PASS.
-- [ ] **Step 5: Commit** `transport/telegram: long polling with offset after Put, topics, silent, 409 stop`.
+  As built: a space also counts only in the final quarter, so a text
+  with one early space is cut hard instead of into a tiny part. `getMe`
+  errors other than 401 and 409 are retried with backoff, so a network
+  outage at start does not stop the transport. The fake gained
+  `Calls(method)` and `Incoming.IsBot`/`Caption` for these tests.
+- [x] **Step 2: Run** `go test ./transport/telegram/` — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./transport/telegram/` — PASS.
+- [x] **Step 5: Commit** `transport/telegram: long polling with offset after Put, topics, silent, 409 stop`.
 
 ### Task 6: access list (2.4)
 

@@ -32,8 +32,9 @@ Start here when coming back to the project.
     D-2 is decided: our own Bot API client
     ([ADR-0018](adr/0018-own-telegram-bot-api-client.md)). Done: task 1
     (shared types), task 2 (SQLite inbox, `queue/sqlqueue`), task 3 (outbox
-    and its sender, `outbox`), task 4 (Bot API client and fake Bot API,
-    `transport/telegram`). Next: task 5, the Telegram transport.
+    and its sender, `outbox`), task 4 (Bot API client and fake Bot API),
+    task 5 (Telegram transport, `transport/telegram`). Next: task 6, the
+    access list.
   - Live checks need a separate test bot: `TELEGRAM_TEST_BOT_TOKEN` in
     `.env`. Everything before that runs against a fake Bot API in tests.
     See [owner setup](#owner-setup-for-live-checks) below.
