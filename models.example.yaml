@@ -14,6 +14,6 @@ providers:
   # - {name: openrouter, type: openai, base_url: https://openrouter.ai/api/v1, key_env: OPENROUTER_API_KEY}
 
 models:
+  # ADR-0022: Haiku first (price 0), DeepSeek as the fallback and for tools.
   - {provider: claude, name: haiku, tier: cheap, context: 200000}
-  - {provider: claude, name: sonnet, tier: smart, context: 200000}
-  # - {provider: openrouter, name: deepseek/deepseek-chat, tier: cheap, tools: true, context: 64000, price_in: 0.27, price_out: 1.1}
+  # - {provider: openrouter, name: deepseek/deepseek-v4.1-flash, tier: cheap, tools: true, context: 1048576, price_in: 0.045, price_out: 0.5}

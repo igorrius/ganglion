@@ -800,8 +800,9 @@ fallback until the gate is passed.
 | Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Not chosen; P0 numbers (ADR-0011) favour Rust or TinyGo over standard Go | Start of P3: how reliably the model writes and fixes each, plus the P0 numbers |
 | Tuya access | Cloud · LAN | Cloud: the internet stays up during outages (0.7); LAN later with a home runner | P1, when the plugs are linked |
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
-| History and tool format | Own · Anthropic Messages · OpenAI | Neutral own format + MCP for tools | Two providers in P1 |
-| First API provider | Anthropic · Gemini · OpenAI-compatible | OpenAI-compatible | Price and quality of a cheap model on real turns |
+| History and tool format | Own · Anthropic Messages · OpenAI | Decided: neutral own format + MCP tool schemas ([ADR-0020](adr/0020-neutral-history-as-conversation-state.md)) | — |
+| First API provider | Anthropic · Gemini · OpenAI-compatible | Decided for development: the operator's choice ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)); Haiku via the claude CLI first, DeepSeek via OpenRouter as fallback ([ADR-0022](adr/0022-haiku-first-during-development.md)) | Revisit with more users or stronger tasks |
+| Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles (conversation, writing tools, analysis) | Not chosen | When a task needs a stronger model than the cheap tier |
 | Where nodes live | Cloud hosting · Pi · home PC | Edge in the cloud or on a Pi, claude CLI worker on the owner's PC | The P1 monthly bill |
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
 | Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Not chosen | What works in a container and on a Pi |
