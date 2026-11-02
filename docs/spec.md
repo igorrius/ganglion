@@ -864,10 +864,20 @@ Reviewed at each gate.
   admin (the same idea as node enrolment with a one-time token, 9.3).
 - An encrypted secret store on the node's key, behind the secret source of
   D-3; secrets set and rotated without a restart.
-- A narrow "answer model" as a tool of the agent core: a small model that
-  answers only constrained questions (yes/no, a number on a short scale,
-  and one more form; the owner will add the model's name and that form
-  once found again). It runs only when such a model is in the catalogue
-  and the operator allows it. Likely uses: the router's classifier
-  (layer 4, P2), a cheap pre-check before the reviewer model (7.6), quick
-  checks inside skills. Noted 2026-11-02.
+- A decision model as a tool of the agent core. Decision models (also
+  called "System One" models) answer typed questions without generating
+  text: yes/no, a choice, a rating on a short scale, with a confidence.
+  The owner has one in mind and will confirm which. Candidates seen in
+  release trackers in October 2026 (not checked against vendor pages):
+  - Strands Decider 2B (AWS, open);
+  - Jev (TypeSafe);
+  - the open Decision 3.0 family (d3-edge, 0.59B);
+  - Liquid AI's d1.
+
+  It runs only when such a model is in the catalogue and the operator
+  allows it. Likely uses:
+  - the router's classifier (layer 4, P2);
+  - a cheap pre-check before the reviewer model (7.6);
+  - quick checks inside skills.
+
+  Noted 2026-11-02.
