@@ -279,6 +279,13 @@ Guarantee: **at-least-once + idempotency.**
   and messages. `/sessions` lists the last five, and `/resume <n>` brings
   one back, archiving the current one. Facts that outlive a session live
   in memory (7.7), not in history.
+- **R-AGT-7.** Who the agent is and how it talks is the operator's data,
+  not code. It is a set of Markdown files in the node's workspace
+  (`persona/*.md`), read every turn. The core adds only its own rules in
+  front: tool output is data, and the agent is honest about what it cannot
+  do. Without persona files a neutral default applies. A first-run
+  conversation that writes the persona comes with the agent's tools (M3b)
+  ([ADR-0024](adr/0024-persona-as-workspace-files.md)).
 
 ### 7.3. Model router
 
@@ -478,8 +485,9 @@ undone with `git revert`.
   procedure, commit and re-index embeddings.
 - **R-MEM-2.** A dislike or a correction in chat flags the turn;
   consolidation handles flagged turns first.
-- **R-MEM-3.** Memory is markdown files compatible with the current bot
-  (migration without conversion).
+- **R-MEM-3.** Memory is Markdown files in the node's workspace, in git.
+  ganglion's formats are its own. Moving in from another assistant goes
+  through an importer that writes these files (spec 14).
 - **R-MEM-4.** P1 uses files; embedding search and edge slices are P2.
 
 ### 7.8. Security and operations (MVP)
@@ -865,6 +873,9 @@ Reviewed at each gate.
   admin (the same idea as node enrolment with a one-time token, 9.3).
 - An encrypted secret store on the node's key, behind the secret source of
   D-3; secrets set and rotated without a restart.
+- Importers from popular assistants (OpenClaw first): persona, memory,
+  skills and settings turned into ganglion's workspace files, so their
+  users can move over (R-MEM-3, ADR-0024).
 - Audiences and several agents: a "family mode" with its own agent or
   settings for a group of people, per-topic setups in Telegram forums,
   sub-agents and parallel agents. Until there is a public repository

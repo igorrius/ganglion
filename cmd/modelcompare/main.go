@@ -59,7 +59,7 @@ type Result struct {
 func run(ctx context.Context, p provider.Provider, m router.Model, convs []Conversation, timeout time.Duration) Result {
 	res := Result{Model: m}
 	for _, c := range convs {
-		history := []provider.Message{{Role: "system", Content: agent.DefaultSystemPrompt}}
+		history := []provider.Message{{Role: "system", Content: agent.CoreRules + "\n\n" + agent.DefaultPersona}}
 		var answers []Answer
 		for _, turn := range c.Turns {
 			history = append(history, provider.Message{Role: "user", Content: "Igor: " + turn})

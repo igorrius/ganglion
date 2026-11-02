@@ -107,21 +107,20 @@ func TestConfigAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := cfg.Agent
-	if a.Catalog != nil || a.DailyBudgetUSD != 1.0 || a.TZ == nil || a.TZ.String() != "Europe/Kyiv" || a.SystemPrompt != "" {
+	if a.Catalog != nil || a.DailyBudgetUSD != 1.0 || a.TZ == nil || a.TZ.String() != "Europe/Kyiv" || a.Workspace != "workspace" {
 		t.Fatalf("agent defaults %+v", a)
 	}
 	cfg, err = ConfigFromEnv(env(map[string]string{
-		"GANGLION_MODELS_FILE":        "/etc/ganglion/models.yaml",
-		"GANGLION_SYSTEM_PROMPT_FILE": "/etc/ganglion/prompt.txt",
-		"OPENROUTER_API_KEY_FILE":     "/run/secrets/or",
-		"GANGLION_DAILY_BUDGET_USD":   "2.5",
-		"GANGLION_DAILY_TURNS":        "100",
-		"GANGLION_DAILY_TOKENS":       "500000",
-		"GANGLION_SESSION_IDLE":       "4h",
-		"GANGLION_TZ":                 "UTC",
+		"GANGLION_MODELS_FILE":      "/etc/ganglion/models.yaml",
+		"GANGLION_WORKSPACE":        "/var/lib/ganglion",
+		"OPENROUTER_API_KEY_FILE":   "/run/secrets/or",
+		"GANGLION_DAILY_BUDGET_USD": "2.5",
+		"GANGLION_DAILY_TURNS":      "100",
+		"GANGLION_DAILY_TOKENS":     "500000",
+		"GANGLION_SESSION_IDLE":     "4h",
+		"GANGLION_TZ":               "UTC",
 	}), files(map[string]string{
 		"/etc/ganglion/models.yaml": models,
-		"/etc/ganglion/prompt.txt":  "Be kind.\n",
 		"/run/secrets/or":           "sk-or-secret\n",
 	}))
 	if err != nil {
@@ -129,7 +128,7 @@ func TestConfigAgent(t *testing.T) {
 	}
 	a = cfg.Agent
 	if a.Catalog == nil || len(a.Catalog.Models) != 2 || a.Keys["openrouter"] != "sk-or-secret" || a.Keys["claude"] != "" ||
-		a.SystemPrompt != "Be kind." || a.DailyBudgetUSD != 2.5 || a.DailyTurns != 100 || a.DailyTokens != 500000 ||
+		a.Workspace != "/var/lib/ganglion" || a.DailyBudgetUSD != 2.5 || a.DailyTurns != 100 || a.DailyTokens != 500000 ||
 		a.SessionIdle.Hours() != 4 || a.TZ.String() != "UTC" {
 		t.Fatalf("agent config %+v", a)
 	}

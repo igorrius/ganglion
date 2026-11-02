@@ -18,7 +18,6 @@ import (
 // Config tunes the agent. Zero values take the defaults; a negative daily
 // limit turns that limit off.
 type Config struct {
-	SystemPrompt  string        // default DefaultSystemPrompt
 	MaxSteps      int           // model calls per turn; default 8
 	TurnTimeout   time.Duration // default 2m
 	CallTimeout   time.Duration // per model call; default 60s
@@ -40,9 +39,6 @@ func (c Config) withDefaults() Config {
 		if *v == 0 {
 			*v = d
 		}
-	}
-	if c.SystemPrompt == "" {
-		c.SystemPrompt = DefaultSystemPrompt
 	}
 	def(&c.MaxSteps, 8)
 	defD(&c.TurnTimeout, 2*time.Minute)
@@ -72,6 +68,9 @@ type Deps struct {
 	AlertConv func(principal string) (transport, conv string, ok bool) // a principal's private chat
 	Now       func() time.Time
 	Log       *slog.Logger
+	// Persona returns the operator's description of the agent, read every
+	// turn so edits apply at once; nil or "" means DefaultPersona.
+	Persona func() (string, error)
 }
 
 // Agent handles conversation turns; Handle is a core.Handler.
@@ -217,7 +216,7 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 		st.Session, st.Started = e.ID, now
 	}
 	user := provider.Message{Role: "user", Content: speaker(m) + ": " + m.Text}
-	msgs := []provider.Message{{Role: "system", Content: a.cfg.SystemPrompt}}
+	msgs := []provider.Message{{Role: "system", Content: a.systemPrompt()}}
 	if st.Summary != "" {
 		msgs = append(msgs, provider.Message{Role: "system", Content: summaryPrefix + st.Summary})
 	}
@@ -276,6 +275,25 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 		ccancel()
 	}
 	return finish([]event.Outgoing{reply(answer)}, st)
+}
+
+// systemPrompt is the core's rules followed by the persona.
+func (a *Agent) systemPrompt() string {
+	persona := ""
+	if a.d.Persona != nil {
+		p, err := a.d.Persona()
+		if err != nil {
+			a.log.Warn("agent: persona unreadable; using the default", "err", err)
+		}
+		persona = strings.TrimSpace(p)
+		if err != nil {
+			persona = ""
+		}
+	}
+	if persona == "" {
+		persona = DefaultPersona
+	}
+	return CoreRules + "\n\n" + persona
 }
 
 func speaker(m event.Message) string {

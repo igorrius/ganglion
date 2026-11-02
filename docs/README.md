@@ -48,8 +48,11 @@ Start here when coming back to the project.
 - **Next:** M3b — memory, tools and policies, skills, and the 3.8
   acceptance under the crash harness; planned after M3a's live run.
   - Scope stays one operator, one agent, one bot (spec 14).
-  - Carried into M3b: the current time in the last user message (the
-    model does not know the date); tools for the claude CLI through MCP
+  - Carried into M3b: a first-run "introduction" conversation that
+    writes the persona ([ADR-0024](adr/0024-persona-as-workspace-files.md));
+    Telegram formatting for model answers (Markdown is shown as plain
+    text today); the current time in the last user message (the model
+    does not know the date); tools for the claude CLI through MCP
     config; the depth limit (R-AGT-4) and tool placement (R-RTR-3).
   - Deferred minors from the reviews:
     - M2: record a send's outcome with `context.WithoutCancel` on

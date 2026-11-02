@@ -209,11 +209,12 @@ func buildHandler(ctx context.Context, ac AgentConfig, db *sql.DB, q *sqlqueue.Q
 		return nil, nil, err
 	}
 	ag := agent.New(agent.Config{
-		SystemPrompt: ac.SystemPrompt, DailyTurns: ac.DailyTurns, DailyTokens: ac.DailyTokens,
+		DailyTurns: ac.DailyTurns, DailyTokens: ac.DailyTokens,
 		SessionIdle: ac.SessionIdle, Location: tz,
 	}, agent.Deps{
 		States: q, Router: rt, Providers: providers, Turns: turnsLog, Archive: archive,
 		Admins: acl.Admins, AlertConv: telegramPrivate, Log: logger,
+		Persona: agent.PersonaDir(ac.Workspace),
 	})
 	giveUp := func(e event.Event) []event.Outgoing {
 		out := []event.Outgoing{{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv,

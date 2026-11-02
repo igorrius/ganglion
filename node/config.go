@@ -27,7 +27,7 @@ type Config struct {
 type AgentConfig struct {
 	Catalog        *rules.Catalog    // GANGLION_MODELS_FILE; nil = no agent
 	Keys           map[string]string // provider name → API key, from each provider's key_env
-	SystemPrompt   string            // GANGLION_SYSTEM_PROMPT_FILE; "" = the agent's default
+	Workspace      string            // GANGLION_WORKSPACE, default "workspace": the agent's files (persona/*.md; memory in M3b)
 	DailyBudgetUSD float64           // GANGLION_DAILY_BUDGET_USD, default 1.0
 	DailyTurns     int               // GANGLION_DAILY_TURNS per person; unset = the agent's default (300), 0 = off
 	DailyTokens    int               // GANGLION_DAILY_TOKENS per person; unset = the agent's default (1M), 0 = off
@@ -99,12 +99,8 @@ func agentFromEnv(getenv func(string) string, readFile func(string) ([]byte, err
 			return a, fmt.Errorf("GANGLION_SESSION_IDLE=%q is not a positive duration like 6h, or off", v)
 		}
 	}
-	if f := getenv("GANGLION_SYSTEM_PROMPT_FILE"); f != "" {
-		b, err := readFile(f)
-		if err != nil {
-			return a, fmt.Errorf("GANGLION_SYSTEM_PROMPT_FILE: %w", err)
-		}
-		a.SystemPrompt = strings.TrimSpace(string(b))
+	if a.Workspace = getenv("GANGLION_WORKSPACE"); a.Workspace == "" {
+		a.Workspace = "workspace"
 	}
 	f := getenv("GANGLION_MODELS_FILE")
 	if f == "" {

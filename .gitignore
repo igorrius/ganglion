@@ -9,3 +9,6 @@ docs/.obsidian/
 
 # Local model catalogues (provider keys stay in .env)
 models.local.yaml
+
+# The agent workspace (persona, memory); examples/workspace shows the layout
+/workspace/

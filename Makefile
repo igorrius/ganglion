@@ -26,9 +26,11 @@ live-echo: build
 	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) ./bin/ganglion --roles core
 
 # The M3a agent on the test bot: live-echo plus a model catalogue
-# (models.local.yaml, git-ignored; see models.example.yaml). Provider keys
-# named by key_env come from .env.
+# (models.local.yaml, git-ignored; see models.example.yaml) and the agent's
+# workspace (./workspace, git-ignored; copy examples/workspace for a
+# persona). Provider keys named by key_env come from .env.
 LIVE_MODELS ?= models.local.yaml
+LIVE_WORKSPACE ?= workspace
 
 live-agent: build
 	@test -f .env || { echo "live-agent: no .env (see docs/README.md, owner setup)"; exit 1; }
@@ -36,7 +38,7 @@ live-agent: build
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-agent: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
 	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) \
-	GANGLION_MODELS_FILE=$(LIVE_MODELS) ./bin/ganglion --roles core
+	GANGLION_MODELS_FILE=$(LIVE_MODELS) GANGLION_WORKSPACE=$(LIVE_WORKSPACE) ./bin/ganglion --roles core
 
 # Run the same conversations through several models of the catalogue and
 # write a report (D-6). COMPARE picks provider:model pairs; empty = all.

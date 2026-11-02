@@ -118,15 +118,17 @@ func (f *fakeTools) Call(_ context.Context, c provider.ToolCall) (string, error)
 }
 
 type env struct {
-	a       *Agent
-	smart   *fakeProvider // p1/smart: tried first for messages
-	cheap   *fakeProvider // p2/cheap: fallback, and compaction
-	states  *states
-	turns   *turns.Log
-	now     time.Time
-	router  *rules.Router
-	archive *Archive
-	logs    *bytes.Buffer
+	a          *Agent
+	smart      *fakeProvider // p1/smart: tried first for messages
+	cheap      *fakeProvider // p2/cheap: fallback, and compaction
+	states     *states
+	turns      *turns.Log
+	now        time.Time
+	router     *rules.Router
+	archive    *Archive
+	logs       *bytes.Buffer
+	persona    string
+	personaErr error
 }
 
 func newEnv(t *testing.T, cfg Config, tools Tools) *env {
@@ -167,8 +169,9 @@ func newEnv(t *testing.T, cfg Config, tools Tools) *env {
 			id, ok := strings.CutPrefix(p, "telegram:user:")
 			return "telegram", "telegram:" + id, ok
 		},
-		Now: func() time.Time { return e.now },
-		Log: slog.New(slog.NewTextHandler(e.logs, nil)),
+		Now:     func() time.Time { return e.now },
+		Persona: func() (string, error) { return e.persona, e.personaErr },
+		Log:     slog.New(slog.NewTextHandler(e.logs, nil)),
 	})
 	return e
 }
@@ -224,7 +227,8 @@ func TestTurnRepliesAndStoresHistory(t *testing.T) {
 }
 
 func TestHistoryReachesTheModel(t *testing.T) {
-	e := newEnv(t, Config{SystemPrompt: "SYS"}, nil)
+	e := newEnv(t, Config{}, nil)
+	e.persona = "SYS"
 	e.turn(t, message("telegram:user:42", "Igor", "первое"))
 	e.turn(t, message("telegram:user:42", "Igor", "второе"))
 	msgs := e.smart.requests()[1].Messages
@@ -232,20 +236,21 @@ func TestHistoryReachesTheModel(t *testing.T) {
 	for _, m := range msgs {
 		got = append(got, m.Role+":"+m.Content)
 	}
-	want := "system:SYS|user:Igor: первое|assistant:ok|user:Igor: второе"
+	want := "system:" + CoreRules + "\n\nSYS|user:Igor: первое|assistant:ok|user:Igor: второе"
 	if strings.Join(got, "|") != want {
 		t.Fatalf("messages %q\nwant %q", strings.Join(got, "|"), want)
 	}
 }
 
 func TestSummaryGoesBeforeMessages(t *testing.T) {
-	e := newEnv(t, Config{SystemPrompt: "SYS"}, nil)
+	e := newEnv(t, Config{}, nil)
+	e.persona = "SYS"
 	raw, _ := json.Marshal(State{V: 1, Session: "s", Started: t0, Last: t0, Summary: "they talked about the boiler",
 		Messages: []provider.Message{{Role: "user", Content: "Igor: a"}, {Role: "assistant", Content: "b"}}})
 	e.states.m["telegram:42"] = raw
 	e.turn(t, message("telegram:user:42", "Igor", "c"))
 	msgs := e.smart.requests()[0].Messages
-	if msgs[0].Content != "SYS" || msgs[1].Role != "system" || msgs[1].Content != "Summary of the conversation so far:\nthey talked about the boiler" || msgs[2].Content != "Igor: a" {
+	if msgs[0].Content != CoreRules+"\n\nSYS" || msgs[1].Role != "system" || msgs[1].Content != "Summary of the conversation so far:\nthey talked about the boiler" || msgs[2].Content != "Igor: a" {
 		t.Fatalf("order %+v", msgs)
 	}
 }
@@ -498,5 +503,42 @@ func TestTraceRecordedWhenTheTurnContextRunsOut(t *testing.T) {
 	}
 	if _, err := e.turns.Get(context.Background(), ev.ID); err != nil {
 		t.Fatalf("the trace was lost with the context: %v", err)
+	}
+}
+
+func TestNoPersonaUsesTheNeutralDefault(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.turn(t, message("telegram:user:42", "Igor", "hi"))
+	sys := e.smart.requests()[0].Messages[0].Content
+	if sys != CoreRules+"\n\n"+DefaultPersona {
+		t.Fatalf("system prompt %q", sys)
+	}
+	if strings.Contains(strings.ToLower(CoreRules+DefaultPersona), "family") {
+		t.Fatal("a persona is hard-coded in the core")
+	}
+}
+
+func TestPersonaIsReadEveryTurn(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.persona = "You are Jarvis."
+	e.turn(t, message("telegram:user:42", "Igor", "one"))
+	e.persona = "You are Friday."
+	e.turn(t, message("telegram:user:42", "Igor", "two"))
+	if got := e.smart.requests()[1].Messages[0].Content; !strings.HasSuffix(got, "You are Friday.") {
+		t.Fatalf("the edited persona did not reach the next turn: %q", got)
+	}
+}
+
+func TestUnreadablePersonaFallsBackToDefault(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.personaErr = errors.New("permission denied")
+	if out := e.turn(t, message("telegram:user:42", "Igor", "hi")); out[0].Text != "ok" {
+		t.Fatalf("out %+v", out)
+	}
+	if got := e.smart.requests()[0].Messages[0].Content; !strings.HasSuffix(got, DefaultPersona) {
+		t.Fatalf("system prompt %q", got)
+	}
+	if !strings.Contains(e.logs.String(), "persona") {
+		t.Fatal("the unreadable persona was not logged")
 	}
 }
