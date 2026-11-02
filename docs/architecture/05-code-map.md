@@ -28,6 +28,7 @@ interfaces only; **planned** — not in the repository yet.
 | Turn loop: parallel workers, lease → handler → atomic complete, turn timeout, give up after max attempts; echo handler | `core` | done (P1 M2, workers M3a); the agent is the handler when a catalogue is set | 7.1, 7.2 | [0019](../adr/0019-release-leases-at-core-start.md) |
 | Agent: turn loop with fallback, step and daily limits, compaction, sessions (`/new`, idle, `/sessions`, `/resume`) | `agent` | done (P1 M3a); tools, memory, depth limit in M3b | 7.2 | [0020](../adr/0020-neutral-history-as-conversation-state.md) |
 | Compare models on scripted conversations (D-6 tool) | `cmd/modelcompare` | done (P1 M3a) | 7.4 | [0022](../adr/0022-haiku-first-during-development.md) |
+| JSON Schemas of the YAML files (model catalogue, module manifest), embedded | `schemas` | done (P1 M3a); node config schema with D-3 in M4 | 7.3, 7.5 | [0023](../adr/0023-json-schemas-for-yaml-files.md) |
 | Policies | — | planned (P1) | 7.6 | — |
 | Memory | — | planned (P1) | 7.7 | — |
 | Runner: wazero host, manifest, limits | `runner` | done (P0 spike, own ABI); supervisor and scheduler planned (P1) | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md), [0012](../adr/0012-yaml-manifests.md) |

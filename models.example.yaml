@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=schemas/models.schema.json
 # Model catalogue for GANGLION_MODELS_FILE (docs/plans/p1-m3a-talking-agent.md,
 # ADR-0021). List one provider or several; the router ranks every model
 # and falls back across them. Keys never go here: key_env names the

@@ -28,6 +28,7 @@ considered, how they compare, the decision and its consequences. See
 | [0020](0020-neutral-history-as-conversation-state.md) | Keep history in our own neutral format, stored as the conversation state | Accepted | 2026-11-02 |
 | [0021](0021-providers-chosen-by-the-operator-claude-cli-included.md) | Let the operator choose one or more providers, the claude CLI included, for conversation | Accepted | 2026-11-02 |
 | [0022](0022-haiku-first-during-development.md) | During development, Haiku through the claude CLI answers first and DeepSeek V4.1 Flash is the fallback | Accepted | 2026-11-02 |
+| [0023](0023-json-schemas-for-yaml-files.md) | Publish JSON Schemas for ganglion's YAML files, kept in sync with the Go loaders by tests | Accepted | 2026-11-02 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

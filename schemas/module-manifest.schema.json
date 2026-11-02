@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/igorrius/ganglion/master/schemas/module-manifest.schema.json",
+  "title": "ganglion module manifest",
+  "description": "What a WASM module needs and may do (spec 7.5, ADR-0011, ADR-0012). The Go loader runner.ParseManifest is the validator; this schema is for editors, docs and the agent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "integer", "minimum": 0 },
+    "triggers": {
+      "description": "When the module runs: on a cron schedule, or as a tool the agent calls.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cron": { "description": "Five-field cron expression.", "type": "string", "minLength": 1 },
+          "tool": { "description": "Tool name, e.g. deye.status.", "type": "string", "minLength": 1 }
+        },
+        "oneOf": [ { "required": ["cron"] }, { "required": ["tool"] } ]
+      }
+    },
+    "capabilities": {
+      "description": "Host functions the module may use; anything not listed is denied.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "http.fetch": { "description": "Allowed host names.", "type": "array", "items": { "type": "string" } },
+        "secret.get": { "description": "Allowed secret names.", "type": "array", "items": { "type": "string" } },
+        "event.emit": { "description": "Allowed event kinds.", "type": "array", "items": { "type": "string" } },
+        "state": { "description": "May keep state in its KV store.", "type": "boolean" }
+      }
+    },
+    "config": { "description": "Plain settings passed to the module.", "type": "object", "additionalProperties": { "type": "string" } },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "memory": { "description": "Like 32MiB; at most 1GiB.", "type": "string", "pattern": "^[0-9]+(KiB|MiB|GiB)?$" },
+        "timeout": { "description": "Per call, a Go duration like 20s.", "type": "string", "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$" }
+      }
+    },
+    "escalate": {
+      "description": "Outcomes that call the model.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["on"],
+        "properties": { "on": { "type": "string", "minLength": 1 } }
+      }
+    }
+  }
+}
