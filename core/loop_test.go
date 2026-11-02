@@ -14,6 +14,8 @@ import (
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func memQueue(t *testing.T) *sqlqueue.Queue {
@@ -310,4 +312,40 @@ func TestTurnHook(t *testing.T) {
 		t.Fatal("the hook did not start before the handler")
 	}
 	eventually(t, "the hook stopped after the turn", func() bool { return stopped.Load() == 1 })
+}
+
+func TestTurnSpanAndGiveUpMetric(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	q := memQueue(t)
+	inSpan := make(chan bool, 1)
+	h := func(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		if e.IdemKey == "k1" {
+			inSpan <- trace.SpanFromContext(ctx).SpanContext().IsValid()
+			return EchoHandler(ctx, e)
+		}
+		return nil, queue.StateUpdate{}, errors.New("always fails")
+	}
+	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler),
+		WithLease(100*time.Millisecond), WithPoll(20*time.Millisecond), WithMaxAttempts(1, nil)))
+	if err := q.Put(context.Background(), msgEvent("k1", "telegram:a", "x")); err != nil {
+		t.Fatal(err)
+	}
+	if !<-inSpan {
+		t.Fatal("the handler's context holds no span")
+	}
+	if err := q.Put(context.Background(), msgEvent("k2", "telegram:b", "y")); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the give-up metric", func() bool { return rec.Value(t, "ganglion.turns.given_up", nil) == 1 })
+	found := false
+	for _, s := range rec.Spans.Ended() {
+		for _, a := range s.Attributes() {
+			if s.Name() == "turn" && a.Key == "event.kind" && a.Value.AsString() == "message" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no turn span with event.kind")
+	}
 }

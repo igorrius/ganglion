@@ -17,6 +17,9 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/transport"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 //go:embed migrations/*.sql
@@ -36,8 +39,9 @@ var ErrUnknownRole = errors.New("access: unknown role")
 
 // List is the allowed table.
 type List struct {
-	db  *sql.DB
-	now func() time.Time
+	db      *sql.DB
+	now     func() time.Time
+	dropped metric.Int64Counter
 }
 
 // Option configures a List.
@@ -56,6 +60,8 @@ func New(ctx context.Context, db *sql.DB, opts ...Option) (*List, error) {
 		return nil, err
 	}
 	l := &List{db: db, now: time.Now}
+	l.dropped, _ = otel.Meter("ganglion/access").Int64Counter("ganglion.access.dropped",
+		metric.WithDescription("Messages kept out of the inbox, by reason."))
 	for _, o := range opts {
 		o(l)
 	}
@@ -133,6 +139,7 @@ func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 		}
 		var m event.Message
 		if err := json.Unmarshal(e.Payload, &m); err != nil || m.From == "" {
+			l.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "malformed")))
 			logger.Warn("access: malformed message dropped", "id", e.ID, "conv", e.Conv, "source", e.Source)
 			return nil
 		}
@@ -141,6 +148,7 @@ func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 			return err
 		}
 		if !ok {
+			l.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "stranger")))
 			logger.Warn("access: message from a stranger dropped",
 				"principal", m.From, "name", m.Name, "conv", e.Conv, "text_len", len(m.Text))
 			return nil

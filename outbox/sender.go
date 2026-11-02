@@ -14,6 +14,11 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/transport"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // DefaultPoll is how often the sender re-checks the outbox when nothing
@@ -55,6 +60,11 @@ type Sender struct {
 	transports map[string]transport.Transport
 	paused     map[string]time.Time // transport name → end of its retry_after pause
 	missing    map[string]bool      // unregistered transports already logged
+
+	tracer  trace.Tracer
+	sent    metric.Int64Counter
+	retries metric.Int64Counter
+	failedN metric.Int64Counter
 }
 
 // Option configures a Sender.
@@ -95,6 +105,11 @@ func NewSender(ob queue.Outbox, wake <-chan struct{}, logger *slog.Logger, opts 
 	for _, o := range opts {
 		o(s)
 	}
+	m := otel.Meter("ganglion/outbox")
+	s.tracer = otel.Tracer("ganglion/outbox")
+	s.sent, _ = m.Int64Counter("ganglion.outbox.sent", metric.WithDescription("Messages delivered, by transport."))
+	s.retries, _ = m.Int64Counter("ganglion.outbox.retries", metric.WithDescription("Failed sends to retry, by transport and kind."))
+	s.failedN, _ = m.Int64Counter("ganglion.outbox.failed", metric.WithDescription("Messages given up for good, by transport."))
 	return s
 }
 
@@ -189,6 +204,9 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	if pt, ok := t.(transport.Parter); ok {
 		parts = pt.Parts(msg)
 	}
+	ctx, span := s.tracer.Start(ctx, "outbox.send", trace.WithAttributes(
+		attribute.String("message.id", msg.ID), attribute.String("transport", msg.Transport), attribute.Int("parts", len(parts))))
+	defer span.End()
 	for i := p.PartsSent; i < len(parts); i++ {
 		if err := t.Send(ctx, parts[i]); err != nil {
 			if ctx.Err() != nil {
@@ -205,6 +223,7 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	if err := s.ob.Sent(ctx, msg.ID); err != nil {
 		return true, err
 	}
+	s.sent.Add(ctx, 1, metric.WithAttributes(attribute.String("transport", msg.Transport)))
 	log.Info("outbox: sent", "parts", len(parts), "len", len(msg.Text))
 	return true, nil
 }
@@ -212,8 +231,11 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 // failed records a failed send according to the kind of error.
 func (s *Sender) failed(ctx context.Context, log *slog.Logger, p queue.Pending, sendErr error) (bool, error) {
 	var ra *transport.RetryAfterError
+	tr := attribute.String("transport", p.Msg.Transport)
+	trace.SpanFromContext(ctx).SetStatus(codes.Error, "send failed")
 	switch {
 	case errors.As(sendErr, &ra):
+		s.retries.Add(ctx, 1, metric.WithAttributes(tr, attribute.String("kind", "retry_after")))
 		// Pause the whole transport; the message stays due and is not
 		// charged an attempt. The pause lives in memory: after a restart
 		// the channel says retry_after again if it still means it.
@@ -222,9 +244,11 @@ func (s *Sender) failed(ctx context.Context, log *slog.Logger, p queue.Pending, 
 		log.Warn("outbox: transport asked to wait", "until", until)
 		return false, nil
 	case errors.Is(sendErr, transport.ErrPermanent):
+		s.failedN.Add(ctx, 1, metric.WithAttributes(tr))
 		log.Error("outbox: permanent failure, giving up", "err", sendErr)
 		return true, s.ob.Fail(ctx, p.Msg.ID, sendErr.Error())
 	default:
+		s.retries.Add(ctx, 1, metric.WithAttributes(tr, attribute.String("kind", "error")))
 		notBefore := s.now().Add(s.backoff(p.Attempts + 1))
 		log.Warn("outbox: send failed, will retry", "err", sendErr, "not_before", notBefore)
 		return true, s.ob.Retry(ctx, p.Msg.ID, notBefore, sendErr.Error())

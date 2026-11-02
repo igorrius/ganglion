@@ -14,6 +14,10 @@ import (
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/turns"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Config tunes the agent. Zero values take the defaults; a negative daily
@@ -79,6 +83,7 @@ type Agent struct {
 	cfg Config
 	d   Deps
 	log *slog.Logger
+	in  instruments
 }
 
 // New returns an agent.
@@ -92,7 +97,7 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Agent{cfg: cfg.withDefaults(), d: d, log: d.Log}
+	return &Agent{cfg: cfg.withDefaults(), d: d, log: d.Log, in: newInstruments()}
 }
 
 // turnRecord accumulates the trace of one turn.
@@ -134,12 +139,16 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, msgs []provider.M
 			tr.Route = append(tr.Route, turns.Attempt{Provider: c.Provider, Model: c.Model, Error: "no_provider"})
 			continue
 		}
-		callCtx, cancel := context.WithTimeout(ctx, a.cfg.CallTimeout)
+		spanCtx, span := a.in.tracer.Start(ctx, "model.call", trace.WithAttributes(
+			attribute.String("provider", c.Provider), attribute.String("model", c.Model), attribute.String("task", task.Kind)))
+		callCtx, cancel := context.WithTimeout(spanCtx, a.cfg.CallTimeout)
+		started := time.Now()
 		resp, err := p.Chat(callCtx, provider.ChatRequest{Model: c.Model, Messages: msgs, Tools: tools})
 		cancel()
 		if err == nil && strings.TrimSpace(resp.Message.Content) == "" && len(resp.Message.ToolCalls) == 0 {
 			err = &provider.Error{Provider: c.Provider, Kind: provider.KindUnavailable, Msg: "empty answer"}
 		}
+		a.observeCall(ctx, span, c, resp.Usage, err, time.Since(started))
 		a.d.Router.Report(c, err)
 		if err == nil {
 			tr.Route = append(tr.Route, turns.Attempt{Provider: c.Provider, Model: c.Model})
@@ -186,7 +195,7 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 	}
 	finish := func(out []event.Outgoing, st State) ([]event.Outgoing, queue.StateUpdate, error) {
 		tr.Finished = a.d.Now()
-		a.logTurn(tr)
+		a.logTurn(ctx, tr)
 		// The turn's context may have run out during compaction; the trace
 		// still counts for the budget and the limits.
 		rctx, rcancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -253,7 +262,10 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 		}
 		for _, call := range msg.ToolCalls {
 			started := time.Now()
-			result, err := a.d.Tools.Call(turnCtx, call)
+			toolCtx, span := a.in.tracer.Start(turnCtx, "tool.call", trace.WithAttributes(attribute.String("tool", call.Name)))
+			result, err := a.d.Tools.Call(toolCtx, call)
+			span.SetAttributes(attribute.Bool("ok", err == nil))
+			span.End()
 			if err != nil {
 				result = "error: " + err.Error()
 			}
@@ -279,19 +291,45 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 	return finish([]event.Outgoing{reply(answer)}, st)
 }
 
+// observeCall records a model call's metrics and ends its span. Nothing
+// from the prompt or the answer goes into them.
+func (a *Agent) observeCall(ctx context.Context, span trace.Span, c router.Candidate, u provider.Usage, err error, d time.Duration) {
+	result := "ok"
+	if err != nil {
+		result = errorKind(err)
+		span.SetStatus(codes.Error, result)
+	}
+	labels := metric.WithAttributes(attribute.String("provider", c.Provider), attribute.String("model", c.Model))
+	a.in.calls.Add(ctx, 1, metric.WithAttributes(attribute.String("provider", c.Provider), attribute.String("model", c.Model), attribute.String("result", result)))
+	a.in.callDur.Record(ctx, d.Seconds(), labels)
+	if err == nil {
+		for kind, n := range map[string]int{"input": u.InputTokens, "cached": u.CacheReadTokens, "output": u.OutputTokens} {
+			a.in.tokens.Add(ctx, int64(n), metric.WithAttributes(attribute.String("provider", c.Provider), attribute.String("model", c.Model), attribute.String("kind", kind)))
+		}
+		a.in.cost.Add(ctx, (float64(u.InputTokens)*c.PriceInMTok+float64(u.OutputTokens)*c.PriceOutMTok)/1e6, labels)
+		span.SetAttributes(attribute.Int("tokens.input", u.InputTokens), attribute.Int("tokens.cached", u.CacheReadTokens), attribute.Int("tokens.output", u.OutputTokens))
+	}
+	span.SetAttributes(attribute.String("result", result))
+	span.End()
+}
+
 // logTurn writes one info line per turn: what an operator watches in the
 // console. Never message text.
-func (a *Agent) logTurn(tr *turnRecord) {
+func (a *Agent) logTurn(ctx context.Context, tr *turnRecord) {
 	model := ""
 	for _, at := range tr.Route {
 		if at.Error == "" {
 			model = at.Provider + "/" + at.Model
 		}
 	}
-	a.log.Info("agent: turn", "id", tr.EventID, "conv", tr.Conv, "principal", tr.Principal, "outcome", tr.Outcome,
+	dur := tr.Finished.Sub(tr.Started)
+	a.in.turns.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", tr.Outcome)))
+	a.in.turnDur.Record(ctx, dur.Seconds(), metric.WithAttributes(attribute.String("outcome", tr.Outcome)))
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("outcome", tr.Outcome), attribute.Int("steps", tr.Steps))
+	a.log.InfoContext(ctx, "agent: turn", "id", tr.EventID, "conv", tr.Conv, "principal", tr.Principal, "outcome", tr.Outcome,
 		"steps", tr.Steps, "model", model, "attempts", len(tr.Route), "tools", len(tr.Tools),
 		"in_tokens", tr.InputTokens, "cached_tokens", tr.CacheReadTokens, "out_tokens", tr.OutputTokens,
-		"cost_usd", fmt.Sprintf("%.6f", tr.CostUSD), "ms", tr.Finished.Sub(tr.Started).Milliseconds())
+		"cost_usd", fmt.Sprintf("%.6f", tr.CostUSD), "ms", dur.Milliseconds())
 }
 
 // systemPrompt is the core's rules followed by the persona.

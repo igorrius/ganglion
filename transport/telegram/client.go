@@ -8,8 +8,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // DefaultAPIURL is the Bot API server.
@@ -31,6 +38,9 @@ type client struct {
 	base  string
 	token string
 	hc    *http.Client
+
+	tracer trace.Tracer
+	dur    metric.Float64Histogram
 }
 
 // newClient returns a client for base (DefaultAPIURL when empty). A nil hc
@@ -42,7 +52,10 @@ func newClient(base, token string, hc *http.Client) *client {
 	if hc == nil {
 		hc = &http.Client{Timeout: httpTimeout}
 	}
-	return &client{base: strings.TrimRight(base, "/"), token: token, hc: hc}
+	c := &client{base: strings.TrimRight(base, "/"), token: token, hc: hc, tracer: otel.Tracer("ganglion/telegram")}
+	c.dur, _ = otel.Meter("ganglion/telegram").Float64Histogram("ganglion.telegram.api.duration", metric.WithUnit("s"),
+		metric.WithDescription("Bot API call duration, by method and HTTP status (\"error\" when unreachable)."))
+	return c
 }
 
 // apiError is an error answer of the Bot API. The transport maps it to
@@ -101,7 +114,17 @@ type envelope struct {
 
 // call POSTs params as JSON to method and decodes the result into result
 // (skipped when result is nil).
-func (c *client) call(ctx context.Context, method string, params, result any) error {
+func (c *client) call(ctx context.Context, method string, params, result any) (err error) {
+	ctx, span := c.tracer.Start(ctx, "telegram "+method, trace.WithSpanKind(trace.SpanKindClient))
+	started, code := time.Now(), "error"
+	defer func() {
+		c.dur.Record(ctx, time.Since(started).Seconds(), metric.WithAttributes(attribute.String("method", method), attribute.String("code", code)))
+		span.SetAttributes(attribute.String("http.status_code", code))
+		if err != nil {
+			span.SetStatus(codes.Error, code)
+		}
+		span.End()
+	}()
 	body := []byte("{}")
 	if params != nil {
 		var err error
@@ -119,6 +142,7 @@ func (c *client) call(ctx context.Context, method string, params, result any) er
 		return c.fail(method, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	code = strconv.Itoa(resp.StatusCode)
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 	if err != nil {
 		return c.fail(method, err)

@@ -15,6 +15,11 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/queue"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Handler handles one event: the replies to send and the conversation
@@ -46,6 +51,9 @@ type Loop struct {
 	hook        func(ctx context.Context, e event.Event) (stop func())
 
 	wake chan struct{} // a worker that got an event wakes an idle one
+
+	tracer  trace.Tracer
+	givenUp metric.Int64Counter
 }
 
 // Option configures a Loop.
@@ -89,6 +97,9 @@ func NewLoop(q queue.Queue, ready <-chan struct{}, h Handler, logger *slog.Logge
 		o(l)
 	}
 	l.wake = make(chan struct{}, l.workers)
+	l.tracer = otel.Tracer("ganglion/core")
+	l.givenUp, _ = otel.Meter("ganglion/core").Int64Counter("ganglion.turns.given_up",
+		metric.WithDescription("Events completed without a turn after failing every attempt."))
 	return l
 }
 
@@ -137,7 +148,12 @@ func (l *Loop) worker(ctx context.Context) {
 func (l *Loop) turn(ctx context.Context, lease queue.Lease) {
 	e := lease.Event
 	log := l.log.With("id", e.ID, "kind", e.Kind, "conv", e.Conv)
+	ctx, span := l.tracer.Start(ctx, "turn", trace.WithAttributes(
+		attribute.String("event.id", e.ID), attribute.String("event.kind", e.Kind), attribute.Int("attempt", lease.Attempts)))
+	defer span.End()
 	if l.maxAttempts > 0 && lease.Attempts > l.maxAttempts {
+		l.givenUp.Add(ctx, 1)
+		span.SetAttributes(attribute.String("outcome", "given_up"))
 		var out []event.Outgoing
 		if l.giveUp != nil {
 			out = l.giveUp(e)
@@ -155,6 +171,7 @@ func (l *Loop) turn(ctx context.Context, lease queue.Lease) {
 	stop()
 	cancel()
 	if err != nil {
+		span.SetStatus(codes.Error, "handler failed")
 		if ctx.Err() == nil {
 			log.Error("core: handler failed; the event is retried when its lease runs out", "err", err, "until", lease.Until, "attempts", lease.Attempts)
 		}

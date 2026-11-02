@@ -19,6 +19,7 @@ import (
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -579,5 +580,51 @@ func TestEveryTurnLogsOneInfoLine(t *testing.T) {
 	}
 	if strings.Contains(e.logs.String(), "екретн") {
 		t.Fatal("message text in the logs")
+	}
+}
+
+func TestAgentTelemetry(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	e := newEnv(t, Config{}, nil)
+	e.smart.push(fail(provider.KindRateLimit))
+	e.cheap.push(say("секретный ответ"))
+	e.turn(t, message("telegram:user:42", "Igor", "секретный вопрос"))
+	e.now = e.now.Add(2 * time.Minute) // past the rate-limit cooldown
+	e.turn(t, message("telegram:user:42", "Igor", "ещё"))
+
+	for _, c := range []struct {
+		name  string
+		attrs map[string]string
+		want  float64
+	}{
+		{"ganglion.turns", map[string]string{"outcome": "ok"}, 2},
+		{"ganglion.turn.duration", map[string]string{"outcome": "ok"}, 2},
+		{"ganglion.model.calls", map[string]string{"provider": "p1", "model": "smart", "result": "rate_limit"}, 1},
+		{"ganglion.model.calls", map[string]string{"provider": "p2", "model": "cheap", "result": "ok"}, 1},
+		{"ganglion.model.calls", map[string]string{"provider": "p1", "model": "smart", "result": "ok"}, 1},
+		{"ganglion.model.call.duration", map[string]string{"provider": "p2", "model": "cheap"}, 1},
+		{"ganglion.model.tokens", map[string]string{"provider": "p2", "kind": "input"}, 100},
+		{"ganglion.model.tokens", map[string]string{"provider": "p2", "kind": "output"}, 10},
+	} {
+		if got := rec.Value(t, c.name, c.attrs); got != c.want {
+			t.Errorf("%s %v = %v, want %v", c.name, c.attrs, got, c.want)
+		}
+	}
+	if got := rec.Value(t, "ganglion.model.cost_usd", map[string]string{"provider": "p1"}); got < 0.000119 || got > 0.000121 {
+		t.Errorf("cost %v, want 0.00012", got)
+	}
+	calls := 0
+	for _, s := range rec.Spans.Ended() {
+		if s.Name() == "model.call" {
+			calls++
+		}
+		for _, a := range s.Attributes() {
+			if strings.Contains(a.Value.Emit(), "екретн") {
+				t.Fatalf("span %s carries message text in %s", s.Name(), a.Key)
+			}
+		}
+	}
+	if calls != 3 {
+		t.Fatalf("%d model.call spans, want 3", calls)
 	}
 }
