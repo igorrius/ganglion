@@ -646,9 +646,11 @@ could collide with old ones and be dropped as duplicates.
   4. Start a second instance: the newer poll wins, and the instance that
      got 409 stops polling and sends one alert.
   5. Kill and restart during a burst of 20 messages: none is lost.
-- [ ] **Step 3: Measure memory.** Record the RSS of the echo bot when idle
+- [x] **Step 3: Measure memory.** Record the RSS of the echo bot when idle
   and after 1,000 messages through the fake, plus the binary size. It must
   stay well inside 128 MB (principle 8).
+  Measured 2026-11-02 with `make memory` (linux/amd64, Go 1.26.3): binary
+  15.4 MB; RSS idle 14.1 MB; after 1,000 messages 21.0 MB, peak 21.0 MB.
 - [ ] **Step 4: Run** `make check`.
 - [ ] **Step 5: Update the docs.**
   - Code map: `queue/sqlqueue`, `outbox`, `transport/telegram`,
