@@ -1,4 +1,4 @@
-package node
+package config
 
 import (
 	"bytes"
@@ -13,14 +13,15 @@ import (
 	"github.com/igorrius/ganglion/secrets"
 )
 
-// Config is the node configuration. Until D-3 (YAML node config, M4) it
-// comes from environment variables.
-type Config struct {
+// Bootstrap is what a node needs to start: where its data lives, its
+// channels and its agent's settings, with the secrets already read. The
+// command line fills it; the providers read it (ADR-0028, ADR-0029).
+type Bootstrap struct {
 	DB        string // GANGLION_DB, default "ganglion.db"
 	BotToken  string // TELEGRAM_BOT_TOKEN or the file named by TELEGRAM_BOT_TOKEN_FILE; empty → no Telegram transport
 	BotAPIURL string // TELEGRAM_API_URL, default "https://api.telegram.org"
 	Admin     string // GANGLION_ADMIN, e.g. "telegram:user:123"; seeded as admin at start
-	Agent     AgentConfig
+	Agent     AgentSettings
 	// MetricsAddr is GANGLION_METRICS_ADDR: where /metrics and the promtop
 	// dashboard are served (default 127.0.0.1:9464), or "off" (ADR-0026).
 	MetricsAddr string
@@ -29,9 +30,9 @@ type Config struct {
 	TelegramReply string
 }
 
-// AgentConfig turns the agent on. Without a catalogue the core echoes, as
+// AgentSettings turns the agent on. Without a catalogue the core echoes, as
 // in M2.
-type AgentConfig struct {
+type AgentSettings struct {
 	Catalog        *rules.Catalog    // GANGLION_MODELS_FILE; nil = no agent
 	Keys           map[string]string // provider name → API key, from each provider's key_env
 	Workspace      string            // GANGLION_WORKSPACE, default "workspace": the agent's files (persona/*.md; memory in M3b)
@@ -44,10 +45,11 @@ type AgentConfig struct {
 
 var principalRE = regexp.MustCompile(`^[a-z][a-z0-9]*:user:[0-9A-Za-z_.-]+$`)
 
-// ConfigFromEnv reads the configuration through getenv; readFile reads
-// secret files (os.ReadFile).
-func ConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte, error)) (Config, error) {
-	cfg := Config{
+// FromEnv reads the bootstrap settings through getenv; readFile reads
+// secret files (os.ReadFile). It goes away when the flags of ADR-0029
+// arrive.
+func FromEnv(getenv func(string) string, readFile func(string) ([]byte, error)) (Bootstrap, error) {
+	cfg := Bootstrap{
 		DB:        getenv("GANGLION_DB"),
 		BotAPIURL: getenv("TELEGRAM_API_URL"),
 		Admin:     getenv("GANGLION_ADMIN"),
@@ -59,12 +61,12 @@ func ConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte, er
 		cfg.BotAPIURL = "https://api.telegram.org"
 	}
 	if cfg.Admin != "" && !principalRE.MatchString(cfg.Admin) {
-		return Config{}, fmt.Errorf("GANGLION_ADMIN=%q is not a principal; want <transport>:user:<id>, e.g. telegram:user:123456", cfg.Admin)
+		return Bootstrap{}, fmt.Errorf("GANGLION_ADMIN=%q is not a principal; want <transport>:user:<id>, e.g. telegram:user:123456", cfg.Admin)
 	}
 	src := secrets.Env{Getenv: getenv, ReadFile: readFile}
 	var err error
 	if cfg.BotToken, err = src.Secret("TELEGRAM_BOT_TOKEN"); err != nil {
-		return Config{}, err
+		return Bootstrap{}, err
 	}
 	if cfg.MetricsAddr = getenv("GANGLION_METRICS_ADDR"); cfg.MetricsAddr == "" {
 		cfg.MetricsAddr = "127.0.0.1:9464"
@@ -74,17 +76,17 @@ func ConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte, er
 		cfg.TelegramReply = "auto"
 	case "auto", "always", "off":
 	default:
-		return Config{}, fmt.Errorf("GANGLION_TELEGRAM_REPLY=%q is not auto, always or off", cfg.TelegramReply)
+		return Bootstrap{}, fmt.Errorf("GANGLION_TELEGRAM_REPLY=%q is not auto, always or off", cfg.TelegramReply)
 	}
 	if cfg.Agent, err = agentFromEnv(getenv, readFile); err != nil {
-		return Config{}, err
+		return Bootstrap{}, err
 	}
 	return cfg, nil
 }
 
-func agentFromEnv(getenv func(string) string, readFile func(string) ([]byte, error)) (AgentConfig, error) {
+func agentFromEnv(getenv func(string) string, readFile func(string) ([]byte, error)) (AgentSettings, error) {
 	def := agent.DefaultConfig()
-	a := AgentConfig{DailyBudgetUSD: 1.0, DailyTurns: def.DailyTurns, DailyTokens: def.DailyTokens, SessionIdle: def.SessionIdle}
+	a := AgentSettings{DailyBudgetUSD: 1.0, DailyTurns: def.DailyTurns, DailyTokens: def.DailyTokens, SessionIdle: def.SessionIdle}
 	tz := getenv("GANGLION_TZ")
 	if tz == "" {
 		tz = "Europe/Kyiv"

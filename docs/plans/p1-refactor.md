@@ -130,33 +130,33 @@ policies and skills on it. The node is assembled in one place (`config`,
   that ends the turn skips the rest).
 - [x] `make check`; commit.
 
-### Task 4: the `config` package with `samber/do`
+### Task 4: the `config` package with `samber/do` — done
 
 **Files:** new `config/` (`bootstrap.go`, `core.go`, `storage.go`,
 `delivery.go`, `agent.go`, `providers.go`, `telemetry.go`,
 `config_test.go`); `node/node.go` reduced to the role runner; `go.mod`
 
-- [ ] `go get github.com/samber/do/v2@v2.1.0`.
-- [ ] `config.Bootstrap`: today's `node.Config` and `AgentConfig` fields as
+- [x] `go get github.com/samber/do/v2@v2.1.0`.
+- [x] `config.Bootstrap`: today's `node.Config` and `AgentConfig` fields as
   plain settings, with `Validate()`. The startup context is provided as a
   value. Until task 5, `cmd/ganglion` fills `Bootstrap` from the
   environment, so the flags change in one task.
-- [ ] One provider per component, each a function that returns
+- [x] One provider per component, each a function that returns
   `do.Provider[T]`:
   - lock, DB, queue, access list, turns log, archive;
   - router, providers, agent, handler;
   - sender, Telegram, loop, prune.
-- [ ] The provider factory becomes a table from the catalogue's provider
+- [x] The provider factory becomes a table from the catalogue's provider
   type (`rules.TypeOpenAI`, `rules.TypeClaudeCLI`) to
   `func(rules.ProviderDef, secrets.Source) (provider.Provider, error)`.
-- [ ] `Shutdown(ctx) error` on the lock and the DB wrapper, so the
+- [x] `Shutdown(ctx) error` on the lock and the DB wrapper, so the
   container closes them in reverse order. Telemetry stays with
   `cmd/ganglion` until task 5.
-- [ ] `node.Component` (`Name() string`, `Run(ctx) error`) and
+- [x] `node.Component` (`Name() string`, `Run(ctx) error`) and
   `node.RunAll`. `config.CoreComponents()` provides the list for the core
   role: sender, loop, prune, and Telegram when a token is set. The typing
   hook is wired in `config`.
-- [ ] Extension points are provided as interfaces whose provider picks
+- [x] Extension points are provided as interfaces whose provider picks
   the implementation:
   - `core.Handler`: the agent or the echo;
   - the transports: Telegram or none;
@@ -164,12 +164,12 @@ policies and skills on it. The node is assembled in one place (`config`,
   - the session archive: SQLite or a no-op.
 
   The `nil` checks in `agent` and `node` go away.
-- [ ] `do.Package` per role: `config.Core`, plus `config.Edge` and
+- [x] `do.Package` per role: `config.Core`, plus `config.Edge` and
   `config.Worker`, which are empty for now.
-- [ ] `config_test.go` builds the core container with the fake Bot API and
+- [x] `config_test.go` builds the core container with the fake Bot API and
   `providertest`, with and without a model catalogue. It invokes the
   components and runs one echo turn and one agent turn end to end.
-- [ ] `make check`; commit.
+- [x] `make check`; commit.
 
 ### Task 5: `urfave/cli` commands and flags
 

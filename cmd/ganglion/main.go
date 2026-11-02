@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/telemetry"
 )
@@ -68,7 +69,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := node.ConfigFromEnv(os.Getenv, os.ReadFile)
+	cfg, err := config.FromEnv(os.Getenv, os.ReadFile)
 	if err != nil {
 		return err
 	}
@@ -93,5 +94,5 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		defer cancel()
 		_ = tel.Shutdown(sctx)
 	}()
-	return node.Run(ctx, roles, cfg, logger)
+	return config.Run(ctx, roles, cfg, logger)
 }

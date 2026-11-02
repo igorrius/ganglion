@@ -48,7 +48,7 @@ type Loop struct {
 	turnTimeout time.Duration
 	maxAttempts int
 	giveUp      func(e event.Event) []event.Outgoing
-	hook        func(ctx context.Context, e event.Event) (stop func())
+	hook        TurnHook
 
 	wake chan struct{} // a worker that got an event wakes an idle one
 
@@ -82,9 +82,15 @@ func WithMaxAttempts(n int, giveUp func(e event.Event) []event.Outgoing) Option 
 	return func(l *Loop) { l.maxAttempts, l.giveUp = n, giveUp }
 }
 
-// WithTurnHook runs h when a turn starts and the stop it returns when the
-// turn ends; the node uses it to show "typing…" (ADR-0025).
-func WithTurnHook(h func(ctx context.Context, e event.Event) (stop func())) Option {
+// TurnHook runs when a turn starts; the stop it returns runs when the
+// turn ends. The node uses it to show "typing…" (ADR-0025).
+type TurnHook func(ctx context.Context, e event.Event) (stop func())
+
+// NoTurnHook does nothing.
+func NoTurnHook(context.Context, event.Event) func() { return func() {} }
+
+// WithTurnHook sets the turn hook; the default is NoTurnHook.
+func WithTurnHook(h TurnHook) Option {
 	return func(l *Loop) { l.hook = h }
 }
 
@@ -92,7 +98,7 @@ func WithTurnHook(h func(ctx context.Context, e event.Event) (stop func())) Opti
 // (sqlqueue.Queue.InboxReady).
 func NewLoop(q queue.Queue, ready <-chan struct{}, h Handler, logger *slog.Logger, opts ...Option) *Loop {
 	l := &Loop{q: q, ready: ready, h: h, log: logger, lease: DefaultLease, poll: DefaultPoll,
-		workers: DefaultWorkers, turnTimeout: DefaultTurnTimeout, maxAttempts: DefaultMaxAttempts}
+		workers: DefaultWorkers, turnTimeout: DefaultTurnTimeout, maxAttempts: DefaultMaxAttempts, hook: NoTurnHook}
 	for _, o := range opts {
 		o(l)
 	}
@@ -163,10 +169,7 @@ func (l *Loop) turn(ctx context.Context, lease queue.Lease) {
 		return
 	}
 	turnCtx, cancel := context.WithTimeout(ctx, l.turnTimeout)
-	stop := func() {}
-	if l.hook != nil {
-		stop = l.hook(turnCtx, e)
-	}
+	stop := l.hook(turnCtx, e)
 	out, st, err := l.h(turnCtx, e)
 	stop()
 	cancel()
