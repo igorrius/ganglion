@@ -510,3 +510,15 @@ func TestReleaseLeasesAfterCrash(t *testing.T) {
 		t.Fatalf("second ReleaseLeases = %d, %v; want 1 (the new lease)", n, err)
 	}
 }
+
+func TestLeaseAttempts(t *testing.T) {
+	f := setup(t)
+	put(t, f, msg("telegram:1", "k1"))
+	if l := lease(t, f); l.Attempts != 1 {
+		t.Fatalf("first lease attempts %d", l.Attempts)
+	}
+	f.clock.Advance(2 * time.Minute)
+	if l := lease(t, f); l.Attempts != 2 {
+		t.Fatalf("second lease attempts %d", l.Attempts)
+	}
+}

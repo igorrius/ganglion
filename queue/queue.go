@@ -22,9 +22,10 @@ var ErrLeaseLost = errors.New("queue: lease lost")
 // Lease is an event taken for processing. If the holder does not complete
 // it before Until, the event becomes available again (R-DLV-3).
 type Lease struct {
-	Event event.Event
-	Token string    // proves ownership when completing
-	Until time.Time // lease expiry
+	Event    event.Event
+	Token    string    // proves ownership when completing
+	Until    time.Time // lease expiry
+	Attempts int       // times the event was leased, this lease included
 }
 
 // StateUpdate is the conversation state written together with a turn's

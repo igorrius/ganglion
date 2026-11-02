@@ -55,7 +55,7 @@ func (q *Queue) Lease(ctx context.Context, d time.Duration) (queue.Lease, error)
 	err := q.immediate(ctx, func(c *sql.Conn) error {
 		now := q.now()
 		for {
-			e, seq, err := nextHead(ctx, c, now)
+			e, seq, attempts, err := nextHead(ctx, c, now)
 			if err != nil {
 				return err
 			}
@@ -66,7 +66,7 @@ func (q *Queue) Lease(ctx context.Context, d time.Duration) (queue.Lease, error)
 				}
 				continue
 			}
-			l = queue.Lease{Event: e, Token: event.NewID(now), Until: now.Add(d)}
+			l = queue.Lease{Event: e, Token: event.NewID(now), Until: now.Add(d), Attempts: attempts + 1}
 			_, err = c.ExecContext(ctx,
 				`UPDATE inbox SET lease_token = ?, lease_until_ms = ?, attempts = attempts + 1 WHERE seq = ?`,
 				l.Token, l.Until.UnixMilli(), seq)
@@ -84,33 +84,34 @@ func (q *Queue) Lease(ctx context.Context, d time.Duration) (queue.Lease, error)
 
 // nextHead returns the oldest pending, unleased event that heads its
 // conversation, or queue.ErrEmpty.
-func nextHead(ctx context.Context, c *sql.Conn, now time.Time) (event.Event, int64, error) {
+func nextHead(ctx context.Context, c *sql.Conn, now time.Time) (event.Event, int64, int, error) {
 	var (
 		e           event.Event
 		seq         int64
+		attempts    int
 		payload     sql.NullString
 		ttlMS, atMS int64
 	)
 	err := c.QueryRowContext(ctx,
-		`SELECT i.seq, i.id, i.idem_key, i.source, i.conv, i.kind, i.payload, i.ttl_ms, i.at_ms
+		`SELECT i.seq, i.id, i.idem_key, i.source, i.conv, i.kind, i.payload, i.ttl_ms, i.at_ms, i.attempts
 		 FROM inbox i
 		 WHERE i.status = 'pending' AND i.lease_until_ms <= ?
 		   AND NOT EXISTS (SELECT 1 FROM inbox j
 		                   WHERE j.conv = i.conv AND j.status = 'pending' AND j.seq < i.seq)
 		 ORDER BY i.seq LIMIT 1`, now.UnixMilli(),
-	).Scan(&seq, &e.ID, &e.IdemKey, &e.Source, &e.Conv, &e.Kind, &payload, &ttlMS, &atMS)
+	).Scan(&seq, &e.ID, &e.IdemKey, &e.Source, &e.Conv, &e.Kind, &payload, &ttlMS, &atMS, &attempts)
 	if errors.Is(err, sql.ErrNoRows) {
-		return event.Event{}, 0, queue.ErrEmpty
+		return event.Event{}, 0, 0, queue.ErrEmpty
 	}
 	if err != nil {
-		return event.Event{}, 0, err
+		return event.Event{}, 0, 0, err
 	}
 	if payload.Valid {
 		e.Payload = json.RawMessage(payload.String)
 	}
 	e.TTL = time.Duration(ttlMS) * time.Millisecond
 	e.At = fromMS(atMS)
-	return e, seq, nil
+	return e, seq, attempts, nil
 }
 
 // Complete implements queue.Queue. In one transaction it marks the event
