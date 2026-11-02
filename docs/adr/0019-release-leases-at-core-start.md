@@ -1,6 +1,6 @@
 # ADR-0019: Release inbox leases when a core starts; one core process owns a database file
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-02
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-3, R-DLV-4)

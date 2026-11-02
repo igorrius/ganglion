@@ -37,8 +37,8 @@ Start here when coming back to the project.
     list, `access`), task 7 (core loop, echo bot, crash harness: 500
     kills, every message answered in order). Next: task 8, the live run on
     the test bot, which closes M2.
-  - [ADR-0019](adr/0019-release-leases-at-core-start.md) (release leases
-    when a core starts) is Proposed and waits for the owner.
+  - [ADR-0019](adr/0019-release-leases-at-core-start.md): a core releases
+    leases at start and locks its database file (Accepted).
   - Live checks need a separate test bot: `TELEGRAM_TEST_BOT_TOKEN` in
     `.env`. Everything before that runs against a fake Bot API in tests.
     See [owner setup](#owner-setup-for-live-checks) below.
