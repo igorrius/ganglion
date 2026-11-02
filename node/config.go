@@ -8,6 +8,7 @@ import (
 	"time"
 	_ "time/tzdata" // GANGLION_TZ works in images without zoneinfo
 
+	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/secrets"
 )
@@ -37,7 +38,7 @@ type AgentConfig struct {
 	DailyBudgetUSD float64           // GANGLION_DAILY_BUDGET_USD, default 1.0
 	DailyTurns     int               // GANGLION_DAILY_TURNS per person; unset = the agent's default (300), 0 = off
 	DailyTokens    int               // GANGLION_DAILY_TOKENS per person; unset = the agent's default (1M), 0 = off
-	SessionIdle    time.Duration     // GANGLION_SESSION_IDLE: a duration or "off"; 0 = the default 6h
+	SessionIdle    time.Duration     // GANGLION_SESSION_IDLE: a duration, or "off" (0); unset = the agent's default (6h)
 	TZ             *time.Location    // GANGLION_TZ, default Europe/Kyiv
 }
 
@@ -82,7 +83,8 @@ func ConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte, er
 }
 
 func agentFromEnv(getenv func(string) string, readFile func(string) ([]byte, error)) (AgentConfig, error) {
-	a := AgentConfig{DailyBudgetUSD: 1.0}
+	def := agent.DefaultConfig()
+	a := AgentConfig{DailyBudgetUSD: 1.0, DailyTurns: def.DailyTurns, DailyTokens: def.DailyTokens, SessionIdle: def.SessionIdle}
 	tz := getenv("GANGLION_TZ")
 	if tz == "" {
 		tz = "Europe/Kyiv"
@@ -102,15 +104,12 @@ func agentFromEnv(getenv func(string) string, readFile func(string) ([]byte, err
 			if *dst, err = strconv.Atoi(v); err != nil || *dst < 0 {
 				return a, fmt.Errorf("%s=%q is not a whole number (0 turns the limit off)", name, v)
 			}
-			if *dst == 0 {
-				*dst = -1 // the agent's "off"; its 0 means "default"
-			}
 		}
 	}
 	switch v := getenv("GANGLION_SESSION_IDLE"); v {
 	case "":
 	case "off":
-		a.SessionIdle = -1
+		a.SessionIdle = 0
 	default:
 		if a.SessionIdle, err = time.ParseDuration(v); err != nil || a.SessionIdle <= 0 {
 			return a, fmt.Errorf("GANGLION_SESSION_IDLE=%q is not a positive duration like 6h, or off", v)

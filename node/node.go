@@ -209,11 +209,10 @@ func buildHandler(ctx context.Context, ac AgentConfig, db *sql.DB, q *sqlqueue.Q
 	if err != nil {
 		return nil, nil, err
 	}
-	ag := agent.New(agent.Config{
-		DailyTurns: ac.DailyTurns, DailyTokens: ac.DailyTokens,
-		SessionIdle: ac.SessionIdle, Location: tz,
-	}, agent.Deps{
-		States: q, Router: rt, Providers: providers, Turns: turnsLog, Archive: archive,
+	acfg := agent.DefaultConfig()
+	acfg.DailyTurns, acfg.DailyTokens, acfg.SessionIdle, acfg.Location = ac.DailyTurns, ac.DailyTokens, ac.SessionIdle, tz
+	ag := agent.New(acfg, agent.Deps{
+		States: q, Router: rt, Providers: providers, Tools: agent.NoTools{}, Turns: turnsLog, Archive: archive,
 		Alerts: admins, Log: logger,
 		Persona: agent.PersonaDir(ac.Workspace),
 	})

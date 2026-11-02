@@ -100,35 +100,35 @@ policies and skills on it. The node is assembled in one place (`config`,
   error, spec 7.3 layer 3). This is the M3a minor.
 - [x] `make check`; commit.
 
-### Task 3: the agent as a stage pipeline
+### Task 3: the agent as a stage pipeline — done
 
 **Files:** `agent/agent.go` split into `agent/turn.go`, `agent/stages.go`,
 `agent/commands.go`, `agent/model.go`, `agent/limits.go`; `agent/tools.go`,
 `agent/sessions.go`, `agent/compact.go`, `agent/prompt.go`
 
-- [ ] `turn` struct: the event, the decoded message, the state, the trace
+- [x] `turn` struct: the event, the decoded message, the state, the trace
   record, the replies, the clock reading. `reply(text)` and `finish()`
   become methods on it, not closures.
-- [ ] `type stage func(ctx, *turn) (done bool, err error)`. `Handle` runs
+- [x] `type stage func(ctx, *turn) (done bool, err error)`. `Handle` runs
   the list `decode → idle session → commands → daily limits → answer →
   compact`, then `finish`. `Handle` itself stays under 30 lines.
-- [ ] Commands as a table: `map[string]command`, where a command is
+- [x] Commands as a table: `map[string]command`, where a command is
   `func(ctx, *turn, arg string) error`, with `/new`, `/reset`, `/sessions`
   and `/resume`. `sessions()` with seven arguments goes away.
-- [ ] `answer` stage: the model and tool loop. Model calls go through
+- [x] `answer` stage: the model and tool loop. Model calls go through
   `call(ctx, task, msgs, tools) (resp, ok)`, which records attempts on the
   turn. Tool calls go through a `ToolFunc` wrapped by middleware. Tracing
   becomes the first `ToolMiddleware`; M3b adds policies and the depth limit
   as more middleware.
-- [ ] `Deps` uses named types: `StateReader` interface, `AdminsFunc`,
+- [x] `Deps` uses named types: `StateReader` interface, `AdminsFunc`,
   `PersonaFunc`, `PrivateConvFunc`.
-- [ ] `Config`: `DefaultConfig()` returns today's defaults; zero turns a
+- [x] `Config`: `DefaultConfig()` returns today's defaults; zero turns a
   limit off. The `-1` sentinel and `node`'s 0→-1 mapping go away.
-- [ ] `systemPrompt`: one clear path. An error logs and uses the default.
-- [ ] The existing `agent` tests pass unchanged except for constructors.
+- [x] `systemPrompt`: one clear path. An error logs and uses the default.
+- [x] The existing `agent` tests pass unchanged except for constructors.
   New table tests cover the command table and the stage order (a stage
   that ends the turn skips the rest).
-- [ ] `make check`; commit.
+- [x] `make check`; commit.
 
 ### Task 4: the `config` package with `samber/do`
 

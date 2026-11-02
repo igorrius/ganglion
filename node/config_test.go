@@ -2,6 +2,7 @@ package node
 
 import (
 	"errors"
+	"github.com/igorrius/ganglion/agent"
 	"io/fs"
 	"strings"
 	"testing"
@@ -145,11 +146,16 @@ func TestConfigAgent(t *testing.T) {
 		}
 	}
 	if cfg, err := ConfigFromEnv(env(map[string]string{"GANGLION_DAILY_TURNS": "0", "GANGLION_DAILY_TOKENS": "0"}), files(nil)); err != nil ||
-		cfg.Agent.DailyTurns >= 0 || cfg.Agent.DailyTokens >= 0 {
-		t.Errorf("0 must turn the daily limits off: %+v, %v", cfg.Agent, err)
+		cfg.Agent.DailyTurns != 0 || cfg.Agent.DailyTokens != 0 {
+		t.Errorf("0 must turn the daily limits off (agent's zero): %+v, %v", cfg.Agent, err)
 	}
-	if cfg, err := ConfigFromEnv(env(map[string]string{"GANGLION_SESSION_IDLE": "off"}), files(nil)); err != nil || cfg.Agent.SessionIdle >= 0 {
+	if cfg, err := ConfigFromEnv(env(map[string]string{"GANGLION_SESSION_IDLE": "off"}), files(nil)); err != nil || cfg.Agent.SessionIdle != 0 {
 		t.Errorf("idle off: %v, %v", cfg.Agent.SessionIdle, err)
+	}
+	def := agent.DefaultConfig()
+	if cfg, err := ConfigFromEnv(env(nil), files(nil)); err != nil || cfg.Agent.DailyTurns != def.DailyTurns ||
+		cfg.Agent.DailyTokens != def.DailyTokens || cfg.Agent.SessionIdle != def.SessionIdle {
+		t.Errorf("unset limits must be the agent's defaults: %+v, %v", cfg.Agent, err)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/turns"
 )
 
 // compactSplit returns where the kept part of msgs starts: keep the last
@@ -39,7 +40,7 @@ func compactInput(summary string, old []provider.Message) string {
 
 // compact folds all but the last KeepRecent messages into the summary with
 // a cheap model. On failure the state is returned unchanged.
-func (a *Agent) compact(ctx context.Context, st State, tr *turnRecord) State {
+func (a *Agent) compact(ctx context.Context, st State, rec *turns.Turn) State {
 	split := compactSplit(st.Messages, a.cfg.KeepRecent)
 	if split == 0 {
 		return st
@@ -48,9 +49,9 @@ func (a *Agent) compact(ctx context.Context, st State, tr *turnRecord) State {
 		{Role: provider.RoleSystem, Content: compactPrompt},
 		{Role: provider.RoleUser, Content: compactInput(st.Summary, st.Messages[:split])},
 	}
-	resp, ok := a.call(ctx, router.TaskReq{Tier: router.TierCheap, Kind: router.TaskCompaction}, msgs, nil, tr)
+	resp, ok := a.call(ctx, router.TaskReq{Tier: router.TierCheap, Kind: router.TaskCompaction}, msgs, nil, rec)
 	if !ok || strings.TrimSpace(resp.Message.Content) == "" {
-		a.log.Warn("agent: compaction failed; history kept", "conv", tr.Conv, "messages", len(st.Messages))
+		a.log.Warn("agent: compaction failed; history kept", "conv", rec.Conv, "messages", len(st.Messages))
 		return st
 	}
 	st.Summary = strings.TrimSpace(resp.Message.Content)

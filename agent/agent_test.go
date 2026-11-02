@@ -128,6 +128,7 @@ type env struct {
 	now        time.Time
 	router     *rules.Router
 	archive    *Archive
+	deps       Deps
 	logs       *bytes.Buffer
 	persona    string
 	personaErr error
@@ -160,10 +161,7 @@ func newEnv(t *testing.T, cfg Config, tools Tools) *env {
 	if tools == nil {
 		tools = NoTools{}
 	}
-	if cfg.Location == nil {
-		cfg.Location = time.UTC
-	}
-	e.a = New(cfg, Deps{
+	e.deps = Deps{
 		States: e.states, Router: e.router, Tools: tools, Turns: tl, Archive: arch,
 		Providers: map[string]provider.Provider{"p1": e.smart, "p2": e.cheap},
 		Alerts: alert.Admins{List: func(context.Context) ([]string, error) { return []string{"telegram:user:1"}, nil }, Private: func(p string) (string, string, bool) {
@@ -173,8 +171,36 @@ func newEnv(t *testing.T, cfg Config, tools Tools) *env {
 		Now:     func() time.Time { return e.now },
 		Persona: func() (string, error) { return e.persona, e.personaErr },
 		Log:     slog.New(slog.NewTextHandler(e.logs, nil)),
-	})
+	}
+	e.a = New(overDefaults(cfg), e.deps)
 	return e
+}
+
+// overDefaults is DefaultConfig with the non-zero fields of cfg.
+func overDefaults(cfg Config) Config {
+	d := DefaultConfig()
+	set := func(dst *int, v int) {
+		if v != 0 {
+			*dst = v
+		}
+	}
+	setD := func(dst *time.Duration, v time.Duration) {
+		if v != 0 {
+			*dst = v
+		}
+	}
+	set(&d.MaxSteps, cfg.MaxSteps)
+	setD(&d.TurnTimeout, cfg.TurnTimeout)
+	setD(&d.CallTimeout, cfg.CallTimeout)
+	set(&d.HistoryTokens, cfg.HistoryTokens)
+	set(&d.KeepRecent, cfg.KeepRecent)
+	set(&d.DailyTurns, cfg.DailyTurns)
+	set(&d.DailyTokens, cfg.DailyTokens)
+	setD(&d.SessionIdle, cfg.SessionIdle)
+	if cfg.Location != nil {
+		d.Location = cfg.Location
+	}
+	return d
 }
 
 var seq int
