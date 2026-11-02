@@ -12,7 +12,7 @@ an agent loop with step and daily limits and a `turns` trace, turns of
 different chats running in parallel; then a live run on the test bot that
 picks the first model (D-6).
 
-**Scope:** M3 tasks 3.1–3.4 of the [phase plan](p1-all-in-one.md#m3--the-agent-spec-72-74-76-77)
+**Scope:** sessions (R-AGT-6), M3 tasks 3.1–3.4 of the [phase plan](p1-all-in-one.md#m3--the-agent-spec-72-74-76-77)
 and the talking half of 3.8. Memory (3.5), tools and policies (3.6), skills
 (3.7) and the end-to-end acceptance under the crash harness (3.8) are M3b,
 planned after this one. M3a has a tool registry but registers no tools.
@@ -84,7 +84,9 @@ dependencies.
 
 | What | Format | Example |
 |---|---|---|
-| Agent state (`conv_state.data`) | `{"v":1,"summary":"…","messages":[…]}` | `{"v":1,"summary":"","messages":[{"role":"user","content":"Igor: hi"}]}` |
+| Agent state (`conv_state.data`) | `{"v":1,"session":"<ULID>","started_ms":…,"last_ms":…,"summary":"…","messages":[…]}` | `{"v":1,"session":"01JC…","started_ms":1793…,"last_ms":1793…,"summary":"","messages":[{"role":"user","content":"Igor: hi"}]}` |
+| Session id | ULID of the event that opened the session | `01JC9…` |
+| Commands (first word of a message; `@<bot username>` suffix allowed) | `/new`, `/reset`, `/sessions`, `/resume <n>` | `/resume 2` |
 | User message content | `<Name>: <text>`; no name → the principal | `Igor: what is the battery level?` |
 | Reply `IdemKey` | `<event IdemKey>:reply:0` (unchanged from M2) | `telegram:7001:883920:reply:0` |
 | Daily-limit alert `IdemKey` | `alert:daily-limit:<YYYY-MM-DD>:<principal>` | `alert:daily-limit:2026-11-03:telegram:user:1` |
@@ -95,10 +97,10 @@ dependencies.
 
 1. **A provider hangs.** A turn must end within its timeout (default 2 min,
    always shorter than the 10-minute lease), try the next candidate, and
-   never hold its conversation for the whole lease (tasks 6, 7).
+   never hold its conversation for the whole lease (tasks 6, 8).
 2. **Every candidate fails** (no key, all rate-limited, model removed).
    The person gets one short apology, the turn completes, and it is not
-   retried every 10 minutes forever (tasks 6, 7).
+   retried every 10 minutes forever (tasks 6, 8).
 3. **History grows without bound.** A long chat must stay inside the
    model's context: compaction runs in the turn that crosses the budget,
    and a failed compaction keeps the history and tries again next turn
@@ -392,7 +394,7 @@ dependencies.
 - Consumes: tasks 1, 4, 5; `queue.StateUpdate`, `event.Message`.
 - Produces:
   ```go
-  type State struct { V int; Summary string; Messages []provider.Message } // json: v, summary, messages
+  type State struct { V int; Session string; Started, Last time.Time; Summary string; Messages []provider.Message } // json: v, session, started_ms, last_ms, summary, messages
   func DecodeState(raw json.RawMessage) (State, error) // nil → empty v:1 state; unknown v → error
 
   type Tools interface {
@@ -492,7 +494,61 @@ dependencies.
 - [ ] **Step 4: Run** `go test -race ./agent/` — PASS.
 - [ ] **Step 5: Commit** `agent: turn loop with fallback, step and daily limits, compaction`.
 
-### Task 7: parallel turns, turn timeout and giving up (R-AGT-1)
+### Task 7: sessions — `/new`, idle reset, archive, `/sessions`, `/resume` (R-AGT-6)
+
+**Files:**
+- Create: `agent/sessions.go`, `agent/migrations/001_sessions.sql`,
+  `agent/sessions_test.go`
+- Modify: `agent/agent.go` (commands and the idle check run before step 2
+  of `Handle`)
+
+**Interfaces:**
+- Consumes: task 6.
+- Produces:
+  ```go
+  type Archive struct{ /* db */ }
+  func NewArchive(ctx context.Context, db *sql.DB) (*Archive, error) // component "sessions"
+  func (a *Archive) Put(ctx context.Context, conv string, s State, endedBy string) error // upsert by (conv, s.Session): a rerun writes the same row
+  func (a *Archive) List(ctx context.Context, conv string, n int) ([]SessionInfo, error) // newest first
+  func (a *Archive) Get(ctx context.Context, conv, session string) (State, error)
+  type SessionInfo struct { Session string; Started, Ended time.Time; Turns int; Title string } // Title: the first user message, first 60 runes
+  // Config gains SessionIdle time.Duration (default 6h; 0 = off); Deps gains Archive *Archive.
+  ```
+  Table `sessions(conv, session, started_ms, ended_ms, ended_by, turns,
+  title, data TEXT json, PRIMARY KEY (conv, session))`, index on
+  `(conv, ended_ms)`.
+- Order in `Handle`, before the model is called:
+  1. A non-empty state whose `Last` is older than `SessionIdle` →
+     archive it (`endedBy "idle"`) and start an empty state with
+     `Session = e.ID`; the message is then handled as usual.
+  2. `/new` or `/reset` → archive the current state if it has messages
+     (`endedBy "new"`), reply `New session started.`, state empty with
+     `Session = e.ID`. No model call; `turns` outcome `command`.
+  3. `/sessions` → reply a numbered list of the last 5:
+     `1. 2 Nov 21:40–22:15 · 6 turns · <title>`, or `No earlier sessions.`.
+  4. `/resume <n>` → the n-th of that list: archive the current state
+     (`endedBy "resume"`) if it has messages, load the chosen one as the
+     state (its `Last` set to now), reply `Resumed: <title>`. A bad `n` →
+     `No such session; see /sessions.`
+  Command replies are plain text and in English in M3a; the agent's
+  language rules apply to model answers only.
+- Archiving before `Complete` is safe without a shared transaction: the
+  row is keyed by `(conv, session)`, so a turn that reruns after a crash
+  writes the same row again.
+- [ ] **Step 1: Write failing tests.** `TestIdleStartsNewSession` (fake
+  clock: a message 7 h after the last one → the old session archived,
+  the model sees no old messages), `TestWithinIdleKeepsSession` (5 h),
+  `TestNewArchivesAndResets`, `TestNewOnEmptySessionArchivesNothing`,
+  `TestCommandWithBotSuffix` (`/new@ganglion_test_bot`),
+  `TestSessionsList` (format and order), `TestResumeSwapsSessions` (the
+  resumed history reaches the model; the replaced one is archived),
+  `TestResumeBadIndex`, `TestArchiveRerunIsIdempotent`.
+- [ ] **Step 2: Run** `go test ./agent/` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** `go test -race ./agent/` — PASS.
+- [ ] **Step 5: Commit** `agent: sessions with /new, idle reset, archive, /sessions and /resume`.
+
+### Task 8: parallel turns, turn timeout and giving up (R-AGT-1)
 
 **Files:**
 - Modify: `core/loop.go`, `core/loop_test.go`, `queue/queue.go`
@@ -528,7 +584,7 @@ dependencies.
 - [ ] **Step 4: Run** `go test -race ./core/ ./queue/...` — PASS.
 - [ ] **Step 5: Commit** `core: parallel workers, turn timeout, give up after max attempts`.
 
-### Task 8: wiring the agent into the node
+### Task 9: wiring the agent into the node
 
 **Files:**
 - Modify: `node/config.go`, `node/config_test.go`, `node/node.go`,
@@ -537,7 +593,8 @@ dependencies.
 **Interfaces:**
 - Consumes: everything above.
 - Config additions (environment until D-3 in M4):
-  - `GANGLION_MODELS_FILE`: the catalogue (task 4). Empty → the core runs
+  - `GANGLION_MODELS_FILE`: the catalogue (task 4); `GANGLION_SESSION_IDLE`
+    (default `6h`, task 7). Empty → the core runs
     `core.Echo` as in M2 and logs that the agent is off.
   - Each provider's `key_env` is read with the `secret` helper (value or
     `<NAME>_FILE`), trimmed.
@@ -550,12 +607,12 @@ dependencies.
   ```
 - `runCore` with a catalogue: `turns.New`, one client per provider by
   `type` (`openai.New` or `claudecli.New`), `rules.New(catalog.RouterModels(), WithBudget(turnsLog, budget,
-  tz))`, `agent.New`, and `core.NewLoop(..., agent.Handle, WithWorkers(4),
+  tz))`, `agent.NewArchive`, `agent.New`, and `core.NewLoop(..., agent.Handle, WithWorkers(4),
   WithTurnTimeout(3m), WithMaxAttempts(3, giveUpAlert))`, where
   `giveUpAlert` tells the sender `Sorry, something went wrong with that
   message.` and each admin the event id.
 - [ ] **Step 1: Write failing tests.** `TestConfigAgent` (defaults, a bad
-  `GANGLION_TZ`, a bad budget), `TestAgentOverTelegram` (fake Telegram +
+  `GANGLION_TZ`, a bad budget, a bad `GANGLION_SESSION_IDLE`), `TestAgentOverTelegram` (fake Telegram +
   `providertest` + a catalogue file in a temp dir: the admin's message gets
   the model's reply; the request to the model carries `Igor: hi`),
   `TestMissingProviderKeyFailsAtStart` (the error names `key_env`, not a
@@ -565,7 +622,7 @@ dependencies.
 - [ ] **Step 4: Run** `go test -race ./...` — PASS (the M2 crash harness still runs the echo path).
 - [ ] **Step 5: Commit** `node: run the agent when a model catalogue is configured`.
 
-### Task 9: live run, first model (D-6), docs
+### Task 10: live run, first model (D-6), docs
 
 **Files:**
 - Create: `docs/research/<date>-first-model.md`, `docs/adr/0022-first-model.md`

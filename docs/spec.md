@@ -273,6 +273,12 @@ Guarantee: **at-least-once + idempotency.**
   limit on turns and tokens; exceeding it alerts the administrator.
 - **R-AGT-5.** Every turn is written to the `turns` table: input, route, tool
   calls, cost, reply (a trace for observability and memory consolidation).
+- **R-AGT-6.** A conversation is split into sessions. A new session starts
+  on `/new` (or `/reset`) and on the first message after 6 hours of
+  silence (configurable). Ended sessions are archived with their summary
+  and messages. `/sessions` lists the last five, and `/resume <n>` brings
+  one back, archiving the current one. Facts that outlive a session live
+  in memory (7.7), not in history.
 
 ### 7.3. Model router
 
