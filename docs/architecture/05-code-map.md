@@ -13,7 +13,7 @@ interfaces only; **planned** — not in the repository yet.
 | Build information: version, commit, toolchain of this binary | `internal/buildinfo` | done (P1 refactor) | — | [0029](../adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md) |
 | Composition root, dependency logic only: one `samber/do` provider per component; extension points (handler, give-up, turn hook, transports, receivers, housekeeping) as an interface provider that selects and one named provider per implementation, no-ops included; a `do.Package` per role, `Run`; `Bootstrap`, filled by the command line | `config` | done (P1 refactor) | 5.1 | [0028](../adr/0028-samber-do-composition-root-in-config.md) |
 | Role runner: `Component`, `RunAll`, `Run` by roles; the database lock; Telegram polling as a component with the 409 alert | `node` | done; edge and worker are stubs | 5.1 | [0004](../adr/0004-one-binary-with-roles.md), [0019](../adr/0019-release-leases-at-core-start.md) |
-| `Event`, `Outgoing` (with `Buttons` and `Edit` in place), TTL expiry, ULID and random ids, the neutral payloads: `Message`, `Decision` (a button press), `ToolResult` (an expired pending call) | `event` | done; buttons, edits, decision and tool.result kinds (P1 M3b task 4) | 6, 9.1 | [0032](../adr/0032-buttons-and-resume.md) |
+| `Event`, `Outgoing` (with `Buttons` and `Edit` in place), TTL expiry, ULID and random ids, the neutral payloads: `Message`, `Decision` (a button press), `ToolResult` (an expired pending call), `Schedule` (a job's time) | `event` | done; buttons, edits, decision and tool.result kinds (P1 M3b task 4); schedule kind (task 6) | 6, 9.1 | [0032](../adr/0032-buttons-and-resume.md) |
 | Transport interface, send errors (`ErrPermanent`, `RetryAfterError`), `Parter` | `transport` | interface | 6, 7.1 | [0017](../adr/0017-extension-points.md) |
 | Inbox / outbox: `Queue`, `Outbox` | `queue` | interface | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 | Model providers: neutral messages, MCP tools, error kinds | `provider` | interface | 7.4 | [0007](../adr/0007-openai-compatible-first-provider.md), [0020](../adr/0020-neutral-history-as-conversation-state.md) |
@@ -22,7 +22,8 @@ interfaces only; **planned** — not in the repository yet.
 | Model router: catalogue types, `Route`, `Report`; `Local`, the P1 tool placement (everything runs on this node) | `router` | interface; `Local` (P1 M3b task 5) | 7.3 | — |
 | Rules router and YAML model catalogue: filters, tiers, budget, cooldown | `router/rules` | done (P1 M3a) | 7.3 | [0021](../adr/0021-providers-chosen-by-the-operator-claude-cli-included.md), [0022](../adr/0022-haiku-first-during-development.md) |
 | Turn trace: route, tools, tokens, cache, cost; daily totals | `turns` | done (P1 M3a) | 7.2 | — |
-| History (as conversation state), cron_runs | history in `agent`; cron_runs planned (P1) | history done (P1 M3a) | 6 | [0020](../adr/0020-neutral-history-as-conversation-state.md) |
+| History (as conversation state), cron_runs | history in `agent`; `cron_runs` in `schedule` | history done (P1 M3a); cron_runs done (P1 M3b task 6) | 6 | [0020](../adr/0020-neutral-history-as-conversation-state.md) |
+| Scheduler: an own five-field cron parser read in the node's zone (a wall time skipped in spring runs at the jump, one repeated in autumn runs once), jobs (reminders and agent tasks with a grant; system jobs cannot be deleted; `Ensure` for the node's own), `cron_runs` with catch-up (one event per job per tick, for the latest missed slot; key `cron:<job>:<slot ms>`, run now `cron:<job>:now:<ms>`), the `Scheduler` component | `schedule` | done (P1 M3b task 6); module triggers in M4 | 7.10 | [0031](../adr/0031-agent-security-baseline.md) |
 | Access list: `allowed` table with roles; sink filter that drops strangers' messages and button presses | `access` | done (P1 M2); presses (P1 M3b task 4) | 7.8 | [0032](../adr/0032-buttons-and-resume.md) |
 | SQLite queue: inbox (ordered leases, atomic `Complete`), outbox (heads per conversation, retries, parts), conversation state, prune and the daily `Pruner` component | `queue/sqlqueue` | done (P1 M2) | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 | Outbox sender: order per conversation, backoff, `retry_after` pause, resumable parts | `outbox` | done (P1 M2) | 7.1 | — |
@@ -88,6 +89,9 @@ flowchart BT
     policyp --> alertp
     policyp --> urlnormp["internal/urlnorm"]
     configp --> policyp
+    schedulep["schedule"] --> toolp
+    schedulep --> event
+    schedulep --> sqlitedb
     pendingp["tool/pending"] --> toolp
     pendingp --> cellsp
     pendingp --> sqlitedb

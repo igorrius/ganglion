@@ -13,6 +13,7 @@ func TestKindValues(t *testing.T) {
 		event.KindMessage:    "message",
 		event.KindDecision:   "decision",
 		event.KindToolResult: "tool.result",
+		event.KindSchedule:   "schedule",
 	} {
 		if string(kind) != want {
 			t.Errorf("kind %q, want %q", kind, want)

@@ -22,6 +22,9 @@ const (
 	// KindToolResult is the end of a pending tool call that nobody
 	// answered in time; its payload is a ToolResult.
 	KindToolResult Kind = "tool.result"
+	// KindSchedule is a scheduled job's time: a reminder to send or a
+	// task to run (spec 7.10); its payload is a Schedule.
+	KindSchedule Kind = "schedule"
 )
 
 // Event is the single input from any transport: a chat message, a sensor

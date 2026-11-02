@@ -24,3 +24,12 @@ type Decision struct {
 type ToolResult struct {
 	Pending string `json:"pending"` // the pending call's id
 }
+
+// Schedule is the payload of an event of kind "schedule": the time of a
+// scheduled job came, or its owner asked to run it now. The job itself
+// is read from its store when the event is handled, so a job deleted
+// after the event was stored does not run.
+type Schedule struct {
+	Job       string `json:"job"`          // the job's id
+	Scheduled int64  `json:"scheduled_ms"` // the slot, Unix ms; for a run now, when it was asked
+}
