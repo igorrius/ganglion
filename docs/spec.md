@@ -873,6 +873,13 @@ Reviewed at each gate.
   admin (the same idea as node enrolment with a one-time token, 9.3).
 - An encrypted secret store on the node's key, behind the secret source of
   D-3; secrets set and rotated without a restart.
+- Telegram, beyond formatting, typing and replies (ADR-0025). Each item
+  is to be checked against the Bot API docs of the day:
+  - a reaction on a message the agent has seen, useful in groups when
+    someone addresses the agent directly;
+  - streaming answers as they are generated (needs streaming providers
+    and must fit the outbox's delivery guarantee);
+  - per-group behaviour and limits in the node config.
 - Importers from popular assistants (OpenClaw first): persona, memory,
   skills and settings turned into ganglion's workspace files, so their
   users can move over (R-MEM-3, ADR-0024).

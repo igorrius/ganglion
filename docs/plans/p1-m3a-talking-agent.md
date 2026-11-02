@@ -632,6 +632,55 @@ dependencies.
 - [x] **Step 4: Run** `go test -race ./...` — PASS (the M2 crash harness still runs the echo path).
 - [x] **Step 5: Commit** `node: run the agent when a model catalogue is configured`.
 
+### Task 11: Telegram formatting, "typing…" and replies (ADR-0025)
+
+Added after the live run: models answer in Markdown, and the M2 transport
+showed it raw.
+
+**Files:**
+- Create: `transport/telegram/markdown.go`, `transport/telegram/markdown_test.go`
+- Modify: `transport/telegram/split.go` (block-aware parts),
+  `transport/telegram/transport.go` (entities, typing, reply),
+  `transport/telegram/types.go`, `event/event.go` (`Outgoing.ReplyTo`),
+  `event/message.go` (`Message.Ref`), `agent/agent.go` (copy the ref),
+  `core/loop.go` (turn hook), `node/node.go`, `node/config.go`
+
+**Interfaces:**
+- Produces:
+  ```go
+  // event
+  type Message struct { Text, From, Name string; Ref string `json:"ref,omitempty"` } // Ref: the channel's message reference
+  type Outgoing struct { …; ReplyTo string } // a Message.Ref; the transport decides whether to use it
+  // transport/telegram
+  func render(md string) (text string, ents []entity) // entity{Type string; Offset, Length int; URL, Language string} in UTF-16 units
+  func WithReplyMode(m ReplyMode) Option              // ReplyAuto (default) | ReplyAlways | ReplyOff
+  func (t *Transport) Typing(ctx context.Context, conv string) // sendChatAction "typing" every 4 s until ctx ends
+  // core
+  func WithTurnHook(h func(ctx context.Context, e event.Event) (stop func())) Option
+  ```
+- `auto` replies when the chat is a group or supergroup, or when a newer
+  incoming message arrived in that chat after the one being answered
+  (the transport keeps the last message id per chat in memory).
+  `reply_parameters` always carries `allow_sending_without_reply: true`.
+  A split message replies with its first part only.
+- [ ] **Step 1: Write failing tests.** `TestRender` (a table: bold,
+  italic, nested bold+italic, strikethrough, inline code, fenced code with
+  a language, a link, a heading, nested lists, a numbered list, a quote,
+  a long quote → expandable, a table → pre, raw HTML shown as text, emoji
+  and Cyrillic offsets in UTF-16); `TestPartsKeepBlocksWhole`;
+  `TestPartsSplitLongCodeBlock`; `TestSendUsesEntities` (fake: the text
+  has no asterisks, the entities arrive); `TestReplyModes` (auto in a
+  private chat with no newer message → no reply; with a newer message →
+  reply; group → reply; always; off); `TestTyping` (the fake counts
+  `sendChatAction` calls; they stop when ctx ends); `TestTurnHook` in
+  core; `TestAgentCopiesRef`.
+- [ ] **Step 2: Run** `go test ./transport/telegram/... ./core/ ./agent/` — FAIL.
+- [ ] **Step 3: Implement**; `node` wires the hook to `Typing` for
+  telegram events and reads `GANGLION_TELEGRAM_REPLY`.
+- [ ] **Step 4: Run** `go test -race ./...` and `make memory` — PASS; note
+  the binary size.
+- [ ] **Step 5: Commit** `transport/telegram: Markdown to entities, typing and replies`.
+
 ### Task 10: live run, first model (D-6), docs
 
 **Files:**
