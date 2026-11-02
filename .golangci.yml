@@ -1,11 +1,53 @@
 version: "2"
 
+# The guardrails of the Go conventions (docs/conventions.md, ADR-0027).
 linters:
   default: standard
   enable:
     - misspell
     - modernize
     - revive
+    - funlen
+    - gocognit
+    - dupl
+    - goconst
+    - exhaustive
+    - depguard
+  settings:
+    funlen:
+      lines: 60
+      statements: 40
+    gocognit:
+      min-complexity: 20
+    dupl:
+      threshold: 150
+    exhaustive:
+      # A switch over a closed set lists every value or says why not with
+      # a default.
+      default-signifies-exhaustive: true
+    depguard:
+      rules:
+        composition-root:
+          files: ["$all", "!**/config/**"]
+          deny:
+            - pkg: github.com/samber/do
+              desc: only the config package wires the node (ADR-0028)
+        command-line:
+          files: ["$all", "!**/cmd/**"]
+          deny:
+            - pkg: github.com/urfave/cli
+              desc: only cmd reads flags (ADR-0029)
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [funlen, dupl, goconst, gocognit]
+      # Shared test kits (conformance suites, fake servers) are test code
+      # outside _test.go files.
+      - path: (^|/)[a-z]+test/
+        linters: [funlen, dupl, goconst, gocognit]
+      # Development tools are scripts behind flags, not shipped.
+      - path: ^tools/
+        linters: [funlen, gocognit]
 
 formatters:
   enable:

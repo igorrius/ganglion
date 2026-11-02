@@ -226,19 +226,19 @@ policies and skills on it. The node is assembled in one place (`config`,
   core`.
 - [x] `make check`; commit.
 
-### Task 6: lint guardrails
+### Task 6: lint guardrails — done
 
 **Files:** `.golangci.yml`, code that the new linters flag
 
-- [ ] Enable `funlen` (60 lines, 40 statements), `gocognit` (20), `dupl`
+- [x] Enable `funlen` (60 lines, 40 statements), `gocognit` (20), `dupl`
   (150 tokens), `goconst`, `exhaustive`. Tests are excluded from `funlen`
   and `dupl`.
-- [ ] `depguard`:
+- [x] `depguard`:
   - `github.com/samber/do` only in `config`;
   - `github.com/urfave/cli` only in `cmd/...`.
-- [ ] Fix what they find. A `//nolint:<linter> // <reason>` is allowed for
+- [x] Fix what they find. A `//nolint:<linter> // <reason>` is allowed for
   protocol `switch`es and generated-shape code.
-- [ ] `make check`; commit.
+- [x] `make check`; commit.
 
 ### Task 7: measure, run live, close
 

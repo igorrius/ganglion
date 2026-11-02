@@ -131,53 +131,63 @@ func (t *Transport) Name() string { return Name }
 // Run returns ErrConflict on 409, the error on 401, and ctx.Err() when ctx
 // ends; other errors are retried with backoff.
 func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
-	pollBackoff := backoff.New(t.retry)
-	var me user
-	for {
-		var err error
-		if me, err = t.c.getMe(ctx); err == nil {
-			break
-		}
-		if stop := t.onError(ctx, err, pollBackoff); stop != nil {
-			return stop
-		}
+	poll := backoff.New(t.retry)
+	me, err := t.whoAmI(ctx, poll)
+	if err != nil {
+		return err
 	}
-	botID := me.ID
-	t.log.Info("telegram: polling", "bot_id", botID, "username", me.Username)
-
-	sinkBackoff := backoff.New(t.retry)
+	t.log.Info("telegram: polling", "bot_id", me.ID, "username", me.Username)
+	sinkRetry := backoff.New(t.retry)
 	var offset int64
 	for {
 		ups, err := t.c.getUpdates(ctx, offset, t.pollTimeout)
 		if err != nil {
-			if stop := t.onError(ctx, err, pollBackoff); stop != nil {
+			if stop := t.onError(ctx, err, poll); stop != nil {
 				return stop
 			}
 			continue
 		}
-		pollBackoff.Reset()
-		for _, u := range ups {
-			t.seen(u)
-			if e, ok := t.toEvent(botID, u); ok {
-				if err := sink(ctx, e); err != nil {
-					if ctx.Err() != nil {
-						return ctx.Err()
-					}
-					// Keep the offset at this update: Telegram sends it
-					// again on the next poll.
-					d := sinkBackoff.Next()
-					t.log.Warn("telegram: sink failed, update not confirmed",
-						"update_id", u.UpdateID, "conv", e.Conv, "err", err, "retry_in", d)
-					if err := sleep(ctx, d); err != nil {
-						return err
-					}
-					break
-				}
-				sinkBackoff.Reset()
-			}
-			offset = u.UpdateID + 1
+		poll.Reset()
+		if offset, err = t.hand(ctx, sink, me.ID, ups, offset, sinkRetry); err != nil {
+			return err
 		}
 	}
+}
+
+// whoAmI asks for the bot's identity until it gets it or onError stops.
+func (t *Transport) whoAmI(ctx context.Context, b *backoff.Backoff) (user, error) {
+	for {
+		me, err := t.c.getMe(ctx)
+		if err == nil {
+			return me, nil
+		}
+		if stop := t.onError(ctx, err, b); stop != nil {
+			return user{}, stop
+		}
+	}
+}
+
+// hand gives the updates to sink in order and returns the offset past the
+// last one handled. When sink fails, the offset stays at that update, so
+// Telegram sends it again on the next poll, after a wait.
+func (t *Transport) hand(ctx context.Context, sink transport.Sink, botID int64, ups []update, offset int64, b *backoff.Backoff) (int64, error) {
+	for _, u := range ups {
+		t.seen(u)
+		if e, ok := t.toEvent(botID, u); ok {
+			if err := sink(ctx, e); err != nil {
+				if ctx.Err() != nil {
+					return offset, ctx.Err()
+				}
+				d := b.Next()
+				t.log.Warn("telegram: sink failed, update not confirmed",
+					"update_id", u.UpdateID, "conv", e.Conv, "err", err, "retry_in", d)
+				return offset, sleep(ctx, d)
+			}
+			b.Reset()
+		}
+		offset = u.UpdateID + 1
+	}
+	return offset, nil
 }
 
 // onError decides what a failed Bot API call means for Run: a non-nil

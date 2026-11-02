@@ -125,40 +125,57 @@ func (c *client) call(ctx context.Context, method string, params, result any) (e
 		}
 		span.End()
 	}()
+	status, raw, err := c.post(ctx, method, params)
+	if status != 0 {
+		code = strconv.Itoa(status)
+	}
+	if err != nil {
+		return err
+	}
+	return c.decode(method, status, raw, result)
+}
+
+// post sends params as JSON to method and returns the HTTP status and the
+// body.
+func (c *client) post(ctx context.Context, method string, params any) (int, []byte, error) {
 	body := []byte("{}")
 	if params != nil {
 		var err error
 		if body, err = json.Marshal(params); err != nil {
-			return c.fail(method, err)
+			return 0, nil, c.fail(method, err)
 		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/bot"+c.token+"/"+method, bytes.NewReader(body))
 	if err != nil {
-		return c.fail(method, err)
+		return 0, nil, c.fail(method, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.hc.Do(req)
 	if err != nil {
-		return c.fail(method, err)
+		return 0, nil, c.fail(method, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	code = strconv.Itoa(resp.StatusCode)
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 	if err != nil {
-		return c.fail(method, err)
+		return resp.StatusCode, nil, c.fail(method, err)
 	}
+	return resp.StatusCode, raw, nil
+}
 
+// decode reads the Bot API envelope: an *apiError when it is not ok,
+// otherwise the result into result (skipped when result is nil).
+func (c *client) decode(method string, status int, raw []byte, result any) error {
 	var env envelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		if resp.StatusCode != http.StatusOK {
-			return &apiError{Method: method, Code: resp.StatusCode, Description: http.StatusText(resp.StatusCode)}
+		if status != http.StatusOK {
+			return &apiError{Method: method, Code: status, Description: http.StatusText(status)}
 		}
 		return c.fail(method, fmt.Errorf("decode answer: %w", err))
 	}
 	if !env.OK {
 		e := &apiError{Method: method, Code: env.ErrorCode, Description: c.redact(env.Description)}
 		if e.Code == 0 {
-			e.Code = resp.StatusCode
+			e.Code = status
 		}
 		if env.Parameters != nil && env.Parameters.RetryAfter > 0 {
 			e.RetryAfter = time.Duration(env.Parameters.RetryAfter) * time.Second

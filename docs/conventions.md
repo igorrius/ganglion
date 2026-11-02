@@ -80,7 +80,8 @@ A `switch` over such a type lists every constant or says why not
 
 - **Small functions, one level of abstraction each.** The linter caps
   length (`funlen`: 60 lines, 40 statements) and cognitive complexity
-  (`gocognit`: 20). A function that reads like a list of steps calls
+  (`gocognit`: 20). Tests, shared test kits (`*test` packages) and
+  `tools/` are exempt from these limits; production code is not. A function that reads like a list of steps calls
   functions named after the steps.
 - **A process of several steps is a pipeline of named stages** over one
   state object, not a long function with closures:

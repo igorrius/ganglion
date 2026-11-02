@@ -122,17 +122,8 @@ func (q *Queue) Complete(ctx context.Context, l queue.Lease, out []event.Outgoin
 	stored := false
 	err := q.immediate(ctx, func(c *sql.Conn) error {
 		now := q.now()
-		res, err := c.ExecContext(ctx,
-			`UPDATE inbox SET status = 'done', done_ms = ?, lease_until_ms = 0
-			 WHERE id = ? AND lease_token = ? AND status = 'pending'`,
-			now.UnixMilli(), l.Event.ID, l.Token)
-		if err != nil {
+		if err := markDone(ctx, c, l, now); err != nil {
 			return err
-		}
-		if n, err := res.RowsAffected(); err != nil {
-			return err
-		} else if n == 0 {
-			return queue.ErrLeaseLost
 		}
 		for _, m := range out {
 			ok, err := insertOutgoing(ctx, c, m, now)
@@ -141,19 +132,7 @@ func (q *Queue) Complete(ctx context.Context, l queue.Lease, out []event.Outgoin
 			}
 			stored = stored || ok
 		}
-		if st.Conv != "" {
-			var data any
-			if st.Data != nil {
-				data = string(st.Data)
-			}
-			if _, err := c.ExecContext(ctx,
-				`INSERT INTO conv_state (conv, data, updated_ms) VALUES (?, ?, ?)
-				 ON CONFLICT (conv) DO UPDATE SET data = excluded.data, updated_ms = excluded.updated_ms`,
-				st.Conv, data, now.UnixMilli()); err != nil {
-				return fmt.Errorf("state of %s: %w", st.Conv, err)
-			}
-		}
-		return nil
+		return upsertState(ctx, c, st, now)
 	})
 	if err != nil {
 		if errors.Is(err, queue.ErrLeaseLost) {
@@ -163,6 +142,42 @@ func (q *Queue) Complete(ctx context.Context, l queue.Lease, out []event.Outgoin
 	}
 	if stored {
 		signal(q.outboxReady)
+	}
+	return nil
+}
+
+// markDone marks the leased event done; queue.ErrLeaseLost when the lease
+// is no longer held.
+func markDone(ctx context.Context, c *sql.Conn, l queue.Lease, now time.Time) error {
+	res, err := c.ExecContext(ctx,
+		`UPDATE inbox SET status = 'done', done_ms = ?, lease_until_ms = 0
+		 WHERE id = ? AND lease_token = ? AND status = 'pending'`,
+		now.UnixMilli(), l.Event.ID, l.Token)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return queue.ErrLeaseLost
+	}
+	return nil
+}
+
+// upsertState stores the conversation state when st.Conv is set.
+func upsertState(ctx context.Context, c *sql.Conn, st queue.StateUpdate, now time.Time) error {
+	if st.Conv == "" {
+		return nil
+	}
+	var data any
+	if st.Data != nil {
+		data = string(st.Data)
+	}
+	if _, err := c.ExecContext(ctx,
+		`INSERT INTO conv_state (conv, data, updated_ms) VALUES (?, ?, ?)
+		 ON CONFLICT (conv) DO UPDATE SET data = excluded.data, updated_ms = excluded.updated_ms`,
+		st.Conv, data, now.UnixMilli()); err != nil {
+		return fmt.Errorf("state of %s: %w", st.Conv, err)
 	}
 	return nil
 }
