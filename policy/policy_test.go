@@ -14,6 +14,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -145,7 +146,7 @@ func chain(t *testing.T, h *counter, ask policy.Asker, opts ...policy.Option) to
 
 func chainCfg(t *testing.T, cfg policy.Config, h *counter, ask policy.Asker, opts ...policy.Option) tool.Func {
 	t.Helper()
-	reg, err := tool.NewRegistry(h)
+	reg, err := tool.NewRegistry(router.Local{}, h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +245,7 @@ func TestDecisionReachesTheJournal(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := &counter{s: spec("schedule.create", tool.ClassSideEffect, tool.PolicyConfirm)}
-	reg, _ := tool.NewRegistry(h)
+	reg, _ := tool.NewRegistry(router.Local{}, h)
 	run := tool.Chain(reg.Run, j.Middleware(), policy.New(policy.DefaultConfig(), reg, &fakeAsker{id: "p"}).Middleware())
 	_, _ = run(ctx, with(base(), func(c *tool.Call) { c.Name = "schedule.create"; c.TurnID = "E1"; c.N = 1 }))
 	es, err := j.Entries(ctx)

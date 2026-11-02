@@ -12,7 +12,8 @@ func (e *env) userTexts(t *testing.T, call int) []string {
 	var out []string
 	for _, m := range e.smart.requests()[call].Messages {
 		if m.Role == "user" {
-			out = append(out, m.Content)
+			text, _, _ := strings.Cut(m.Content, "\n[now: ") // the line the turn appends
+			out = append(out, text)
 		}
 	}
 	return out

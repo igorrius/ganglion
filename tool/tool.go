@@ -94,9 +94,14 @@ func (c Call) Key() string { return c.TurnID + ":" + strconv.Itoa(c.N) }
 // Result is what a call returns.
 type Result struct {
 	Text     string
-	External bool             // the text is outside content: the session becomes tainted and the text is wrapped as data
-	Pending  string           // non-empty: the id of a call awaiting confirmation; Text says so
-	Out      []event.Outgoing // messages the tool produces; the agent sends them with the turn's replies
+	External bool   // the text is outside content: the session becomes tainted and the text is wrapped as data
+	Pending  string // non-empty: the id of a call awaiting confirmation; Text says so
+	// Out are the messages the tool produces; the agent sends them with the
+	// turn's replies. They are delivered even when the call returns an
+	// error, so a tool must not return both unless it means to: the
+	// policy's alert about a call outside a task's grant is the one such
+	// case. A tool validates first and builds Out after.
+	Out []event.Outgoing
 }
 
 // Func runs one call.

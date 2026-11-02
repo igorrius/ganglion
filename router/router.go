@@ -85,3 +85,10 @@ type Router interface {
 	Route(ctx context.Context, task TaskReq) ([]Candidate, error)
 	Report(c Candidate, err error)
 }
+
+// Local is the P1 placement: every tool runs on the node that handles
+// the turn (R-RTR-3). It satisfies tool.Placement.
+type Local struct{}
+
+// Where returns "local" for every tool; it is tool.PlacementLocal.
+func (Local) Where(string) string { return "local" }

@@ -118,6 +118,12 @@ func (l *List) Role(ctx context.Context, principal string) (Role, bool, error) {
 	return Role(role), true, nil
 }
 
+// Listed reports whether principal is on the list, in any role.
+func (l *List) Listed(ctx context.Context, principal string) (bool, error) {
+	_, ok, err := l.Role(ctx, principal)
+	return ok, err
+}
+
 // IsAdmin reports whether principal is listed with the admin role. A
 // principal that is not listed is not an admin.
 func (l *List) IsAdmin(ctx context.Context, principal string) (bool, error) {

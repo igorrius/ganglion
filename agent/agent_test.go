@@ -139,7 +139,7 @@ func newClock() *fakeTool { return &fakeTool{result: tool.Result{Text: "12:00"}}
 
 func registry(t *testing.T, hs ...tool.Handler) *tool.Registry {
 	t.Helper()
-	r, err := tool.NewRegistry(hs...)
+	r, err := tool.NewRegistry(router.Local{}, hs...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +301,7 @@ func TestHistoryReachesTheModel(t *testing.T) {
 	for _, m := range msgs {
 		got = append(got, string(m.Role)+":"+m.Content)
 	}
-	want := "system:" + CoreRules + "\n\nSYS|user:Igor: первое|assistant:ok|user:Igor: второе"
+	want := "system:" + CoreRules + "\n\nSYS|user:Igor: первое|assistant:ok|user:Igor: второе\n[now: 2026-11-03 10:00 Tue, UTC]"
 	if strings.Join(got, "|") != want {
 		t.Fatalf("messages %q\nwant %q", strings.Join(got, "|"), want)
 	}

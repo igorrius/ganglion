@@ -235,3 +235,16 @@ func TestIsAdmin(t *testing.T) {
 		}
 	}
 }
+
+func TestListed(t *testing.T) {
+	l := newList(t)
+	ctx := context.Background()
+	_ = l.Allow(ctx, "telegram:user:1", access.RoleAdmin, "Igor")
+	_ = l.Allow(ctx, "telegram:user:2", access.RoleFamily, "Anna")
+	for p, want := range map[string]bool{"telegram:user:1": true, "telegram:user:2": true, "telegram:user:3": false} {
+		got, err := l.Listed(ctx, p)
+		if err != nil || got != want {
+			t.Errorf("Listed(%s) = %v, %v; want %v", p, got, err, want)
+		}
+	}
+}

@@ -560,15 +560,15 @@ It records the callback abuse cases of design 5.2.
   - the P1 implementation returns `"local"`;
   - the registry asks it and rejects anything other than `"local"`.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestMessageSendUnknownConv`.
   - `TestMessageSendKey`.
   - `TestCellsSetNeedsConfirm` (through the policy).
   - `TestNowLineNotStored`.
   - `TestTaintNoticeOnlyWhenTainted`.
   - `TestPlacementLocalOnly`.
-- [ ] **Step 2–4: Run, implement, run** `go test -race ./...`; lint.
-- [ ] **Step 5: Commit** `tools: message.send, cells.get/set; the time and taint notice in the turn; tool placement`.
+- [x] **Step 2–4: Run, implement, run** `go test -race ./...`; lint.
+- [x] **Step 5: Commit** `tools: message.send, cells.get/set; the time and taint notice in the turn; tool placement`.
 
 ### Task 6: scheduler, reminders and scheduled agent tasks
 

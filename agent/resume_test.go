@@ -96,6 +96,13 @@ func (e *confirmEnv) decisions(t *testing.T, key string) []journal.Decision {
 }
 
 func lastUser(req provider.ChatRequest) string {
+	text, _, _ := strings.Cut(lastUserRaw(req), "\n[now: ")
+	return text
+}
+
+// lastUserRaw is the last user message as the model read it, with the
+// lines the turn appended.
+func lastUserRaw(req provider.ChatRequest) string {
 	for _, m := range slices.Backward(req.Messages) {
 		if m.Role == provider.RoleUser {
 			return m.Content

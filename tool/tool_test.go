@@ -23,21 +23,36 @@ func (s stub) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	return s.run(ctx, c)
 }
 
+// local puts every tool on this node.
+type local struct{}
+
+func (local) Where(string) string { return tool.PlacementLocal }
+
+// placed puts the named tools where it says and every other tool here.
+type placed map[string]string
+
+func (p placed) Where(name string) string {
+	if w, ok := p[name]; ok {
+		return w
+	}
+	return tool.PlacementLocal
+}
+
 func named(name string, admin bool) stub {
 	return stub{spec: tool.Spec{Name: name, Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: admin}}
 }
 
 func TestRegistryDuplicate(t *testing.T) {
-	if _, err := tool.NewRegistry(named("a", false), named("a", true)); err == nil {
+	if _, err := tool.NewRegistry(local{}, named("a", false), named("a", true)); err == nil {
 		t.Fatal("a duplicate name was accepted")
 	}
-	if _, err := tool.NewRegistry(named("", false)); err == nil {
+	if _, err := tool.NewRegistry(local{}, named("", false)); err == nil {
 		t.Fatal("an empty name was accepted")
 	}
 }
 
 func TestSpecsHideAdminOnly(t *testing.T) {
-	r, err := tool.NewRegistry(named("b.admin", true), named("a.open", false))
+	r, err := tool.NewRegistry(local{}, named("b.admin", true), named("a.open", false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +72,7 @@ func TestSpecsHideAdminOnly(t *testing.T) {
 }
 
 func TestRunUnknownAndAdminOnly(t *testing.T) {
-	r, _ := tool.NewRegistry(named("x", true))
+	r, _ := tool.NewRegistry(local{}, named("x", true))
 	if _, err := r.Run(context.Background(), tool.Call{Name: "nope", Admin: true}); !errors.Is(err, tool.ErrUnknown) {
 		t.Errorf("unknown tool: %v, want ErrUnknown", err)
 	}
@@ -127,5 +142,18 @@ func TestUnwrap(t *testing.T) {
 	}
 	if _, ok := tool.Unwrap("summary", "plain"); ok {
 		t.Error("plain text was unwrapped")
+	}
+}
+
+func TestPlacementLocalOnly(t *testing.T) {
+	r, err := tool.NewRegistry(placed{"far.away": "node-2"}, named("far.away", false), named("near.by", false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Run(context.Background(), tool.Call{Name: "far.away"}); !errors.Is(err, tool.ErrNotLocal) || !strings.Contains(err.Error(), "node-2") {
+		t.Errorf("a tool placed elsewhere: %v, want ErrNotLocal naming the place", err)
+	}
+	if res, err := r.Run(context.Background(), tool.Call{Name: "near.by"}); err != nil || res.Text != "ran near.by" {
+		t.Errorf("a local tool = %+v, %v", res, err)
 	}
 }

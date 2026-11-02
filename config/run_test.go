@@ -264,7 +264,15 @@ func TestAgentOverTelegram(t *testing.T) {
 	}
 	reqs := model.Requests()
 	last := reqs[0].Messages[len(reqs[0].Messages)-1]
-	if reqs[0].Model != "m1" || last["content"] != "Igor: hi" {
+	content, _ := last["content"].(string)
+	if reqs[0].Model != "m1" || !strings.HasPrefix(content, "Igor: hi\n[now: ") || !strings.HasSuffix(content, ", UTC]") {
 		t.Fatalf("model request %+v", reqs[0])
+	}
+	var offered []string
+	for _, tl := range reqs[0].Tools {
+		offered = append(offered, tl["function"].(map[string]any)["name"].(string))
+	}
+	if got := strings.Join(offered, ","); got != "cells.get,cells.set,message.send" {
+		t.Fatalf("the admin was offered %q", got)
 	}
 }

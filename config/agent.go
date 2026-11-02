@@ -8,6 +8,7 @@ import (
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/alert"
+	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider"
@@ -17,8 +18,10 @@ import (
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
+	"github.com/igorrius/ganglion/transport/telegram"
 	"github.com/igorrius/ganglion/turns"
 	"github.com/samber/do/v2"
 )
@@ -95,13 +98,31 @@ func IsAdmin() do.Provider[agent.AdminFunc] {
 // toolHandlers.
 func Tools() do.Provider[*tool.Registry] {
 	return func(i do.Injector) (*tool.Registry, error) {
-		return tool.NewRegistry(toolHandlers(i)...)
+		return tool.NewRegistry(router.Local{}, toolHandlers(i)...)
 	}
 }
 
-// toolHandlers lists the tools the agent has. None yet: each tool of M3b
-// adds a line here.
-func toolHandlers(do.Injector) []tool.Handler { return nil }
+// toolHandlers lists the tools the agent has; each tool joins by one line.
+func toolHandlers(i do.Injector) []tool.Handler {
+	cs := do.MustInvoke[*cells.Service](i)
+	return []tool.Handler{
+		builtin.NewMessageSend(do.MustInvoke[builtin.Convs](i)),
+		builtin.NewCellsGet(cs),
+		builtin.NewCellsSet(cs),
+	}
+}
+
+// Convs provides where message.send may deliver: conversations with a
+// stored state and the private chats of principals on the access list.
+func Convs() do.Provider[builtin.Convs] {
+	return func(i do.Injector) (builtin.Convs, error) {
+		return builtin.Convs{
+			States:  do.MustInvoke[*sqlqueue.Queue](i),
+			Listed:  do.MustInvoke[*access.List](i).Listed,
+			Private: telegram.PrivateConv,
+		}, nil
+	}
+}
 
 // Router provides the rules router over the catalogue, with the daily
 // budget from the turn trace.
