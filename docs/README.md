@@ -40,7 +40,7 @@ Start here when coming back to the project.
     step-by-step plan ([p1-m3a-talking-agent.md](plans/p1-m3a-talking-agent.md));
     it rests on [ADR-0020](adr/0020-neutral-history-as-conversation-state.md)
     (history in a neutral format, stored as the conversation state,
-    Proposed). Its live run needs an API key for a cheap model.
+    Accepted). Its live run needs an API key for a cheap model.
   - A cap on attempts for a turn that always fails is M3a task 6.
   - Deferred minors from the M2 review: record a send's outcome with
     `context.WithoutCancel` on shutdown; keep the seeded admin's name and

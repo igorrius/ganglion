@@ -1,6 +1,6 @@
 # ADR-0020: Keep history in our own neutral format, stored as the conversation state
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-02
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-4), [7.2](../spec.md#72-conversations-history-and-the-agent-loop) (R-AGT-2), [7.4](../spec.md#74-providers-and-model-access) (R-PRV-3), [11](../spec.md#11-open-decisions) ("History and tool format")

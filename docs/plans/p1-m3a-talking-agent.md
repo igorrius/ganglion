@@ -51,8 +51,7 @@ dependencies.
 [0007](../adr/0007-openai-compatible-first-provider.md),
 [0017](../adr/0017-extension-points.md),
 [0019](../adr/0019-release-leases-at-core-start.md),
-[0020](../adr/0020-neutral-history-as-conversation-state.md) (Proposed; this
-plan assumes it).
+[0020](../adr/0020-neutral-history-as-conversation-state.md).
 
 ## Global constraints
 
@@ -488,7 +487,9 @@ plan assumes it).
   `GANGLION_MODELS_FILE=models.local.yaml` (git-ignored) and the provider
   key from `.env`. Needs an API key from the owner; without it the step is
   reported as blocked.
-- [ ] **Step 2: Compare candidates.** The same 20 prompts (Russian and
+- [ ] **Step 2: Compare candidates** over OpenRouter (the owner's key;
+  Claude Haiku is one of the candidates, reached through the API, not the
+  claude CLI, R-PRV-4). The same 20 prompts (Russian and
   Ukrainian small talk, a household question, a follow-up that needs the
   history, a long message that forces compaction) on 2–3 cheap models from
   the catalogue. Record per model: answers judged good / acceptable / bad,
