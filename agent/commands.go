@@ -73,9 +73,10 @@ func (a *Agent) listSessions(ctx context.Context, t *turn, _ string) error {
 	return nil
 }
 
-// resume brings back session number arg of /sessions, archiving the
-// current one.
-func (a *Agent) resume(ctx context.Context, t *turn, arg string) error {
+// resumeSession brings back session number arg of /sessions, archiving
+// the current one. Calls it was waiting for that are answered or expired
+// since are dropped from its pending list.
+func (a *Agent) resumeSession(ctx context.Context, t *turn, arg string) error {
 	list, err := a.d.Archive.List(ctx, t.event.Conv, sessionsShown, t.state.Session)
 	if err != nil {
 		return err
@@ -93,6 +94,9 @@ func (a *Agent) resume(ctx context.Context, t *turn, arg string) error {
 		if err := a.archive(ctx, t.event.Conv, t.state, "resume"); err != nil {
 			return err
 		}
+	}
+	if chosen.Pending, err = a.d.Pending.Waiting(ctx, chosen.Pending); err != nil {
+		return err
 	}
 	chosen.Last = t.now
 	t.state = chosen

@@ -41,6 +41,45 @@ If the process dies before `Complete` commits, the lease expires and the event i
 processed again. If it dies between sending and marking, one duplicate
 reply is possible (R-DLV-5).
 
+## Confirmation on a button (P1)
+
+A call that needs the owner's confirmation does not hold its turn open:
+the turn ends with the call parked, and the press is a new event that
+resumes the conversation ([ADR-0032](../adr/0032-buttons-and-resume.md)).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant TG as Telegram
+    participant T as Telegram transport
+    participant Q as Inbox / outbox
+    participant A as Agent
+    participant P as Policy
+    participant D as Pending store
+    participant X as Tool
+
+    A->>P: tool call (key turn_id + n)
+    P->>D: Ask: store call, request cell, two buttons
+    P-->>A: "awaiting confirmation" + question with buttons
+    A->>Q: Complete(question, reply, Pending += id)
+    Q-->>TG: question with buttons c:<id>
+    TG->>T: callback_query
+    T->>TG: answerCallbackQuery
+    T->>Q: Put(decision, idemKey = update_id)
+    A->>Q: Lease
+    A->>D: Press (one-time, principal, chat, expiry)
+    alt approve
+        A->>X: stored call, same key, journal "approved", no policy
+        X-->>A: result
+    else deny
+        Note over A: journal "denied", result "the owner declined"
+    end
+    A->>D: Decide(done, result)
+    A->>A: model on "[confirmation] tool: result"
+    A->>Q: Complete(edit "Approved.", answer)
+    Note over D,Q: unanswered: the expirer puts tool.result every 30 s, same resume with "expired"
+```
+
 ## Module tick and escalation (P0–P1)
 
 The Deye monitor as a reflex: no model in the normal path.

@@ -40,18 +40,33 @@ func (a *Agent) limits(ctx context.Context, t *turn) (bool, error) {
 	return true, nil
 }
 
-// answer asks the models for an answer, running tools in between, and
-// adds the exchange to the history.
+// answer asks the models for an answer to the person's message, running
+// tools in between, and adds the exchange to the history.
 func (a *Agent) answer(ctx context.Context, t *turn) (bool, error) {
+	if err := a.setAdmin(ctx, t); err != nil {
+		return false, err
+	}
+	user := provider.Message{Role: provider.RoleUser, Content: speaker(t.msg) + ": " + t.msg.Text}
+	return a.converse(ctx, t, user)
+}
+
+// setAdmin looks up whether the turn's principal may use tools.
+func (a *Agent) setAdmin(ctx context.Context, t *turn) error {
+	admin, err := a.d.IsAdmin(ctx, t.msg.From)
+	if err != nil {
+		return fmt.Errorf("agent: role of %s: %w", t.msg.From, err)
+	}
+	t.admin = admin
+	return nil
+}
+
+// converse adds user to the history and runs the model on it, with tools
+// in between, and replies with its answer. done is true when no model
+// answered.
+func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (bool, error) {
 	if t.state.Session == "" {
 		t.state.Session, t.state.Started = t.event.ID, t.now
 	}
-	admin, err := a.d.IsAdmin(ctx, t.msg.From)
-	if err != nil {
-		return false, fmt.Errorf("agent: role of %s: %w", t.msg.From, err)
-	}
-	t.admin = admin
-	user := provider.Message{Role: provider.RoleUser, Content: speaker(t.msg) + ": " + t.msg.Text}
 	t.known = knownURLs(append(slices.Clone(t.state.Messages), user))
 	turnCtx, cancel := context.WithTimeout(ctx, a.cfg.TurnTimeout)
 	defer cancel()

@@ -11,9 +11,18 @@ import (
 // values never change.
 type Kind string
 
-// KindMessage is text a person sent through a chat transport; its payload
-// is a Message.
-const KindMessage Kind = "message"
+// Kinds.
+const (
+	// KindMessage is text a person sent through a chat transport; its
+	// payload is a Message.
+	KindMessage Kind = "message"
+	// KindDecision is a press of a button the core sent; its payload is a
+	// Decision.
+	KindDecision Kind = "decision"
+	// KindToolResult is the end of a pending tool call that nobody
+	// answered in time; its payload is a ToolResult.
+	KindToolResult Kind = "tool.result"
+)
 
 // Event is the single input from any transport: a chat message, a sensor
 // reading, a cron tick or a module exception.
@@ -44,4 +53,19 @@ type Outgoing struct {
 	Text      string
 	Silent    bool   // deliver without a notification sound
 	ReplyTo   string // a Message.Ref this answers; the transport decides whether to show it as a reply
+	// Buttons are shown under the message, one per row. A press comes back
+	// as a KindDecision event carrying the button's ID.
+	Buttons []Button `json:",omitempty"`
+	// Edit is a Message.Ref of a message to change in place instead of
+	// sending a new one; its buttons are replaced by Buttons (none removes
+	// them).
+	Edit string `json:",omitempty"`
+}
+
+// Button is one button under a message. ID is opaque to the transport and
+// short enough for any channel's callback data; it never carries a tool
+// name or arguments (ADR-0032).
+type Button struct {
+	ID    string
+	Label string
 }

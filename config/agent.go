@@ -18,6 +18,7 @@ import (
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
+	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
 	"github.com/samber/do/v2"
 )
@@ -51,17 +52,17 @@ func Agent() do.Provider[*agent.Agent] {
 			Router:    do.MustInvoke[router.Router](i),
 			Providers: do.MustInvoke[map[string]provider.Provider](i),
 			Tools:     do.MustInvoke[*tool.Registry](i),
-			// Around every tool call, outermost first: traced, journal, policy.
-			Middleware: []tool.Middleware{
-				do.MustInvoke[*journal.Journal](i).Middleware(),
-				do.MustInvoke[*policy.Policy](i).Middleware(),
-			},
-			IsAdmin: do.MustInvoke[agent.AdminFunc](i),
-			Turns:   do.MustInvoke[*turns.Log](i),
-			Archive: do.MustInvoke[agent.SessionStore](i),
-			Alerts:  do.MustInvoke[alert.Admins](i),
-			Persona: agent.PersonaDir(b.Agent.Workspace),
-			Log:     do.MustInvoke[*slog.Logger](i),
+			// Around every tool call, outermost first: traced, journal, then
+			// the policy for the calls the model makes.
+			Middleware: []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
+			Policy:     do.MustInvoke[*policy.Policy](i).Middleware(),
+			Pending:    do.MustInvoke[*pending.Store](i),
+			IsAdmin:    do.MustInvoke[agent.AdminFunc](i),
+			Turns:      do.MustInvoke[*turns.Log](i),
+			Archive:    do.MustInvoke[agent.SessionStore](i),
+			Alerts:     do.MustInvoke[alert.Admins](i),
+			Persona:    agent.PersonaDir(b.Agent.Workspace),
+			Log:        do.MustInvoke[*slog.Logger](i),
 		}), nil
 	}
 }
@@ -78,10 +79,9 @@ func Policy() do.Provider[*policy.Policy] {
 	}
 }
 
-// Asker provides the owner's confirmations. Until pending calls and
-// buttons exist, a call that needs one fails.
+// Asker provides the owner's confirmations: pending calls with buttons.
 func Asker() do.Provider[policy.Asker] {
-	return func(do.Injector) (policy.Asker, error) { return policy.NoAsk{}, nil }
+	return func(i do.Injector) (policy.Asker, error) { return do.MustInvoke[*pending.Store](i), nil }
 }
 
 // IsAdmin provides the agent's role check, backed by the access list.

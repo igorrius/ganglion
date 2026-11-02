@@ -11,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/outbox"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/tool/journal"
+	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/transport"
 	"github.com/igorrius/ganglion/transport/telegram"
 	"github.com/samber/do/v2"
@@ -114,10 +115,15 @@ func Housekeepers() do.Provider[Housekeeping] {
 	return choose[Housekeeping](agentOn, housekeepingAgent, housekeepingNone)
 }
 
-// AgentHousekeepers provides the daily prune of the tool-call journal.
+// AgentHousekeepers provides the daily prune of the tool-call journal and
+// the expiry of unanswered confirmations.
 func AgentHousekeepers() do.Provider[Housekeeping] {
 	return func(i do.Injector) (Housekeeping, error) {
-		return Housekeeping{journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: do.MustInvoke[*slog.Logger](i)}}, nil
+		logger := do.MustInvoke[*slog.Logger](i)
+		return Housekeeping{
+			journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: logger},
+			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger),
+		}, nil
 	}
 }
 

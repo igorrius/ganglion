@@ -21,6 +21,10 @@ type turn struct {
 	admin  bool   // the sender may use tools
 	calls  int    // tool calls so far in this turn; the next is calls+1
 	known  urlSet // addresses the sender gave or a search returned
+	// decision is the press of a KindDecision event; toolResult the
+	// pending call of a KindToolResult event.
+	decision   event.Decision
+	toolResult event.ToolResult
 }
 
 // reply adds the answer to the person's message. A turn answers once, so
@@ -28,6 +32,16 @@ type turn struct {
 func (t *turn) reply(text string) {
 	e := t.event
 	t.out = append(t.out, event.Outgoing{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv, Text: text, ReplyTo: t.msg.Ref})
+}
+
+// edit changes the message holding the pressed button to text and removes
+// its buttons. A turn edits once, so the key is fixed.
+func (t *turn) edit(text string) {
+	if t.decision.Ref == "" {
+		return
+	}
+	e := t.event
+	t.out = append(t.out, event.Outgoing{IdemKey: e.IdemKey + ":edit", Transport: e.Source, Conv: e.Conv, Text: text, Edit: t.decision.Ref})
 }
 
 // stage does one step of a turn; done ends the turn early. An error

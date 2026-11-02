@@ -56,12 +56,19 @@ func newRequestID() string {
 
 // Ask creates a pending request that expires after ttl.
 func (s *Service) Ask(ctx context.Context, r Request, ttl time.Duration, src string) (Cell, error) {
+	return s.AskAs(ctx, newRequestID(), r, ttl, src)
+}
+
+// AskAs creates a pending request with the given id, for a caller that
+// names its requests after its own records (a pending tool call is
+// "request:call:<id>"). An existing id is ErrExists.
+func (s *Service) AskAs(ctx context.Context, id string, r Request, ttl time.Duration, src string) (Cell, error) {
 	if r.Question == "" || ttl <= 0 {
 		return Cell{}, fmt.Errorf("%w: a request needs a question and a positive ttl", ErrInvalidValue)
 	}
 	now := s.now().UTC()
 	c := Cell{
-		ID:       newRequestID(),
+		ID:       id,
 		Kind:     KindRequest,
 		Desired:  mustJSON(r),
 		Reported: mustJSON(Decision{Status: StatusPending}),

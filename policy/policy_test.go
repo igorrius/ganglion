@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/alert"
+	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/sqlitedb"
@@ -132,6 +133,10 @@ func (a *fakeAsker) Ask(_ context.Context, _ tool.Call, q string) (string, error
 	return a.id, a.err
 }
 
+func (a *fakeAsker) Outgoing(_ context.Context, id string) (event.Outgoing, error) {
+	return event.Outgoing{IdemKey: id + ":q", Text: a.asked[len(a.asked)-1], Buttons: []event.Button{{ID: "B", Label: "Approve"}}}, nil
+}
+
 // chain builds the production chain over h: journal-less, policy, registry.
 func chain(t *testing.T, h *counter, ask policy.Asker, opts ...policy.Option) tool.Func {
 	t.Helper()
@@ -165,6 +170,10 @@ func TestConfirmDoesNotRun(t *testing.T) {
 	if res.Pending != "pend-1" || !strings.Contains(res.Text, "awaiting confirmation") {
 		t.Fatalf("result %+v", res)
 	}
+	// The question with its buttons goes out with the turn's replies.
+	if len(res.Out) != 1 || res.Out[0].IdemKey != "pend-1:q" || len(res.Out[0].Buttons) != 1 {
+		t.Fatalf("out %+v", res.Out)
+	}
 	if len(ask.asked) != 1 || !strings.Contains(ask.asked[0], "schedule.create") || strings.Contains(ask.asked[0], "abcdefghijkl") {
 		t.Fatalf("question %q: want the tool and no secret", ask.asked)
 	}
@@ -176,6 +185,16 @@ func TestAskFailureFailsTheCall(t *testing.T) {
 	_, err := run(context.Background(), with(base(), func(c *tool.Call) { c.Name = "schedule.create" }))
 	if !errors.Is(err, policy.ErrNoAsker) || h.calls != 0 {
 		t.Fatalf("err %v, ran %d times", err, h.calls)
+	}
+}
+
+// An Asker that returns no id and no error has a bug: the call must not
+// look parked.
+func TestEmptyPendingIDFailsTheCall(t *testing.T) {
+	h := &counter{s: spec("schedule.create", tool.ClassSideEffect, tool.PolicyConfirm)}
+	res, err := chain(t, h, &fakeAsker{})(context.Background(), with(base(), func(c *tool.Call) { c.Name = "schedule.create" }))
+	if err == nil || res.Pending != "" || h.calls != 0 {
+		t.Fatalf("result %+v, err %v, ran %d times", res, err, h.calls)
 	}
 }
 

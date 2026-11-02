@@ -4,10 +4,21 @@
 // event.Outgoing (ADR-0017).
 package telegram
 
-// update is a Bot API Update; only messages are requested.
+// update is a Bot API Update; messages and button presses are requested.
 type update struct {
-	UpdateID int64    `json:"update_id"`
-	Message  *message `json:"message,omitempty"`
+	UpdateID      int64          `json:"update_id"`
+	Message       *message       `json:"message,omitempty"`
+	CallbackQuery *callbackQuery `json:"callback_query,omitempty"`
+}
+
+// callbackQuery is a press of an inline button. Message is the message
+// holding the button; Telegram sends date 0 when it is no longer
+// accessible.
+type callbackQuery struct {
+	ID      string   `json:"id"`
+	From    user     `json:"from"`
+	Message *message `json:"message,omitempty"`
+	Data    string   `json:"data,omitempty"`
 }
 
 // message is a Bot API Message, reduced to the fields we read.
@@ -44,6 +55,26 @@ type sendParams struct {
 	Entities            []entity         `json:"entities,omitempty"`
 	DisableNotification bool             `json:"disable_notification,omitempty"`
 	ReplyParameters     *replyParameters `json:"reply_parameters,omitempty"`
+	ReplyMarkup         *inlineMarkup    `json:"reply_markup,omitempty"`
+}
+
+// editParams are the parameters of editMessageText that we use.
+type editParams struct {
+	ChatID      int64        `json:"chat_id"`
+	MessageID   int64        `json:"message_id"`
+	Text        string       `json:"text"`
+	Entities    []entity     `json:"entities,omitempty"`
+	ReplyMarkup inlineMarkup `json:"reply_markup"` // always sent: an empty keyboard removes the buttons
+}
+
+// inlineMarkup is an InlineKeyboardMarkup.
+type inlineMarkup struct {
+	InlineKeyboard [][]inlineButton `json:"inline_keyboard"`
+}
+
+type inlineButton struct {
+	Text         string `json:"text"`
+	CallbackData string `json:"callback_data"`
 }
 
 type replyParameters struct {

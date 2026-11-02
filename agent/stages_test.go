@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -88,7 +89,7 @@ func TestGiveUpApologisesAndAlertsAdmins(t *testing.T) {
 	if len(out) != 2 {
 		t.Fatalf("give-up %+v", out)
 	}
-	if out[0] != (event.Outgoing{IdemKey: ev.IdemKey + ":reply:0", Transport: ev.Source, Conv: ev.Conv, Text: "Sorry, something went wrong with that message."}) {
+	if !reflect.DeepEqual(out[0], event.Outgoing{IdemKey: ev.IdemKey + ":reply:0", Transport: ev.Source, Conv: ev.Conv, Text: "Sorry, something went wrong with that message."}) {
 		t.Errorf("apology %+v", out[0])
 	}
 	if out[1].IdemKey != "alert:give-up:"+ev.ID+":telegram:user:1" || out[1].Text != "Gave up on event "+ev.ID+" in "+ev.Conv+" after 3 attempts." {

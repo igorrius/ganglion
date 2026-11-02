@@ -175,6 +175,8 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Comparing web addresses (lower-case host, no fragment, no default port) | `internal/urlnorm` |
 | Marking outside content as data for the model | `tool.WrapExternal` |
 | Removing secrets before anything is journalled | `journal.Redact` |
+| An id nobody can guess (button ids) | `event.RandomID` |
+| A SQLite transaction that takes the write lock first | `sqlitedb.Immediate` |
 
 (The table describes the state after the [refactoring plan](plans/p1-refactor.md).)
 

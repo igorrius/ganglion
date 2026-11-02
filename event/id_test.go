@@ -52,3 +52,14 @@ func TestNewIDEncodesTime(t *testing.T) {
 		t.Fatalf("time part = %q, want %q", got, want)
 	}
 }
+
+func TestRandomIDIs26CrockfordCharacters(t *testing.T) {
+	seen := map[string]bool{}
+	for range 1000 {
+		id := RandomID()
+		if len(id) != 26 || strings.Trim(id, crockford) != "" || seen[id] {
+			t.Fatalf("id %q: bad length, alphabet or a duplicate", id)
+		}
+		seen[id] = true
+	}
+}

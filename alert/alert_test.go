@@ -3,6 +3,7 @@ package alert_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/igorrius/ganglion/alert"
@@ -31,7 +32,7 @@ func TestMessagesGoToEveryAdminWithAPrivateChat(t *testing.T) {
 		{IdemKey: "alert:x:7:telegram:user:1", Transport: "telegram", Conv: "chat-of-telegram:user:1", Text: "Something broke."},
 		{IdemKey: "alert:x:7:telegram:user:2", Transport: "telegram", Conv: "chat-of-telegram:user:2", Text: "Something broke."},
 	}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	if len(got) != len(want) || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/alert"
+	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/internal/urlnorm"
 	"github.com/igorrius/ganglion/tool"
@@ -48,9 +49,12 @@ const DefaultMaxDepth = 3
 // ErrNoAsker is what NoAsk answers: confirmations are not available.
 var ErrNoAsker = errors.New("policy: confirmations are not available")
 
-// Asker parks a call for a person and returns its pending id.
+// Asker parks a call for a person (tool/pending). Ask returns the pending
+// id and never an empty one without an error; Outgoing is the message that
+// asks, which goes out with the turn's replies.
 type Asker interface {
 	Ask(ctx context.Context, c tool.Call, question string) (pending string, err error)
+	Outgoing(ctx context.Context, pending string) (event.Outgoing, error)
 }
 
 // NoAsk is the Asker of a node without confirmations: every call that
@@ -59,6 +63,11 @@ type NoAsk struct{}
 
 // Ask implements Asker.
 func (NoAsk) Ask(context.Context, tool.Call, string) (string, error) { return "", ErrNoAsker }
+
+// Outgoing implements Asker.
+func (NoAsk) Outgoing(context.Context, string) (event.Outgoing, error) {
+	return event.Outgoing{}, ErrNoAsker
+}
 
 // Config holds the policy settings.
 type Config struct {
@@ -149,13 +158,21 @@ func (p *Policy) spec(s tool.Spec) tool.Spec {
 	return s
 }
 
-// confirm parks the call for the owner and returns its pending id.
+// confirm parks the call for the owner and returns its pending id with
+// the question, which the agent sends with the turn's replies.
 func (p *Policy) confirm(ctx context.Context, c tool.Call) (tool.Result, error) {
 	id, err := p.ask.Ask(ctx, c, question(c))
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("policy: ask about %s: %w", c.Name, err)
 	}
-	return tool.Result{Pending: id, Text: confirmText}, nil
+	if id == "" {
+		return tool.Result{}, fmt.Errorf("policy: ask about %s: the asker returned no pending id", c.Name)
+	}
+	q, err := p.ask.Outgoing(ctx, id)
+	if err != nil {
+		return tool.Result{}, fmt.Errorf("policy: question about %s: %w", c.Name, err)
+	}
+	return tool.Result{Pending: id, Text: confirmText, Out: []event.Outgoing{q}}, nil
 }
 
 // question is what the owner is asked: the tool and its arguments, with

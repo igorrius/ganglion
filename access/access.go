@@ -143,14 +143,18 @@ func (l *List) Admins(ctx context.Context) ([]string, error) {
 	return out, rows.Err()
 }
 
-// Filter wraps next so that messages from principals not on the list never
-// reach it. A dropped message returns nil, so the transport confirms it and
-// the stranger gets no reply; it is logged without its text. Events that
-// are not messages pass through. An error reading the list is returned, so
-// the transport offers the update again later.
+// fromPerson are the kinds of events a person sends; their payloads name
+// the sender under "from" (event.Message, event.Decision).
+var fromPerson = map[event.Kind]bool{event.KindMessage: true, event.KindDecision: true}
+
+// Filter wraps next so that messages and button presses from principals
+// not on the list never reach it. A dropped event returns nil, so the
+// transport confirms it and the stranger gets no reply; it is logged
+// without its text. Other events pass through. An error reading the list
+// is returned, so the transport offers the update again later.
 func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 	return func(ctx context.Context, e event.Event) error {
-		if e.Kind != event.KindMessage {
+		if !fromPerson[e.Kind] {
 			return next(ctx, e)
 		}
 		var m event.Message
@@ -165,7 +169,7 @@ func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 		}
 		if !ok {
 			l.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "stranger")))
-			logger.Warn("access: message from a stranger dropped",
+			logger.Warn("access: message from a stranger dropped", "kind", e.Kind,
 				"principal", m.From, "name", m.Name, "conv", e.Conv, "text_len", len(m.Text))
 			return nil
 		}

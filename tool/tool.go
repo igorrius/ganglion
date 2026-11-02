@@ -76,6 +76,7 @@ type Call struct {
 	TurnID    string // the event id
 	N         int    // call number in the turn, from 1
 	Conv      string
+	Transport string // the transport of Conv, for messages about the call
 	Principal string
 	Admin     bool
 	Tainted   bool   // the session's taint before this call

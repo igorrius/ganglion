@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -57,8 +58,9 @@ func (a *Agent) runTools(ctx context.Context, t *turn, calls []provider.ToolCall
 }
 
 // runTool runs one call: it numbers it, runs it through the chain, marks
-// an external result as data and taints the session, and keeps the tool's
-// outgoing messages for the turn, whether the call failed or not.
+// an external result as data and taints the session, keeps the tool's
+// outgoing messages for the turn, whether the call failed or not, and
+// remembers a call parked for confirmation in the state.
 func (a *Agent) runTool(ctx context.Context, t *turn, call provider.ToolCall) provider.Message {
 	t.calls++
 	started := time.Now()
@@ -78,6 +80,9 @@ func (a *Agent) runTool(ctx context.Context, t *turn, call provider.ToolCall) pr
 		if call.Name == searchTool {
 			t.known.add(result.Text)
 		}
+		if result.Pending != "" && !slices.Contains(t.state.Pending, result.Pending) {
+			t.state.Pending = append(t.state.Pending, result.Pending)
+		}
 	}
 	t.record.Tools = append(t.record.Tools, turns.ToolUse{Name: call.Name, OK: err == nil, Ms: time.Since(started).Milliseconds()})
 	return provider.Message{Role: provider.RoleTool, ToolCallID: call.ID, Content: text}
@@ -86,7 +91,7 @@ func (a *Agent) runTool(ctx context.Context, t *turn, call provider.ToolCall) pr
 // toolCall is the context of the turn's next call.
 func (a *Agent) toolCall(t *turn, call provider.ToolCall) tool.Call {
 	return tool.Call{
-		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Principal: t.msg.From,
+		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Transport: t.event.Source, Principal: t.msg.From,
 		Admin: t.admin, Tainted: t.state.Tainted, KnownURL: t.known.has,
 		Name: call.Name, Args: call.Args,
 	}
@@ -129,15 +134,18 @@ func (s urlSet) has(raw string) bool {
 	return known
 }
 
-// knownURLs collects the set from a session's history: user messages and
-// the results of web.search calls, paired with their calls by id.
+// knownURLs collects the set from a session's history: the person's
+// messages and the results of web.search calls, paired with their calls
+// by id. A confirmation note is not the person's words and does not count.
 func knownURLs(msgs []provider.Message) urlSet {
 	set := urlSet{}
 	searches := map[string]bool{} // ids of web.search calls
 	for _, m := range msgs {
 		switch m.Role {
 		case provider.RoleUser:
-			set.add(m.Content)
+			if !strings.HasPrefix(m.Content, confirmationPrefix) {
+				set.add(m.Content)
+			}
 		case provider.RoleAssistant:
 			for _, c := range m.ToolCalls {
 				searches[c.ID] = c.Name == searchTool

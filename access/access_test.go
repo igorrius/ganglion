@@ -132,6 +132,28 @@ func TestFilterDropsStranger(t *testing.T) {
 	}
 }
 
+// A press of a button is checked like a message: a stranger who got hold
+// of a button id cannot answer a question (design section 5.2).
+func TestFilterDropsStrangersPress(t *testing.T) {
+	l := newList(t)
+	ctx := context.Background()
+	if err := l.Allow(ctx, "telegram:user:1", access.RoleAdmin, "Igor"); err != nil {
+		t.Fatal(err)
+	}
+	r := &recorder{}
+	sink := l.Filter(r.sink, slog.New(slog.DiscardHandler))
+	press := func(from string) event.Event {
+		p, _ := json.Marshal(event.Decision{Button: "01JCQ4ZK7Y3V8M2N6P9R5T1W0X", From: from, Ref: "17"})
+		return event.Event{ID: "01Z", IdemKey: "telegram:7001:9", Source: "telegram", Conv: "telegram:42", Kind: event.KindDecision, Payload: p, At: t0}
+	}
+	if err := sink(ctx, press("telegram:user:666")); err != nil || len(r.got) != 0 {
+		t.Fatalf("stranger's press: err=%v passed=%d", err, len(r.got))
+	}
+	if err := sink(ctx, press("telegram:user:1")); err != nil || len(r.got) != 1 {
+		t.Fatalf("admin's press: err=%v passed=%d", err, len(r.got))
+	}
+}
+
 func TestFilterDropsMalformedMessage(t *testing.T) {
 	l := newList(t)
 	r := &recorder{}

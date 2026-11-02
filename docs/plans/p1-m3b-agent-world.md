@@ -500,7 +500,7 @@ It records the callback abuse cases of design 5.2.
   The agent holds a map of them. A quick action edits the message and
   does not start a model turn.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestPressOnce`: two concurrent presses → one Press, one `ErrUsed`.
   - `TestPressNotYours`.
   - `TestPressExpired`.
@@ -519,10 +519,10 @@ It records the callback abuse cases of design 5.2.
     - `TestDenyResumesWithDecline`;
     - `TestRerunDecisionEventRunsOnce`: same event handled twice → one
       run, by the call key.
-- [ ] **Step 2: Run** — FAIL.
-- [ ] **Step 3: Implement.** Write ADR-0032.
-- [ ] **Step 4: Run** `go test -race ./...`; lint — PASS.
-- [ ] **Step 5: Commit** `tool/pending, telegram, agent: confirmations on buttons and resuming the turn`.
+- [x] **Step 2: Run** — FAIL.
+- [x] **Step 3: Implement.** Write ADR-0032.
+- [x] **Step 4: Run** `go test -race ./...`; lint — PASS.
+- [x] **Step 5: Commit** `tool/pending, telegram, agent: confirmations on buttons and resuming the turn`.
 
 ### Task 5: `message.send` and `cells.*` tools; time and depth in the turn
 

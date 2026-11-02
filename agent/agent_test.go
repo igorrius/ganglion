@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/alert"
+	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/queue"
@@ -22,6 +24,7 @@ import (
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -145,6 +148,8 @@ func registry(t *testing.T, hs ...tool.Handler) *tool.Registry {
 
 type env struct {
 	a          *Agent
+	db         *sql.DB
+	pending    *pending.Store
 	smart      *fakeProvider // p1/smart: tried first for messages
 	cheap      *fakeProvider // p2/cheap: fallback, and compaction
 	states     *states
@@ -175,7 +180,7 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0, admin: true}
+	e := &env{db: db, logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0, admin: true}
 	e.router, err = rules.New([]router.Model{
 		{Provider: "p1", Name: "smart", Tier: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 2}},
 		{Provider: "p2", Name: "cheap", Tier: "cheap", Caps: router.ModelCaps{Tools: true}},
@@ -186,8 +191,13 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 	if tools == nil {
 		tools = registry(t)
 	}
+	e.pending, err = pending.New(ctx, db, cells.NewService(cells.NewMemStore(), cells.WithClock(func() time.Time { return e.now })),
+		func() time.Time { return e.now }, pending.DefaultTTL)
+	if err != nil {
+		t.Fatal(err)
+	}
 	e.deps = Deps{
-		States: e.states, Router: e.router, Tools: tools, IsAdmin: func(context.Context, string) (bool, error) { return e.admin, nil }, Turns: tl, Archive: arch,
+		States: e.states, Router: e.router, Tools: tools, Policy: passThrough, Pending: e.pending, IsAdmin: func(context.Context, string) (bool, error) { return e.admin, nil }, Turns: tl, Archive: arch,
 		Providers: map[string]provider.Provider{"p1": e.smart, "p2": e.cheap},
 		Alerts: alert.Admins{List: func(context.Context) ([]string, error) { return []string{"telegram:user:1"}, nil }, Private: func(p string) (string, string, bool) {
 			id, ok := strings.CutPrefix(p, "telegram:user:")
@@ -200,6 +210,9 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 	e.a = New(overDefaults(cfg), e.deps)
 	return e
 }
+
+// passThrough is a policy that lets every call run.
+func passThrough(next tool.Func) tool.Func { return next }
 
 // overDefaults is DefaultConfig with the non-zero fields of cfg.
 func overDefaults(cfg Config) Config {

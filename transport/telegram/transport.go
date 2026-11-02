@@ -173,6 +173,7 @@ func (t *Transport) whoAmI(ctx context.Context, b *backoff.Backoff) (user, error
 func (t *Transport) hand(ctx context.Context, sink transport.Sink, botID int64, ups []update, offset int64, b *backoff.Backoff) (int64, error) {
 	for _, u := range ups {
 		t.seen(u)
+		t.answerCallback(ctx, u)
 		if e, ok := t.toEvent(botID, u); ok {
 			if err := sink(ctx, e); err != nil {
 				if ctx.Err() != nil {
@@ -215,9 +216,18 @@ func (t *Transport) onError(ctx context.Context, err error, b *backoff.Backoff) 
 	return sleep(ctx, d)
 }
 
-// toEvent turns an update into an event. Only text messages (or captions)
-// from people become events.
+// toEvent turns an update into an event: a text message (or caption)
+// from a person, or a press of one of our buttons.
 func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
+	if u.CallbackQuery != nil {
+		return t.decisionEvent(botID, u)
+	}
+	return t.messageEvent(botID, u)
+}
+
+// messageEvent turns a message update into an event. Only text messages
+// (or captions) from people become events.
+func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	m := u.Message
 	if m == nil || m.From == nil || m.From.IsBot {
 		t.log.Debug("telegram: update skipped", "update_id", u.UpdateID, "reason", "not a message from a person")
@@ -251,7 +261,7 @@ func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
 	}
 	return event.Event{
 		ID:      event.NewID(now),
-		IdemKey: "telegram:" + strconv.FormatInt(botID, 10) + ":" + strconv.FormatInt(u.UpdateID, 10),
+		IdemKey: idemKey(botID, u.UpdateID),
 		Source:  Name,
 		Conv:    ConvKey(m.Chat.ID, thread),
 		Kind:    event.KindMessage,
@@ -260,10 +270,13 @@ func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
 	}, true
 }
 
-// Send implements transport.Transport. The text is sent as plain text. A
-// 429 becomes transport.RetryAfterError; 400 and 403 (and a conversation
-// that is not a Telegram one) wrap transport.ErrPermanent; anything else
-// is returned as is and retried by the sender.
+// Send implements transport.Transport. The Markdown text is sent with
+// entities, and Buttons as an inline keyboard; a message with Edit
+// changes that message instead (editMessageText), where "not modified"
+// counts as done. A 429 becomes transport.RetryAfterError; 400 and 403
+// (a message to edit that is gone among them, and a conversation that is
+// not a Telegram one) wrap transport.ErrPermanent; anything else is
+// returned as is and retried by the sender.
 func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 	chat, thread, err := ParseConv(msg.Conv)
 	if err != nil {
@@ -273,6 +286,9 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 	if strings.TrimSpace(text) == "" {
 		text, ents = msg.Text, nil // nothing visible left: send the source rather than nothing
 	}
+	if msg.Edit != "" {
+		return sendError(t.edit(ctx, chat, msg.Edit, text, ents, msg.Buttons))
+	}
 	_, err = t.c.sendMessage(ctx, sendParams{
 		ChatID:              chat,
 		MessageThreadID:     thread,
@@ -280,7 +296,13 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 		Entities:            ents,
 		DisableNotification: msg.Silent,
 		ReplyParameters:     t.replyTo(chat, msg.ReplyTo),
+		ReplyMarkup:         keyboard(msg.Buttons),
 	})
+	return sendError(err)
+}
+
+// sendError maps a Bot API error of a send to the sender's terms.
+func sendError(err error) error {
 	ae, ok := errors.AsType[*apiError](err)
 	if !ok {
 		return err // nil, or a network error: retried

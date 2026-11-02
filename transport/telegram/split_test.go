@@ -2,7 +2,7 @@ package telegram
 
 import (
 	"fmt"
-	"slices"
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf16"
@@ -37,7 +37,7 @@ func split(t *testing.T, text string) []event.Outgoing {
 		joined.WriteString(p.Text)
 	}
 	_ = joined
-	if again := tr.Parts(msg); !slices.Equal(again, parts) {
+	if again := tr.Parts(msg); !reflect.DeepEqual(again, parts) {
 		t.Error("Parts is not deterministic")
 	}
 	return parts

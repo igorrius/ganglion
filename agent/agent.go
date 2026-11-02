@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,21 +27,28 @@ type StateReader interface {
 type PersonaFunc func() (string, error)
 
 // Deps are the agent's collaborators. All are required except Middleware,
-// Now and Log; the composition root passes no-op implementations where a part is
-// off (ADR-0028).
+// QuickActions, Now and Log; the composition root passes no-op
+// implementations where a part is off (ADR-0028).
 type Deps struct {
 	States     StateReader
 	Router     router.Router
 	Providers  map[string]provider.Provider
 	Tools      *tool.Registry
 	Middleware []tool.Middleware // around every tool call, after tracing; the first runs first
-	IsAdmin    AdminFunc
-	Turns      *turns.Log
-	Archive    SessionStore
-	Alerts     alert.Admins // who hears about a reached daily limit
-	Persona    PersonaFunc
-	Now        func() time.Time
-	Log        *slog.Logger
+	// Policy decides the calls the model makes, inside Middleware. A call
+	// the owner confirmed runs without it: it was decided (ADR-0032).
+	Policy  tool.Middleware
+	Pending Confirmations // calls awaiting the owner and their buttons
+	// QuickActions run quick-action buttons by their action name; tools
+	// register them (none yet).
+	QuickActions map[string]QuickAction
+	IsAdmin      AdminFunc
+	Turns        *turns.Log
+	Archive      SessionStore
+	Alerts       alert.Admins // who hears about a reached daily limit
+	Persona      PersonaFunc
+	Now          func() time.Time
+	Log          *slog.Logger
 }
 
 // Agent handles conversation turns; Handle is a core.Handler.
@@ -66,18 +74,18 @@ func New(cfg Config, d Deps) *Agent {
 		cfg.Location = time.UTC
 	}
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
-	a.stages = []stage{a.idle, a.command, a.limits, a.answer, a.compactHistory}
+	a.stages = []stage{a.resume, a.dropStalePending, a.idle, a.command, a.limits, a.answer, a.compactHistory}
 	a.commands = map[string]command{
 		"/new": a.newSession, "/reset": a.newSession,
-		"/sessions": a.listSessions, "/resume": a.resume,
+		"/sessions": a.listSessions, "/resume": a.resumeSession,
 	}
-	a.tool = tool.Chain(d.Tools.Run, append([]tool.Middleware{a.traced}, d.Middleware...)...)
+	a.tool = tool.Chain(d.Tools.Run, slices.Concat([]tool.Middleware{a.traced}, d.Middleware, []tool.Middleware{d.Policy})...)
 	return a
 }
 
 // Handle implements core.Handler: it runs the turn's stages and returns
-// the replies and the new state. Events that are not text messages are
-// left alone.
+// the replies and the new state. It answers text messages, button presses
+// and the expiry of pending calls; other events are left alone.
 func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
 	t, ok, err := a.begin(ctx, e)
 	if err != nil || !ok {
@@ -89,14 +97,31 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 	return a.finish(ctx, t)
 }
 
-// begin decodes the message and loads the conversation's state. ok is
+// payloads decode the payload of each kind of event the agent handles
+// into the turn; false means the event is not one to answer.
+var payloads = map[event.Kind]func(t *turn) bool{
+	event.KindMessage: func(t *turn) bool {
+		return json.Unmarshal(t.event.Payload, &t.msg) == nil && strings.TrimSpace(t.msg.Text) != ""
+	},
+	event.KindDecision: func(t *turn) bool {
+		d := &t.decision
+		if json.Unmarshal(t.event.Payload, d) != nil || d.Button == "" || d.From == "" {
+			return false
+		}
+		t.msg = event.Message{From: d.From, Name: d.Name, Ref: d.Ref}
+		return true
+	},
+	event.KindToolResult: func(t *turn) bool {
+		return json.Unmarshal(t.event.Payload, &t.toolResult) == nil && t.toolResult.Pending != ""
+	},
+}
+
+// begin decodes the event and loads the conversation's state. ok is
 // false for an event the agent does not answer.
 func (a *Agent) begin(ctx context.Context, e event.Event) (*turn, bool, error) {
-	if e.Kind != event.KindMessage {
-		return nil, false, nil
-	}
-	var m event.Message
-	if err := json.Unmarshal(e.Payload, &m); err != nil || strings.TrimSpace(m.Text) == "" {
+	decode, ok := payloads[e.Kind]
+	t := &turn{event: e}
+	if !ok || !decode(t) {
 		return nil, false, nil
 	}
 	raw, err := a.d.States.State(ctx, e.Conv)
@@ -108,10 +133,9 @@ func (a *Agent) begin(ctx context.Context, e event.Event) (*turn, bool, error) {
 		a.log.Error("agent: unreadable state; starting a new session", "conv", e.Conv, "err", err)
 		st = State{V: StateVersion}
 	}
-	now := a.d.Now()
-	return &turn{event: e, msg: m, state: st, now: now, record: turns.Turn{
-		EventID: e.ID, Conv: e.Conv, Principal: m.From, Started: now, Outcome: turns.OutcomeOK,
-	}}, true, nil
+	t.state, t.now = st, a.d.Now()
+	t.record = turns.Turn{EventID: e.ID, Conv: e.Conv, Principal: t.msg.From, Started: t.now, Outcome: turns.OutcomeOK}
+	return t, true, nil
 }
 
 // finish logs and records the turn and encodes the new state.

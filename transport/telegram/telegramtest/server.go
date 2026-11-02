@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,6 +45,31 @@ type Outgoing struct {
 	Silent   bool
 	Entities string // the entities as sent, JSON; "" when none
 	ReplyTo  int64  // reply_parameters.message_id; 0 when not a reply
+	Keyboard string // reply_markup.inline_keyboard as sent, JSON; "" when none or empty
+}
+
+// Callback is a press of an inline button under a message the bot sent.
+type Callback struct {
+	ChatID    int64
+	ThreadID  int64 // forum topic of the message; 0 for none
+	UserID    int64
+	Name      string
+	MessageID int64  // the message holding the button; 0 for an inaccessible message
+	Data      string // the button's callback_data
+}
+
+// Edit is one successful editMessageText call.
+type Edit struct {
+	ChatID    int64
+	MessageID int64
+	Text      string
+	Entities  string // JSON; "" when none
+	Keyboard  string // JSON; "" when none or empty
+}
+
+// shown is what a sent message shows now, for editMessageText.
+type shown struct {
+	text, entities, keyboard string
 }
 
 // ChatAction is one sendChatAction call.
@@ -78,6 +104,11 @@ type Server struct {
 	threads    map[int64]map[int64]bool // chat → known forum topics
 	calls      map[string]int
 	actions    []ChatAction
+	allowed    []string                  // allowed_updates of the last getUpdates that gave them
+	messages   map[int64]map[int64]shown // chat → message id → what the bot's message shows
+	edits      []Edit
+	answered   []string // callback query ids answered
+	nextQuery  int64
 }
 
 // NewServer starts a fake Bot API for token (<bot_id>:<secret>). It is
@@ -98,6 +129,7 @@ func NewServer(t testing.TB, token string) *Server {
 		notify:     make(chan struct{}),
 		threads:    map[int64]map[int64]bool{},
 		calls:      map[string]int{},
+		messages:   map[int64]map[int64]shown{},
 	}
 	s.ts = httptest.NewServer(http.HandlerFunc(s.serve))
 	t.Cleanup(func() {
@@ -148,6 +180,62 @@ func (s *Server) AddMessage(m Incoming) int64 {
 	close(s.notify)
 	s.notify = make(chan struct{})
 	return s.nextUpdate
+}
+
+// AddCallback queues a press of an inline button and returns its
+// update_id. The callback query's id is "cq<n>".
+func (s *Server) AddCallback(c Callback) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nextUpdate++
+	s.nextQuery++
+	name := c.Name
+	if name == "" {
+		name = "User"
+	}
+	chatType := "private"
+	if c.ChatID < 0 {
+		chatType = "supergroup"
+	}
+	msg := map[string]any{"message_id": c.MessageID, "date": time.Now().Unix(), "chat": map[string]any{"id": c.ChatID, "type": chatType}}
+	if c.MessageID == 0 {
+		msg["date"] = 0 // an inaccessible message
+	}
+	if c.ThreadID != 0 {
+		msg["message_thread_id"], msg["is_topic_message"] = c.ThreadID, true
+	}
+	s.updates = append(s.updates, map[string]any{"update_id": s.nextUpdate, "callback_query": map[string]any{
+		"id":            "cq" + strconv.FormatInt(s.nextQuery, 10),
+		"from":          map[string]any{"id": c.UserID, "is_bot": false, "first_name": name},
+		"message":       msg,
+		"chat_instance": "ci" + strconv.FormatInt(c.ChatID, 10),
+		"data":          c.Data,
+	}})
+	close(s.notify)
+	s.notify = make(chan struct{})
+	return s.nextUpdate
+}
+
+// Answered returns the ids of the callback queries answered, in order.
+func (s *Server) Answered() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.answered...)
+}
+
+// Edits returns the successful editMessageText calls, in order.
+func (s *Server) Edits() []Edit {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]Edit(nil), s.edits...)
+}
+
+// AllowedUpdates returns the allowed_updates of the last getUpdates call
+// that gave them.
+func (s *Server) AllowedUpdates() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.allowed...)
 }
 
 // Sent returns the messages delivered by sendMessage, in order.
@@ -240,6 +328,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.getUpdates(w, r, params)
 	case "sendMessage":
 		s.sendMessage(w, params)
+	case "editMessageText":
+		s.editMessageText(w, params)
+	case "answerCallbackQuery":
+		var id string
+		_ = json.Unmarshal(params["callback_query_id"], &id)
+		s.mu.Lock()
+		s.answered = append(s.answered, id)
+		s.mu.Unlock()
+		writeOK(w, true)
 	case "sendChatAction":
 		var p struct {
 			ChatID          int64  `json:"chat_id"`
@@ -268,7 +365,12 @@ func (s *Server) getUpdates(w http.ResponseWriter, r *http.Request, params map[s
 	timer := time.NewTimer(time.Duration(intParam(params, "timeout")) * time.Second)
 	defer timer.Stop()
 
+	var allowed []string
+	_ = json.Unmarshal(params["allowed_updates"], &allowed)
 	s.mu.Lock()
+	if allowed != nil {
+		s.allowed = allowed
+	}
 	if s.webhook {
 		s.mu.Unlock()
 		writeErr(w, http.StatusConflict,
@@ -300,8 +402,7 @@ func (s *Server) getUpdates(w http.ResponseWriter, r *http.Request, params map[s
 			return
 		default:
 		}
-		if n := min(len(s.updates), maxUpdates); n > 0 {
-			ups := append([]map[string]any(nil), s.updates[:n]...)
+		if ups := s.deliverable(); len(ups) > 0 {
 			s.kick = nil
 			s.mu.Unlock()
 			writeOK(w, ups)
@@ -328,6 +429,21 @@ func (s *Server) getUpdates(w http.ResponseWriter, r *http.Request, params map[s
 	}
 }
 
+// deliverable returns the pending updates of the allowed types, at most
+// maxUpdates; like Telegram, an empty list allows every type.
+func (s *Server) deliverable() []map[string]any {
+	var ups []map[string]any
+	for _, u := range s.updates {
+		if len(ups) == maxUpdates {
+			break
+		}
+		if len(s.allowed) == 0 || slices.ContainsFunc(s.allowed, func(k string) bool { _, ok := u[k]; return ok }) {
+			ups = append(ups, u)
+		}
+	}
+	return ups
+}
+
 // release clears the in-flight poll unless a newer one replaced it.
 func (s *Server) release(mine chan struct{}) {
 	s.mu.Lock()
@@ -351,6 +467,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 		ReplyParameters *struct {
 			MessageID int64 `json:"message_id"`
 		} `json:"reply_parameters"`
+		ReplyMarkup *markup `json:"reply_markup"`
 	}
 	raw, _ := json.Marshal(params)
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -380,7 +497,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 			return
 		}
 	}
-	out := Outgoing{ChatID: p.ChatID, ThreadID: p.MessageThreadID, Text: p.Text, Silent: p.DisableNotification}
+	out := Outgoing{ChatID: p.ChatID, ThreadID: p.MessageThreadID, Text: p.Text, Silent: p.DisableNotification, Keyboard: p.ReplyMarkup.keyboard()}
 	if len(p.Entities) > 0 {
 		out.Entities = string(params["entities"])
 	}
@@ -389,6 +506,10 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 	}
 	s.sent = append(s.sent, out)
 	s.nextMsg++
+	if s.messages[p.ChatID] == nil {
+		s.messages[p.ChatID] = map[int64]shown{}
+	}
+	s.messages[p.ChatID][s.nextMsg] = shown{text: out.Text, entities: out.Entities, keyboard: out.Keyboard}
 	msg := map[string]any{
 		"message_id": s.nextMsg,
 		"date":       time.Now().Unix(),
@@ -399,6 +520,59 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 		msg["message_thread_id"] = p.MessageThreadID
 	}
 	writeOK(w, msg)
+}
+
+// markup is reply_markup with an inline keyboard.
+type markup struct {
+	InlineKeyboard json.RawMessage `json:"inline_keyboard"`
+}
+
+// keyboard is the inline keyboard as JSON; "" when there is none or it is
+// empty.
+func (m *markup) keyboard() string {
+	if m == nil || len(m.InlineKeyboard) == 0 {
+		return ""
+	}
+	var rows [][]json.RawMessage
+	if err := json.Unmarshal(m.InlineKeyboard, &rows); err != nil || len(rows) == 0 {
+		return ""
+	}
+	return string(m.InlineKeyboard)
+}
+
+// editMessageText changes a message the bot sent, with Telegram's
+// answers for a message that is gone and for an edit that changes nothing.
+func (s *Server) editMessageText(w http.ResponseWriter, params map[string]json.RawMessage) {
+	var p struct {
+		ChatID      int64           `json:"chat_id"`
+		MessageID   int64           `json:"message_id"`
+		Text        string          `json:"text"`
+		Entities    json.RawMessage `json:"entities"`
+		ReplyMarkup *markup         `json:"reply_markup"`
+	}
+	raw, _ := json.Marshal(params)
+	if err := json.Unmarshal(raw, &p); err != nil || p.Text == "" {
+		writeErr(w, http.StatusBadRequest, "Bad Request: message text is empty", 0)
+		return
+	}
+	e := Edit{ChatID: p.ChatID, MessageID: p.MessageID, Text: p.Text, Keyboard: p.ReplyMarkup.keyboard()}
+	if len(p.Entities) > 0 && string(p.Entities) != "null" {
+		e.Entities = string(p.Entities)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur, ok := s.messages[p.ChatID][p.MessageID]
+	switch {
+	case !ok:
+		writeErr(w, http.StatusBadRequest, "Bad Request: message to edit not found", 0)
+		return
+	case cur == shown{text: e.Text, entities: e.Entities, keyboard: e.Keyboard}:
+		writeErr(w, http.StatusBadRequest, "Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message", 0)
+		return
+	}
+	s.messages[p.ChatID][p.MessageID] = shown{text: e.Text, entities: e.Entities, keyboard: e.Keyboard}
+	s.edits = append(s.edits, e)
+	writeOK(w, map[string]any{"message_id": p.MessageID, "date": time.Now().Unix(), "chat": map[string]any{"id": p.ChatID, "type": "private"}, "text": p.Text})
 }
 
 func writeOK(w http.ResponseWriter, result any) {

@@ -121,3 +121,15 @@ func TestRequestRejectsDesiredAndReport(t *testing.T) {
 		t.Fatalf("Report on a request = %v", err)
 	}
 }
+
+func TestAskAsUsesTheGivenID(t *testing.T) {
+	s, _ := newService(t)
+	ctx := context.Background()
+	c, err := s.AskAs(ctx, "request:call:X1", cells.Request{Question: "Run?"}, time.Minute, "agent")
+	if err != nil || c.ID != "request:call:X1" || decision(t, c).Status != cells.StatusPending {
+		t.Fatalf("AskAs = %+v, %v", c, err)
+	}
+	if _, err := s.AskAs(ctx, "request:call:X1", cells.Request{Question: "Run?"}, time.Minute, "agent"); !errors.Is(err, cells.ErrExists) {
+		t.Fatalf("second AskAs = %v, want ErrExists", err)
+	}
+}
