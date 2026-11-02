@@ -219,7 +219,7 @@ func TestWorkersRunConversationsConcurrently(t *testing.T) {
 func TestOneConversationStaysSerial(t *testing.T) {
 	q := memQueue(t)
 	var alive, peak, done atomic.Int32
-	h := func(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+	h := func(_ context.Context, _ event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
 		n := alive.Add(1)
 		for {
 			p := peak.Load()
@@ -247,7 +247,7 @@ func TestOneConversationStaysSerial(t *testing.T) {
 func TestTurnTimeoutCancelsHandler(t *testing.T) {
 	q := memQueue(t)
 	got := make(chan error, 1)
-	h := func(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+	h := func(ctx context.Context, _ event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
 		<-ctx.Done()
 		got <- ctx.Err()
 		return nil, queue.StateUpdate{}, ctx.Err()

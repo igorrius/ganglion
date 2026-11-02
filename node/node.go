@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,12 +13,18 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/access"
+	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/outbox"
+	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/provider/claudecli"
+	"github.com/igorrius/ganglion/provider/openai"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/transport/telegram"
+	"github.com/igorrius/ganglion/turns"
 )
 
 // conflictAlert is sent to every admin when Telegram polling stops on 409.
@@ -93,7 +100,11 @@ func runCore(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	}
 
 	sender := outbox.NewSender(q, q.OutboxReady(), logger)
-	loop := core.NewLoop(q, q.InboxReady(), core.EchoHandler, logger)
+	handler, loopOpts, err := buildHandler(ctx, cfg.Agent, db, q, acl, logger)
+	if err != nil {
+		return err
+	}
+	loop := core.NewLoop(q, q.InboxReady(), handler, logger, loopOpts...)
 	components := []component{
 		{"sender", sender.Run},
 		{"loop", loop.Run},
@@ -147,6 +158,79 @@ func runAll(ctx context.Context, components []component) error {
 	return firstErr
 }
 
+// telegramPrivate returns the private chat of a Telegram principal: a
+// user's private chat has the user's id.
+func telegramPrivate(principal string) (transport, conv string, ok bool) {
+	idStr, ok := strings.CutPrefix(principal, "telegram:user:")
+	if !ok {
+		return "", "", false
+	}
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		return "", "", false
+	}
+	return "telegram", telegram.ConvKey(id, 0), true
+}
+
+// buildHandler returns the agent when a model catalogue is configured, and
+// the M2 echo otherwise.
+func buildHandler(ctx context.Context, ac AgentConfig, db *sql.DB, q *sqlqueue.Queue, acl *access.List, logger *slog.Logger) (core.Handler, []core.Option, error) {
+	if ac.Catalog == nil {
+		logger.Warn("node: no GANGLION_MODELS_FILE; the agent is off and the bot echoes")
+		return core.EchoHandler, nil, nil
+	}
+	turnsLog, err := turns.New(ctx, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	archive, err := agent.NewArchive(ctx, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	providers := map[string]provider.Provider{}
+	for _, p := range ac.Catalog.Providers {
+		switch p.Type {
+		case rules.TypeClaudeCLI:
+			var opts []claudecli.Option
+			if p.Command != "" {
+				opts = append(opts, claudecli.WithCommand(p.Command))
+			}
+			providers[p.Name] = claudecli.New(p.Name, opts...)
+		default:
+			providers[p.Name] = openai.New(p.Name, p.BaseURL, ac.Keys[p.Name])
+		}
+	}
+	tz := ac.TZ
+	if tz == nil {
+		tz = time.UTC
+	}
+	rt, err := rules.New(ac.Catalog.RouterModels(), rules.WithBudget(turnsLog, ac.DailyBudgetUSD, tz))
+	if err != nil {
+		return nil, nil, err
+	}
+	ag := agent.New(agent.Config{
+		SystemPrompt: ac.SystemPrompt, DailyTurns: ac.DailyTurns, DailyTokens: ac.DailyTokens,
+		SessionIdle: ac.SessionIdle, Location: tz,
+	}, agent.Deps{
+		States: q, Router: rt, Providers: providers, Turns: turnsLog, Archive: archive,
+		Admins: acl.Admins, AlertConv: telegramPrivate, Log: logger,
+	})
+	giveUp := func(e event.Event) []event.Outgoing {
+		out := []event.Outgoing{{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv,
+			Text: "Sorry, something went wrong with that message."}}
+		admins, _ := acl.Admins(context.Background())
+		for _, adm := range admins {
+			if transport, conv, ok := telegramPrivate(adm); ok {
+				out = append(out, event.Outgoing{IdemKey: "alert:give-up:" + e.ID + ":" + adm, Transport: transport, Conv: conv,
+					Text: "Gave up on event " + e.ID + " in " + e.Conv + " after " + strconv.Itoa(core.DefaultMaxAttempts) + " attempts."})
+			}
+		}
+		return out
+	}
+	logger.Info("node: agent on", "providers", len(providers), "models", len(ac.Catalog.Models))
+	return ag.Handle, []core.Option{core.WithMaxAttempts(core.DefaultMaxAttempts, giveUp)}, nil
+}
+
 // alertAdmins enqueues the conflict alert to the private chat of every
 // Telegram admin, once per process start.
 func alertAdmins(ctx context.Context, acl *access.List, q *sqlqueue.Queue, started time.Time) error {
@@ -156,19 +240,13 @@ func alertAdmins(ctx context.Context, acl *access.List, q *sqlqueue.Queue, start
 	}
 	var msgs []event.Outgoing
 	for _, p := range admins {
-		idStr, ok := strings.CutPrefix(p, "telegram:user:")
+		transport, conv, ok := telegramPrivate(p)
 		if !ok {
-			continue
-		}
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
 			continue
 		}
 		msgs = append(msgs, event.Outgoing{
 			IdemKey:   "alert:telegram-conflict:" + strconv.FormatInt(started.UnixMilli(), 10) + ":" + p,
-			Transport: "telegram",
-			Conv:      telegram.ConvKey(id, 0), // a user's private chat has the user's id
-			Text:      conflictAlert,
+			Transport: transport, Conv: conv, Text: conflictAlert,
 		})
 	}
 	if len(msgs) == 0 {
