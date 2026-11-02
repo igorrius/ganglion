@@ -80,7 +80,7 @@ Prometheus names after the exporter's conversion:
   checks the metric and its labels after the action, plus the agent's
   "no text in spans" check: span attributes never contain the message.
 
-### Task 3: node wiring, config, live check — done but the live check
+### Task 3: node wiring, config, live check — done; the owner's live look at the dashboard is pending
 
 - `GANGLION_METRICS_ADDR` (default `127.0.0.1:9464`; `off`).
 - `node.Run` sets telemetry up first and shuts it down last, and wraps the

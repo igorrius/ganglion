@@ -695,9 +695,18 @@ showed it raw.
   `docs/plans/p1-all-in-one.md`, `docs/spec.md` (section 11: history format
   resolved by ADR-0020, first API provider by ADR-0021 and ADR-0022)
 
-- [ ] **Step 1: `make live-agent`.** Like `live-echo`, plus
+- [x] **Step 1: `make live-agent`.** Like `live-echo`, plus
   `GANGLION_MODELS_FILE=models.local.yaml` (git-ignored) and
   `OPENROUTER_API_KEY` from `.env`. The CLI uses the owner's local login.
+
+  Run 2026-11-02 on @ganglion_test_bot by the owner. Haiku answered
+  through the CLI, under a persona from workspace files. A table and a Go
+  code block arrived formatted after task 11. The run surfaced four
+  changes, each made the same day:
+  - the persona moved out of Go (ADR-0024);
+  - Telegram formatting, "typing…" and replies (ADR-0025);
+  - one info log line per turn;
+  - OpenTelemetry ([observability plan](p1-observability.md)).
 - [x] **Step 2: Compare candidates**: Haiku through the claude CLI and 2
   cheap models over OpenRouter. The same 20 prompts (Russian and
   Ukrainian small talk, a household question, a follow-up that needs the
@@ -719,4 +728,4 @@ showed it raw.
   `provider/claudecli`,
   `provider/providertest`, `router/rules`, `turns`, `agent`, core workers),
   component diagram, phase plan (M3a done with numbers), "Where we are".
-- [ ] **Step 6: Commit** `docs: M3a talking agent done`.
+- [x] **Step 6: Commit** `docs: M3a talking agent done`.

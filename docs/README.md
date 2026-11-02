@@ -48,6 +48,8 @@ Start here when coming back to the project.
     (persona in workspace files), [ADR-0025](adr/0025-markdown-rendered-to-telegram-entities.md)
     (Markdown rendered to Telegram entities; typing; replies). Run live
     on the test bot by the owner; formatting checked after task 11.
+    Closed; the work after the M3a review (persona, schemas, formatting,
+    observability) has had no independent review yet.
   - Observability ([plan](plans/p1-observability.md),
     [ADR-0026](adr/0026-opentelemetry-prometheus-and-promtop.md)):
     - one info log line per turn;

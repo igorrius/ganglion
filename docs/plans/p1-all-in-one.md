@@ -143,7 +143,7 @@ and policies, skills, 3.8 acceptance) is planned after M3a.
   fallback (ADR-0022).
 - **Memory:** the agent is 24.2 MB after 1,000 turns.
 
-The live run on the test bot closes it.
+Closed 2026-11-02 after the live run on the test bot.
 
 | Task | Done when |
 |---|---|
