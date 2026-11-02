@@ -17,7 +17,8 @@ interfaces only; **planned** — not in the repository yet.
 | Model providers | `provider` | interface | 7.4 | [0007](../adr/0007-openai-compatible-first-provider.md), [0009](../adr/0009-claude-subscription-only-via-cli-worker.md) |
 | Model router | `router` | interface | 7.3 | — |
 | Store (history, turns, cron_runs, allowed) | — | planned (P1) | 6 | — |
-| SQLite queue: inbox (ordered leases, atomic `Complete`), conversation state, prune | `queue/sqlqueue` | inbox done (P1 M2); outbox side in task 3 | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
+| SQLite queue: inbox (ordered leases, atomic `Complete`), outbox (heads per conversation, retries, parts), conversation state, prune | `queue/sqlqueue` | done (P1 M2) | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
+| Outbox sender: order per conversation, backoff, `retry_after` pause, resumable parts | `outbox` | done (P1 M2) | 7.1 | — |
 | Telegram transport | — | planned (P1) | 7.1 | — |
 | Agent loop and actors | — | planned (P1) | 7.2 | — |
 | Policies | — | planned (P1) | 7.6 | — |
@@ -60,6 +61,8 @@ flowchart BT
     virtualb["cells/virtual"] --> cellsp
     sqlqueue["queue/sqlqueue"] --> queue
     sqlqueue --> sqlitedb
+    outboxp["outbox"] --> queue
+    outboxp --> transport
 ```
 
 - `event` and `pdk` are leaves: they import nothing from the project.

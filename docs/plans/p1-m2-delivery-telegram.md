@@ -318,14 +318,16 @@ could collide with old ones and be dropped as duplicates.
   4. Send parts from `PartsSent` onward, calling `PartSent` after each.
   5. Call `Sent` when all parts are out.
   6. On error:
-     - `RetryAfterError`: pause the transport until `now + After`, `Retry`
-       the message with `notBefore` at the same time, and do not count an
-       attempt;
+     - `RetryAfterError`: pause the transport until `now + After` and do
+       not count an attempt. As built, the message is not `Retry`-ed:
+       `Retry` always counts an attempt, and the in-memory pause already
+       holds every message of the transport. After a restart the pause is
+       forgotten and Telegram answers 429 once more;
      - `ErrPermanent`: `Fail` the message and log at error level;
      - anything else: `Retry` it at `now + backoff(attempts+1)`.
 - Sleep until the earliest of: `next`, the end of a transport pause, the
   `wake` channel, or the poll interval. There is never a busy loop.
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - Outbox (sqlqueue): `TestDueGivesOneHeadPerConversation`,
     `TestRetryBlocksOnlyItsConversation`, `TestDueNextIsEarliestRetry`,
     `TestFailMovesConversationOn`, `TestEnqueueDuplicateIsNoOp`,
@@ -345,12 +347,12 @@ could collide with old ones and be dropped as duplicates.
     - `TestSplitMessageResumesAfterCrash`: a transport splits into 3 parts;
       part 2 fails; a new sender on the same queue sends only parts 2 and 3.
     - `TestWakeTriggersImmediateSend`.
-- [ ] **Step 2: Run** `go test ./queue/sqlqueue/ ./outbox/` — FAIL.
-- [ ] **Step 3: Implement.** The sender is one goroutine and sends
+- [x] **Step 2: Run** `go test ./queue/sqlqueue/ ./outbox/` — FAIL.
+- [x] **Step 3: Implement.** The sender is one goroutine and sends
   sequentially. That is enough for a family bot and keeps the order
   trivially correct.
-- [ ] **Step 4: Run** `go test -race ./queue/sqlqueue/ ./outbox/` — PASS.
-- [ ] **Step 5: Commit** `outbox: sender with per-conversation order, retry_after and resumable parts`.
+- [x] **Step 4: Run** `go test -race ./queue/sqlqueue/ ./outbox/` — PASS.
+- [x] **Step 5: Commit** `outbox: sender with per-conversation order, retry_after and resumable parts`.
 
 ### Task 4: Bot API client and fake Bot API (2.3, part 1; ADR-0018)
 
