@@ -60,7 +60,8 @@ Start here when coming back to the project.
     - M2: record a send's outcome with `context.WithoutCancel` on
       shutdown; keep the seeded admin's name and plan admin removal; do
       not end the node when the `409` alert cannot be stored.
-    - M3a: remove or document `provider.Fallback`; clean up the claude
+    - M3a: move to goldmark v2 (`github.com/yuin/goldmark/v2`), where
+      upstream now lands some fixes first; remove or document `provider.Fallback`; clean up the claude
       work dir; name people, not ids, in limit alerts.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 

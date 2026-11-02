@@ -678,9 +678,12 @@ showed it raw.
 - [x] **Step 3: Implement**; `node` wires the hook to `Typing` for
   telegram events and reads `GANGLION_TELEGRAM_REPLY`.
 - [x] **Step 4: Run** `go test -race ./...` and `make memory` — PASS; note
-  the binary size. Measured: binary 17.3 MB (16.4 MB before goldmark
-  v1.8.6, pinned to a release two months old); the agent 17.6 MB idle and
-  24.8 MB after 1,000 turns.
+  the binary size. Measured: binary 17.3 MB (16.4 MB before goldmark);
+  the agent 17.6 MB idle and 24.8 MB after 1,000 turns. goldmark was
+  first pinned to v1.8.6, a release two months old. It then moved to
+  v1.8.7 (2026-10-30) at the owner's call: its changes are a parser fix
+  and limits on label lengths and cached searches against slow inputs.
+  v1.8.6 rendered 100 KB pathological inputs in 300 ms at worst.
 - [x] **Step 5: Commit** `transport/telegram: Markdown to entities, typing and replies`.
 
 ### Task 10: live run, first model (D-6), docs
