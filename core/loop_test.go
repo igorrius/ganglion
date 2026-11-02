@@ -275,7 +275,9 @@ func TestGiveUpAfterMaxAttempts(t *testing.T) {
 		calls.Add(1)
 		return nil, queue.StateUpdate{}, errors.New("always fails")
 	}
-	giveUp := func(e event.Event) []event.Outgoing {
+	var gaveUpAfter atomic.Int32
+	var giveUp GiveUp = func(e event.Event, attempts int) []event.Outgoing {
+		gaveUpAfter.Store(int32(attempts))
 		return []event.Outgoing{{IdemKey: e.IdemKey + ":give-up", Transport: "telegram", Conv: e.Conv, Text: "gave up"}}
 	}
 	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler),
@@ -289,6 +291,9 @@ func TestGiveUpAfterMaxAttempts(t *testing.T) {
 	})
 	if n := calls.Load(); n != 2 {
 		t.Fatalf("handler called %d times, want 2", n)
+	}
+	if n := gaveUpAfter.Load(); n != 2 {
+		t.Fatalf("give-up told %d attempts, want 2", n)
 	}
 }
 
@@ -326,7 +331,7 @@ func TestTurnSpanAndGiveUpMetric(t *testing.T) {
 		return nil, queue.StateUpdate{}, errors.New("always fails")
 	}
 	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler),
-		WithLease(100*time.Millisecond), WithPoll(20*time.Millisecond), WithMaxAttempts(1, nil)))
+		WithLease(100*time.Millisecond), WithPoll(20*time.Millisecond), WithMaxAttempts(1, NoGiveUp)))
 	if err := q.Put(context.Background(), msgEvent("k1", "telegram:a", "x")); err != nil {
 		t.Fatal(err)
 	}

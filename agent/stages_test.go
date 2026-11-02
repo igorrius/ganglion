@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -77,5 +78,20 @@ func TestSessionCommandsAnswerWithoutAModel(t *testing.T) {
 	e.turn(t, message("telegram:user:42", "Igor", "/weather"))
 	if len(e.smart.requests()) != 1 {
 		t.Fatal("an unknown command did not reach the model")
+	}
+}
+
+func TestGiveUpApologisesAndAlertsAdmins(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	ev := message("telegram:user:42", "Igor", "hi")
+	out := e.a.GiveUp(ev, 3)
+	if len(out) != 2 {
+		t.Fatalf("give-up %+v", out)
+	}
+	if out[0] != (event.Outgoing{IdemKey: ev.IdemKey + ":reply:0", Transport: ev.Source, Conv: ev.Conv, Text: "Sorry, something went wrong with that message."}) {
+		t.Errorf("apology %+v", out[0])
+	}
+	if out[1].IdemKey != "alert:give-up:"+ev.ID+":telegram:user:1" || out[1].Text != "Gave up on event "+ev.ID+" in "+ev.Conv+" after 3 attempts." {
+		t.Errorf("alert %+v", out[1])
 	}
 }

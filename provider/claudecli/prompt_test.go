@@ -26,3 +26,9 @@ func TestPromptSplitsSystemAndRendersTheTranscript(t *testing.T) {
 		t.Errorf("stdin\n%q\nwant\n%q", stdin, want)
 	}
 }
+
+func TestEmptyCommandKeepsTheDefault(t *testing.T) {
+	if c := New("cli", WithCommand("")); c.command != "claude" {
+		t.Fatalf("command %q", c.command)
+	}
+}

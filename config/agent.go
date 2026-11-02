@@ -1,16 +1,12 @@
 package config
 
 import (
-	"context"
-	"fmt"
 	"log/slog"
-	"strconv"
-	"time"
 
+	"fmt"
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/core"
-	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/claudecli"
 	"github.com/igorrius/ganglion/provider/openai"
@@ -21,19 +17,12 @@ import (
 	"github.com/samber/do/v2"
 )
 
-// Handler provides the turn handler: the agent when a model catalogue is
-// set, the M2 echo bot otherwise.
-func Handler() do.Provider[core.Handler] {
+// Handler provides the turn handler.
+func Handler() do.Provider[core.Handler] { return choose[core.Handler](agentOrEcho) }
+
+// AgentHandler provides the agent as the turn handler.
+func AgentHandler() do.Provider[core.Handler] {
 	return func(i do.Injector) (core.Handler, error) {
-		var err error
-		b, logger := need[Bootstrap](i, &err), need[*slog.Logger](i, &err)
-		if err != nil {
-			return nil, err
-		}
-		if b.Agent.Catalog == nil {
-			logger.Warn("node: no GANGLION_MODELS_FILE; the agent is off and the bot echoes")
-			return core.EchoHandler, nil
-		}
 		ag, err := do.Invoke[*agent.Agent](i)
 		if err != nil {
 			return nil, err
@@ -42,32 +31,25 @@ func Handler() do.Provider[core.Handler] {
 	}
 }
 
-// GiveUp is what the turn loop sends for an event that failed every
-// attempt.
-type GiveUp func(e event.Event) []event.Outgoing
+// EchoHandler provides the M2 echo bot as the turn handler.
+func EchoHandler() do.Provider[core.Handler] { return value[core.Handler](core.EchoHandler) }
 
-// GiveUpReplies provides the give-up replies: with the agent on, an
-// apology to the person and an alert to the admins; the echo bot gives up
-// silently.
-func GiveUpReplies() do.Provider[GiveUp] {
-	return func(i do.Injector) (GiveUp, error) {
-		var err error
-		b, admins, logger := need[Bootstrap](i, &err), need[alert.Admins](i, &err), need[*slog.Logger](i, &err)
-		if err != nil || b.Agent.Catalog == nil {
-			return func(event.Event) []event.Outgoing { return nil }, err
+// GiveUp provides the replies for an event that failed every attempt.
+func GiveUp() do.Provider[core.GiveUp] { return choose[core.GiveUp](agentOrEcho) }
+
+// AgentGiveUp provides the agent's apology and admin alert.
+func AgentGiveUp() do.Provider[core.GiveUp] {
+	return func(i do.Injector) (core.GiveUp, error) {
+		ag, err := do.Invoke[*agent.Agent](i)
+		if err != nil {
+			return nil, err
 		}
-		return func(e event.Event) []event.Outgoing {
-			out := []event.Outgoing{{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv,
-				Text: "Sorry, something went wrong with that message."}}
-			alerts, err := admins.Messages(context.Background(), "alert:give-up:"+e.ID,
-				"Gave up on event "+e.ID+" in "+e.Conv+" after "+strconv.Itoa(core.DefaultMaxAttempts)+" attempts.")
-			if err != nil {
-				logger.Warn("node: give-up alert not built", "id", e.ID, "err", err)
-			}
-			return append(out, alerts...)
-		}, nil
+		return ag.GiveUp, nil
 	}
 }
+
+// NoGiveUp provides giving up silently.
+func NoGiveUp() do.Provider[core.GiveUp] { return value[core.GiveUp](core.NoGiveUp) }
 
 // Agent provides the agent over the catalogue's models.
 func Agent() do.Provider[*agent.Agent] {
@@ -80,8 +62,7 @@ func Agent() do.Provider[*agent.Agent] {
 			return nil, err
 		}
 		cfg := agent.DefaultConfig()
-		cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, location(b)
-		logger.Info("node: agent on", "providers", len(providers), "models", len(b.Agent.Catalog.Models))
+		cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
 		return agent.New(cfg, agent.Deps{
 			States: q, Router: rt, Providers: providers, Tools: agent.NoTools{}, Turns: tl, Archive: archive,
 			Alerts: admins, Log: logger, Persona: agent.PersonaDir(b.Agent.Workspace),
@@ -98,7 +79,7 @@ func Router() do.Provider[router.Router] {
 		if err != nil {
 			return nil, err
 		}
-		return rules.New(b.Agent.Catalog.RouterModels(), rules.WithBudget(tl, b.Agent.DailyBudgetUSD, location(b)))
+		return rules.New(b.Agent.Catalog.RouterModels(), rules.WithBudget(tl, b.Agent.DailyBudgetUSD, b.Agent.TZ))
 	}
 }
 
@@ -109,11 +90,7 @@ var providerFactories = map[string]func(p rules.ProviderDef, key string) provide
 		return openai.New(p.Name, p.BaseURL, key)
 	},
 	rules.TypeClaudeCLI: func(p rules.ProviderDef, _ string) provider.Provider {
-		var opts []claudecli.Option
-		if p.Command != "" {
-			opts = append(opts, claudecli.WithCommand(p.Command))
-		}
-		return claudecli.New(p.Name, opts...)
+		return claudecli.New(p.Name, claudecli.WithCommand(p.Command))
 	},
 }
 
@@ -134,11 +111,4 @@ func Providers() do.Provider[map[string]provider.Provider] {
 		}
 		return out, nil
 	}
-}
-
-func location(b Bootstrap) *time.Location {
-	if b.Agent.TZ == nil {
-		return time.UTC
-	}
-	return b.Agent.TZ
 }

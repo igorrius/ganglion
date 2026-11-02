@@ -45,3 +45,18 @@ func TestPrunerPrunesAtStartAndStopsWithTheContext(t *testing.T) {
 		t.Fatalf("Run = %v, want nil when the context ends", err)
 	}
 }
+
+// The process that owns the database releases the leases a dead process
+// left (ADR-0019), so their events are leasable at once.
+func TestOpenOwnedReleasesDeadLeases(t *testing.T) {
+	f := setup(t)
+	put(t, f, msg("telegram:1", "held"))
+	lease(t, f) // a process took it and died
+	q, err := sqlqueue.OpenOwned(context.Background(), f.db, slog.New(slog.DiscardHandler), sqlqueue.WithClock(f.clock.Now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, err := q.Lease(context.Background(), time.Minute); err != nil || l.Event.IdemKey != "held" {
+		t.Fatalf("lease after OpenOwned: %+v, %v", l, err)
+	}
+}

@@ -210,3 +210,12 @@ func TestVersionCommand(t *testing.T) {
 		t.Fatalf("--version: %v:\n%s", err, out)
 	}
 }
+
+// run says which optional parts its settings leave off.
+func TestRunAnnouncesWhatIsOff(t *testing.T) {
+	clearEnv(t)
+	_, _, out, err := captured(t, "run")
+	if err != nil || !strings.Contains(out, "the agent is off and the bot echoes") || !strings.Contains(out, "the Telegram transport is off") {
+		t.Fatalf("%v:\n%s", err, out)
+	}
+}

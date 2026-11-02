@@ -39,8 +39,15 @@ var _ provider.Provider = (*Client)(nil)
 // Option configures a Client.
 type Option func(*Client)
 
-// WithCommand sets the claude binary; the default is "claude" on PATH.
-func WithCommand(path string) Option { return func(c *Client) { c.command = path } }
+// WithCommand sets the claude binary; the default, and "", is "claude" on
+// PATH.
+func WithCommand(path string) Option {
+	return func(c *Client) {
+		if path != "" {
+			c.command = path
+		}
+	}
+}
 
 // WithMaxConcurrent caps the claude processes alive at once; default 2.
 func WithMaxConcurrent(n int) Option {

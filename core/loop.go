@@ -47,7 +47,7 @@ type Loop struct {
 	workers     int
 	turnTimeout time.Duration
 	maxAttempts int
-	giveUp      func(e event.Event) []event.Outgoing
+	giveUp      GiveUp
 	hook        TurnHook
 
 	wake chan struct{} // a worker that got an event wakes an idle one
@@ -75,10 +75,17 @@ func WithWorkers(n int) Option { return func(l *Loop) { l.workers = max(n, 1) } 
 // The default is DefaultTurnTimeout.
 func WithTurnTimeout(d time.Duration) Option { return func(l *Loop) { l.turnTimeout = d } }
 
+// GiveUp returns the replies for an event that failed every one of its
+// attempts; the event is completed with them instead of being retried.
+type GiveUp func(e event.Event, attempts int) []event.Outgoing
+
+// NoGiveUp gives up without replies.
+func NoGiveUp(event.Event, int) []event.Outgoing { return nil }
+
 // WithMaxAttempts stops retrying an event leased more than n times: it is
-// completed with giveUp's replies (nil: none) instead of reaching the
-// handler again. The default is DefaultMaxAttempts with no replies.
-func WithMaxAttempts(n int, giveUp func(e event.Event) []event.Outgoing) Option {
+// completed with giveUp's replies instead of reaching the handler again.
+// The default is DefaultMaxAttempts with NoGiveUp.
+func WithMaxAttempts(n int, giveUp GiveUp) Option {
 	return func(l *Loop) { l.maxAttempts, l.giveUp = n, giveUp }
 }
 
@@ -98,7 +105,7 @@ func WithTurnHook(h TurnHook) Option {
 // (sqlqueue.Queue.InboxReady).
 func NewLoop(q queue.Queue, ready <-chan struct{}, h Handler, logger *slog.Logger, opts ...Option) *Loop {
 	l := &Loop{q: q, ready: ready, h: h, log: logger, lease: DefaultLease, poll: DefaultPoll,
-		workers: DefaultWorkers, turnTimeout: DefaultTurnTimeout, maxAttempts: DefaultMaxAttempts, hook: NoTurnHook}
+		workers: DefaultWorkers, turnTimeout: DefaultTurnTimeout, maxAttempts: DefaultMaxAttempts, hook: NoTurnHook, giveUp: NoGiveUp}
 	for _, o := range opts {
 		o(l)
 	}
@@ -160,10 +167,7 @@ func (l *Loop) turn(ctx context.Context, lease queue.Lease) {
 	if l.maxAttempts > 0 && lease.Attempts > l.maxAttempts {
 		l.givenUp.Add(ctx, 1)
 		span.SetAttributes(attribute.String("outcome", "given_up"))
-		var out []event.Outgoing
-		if l.giveUp != nil {
-			out = l.giveUp(e)
-		}
+		out := l.giveUp(e, lease.Attempts-1)
 		log.Error("core: giving up on an event that failed every attempt", "attempts", lease.Attempts-1)
 		l.complete(ctx, log, lease, out, queue.StateUpdate{})
 		return

@@ -2,9 +2,28 @@ package sqlqueue
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"time"
 )
+
+// OpenOwned opens the queue for the one process that owns this database
+// (ADR-0019): leases left in it belong to a process that died, so they are
+// released at once.
+func OpenOwned(ctx context.Context, db *sql.DB, logger *slog.Logger, opts ...Option) (*Queue, error) {
+	q, err := New(ctx, db, opts...)
+	if err != nil {
+		return nil, err
+	}
+	n, err := q.ReleaseLeases(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if n > 0 {
+		logger.Warn("node: released leases left by a previous process", "events", n)
+	}
+	return q, nil
+}
 
 // Pruner deletes finished queue rows older than Retention, at start and
 // then every Every. It is a node component.

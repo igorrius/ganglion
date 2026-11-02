@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
@@ -31,6 +32,19 @@ func (a *Agent) overLimit(ctx context.Context, now time.Time, principal, eventID
 		a.log.Warn("agent: daily limit alert not built", "err", err)
 	}
 	return alerts, true
+}
+
+// GiveUp is the agent's core.GiveUp: an apology to the person and an
+// alert to the admins for a message that failed every attempt.
+func (a *Agent) GiveUp(e event.Event, attempts int) []event.Outgoing {
+	out := []event.Outgoing{{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv,
+		Text: "Sorry, something went wrong with that message."}}
+	alerts, err := a.d.Alerts.Messages(context.Background(), "alert:give-up:"+e.ID,
+		"Gave up on event "+e.ID+" in "+e.Conv+" after "+strconv.Itoa(attempts)+" attempts.")
+	if err != nil {
+		a.log.Warn("node: give-up alert not built", "id", e.ID, "err", err)
+	}
+	return append(out, alerts...)
 }
 
 // under reports whether used is below limit; a zero limit is off.

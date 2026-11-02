@@ -404,3 +404,30 @@ func TestTyping(t *testing.T) {
 		t.Fatalf("typing went on after ctx ended: %d → %d", len(acts), n)
 	}
 }
+
+// The turn hook shows "typing…" for a Telegram message until the turn
+// ends, and nothing for other events.
+func TestTypingHookOnlyForTelegramMessages(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	tr.typingEvery = 20 * time.Millisecond
+	ctx := context.Background()
+	tr.TypingHook(ctx, event.Event{Source: "mqtt", Kind: event.KindMessage, Conv: "telegram:42"})()
+	tr.TypingHook(ctx, event.Event{Source: Name, Kind: "sensor", Conv: "telegram:42"})()
+	time.Sleep(60 * time.Millisecond)
+	if n := len(fake.ChatActions()); n != 0 {
+		t.Fatalf("%d chat actions for events that are not Telegram messages", n)
+	}
+	stop := tr.TypingHook(ctx, event.Event{Source: Name, Kind: event.KindMessage, Conv: "telegram:42"})
+	deadline := time.Now().Add(2 * time.Second)
+	for len(fake.ChatActions()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	stop()
+	time.Sleep(60 * time.Millisecond)
+	n := len(fake.ChatActions())
+	time.Sleep(100 * time.Millisecond)
+	if n == 0 || len(fake.ChatActions()) != n {
+		t.Fatalf("typing: %d actions, then %d after stop", n, len(fake.ChatActions()))
+	}
+}

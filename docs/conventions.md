@@ -20,6 +20,14 @@ same commit as the code, not the other way round.
 - **One composition root.** Only the `config` package builds concrete
   implementations and connects them, through `samber/do` providers
   (ADR-0028). Domain packages never import `github.com/samber/do`.
+- **`config` holds dependency logic only.** A provider invokes what its
+  component needs, maps settings to constructor arguments and calls the
+  constructor. An extension point is an interface provider that only
+  selects (`choose`): each implementation, the no-op included, has its own
+  named provider. No texts, goroutines, defaults, policies or log lines
+  about the product in `config`: they belong to the package that owns the
+  behaviour (the agent's give-up reply, Telegram's typing hook, the
+  queue's lease release, the access list's admin seed).
 - **One command line.** `main.go` at the root only calls `cmd.Execute`.
   The command tree lives in `cmd` and the flags in `cmd/flags`. Only
   `cmd/...` imports `github.com/urfave/cli/v3` (ADR-0029). `config` gets

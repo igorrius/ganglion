@@ -43,6 +43,7 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 				With("version", in.Version, "commit", shortCommit(in))
 			stop := startTelemetry(ctx, b.MetricsAddr, in, logger)
 			defer stop()
+			announce(logger, b)
 			return start(ctx, roles, b, logger)
 		},
 	}
@@ -99,6 +100,18 @@ func catalogue(path string, src secrets.Source, readFile func(string) ([]byte, e
 		keys[p.Name] = key
 	}
 	return &cat, keys, nil
+}
+
+// announce says which optional parts the settings turn on or leave off.
+func announce(logger *slog.Logger, b config.Bootstrap) {
+	if cat := b.Agent.Catalog; cat != nil {
+		logger.Info("node: agent on", "providers", len(cat.Providers), "models", len(cat.Models))
+	} else {
+		logger.Warn("node: no GANGLION_MODELS_FILE; the agent is off and the bot echoes")
+	}
+	if b.BotToken == "" {
+		logger.Warn("node: no TELEGRAM_BOT_TOKEN; the Telegram transport is off")
+	}
 }
 
 // startTelemetry serves metrics and returns the stop. Watching the node

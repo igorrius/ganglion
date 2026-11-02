@@ -19,7 +19,7 @@ type DBLock struct{ release func() }
 // Shutdown releases the lock.
 func (l DBLock) Shutdown() { l.release() }
 
-// Lock provides the database lock: one core process per database file.
+// Lock provides the database lock.
 func Lock() do.Provider[DBLock] {
 	return func(i do.Injector) (DBLock, error) {
 		b, err := do.Invoke[Bootstrap](i)
@@ -50,8 +50,7 @@ func DB() do.Provider[Database] {
 	}
 }
 
-// Queue provides the inbox and outbox. This process owns the database, so
-// leases left in it belong to a process that died (ADR-0019).
+// Queue provides the inbox and outbox, owned by this process.
 func Queue() do.Provider[*sqlqueue.Queue] {
 	return func(i do.Injector) (*sqlqueue.Queue, error) {
 		var err error
@@ -59,20 +58,11 @@ func Queue() do.Provider[*sqlqueue.Queue] {
 		if err != nil {
 			return nil, err
 		}
-		q, err := sqlqueue.New(start, db.DB)
-		if err != nil {
-			return nil, err
-		}
-		if n, err := q.ReleaseLeases(start); err != nil {
-			return nil, err
-		} else if n > 0 {
-			logger.Warn("node: released leases left by a previous process", "events", n)
-		}
-		return q, nil
+		return sqlqueue.OpenOwned(start, db.DB, logger)
 	}
 }
 
-// Access provides the access list, with the bootstrap admin seeded.
+// Access provides the access list with the bootstrap admin.
 func Access() do.Provider[*access.List] {
 	return func(i do.Injector) (*access.List, error) {
 		var err error
@@ -80,16 +70,7 @@ func Access() do.Provider[*access.List] {
 		if err != nil {
 			return nil, err
 		}
-		acl, err := access.New(start, db.DB)
-		if err != nil {
-			return nil, err
-		}
-		if b.Admin != "" {
-			if err := acl.Allow(start, b.Admin, access.RoleAdmin, ""); err != nil {
-				return nil, err
-			}
-		}
-		return acl, nil
+		return access.New(start, db.DB, access.WithAdmin(b.Admin))
 	}
 }
 

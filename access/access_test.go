@@ -181,3 +181,22 @@ func TestFilterCountsDrops(t *testing.T) {
 		t.Errorf("malformed drops %v", got)
 	}
 }
+
+func TestWithAdminSeedsTheAdmin(t *testing.T) {
+	ctx := context.Background()
+	db, err := sqlitedb.Open(ctx, filepath.Join(t.TempDir(), "access.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	l, err := access.New(ctx, db, access.WithAdmin("telegram:user:42"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if role, ok, err := l.Role(ctx, "telegram:user:42"); err != nil || !ok || role != access.RoleAdmin {
+		t.Fatalf("role %q, %v, %v", role, ok, err)
+	}
+	if _, err := access.New(ctx, db, access.WithAdmin("")); err != nil {
+		t.Fatalf("an empty admin is no admin: %v", err)
+	}
+}
