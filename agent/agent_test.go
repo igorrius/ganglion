@@ -1,0 +1,427 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/queue"
+	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/turns"
+)
+
+var t0 = time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+
+// fakeProvider answers from a script; an empty script answers "ok".
+type fakeProvider struct {
+	name   string
+	mu     sync.Mutex
+	script []func(context.Context, provider.ChatRequest) (provider.ChatResponse, error)
+	reqs   []provider.ChatRequest
+}
+
+func (f *fakeProvider) Name() string { return f.name }
+
+func (f *fakeProvider) Chat(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+	f.mu.Lock()
+	f.reqs = append(f.reqs, req)
+	var step func(context.Context, provider.ChatRequest) (provider.ChatResponse, error)
+	if len(f.script) > 0 {
+		step, f.script = f.script[0], f.script[1:]
+	}
+	f.mu.Unlock()
+	if step == nil {
+		return text("ok"), nil
+	}
+	return step(ctx, req)
+}
+
+func (f *fakeProvider) push(steps ...func(context.Context, provider.ChatRequest) (provider.ChatResponse, error)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.script = append(f.script, steps...)
+}
+
+func (f *fakeProvider) requests() []provider.ChatRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]provider.ChatRequest(nil), f.reqs...)
+}
+
+func text(s string) provider.ChatResponse {
+	return provider.ChatResponse{Message: provider.Message{Role: "assistant", Content: s}, Usage: provider.Usage{InputTokens: 100, OutputTokens: 10}}
+}
+
+func say(s string) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) { return text(s), nil }
+}
+
+func fail(kind provider.ErrorKind) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+		return provider.ChatResponse{}, &provider.Error{Provider: "x", Kind: kind, Msg: string(kind)}
+	}
+}
+
+func callTool(name string) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return func(_ context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		return provider.ChatResponse{Message: provider.Message{Role: "assistant", ToolCalls: []provider.ToolCall{
+			{ID: fmt.Sprintf("call_%d", len(req.Messages)), Name: name, Args: json.RawMessage(`{}`)}}}, Usage: provider.Usage{InputTokens: 50, OutputTokens: 5}}, nil
+	}
+}
+
+func hang(ctx context.Context, _ provider.ChatRequest) (provider.ChatResponse, error) {
+	<-ctx.Done()
+	return provider.ChatResponse{}, &provider.Error{Provider: "x", Kind: provider.KindTimeout, Msg: "deadline"}
+}
+
+// states is an in-memory conversation state store.
+type states struct {
+	mu sync.Mutex
+	m  map[string]json.RawMessage
+}
+
+func (s *states) State(_ context.Context, conv string) (json.RawMessage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.m[conv], nil
+}
+
+func (s *states) apply(st queue.StateUpdate) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if st.Conv != "" {
+		s.m[st.Conv] = st.Data
+	}
+}
+
+type fakeTools struct{ calls []string }
+
+func (f *fakeTools) List() []provider.Tool {
+	return []provider.Tool{{Name: "clock", Description: "time", InputSchema: json.RawMessage(`{"type":"object"}`)}}
+}
+
+func (f *fakeTools) Call(_ context.Context, c provider.ToolCall) (string, error) {
+	f.calls = append(f.calls, c.Name)
+	return "12:00", nil
+}
+
+type env struct {
+	a      *Agent
+	smart  *fakeProvider // p1/smart: tried first for messages
+	cheap  *fakeProvider // p2/cheap: fallback, and compaction
+	states *states
+	turns  *turns.Log
+	now    time.Time
+	router *rules.Router
+}
+
+func newEnv(t *testing.T, cfg Config, tools Tools) *env {
+	t.Helper()
+	ctx := context.Background()
+	db, err := sqlitedb.Open(ctx, filepath.Join(t.TempDir(), "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	tl, err := turns.New(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &env{smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0}
+	e.router, err = rules.New([]router.Model{
+		{Provider: "p1", Name: "smart", Tier: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 2}},
+		{Provider: "p2", Name: "cheap", Tier: "cheap", Caps: router.ModelCaps{Tools: true}},
+	}, rules.WithClock(func() time.Time { return e.now }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tools == nil {
+		tools = NoTools{}
+	}
+	if cfg.Location == nil {
+		cfg.Location = time.UTC
+	}
+	e.a = New(cfg, Deps{
+		States: e.states, Router: e.router, Tools: tools, Turns: tl,
+		Providers: map[string]provider.Provider{"p1": e.smart, "p2": e.cheap},
+		Admins:    func(context.Context) ([]string, error) { return []string{"telegram:user:1"}, nil },
+		AlertConv: func(p string) (string, string, bool) {
+			id, ok := strings.CutPrefix(p, "telegram:user:")
+			return "telegram", "telegram:" + id, ok
+		},
+		Now: func() time.Time { return e.now },
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	return e
+}
+
+var seq int
+
+func message(from, name, txt string) event.Event {
+	seq++
+	p, _ := json.Marshal(event.Message{Text: txt, From: from, Name: name})
+	return event.Event{ID: fmt.Sprintf("01EV%04d", seq), IdemKey: fmt.Sprintf("telegram:7001:%d", seq), Source: "telegram",
+		Conv: "telegram:42", Kind: "message", Payload: p, At: t0}
+}
+
+// turn handles e and applies its state update, as Complete would.
+func (e *env) turn(t *testing.T, ev event.Event) []event.Outgoing {
+	t.Helper()
+	out, st, err := e.a.Handle(context.Background(), ev)
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	e.states.apply(st)
+	return out
+}
+
+func (e *env) state(t *testing.T) State {
+	t.Helper()
+	st, err := DecodeState(e.states.m["telegram:42"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+func TestTurnRepliesAndStoresHistory(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.smart.push(say("Привет, Игорь!"))
+	ev := message("telegram:user:42", "Igor", "привет")
+	out := e.turn(t, ev)
+	if len(out) != 1 || out[0].Text != "Привет, Игорь!" || out[0].IdemKey != ev.IdemKey+":reply:0" || out[0].Transport != "telegram" || out[0].Conv != "telegram:42" {
+		t.Fatalf("out %+v", out)
+	}
+	st := e.state(t)
+	if len(st.Messages) != 2 || st.Messages[0].Content != "Igor: привет" || st.Messages[1].Content != "Привет, Игорь!" {
+		t.Fatalf("state %+v", st)
+	}
+	tr, err := e.turns.Get(context.Background(), ev.ID)
+	if err != nil || tr.Outcome != "ok" || tr.Steps != 1 || tr.InputTokens != 100 || tr.OutputTokens != 10 || tr.Principal != "telegram:user:42" {
+		t.Fatalf("turn %+v, %v", tr, err)
+	}
+	if want := (100*1.0 + 10*2.0) / 1e6; tr.CostUSD != want {
+		t.Fatalf("cost %v, want %v", tr.CostUSD, want)
+	}
+}
+
+func TestHistoryReachesTheModel(t *testing.T) {
+	e := newEnv(t, Config{SystemPrompt: "SYS"}, nil)
+	e.turn(t, message("telegram:user:42", "Igor", "первое"))
+	e.turn(t, message("telegram:user:42", "Igor", "второе"))
+	msgs := e.smart.requests()[1].Messages
+	got := []string{}
+	for _, m := range msgs {
+		got = append(got, m.Role+":"+m.Content)
+	}
+	want := "system:SYS|user:Igor: первое|assistant:ok|user:Igor: второе"
+	if strings.Join(got, "|") != want {
+		t.Fatalf("messages %q\nwant %q", strings.Join(got, "|"), want)
+	}
+}
+
+func TestSummaryGoesBeforeMessages(t *testing.T) {
+	e := newEnv(t, Config{SystemPrompt: "SYS"}, nil)
+	raw, _ := json.Marshal(State{V: 1, Session: "s", Started: t0, Last: t0, Summary: "they talked about the boiler",
+		Messages: []provider.Message{{Role: "user", Content: "Igor: a"}, {Role: "assistant", Content: "b"}}})
+	e.states.m["telegram:42"] = raw
+	e.turn(t, message("telegram:user:42", "Igor", "c"))
+	msgs := e.smart.requests()[0].Messages
+	if msgs[0].Content != "SYS" || msgs[1].Role != "system" || msgs[1].Content != "Summary of the conversation so far:\nthey talked about the boiler" || msgs[2].Content != "Igor: a" {
+		t.Fatalf("order %+v", msgs)
+	}
+}
+
+func TestToolCallLoop(t *testing.T) {
+	tools := &fakeTools{}
+	e := newEnv(t, Config{}, tools)
+	e.smart.push(callTool("clock"), say("It is noon."))
+	out := e.turn(t, message("telegram:user:42", "Igor", "time?"))
+	if out[0].Text != "It is noon." || len(tools.calls) != 1 {
+		t.Fatalf("out %+v, calls %v", out, tools.calls)
+	}
+	second := e.smart.requests()[1]
+	last := second.Messages[len(second.Messages)-1]
+	if len(second.Tools) != 1 || last.Role != "tool" || last.Content != "12:00" || last.ToolCallID == "" {
+		t.Fatalf("second request %+v", second)
+	}
+	st := e.state(t)
+	if len(st.Messages) != 4 || len(st.Messages[1].ToolCalls) != 1 || st.Messages[2].Role != "tool" {
+		t.Fatalf("state %+v", st.Messages)
+	}
+}
+
+func TestStepLimit(t *testing.T) {
+	e := newEnv(t, Config{MaxSteps: 3}, &fakeTools{})
+	for range 5 {
+		e.smart.push(callTool("clock"))
+	}
+	ev := message("telegram:user:42", "Igor", "loop")
+	out := e.turn(t, ev)
+	if len(e.smart.requests()) != 3 || out[0].Text != "Sorry, I could not finish that." {
+		t.Fatalf("%d calls, out %+v", len(e.smart.requests()), out)
+	}
+	if tr, _ := e.turns.Get(context.Background(), ev.ID); tr.Outcome != "limit" || tr.Steps != 3 {
+		t.Fatalf("turn %+v", tr)
+	}
+}
+
+func TestFallbackOnRateLimit(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.smart.push(fail(provider.KindRateLimit))
+	e.cheap.push(say("from cheap"))
+	ev := message("telegram:user:42", "Igor", "hi")
+	if out := e.turn(t, ev); out[0].Text != "from cheap" {
+		t.Fatalf("out %+v", out)
+	}
+	tr, _ := e.turns.Get(context.Background(), ev.ID)
+	if len(tr.Route) != 2 || tr.Route[0] != (turns.Attempt{Provider: "p1", Model: "smart", Error: "rate_limit"}) || tr.Route[1].Error != "" {
+		t.Fatalf("route %+v", tr.Route)
+	}
+	cs, _ := e.router.Route(context.Background(), router.TaskReq{Kind: "message"})
+	if cs[0].Provider != "p2" {
+		t.Fatalf("the router did not hear about the rate limit: %+v", cs)
+	}
+}
+
+func TestFallbackOnAuthToo(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.smart.push(fail(provider.KindAuth))
+	e.cheap.push(say("from cheap"))
+	if out := e.turn(t, message("telegram:user:42", "Igor", "hi")); out[0].Text != "from cheap" {
+		t.Fatalf("a wrong key on one provider must not stop the others: %+v", out)
+	}
+}
+
+func TestAllModelsDownApologises(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.smart.push(fail(provider.KindUnavailable))
+	e.cheap.push(fail(provider.KindRateLimit))
+	ev := message("telegram:user:42", "Igor", "hi")
+	out := e.turn(t, ev)
+	if out[0].Text != "Sorry, no model is reachable right now. Please try again in a few minutes." {
+		t.Fatalf("out %+v", out)
+	}
+	if tr, _ := e.turns.Get(context.Background(), ev.ID); tr.Outcome != "no_model" {
+		t.Fatalf("turn %+v", tr)
+	}
+	if st := e.state(t); len(st.Messages) != 1 || st.Messages[0].Content != "Igor: hi" {
+		t.Fatalf("state %+v", st.Messages)
+	}
+}
+
+func TestCallTimeoutMovesOn(t *testing.T) {
+	e := newEnv(t, Config{CallTimeout: 50 * time.Millisecond}, nil)
+	e.smart.push(hang)
+	e.cheap.push(say("from cheap"))
+	start := time.Now()
+	if out := e.turn(t, message("telegram:user:42", "Igor", "hi")); out[0].Text != "from cheap" {
+		t.Fatalf("out %+v", out)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatal("the hung call held the turn")
+	}
+}
+
+func TestCancelledTurnReturnsError(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.smart.push(hang)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { time.Sleep(50 * time.Millisecond); cancel() }()
+	if _, _, err := e.a.Handle(ctx, message("telegram:user:42", "Igor", "hi")); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Handle on shutdown = %v, want context.Canceled so the event is retried", err)
+	}
+}
+
+func TestCompaction(t *testing.T) {
+	e := newEnv(t, Config{HistoryTokens: 60, KeepRecent: 4}, &fakeTools{})
+	long := strings.Repeat("слово ", 20)
+	e.turn(t, message("telegram:user:42", "Igor", long))
+	e.smart.push(callTool("clock"), say("answer"))
+	e.cheap.push(say("SUMMARY"))
+	e.turn(t, message("telegram:user:42", "Igor", long))
+	st := e.state(t)
+	if st.Summary != "SUMMARY" {
+		t.Fatalf("summary %q", st.Summary)
+	}
+	if st.Messages[0].Role == "tool" {
+		t.Fatal("kept history starts with a tool result cut from its call")
+	}
+	if n := len(st.Messages); n < 4 || n > 5 {
+		t.Fatalf("kept %d messages, want KeepRecent (moved back to keep a tool call whole)", n)
+	}
+	creq := e.cheap.requests()[0]
+	if !strings.Contains(creq.Messages[len(creq.Messages)-1].Content, "Igor: слово") {
+		t.Fatalf("compaction prompt %+v", creq.Messages)
+	}
+}
+
+func TestCompactionFailureKeepsHistory(t *testing.T) {
+	e := newEnv(t, Config{HistoryTokens: 10, KeepRecent: 2}, nil)
+	e.turn(t, message("telegram:user:42", "Igor", strings.Repeat("a ", 50)))
+	before := len(e.state(t).Messages)
+	e.cheap.push(fail(provider.KindUnavailable))
+	e.smart.push(say("ok"), fail(provider.KindUnavailable))
+	e.turn(t, message("telegram:user:42", "Igor", "next"))
+	st := e.state(t)
+	if st.Summary != "" || len(st.Messages) != before+2 {
+		t.Fatalf("after a failed compaction: summary %q, %d messages", st.Summary, len(st.Messages))
+	}
+}
+
+func TestDailyLimitAlertsAdminsOnce(t *testing.T) {
+	e := newEnv(t, Config{DailyTurns: 1}, nil)
+	e.turn(t, message("telegram:user:42", "Igor", "one"))
+	o1 := e.turn(t, message("telegram:user:42", "Igor", "two"))
+	o2 := e.turn(t, message("telegram:user:42", "Igor", "three"))
+	if len(o1) != 2 || o1[0].Text != "Daily limit reached; the bot answers again tomorrow." {
+		t.Fatalf("over the limit: %+v", o1)
+	}
+	if o1[1].Conv != "telegram:1" || o1[1].IdemKey != "alert:daily-limit:2026-11-03:telegram:user:42:telegram:user:1" || o1[1].IdemKey != o2[1].IdemKey {
+		t.Fatalf("alerts %+v / %+v", o1[1], o2[1])
+	}
+	if len(e.smart.requests()) != 1 {
+		t.Fatal("the model was called over the limit")
+	}
+	if st := e.state(t); len(st.Messages) != 2 {
+		t.Fatalf("a refused message entered history: %d messages", len(st.Messages))
+	}
+	e.now = t0.Add(24 * time.Hour)
+	if out := e.turn(t, message("telegram:user:42", "Igor", "tomorrow")); out[0].Text != "ok" {
+		t.Fatalf("next day %+v", out)
+	}
+}
+
+func TestRerunSameEventSameResult(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	ev := message("telegram:user:42", "Igor", "hi")
+	o1, s1, err1 := e.a.Handle(context.Background(), ev)
+	o2, s2, err2 := e.a.Handle(context.Background(), ev)
+	if err1 != nil || err2 != nil || o1[0].IdemKey != o2[0].IdemKey || string(s1.Data) != string(s2.Data) {
+		t.Fatalf("rerun differs: %+v %+v", o1, o2)
+	}
+	tot, _ := e.turns.Totals(context.Background(), t0.Add(-time.Hour), "")
+	if tot.Turns != 1 {
+		t.Fatalf("%d turns rows, want 1", tot.Turns)
+	}
+}
+
+func TestNonMessageIgnored(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	out, st, err := e.a.Handle(context.Background(), event.Event{ID: "x", Kind: "cron.tick", Conv: "cron:x"})
+	if err != nil || len(out) != 0 || st.Conv != "" || len(e.smart.requests()) != 0 {
+		t.Fatalf("non-message: %+v %+v %v", out, st, err)
+	}
+}
