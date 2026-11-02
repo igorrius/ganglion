@@ -157,18 +157,18 @@ could collide with old ones and be dropped as duplicates.
       Fail(ctx context.Context, id string, reason string) error // permanent; the conversation moves on
   }
   ```
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestNewIDIsSortableAndUnique`: 1,000 ids over increasing times sort in
     time order; there are no duplicates; each id is 26 characters from the
     Crockford alphabet.
   - `TestNewIDSameMillisecondDiffers`.
   - `TestRetryAfterErrorUnwraps`: `errors.As` finds it inside
     `fmt.Errorf("send: %w", err)`.
-- [ ] **Step 2: Run** `go test ./event/ ./transport/` — FAIL.
-- [ ] **Step 3: Implement.** Only types and `NewID`; `Queue` itself does
+- [x] **Step 2: Run** `go test ./event/ ./transport/` — FAIL.
+- [x] **Step 3: Implement.** Only types and `NewID`; `Queue` itself does
   not change.
-- [ ] **Step 4: Run** `go test -race ./event/ ./transport/ ./queue/` — PASS.
-- [ ] **Step 5: Commit** `event, transport, queue: ids, message payload, send errors, outbox interface`.
+- [x] **Step 4: Run** `go test -race ./event/ ./transport/ ./queue/` — PASS.
+- [x] **Step 5: Commit** `event, transport, queue: ids, message payload, send errors, outbox interface`.
 
 ### Task 2: SQLite inbox — put, lease in order per conversation, complete (2.1)
 

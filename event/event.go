@@ -34,4 +34,5 @@ type Outgoing struct {
 	Transport string // transport name, e.g. "telegram"
 	Conv      string // conversation the message belongs to
 	Text      string
+	Silent    bool // deliver without a notification sound
 }
