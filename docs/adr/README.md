@@ -23,6 +23,7 @@ considered, how they compare, the decision and its consequences. See
 | [0015](0015-agent-first-p1.md) | Build the agent early in P1 and let it reconfigure the system | Accepted | 2026-11-01 |
 | [0016](0016-sqlite-migrations.md) | Apply SQLite migrations with a small built-in migrator, per component | Accepted | 2026-11-01 |
 | [0017](0017-extension-points.md) | Map the extension points: the core keeps guarantees and trust, everything else is contributed | Accepted | 2026-11-02 |
+| [0018](0018-own-telegram-bot-api-client.md) | Use our own minimal Telegram Bot API client | Accepted | 2026-11-02 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

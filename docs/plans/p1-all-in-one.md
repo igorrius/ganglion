@@ -108,11 +108,13 @@ peak RSS 17.5 MiB for the whole process, ~4,400 writes/s, no change lost
 
 ### M2 · Delivery and Telegram (spec 7.1, 7.8)
 
+Step-by-step plan: [p1-m2-delivery-telegram.md](p1-m2-delivery-telegram.md).
+
 | Task | Done when |
 |---|---|
 | 2.1 SQLite `queue.Queue`: inbox with unique `idemKey`, leases, `Complete` writing replies, state and the processed mark in one transaction (R-DLV-1, 3, 4, 7) | Duplicate put is a no-op; an expired lease is redelivered; `Complete` is atomic |
 | 2.2 Outbox sender: retries, Telegram `retry_after`, order kept per chat, backoff while Telegram is down for hours (R-DLV-5) | Tests with a fake Bot API: 429 honoured, order kept after an outage, no busy loop |
-| 2.3 Telegram transport: own minimal Bot API client (decision D-2), long polling, offset only after `Put` (R-DLV-2), forum topics, silent messages; `409 Conflict` stops polling and alerts (R-DLV-8) | Tests against a fake Bot API, then a manual run on the test bot; Telegram types stay inside the transport package, and `Outgoing` gains only channel-neutral fields (silent, topic) ([ADR-0017](../adr/0017-extension-points.md)) |
+| 2.3 Telegram transport: own minimal Bot API client ([ADR-0018](../adr/0018-own-telegram-bot-api-client.md)), long polling, offset only after `Put` (R-DLV-2), forum topics, silent messages; `409 Conflict` stops polling and alerts (R-DLV-8) | Tests against a fake Bot API, then a manual run on the test bot; Telegram types stay inside the transport package, and `Outgoing` gains only channel-neutral fields (silent); a forum topic is part of the conversation key ([ADR-0017](../adr/0017-extension-points.md)) |
 | 2.4 Access: `allowed` table with roles `admin` and `family`; strangers get no reply (7.8) | Unit tests; a stranger's message is logged and dropped |
 | 2.5 Crash harness: an echo turn under `kill -9` at random points, many iterations | No lost message, at most one duplicate per kill (10.2) |
 
@@ -133,7 +135,7 @@ peak RSS 17.5 MiB for the whole process, ~4,400 writes/s, no change lost
 
 | Task | Done when |
 |---|---|
-| 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets from the environment; `GOMEMLIMIT` (R-RUN-6) | Config tests; a bad config fails at start with a clear message |
+| 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets through a secret source (environment and `*_FILE` first), never in the YAML; `GOMEMLIMIT` (R-RUN-6) | Config tests; a bad config fails at start with a clear message |
 | 4.2 Scheduler: cron in Europe/Kyiv, `cron_runs` table, catch-up after downtime runs each missed job once; `idemKey` = job + scheduled time; the agent's `schedule.*` uses it | Tests across a DST change and a simulated downtime |
 | 4.3 Cell host functions for modules (`cell.get`, `cell.report`, `cell.set`), granted per cell in the manifest; `pdk` and `pdk/guest` updated | Runner conformance suite extended and green |
 | 4.4 Runner in `node.Run`: modules from config, triggered by the scheduler or called by the agent as tools (`deye.status`); optional `init` and `health` exports (spec 7.5); a minimal supervisor — backoff after failures, N failures in M minutes disable the module and emit `module.crashloop`; failures and `auth_failed` reach the agent as events; `cells.Reconcile` at start and periodically, `ExpireDue` on a short tick (M1 review) | `deye-reader` writes the `grid` and `soc` sensor cells on schedule; the agent answers "how is the battery?" through the tool; a failing probe module is disabled |
@@ -177,11 +179,11 @@ starting point, not a decision.
 | # | Question | Recommendation | Milestone |
 |---|---|---|---|
 | D-1 | SQLite migrations: own small migrator over embedded `.sql` files, or goose | Own: a few dozen lines, no dependency | M1 |
-| D-2 | Telegram client: own minimal Bot API client, or a library | Own: a handful of methods, full control over 409 and 429 | M2 |
+| D-2 | Telegram client: own minimal Bot API client, or a library | Decided: own ([ADR-0018](../adr/0018-own-telegram-bot-api-client.md)) | M2 |
 | D-5 | Sandbox for level-2 scripts | P1: subprocess, environment allowlist, timeout; Landlock or bubblewrap later (spec 11) | M3 |
 | D-6 | First cloud model for routine turns | Chosen on cost and quality of real turns (spec 11) | M3 |
 | D-7 | Git for memory and config: the `git` binary or go-git | The binary: smaller process (principle 8) | M3 |
-| D-3 | Node config format | YAML, like manifests (ADR-0012); secrets only from the environment | M4 |
+| D-3 | Node config and secrets | YAML, like manifests (ADR-0012), for the node config. Requirements: (1) three kinds of data — bootstrap (data directory, roles) from flags or environment; node config (chats, cells, modules, policies) as YAML in a git repo that the agent changes only with approval (M6); secrets never in the YAML; (2) secrets come through one secret-source interface: environment and `*_FILE` files (Docker and Kubernetes secrets) in P1, an encrypted store later; the runner's `secret.get` reads from it; (3) the same binary works on Railway, in Docker or Kubernetes and as a local install | M4 |
 | D-4 | The flow as a WASM module with cell host functions, or native Go | WASM module: it is the project's core hypothesis | M5 |
 
 ## Cut list

@@ -28,14 +28,47 @@ Start here when coming back to the project.
   `cells/virtual`, `sqlitedb` ([plan](plans/p1-m1-cells.md)).
 - **Next:** M2 delivery and Telegram, then the agent (M3) — agent first
   after its foundations ([ADR-0015](adr/0015-agent-first-p1.md)).
-  - Start M2 by writing its step-by-step plan (`docs/plans/p1-m2-*.md`) from
-    the M2 table in the [phase plan](plans/p1-all-in-one.md), with decision
-    D-2 (own Bot API client) as an ADR.
+  - M2 has its step-by-step plan ([p1-m2-delivery-telegram.md](plans/p1-m2-delivery-telegram.md));
+    D-2 is decided: our own Bot API client
+    ([ADR-0018](adr/0018-own-telegram-bot-api-client.md)). Next: task 1 of
+    that plan.
   - Live checks need a separate test bot: `TELEGRAM_TEST_BOT_TOKEN` in
     `.env`. Everything before that runs against a fake Bot API in tests.
+    See [owner setup](#owner-setup-for-live-checks) below.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.
+
+## Owner setup for live checks
+
+What the owner sets up by hand before the first live run on the test bot
+(M2 task 8 of the [M2 plan](plans/p1-m2-delivery-telegram.md)). Nothing here
+is needed for tests: they run against a fake Bot API.
+
+- **Test bot:** the owner's existing development bot, which local
+  services share; it uses long polling, no webhook, and one process at a
+  time (confirmed 2026-11-02). Before a live run, stop any other local
+  service polling it, or the run gets `409 Conflict` and stops (R-DLV-8).
+- **Your Telegram user id:** needed for the admin entry in the access list
+  (`GANGLION_ADMIN=telegram:user:<id>`); strangers get no reply. Any
+  "user info" bot shows it, or the `from.id` of your message in
+  `getUpdates`.
+- **Running locally:** a `.env` file in the repository root (git-ignored):
+
+  ```sh
+  TELEGRAM_TEST_BOT_TOKEN=<token from @BotFather>
+  GANGLION_ADMIN=telegram:user:<your id>
+  ```
+
+- **Running in a Claude Code cloud session:** a local `.env` does not reach
+  the container. In the cloud environment's settings (the environment menu
+  in the session title bar → Edit):
+  1. Network access: add `api.telegram.org` to Allowed domains, keeping
+     "Allow package managers" ticked
+     ([docs](https://code.claude.com/docs/en/cloud-environments#network-access)).
+  2. Add `TELEGRAM_TEST_BOT_TOKEN` and `GANGLION_ADMIN` as secrets or
+     environment variables. A new session picks them up. Never paste the
+     token into the chat.
 
 ## Map
 
