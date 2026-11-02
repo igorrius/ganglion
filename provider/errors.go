@@ -27,7 +27,9 @@ type Error struct {
 	Msg        string
 }
 
-func (e *Error) Error() string { return "provider " + e.Provider + ": " + string(e.Kind) + ": " + e.Msg }
+func (e *Error) Error() string {
+	return "provider " + e.Provider + ": " + string(e.Kind) + ": " + e.Msg
+}
 
 // Fallback reports whether the next candidate should be tried after err:
 // rate limits, timeouts and outages are the provider's trouble; a wrong

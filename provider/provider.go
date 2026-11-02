@@ -35,10 +35,13 @@ type Tool struct {
 	InputSchema json.RawMessage `json:"inputSchema"`
 }
 
-// Usage is what a call cost, recorded in the turns table.
+// Usage is what a call cost, recorded in the turns table. The cache
+// counts are part of InputTokens.
 type Usage struct {
-	InputTokens  int
-	OutputTokens int
+	InputTokens      int
+	CacheReadTokens  int
+	CacheWriteTokens int
+	OutputTokens     int
 }
 
 // ChatRequest asks a model for the next step of a turn.
