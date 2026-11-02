@@ -189,7 +189,10 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 		return out, queue.StateUpdate{Conv: e.Conv, Data: data}, nil
 	}
 
-	st, out, handled := a.sessions(ctx, e, st, m, now, tr, reply)
+	st, out, handled, err := a.sessions(ctx, e, st, m, now, tr, reply)
+	if err != nil {
+		return nil, queue.StateUpdate{}, err
+	}
 	if handled {
 		return finish(out, st)
 	}

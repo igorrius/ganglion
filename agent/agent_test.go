@@ -118,13 +118,14 @@ func (f *fakeTools) Call(_ context.Context, c provider.ToolCall) (string, error)
 }
 
 type env struct {
-	a      *Agent
-	smart  *fakeProvider // p1/smart: tried first for messages
-	cheap  *fakeProvider // p2/cheap: fallback, and compaction
-	states *states
-	turns  *turns.Log
-	now    time.Time
-	router *rules.Router
+	a       *Agent
+	smart   *fakeProvider // p1/smart: tried first for messages
+	cheap   *fakeProvider // p2/cheap: fallback, and compaction
+	states  *states
+	turns   *turns.Log
+	now     time.Time
+	router  *rules.Router
+	archive *Archive
 }
 
 func newEnv(t *testing.T, cfg Config, tools Tools) *env {
@@ -139,7 +140,11 @@ func newEnv(t *testing.T, cfg Config, tools Tools) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0}
+	arch, err := NewArchive(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &env{archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0}
 	e.router, err = rules.New([]router.Model{
 		{Provider: "p1", Name: "smart", Tier: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 2}},
 		{Provider: "p2", Name: "cheap", Tier: "cheap", Caps: router.ModelCaps{Tools: true}},
@@ -154,7 +159,7 @@ func newEnv(t *testing.T, cfg Config, tools Tools) *env {
 		cfg.Location = time.UTC
 	}
 	e.a = New(cfg, Deps{
-		States: e.states, Router: e.router, Tools: tools, Turns: tl,
+		States: e.states, Router: e.router, Tools: tools, Turns: tl, Archive: arch,
 		Providers: map[string]provider.Provider{"p1": e.smart, "p2": e.cheap},
 		Admins:    func(context.Context) ([]string, error) { return []string{"telegram:user:1"}, nil },
 		AlertConv: func(p string) (string, string, bool) {
