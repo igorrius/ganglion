@@ -240,7 +240,7 @@ policies and skills on it. The node is assembled in one place (`config`,
   protocol `switch`es and generated-shape code.
 - [x] `make check`; commit.
 
-### Task 7: measure, run live, close
+### Task 7: measure, run live, close — done
 
 - [x] Fill in the baseline table: binary size, RSS after 1,000 turns,
   lines of Go.
@@ -254,4 +254,6 @@ policies and skills on it. The node is assembled in one place (`config`,
   - [containers](../architecture/02-containers.md), if the start command
     is shown there;
   - "Where we are" in [docs/README.md](../README.md).
-- [ ] A code review of the branch against [the conventions](../conventions.md).
+- [x] A code review of the branch against [the conventions](../conventions.md):
+  no critical or important findings; two fixes (decimal integers, a bare
+  `ganglion` fails), five minors deferred.

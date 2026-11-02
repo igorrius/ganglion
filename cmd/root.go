@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 
@@ -33,5 +34,14 @@ func newRoot(out io.Writer, start startFunc) *cli.Command {
 		ErrWriter: out,
 		Flags:     root.Flags(),
 		Commands:  []*cli.Command{runCommand(&root, out, start), versionCommand(out)},
+		// Without a command: help, and a failure, so a supervisor still
+		// starting the command line from before `run` sees an error
+		// instead of a clean exit.
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			_ = cli.ShowRootCommandHelp(cmd)
+			return errNoCommand
+		},
 	}
 }
+
+var errNoCommand = errors.New("no command; to run a node use `ganglion run --roles ...`")

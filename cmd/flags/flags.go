@@ -86,9 +86,9 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 		&cli.FloatFlag{Name: "daily-budget-usd", Usage: "paid smart models stop for the day after this spend", Value: 1.0,
 			Category: catAgent, Local: true, Sources: env("GANGLION_DAILY_BUDGET_USD"), Destination: &r.DailyBudgetUSD,
 			Validator: in("GANGLION_DAILY_BUDGET_USD", nonNegative[float64])},
-		&cli.IntFlag{Name: "daily-turns", Usage: "turns per person per day; 0 = off", Value: dailyTurns, Category: catAgent,
+		&cli.IntFlag{Name: "daily-turns", Usage: "turns per person per day; 0 = off", Value: dailyTurns, Category: catAgent, Config: decimal,
 			Local: true, Sources: env("GANGLION_DAILY_TURNS"), Destination: &r.DailyTurns, Validator: in("GANGLION_DAILY_TURNS", nonNegative[int])},
-		&cli.IntFlag{Name: "daily-tokens", Usage: "tokens per person per day; 0 = off", Value: dailyTokens, Category: catAgent,
+		&cli.IntFlag{Name: "daily-tokens", Usage: "tokens per person per day; 0 = off", Value: dailyTokens, Category: catAgent, Config: decimal,
 			Local: true, Sources: env("GANGLION_DAILY_TOKENS"), Destination: &r.DailyTokens, Validator: in("GANGLION_DAILY_TOKENS", nonNegative[int])},
 		&cli.StringFlag{Name: "session-idle", Usage: "a new session after this much silence, or off", Value: idle.String(),
 			Category: catAgent, Local: true, Sources: env("GANGLION_SESSION_IDLE"), Destination: &r.SessionIdle,
@@ -98,6 +98,10 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 			Validator: in("GANGLION_TZ", func(v string) error { _, err := time.LoadLocation(v); return err })},
 	}
 }
+
+// decimal reads integers in base 10, as before the flags: 050 is fifty,
+// not octal forty.
+var decimal = cli.IntegerConfig{Base: 10}
 
 // Idle parses --session-idle: a positive duration, or "off" (0).
 func Idle(v string) (time.Duration, error) {

@@ -174,10 +174,24 @@ func TestHelpListsTheSettingsAndTheirVariables(t *testing.T) {
 	}
 }
 
-func TestRootWithoutACommandPrintsHelp(t *testing.T) {
+// Without a command ganglion prints help and fails, so a supervisor that
+// still starts the pre-`run` command line sees an error, not a clean exit.
+func TestRootWithoutACommandPrintsHelpAndFails(t *testing.T) {
 	_, roles, out, err := captured(t)
-	if err != nil || roles != nil || !strings.Contains(out, "run") || !strings.Contains(out, "version") {
+	if err == nil || !strings.Contains(err.Error(), "ganglion run") || roles != nil ||
+		!strings.Contains(out, "run") || !strings.Contains(out, "version") {
 		t.Fatalf("roles %v, err %v, out:\n%s", roles, err, out)
+	}
+}
+
+// Numbers read as decimal, as strconv.Atoi read them: 050 is fifty.
+func TestNumbersAreDecimal(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("GANGLION_DAILY_TURNS", "050")
+	t.Setenv("GANGLION_DAILY_TOKENS", "0100")
+	b, _, _, err := captured(t, "run")
+	if err != nil || b.Agent.DailyTurns != 50 || b.Agent.DailyTokens != 100 {
+		t.Fatalf("turns %d, tokens %d, %v", b.Agent.DailyTurns, b.Agent.DailyTokens, err)
 	}
 }
 

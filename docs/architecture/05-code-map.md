@@ -112,7 +112,7 @@ flowchart BT
     alertp["alert"] --> event
     agentp --> alertp
     configp --> alertp
-    configp --> secretsp["secrets"]
+    cmd --> secretsp["secrets"]
 ```
 
 - `event` and `pdk` are leaves: they import nothing from the project.
