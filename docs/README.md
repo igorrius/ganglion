@@ -4,7 +4,7 @@ Start here when coming back to the project.
 
 ## Where we are
 
-- **Phase:** P0 · Recon is complete; P1 · All-in-one is next
+- **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
@@ -70,14 +70,32 @@ Start here when coming back to the project.
       the root, development tools in `tools/`
       ([ADR-0029](adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md));
     - 34 MB on disk, 35 MB RSS after 1,000 agent turns.
-- **Next:** M3b — memory, tools and policies, skills, and the 3.8
-  acceptance under the crash harness.
-  - Scope stays one operator, one agent, one bot (spec 14).
-  - Carried into M3b: a first-run "introduction" conversation that
-    writes the persona ([ADR-0024](adr/0024-persona-as-workspace-files.md));
-    the current time in the last user message (the model
-    does not know the date); tools for the claude CLI through MCP
-    config; the depth limit (R-AGT-4) and tool placement (R-RTR-3).
+- **In progress:** M3b, the agent works with the world
+  ([plan](plans/p1-m3b-agent-world.md)). The rest of M3 is split in two by
+  the [M3b and M3c design](plans/p1-m3b-m3c-design.md), recorded in the
+  [phase plan](plans/p1-all-in-one.md#m3--the-agent-spec-7274-76-77) and
+  the [spec](spec.md#102-p1--all-in-one--scope-and-acceptance):
+  - **M3b:**
+    - tools under policies and a security baseline
+      ([ADR-0031](adr/0031-agent-security-baseline.md), Proposed;
+      [research](research/2026-11-02-agent-security-baseline.md));
+    - confirmations and quick actions on buttons;
+    - the scheduler with reminders and scheduled agent tasks, moved up
+      from M4;
+    - memory with a clean-context check;
+    - reading the web (`web.fetch` with an `html2md` WASM module,
+      `web.search`);
+    - the tool-call journal;
+    - the same tools for the claude CLI through an MCP bridge;
+    - carried from M3a: the first-run introduction that writes the persona
+      ([ADR-0024](adr/0024-persona-as-workspace-files.md)), the current
+      time in the last user message, the depth limit (R-AGT-4) and tool
+      placement (R-RTR-3).
+  - **M3c, next:** module update and rollback, skills, attachments, logs
+    on disk, `ganglion mcp` for diagnosis from outside, and the 3.8
+    acceptance under the crash harness.
+  - Scope stays one operator, one agent, one bot (spec 14). Voice
+    messages and PDF generation went to "Not now".
   - Deferred minors from the reviews:
     - M2: record a send's outcome with `context.WithoutCancel` on
       shutdown; keep the seeded admin's name and plan admin removal; do

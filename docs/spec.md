@@ -133,6 +133,8 @@ the "Not now" list (section 14); the phase does not grow.
 | `idemKey` | Idempotency key of an event or call |
 | `ttl` | Command lifetime; an expired command is not executed |
 | Escalation | An event from a module to the agent: "a model is needed" |
+| Tainted session | A session that external content (a web page, a search result, a forwarded message) has entered; side effects in it need confirmation (R-POL-6) |
+| Grant | What a scheduled agent task may do, fixed and approved by the owner when the task is created (R-POL-8) |
 
 ## 5. Architecture
 
@@ -178,14 +180,16 @@ core process.
 | Router | core | Choice of model and tool execution location, fallback chain | rules from `SKILL.md` + node registry | P1 (rules) |
 | Model providers | core or worker | OpenAI-compatible (incl. Ollama), later Anthropic Messages; translating MCP tools to the API's format | net/http | P1 (one API) |
 | claude CLI worker | worker | Tasks on the owner's subscription: write a module, analyse logs | unmodified `claude -p` | P2 (ADR-0015) |
-| Tools and MCP | core, edge | `memory.*`, `schedule.*`, `message.send` in the core; `device.*` on the edge | MCP stdio / HTTP | P1 |
-| WASM runtime | edge | Running modules with host functions from the manifest | wazero, own ABI (ADR-0011) | P0 (spike), P1 |
-| Action policies | core defines, edge enforces | Autonomous / confirm / forbid, limits, `ttl`, audit | declarative config | P1 (base), P2 |
-| Scheduler | core, edge | Crons, catch-up after downtime; on the edge, modules run without a link | `cron_runs` table | P1 |
+| Tools and MCP | core, edge | `memory.*`, `schedule.*`, `message.send`, `cells.*`, `web.*` in the core; `device.*` on the edge; the same tools served to CLI providers over an MCP bridge (R-PRV-6) | MCP stdio / HTTP | P1 |
+| Web reading | core | `web.fetch` and `web.search` (7.11); HTML turned into Markdown by the `html2md` WASM module | net/http + a WASM module | P1 (M3b) |
+| WASM runtime | edge | Running modules with host functions from the manifest; install, update and rollback (R-RUN-8) | wazero, own ABI (ADR-0011) | P0 (spike), P1 |
+| Action policies | core defines, edge enforces | Autonomous / confirm / forbid, limits, `ttl`, audit; tainted sessions, clean-context checks, grants (R-POL-6–8) | declarative config | P1 (base), P2 |
+| Scheduler | core, edge | Crons, catch-up after downtime; reminders and scheduled agent tasks (7.10); on the edge, modules run without a link | `cron_runs` table | P1 (M3b; module triggers M4) |
 | Memory | core | Facts, skills, semantic search; slices for edges | markdown in git; embeddings | P1 (files), P2 |
 | Core ↔ edge protocol | all | Registration, calls, events, modules, policies, context | envelope + MCP over NATS | P2 |
 | Bus | all | Delivery, buffering during outages, module object store | NATS: leaf node + JetStream | P2 |
-| Observability | all | Turn trace: input, route, tools, cost, reply; metrics; traces | slog + `turns` table + OpenTelemetry (Prometheus `/metrics` with the promtop dashboard, OTLP traces) | P1 |
+| Observability | all | Turn trace: input, route, tools, cost, reply; metrics; traces; the tool-call journal and logs on disk | slog + `turns` and `tool_calls` tables + OpenTelemetry (Prometheus `/metrics` with the promtop dashboard, OTLP traces) | P1 |
+| Diagnostics | core | `ganglion mcp`: read-only MCP tools over logs, the journal and the config, with no running node or model needed (R-OBS-7) | MCP over stdio | P1 (M3c) |
 
 ## 6. Key interfaces (draft)
 
@@ -228,7 +232,7 @@ type Router interface {
     Route(ctx context.Context, task TaskReq) ([]Candidate, error)
 }
 
-type Store interface { /* history, turns, cron_runs, allowed, module KV */ }
+type Store interface { /* history, turns, tool_calls, cron_runs, allowed, module KV */ }
 ```
 
 ## 7. P1 subsystems: requirements
@@ -259,6 +263,10 @@ Guarantee: **at-least-once + idempotency.**
   by NATS JetStream (deduplication via `Nats-Msg-Id`).
 - **R-DLV-8.** Two processes must not poll with the same Telegram token at
   once: zero overlap on deploy, or switch to a webhook.
+- **R-DLV-9.** A reply may carry attachments (a picture, a document) in a
+  channel-neutral form; they go through the outbox with the same delivery
+  guarantee as text. The Telegram transport sends them with `sendPhoto`
+  and `sendDocument` (M3c).
 
 ### 7.2. Conversations, history and the agent loop
 
@@ -331,10 +339,22 @@ model:
   conversation provider it gets the core's history in the prompt on every
   call, with no session and no `--resume`
   ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)).
+  The agent's tools reach it through the MCP bridge (R-PRV-6).
 - **R-PRV-5.** The operator chooses the providers a node uses: one or
   several, of any supported type (`openai`, `claude-cli`; `anthropic`
   later), listed in the model catalogue. The router ranks and falls back
   across all of them.
+- **R-PRV-6.** A CLI provider that runs its own tool loop (the claude CLI)
+  gets the agent's tools through an MCP bridge to the core (M3b):
+  - the core serves the turn's tools for the duration of one run,
+    authenticated by a per-run grant;
+  - the session, the principal and the turn come from the core's own
+    context, never from the child process;
+  - the CLI's own tools stay off;
+  - every call runs in the core under the same policies, taint, journal
+    and idempotency keys as for an API model; the bridge only forwards.
+
+  The transport is decided in an ADR (planned: ADR-0036).
 
 Rules for access to Anthropic models (per
 [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance),
@@ -418,6 +438,36 @@ escalate:                    # when to call the model
 - **R-RUN-6.** The runner process sets a soft memory limit (`GOMEMLIMIT`) from
   its config, and edge JetStream streams have explicit size limits, so a long
   outage cannot grow memory or the backlog without bound (task 0.5).
+- **R-RUN-7.** A module can be a tool of the core: the agent calls it
+  through the same policies as any tool. The first one is `html2md`
+  (7.11), a pure function granted no host functions, embedded in the
+  binary (M3b). M4 extends the path to modules from the node config
+  (`deye.status`).
+- **R-RUN-8.** Modules are installed, updated and rolled back without
+  restarting the node (M3c, admin only):
+  - the source in P1 is a URL plus a sha256 sum; built-in modules come
+    from the project's GitHub Releases, tagged per module
+    (`html2md/v0.3.0`);
+  - the new version is checked against its sum and passes a self-test on
+    built-in samples before an atomic switch; calls in flight finish on
+    the old version; a failed self-test keeps the old version and tells
+    the owner;
+  - the previous version is kept for `/modules rollback <name>`; module
+    state survives the swap;
+  - an updated version stored on the data volume takes precedence over
+    the embedded one.
+
+  Trust boundary:
+  - built-in modules (`ganglion/…`) come only from the project's release
+    channel (a checksum now, a signature in P3); nobody else, the agent
+    included, replaces one under the same name;
+  - modules built later by the agent install under `local/…`, always
+    with the owner's approval;
+  - a new version's manifest rights are compared with the old one's, and
+    any widening is a separately worded approval;
+  - the core embeds, for each built-in module, the ABI version and a
+    ceiling of rights; a release that asks for more is refused until the
+    core itself is upgraded.
 
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation
@@ -465,6 +515,43 @@ human); module install — tests + reviewer + admin.
 - **R-POL-5.** Kill switches are switch cells per action/device plus a
   global one ([ADR-0014](adr/0014-state-cells.md)); toggled by a Telegram
   command.
+- **R-POL-6.** A session is **tainted** once external content enters it: a
+  web page, a search result, a forwarded message, a scheduled task's
+  fetch.
+  - The taint is per session, not per turn: the content stays in the
+    history and would steer the next turn.
+  - It lasts until the session ends (`/new`, idle reset, R-AGT-6) and
+    survives compaction. The compaction summary keeps external content
+    marked as data, so an injection cannot come back as the agent's own
+    words.
+  - In a tainted session these need the owner's confirmation: any side
+    effect, any send to anyone but the requester, and any memory write.
+- **R-POL-7.** A **clean-context check** guards what the agent keeps. It
+  uses a cheap model with no history, no tools and no tainted context (the
+  "dual LLM" pattern; a first, narrow form of the reviewer model above).
+  - **On write:** every memory entry is checked before it is committed: a
+    fact about the owner, or a hidden instruction? Imperative entries
+    ("always do…", "ignore…") are rejected. Suspicious ones go to
+    quarantine, and the owner gets a notice.
+  - **On schedule:** a system task audits memory, persona and skills for
+    injections, contradictions and stale entries. A system task is marked
+    as such and cannot be deleted.
+- **R-POL-8.** A scheduled agent task carries a **grant**, fixed when the
+  task is created.
+  - The creation confirmation shows what the runs may do: the
+    instruction, the schedule, the tools, the hosts `web.fetch` may reach
+    and who receives the reply. The owner approves it once; the runs then
+    need no presses.
+  - A run that needs anything outside its grant is denied, and the owner
+    gets one notice with the reason, not a button on every run.
+  - A task runs as its creator, with the creator's rights. Its
+    instruction and grant cannot be changed by what a run reads.
+
+The rest of the baseline is in
+[ADR-0031](adr/0031-agent-security-baseline.md) (Proposed): no data out
+without confirmation (R-WEB-2), secrets redacted before any journal or
+log, least privilege, every decision journalled (R-OBS-5), and tools,
+memory and scheduled tasks for admins only in P1.
 
 ### 7.7. Memory
 
@@ -489,14 +576,25 @@ undone with `git revert`.
   ganglion's formats are its own. Moving in from another assistant goes
   through an importer that writes these files (spec 14).
 - **R-MEM-4.** P1 uses files; embedding search and edge slices are P2.
+- **R-MEM-5.** Memory holds facts, not instructions (M3b).
+  - The agent decides what to remember; "remember this" is one case of it.
+  - Facts reach the model as a "known facts" data block. Procedures go to
+    skills, which the owner installs; directives and policies go to
+    config and code.
+  - Every entry records where it came from: the turn, whether the
+    session was tainted, the date. Writes from a tainted session need
+    confirmation (R-POL-6), every write passes the clean-context check
+    (R-POL-7), and every change is a git commit.
+  - "What do you remember about me?" lists it.
 
 ### 7.8. Security and operations (MVP)
 
 | Threat | Measure | Phase |
 |---|---|---|
-| Prompt injection | Confirmation of side effects; external text is data | P1 |
-| Secret leakage | The model never sees secrets; modules get them via `secret.get` / env per manifest | P1 |
-| A stranger messages the bot | `allowed` table with roles: the admin installs modules, others only ask | P1 |
+| Prompt injection | Confirmation of side effects; external text is data; tainted sessions, the clean-context check and grants (R-POL-6–8); the `web.fetch` URL rule (R-WEB-2); [ADR-0031](adr/0031-agent-security-baseline.md) | P1 |
+| Secret leakage | The model never sees secrets; modules get them via `secret.get` / env per manifest; secrets are redacted before the journal and logs, and the Bot API token is never logged | P1 |
+| A stranger messages the bot | `allowed` table with roles: the admin installs modules, others only ask; in P1 a `family` member gets conversation with no tools and no memory | P1 |
+| Diagnostics expose the node | `ganglion mcp` opens no port: it runs over stdio and relies on the platform's authentication; read access to the data directory is read access to all history | P1 |
 | Infinite loop | R-AGT-4 | P1 |
 | Exhausted limits | Crons and consolidation on a cheap model; usage counter in `turns` | P1 |
 | Self-modification broke something | Regression scenarios (question → expected tool call) after every change | P3 |
@@ -521,6 +619,62 @@ undone with `git revert`.
 - **R-OBS-4.** Logs are slog. A line written inside a span carries
   `trace_id` and `span_id`. Message text and model output are never
   logged, traced or exported as metric labels.
+- **R-OBS-5.** Every tool call is written to a `tool_calls` journal beside
+  `turns` (M3b): the turn id and call number, the tool, the arguments
+  (secrets redacted, size-capped), the result's size and head, the error,
+  the duration, the policy decision and the taint. One turn id ties the
+  incoming message, the route, the calls and the reply together, so a
+  model can diagnose a turn without joining events by time. It is also
+  the audit log of R-POL-3. Rows are kept for a limited age.
+- **R-OBS-6.** Logs are also written to disk as JSON lines in
+  `<data>/logs/`, beside stdout (M3c). Writes are synchronous, so the last
+  lines before a `kill -9` survive. Files rotate by size with limits on
+  their count and age, so the disk never fills. Secrets are redacted.
+- **R-OBS-7.** `ganglion mcp` is an MCP server over stdio for diagnosis
+  from outside (M3c). It needs no running node and no model: it opens the
+  database read-only and the log files, and offers read-only tools (search
+  logs and the journal, recent failed turns, the effective configuration
+  with secrets redacted, queue state). It is reached by running the
+  command, locally or through `ssh`, `docker exec` or `kubectl exec`; it
+  opens no port. The agent gets the same search tools, for admins only,
+  with results marked as external data.
+
+### 7.10. Scheduler and reminders
+
+The scheduler moves up from M4 to M3b; M4 reuses it for module triggers.
+
+- **R-SCH-1.** Crons run in the node's time zone (`GANGLION_TZ`, default
+  Europe/Kyiv) and are recorded in `cron_runs`. After downtime each missed
+  job runs once, not once per missed slot. A run's `idemKey` is the job
+  plus the scheduled time.
+- **R-SCH-2.** The agent schedules two kinds of jobs:
+  - a **reminder**: a fixed text at a time;
+  - a **task**: an instruction run as a full agent turn with tools.
+
+  Both are created and listed in words; a list comes with buttons
+  (Details, Delete, and Run now for tasks). Creating a recurring task asks
+  for confirmation, because it runs unattended and spends tokens, and
+  fixes its grant (R-POL-8). Each task has its own session, so its
+  earlier runs are its history. Scheduled turns count towards the daily
+  limit (R-AGT-4).
+
+### 7.11. Reading the web
+
+- **R-WEB-1.** `web.fetch` runs in the core:
+  - http(s) only; no private or loopback addresses, re-checked after
+    every redirect; size and time limits;
+  - HTML goes to the `html2md` WASM module, which extracts the main
+    content and returns Markdown; it is granted no host functions, so
+    hostile HTML is parsed in the sandbox, not in the core (R-RUN-7);
+  - JSON and plain text pass through unconverted;
+  - the result is marked as external data and truncated to a limit.
+- **R-WEB-2.** `web.fetch` runs without confirmation only on a URL that
+  came from the owner's message or from search results. A URL the model
+  built itself needs confirmation: its query string is a channel out
+  ([ADR-0031](adr/0031-agent-security-baseline.md)).
+- **R-WEB-3.** `web.search` has one backend behind an interface. The
+  default needs no key; keyed backends are enabled by setting a key. The
+  backends are chosen in an ADR (planned: ADR-0035).
 
 ## 8. First flow: Deye and load shedding (P1)
 
@@ -798,8 +952,13 @@ with a gate; the next phase does not start until the gate is passed.
 
 ### 10.2. P1 · All-in-one — scope and acceptance
 
-Scope: sections 7.1–7.8 and 8 in full. Milestones, tasks, decisions and the
-cut list are in the [P1 phase plan](plans/p1-all-in-one.md).
+Scope: sections 7 and 8 in full. Milestones, tasks, decisions and the
+cut list are in the [P1 phase plan](plans/p1-all-in-one.md). The agent
+milestone is split into M3a (talks), M3b (works with the world: tools,
+policies, memory, the scheduler, web reading, the MCP bridge) and M3c
+(module updates, skills, attachments, logs on disk, `ganglion mcp`), as
+the [M3b and M3c design](plans/p1-m3b-m3c-design.md) sets out; the
+scheduler moves from M4 to M3b.
 
 Acceptance:
 
@@ -899,6 +1058,11 @@ Reviewed at each gate.
   - streaming answers as they are generated (needs streaming providers
     and must fit the outbox's delivery guarantee);
   - per-group behaviour and limits in the node config.
+- Voice messages: understanding them, later, as a separate module or
+  model (owner, 2026-11-02).
+- PDF generation: deferred, since Cyrillic fonts add weight; replies
+  carry pictures and documents as attachments first (R-DLV-9) (owner,
+  2026-11-02).
 - Importers from popular assistants (OpenClaw first): persona, memory,
   skills and settings turned into ganglion's workspace files, so their
   users can move over (R-MEM-3, ADR-0024).
