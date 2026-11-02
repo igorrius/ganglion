@@ -21,7 +21,8 @@ same commit as the code, not the other way round.
   implementations and connects them, through `samber/do` providers
   (ADR-0028). Domain packages never import `github.com/samber/do`.
 - **`config` holds dependency logic only.** A provider takes what its
-  component needs with `do.MustInvoke` (ADR-0030), maps settings to
+  component needs with `do.MustInvoke` when an error is only passed on, and
+  with `do.Invoke` plus handling when a decision depends on it (ADR-0030), maps settings to
   constructor arguments and calls the constructor. An extension point is
   an interface provider that only selects (`choose`); each implementation,
   the no-op included, is registered under its own name constant. No texts, goroutines, defaults, policies or log lines

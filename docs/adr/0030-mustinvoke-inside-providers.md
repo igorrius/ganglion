@@ -58,11 +58,16 @@ struct's tags.
 **B.** The owner's words (2026-11-02): it reads simply, and panicking at
 start is even wanted. The rules:
 
-- **Inside providers:** `do.MustInvoke` / `do.MustInvokeNamed` for
-  dependencies. A provider returns its constructor's error.
-- **Outside providers:** `do.Invoke` with an error, for example
-  `config.Run` building the components. No provider runs there, so
-  nothing would recover a panic.
+- **The error is only passed on:** `do.MustInvoke` /
+  `do.MustInvokeNamed`. This is the case for a provider's dependencies: a
+  failed dependency fails the provider. A provider still returns its own
+  constructor's error.
+- **A decision depends on the error:** `do.Invoke`, and the error is
+  handled. Examples: falling back to another implementation, logging and
+  going on, or `config.Run`, whose error `node.Run` judges (ignored once a
+  stop was asked for).
+- **Outside a provider:** always `do.Invoke`. Nothing there would recover
+  a panic.
 - **Extension points:** one helper, `choose`. Each implementation is
   registered under an explicit name constant, with `do.LazyNamed` for a
   provider or `do.EagerNamed` for a ready value such as a no-op. `do`
