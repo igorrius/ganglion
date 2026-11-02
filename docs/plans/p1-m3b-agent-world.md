@@ -398,7 +398,7 @@ ADRs:
   The journal records the policy decision because the policy calls
   `journal.Annotate(ctx, d)` (task 2).
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestDecide`: a table over every rule above, including
     - depth 4;
     - a family principal;
@@ -409,10 +409,10 @@ ADRs:
   - `TestConfirmDoesNotRun`: the handler's call counter stays 0.
   - `TestOutOfGrantAlertsOncePerDay`: three denied runs on one day give
     one alert.
-- [ ] **Step 2: Run** `go test ./policy/` — FAIL.
-- [ ] **Step 3: Implement**; set `ClassRead` tools to auto by default.
-- [ ] **Step 4: Run** `go test -race ./policy/ ./agent/`; lint — PASS.
-- [ ] **Step 5: Commit** `policy: per-tool policy, taint, grants, depth limit`.
+- [x] **Step 2: Run** `go test ./policy/` — FAIL.
+- [x] **Step 3: Implement**; set `ClassRead` tools to auto by default.
+- [x] **Step 4: Run** `go test -race ./policy/ ./agent/`; lint — PASS.
+- [x] **Step 5: Commit** `policy: per-tool policy, taint, grants, depth limit`.
 
 ### Task 4: pending calls, buttons and resuming the turn
 

@@ -106,6 +106,26 @@ func TestToolErrorGoesToTheModel(t *testing.T) {
 	}
 }
 
+func TestFailedCallKeepsItsOutgoingMessages(t *testing.T) {
+	e := newEnv(t, Config{}, registry(t, newClock()))
+	deny := func(tool.Func) tool.Func {
+		return func(context.Context, tool.Call) (tool.Result, error) {
+			return tool.Result{Out: []event.Outgoing{{IdemKey: "alert:1", Transport: "telegram", Conv: "telegram:99", Text: "refused"}}}, tool.ErrOutOfGrant
+		}
+	}
+	e.deps.Middleware = []tool.Middleware{deny}
+	e.a = New(overDefaults(Config{}), e.deps)
+	e.smart.push(callTools("clock"), say("Done."))
+	out := e.turn(t, message("telegram:user:42", "Igor", "go"))
+	if len(out) != 2 || out[0].Text != "refused" || out[1].Text != "Done." {
+		t.Fatalf("replies %+v, want the alert of the failed call and then the answer", out)
+	}
+	msgs := e.smart.requests()[1].Messages
+	if got := msgs[len(msgs)-1].Content; !strings.HasPrefix(got, "error: ") {
+		t.Fatalf("the model saw %q, want the error", got)
+	}
+}
+
 func TestNonAdminGetsNoTools(t *testing.T) {
 	clock := newClock()
 	e := newEnv(t, Config{}, registry(t, clock))

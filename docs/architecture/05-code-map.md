@@ -28,7 +28,7 @@ interfaces only; **planned** — not in the repository yet.
 | Outbox sender: order per conversation, backoff, `retry_after` pause, resumable parts | `outbox` | done (P1 M2) | 7.1 | — |
 | Telegram transport: own Bot API client, long polling (offset after the sink), conversation keys, Markdown rendered to entities (goldmark), block-aware split, replies (auto/always/off), typing; fake Bot API for tests | `transport/telegram`, `transport/telegram/telegramtest` | done (P1 M2) | 7.1 | [0018](../adr/0018-own-telegram-bot-api-client.md) |
 | Turn loop: parallel workers, lease → handler → atomic complete, turn timeout, give up after max attempts; echo handler | `core` | done (P1 M2, workers M3a); the agent is the handler when a catalogue is set | 7.1, 7.2 | [0019](../adr/0019-release-leases-at-core-start.md) |
-| Agent: a turn is a pipeline of stages (idle session, commands, daily limits, answer, compaction); model calls with fallback; tools run through `tool.Middleware` (tracing, then the journal) with a numbered `tool.Call` per call; an external result taints the session and reaches the model wrapped as data; the known-URL set for `web.fetch`; tools only for admins (`AdminFunc`); a command table (`/new`, `/sessions`, `/resume`); sessions archive (`SessionStore`, `NoArchive`); core rules + persona from `workspace/persona/*.md`; conversation state v2 (adds `Tainted` and `Pending`, reads v1; compaction keeps the taint and stores the summary wrapped) | `agent` | done (P1 M3a); tool context, taint and state v2 (P1 M3b task 2); memory, depth limit, first-run introduction later in M3b | 7.2 | [0020](../adr/0020-neutral-history-as-conversation-state.md), [0024](../adr/0024-persona-as-workspace-files.md), [0031](../adr/0031-agent-security-baseline.md) |
+| Agent: a turn is a pipeline of stages (idle session, commands, daily limits, answer, compaction); model calls with fallback; tools run through `tool.Middleware` (tracing, the journal, then the policy) with a numbered `tool.Call` per call; an external result taints the session and reaches the model wrapped as data; the known-URL set for `web.fetch`; tools only for admins (`AdminFunc`); a command table (`/new`, `/sessions`, `/resume`); sessions archive (`SessionStore`, `NoArchive`); core rules + persona from `workspace/persona/*.md`; conversation state v2 (adds `Tainted` and `Pending`, reads v1; compaction keeps the taint and stores the summary wrapped) | `agent` | done (P1 M3a); tool context, taint and state v2 (P1 M3b task 2); memory, depth limit, first-run introduction later in M3b | 7.2 | [0020](../adr/0020-neutral-history-as-conversation-state.md), [0024](../adr/0024-persona-as-workspace-files.md), [0031](../adr/0031-agent-security-baseline.md) |
 | Tools: `Spec`, `Call`, `Result` (text, external flag, pending id, outgoing messages), `Handler`, `Registry` (admin-only tools hidden from others and refused at run), `Middleware`, `Grant`, `WrapExternal` | `tool` | done (P1 M3b task 2); the tools themselves in later tasks | 7.6 | [0031](../adr/0031-agent-security-baseline.md) |
 | Tool-call journal: one row per decision on a call, arguments and results redacted and capped, daily prune component | `tool/journal` | done (P1 M3b task 2) | 7.6 | [0031](../adr/0031-agent-security-baseline.md) |
 | Web address normalisation for the known-URL check | `internal/urlnorm` | done (P1 M3b task 2) | 7.6 | [0031](../adr/0031-agent-security-baseline.md) |
@@ -38,7 +38,7 @@ interfaces only; **planned** — not in the repository yet.
 | Alerts to every admin's private chat (daily limit, give-up, 409) | `alert` | done (P1 refactor) | 7.8 | — |
 | Secret source: the environment and `*_FILE` files; an encrypted store later | `secrets` | done (P1 refactor) | D-3 | [0029](../adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md) |
 | Shared helpers, not library API: backoff with jitter, rune truncation, plain transcript, start of day, URL normalisation | `internal/backoff`, `internal/text`, `internal/transcript`, `internal/clock`, `internal/urlnorm` | done (P1 refactor) | — | [0027](../adr/0027-written-go-conventions-and-lint-guardrails.md) |
-| Policies | — | planned (P1) | 7.6 | — |
+| Policies: a pure `Decide` over the tool's spec and the call (depth limit, admin-only, grant, forbidden, side effect, tainted memory write, `message.send` elsewhere, unknown `web.fetch` URL); the middleware parks a confirm with the `Asker` and refuses a forbidden or out-of-grant call, with one alert per task per day | `policy` | done (P1 M3b task 3); the real `Asker` (pending calls, buttons) in task 4 | 7.6 | [0031](../adr/0031-agent-security-baseline.md) |
 | Memory | — | planned (P1) | 7.7 | — |
 | Runner: wazero host, manifest, limits | `runner` | done (P0 spike, own ABI); supervisor and scheduler planned (P1) | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md), [0012](../adr/0012-yaml-manifests.md) |
 | Module-side kit: `Host`, wire types | `pdk` | done (P0) | 7.5 | [0011](../adr/0011-module-abi.md) |
@@ -77,6 +77,11 @@ flowchart BT
     journalp["tool/journal"] --> toolp
     journalp --> sqlitedb
     configp --> journalp
+    policyp["policy"] --> toolp
+    policyp --> journalp
+    policyp --> alertp
+    policyp --> urlnormp["internal/urlnorm"]
+    configp --> policyp
     agentp --> queue
     configp --> agentp
     configp --> rulesp

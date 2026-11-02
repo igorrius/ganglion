@@ -58,12 +58,15 @@ func (a *Agent) runTools(ctx context.Context, t *turn, calls []provider.ToolCall
 
 // runTool runs one call: it numbers it, runs it through the chain, marks
 // an external result as data and taints the session, and keeps the tool's
-// outgoing messages for the turn.
+// outgoing messages for the turn, whether the call failed or not.
 func (a *Agent) runTool(ctx context.Context, t *turn, call provider.ToolCall) provider.Message {
 	t.calls++
 	started := time.Now()
 	result, err := a.tool(ctx, a.toolCall(t, call))
 	text := result.Text
+	// A call that failed can still carry messages, such as the alert about
+	// a call outside a task's grant.
+	t.out = append(t.out, result.Out...)
 	switch {
 	case err != nil:
 		text = "error: " + err.Error()
@@ -75,7 +78,6 @@ func (a *Agent) runTool(ctx context.Context, t *turn, call provider.ToolCall) pr
 		if call.Name == searchTool {
 			t.known.add(result.Text)
 		}
-		t.out = append(t.out, result.Out...)
 	}
 	t.record.Tools = append(t.record.Tools, turns.ToolUse{Name: call.Name, OK: err == nil, Ms: time.Since(started).Milliseconds()})
 	return provider.Message{Role: provider.RoleTool, ToolCallID: call.ID, Content: text}

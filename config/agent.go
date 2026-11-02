@@ -1,13 +1,15 @@
 package config
 
 import (
-	"log/slog"
-
 	"fmt"
+	"log/slog"
+	"time"
+
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/core"
+	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/claudecli"
 	"github.com/igorrius/ganglion/provider/openai"
@@ -49,16 +51,37 @@ func Agent() do.Provider[*agent.Agent] {
 			Router:    do.MustInvoke[router.Router](i),
 			Providers: do.MustInvoke[map[string]provider.Provider](i),
 			Tools:     do.MustInvoke[*tool.Registry](i),
-			// Around every tool call, outermost first; the policy joins in M3b.
-			Middleware: []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
-			IsAdmin:    do.MustInvoke[agent.AdminFunc](i),
-			Turns:      do.MustInvoke[*turns.Log](i),
-			Archive:    do.MustInvoke[agent.SessionStore](i),
-			Alerts:     do.MustInvoke[alert.Admins](i),
-			Persona:    agent.PersonaDir(b.Agent.Workspace),
-			Log:        do.MustInvoke[*slog.Logger](i),
+			// Around every tool call, outermost first: traced, journal, policy.
+			Middleware: []tool.Middleware{
+				do.MustInvoke[*journal.Journal](i).Middleware(),
+				do.MustInvoke[*policy.Policy](i).Middleware(),
+			},
+			IsAdmin: do.MustInvoke[agent.AdminFunc](i),
+			Turns:   do.MustInvoke[*turns.Log](i),
+			Archive: do.MustInvoke[agent.SessionStore](i),
+			Alerts:  do.MustInvoke[alert.Admins](i),
+			Persona: agent.PersonaDir(b.Agent.Workspace),
+			Log:     do.MustInvoke[*slog.Logger](i),
 		}), nil
 	}
+}
+
+// Policy provides the tool policy: the default settings, alerts to the
+// admins, the node's calendar day.
+func Policy() do.Provider[*policy.Policy] {
+	return func(i do.Injector) (*policy.Policy, error) {
+		b := do.MustInvoke[Bootstrap](i)
+		return policy.New(policy.DefaultConfig(), do.MustInvoke[*tool.Registry](i), do.MustInvoke[policy.Asker](i),
+			policy.WithAlerts(do.MustInvoke[alert.Admins](i)),
+			policy.WithClock(time.Now, b.Agent.TZ),
+			policy.WithLogger(do.MustInvoke[*slog.Logger](i))), nil
+	}
+}
+
+// Asker provides the owner's confirmations. Until pending calls and
+// buttons exist, a call that needs one fails.
+func Asker() do.Provider[policy.Asker] {
+	return func(do.Injector) (policy.Asker, error) { return policy.NoAsk{}, nil }
 }
 
 // IsAdmin provides the agent's role check, backed by the access list.
