@@ -220,9 +220,8 @@ type Queue interface {
 
 type Provider interface {
     Name() string
-    Caps() ModelCaps // tools, vision, context, local, price, latency
     Chat(ctx context.Context, req ChatRequest) (ChatResponse, error)
-}
+} // capabilities and prices are per model, in the router's catalogue (ADR-0020)
 
 type Router interface {
     // Ordered list of "provider + model" candidates.
