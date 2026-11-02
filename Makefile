@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo live-agent memory modules modules-tinygo modules-rust modrun modbench bench
+.PHONY: build test lint check live-echo live-agent compare memory modules modules-tinygo modules-rust modrun modbench bench
 
 build:
 	go build -ldflags "-X main.version=$(VERSION)" -o bin/ganglion ./cmd/ganglion
@@ -37,6 +37,13 @@ live-agent: build
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-agent: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
 	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) \
 	GANGLION_MODELS_FILE=$(LIVE_MODELS) ./bin/ganglion --roles core
+
+# Run the same conversations through several models of the catalogue and
+# write a report (D-6). COMPARE picks provider:model pairs; empty = all.
+COMPARE ?=
+compare:
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	go run ./cmd/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
 
 # RSS of the echo bot and of the agent on a fake model API, idle and after
 # 1,000 messages through the fake Bot API.

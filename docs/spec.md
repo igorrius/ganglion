@@ -864,3 +864,10 @@ Reviewed at each gate.
   admin (the same idea as node enrolment with a one-time token, 9.3).
 - An encrypted secret store on the node's key, behind the secret source of
   D-3; secrets set and rotated without a restart.
+- A narrow "answer model" as a tool of the agent core: a small model that
+  answers only constrained questions (yes/no, a number on a short scale,
+  and one more form; the owner will add the model's name and that form
+  once found again). It runs only when such a model is in the catalogue
+  and the operator allows it. Likely uses: the router's classifier
+  (layer 4, P2), a cheap pre-check before the reviewer model (7.6), quick
+  checks inside skills. Noted 2026-11-02.
