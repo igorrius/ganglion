@@ -2,8 +2,8 @@
 
 - **Date:** 2026-11-02
 - **Task:** M3a task 10 ([plan](../plans/p1-m3a-talking-agent.md)), decision D-6
-- **Question:** which model should answer the family's messages first, and
-  which should take over when it fails?
+- **Question:** which model should answer the agent's conversation turns
+  first, and which should take over when it fails?
 - **Status:** measured on 20 turns per model. The owner picks; the choice
   becomes ADR-0022.
 
@@ -52,7 +52,7 @@
 
 **Weak spots:**
 - One of its two jokes made no sense.
-- Its film list for the whole family included *La La Land*.
+- Its film list "for the whole family" included *La La Land*.
 - It sends about 550 extra input tokens per call. This costs nothing on
   the subscription, but it counts towards the subscription's limits.
 
@@ -68,7 +68,7 @@
 **Weak spots:**
 - It sometimes tells people, unasked, that it cannot control devices.
 
-At family scale (300 turns a day) it would cost about $1.4 a month.
+At 300 turns a day it would cost about $1.4 a month.
 
 ### Qwen 3.8 Flash
 
@@ -81,7 +81,7 @@ It is the weakest of the three:
 
 ## Findings
 
-1. **Haiku and DeepSeek are both good enough** for family conversation.
+1. **Haiku and DeepSeek are both good enough** for the agent's conversation.
    Qwen is not.
 2. **The model does not know the date.** No model has it except through
    the CLI. M3b should add the current time to the last user message, as

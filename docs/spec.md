@@ -864,20 +864,31 @@ Reviewed at each gate.
   admin (the same idea as node enrolment with a one-time token, 9.3).
 - An encrypted secret store on the node's key, behind the secret source of
   D-3; secrets set and rotated without a restart.
-- A decision model as a tool of the agent core. Decision models (also
-  called "System One" models) answer typed questions without generating
-  text: yes/no, a choice, a rating on a short scale, with a confidence.
-  The owner has one in mind and will confirm which. Candidates seen in
-  release trackers in October 2026 (not checked against vendor pages):
-  - Strands Decider 2B (AWS, open);
-  - Jev (TypeSafe);
-  - the open Decision 3.0 family (d3-edge, 0.59B);
-  - Liquid AI's d1.
-
-  It runs only when such a model is in the catalogue and the operator
-  allows it. Likely uses:
-  - the router's classifier (layer 4, P2);
-  - a cheap pre-check before the reviewer model (7.6);
-  - quick checks inside skills.
+- Audiences and several agents: a "family mode" with its own agent or
+  settings for a group of people, per-topic setups in Telegram forums,
+  sub-agents and parallel agents. Until there is a public repository
+  with install docs and settled processes, a node is one operator, one
+  agent, one bot (owner, 2026-11-02).
+- A decision model as a tool of the agent core: the owner's pick is
+  **Jev** by TypeSafe ([typesafe.ai](https://typesafe.ai/),
+  [docs](https://docs.typesafe.ai/)), a "System One" model.
+  - **What it answers:** typed questions about a given state (text or
+    JSON), without generating text. Three primitives:
+    - **Noul:** is a statement true, 0 to 1;
+    - **Score:** a rating on a rubric;
+    - **Choice:** an option from a list.
+  - **What it returns:** probabilities and a confidence. Several questions
+    go in one request and are evaluated in parallel.
+  - **Access:** its own API in early access, not OpenAI-compatible, so it
+    needs its own provider type. Pricing on 2026-10-28: $42 per billion
+    input tokens.
+  - **When it runs:** only when such a model is in the catalogue and the
+    operator allows it.
+  - **Likely uses:**
+    - the router's classifier (layer 4, P2);
+    - a cheap pre-check before the reviewer model (7.6);
+    - yes/no and rating checks inside skills and policies.
+  - Other decision models seen in October 2026: Strands Decider 2B (AWS,
+    open), the Decision 3.0 family, Liquid AI's d1.
 
   Noted 2026-11-02.
