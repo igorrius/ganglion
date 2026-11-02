@@ -30,8 +30,9 @@ Start here when coming back to the project.
   after its foundations ([ADR-0015](adr/0015-agent-first-p1.md)).
   - M2 has its step-by-step plan ([p1-m2-delivery-telegram.md](plans/p1-m2-delivery-telegram.md));
     D-2 is decided: our own Bot API client
-    ([ADR-0018](adr/0018-own-telegram-bot-api-client.md)). Next: task 1 of
-    that plan.
+    ([ADR-0018](adr/0018-own-telegram-bot-api-client.md)). Done: task 1
+    (shared types), task 2 (SQLite inbox, `queue/sqlqueue`). Next: task 3,
+    the outbox and its sender.
   - Live checks need a separate test bot: `TELEGRAM_TEST_BOT_TOKEN` in
     `.env`. Everything before that runs against a fake Bot API in tests.
     See [owner setup](#owner-setup-for-live-checks) below.

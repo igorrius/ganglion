@@ -253,7 +253,7 @@ could collide with old ones and be dropped as duplicates.
 
   A lease that expired but was not taken by anyone else still completes:
   the token still matches.
-- [ ] **Step 1: Write failing tests** (temp-file DB, fake clock):
+- [x] **Step 1: Write failing tests** (temp-file DB, fake clock):
   - `TestPutDuplicateIsNoOp`: the second `Put` returns nil, and there is
     one row.
   - `TestLeaseEmpty`: returns `ErrEmpty`.
@@ -280,12 +280,12 @@ could collide with old ones and be dropped as duplicates.
     cutoff are removed; pending rows stay. Retention is 7 days. Telegram
     keeps unconfirmed updates for 24 hours, so a pruned `IdemKey` cannot
     come back from it.
-- [ ] **Step 2: Run** `go test ./queue/sqlqueue/` — FAIL.
-- [ ] **Step 3: Implement.** Use `BEGIN IMMEDIATE` for `Lease` and
+- [x] **Step 2: Run** `go test ./queue/sqlqueue/` — FAIL.
+- [x] **Step 3: Implement.** Use `BEGIN IMMEDIATE` for `Lease` and
   `Complete` (`db.Conn` + `ExecContext("BEGIN IMMEDIATE")`), so two
   leasers cannot pick the same row.
-- [ ] **Step 4: Run** `go test -race ./queue/sqlqueue/` — PASS.
-- [ ] **Step 5: Commit** `queue/sqlqueue: SQLite inbox with ordered leases and atomic complete`.
+- [x] **Step 4: Run** `go test -race ./queue/sqlqueue/` — PASS.
+- [x] **Step 5: Commit** `queue/sqlqueue: SQLite inbox with ordered leases and atomic complete`.
 
 ### Task 3: outbox and sender — order, retries, `retry_after`, parts (2.2)
 

@@ -17,7 +17,7 @@ interfaces only; **planned** — not in the repository yet.
 | Model providers | `provider` | interface | 7.4 | [0007](../adr/0007-openai-compatible-first-provider.md), [0009](../adr/0009-claude-subscription-only-via-cli-worker.md) |
 | Model router | `router` | interface | 7.3 | — |
 | Store (history, turns, cron_runs, allowed) | — | planned (P1) | 6 | — |
-| SQLite queue | — | planned (P1) | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
+| SQLite queue: inbox (ordered leases, atomic `Complete`), conversation state, prune | `queue/sqlqueue` | inbox done (P1 M2); outbox side in task 3 | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 | Telegram transport | — | planned (P1) | 7.1 | — |
 | Agent loop and actors | — | planned (P1) | 7.2 | — |
 | Policies | — | planned (P1) | 7.6 | — |
@@ -58,6 +58,8 @@ flowchart BT
     sqlstore["cells/sqlstore"] --> cellsp
     sqlstore --> sqlitedb["sqlitedb"]
     virtualb["cells/virtual"] --> cellsp
+    sqlqueue["queue/sqlqueue"] --> queue
+    sqlqueue --> sqlitedb
 ```
 
 - `event` and `pdk` are leaves: they import nothing from the project.
