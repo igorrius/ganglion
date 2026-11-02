@@ -58,17 +58,19 @@ Start here when coming back to the project.
     - OTLP traces when `OTEL_EXPORTER_OTLP_ENDPOINT` is set;
     - Go 1.27.3;
     - the node is 33 MB on disk and 35 MB RSS after 1,000 turns.
-- **Next:** a refactoring before M3b ([plan](plans/p1-refactor.md)):
-  - the [Go conventions](conventions.md) and lint guardrails
-    ([ADR-0027](adr/0027-written-go-conventions-and-lint-guardrails.md));
-  - the agent as a stage pipeline;
-  - the node assembled in `config` with `samber/do`
-    ([ADR-0028](adr/0028-samber-do-composition-root-in-config.md));
-  - `ganglion run` on urfave/cli
-    ([ADR-0029](adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md)).
-
-  No behaviour changes.
-- **Then:** M3b — memory, tools and policies, skills, and the 3.8
+  - Refactoring before M3b done ([plan](plans/p1-refactor.md)); no
+    behaviour change:
+    - the [Go conventions](conventions.md) with lint guardrails
+      ([ADR-0027](adr/0027-written-go-conventions-and-lint-guardrails.md));
+    - the agent as a pipeline of stages, a command table, tool
+      middleware;
+    - the node assembled in `config` with `samber/do`; `node` runs roles
+      ([ADR-0028](adr/0028-samber-do-composition-root-in-config.md));
+    - `ganglion run` and `ganglion version` on urfave/cli, `main.go` at
+      the root, development tools in `tools/`
+      ([ADR-0029](adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md));
+    - 34 MB on disk, 35 MB RSS after 1,000 agent turns.
+- **Next:** M3b — memory, tools and policies, skills, and the 3.8
   acceptance under the crash harness.
   - Scope stays one operator, one agent, one bot (spec 14).
   - Carried into M3b: a first-run "introduction" conversation that

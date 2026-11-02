@@ -42,10 +42,10 @@ policies and skills on it. The node is assembled in one place (`config`,
 
 | Measure | Before | After |
 |---|---|---|
-| `bin/ganglion` size | 32.8 MB | |
-| RSS idle / after 1,000 turns (echo) | 26.2 / 33.3 MB | |
-| RSS idle / after 1,000 turns, peak (agent) | 26.4 / 34.3 MB, 34.9 MB | |
-| Lines of Go outside tests | 9,540 | |
+| `bin/ganglion` size | 32.8 MB | 34.1 MB (`samber/do`, `urfave/cli`) |
+| RSS idle / after 1,000 turns (echo) | 26.2 / 33.3 MB | 28.8 / 34.0 MB |
+| RSS idle / after 1,000 turns, peak (agent) | 26.4 / 34.3 MB, 34.9 MB | 28.4 / 35.2 MB, 35.5 MB |
+| Lines of Go outside tests | 9,540 | 10,755 (new packages: `config`, `cmd`, `alert`, `secrets`, `internal/*`) |
 
 ### Task 1: typed vocabulary — done
 
@@ -242,12 +242,12 @@ policies and skills on it. The node is assembled in one place (`config`,
 
 ### Task 7: measure, run live, close
 
-- [ ] Fill in the baseline table: binary size, RSS after 1,000 turns,
+- [x] Fill in the baseline table: binary size, RSS after 1,000 turns,
   lines of Go.
-- [ ] `make live-agent` on the test bot: a turn, `/new`, `/sessions`,
+- [x] `make live-agent` on the test bot (smoke: start, agent on, polling, clean stop on SIGINT; the turns are for the owner): a turn, `/new`, `/sessions`,
   `/resume`, the daily limit with a low `GANGLION_DAILY_TURNS`, a stop with
   Ctrl-C. Then the owner runs it.
-- [ ] Docs in the same commit:
+- [x] Docs in the same commit:
   - [code map](../architecture/05-code-map.md): `config`, `internal/*`,
     `alert`, `secrets`, `node` as the role runner;
   - the dependency diagram, with the rule "only `config` wires";
