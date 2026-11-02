@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -26,6 +27,10 @@ func TestRunRejectsUnknownRole(t *testing.T) {
 }
 
 func TestRunStartsAllRolesByDefault(t *testing.T) {
+	t.Setenv("GANGLION_DB", filepath.Join(t.TempDir(), "g.db"))
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	t.Setenv("TELEGRAM_BOT_TOKEN_FILE", "")
+	t.Setenv("GANGLION_ADMIN", "")
 	var out bytes.Buffer
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // the node stops as soon as it has started

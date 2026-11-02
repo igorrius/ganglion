@@ -596,7 +596,7 @@ could collide with old ones and be dropped as duplicates.
      - the total number of duplicate replies is at most K;
      - replies in each chat are in the same order as the messages;
      - `Confirmed()` reached the last update.
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `core`: `TestLoopEchoes` (in-memory sqlqueue on `:memory:`);
     `TestHandlerErrorLeavesLeaseToExpire`;
     `TestLoopWaitsOnReadyNotBusy` (counts `Lease` calls over a fake
@@ -607,12 +607,24 @@ could collide with old ones and be dropped as duplicates.
     variable, not the file content); `TestConfigTokenBothFormsRejected`; `TestConflictSendsOneAlert` (the fake
     has a webhook set; the admin gets exactly one alert and polling stops).
   - The crash harness as above.
-- [ ] **Step 2: Run** `go test ./core/ ./node/ ./cmd/ganglion/` — FAIL.
-- [ ] **Step 3: Implement**; `cmd/ganglion/main.go` passes
+  As built:
+  - The harness found that a process killed inside a turn left its lease
+    for 10 minutes, so the conversation stayed silent after the restart.
+    The core now releases leases at start
+    ([ADR-0019](../adr/0019-release-leases-at-core-start.md), R-DLV-3);
+    `TestRestartReleasesDeadLeases` covers it.
+  - The alert's `IdemKey` ends with the admin's principal, so each admin
+    gets one: `alert:telegram-conflict:<start ms>:<principal>`.
+  - `Echo` completes a message whose payload cannot be read with no reply,
+    instead of failing the turn forever.
+  - The harness sends a message every `K × 1.25 ms`, so the messages arrive
+    during the kills rather than after them.
+- [x] **Step 2: Run** `go test ./core/ ./node/ ./cmd/ganglion/` — FAIL.
+- [x] **Step 3: Implement**; `cmd/ganglion/main.go` passes
   `node.ConfigFromEnv(os.Getenv, os.ReadFile)`.
-- [ ] **Step 4: Run** `go test -race ./...` — PASS, including the harness
+- [x] **Step 4: Run** `go test -race ./...` — PASS, including the harness
   with 40 kills. Run it once locally with `GANGLION_CRASH_ITERS=500`.
-- [ ] **Step 5: Commit** `core, node: echo bot on the queue and a kill -9 crash harness`.
+- [x] **Step 5: Commit** `core, node: echo bot on the queue and a kill -9 crash harness`.
 
 ### Task 8: live run on the test bot, memory, docs (2.3 manual run; closes M2)
 

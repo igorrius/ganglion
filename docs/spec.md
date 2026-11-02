@@ -242,7 +242,10 @@ Guarantee: **at-least-once + idempotency.**
   `idemKey`; duplicates are rejected by a unique index.
 - **R-DLV-2.** The Telegram offset advances only after the write to `inbox`.
 - **R-DLV-3.** An actor takes an event under a lease (10 min by default). If
-  the process dies, the lease expires and the event is processed again.
+  the process dies, the event is processed again: a restarted core
+  releases the leases left in its database at start, and otherwise the
+  lease expires. One core process owns a database file
+  ([ADR-0019](adr/0019-release-leases-at-core-start.md)).
 - **R-DLV-4.** The agent's reply, the new session state and the "incoming
   event processed" mark are written in one transaction (outbox pattern).
 - **R-DLV-5.** A separate sender delivers the outbox with retries, honours
@@ -846,3 +849,6 @@ Reviewed at each gate.
   admin (the same idea as node enrolment with a one-time token, 9.3).
 - An encrypted secret store on the node's key, behind the secret source of
   D-3; secrets set and rotated without a restart.
+- A lock that stops a second core process from opening the same database
+  file (ADR-0019 relies on one owner; today only Telegram's `409` hints at
+  a second process).
