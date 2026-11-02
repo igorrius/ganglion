@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/backoff"
 	"github.com/igorrius/ganglion/transport"
 )
 
@@ -46,8 +46,7 @@ type Transport struct {
 	log         *slog.Logger
 	now         func() time.Time
 	pollTimeout time.Duration
-	backoffMin  time.Duration
-	backoffMax  time.Duration
+	retry       backoff.Policy // between failed polls and failed sinks
 	replyMode   ReplyMode
 	typingEvery time.Duration
 
@@ -114,8 +113,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 		log:         cfg.log,
 		now:         cfg.now,
 		pollTimeout: cfg.pollTimeout,
-		backoffMin:  time.Second,
-		backoffMax:  time.Minute,
+		retry:       backoff.Policy{Min: time.Second, Max: time.Minute},
 		replyMode:   cfg.replyMode,
 		typingEvery: 4 * time.Second,
 		last:        map[int64]int64{},
@@ -133,7 +131,7 @@ func (t *Transport) Name() string { return Name }
 // Run returns ErrConflict on 409, the error on 401, and ctx.Err() when ctx
 // ends; other errors are retried with backoff.
 func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
-	pollBackoff := t.newBackoff()
+	pollBackoff := backoff.New(t.retry)
 	var me user
 	for {
 		var err error
@@ -147,7 +145,7 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 	botID := me.ID
 	t.log.Info("telegram: polling", "bot_id", botID, "username", me.Username)
 
-	sinkBackoff := t.newBackoff()
+	sinkBackoff := backoff.New(t.retry)
 	var offset int64
 	for {
 		ups, err := t.c.getUpdates(ctx, offset, t.pollTimeout)
@@ -157,7 +155,7 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 			}
 			continue
 		}
-		pollBackoff.reset()
+		pollBackoff.Reset()
 		for _, u := range ups {
 			t.seen(u)
 			if e, ok := t.toEvent(botID, u); ok {
@@ -167,7 +165,7 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 					}
 					// Keep the offset at this update: Telegram sends it
 					// again on the next poll.
-					d := sinkBackoff.next()
+					d := sinkBackoff.Next()
 					t.log.Warn("telegram: sink failed, update not confirmed",
 						"update_id", u.UpdateID, "conv", e.Conv, "err", err, "retry_in", d)
 					if err := sleep(ctx, d); err != nil {
@@ -175,7 +173,7 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 					}
 					break
 				}
-				sinkBackoff.reset()
+				sinkBackoff.Reset()
 			}
 			offset = u.UpdateID + 1
 		}
@@ -184,7 +182,7 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 
 // onError decides what a failed Bot API call means for Run: a non-nil
 // result stops Run, nil means poll again (after waiting).
-func (t *Transport) onError(ctx context.Context, err error, b *backoff) error {
+func (t *Transport) onError(ctx context.Context, err error, b *backoff.Backoff) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -202,7 +200,7 @@ func (t *Transport) onError(ctx context.Context, err error, b *backoff) error {
 			return sleep(ctx, d)
 		}
 	}
-	d := b.next()
+	d := b.Next()
 	t.log.Warn("telegram: poll failed", "err", err, "retry_in", d)
 	return sleep(ctx, d)
 }
@@ -338,24 +336,6 @@ func (t *Transport) Typing(ctx context.Context, conv string) {
 		}
 	}
 }
-
-// backoff grows from min to max, doubling, with ±20% jitter.
-type backoff struct {
-	min, max, cur time.Duration
-}
-
-func (t *Transport) newBackoff() *backoff { return &backoff{min: t.backoffMin, max: t.backoffMax} }
-
-func (b *backoff) next() time.Duration {
-	if b.cur == 0 {
-		b.cur = b.min
-	} else {
-		b.cur = min(2*b.cur, b.max)
-	}
-	return min(time.Duration(float64(b.cur)*(0.8+0.4*rand.Float64())), b.max)
-}
-
-func (b *backoff) reset() { b.cur = 0 }
 
 func sleep(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)

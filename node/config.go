@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 	_ "time/tzdata" // GANGLION_TZ works in images without zoneinfo
 
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/secrets"
 )
 
 // Config is the node configuration. Until D-3 (YAML node config, M4) it
@@ -60,8 +60,9 @@ func ConfigFromEnv(getenv func(string) string, readFile func(string) ([]byte, er
 	if cfg.Admin != "" && !principalRE.MatchString(cfg.Admin) {
 		return Config{}, fmt.Errorf("GANGLION_ADMIN=%q is not a principal; want <transport>:user:<id>, e.g. telegram:user:123456", cfg.Admin)
 	}
+	src := secrets.Env{Getenv: getenv, ReadFile: readFile}
 	var err error
-	if cfg.BotToken, err = secret(getenv, readFile, "TELEGRAM_BOT_TOKEN"); err != nil {
+	if cfg.BotToken, err = src.Secret("TELEGRAM_BOT_TOKEN"); err != nil {
 		return Config{}, err
 	}
 	if cfg.MetricsAddr = getenv("GANGLION_METRICS_ADDR"); cfg.MetricsAddr == "" {
@@ -135,7 +136,7 @@ func agentFromEnv(getenv func(string) string, readFile func(string) ([]byte, err
 		if p.KeyEnv == "" {
 			continue
 		}
-		key, err := secret(getenv, readFile, p.KeyEnv)
+		key, err := secrets.Env{Getenv: getenv, ReadFile: readFile}.Secret(p.KeyEnv)
 		if err != nil {
 			return a, err
 		}
@@ -145,29 +146,4 @@ func agentFromEnv(getenv func(string) string, readFile func(string) ([]byte, err
 		a.Keys[p.Name] = key
 	}
 	return a, nil
-}
-
-// secret reads a secret from the variable name, or from the file named by
-// name_FILE (as Docker and Kubernetes mount secrets). A trailing newline
-// is trimmed, as is surrounding whitespace. Errors name the variable and never include the file content.
-func secret(getenv func(string) string, readFile func(string) ([]byte, error), name string) (string, error) {
-	value, file := getenv(name), getenv(name+"_FILE")
-	switch {
-	case value != "" && file != "":
-		return "", fmt.Errorf("both %s and %s_FILE are set; set one", name, name)
-	case file == "":
-		// A value pasted with a newline or a CRLF .env line must not reach
-		// the transport: whitespace in the token defeats its redaction.
-		return strings.TrimSpace(value), nil
-	}
-	b, err := readFile(file)
-	if err != nil {
-		// os.ReadFile errors name the path, never the content.
-		return "", fmt.Errorf("%s_FILE: %w", name, err)
-	}
-	v := strings.TrimSpace(string(b))
-	if v == "" {
-		return "", fmt.Errorf("%s_FILE: %s is empty", name, file)
-	}
-	return v, nil
 }

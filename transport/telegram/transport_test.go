@@ -20,7 +20,7 @@ func newTransport(t *testing.T, fake *telegramtest.Server) *Transport {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr.backoffMin = 10 * time.Millisecond
+	tr.retry.Min = 10 * time.Millisecond
 	return tr
 }
 

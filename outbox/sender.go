@@ -8,10 +8,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"math/rand/v2"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/backoff"
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/transport"
 	"go.opentelemetry.io/otel"
@@ -28,24 +28,12 @@ const DefaultPoll = 30 * time.Second
 // batch is how many messages one pass takes from the outbox.
 const batch = 100
 
-const (
-	backoffBase = time.Second
-	backoffCap  = 5 * time.Minute
-)
+// retryPolicy is the wait between failed sends of one message.
+var retryPolicy = backoff.Policy{Min: time.Second, Max: 5 * time.Minute}
 
 // DefaultBackoff returns the wait before retry number attempt (from 1):
 // 1 s·2^(attempt-1) with ±20% jitter, capped at 5 minutes.
-func DefaultBackoff(attempt int) time.Duration {
-	d := backoffCap
-	if attempt < 1 {
-		attempt = 1
-	}
-	if attempt <= 20 {
-		d = backoffBase << (attempt - 1)
-	}
-	d = time.Duration(float64(d) * (0.8 + 0.4*rand.Float64()))
-	return min(d, backoffCap)
-}
+func DefaultBackoff(attempt int) time.Duration { return retryPolicy.Delay(attempt) }
 
 // Sender delivers the outbox. It is one goroutine and sends sequentially,
 // which keeps the order within a conversation trivially correct.

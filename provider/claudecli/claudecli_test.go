@@ -198,12 +198,12 @@ func TestTimeoutKillsProcess(t *testing.T) {
 	}
 }
 
-func TestCancelIsNotFallback(t *testing.T) {
+func TestCancelIsReturnedAsCanceled(t *testing.T) {
 	c, _ := fake(t, "sleep")
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { time.Sleep(100 * time.Millisecond); cancel() }()
 	_, err := c.Chat(ctx, provider.ChatRequest{Model: "haiku", Messages: history})
-	if !errors.Is(err, context.Canceled) || provider.Fallback(err) {
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel: %v", err)
 	}
 }

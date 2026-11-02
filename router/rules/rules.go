@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/igorrius/ganglion/internal/clock"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
 )
@@ -101,8 +102,7 @@ func (r *Router) Route(ctx context.Context, t router.TaskReq) ([]router.Candidat
 	}
 	overBudget := false
 	if r.budget != nil && r.daily > 0 {
-		now := r.now().In(r.loc)
-		day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, r.loc)
+		day := clock.DayStart(r.now(), r.loc)
 		if spent, err := r.budget.SpentSince(ctx, day); err == nil && spent >= r.daily {
 			overBudget = true // on an error the budget does not block: fail open
 		}

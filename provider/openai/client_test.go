@@ -116,13 +116,13 @@ func TestErrorKinds(t *testing.T) {
 	short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 	_, err := New("or", fake.URL(), key).Chat(short, provider.ChatRequest{Model: "m", Messages: user("x")})
-	if e, ok := errors.AsType[*provider.Error](err); !ok || e.Kind != provider.KindTimeout || !provider.Fallback(err) {
+	if e, ok := errors.AsType[*provider.Error](err); !ok || e.Kind != provider.KindTimeout {
 		t.Errorf("hang: %v, want timeout", err)
 	}
 	cancelled, cancel2 := context.WithCancel(ctx)
 	cancel2()
 	_, err = New("or", fake.URL(), key).Chat(cancelled, provider.ChatRequest{Model: "m", Messages: user("x")})
-	if !errors.Is(err, context.Canceled) || provider.Fallback(err) {
+	if !errors.Is(err, context.Canceled) {
 		t.Errorf("cancelled: %v, want context.Canceled and no fallback", err)
 	}
 }

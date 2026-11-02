@@ -30,6 +30,9 @@ interfaces only; **planned** — not in the repository yet.
 | Compare models on scripted conversations (D-6 tool) | `cmd/modelcompare` | done (P1 M3a) | 7.4 | [0022](../adr/0022-haiku-first-during-development.md) |
 | Telemetry: OpenTelemetry setup, Prometheus `/metrics`, the promtop dashboard, OTLP traces, trace ids in logs; in-memory providers for tests | `telemetry`, `telemetry/telemetrytest` | done (P1) | 7.9 | [0026](../adr/0026-opentelemetry-prometheus-and-promtop.md) |
 | JSON Schemas of the YAML files (model catalogue, module manifest), embedded | `schemas` | done (P1 M3a); node config schema with D-3 in M4 | 7.3, 7.5 | [0023](../adr/0023-json-schemas-for-yaml-files.md) |
+| Alerts to every admin's private chat (daily limit, give-up, 409) | `alert` | done (P1 refactor) | 7.8 | — |
+| Secret source: the environment and `*_FILE` files; an encrypted store later | `secrets` | done (P1 refactor) | D-3 | [0029](../adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md) |
+| Shared helpers, not library API: backoff with jitter, rune truncation, plain transcript, start of day | `internal/backoff`, `internal/text`, `internal/transcript`, `internal/clock` | done (P1 refactor) | — | [0027](../adr/0027-written-go-conventions-and-lint-guardrails.md) |
 | Policies | — | planned (P1) | 7.6 | — |
 | Memory | — | planned (P1) | 7.7 | — |
 | Runner: wazero host, manifest, limits | `runner` | done (P0 spike, own ABI); supervisor and scheduler planned (P1) | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md), [0012](../adr/0012-yaml-manifests.md) |
@@ -99,9 +102,15 @@ flowchart BT
     outboxp --> transport
     accessp["access"] --> transport
     accessp --> sqlitedb
+    alertp["alert"] --> event
+    agentp --> alertp
+    node --> alertp
+    node --> secretsp["secrets"]
 ```
 
 - `event` and `pdk` are leaves: they import nothing from the project.
+- `internal/*` packages are helpers shared by several packages; they are
+  not part of the library API and are left out of the diagram.
 - Module code (`modules/*`) depends only on `pdk`, never on `runner`, so it
   compiles to WASM.
 - Interface packages (`transport`, `queue`, `provider`, `router`) depend only

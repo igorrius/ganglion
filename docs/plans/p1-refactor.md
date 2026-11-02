@@ -67,7 +67,7 @@ policies and skills on it. The node is assembled in one place (`config`,
   `"telegram"` in `node` and the transport.
 - [x] `make check`; commit.
 
-### Task 2: one source for shared knowledge
+### Task 2: one source for shared knowledge — done
 
 **Files:** new `internal/backoff`, `internal/text`, `internal/transcript`,
 `internal/clock`, `alert`, `secrets`; changed `outbox/sender.go`,
@@ -75,30 +75,30 @@ policies and skills on it. The node is assembled in one place (`config`,
 `router/router.go`, `router/rules/rules.go`, `node/*.go`,
 `provider/errors.go`
 
-- [ ] `internal/backoff`: a doubling backoff with ±20% jitter and a cap
+- [x] `internal/backoff`: a doubling backoff with ±20% jitter and a cap
   (`Next`, `Reset`), plus `Delay(attempt)`. The outbox and the Telegram
   transport use it. Their existing tests pin the timings.
-- [ ] `internal/text.Truncate(s, n)`, used by `agent` and `claudecli`.
-- [ ] `internal/transcript.Render(msgs, opts)`: "User: … / Assistant: … /
+- [x] `internal/text.Truncate(s, n)`, used by `agent` and `claudecli`.
+- [x] `internal/transcript.Render(msgs, opts)`: "User: … / Assistant: … /
   Tool result: …". Compaction and the claude CLI prompt both use it. The
   claude CLI keeps tool calls in its output and compaction leaves them out
   through an option. Tests pin both outputs byte for byte.
-- [ ] `internal/clock.DayStart(t, loc)`, used by the agent's limits and the
+- [x] `internal/clock.DayStart(t, loc)`, used by the agent's limits and the
   router's budget.
-- [ ] `router.Candidate.Cost(provider.Usage) float64`, used by the turn
-  trace and the cost metric.
-- [ ] `telegram.PrivateConv(principal)`: moved from `node.telegramPrivate`.
-- [ ] Package `alert`: `ToAdmins(ctx, admins AdminsFunc, private
-  PrivateConvFunc, key, text)` returns the outgoing messages. The daily
+- [x] `router.Candidate.Cost(inTokens, outTokens int) float64` (`router`
+  may not import `provider`), used by the turn trace and the cost metric.
+- [x] `telegram.PrivateConv(principal)`: moved from `node.telegramPrivate`.
+- [x] Package `alert`: `Admins{List, Private}.Messages(ctx, key, text)`
+  returns the outgoing messages. The daily
   limit alert, the give-up alert and the `409` alert use it. A failure to
   list admins is returned, not dropped. This is the M2 minor about the
   `409` alert: the caller logs and goes on.
-- [ ] Package `secrets`: `Source` interface and `Env` (the variable or
+- [x] Package `secrets`: `Source` interface and `Env` (the variable or
   `<NAME>_FILE`, trimmed, one of the two). Moved from `node.secret` with its
   tests.
-- [ ] Remove `provider.Fallback` (unused; the agent falls back on any
+- [x] Remove `provider.Fallback` (unused; the agent falls back on any
   error, spec 7.3 layer 3). This is the M3a minor.
-- [ ] `make check`; commit.
+- [x] `make check`; commit.
 
 ### Task 3: the agent as a stage pipeline
 

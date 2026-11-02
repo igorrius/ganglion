@@ -69,6 +69,12 @@ type Candidate struct {
 	PriceOutMTok float64
 }
 
+// Cost is what a call that used inTokens and outTokens costs at the
+// candidate's catalogue prices, in USD. Cached input counts as input.
+func (c Candidate) Cost(inTokens, outTokens int) float64 {
+	return (float64(inTokens)*c.PriceInMTok + float64(outTokens)*c.PriceOutMTok) / 1e6
+}
+
 // ErrNoCandidate is returned when no model fits the task.
 var ErrNoCandidate = errors.New("router: no model fits the task")
 

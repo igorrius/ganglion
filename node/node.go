@@ -14,6 +14,7 @@ import (
 
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
+	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/outbox"
@@ -99,6 +100,7 @@ func runCore(ctx context.Context, cfg Config, logger *slog.Logger) error {
 		}
 	}
 
+	admins := alert.Admins{List: acl.Admins, Private: telegram.PrivateConv}
 	sender := outbox.NewSender(q, q.OutboxReady(), logger)
 	var tr *telegram.Transport
 	if cfg.BotToken != "" {
@@ -107,7 +109,7 @@ func runCore(ctx context.Context, cfg Config, logger *slog.Logger) error {
 			return err
 		}
 	}
-	handler, loopOpts, err := buildHandler(ctx, cfg.Agent, db, q, acl, logger)
+	handler, loopOpts, err := buildHandler(ctx, cfg.Agent, db, q, admins, logger)
 	if err != nil {
 		return err
 	}
@@ -141,7 +143,7 @@ func runCore(ctx context.Context, cfg Config, logger *slog.Logger) error {
 			// Do not exit: a supervisor would restart the process into the
 			// same fight. Tell the admins and keep sending.
 			logger.Error("node: Telegram polling stopped; another process or a webhook holds the token", "err", err)
-			return alertAdmins(ctx, acl, q, started)
+			return alertConflict(ctx, admins, q.Enqueue, started, logger)
 		}})
 	}
 	return runAll(ctx, components)
@@ -171,23 +173,9 @@ func runAll(ctx context.Context, components []component) error {
 	return firstErr
 }
 
-// telegramPrivate returns the private chat of a Telegram principal: a
-// user's private chat has the user's id.
-func telegramPrivate(principal string) (transport, conv string, ok bool) {
-	idStr, ok := strings.CutPrefix(principal, "telegram:user:")
-	if !ok {
-		return "", "", false
-	}
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		return "", "", false
-	}
-	return telegram.Name, telegram.ConvKey(id, 0), true
-}
-
 // buildHandler returns the agent when a model catalogue is configured, and
 // the M2 echo otherwise.
-func buildHandler(ctx context.Context, ac AgentConfig, db *sql.DB, q *sqlqueue.Queue, acl *access.List, logger *slog.Logger) (core.Handler, []core.Option, error) {
+func buildHandler(ctx context.Context, ac AgentConfig, db *sql.DB, q *sqlqueue.Queue, admins alert.Admins, logger *slog.Logger) (core.Handler, []core.Option, error) {
 	if ac.Catalog == nil {
 		logger.Warn("node: no GANGLION_MODELS_FILE; the agent is off and the bot echoes")
 		return core.EchoHandler, nil, nil
@@ -226,47 +214,36 @@ func buildHandler(ctx context.Context, ac AgentConfig, db *sql.DB, q *sqlqueue.Q
 		SessionIdle: ac.SessionIdle, Location: tz,
 	}, agent.Deps{
 		States: q, Router: rt, Providers: providers, Turns: turnsLog, Archive: archive,
-		Admins: acl.Admins, AlertConv: telegramPrivate, Log: logger,
+		Alerts: admins, Log: logger,
 		Persona: agent.PersonaDir(ac.Workspace),
 	})
 	giveUp := func(e event.Event) []event.Outgoing {
 		out := []event.Outgoing{{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv,
 			Text: "Sorry, something went wrong with that message."}}
-		admins, _ := acl.Admins(context.Background())
-		for _, adm := range admins {
-			if transport, conv, ok := telegramPrivate(adm); ok {
-				out = append(out, event.Outgoing{IdemKey: "alert:give-up:" + e.ID + ":" + adm, Transport: transport, Conv: conv,
-					Text: "Gave up on event " + e.ID + " in " + e.Conv + " after " + strconv.Itoa(core.DefaultMaxAttempts) + " attempts."})
-			}
+		alerts, err := admins.Messages(context.Background(), "alert:give-up:"+e.ID,
+			"Gave up on event "+e.ID+" in "+e.Conv+" after "+strconv.Itoa(core.DefaultMaxAttempts)+" attempts.")
+		if err != nil {
+			logger.Warn("node: give-up alert not built", "id", e.ID, "err", err)
 		}
-		return out
+		return append(out, alerts...)
 	}
 	logger.Info("node: agent on", "providers", len(providers), "models", len(ac.Catalog.Models))
 	return ag.Handle, []core.Option{core.WithMaxAttempts(core.DefaultMaxAttempts, giveUp)}, nil
 }
 
-// alertAdmins enqueues the conflict alert to the private chat of every
-// Telegram admin, once per process start.
-func alertAdmins(ctx context.Context, acl *access.List, q *sqlqueue.Queue, started time.Time) error {
-	admins, err := acl.Admins(ctx)
-	if err != nil {
-		return err
+// alertConflict enqueues the conflict alert to every admin, once per
+// process start. A failure is logged, never returned: the node keeps
+// sending, and a supervisor must not restart it into the same fight.
+func alertConflict(ctx context.Context, admins alert.Admins, enqueue func(context.Context, ...event.Outgoing) error,
+	started time.Time, logger *slog.Logger) error {
+	msgs, err := admins.Messages(ctx, "alert:telegram-conflict:"+strconv.FormatInt(started.UnixMilli(), 10), conflictAlert)
+	if err == nil && len(msgs) > 0 {
+		err = enqueue(ctx, msgs...)
 	}
-	var msgs []event.Outgoing
-	for _, p := range admins {
-		transport, conv, ok := telegramPrivate(p)
-		if !ok {
-			continue
-		}
-		msgs = append(msgs, event.Outgoing{
-			IdemKey:   "alert:telegram-conflict:" + strconv.FormatInt(started.UnixMilli(), 10) + ":" + p,
-			Transport: transport, Conv: conv, Text: conflictAlert,
-		})
+	if err != nil && ctx.Err() == nil {
+		logger.Error("node: the 409 alert was not stored", "err", err)
 	}
-	if len(msgs) == 0 {
-		return nil
-	}
-	return q.Enqueue(ctx, msgs...)
+	return nil
 }
 
 // prune deletes finished queue rows at start and then once a day.

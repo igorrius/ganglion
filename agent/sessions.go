@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/turns"
@@ -46,17 +47,10 @@ func NewArchive(ctx context.Context, db *sql.DB) (*Archive, error) {
 func title(s State) string {
 	for _, m := range s.Messages {
 		if m.Role == provider.RoleUser {
-			return truncate(m.Content, 60)
+			return text.Truncate(m.Content, 60)
 		}
 	}
 	return ""
-}
-
-func truncate(s string, n int) string {
-	if r := []rune(s); len(r) > n {
-		return string(r[:n]) + "…"
-	}
-	return s
 }
 
 // Put archives s, ended at s.Last. It is keyed by (conv, session), so a

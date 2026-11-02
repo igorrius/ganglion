@@ -18,3 +18,10 @@ func TestVocabularyValues(t *testing.T) {
 		}
 	}
 }
+
+func TestCandidateCostAtCataloguePrices(t *testing.T) {
+	c := router.Candidate{PriceInMTok: 0.5, PriceOutMTok: 2}
+	if got := c.Cost(2_000_000, 500_000); got != 2.0 { // 2M in at $0.5 + 0.5M out at $2
+		t.Fatalf("Cost = %v, want 2.0", got)
+	}
+}

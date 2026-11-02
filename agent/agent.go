@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/clock"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/router"
@@ -68,9 +70,8 @@ type Deps struct {
 	Providers map[string]provider.Provider
 	Tools     Tools
 	Turns     *turns.Log
-	Archive   *Archive // nil: sessions are not archived
-	Admins    func(ctx context.Context) ([]string, error)
-	AlertConv func(principal string) (transport, conv string, ok bool) // a principal's private chat
+	Archive   *Archive     // nil: sessions are not archived
+	Alerts    alert.Admins // who hears about a reached daily limit
 	Now       func() time.Time
 	Log       *slog.Logger
 	// Persona returns the operator's description of the agent, read every
@@ -108,7 +109,7 @@ func (tr *turnRecord) add(c router.Candidate, u provider.Usage) {
 	tr.CacheReadTokens += u.CacheReadTokens
 	tr.CacheWriteTokens += u.CacheWriteTokens
 	tr.OutputTokens += u.OutputTokens
-	tr.CostUSD += (float64(u.InputTokens)*c.PriceInMTok + float64(u.OutputTokens)*c.PriceOutMTok) / 1e6
+	tr.CostUSD += c.Cost(u.InputTokens, u.OutputTokens)
 }
 
 func errorKind(err error) string {
@@ -163,11 +164,6 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, msgs []provider.M
 		a.log.Warn("agent: model call failed", attrs...)
 	}
 	return provider.ChatResponse{}, false
-}
-
-func dayStart(t time.Time, loc *time.Location) time.Time {
-	t = t.In(loc)
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
 }
 
 // Handle implements core.Handler.
@@ -306,7 +302,7 @@ func (a *Agent) observeCall(ctx context.Context, span trace.Span, c router.Candi
 		for kind, n := range map[string]int{"input": u.InputTokens, "cached": u.CacheReadTokens, "output": u.OutputTokens} {
 			a.in.tokens.Add(ctx, int64(n), metric.WithAttributes(attribute.String("provider", c.Provider), attribute.String("model", c.Model), attribute.String("kind", kind)))
 		}
-		a.in.cost.Add(ctx, (float64(u.InputTokens)*c.PriceInMTok+float64(u.OutputTokens)*c.PriceOutMTok)/1e6, labels)
+		a.in.cost.Add(ctx, c.Cost(u.InputTokens, u.OutputTokens), labels)
 		span.SetAttributes(attribute.Int("tokens.input", u.InputTokens), attribute.Int("tokens.cached", u.CacheReadTokens), attribute.Int("tokens.output", u.OutputTokens))
 	}
 	span.SetAttributes(attribute.String("result", result))
@@ -365,7 +361,7 @@ func (a *Agent) overLimit(ctx context.Context, now time.Time, principal, eventID
 	if a.cfg.DailyTurns < 0 && a.cfg.DailyTokens < 0 {
 		return nil, false
 	}
-	day := dayStart(now, a.cfg.Location)
+	day := clock.DayStart(now, a.cfg.Location)
 	tot, err := a.d.Turns.Totals(ctx, day, principal, eventID)
 	if err != nil {
 		a.log.Warn("agent: daily totals unavailable; limit not checked", "err", err)
@@ -375,20 +371,13 @@ func (a *Agent) overLimit(ctx context.Context, now time.Time, principal, eventID
 		return nil, false
 	}
 	a.log.Warn("agent: daily limit reached", "principal", principal, "turns", tot.Turns, "tokens", tot.Tokens)
-	var alerts []event.Outgoing
-	if a.d.Admins != nil && a.d.AlertConv != nil {
-		admins, _ := a.d.Admins(ctx)
-		for _, adm := range admins {
-			transport, conv, ok := a.d.AlertConv(adm)
-			if !ok {
-				continue
-			}
-			alerts = append(alerts, event.Outgoing{
-				IdemKey:   "alert:daily-limit:" + day.Format("2006-01-02") + ":" + principal + ":" + adm,
-				Transport: transport, Conv: conv,
-				Text: "Daily limit reached for " + principal + " (turns or tokens); the bot refuses them until tomorrow.",
-			})
-		}
+	if a.d.Alerts.List == nil {
+		return nil, true
+	}
+	alerts, err := a.d.Alerts.Messages(ctx, "alert:daily-limit:"+day.Format("2006-01-02")+":"+principal,
+		"Daily limit reached for "+principal+" (turns or tokens); the bot refuses them until tomorrow.")
+	if err != nil {
+		a.log.Warn("agent: daily limit alert not built", "err", err)
 	}
 	return alerts, true
 }
