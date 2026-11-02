@@ -717,6 +717,10 @@ replay on history → approval → shadow → rollout.
 | 4. WASM | `.wasm` in wazero | no | capability list | Yes, P1 by hand, P3 by the model |
 | 5. Core rebuild | `go build`, binary swap | yes | none | **Never** |
 
+Which part of the system each level can extend, what the core always keeps,
+and when a contribution can be a WASM module are mapped in
+[ADR-0017](adr/0017-extension-points.md).
+
 Why not level 5: +0.5 GB of toolchain in the image; one bad commit and the
 bot does not start, and the repairer is the bot itself; Go's `plugin` package
 is brittle (same toolchain, Linux only, no unloading). Zero-downtime
@@ -828,3 +832,9 @@ Reviewed at each gate.
 - CBOR and microcontroller adapters.
 - OpenTelemetry instead of slog + `turns`.
 - An A2A endpoint on the core for external agents (after P3, ADR-0013).
+- Bot features contributed by tools and modules: commands, menus and
+  buttons declared in the manifest in a channel-neutral form; a press is a
+  `tool.call` through policies; confirmations, access and the bot token stay
+  in the transport (P3, [ADR-0017](adr/0017-extension-points.md)).
+- Telegram Mini Apps (web pages inside the chat): an HTTP server and
+  `initData` validation in the core; a web UI, excluded from 0.x (ADR-0017).
