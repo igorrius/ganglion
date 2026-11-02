@@ -101,7 +101,7 @@ func TestSpentSince(t *testing.T) {
 func TestTotalsCountOnlyModelTurns(t *testing.T) {
 	l := newLog(t)
 	ctx := context.Background()
-	for i, outcome := range []string{"ok", "step_limit", "daily_limit", "no_model", "command"} {
+	for i, outcome := range []turns.Outcome{turns.OutcomeOK, turns.OutcomeStepLimit, turns.OutcomeDailyLimit, turns.OutcomeNoModel, turns.OutcomeCommand} {
 		tr := turn(fmt.Sprintf("e%d", i), "telegram:user:1", t0, 10, 1, 0)
 		tr.Outcome = outcome
 		_ = l.Record(ctx, tr)

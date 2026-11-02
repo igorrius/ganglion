@@ -113,7 +113,7 @@ func runCore(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	}
 	if tr != nil {
 		loopOpts = append(loopOpts, core.WithTurnHook(func(ctx context.Context, e event.Event) func() {
-			if e.Source != "telegram" || e.Kind != "message" {
+			if e.Source != telegram.Name || e.Kind != event.KindMessage {
 				return func() {}
 			}
 			tctx, stop := context.WithCancel(ctx)
@@ -133,7 +133,7 @@ func runCore(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	} else {
 		sender.Register(tr)
 		sink := acl.Filter(q.Put, logger)
-		components = append(components, component{"telegram", func(ctx context.Context) error {
+		components = append(components, component{telegram.Name, func(ctx context.Context) error {
 			err := tr.Run(ctx, sink)
 			if !errors.Is(err, telegram.ErrConflict) {
 				return err
@@ -182,7 +182,7 @@ func telegramPrivate(principal string) (transport, conv string, ok bool) {
 	if err != nil {
 		return "", "", false
 	}
-	return "telegram", telegram.ConvKey(id, 0), true
+	return telegram.Name, telegram.ConvKey(id, 0), true
 }
 
 // buildHandler returns the agent when a model catalogue is configured, and

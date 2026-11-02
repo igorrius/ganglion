@@ -134,7 +134,7 @@ func (l *List) Admins(ctx context.Context) ([]string, error) {
 // the transport offers the update again later.
 func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 	return func(ctx context.Context, e event.Event) error {
-		if e.Kind != "message" {
+		if e.Kind != event.KindMessage {
 			return next(ctx, e)
 		}
 		var m event.Message

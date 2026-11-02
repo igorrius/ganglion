@@ -47,25 +47,25 @@ policies and skills on it. The node is assembled in one place (`config`,
 | RSS idle / after 1,000 turns, peak (agent) | 26.4 / 34.3 MB, 34.9 MB | |
 | Lines of Go outside tests | 9,540 | |
 
-### Task 1: typed vocabulary
+### Task 1: typed vocabulary — done
 
 **Files:** `provider/provider.go`, `turns/turns.go`, `event/event.go`,
 `router/router.go`, `router/rules/*.go`, `agent/*.go`,
 `provider/claudecli/claudecli.go`, `provider/openai/client.go`,
 `transport/telegram/transport.go`, `core/*.go`, `access/access.go`
 
-- [ ] `provider.Role` with `RoleSystem`, `RoleUser`, `RoleAssistant`,
+- [x] `provider.Role` with `RoleSystem`, `RoleUser`, `RoleAssistant`,
   `RoleTool`. `Message.Role` takes this type; the JSON stays the same
   string.
-- [ ] `turns.Outcome` with `OutcomeOK`, `OutcomeStepLimit`,
+- [x] `turns.Outcome` with `OutcomeOK`, `OutcomeStepLimit`,
   `OutcomeDailyLimit`, `OutcomeNoModel`, `OutcomeCommand`, `OutcomeError`.
-- [ ] `event.Kind` with `KindMessage`, used by the agent, `core`, `access`
+- [x] `event.Kind` with `KindMessage`, used by the agent, `core`, `access`
   and the transport.
-- [ ] `router.Tier` with `TierCheap` and `TierSmart`. `router.TaskKind` for
+- [x] `router.Tier` with `TierCheap` and `TierSmart`. `router.TaskKind` for
   the task kinds (`message`, `compaction`).
-- [ ] A `Name` constant for the Telegram transport, used instead of
+- [x] A `Name` constant for the Telegram transport, used instead of
   `"telegram"` in `node` and the transport.
-- [ ] `make check`; commit.
+- [x] `make check`; commit.
 
 ### Task 2: one source for shared knowledge
 

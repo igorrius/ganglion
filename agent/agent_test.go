@@ -235,7 +235,7 @@ func TestHistoryReachesTheModel(t *testing.T) {
 	msgs := e.smart.requests()[1].Messages
 	got := []string{}
 	for _, m := range msgs {
-		got = append(got, m.Role+":"+m.Content)
+		got = append(got, string(m.Role)+":"+m.Content)
 	}
 	want := "system:" + CoreRules + "\n\nSYS|user:Igor: первое|assistant:ok|user:Igor: второе"
 	if strings.Join(got, "|") != want {

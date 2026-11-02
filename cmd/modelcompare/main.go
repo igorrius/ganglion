@@ -59,10 +59,10 @@ type Result struct {
 func run(ctx context.Context, p provider.Provider, m router.Model, convs []Conversation, timeout time.Duration) Result {
 	res := Result{Model: m}
 	for _, c := range convs {
-		history := []provider.Message{{Role: "system", Content: agent.CoreRules + "\n\n" + agent.DefaultPersona}}
+		history := []provider.Message{{Role: provider.RoleSystem, Content: agent.CoreRules + "\n\n" + agent.DefaultPersona}}
 		var answers []Answer
 		for _, turn := range c.Turns {
-			history = append(history, provider.Message{Role: "user", Content: "Igor: " + turn})
+			history = append(history, provider.Message{Role: provider.RoleUser, Content: "Igor: " + turn})
 			callCtx, cancel := context.WithTimeout(ctx, timeout)
 			start := time.Now()
 			resp, err := p.Chat(callCtx, provider.ChatRequest{Model: m.Name, Messages: history})
@@ -73,7 +73,7 @@ func run(ctx context.Context, p provider.Provider, m router.Model, convs []Conve
 			} else {
 				a.Text = resp.Message.Content
 				a.CostUSD = (float64(resp.Usage.InputTokens)*m.Caps.PriceInMTok + float64(resp.Usage.OutputTokens)*m.Caps.PriceOutMTok) / 1e6
-				history = append(history, provider.Message{Role: "assistant", Content: resp.Message.Content})
+				history = append(history, provider.Message{Role: provider.RoleAssistant, Content: resp.Message.Content})
 			}
 			answers = append(answers, a)
 		}

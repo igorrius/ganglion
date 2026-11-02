@@ -87,22 +87,22 @@ func prompt(msgs []provider.Message) (system, stdin string) {
 	seenSystem := false
 	for _, m := range msgs {
 		switch m.Role {
-		case "system":
+		case provider.RoleSystem:
 			if !seenSystem {
 				system, seenSystem = m.Content, true
 				continue
 			}
 			head = append(head, m.Content)
-		case "user":
+		case provider.RoleUser:
 			parts = append(parts, "User: "+m.Content)
-		case "assistant":
+		case provider.RoleAssistant:
 			if m.Content != "" {
 				parts = append(parts, "Assistant: "+m.Content)
 			}
 			for _, tc := range m.ToolCalls {
 				parts = append(parts, fmt.Sprintf("Assistant called tool %s with %s", tc.Name, tc.Args))
 			}
-		case "tool":
+		case provider.RoleTool:
 			parts = append(parts, "Tool result: "+m.Content)
 		}
 	}
@@ -176,7 +176,7 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 	}
 	u := r.Usage
 	return provider.ChatResponse{
-		Message: provider.Message{Role: "assistant", Content: r.Result},
+		Message: provider.Message{Role: provider.RoleAssistant, Content: r.Result},
 		Usage: provider.Usage{
 			InputTokens:      u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens,
 			CacheReadTokens:  u.CacheReadInputTokens,

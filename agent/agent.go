@@ -140,7 +140,7 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, msgs []provider.M
 			continue
 		}
 		spanCtx, span := a.in.tracer.Start(ctx, "model.call", trace.WithAttributes(
-			attribute.String("provider", c.Provider), attribute.String("model", c.Model), attribute.String("task", task.Kind)))
+			attribute.String("provider", c.Provider), attribute.String("model", c.Model), attribute.String("task", string(task.Kind))))
 		callCtx, cancel := context.WithTimeout(spanCtx, a.cfg.CallTimeout)
 		started := time.Now()
 		resp, err := p.Chat(callCtx, provider.ChatRequest{Model: c.Model, Messages: msgs, Tools: tools})
@@ -172,7 +172,7 @@ func dayStart(t time.Time, loc *time.Location) time.Time {
 
 // Handle implements core.Handler.
 func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
-	if e.Kind != "message" {
+	if e.Kind != event.KindMessage {
 		return nil, queue.StateUpdate{}, nil
 	}
 	var m event.Message
@@ -189,7 +189,7 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 		st = State{V: StateVersion}
 	}
 	now := a.d.Now()
-	tr := &turnRecord{turns.Turn{EventID: e.ID, Conv: e.Conv, Principal: m.From, Started: now, Outcome: "ok"}}
+	tr := &turnRecord{turns.Turn{EventID: e.ID, Conv: e.Conv, Principal: m.From, Started: now, Outcome: turns.OutcomeOK}}
 	reply := func(text string) event.Outgoing {
 		return event.Outgoing{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv, Text: text, ReplyTo: m.Ref}
 	}
@@ -219,17 +219,17 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 	}
 
 	if alerts, over := a.overLimit(ctx, now, m.From, e.ID); over {
-		tr.Outcome = "daily_limit"
+		tr.Outcome = turns.OutcomeDailyLimit
 		return finish(append([]event.Outgoing{reply(replyDailyLimit)}, alerts...), st)
 	}
 
 	if st.Session == "" {
 		st.Session, st.Started = e.ID, now
 	}
-	user := provider.Message{Role: "user", Content: speaker(m) + ": " + m.Text}
-	msgs := []provider.Message{{Role: "system", Content: a.systemPrompt()}}
+	user := provider.Message{Role: provider.RoleUser, Content: speaker(m) + ": " + m.Text}
+	msgs := []provider.Message{{Role: provider.RoleSystem, Content: a.systemPrompt()}}
 	if st.Summary != "" {
-		msgs = append(msgs, provider.Message{Role: "system", Content: summaryPrefix + st.Summary})
+		msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: summaryPrefix + st.Summary})
 	}
 	msgs = append(msgs, st.Messages...)
 	msgs = append(msgs, user)
@@ -241,17 +241,17 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 	answer, lastText := "", ""
 	for tr.Steps < a.cfg.MaxSteps {
 		tr.Steps++
-		resp, ok := a.call(turnCtx, router.TaskReq{Kind: "message", Tools: len(tools) > 0}, msgs, tools, tr)
+		resp, ok := a.call(turnCtx, router.TaskReq{Kind: router.TaskMessage, Tools: len(tools) > 0}, msgs, tools, tr)
 		if ctx.Err() != nil {
 			return nil, queue.StateUpdate{}, ctx.Err() // shutting down: the event is offered again
 		}
 		if !ok {
-			tr.Outcome = "no_model"
+			tr.Outcome = turns.OutcomeNoModel
 			st.Messages, st.Last = append(st.Messages, user), now
 			return finish([]event.Outgoing{reply(replyNoModel)}, st)
 		}
 		msg := resp.Message
-		msg.Role = "assistant"
+		msg.Role = provider.RoleAssistant
 		msgs, added = append(msgs, msg), append(added, msg)
 		if msg.Content != "" {
 			lastText = msg.Content
@@ -270,12 +270,12 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 				result = "error: " + err.Error()
 			}
 			tr.Tools = append(tr.Tools, turns.ToolUse{Name: call.Name, OK: err == nil, Ms: time.Since(started).Milliseconds()})
-			res := provider.Message{Role: "tool", ToolCallID: call.ID, Content: result}
+			res := provider.Message{Role: provider.RoleTool, ToolCallID: call.ID, Content: result}
 			msgs, added = append(msgs, res), append(added, res)
 		}
 	}
 	if answer == "" {
-		tr.Outcome = "step_limit"
+		tr.Outcome = turns.OutcomeStepLimit
 		answer = lastText
 		if answer == "" {
 			answer = replyStepLimit
@@ -323,9 +323,9 @@ func (a *Agent) logTurn(ctx context.Context, tr *turnRecord) {
 		}
 	}
 	dur := tr.Finished.Sub(tr.Started)
-	a.in.turns.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", tr.Outcome)))
-	a.in.turnDur.Record(ctx, dur.Seconds(), metric.WithAttributes(attribute.String("outcome", tr.Outcome)))
-	trace.SpanFromContext(ctx).SetAttributes(attribute.String("outcome", tr.Outcome), attribute.Int("steps", tr.Steps))
+	a.in.turns.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", string(tr.Outcome))))
+	a.in.turnDur.Record(ctx, dur.Seconds(), metric.WithAttributes(attribute.String("outcome", string(tr.Outcome))))
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("outcome", string(tr.Outcome)), attribute.Int("steps", tr.Steps))
 	a.log.InfoContext(ctx, "agent: turn", "id", tr.EventID, "conv", tr.Conv, "principal", tr.Principal, "outcome", tr.Outcome,
 		"steps", tr.Steps, "model", model, "attempts", len(tr.Route), "tools", len(tr.Tools),
 		"in_tokens", tr.InputTokens, "cached_tokens", tr.CacheReadTokens, "out_tokens", tr.OutputTokens,

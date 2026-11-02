@@ -30,16 +30,16 @@ type ProviderDef struct {
 
 // ModelDef is a model in the catalogue.
 type ModelDef struct {
-	Provider  string  `yaml:"provider"`
-	Name      string  `yaml:"name"`
-	Tier      string  `yaml:"tier"`
-	Tools     bool    `yaml:"tools"`
-	Vision    bool    `yaml:"vision"`
-	Local     bool    `yaml:"local"`
-	Context   int     `yaml:"context"`
-	PriceIn   float64 `yaml:"price_in"`  // USD per million tokens
-	PriceOut  float64 `yaml:"price_out"` // USD per million tokens
-	LatencyMS int     `yaml:"latency_ms"`
+	Provider  string      `yaml:"provider"`
+	Name      string      `yaml:"name"`
+	Tier      router.Tier `yaml:"tier"`
+	Tools     bool        `yaml:"tools"`
+	Vision    bool        `yaml:"vision"`
+	Local     bool        `yaml:"local"`
+	Context   int         `yaml:"context"`
+	PriceIn   float64     `yaml:"price_in"`  // USD per million tokens
+	PriceOut  float64     `yaml:"price_out"` // USD per million tokens
+	LatencyMS int         `yaml:"latency_ms"`
 }
 
 // Catalog is the models file: which providers a node uses and their models
@@ -99,7 +99,7 @@ func LoadCatalog(r io.Reader) (Catalog, error) {
 			return Catalog{}, fmt.Errorf("%s: provider %q is not in providers", at, m.Provider)
 		case m.Name == "":
 			return Catalog{}, fmt.Errorf("%s: name is empty", at)
-		case m.Tier != "cheap" && m.Tier != "smart":
+		case m.Tier != router.TierCheap && m.Tier != router.TierSmart:
 			return Catalog{}, fmt.Errorf("%s: tier %q is not cheap or smart", at, m.Tier)
 		case seen[m.Provider+"/"+m.Name]:
 			return Catalog{}, fmt.Errorf("%s: duplicate model %s/%s", at, m.Provider, m.Name)

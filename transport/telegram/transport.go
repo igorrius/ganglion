@@ -36,6 +36,10 @@ const (
 	ReplyOff    ReplyMode = "off"
 )
 
+// Name is the transport's name: the Source of its events and the
+// Transport of messages for it.
+const Name = "telegram"
+
 // Transport is the Telegram transport.
 type Transport struct {
 	c           *client
@@ -120,7 +124,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 }
 
 // Name implements transport.Transport.
-func (t *Transport) Name() string { return "telegram" }
+func (t *Transport) Name() string { return Name }
 
 // Run implements transport.Transport. It polls updates and hands each
 // message to sink in order. The offset moves past an update only after
@@ -240,9 +244,9 @@ func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
 	return event.Event{
 		ID:      event.NewID(now),
 		IdemKey: "telegram:" + strconv.FormatInt(botID, 10) + ":" + strconv.FormatInt(u.UpdateID, 10),
-		Source:  "telegram",
+		Source:  Name,
 		Conv:    ConvKey(m.Chat.ID, thread),
-		Kind:    "message",
+		Kind:    event.KindMessage,
 		Payload: payload,
 		At:      at,
 	}, true

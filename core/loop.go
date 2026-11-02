@@ -149,7 +149,7 @@ func (l *Loop) turn(ctx context.Context, lease queue.Lease) {
 	e := lease.Event
 	log := l.log.With("id", e.ID, "kind", e.Kind, "conv", e.Conv)
 	ctx, span := l.tracer.Start(ctx, "turn", trace.WithAttributes(
-		attribute.String("event.id", e.ID), attribute.String("event.kind", e.Kind), attribute.Int("attempt", lease.Attempts)))
+		attribute.String("event.id", e.ID), attribute.String("event.kind", string(e.Kind)), attribute.Int("attempt", lease.Attempts)))
 	defer span.End()
 	if l.maxAttempts > 0 && lease.Attempts > l.maxAttempts {
 		l.givenUp.Add(ctx, 1)

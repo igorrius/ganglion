@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/turns"
 )
 
 //go:embed migrations/*.sql
@@ -43,7 +45,7 @@ func NewArchive(ctx context.Context, db *sql.DB) (*Archive, error) {
 
 func title(s State) string {
 	for _, m := range s.Messages {
-		if m.Role == "user" {
+		if m.Role == provider.RoleUser {
 			return truncate(m.Content, 60)
 		}
 	}
@@ -66,7 +68,7 @@ func (a *Archive) Put(ctx context.Context, conv string, s State, endedBy string)
 	}
 	turns := 0
 	for _, m := range s.Messages {
-		if m.Role == "user" {
+		if m.Role == provider.RoleUser {
 			turns++
 		}
 	}
@@ -164,11 +166,11 @@ func (a *Agent) sessions(ctx context.Context, e event.Event, st State, m event.M
 		if err := a.archive(ctx, e.Conv, st, "new"); err != nil {
 			return st, nil, false, err
 		}
-		tr.Outcome = "command"
+		tr.Outcome = turns.OutcomeCommand
 		// The next real message opens the session and sets its id and start.
 		return State{V: StateVersion}, []event.Outgoing{reply(replyNewSession)}, true, nil
 	case "/sessions", "/resume":
-		tr.Outcome = "command"
+		tr.Outcome = turns.OutcomeCommand
 		if a.d.Archive == nil {
 			return st, []event.Outgoing{reply(replyNoSessions)}, true, nil
 		}

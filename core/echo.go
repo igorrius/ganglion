@@ -12,7 +12,7 @@ import (
 // from. Other events, and messages whose payload cannot be read, get no
 // reply. It is the handler of M2; the agent replaces it in M3.
 func Echo(e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
-	if e.Kind != "message" {
+	if e.Kind != event.KindMessage {
 		return nil, queue.StateUpdate{}, nil
 	}
 	var m event.Message

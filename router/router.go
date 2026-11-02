@@ -9,15 +9,34 @@ import (
 	"time"
 )
 
+// Tier is a model's class in the catalogue.
+type Tier string
+
+// Tiers.
+const (
+	TierCheap Tier = "cheap"
+	TierSmart Tier = "smart"
+)
+
+// TaskKind is what a model is asked to do; the router picks the tier by it
+// when the task names none.
+type TaskKind string
+
+// Task kinds.
+const (
+	TaskMessage    TaskKind = "message"    // answer a person
+	TaskCompaction TaskKind = "compaction" // fold old history into a summary
+)
+
 // TaskReq is what a task needs from a model. Skills declare it in the
 // model block of their SKILL.md frontmatter.
 type TaskReq struct {
-	Tier    string // "cheap" or "smart"; empty lets the router decide
+	Tier    Tier // empty lets the router decide
 	Tools   bool
 	Context string // "short" or "long"
 	Vision  bool
 	Privacy string // "local-only" keeps the task off cloud models
-	Kind    string // event kind, e.g. "cron" or "message"
+	Kind    TaskKind
 }
 
 // ModelCaps are the tags the router filters and ranks a model by
@@ -37,7 +56,7 @@ type ModelCaps struct {
 type Model struct {
 	Provider string
 	Name     string
-	Tier     string // "cheap" | "smart"
+	Tier     Tier
 	Caps     ModelCaps
 }
 

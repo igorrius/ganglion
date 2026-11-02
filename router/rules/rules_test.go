@@ -28,7 +28,7 @@ func (b *budget) SpentSince(_ context.Context, t time.Time) (float64, error) {
 	return b.usd, nil
 }
 
-func m(provider, name, tier string, caps router.ModelCaps) router.Model {
+func m(provider, name string, tier router.Tier, caps router.ModelCaps) router.Model {
 	return router.Model{Provider: provider, Name: name, Tier: tier, Caps: caps}
 }
 

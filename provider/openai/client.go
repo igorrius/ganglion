@@ -105,8 +105,8 @@ func toWire(req provider.ChatRequest) wireRequest {
 	w := wireRequest{Model: req.Model, MaxTokens: req.MaxTokens}
 	for _, m := range req.Messages {
 		content := m.Content
-		wm := wireMessage{Role: m.Role, Content: &content, ToolCallID: m.ToolCallID}
-		if m.Role == "assistant" && len(m.ToolCalls) > 0 && content == "" {
+		wm := wireMessage{Role: string(m.Role), Content: &content, ToolCallID: m.ToolCallID}
+		if m.Role == provider.RoleAssistant && len(m.ToolCalls) > 0 && content == "" {
 			wm.Content = nil
 		}
 		for _, tc := range m.ToolCalls {
@@ -174,7 +174,7 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 		return provider.ChatResponse{}, c.fail(provider.KindUnavailable, resp.StatusCode, 0, "unreadable answer")
 	}
 	wm := wr.Choices[0].Message
-	out := provider.Message{Role: "assistant"}
+	out := provider.Message{Role: provider.RoleAssistant}
 	if wm.Content != nil {
 		out.Content = *wm.Content
 	}

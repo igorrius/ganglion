@@ -16,7 +16,7 @@ func compactSplit(msgs []provider.Message, keep int) int {
 	if split <= 0 {
 		return 0
 	}
-	for split > 0 && msgs[split].Role == "tool" {
+	for split > 0 && msgs[split].Role == provider.RoleTool {
 		split--
 	}
 	return split
@@ -35,16 +35,16 @@ func (a *Agent) compact(ctx context.Context, st State, tr *turnRecord) State {
 	}
 	for _, m := range st.Messages[:split] {
 		switch {
-		case m.Role == "user":
+		case m.Role == provider.RoleUser:
 			b.WriteString("User: " + m.Content + "\n")
-		case m.Role == "assistant" && m.Content != "":
+		case m.Role == provider.RoleAssistant && m.Content != "":
 			b.WriteString("Assistant: " + m.Content + "\n")
-		case m.Role == "tool":
+		case m.Role == provider.RoleTool:
 			b.WriteString("Tool result: " + m.Content + "\n")
 		}
 	}
-	msgs := []provider.Message{{Role: "system", Content: compactPrompt}, {Role: "user", Content: b.String()}}
-	resp, ok := a.call(ctx, router.TaskReq{Tier: "cheap", Kind: "compaction"}, msgs, nil, tr)
+	msgs := []provider.Message{{Role: provider.RoleSystem, Content: compactPrompt}, {Role: provider.RoleUser, Content: b.String()}}
+	resp, ok := a.call(ctx, router.TaskReq{Tier: router.TierCheap, Kind: router.TaskCompaction}, msgs, nil, tr)
 	if !ok || strings.TrimSpace(resp.Message.Content) == "" {
 		a.log.Warn("agent: compaction failed; history kept", "conv", tr.Conv, "messages", len(st.Messages))
 		return st

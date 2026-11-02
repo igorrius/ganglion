@@ -12,10 +12,22 @@ import (
 	"encoding/json"
 )
 
+// Role is who wrote a message of the history. Roles are stored in
+// conversation state, so their values never change.
+type Role string
+
+// Roles.
+const (
+	RoleSystem    Role = "system"
+	RoleUser      Role = "user"
+	RoleAssistant Role = "assistant"
+	RoleTool      Role = "tool"
+)
+
 // Message is one entry of the provider-neutral history the core keeps
 // (R-AGT-2, ADR-0020).
 type Message struct {
-	Role       string     `json:"role"` // system | user | assistant | tool
+	Role       Role       `json:"role"`
 	Content    string     `json:"content,omitempty"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`   // assistant only
 	ToolCallID string     `json:"tool_call_id,omitempty"` // tool only: the call this result answers

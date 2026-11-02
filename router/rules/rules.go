@@ -68,7 +68,7 @@ func New(models []router.Model, opts ...Option) (*Router, error) {
 		o(r)
 	}
 	for _, m := range r.models {
-		if m.Tier != "cheap" && m.Tier != "smart" {
+		if m.Tier != router.TierCheap && m.Tier != router.TierSmart {
 			return nil, errors.New("rules: model " + m.Provider + "/" + m.Name + ": tier must be cheap or smart")
 		}
 	}
@@ -94,9 +94,9 @@ func price(m router.Model) float64 { return m.Caps.PriceInMTok + m.Caps.PriceOut
 func (r *Router) Route(ctx context.Context, t router.TaskReq) ([]router.Candidate, error) {
 	tier := t.Tier
 	if tier == "" {
-		tier = "cheap"
-		if t.Kind == "message" {
-			tier = "smart"
+		tier = router.TierCheap
+		if t.Kind == router.TaskMessage {
+			tier = router.TierSmart
 		}
 	}
 	overBudget := false
@@ -117,7 +117,7 @@ func (r *Router) Route(ctx context.Context, t router.TaskReq) ([]router.Candidat
 		if !fits(m, t) {
 			continue
 		}
-		if overBudget && t.Tier != "smart" && m.Tier == "smart" && price(m) > 0 && !m.Caps.Local {
+		if overBudget && t.Tier != router.TierSmart && m.Tier == router.TierSmart && price(m) > 0 && !m.Caps.Local {
 			continue
 		}
 		picked = append(picked, ranked{m, i})
