@@ -6,3 +6,6 @@
 .env
 docs/.obsidian/
 .ganglion/
+
+# Local model catalogues (provider keys stay in .env)
+models.local.yaml

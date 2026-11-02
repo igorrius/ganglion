@@ -1,0 +1,19 @@
+# Model catalogue for GANGLION_MODELS_FILE (docs/plans/p1-m3a-talking-agent.md,
+# ADR-0021). List one provider or several; the router ranks every model
+# and falls back across them. Keys never go here: key_env names the
+# variable (or <NAME>_FILE) that holds a provider's key.
+#
+# Tiers: people's messages try "smart" models first, crons and compaction
+# "cheap" first; the other tier is the fallback. Within a tier, cheaper
+# first. Subscription and local models cost 0 here.
+
+providers:
+  # The claude CLI installed and logged in on this machine (no key).
+  - {name: claude, type: claude-cli}
+  # Any OpenAI-compatible API; uncomment and set OPENROUTER_API_KEY in .env.
+  # - {name: openrouter, type: openai, base_url: https://openrouter.ai/api/v1, key_env: OPENROUTER_API_KEY}
+
+models:
+  - {provider: claude, name: haiku, tier: cheap, context: 200000}
+  - {provider: claude, name: sonnet, tier: smart, context: 200000}
+  # - {provider: openrouter, name: deepseek/deepseek-chat, tier: cheap, tools: true, context: 64000, price_in: 0.27, price_out: 1.1}
