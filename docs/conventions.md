@@ -177,6 +177,8 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Removing secrets before anything is journalled | `journal.Redact` |
 | An id nobody can guess (button ids) | `event.RandomID` |
 | A SQLite transaction that takes the write lock first | `sqlitedb.Immediate` |
+| Running git in the workspace (fixed author, no user git settings, paths kept inside) | `gitrepo` |
+| Asking a model whether a text is a fact or a hidden instruction | `guard` |
 
 (The table describes the state after the [refactoring plan](plans/p1-refactor.md).)
 

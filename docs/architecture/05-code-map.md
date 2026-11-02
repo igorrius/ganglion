@@ -19,7 +19,7 @@ interfaces only; **planned** — not in the repository yet.
 | Model providers: neutral messages, MCP tools, error kinds | `provider` | interface | 7.4 | [0007](../adr/0007-openai-compatible-first-provider.md), [0020](../adr/0020-neutral-history-as-conversation-state.md) |
 | OpenAI-compatible provider (OpenRouter, Ollama, …); fake API for tests | `provider/openai`, `provider/providertest` | done (P1 M3a) | 7.4 | [0007](../adr/0007-openai-compatible-first-provider.md) |
 | claude CLI as a conversation provider (`claude -p`, history on stdin) | `provider/claudecli` | done (P1 M3a) | 7.4 | [0021](../adr/0021-providers-chosen-by-the-operator-claude-cli-included.md) |
-| Model router: catalogue types, `Route`, `Report`; `Local`, the P1 tool placement (everything runs on this node) | `router` | interface; `Local` (P1 M3b task 5) | 7.3 | — |
+| Model router: catalogue types and task kinds (message, compaction, guard), `Route`, `Report`; `Local`, the P1 tool placement (everything runs on this node) | `router` | interface; `Local` (P1 M3b task 5) | 7.3 | — |
 | Rules router and YAML model catalogue: filters, tiers, budget, cooldown | `router/rules` | done (P1 M3a) | 7.3 | [0021](../adr/0021-providers-chosen-by-the-operator-claude-cli-included.md), [0022](../adr/0022-haiku-first-during-development.md) |
 | Turn trace: route, tools, tokens, cache, cost; daily totals | `turns` | done (P1 M3a) | 7.2 | — |
 | History (as conversation state), cron_runs | history in `agent`; `cron_runs` in `schedule` | history done (P1 M3a); cron_runs done (P1 M3b task 6) | 6 | [0020](../adr/0020-neutral-history-as-conversation-state.md) |
@@ -42,6 +42,8 @@ interfaces only; **planned** — not in the repository yet.
 | Secret source: the environment and `*_FILE` files; an encrypted store later | `secrets` | done (P1 refactor) | D-3 | [0029](../adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md) |
 | Shared helpers, not library API: backoff with jitter, rune truncation, plain transcript, start of day, URL normalisation | `internal/backoff`, `internal/text`, `internal/transcript`, `internal/clock`, `internal/urlnorm` | done (P1 refactor) | — | [0027](../adr/0027-written-go-conventions-and-lint-guardrails.md) |
 | Policies: a pure `Decide` over the tool's spec and the call (depth limit, admin-only, grant (web.fetch on its hosts, message.send to its reply target only), forbidden, side effect, tainted memory write, `message.send` elsewhere, unknown `web.fetch` URL); the middleware parks a confirm with the `Asker` (the question in the tool's words when it is a `tool.Questioner`, which may refuse an invalid call first) and returns its question in `Result.Out`, and refuses a forbidden or out-of-grant call, with one alert per task per day | `policy` | done (P1 M3b task 3); the `Asker` is `tool/pending` (task 4) | 7.6 | [0031](../adr/0031-agent-security-baseline.md), [0032](../adr/0032-buttons-and-resume.md) |
+| Workspace repository: `Open` (git init when the directory itself is not a repository), `Commit` of the given paths only (no change → the current commit), `Revert`, `Path` (refuses absolute, `..` and `.git` paths); the `git` binary with a fixed author, without the global, system or environment git settings; `ErrNoGit` | `gitrepo` | done (P1 M3b task 7) | 7.7 | [0033](../adr/0033-memory-in-the-workspace-git-with-the-git-binary.md) |
+| Clean-context check: a cheap model, one fixed prompt, the text wrapped as data, no tools, no history; verdict `{"ok","reason"}`; fails closed (`guard unavailable`, unparseable → not OK); facts (`CheckFact`) and persona files (`CheckPersona`) | `guard` | done (P1 M3b task 7) | 7.6 | [0034](../adr/0034-clean-context-guard.md) |
 | Memory | — | planned (P1) | 7.7 | — |
 | Runner: wazero host, manifest, limits | `runner` | done (P0 spike, own ABI); supervisor and scheduler planned (P1) | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md), [0012](../adr/0012-yaml-manifests.md) |
 | Module-side kit: `Host`, wire types | `pdk` | done (P0) | 7.5 | [0011](../adr/0011-module-abi.md) |
@@ -84,6 +86,9 @@ flowchart BT
     builtinp --> schedulep
     builtinp --> pendingp
     builtinp --> journalp
+    guardp["guard"] --> router
+    guardp --> provider
+    guardp --> toolp
     agentp --> schedulep
     configp --> schedulep
     configp --> builtinp

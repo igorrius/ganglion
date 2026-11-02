@@ -250,7 +250,7 @@ starting point, not a decision.
 | D-2 | Telegram client: own minimal Bot API client, or a library | Decided: own ([ADR-0018](../adr/0018-own-telegram-bot-api-client.md)) | M2 |
 | D-5 | Sandbox for level-2 scripts | P1: subprocess, environment allowlist, timeout; Landlock or bubblewrap later (spec 11) | M3c |
 | D-6 | First cloud model for routine turns | Chosen on cost and quality of real turns (spec 11) | M3 |
-| D-7 | Git for memory and config: the `git` binary or go-git | The binary: smaller process (principle 8) | M3b |
+| D-7 | Git for memory and config: the `git` binary or go-git | The binary: smaller process (principle 8); measured in [ADR-0033](../adr/0033-memory-in-the-workspace-git-with-the-git-binary.md) (Proposed) | M3b |
 | D-3 | Node config and secrets | YAML, like manifests (ADR-0012), for the node config. Requirements: (1) three kinds of data — bootstrap (data directory, roles) from flags or environment; node config (chats, cells, modules, policies) as YAML in a git repo that the agent changes only with approval (M6); secrets never in the YAML; (2) secrets come through one secret-source interface: environment and `*_FILE` files (Docker and Kubernetes secrets) in P1, an encrypted store later; the runner's `secret.get` reads from it; (3) the same binary works on Railway, in Docker or Kubernetes and as a local install | M4 |
 | D-4 | The flow as a WASM module with cell host functions, or native Go | WASM module: it is the project's core hypothesis | M5 |
 

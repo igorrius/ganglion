@@ -26,6 +26,7 @@ type TaskKind string
 const (
 	TaskMessage    TaskKind = "message"    // answer a person
 	TaskCompaction TaskKind = "compaction" // fold old history into a summary
+	TaskGuard      TaskKind = "guard"      // the clean-context check of what the agent keeps (R-POL-7)
 )
 
 // TaskReq is what a task needs from a model. Skills declare it in the
