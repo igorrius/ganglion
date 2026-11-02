@@ -137,8 +137,8 @@ core start, database lock).
 ### M3 · The agent (spec 7.2–7.4, 7.6, 7.7)
 
 M3 is split in three; the split comes from the
-[M3b and M3c design](p1-m3b-m3c-design.md) of 2026-11-02 (spec 7.9–7.11
-and R-POL-6–8 were added for it). Step-by-step plans:
+[M3b and M3c design](p1-m3b-m3c-design.md) of 2026-11-02 (spec 7.10–7.11,
+R-OBS-5–7 and R-POL-6–8 were added for it). Step-by-step plans:
 - [M3a, the talking agent](p1-m3a-talking-agent.md): 3.1–3.4 and a live
   run that picks the first model;
 - [M3b, the agent works with the world](p1-m3b-agent-world.md): 3.5, 3.6

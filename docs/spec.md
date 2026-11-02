@@ -542,6 +542,9 @@ human); module install — tests + reviewer + admin.
     instruction, the schedule, the tools, the hosts `web.fetch` may reach
     and who receives the reply. The owner approves it once; the runs then
     need no presses.
+  - A run's own fetches taint its session (R-POL-6), but inside its grant
+    the run still needs no confirmation: the grant approved at creation
+    is the confirmation.
   - A run that needs anything outside its grant is denied, and the owner
     gets one notice with the reason, not a button on every run.
   - A task runs as its creator, with the creator's rights. Its
@@ -551,7 +554,8 @@ The rest of the baseline is in
 [ADR-0031](adr/0031-agent-security-baseline.md) (Proposed): no data out
 without confirmation (R-WEB-2), secrets redacted before any journal or
 log, least privilege, every decision journalled (R-OBS-5), and tools,
-memory and scheduled tasks for admins only in P1.
+memory and scheduled tasks for admins only in M3b; the family bot
+migration (M7) decides what `family` members get.
 
 ### 7.7. Memory
 
@@ -593,7 +597,7 @@ undone with `git revert`.
 |---|---|---|
 | Prompt injection | Confirmation of side effects; external text is data; tainted sessions, the clean-context check and grants (R-POL-6–8); the `web.fetch` URL rule (R-WEB-2); [ADR-0031](adr/0031-agent-security-baseline.md) | P1 |
 | Secret leakage | The model never sees secrets; modules get them via `secret.get` / env per manifest; secrets are redacted before the journal and logs, and the Bot API token is never logged | P1 |
-| A stranger messages the bot | `allowed` table with roles: the admin installs modules, others only ask; in P1 a `family` member gets conversation with no tools and no memory | P1 |
+| A stranger messages the bot | `allowed` table with roles: the admin installs modules, others only ask; in M3b a `family` member gets conversation with no tools and no memory, and the family bot migration (M7) decides family access | P1 |
 | Diagnostics expose the node | `ganglion mcp` opens no port: it runs over stdio and relies on the platform's authentication; read access to the data directory is read access to all history | P1 |
 | Infinite loop | R-AGT-4 | P1 |
 | Exhausted limits | Crons and consolidation on a cheap model; usage counter in `turns` | P1 |

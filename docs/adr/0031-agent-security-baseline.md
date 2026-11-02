@@ -131,7 +131,10 @@ Rules:
    content enters it: a page, a search result, a forwarded message, a
    scheduled task's fetch. It lasts until the session ends. In a tainted
    session these need the owner's confirmation: any side effect, any send
-   to anyone but the requester, any memory write.
+   to anyone but the requester, any memory write. The exception is a
+   scheduled task's run acting inside its grant (rule 6): its own fetches
+   taint its session, but the grant approved at creation is the
+   confirmation.
 2. **No data out without confirmation.** `message.send` to another chat,
    network from skill scripts, and `web.fetch` need confirmation.
    `web.fetch` runs without it only on URLs that came from the owner's
