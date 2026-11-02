@@ -542,3 +542,21 @@ func TestUnreadablePersonaFallsBackToDefault(t *testing.T) {
 		t.Fatal("the unreadable persona was not logged")
 	}
 }
+
+func TestRepliesCarryTheRef(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	ev := message("telegram:user:42", "Igor", "hi")
+	p, _ := json.Marshal(event.Message{Text: "hi", From: "telegram:user:42", Name: "Igor", Ref: "77"})
+	ev.Payload = p
+	if out := e.turn(t, ev); out[0].ReplyTo != "77" {
+		t.Fatalf("reply_to %q, want 77", out[0].ReplyTo)
+	}
+	e.smart.push(fail(provider.KindUnavailable))
+	e.cheap.push(fail(provider.KindUnavailable))
+	ev2 := message("telegram:user:42", "Igor", "again")
+	p2, _ := json.Marshal(event.Message{Text: "again", From: "telegram:user:42", Ref: "78"})
+	ev2.Payload = p2
+	if out := e.turn(t, ev2); out[0].ReplyTo != "78" {
+		t.Fatalf("the apology does not reply to its message: %q", out[0].ReplyTo)
+	}
+}

@@ -181,7 +181,7 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 	now := a.d.Now()
 	tr := &turnRecord{turns.Turn{EventID: e.ID, Conv: e.Conv, Principal: m.From, Started: now, Outcome: "ok"}}
 	reply := func(text string) event.Outgoing {
-		return event.Outgoing{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv, Text: text}
+		return event.Outgoing{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv, Text: text, ReplyTo: m.Ref}
 	}
 	finish := func(out []event.Outgoing, st State) ([]event.Outgoing, queue.StateUpdate, error) {
 		tr.Finished = a.d.Now()

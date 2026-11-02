@@ -34,5 +34,6 @@ type Outgoing struct {
 	Transport string // transport name, e.g. "telegram"
 	Conv      string // conversation the message belongs to
 	Text      string
-	Silent    bool // deliver without a notification sound
+	Silent    bool   // deliver without a notification sound
+	ReplyTo   string // a Message.Ref this answers; the transport decides whether to show it as a reply
 }

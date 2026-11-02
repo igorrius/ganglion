@@ -289,3 +289,25 @@ func TestGiveUpAfterMaxAttempts(t *testing.T) {
 		t.Fatalf("handler called %d times, want 2", n)
 	}
 }
+
+func TestTurnHook(t *testing.T) {
+	q := memQueue(t)
+	var started, stopped atomic.Int32
+	inTurn := make(chan bool, 1)
+	hook := func(context.Context, event.Event) func() {
+		started.Add(1)
+		return func() { stopped.Add(1) }
+	}
+	h := func(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		inTurn <- started.Load() == 1 && stopped.Load() == 0
+		return EchoHandler(ctx, e)
+	}
+	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler), WithTurnHook(hook)))
+	if err := q.Put(context.Background(), msgEvent("k1", "telegram:a", "x")); err != nil {
+		t.Fatal(err)
+	}
+	if !<-inTurn {
+		t.Fatal("the hook did not start before the handler")
+	}
+	eventually(t, "the hook stopped after the turn", func() bool { return stopped.Load() == 1 })
+}

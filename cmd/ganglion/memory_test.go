@@ -35,7 +35,7 @@ func TestMemoryAgent(t *testing.T) {
 	if err := os.WriteFile(catalog, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	measure(t, "agent", []string{"GANGLION_MODELS_FILE=" + catalog, "FAKE_KEY=sk-measure", "GANGLION_DAILY_TURNS=-1"})
+	measure(t, "agent", []string{"GANGLION_MODELS_FILE=" + catalog, "FAKE_KEY=sk-measure", "GANGLION_DAILY_TURNS=0"})
 }
 
 func measure(t *testing.T, label string, extraEnv []string) {

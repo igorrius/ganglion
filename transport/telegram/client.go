@@ -170,6 +170,15 @@ func (c *client) getUpdates(ctx context.Context, offset int64, timeout time.Dura
 	return ups, err
 }
 
+// sendChatAction shows an action such as "typing" in a chat for ~5 s.
+func (c *client) sendChatAction(ctx context.Context, chatID, threadID int64, action string) error {
+	return c.call(ctx, "sendChatAction", struct {
+		ChatID          int64  `json:"chat_id"`
+		MessageThreadID int64  `json:"message_thread_id,omitempty"`
+		Action          string `json:"action"`
+	}{chatID, threadID, action}, nil)
+}
+
 // sendMessage sends a text message.
 func (c *client) sendMessage(ctx context.Context, p sendParams) (message, error) {
 	var m message

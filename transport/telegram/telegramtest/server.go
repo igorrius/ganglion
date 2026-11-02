@@ -42,6 +42,15 @@ type Outgoing struct {
 	ThreadID int64
 	Text     string
 	Silent   bool
+	Entities string // the entities as sent, JSON; "" when none
+	ReplyTo  int64  // reply_parameters.message_id; 0 when not a reply
+}
+
+// ChatAction is one sendChatAction call.
+type ChatAction struct {
+	ChatID   int64
+	ThreadID int64
+	Action   string
 }
 
 type failure struct {
@@ -68,6 +77,7 @@ type Server struct {
 	notify     chan struct{}            // closed and replaced when a message arrives
 	threads    map[int64]map[int64]bool // chat → known forum topics
 	calls      map[string]int
+	actions    []ChatAction
 }
 
 // NewServer starts a fake Bot API for token (<bot_id>:<secret>). It is
@@ -154,6 +164,20 @@ func (s *Server) Confirmed() int64 {
 	return s.confirmed
 }
 
+// LastMessageID returns the message_id of the last message added.
+func (s *Server) LastMessageID() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.nextMsg
+}
+
+// ChatActions returns the sendChatAction calls received.
+func (s *Server) ChatActions() []ChatAction {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]ChatAction(nil), s.actions...)
+}
+
 // Calls returns how many times method was called with the right token.
 func (s *Server) Calls(method string) int {
 	s.mu.Lock()
@@ -216,6 +240,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.getUpdates(w, r, params)
 	case "sendMessage":
 		s.sendMessage(w, params)
+	case "sendChatAction":
+		var p struct {
+			ChatID          int64  `json:"chat_id"`
+			MessageThreadID int64  `json:"message_thread_id"`
+			Action          string `json:"action"`
+		}
+		raw, _ := json.Marshal(params)
+		_ = json.Unmarshal(raw, &p)
+		s.mu.Lock()
+		s.actions = append(s.actions, ChatAction{ChatID: p.ChatID, ThreadID: p.MessageThreadID, Action: p.Action})
+		s.mu.Unlock()
+		writeOK(w, true)
 	default:
 		writeErr(w, http.StatusNotFound, "Not Found", 0)
 	}
@@ -307,6 +343,14 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 		MessageThreadID     int64  `json:"message_thread_id"`
 		Text                string `json:"text"`
 		DisableNotification bool   `json:"disable_notification"`
+		Entities            []struct {
+			Type   string `json:"type"`
+			Offset int    `json:"offset"`
+			Length int    `json:"length"`
+		} `json:"entities"`
+		ReplyParameters *struct {
+			MessageID int64 `json:"message_id"`
+		} `json:"reply_parameters"`
 	}
 	raw, _ := json.Marshal(params)
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -329,7 +373,21 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 		writeErr(w, http.StatusBadRequest, "Bad Request: message is too long", 0)
 		return
 	}
-	s.sent = append(s.sent, Outgoing{ChatID: p.ChatID, ThreadID: p.MessageThreadID, Text: p.Text, Silent: p.DisableNotification})
+	units := len(utf16.Encode([]rune(p.Text)))
+	for _, e := range p.Entities {
+		if e.Type == "" || e.Offset < 0 || e.Length <= 0 || e.Offset+e.Length > units {
+			writeErr(w, http.StatusBadRequest, "Bad Request: can't parse entities", 0)
+			return
+		}
+	}
+	out := Outgoing{ChatID: p.ChatID, ThreadID: p.MessageThreadID, Text: p.Text, Silent: p.DisableNotification}
+	if len(p.Entities) > 0 {
+		out.Entities = string(params["entities"])
+	}
+	if p.ReplyParameters != nil {
+		out.ReplyTo = p.ReplyParameters.MessageID
+	}
+	s.sent = append(s.sent, out)
 	s.nextMsg++
 	msg := map[string]any{
 		"message_id": s.nextMsg,

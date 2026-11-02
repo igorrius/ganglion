@@ -314,3 +314,93 @@ func jsonNumber(v int64) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+func TestSendUsesEntities(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	if err := tr.Send(context.Background(), event.Outgoing{IdemKey: "k", Transport: "telegram", Conv: "telegram:42", Text: "**Привет**, мир"}); err != nil {
+		t.Fatal(err)
+	}
+	got := fake.Sent()[0]
+	if got.Text != "Привет, мир" || got.Entities != `[{"type":"bold","offset":0,"length":6}]` {
+		t.Fatalf("sent %+v", got)
+	}
+}
+
+func TestEventCarriesRef(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	c := &collector{}
+	run(t, newTransport(t, fake), c.sink)
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hi"})
+	eventually(t, "an event", func() bool { return len(c.got()) == 1 })
+	if ref := payload(t, c.got()[0]).Ref; ref != itoa(fake.LastMessageID()) {
+		t.Fatalf("ref %q, want the message id %d", ref, fake.LastMessageID())
+	}
+}
+
+func TestReplyModes(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mode   ReplyMode
+		chat   int64
+		second bool // a newer message arrives before the answer
+		want   bool
+	}{
+		{"auto, private, nothing newer", ReplyAuto, 42, false, false},
+		{"auto, private, a newer message", ReplyAuto, 42, true, true},
+		{"auto, group", ReplyAuto, -100, false, true},
+		{"always", ReplyAlways, 42, false, true},
+		{"off", ReplyOff, -100, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := telegramtest.NewServer(t, testToken)
+			tr, err := New(testToken, WithBaseURL(fake.URL()), WithPollTimeout(time.Second), WithReplyMode(tc.mode))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c := &collector{}
+			run(t, tr, c.sink)
+			fake.AddMessage(telegramtest.Incoming{ChatID: tc.chat, UserID: 42, Text: "first"})
+			n := 1
+			if tc.second {
+				fake.AddMessage(telegramtest.Incoming{ChatID: tc.chat, UserID: 42, Text: "second"})
+				n = 2
+			}
+			eventually(t, "the messages", func() bool { return len(c.got()) == n })
+			ref := payload(t, c.got()[0]).Ref
+			if err := tr.Send(context.Background(), event.Outgoing{IdemKey: "r", Transport: "telegram", Conv: c.got()[0].Conv, Text: "answer", ReplyTo: ref}); err != nil {
+				t.Fatal(err)
+			}
+			got := fake.Sent()[0].ReplyTo
+			if (got != 0) != tc.want || (tc.want && itoa(got) != ref) {
+				t.Fatalf("reply_to %d, want reply=%v to %s", got, tc.want, ref)
+			}
+		})
+	}
+}
+
+func TestOnlyTheFirstPartReplies(t *testing.T) {
+	tr := &Transport{}
+	long := strings.Repeat("слово ", 1000) + "\n\n" + strings.Repeat("ещё ", 1000)
+	parts := tr.Parts(event.Outgoing{IdemKey: "k", Text: long, ReplyTo: "5"})
+	if len(parts) < 2 || parts[0].ReplyTo != "5" || parts[1].ReplyTo != "" {
+		t.Fatalf("parts reply_to: %q, %q", parts[0].ReplyTo, parts[1].ReplyTo)
+	}
+}
+
+func TestTyping(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	tr.typingEvery = 50 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Millisecond)
+	tr.Typing(ctx, "telegram:-100/45")
+	cancel()
+	acts := fake.ChatActions()
+	if len(acts) < 3 || acts[0] != (telegramtest.ChatAction{ChatID: -100, ThreadID: 45, Action: "typing"}) {
+		t.Fatalf("chat actions %+v", acts)
+	}
+	time.Sleep(150 * time.Millisecond)
+	if n := len(fake.ChatActions()); n != len(acts) {
+		t.Fatalf("typing went on after ctx ended: %d → %d", len(acts), n)
+	}
+}

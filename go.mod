@@ -4,6 +4,7 @@ go 1.26.3
 
 require (
 	github.com/tetratelabs/wazero v1.12.0
+	github.com/yuin/goldmark v1.8.6
 	go.yaml.in/yaml/v3 v3.0.6
 	modernc.org/sqlite v1.60.1
 )

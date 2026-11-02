@@ -663,7 +663,7 @@ showed it raw.
   (the transport keeps the last message id per chat in memory).
   `reply_parameters` always carries `allow_sending_without_reply: true`.
   A split message replies with its first part only.
-- [ ] **Step 1: Write failing tests.** `TestRender` (a table: bold,
+- [x] **Step 1: Write failing tests.** `TestRender` (a table: bold,
   italic, nested bold+italic, strikethrough, inline code, fenced code with
   a language, a link, a heading, nested lists, a numbered list, a quote,
   a long quote → expandable, a table → pre, raw HTML shown as text, emoji
@@ -674,12 +674,14 @@ showed it raw.
   reply; group → reply; always; off); `TestTyping` (the fake counts
   `sendChatAction` calls; they stop when ctx ends); `TestTurnHook` in
   core; `TestAgentCopiesRef`.
-- [ ] **Step 2: Run** `go test ./transport/telegram/... ./core/ ./agent/` — FAIL.
-- [ ] **Step 3: Implement**; `node` wires the hook to `Typing` for
+- [x] **Step 2: Run** `go test ./transport/telegram/... ./core/ ./agent/` — FAIL.
+- [x] **Step 3: Implement**; `node` wires the hook to `Typing` for
   telegram events and reads `GANGLION_TELEGRAM_REPLY`.
-- [ ] **Step 4: Run** `go test -race ./...` and `make memory` — PASS; note
-  the binary size.
-- [ ] **Step 5: Commit** `transport/telegram: Markdown to entities, typing and replies`.
+- [x] **Step 4: Run** `go test -race ./...` and `make memory` — PASS; note
+  the binary size. Measured: binary 17.3 MB (16.4 MB before goldmark
+  v1.8.6, pinned to a release two months old); the agent 17.6 MB idle and
+  24.8 MB after 1,000 turns.
+- [x] **Step 5: Commit** `transport/telegram: Markdown to entities, typing and replies`.
 
 ### Task 10: live run, first model (D-6), docs
 

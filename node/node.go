@@ -100,9 +100,26 @@ func runCore(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	}
 
 	sender := outbox.NewSender(q, q.OutboxReady(), logger)
+	var tr *telegram.Transport
+	if cfg.BotToken != "" {
+		if tr, err = telegram.New(cfg.BotToken, telegram.WithBaseURL(cfg.BotAPIURL), telegram.WithLogger(logger),
+			telegram.WithReplyMode(telegram.ReplyMode(cfg.TelegramReply))); err != nil {
+			return err
+		}
+	}
 	handler, loopOpts, err := buildHandler(ctx, cfg.Agent, db, q, acl, logger)
 	if err != nil {
 		return err
+	}
+	if tr != nil {
+		loopOpts = append(loopOpts, core.WithTurnHook(func(ctx context.Context, e event.Event) func() {
+			if e.Source != "telegram" || e.Kind != "message" {
+				return func() {}
+			}
+			tctx, stop := context.WithCancel(ctx)
+			go tr.Typing(tctx, e.Conv)
+			return stop
+		}))
 	}
 	loop := core.NewLoop(q, q.InboxReady(), handler, logger, loopOpts...)
 	components := []component{
@@ -111,13 +128,9 @@ func runCore(ctx context.Context, cfg Config, logger *slog.Logger) error {
 		{"prune", func(ctx context.Context) error { return prune(ctx, q, logger) }},
 	}
 
-	if cfg.BotToken == "" {
+	if tr == nil {
 		logger.Warn("node: no TELEGRAM_BOT_TOKEN; the Telegram transport is off")
 	} else {
-		tr, err := telegram.New(cfg.BotToken, telegram.WithBaseURL(cfg.BotAPIURL), telegram.WithLogger(logger))
-		if err != nil {
-			return err
-		}
 		sender.Register(tr)
 		sink := acl.Filter(q.Put, logger)
 		components = append(components, component{"telegram", func(ctx context.Context) error {

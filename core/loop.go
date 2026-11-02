@@ -43,6 +43,7 @@ type Loop struct {
 	turnTimeout time.Duration
 	maxAttempts int
 	giveUp      func(e event.Event) []event.Outgoing
+	hook        func(ctx context.Context, e event.Event) (stop func())
 
 	wake chan struct{} // a worker that got an event wakes an idle one
 }
@@ -71,6 +72,12 @@ func WithTurnTimeout(d time.Duration) Option { return func(l *Loop) { l.turnTime
 // handler again. The default is DefaultMaxAttempts with no replies.
 func WithMaxAttempts(n int, giveUp func(e event.Event) []event.Outgoing) Option {
 	return func(l *Loop) { l.maxAttempts, l.giveUp = n, giveUp }
+}
+
+// WithTurnHook runs h when a turn starts and the stop it returns when the
+// turn ends; the node uses it to show "typing…" (ADR-0025).
+func WithTurnHook(h func(ctx context.Context, e event.Event) (stop func())) Option {
+	return func(l *Loop) { l.hook = h }
 }
 
 // NewLoop returns a loop over q. ready is signalled when an event is put
@@ -140,7 +147,12 @@ func (l *Loop) turn(ctx context.Context, lease queue.Lease) {
 		return
 	}
 	turnCtx, cancel := context.WithTimeout(ctx, l.turnTimeout)
+	stop := func() {}
+	if l.hook != nil {
+		stop = l.hook(turnCtx, e)
+	}
 	out, st, err := l.h(turnCtx, e)
+	stop()
 	cancel()
 	if err != nil {
 		if ctx.Err() == nil {

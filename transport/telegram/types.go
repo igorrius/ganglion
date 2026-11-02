@@ -38,8 +38,15 @@ type user struct {
 
 // sendParams are the parameters of sendMessage that we use.
 type sendParams struct {
-	ChatID              int64  `json:"chat_id"`
-	MessageThreadID     int64  `json:"message_thread_id,omitempty"`
-	Text                string `json:"text"`
-	DisableNotification bool   `json:"disable_notification,omitempty"`
+	ChatID              int64            `json:"chat_id"`
+	MessageThreadID     int64            `json:"message_thread_id,omitempty"`
+	Text                string           `json:"text"`
+	Entities            []entity         `json:"entities,omitempty"`
+	DisableNotification bool             `json:"disable_notification,omitempty"`
+	ReplyParameters     *replyParameters `json:"reply_parameters,omitempty"`
+}
+
+type replyParameters struct {
+	MessageID                int64 `json:"message_id"`
+	AllowSendingWithoutReply bool  `json:"allow_sending_without_reply"`
 }

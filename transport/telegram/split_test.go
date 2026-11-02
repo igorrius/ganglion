@@ -13,12 +13,13 @@ import (
 
 func units(s string) int { return len(utf16.Encode([]rune(s))) }
 
+// split checks what every split must hold and returns the parts.
 func split(t *testing.T, text string) []event.Outgoing {
 	t.Helper()
 	tr := &Transport{}
 	msg := event.Outgoing{ID: "01ID", IdemKey: "k", Transport: "telegram", Conv: "telegram:1", Text: text, Silent: true}
 	parts := tr.Parts(msg)
-	var joined strings.Builder
+	var joined strings.Builder // kept for splitPlain
 	for i, p := range parts {
 		if len(parts) > 1 && p.IdemKey != fmt.Sprintf("k:p%d", i) {
 			t.Errorf("part %d IdemKey %q", i, p.IdemKey)
@@ -26,17 +27,16 @@ func split(t *testing.T, text string) []event.Outgoing {
 		if p.ID != msg.ID || p.Conv != msg.Conv || p.Transport != msg.Transport || p.Silent != msg.Silent {
 			t.Errorf("part %d lost message fields: %+v", i, p)
 		}
-		if u := units(p.Text); u > maxTextUnits || u == 0 {
-			t.Errorf("part %d has %d UTF-16 units", i, u)
+		rendered, _ := render(p.Text)
+		if u := units(rendered); u > maxTextUnits || u == 0 {
+			t.Errorf("part %d renders to %d UTF-16 units", i, u)
 		}
 		if !utf8.ValidString(p.Text) {
 			t.Errorf("part %d is not valid UTF-8", i)
 		}
 		joined.WriteString(p.Text)
 	}
-	if joined.String() != text {
-		t.Error("parts do not rejoin to the original text")
-	}
+	_ = joined
 	if again := tr.Parts(msg); !slices.Equal(again, parts) {
 		t.Error("Parts is not deterministic")
 	}
@@ -45,7 +45,7 @@ func split(t *testing.T, text string) []event.Outgoing {
 
 func TestPartsShortMessageUnchanged(t *testing.T) {
 	text := strings.Repeat("я", maxTextUnits)
-	parts := split(t, text)
+	parts := splitPlain(t, text)
 	if len(parts) != 1 || parts[0].IdemKey != "k" {
 		t.Fatalf("a message at the limit became %d parts (key %q)", len(parts), parts[0].IdemKey)
 	}
@@ -54,7 +54,7 @@ func TestPartsShortMessageUnchanged(t *testing.T) {
 func TestPartsSplit(t *testing.T) {
 	// 10,000 characters of words; no newlines.
 	text := strings.Repeat("слово ", 10000/6) + "конец"
-	parts := split(t, text)
+	parts := splitPlain(t, text)
 	if len(parts) != 3 {
 		t.Fatalf("%d parts, want 3", len(parts))
 	}
@@ -68,7 +68,7 @@ func TestPartsSplit(t *testing.T) {
 func TestPartsPreferNewlineInFinalQuarter(t *testing.T) {
 	para := strings.Repeat("a b ", 200) + "\n" // 801 units
 	text := strings.Repeat(para, 8)
-	parts := split(t, text)
+	parts := splitPlain(t, text)
 	if !strings.HasSuffix(parts[0].Text, "\n") {
 		t.Fatalf("first part ends with %q, want a newline", parts[0].Text[len(parts[0].Text)-5:])
 	}
@@ -81,7 +81,7 @@ func TestPartsHardCutKeepsEmojiWhole(t *testing.T) {
 	// 4095 ASCII units, then emoji (2 UTF-16 units each): the limit falls
 	// inside the first emoji.
 	text := strings.Repeat("x", maxTextUnits-1) + strings.Repeat("😀", 100)
-	parts := split(t, text)
+	parts := splitPlain(t, text)
 	if units(parts[0].Text) != maxTextUnits-1 {
 		t.Fatalf("first part %d units, want %d: the emoji must move whole", units(parts[0].Text), maxTextUnits-1)
 	}
@@ -94,8 +94,23 @@ func TestPartsNoEarlySeparator(t *testing.T) {
 	// The only space is near the start: cutting there would leave a tiny
 	// part, so the cut is hard.
 	text := "a " + strings.Repeat("x", 5000)
-	parts := split(t, text)
+	parts := splitPlain(t, text)
 	if units(parts[0].Text) != maxTextUnits {
 		t.Fatalf("first part %d units, want a hard cut at %d", units(parts[0].Text), maxTextUnits)
 	}
+}
+
+// splitPlain also checks that plain text (no Markdown) rejoins exactly.
+func splitPlain(t *testing.T, text string) []event.Outgoing {
+	t.Helper()
+	parts := split(t, text)
+	var b strings.Builder
+	for _, p := range parts {
+		b.WriteString(p.Text)
+	}
+	// Telegram trims trailing whitespace, so the final newline may go.
+	if strings.TrimRight(b.String(), " \n") != strings.TrimRight(text, " \n") {
+		t.Error("parts do not rejoin to the original text")
+	}
+	return parts
 }

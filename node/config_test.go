@@ -159,3 +159,15 @@ func TestMissingProviderKeyFailsAtStart(t *testing.T) {
 		t.Fatalf("missing key: %v", err)
 	}
 }
+
+func TestConfigTelegramReply(t *testing.T) {
+	for v, want := range map[string]string{"": "auto", "auto": "auto", "always": "always", "off": "off"} {
+		cfg, err := ConfigFromEnv(env(map[string]string{"GANGLION_TELEGRAM_REPLY": v}), files(nil))
+		if err != nil || cfg.TelegramReply != want {
+			t.Errorf("%q: %q, %v", v, cfg.TelegramReply, err)
+		}
+	}
+	if _, err := ConfigFromEnv(env(map[string]string{"GANGLION_TELEGRAM_REPLY": "sometimes"}), files(nil)); err == nil {
+		t.Error("a bad reply mode was accepted")
+	}
+}

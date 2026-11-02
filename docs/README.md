@@ -43,15 +43,17 @@ Start here when coming back to the project.
     turns trace; 24 MB RSS. Decisions: [ADR-0020](adr/0020-neutral-history-as-conversation-state.md)
     (history as conversation state), [ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)
     (operator-chosen providers, CLI included), [ADR-0022](adr/0022-haiku-first-during-development.md)
-    (Haiku first during development). Waiting for the owner's live run
-    (`make live-agent`).
+    (Haiku first during development), [ADR-0023](adr/0023-json-schemas-for-yaml-files.md)
+    (JSON Schemas for YAML files), [ADR-0024](adr/0024-persona-as-workspace-files.md)
+    (persona in workspace files), [ADR-0025](adr/0025-markdown-rendered-to-telegram-entities.md)
+    (Markdown rendered to Telegram entities; typing; replies). Run live
+    on the test bot by the owner; formatting checked after task 11.
 - **Next:** M3b — memory, tools and policies, skills, and the 3.8
   acceptance under the crash harness; planned after M3a's live run.
   - Scope stays one operator, one agent, one bot (spec 14).
   - Carried into M3b: a first-run "introduction" conversation that
     writes the persona ([ADR-0024](adr/0024-persona-as-workspace-files.md));
-    Telegram formatting for model answers (Markdown is shown as plain
-    text today); the current time in the last user message (the model
+    the current time in the last user message (the model
     does not know the date); tools for the claude CLI through MCP
     config; the depth limit (R-AGT-4) and tool placement (R-RTR-3).
   - Deferred minors from the reviews:
