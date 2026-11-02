@@ -1,47 +1,58 @@
 // Package provider defines model backends: an OpenAI-compatible client
 // first (which also covers Ollama), the Anthropic Messages API later, and
 // the claude CLI worker (docs/spec.md, section 7.4).
+//
+// The types here are the neutral history format of ADR-0020: each client
+// translates them to and from its wire format. Capabilities and prices are
+// per model and live in the router's catalogue.
 package provider
 
 import (
 	"context"
 	"encoding/json"
-	"time"
 )
 
-// ModelCaps are the tags the router filters and ranks models by
-// (R-RTR-1).
-type ModelCaps struct {
-	Tools         bool
-	Vision        bool
-	ContextTokens int
-	Local         bool    // data stays on the user's hardware
-	PriceInMTok   float64 // USD per million input tokens
-	PriceOutMTok  float64 // USD per million output tokens
-	Latency       time.Duration
-}
-
 // Message is one entry of the provider-neutral history the core keeps
-// (R-AGT-2).
+// (R-AGT-2, ADR-0020).
 type Message struct {
-	Role    string // "system", "user", "assistant", "tool"
-	Content string
+	Role       string     `json:"role"` // system | user | assistant | tool
+	Content    string     `json:"content,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`   // assistant only
+	ToolCallID string     `json:"tool_call_id,omitempty"` // tool only: the call this result answers
 }
 
-// Usage is what a call cost, recorded in the turns table.
+// ToolCall is the model asking to run a tool.
+type ToolCall struct {
+	ID   string          `json:"id"`
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args,omitempty"`
+}
+
+// Tool describes a tool in MCP's shape; clients translate it (R-PRV-3).
+type Tool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	InputSchema json.RawMessage `json:"inputSchema"`
+}
+
+// Usage is what a call cost, recorded in the turns table. The cache
+// counts are part of InputTokens.
 type Usage struct {
-	InputTokens  int
-	OutputTokens int
+	InputTokens      int
+	CacheReadTokens  int
+	CacheWriteTokens int
+	OutputTokens     int
 }
 
 // ChatRequest asks a model for the next step of a turn.
 type ChatRequest struct {
-	Model    string
-	Messages []Message
-	Tools    []json.RawMessage // MCP tool schemas; the provider translates them (R-PRV-3)
+	Model     string
+	Messages  []Message
+	Tools     []Tool
+	MaxTokens int // 0: the provider's default
 }
 
-// ChatResponse is the model's reply.
+// ChatResponse is the model's reply: text, tool calls, or both.
 type ChatResponse struct {
 	Message Message
 	Usage   Usage
@@ -50,6 +61,5 @@ type ChatResponse struct {
 // Provider is a model backend.
 type Provider interface {
 	Name() string
-	Caps() ModelCaps
 	Chat(ctx context.Context, req ChatRequest) (ChatResponse, error)
 }

@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo memory modules modules-tinygo modules-rust modrun modbench bench
+.PHONY: build test lint check live-echo live-agent compare memory modules modules-tinygo modules-rust modrun modbench bench
 
 build:
 	go build -ldflags "-X main.version=$(VERSION)" -o bin/ganglion ./cmd/ganglion
@@ -25,9 +25,32 @@ live-echo: build
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-echo: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
 	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) ./bin/ganglion --roles core
 
-# RSS of the echo bot, idle and after 1,000 messages through the fake Bot API.
+# The M3a agent on the test bot: live-echo plus a model catalogue
+# (models.local.yaml, git-ignored; see models.example.yaml) and the agent's
+# workspace (./workspace, git-ignored; copy examples/workspace for a
+# persona). Provider keys named by key_env come from .env.
+LIVE_MODELS ?= models.local.yaml
+LIVE_WORKSPACE ?= workspace
+
+live-agent: build
+	@test -f .env || { echo "live-agent: no .env (see docs/README.md, owner setup)"; exit 1; }
+	@test -f $(LIVE_MODELS) || { echo "live-agent: no $(LIVE_MODELS); copy models.example.yaml"; exit 1; }
+	@set -a; . ./.env; set +a; \
+	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-agent: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
+	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) \
+	GANGLION_MODELS_FILE=$(LIVE_MODELS) GANGLION_WORKSPACE=$(LIVE_WORKSPACE) ./bin/ganglion --roles core
+
+# Run the same conversations through several models of the catalogue and
+# write a report (D-6). COMPARE picks provider:model pairs; empty = all.
+COMPARE ?=
+compare:
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	go run ./cmd/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
+
+# RSS of the echo bot and of the agent on a fake model API, idle and after
+# 1,000 messages through the fake Bot API.
 memory:
-	GANGLION_MEASURE=1 go test -count=1 -run TestMemoryEcho -v ./cmd/ganglion/
+	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent)' -v ./cmd/ganglion/
 
 # The deye-reader module, built with three toolchains (Go, TinyGo, Rust) to
 # compare them (ADR-0011). TinyGo and Rust are optional, must be on PATH,

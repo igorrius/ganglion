@@ -57,6 +57,7 @@ func TestCrashHarness(t *testing.T) {
 		"TELEGRAM_BOT_TOKEN_FILE=",
 		"TELEGRAM_API_URL="+fake.URL(),
 		"GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID),
+		"GANGLION_METRICS_ADDR=127.0.0.1:0",
 	)
 
 	// Messages arrive gradually while the process is being killed: one

@@ -1,6 +1,6 @@
 # ADR-0009: Use a Claude subscription only through an unmodified claude CLI worker
 
-- **Status:** Accepted
+- **Status:** Accepted; the rule that conversation turns never use the subscription is superseded by [ADR-0021](0021-providers-chosen-by-the-operator-claude-cli-included.md)
 - **Date:** 2026-10-31
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.4](../spec.md#74-providers-and-model-access)

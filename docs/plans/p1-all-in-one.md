@@ -17,7 +17,7 @@ cells are what it perceives and acts on, modules are its reflexes, the
 inbox/outbox is its nervous system. In-process bus; SQLite for inbox/outbox,
 history and cells; WASM modules on the runner.
 
-**Tech stack:** Go 1.26, wazero 1.12 (own ABI), modernc.org/sqlite (WAL),
+**Tech stack:** Go 1.27 (1.26 until 2026-11-02), wazero 1.12 (own ABI), modernc.org/sqlite (WAL),
 Telegram Bot API, an OpenAI-compatible model API, YAML config.
 
 **Spec:** [spec](../spec.md) sections 6–8 and 10.2; ADRs
@@ -128,6 +128,23 @@ core start, database lock).
 
 ### M3 · The agent (spec 7.2–7.4, 7.6, 7.7)
 
+Step-by-step plans: [M3a, the talking agent](p1-m3a-talking-agent.md)
+(3.1–3.4 and a live run that picks the first model); M3b (memory, tools
+and policies, skills, 3.8 acceptance) is planned after M3a.
+
+**M3a built 2026-11-02**:
+- **Providers:** the operator chooses them (ADR-0021): OpenAI-compatible
+  APIs and the claude CLI.
+- **Router:** a rules router over a YAML catalogue.
+- **Agent:** fallback, step and daily limits, compaction and sessions,
+  with the turns trace.
+- **Turns:** parallel, with a timeout and give-up.
+- **First model:** Haiku through the CLI first, DeepSeek V4.1 Flash as the
+  fallback (ADR-0022).
+- **Memory:** the agent is 24.2 MB after 1,000 turns.
+
+Closed 2026-11-02 after the live run on the test bot.
+
 | Task | Done when |
 |---|---|
 | 3.1 History store and conversation actors: one turn at a time, timeout, cancel; provider-neutral history; compaction to a summary (R-AGT-1, 2) | Tests; concurrent messages in one chat are serialised |
@@ -143,7 +160,7 @@ core start, database lock).
 
 | Task | Done when |
 |---|---|
-| 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets through a secret source (environment and `*_FILE` first), never in the YAML; `GOMEMLIMIT` (R-RUN-6) | Config tests; a bad config fails at start with a clear message |
+| 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets through a secret source (environment and `*_FILE` first), never in the YAML; `GOMEMLIMIT` (R-RUN-6); a JSON Schema in `schemas/` kept in sync by a test ([ADR-0023](../adr/0023-json-schemas-for-yaml-files.md)) | Config tests; a bad config fails at start with a clear message |
 | 4.2 Scheduler: cron in Europe/Kyiv, `cron_runs` table, catch-up after downtime runs each missed job once; `idemKey` = job + scheduled time; the agent's `schedule.*` uses it | Tests across a DST change and a simulated downtime |
 | 4.3 Cell host functions for modules (`cell.get`, `cell.report`, `cell.set`), granted per cell in the manifest; `pdk` and `pdk/guest` updated | Runner conformance suite extended and green |
 | 4.4 Runner in `node.Run`: modules from config, triggered by the scheduler or called by the agent as tools (`deye.status`); optional `init` and `health` exports (spec 7.5); a minimal supervisor — backoff after failures, N failures in M minutes disable the module and emit `module.crashloop`; failures and `auth_failed` reach the agent as events; `cells.Reconcile` at start and periodically, `ExpireDue` on a short tick (M1 review) | `deye-reader` writes the `grid` and `soc` sensor cells on schedule; the agent answers "how is the battery?" through the tool; a failing probe module is disabled |

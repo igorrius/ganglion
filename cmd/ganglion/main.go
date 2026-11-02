@@ -14,8 +14,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/igorrius/ganglion/node"
+	"github.com/igorrius/ganglion/telemetry"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -32,6 +34,18 @@ func main() {
 		fmt.Fprintln(os.Stderr, "ganglion:", err)
 		os.Exit(1)
 	}
+}
+
+// logLevel reads GANGLION_LOG_LEVEL: debug, info (default), warn or error.
+func logLevel(s string) (slog.Level, error) {
+	if s == "" {
+		return slog.LevelInfo, nil
+	}
+	var l slog.Level
+	if err := l.UnmarshalText([]byte(s)); err != nil {
+		return 0, fmt.Errorf("GANGLION_LOG_LEVEL=%q is not debug, info, warn or error", s)
+	}
+	return l, nil
 }
 
 // run parses args, then runs the node until ctx is cancelled. Logs and the
@@ -58,6 +72,26 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	logger := slog.New(slog.NewTextHandler(out, nil)).With("version", version)
+	level, err := logLevel(os.Getenv("GANGLION_LOG_LEVEL"))
+	if err != nil {
+		return err
+	}
+	logger := slog.New(telemetry.LogHandler(slog.NewTextHandler(out, &slog.HandlerOptions{Level: level}))).With("version", version)
+
+	tel, err := telemetry.Setup(ctx, telemetry.Config{Addr: cfg.MetricsAddr, Service: "ganglion", Version: version})
+	if err != nil {
+		// Watching the node must never stop it: run without metrics.
+		logger.Warn("telemetry: metrics are off", "addr", cfg.MetricsAddr, "err", err)
+		if tel, err = telemetry.Setup(ctx, telemetry.Config{Addr: "off", Service: "ganglion", Version: version}); err != nil {
+			return err
+		}
+	} else if a := tel.Addr(); a != "" {
+		logger.Info("telemetry: serving", "metrics", "http://"+a+"/metrics", "dashboard", "http://"+a+"/webmetrics/")
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tel.Shutdown(sctx)
+	}()
 	return node.Run(ctx, roles, cfg, logger)
 }

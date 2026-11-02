@@ -14,7 +14,7 @@ considered, how they compare, the decision and its consequences. See
 | [0006](0006-sqlite-inside-nats-between-nodes.md) | SQLite inbox/outbox inside a node, NATS JetStream between nodes | Accepted | 2026-10-31 |
 | [0007](0007-openai-compatible-first-provider.md) | Start with an OpenAI-compatible provider client | Accepted | 2026-10-31 |
 | [0008](0008-agent-never-rebuilds-core.md) | The agent extends the system but never rebuilds the core | Accepted | 2026-10-31 |
-| [0009](0009-claude-subscription-only-via-cli-worker.md) | Use a Claude subscription only through an unmodified claude CLI worker | Accepted | 2026-10-31 |
+| [0009](0009-claude-subscription-only-via-cli-worker.md) | Use a Claude subscription only through an unmodified claude CLI worker | Accepted; conversation rule superseded by 0021 | 2026-10-31 |
 | [0010](0010-documentation-in-english.md) | Write all documentation in English | Accepted | 2026-11-01 |
 | [0011](0011-module-abi.md) | Module ABI — own host interface or Extism | Accepted: own ABI | 2026-11-01 |
 | [0012](0012-yaml-manifests.md) | Write module manifests in YAML, parsed strictly with go.yaml.in/yaml/v3 | Accepted | 2026-11-01 |
@@ -25,6 +25,13 @@ considered, how they compare, the decision and its consequences. See
 | [0017](0017-extension-points.md) | Map the extension points: the core keeps guarantees and trust, everything else is contributed | Accepted | 2026-11-02 |
 | [0018](0018-own-telegram-bot-api-client.md) | Use our own minimal Telegram Bot API client | Accepted | 2026-11-02 |
 | [0019](0019-release-leases-at-core-start.md) | Release inbox leases when a core starts; one core process owns a database file | Accepted | 2026-11-02 |
+| [0020](0020-neutral-history-as-conversation-state.md) | Keep history in our own neutral format, stored as the conversation state | Accepted | 2026-11-02 |
+| [0021](0021-providers-chosen-by-the-operator-claude-cli-included.md) | Let the operator choose one or more providers, the claude CLI included, for conversation | Accepted | 2026-11-02 |
+| [0022](0022-haiku-first-during-development.md) | During development, Haiku through the claude CLI answers first and DeepSeek V4.1 Flash is the fallback | Accepted | 2026-11-02 |
+| [0023](0023-json-schemas-for-yaml-files.md) | Publish JSON Schemas for ganglion's YAML files, kept in sync with the Go loaders by tests | Accepted | 2026-11-02 |
+| [0024](0024-persona-as-workspace-files.md) | Keep the agent's persona in Markdown files of the workspace; the core keeps only its rules in code | Accepted | 2026-11-02 |
+| [0025](0025-markdown-rendered-to-telegram-entities.md) | Agents write Markdown; the Telegram transport renders it to message entities with goldmark | Accepted | 2026-11-02 |
+| [0026](0026-opentelemetry-prometheus-and-promtop.md) | Instrument with OpenTelemetry; serve metrics to Prometheus with the promtop dashboard, export traces over OTLP | Accepted | 2026-11-02 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

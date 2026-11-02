@@ -15,6 +15,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/transport"
 )
 
@@ -450,6 +451,40 @@ func TestDefaultBackoff(t *testing.T) {
 			if d := DefaultBackoff(tc.attempt); d < tc.min || d > tc.max {
 				t.Fatalf("DefaultBackoff(%d) = %v, want in [%v, %v]", tc.attempt, d, tc.min, tc.max)
 			}
+		}
+	}
+}
+
+func TestSenderTelemetry(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	e := newEnv(t)
+	bad := out("telegram:c", "c1")
+	e.enqueue(t, out("telegram:a", "a1"), out("telegram:b", "b1"), bad)
+	tr := newFake(e.clock, func(m event.Outgoing, n int) error {
+		switch {
+		case m.IdemKey == "a1" && n == 0:
+			return &transport.RetryAfterError{After: time.Second}
+		case m.IdemKey == "b1" && n == 0:
+			return errors.New("timeout")
+		case m.IdemKey == "c1":
+			return fmt.Errorf("blocked: %w", transport.ErrPermanent)
+		}
+		return nil
+	})
+	e.start(t, tr, WithBackoff(func(int) time.Duration { return time.Second }))
+	e.runUntil(t, t0.Add(time.Minute), func() bool { return len(tr.delivered()) == 2 })
+	for _, c := range []struct {
+		name  string
+		attrs map[string]string
+		want  float64
+	}{
+		{"ganglion.outbox.sent", map[string]string{"transport": "telegram"}, 2},
+		{"ganglion.outbox.retries", map[string]string{"transport": "telegram", "kind": "retry_after"}, 1},
+		{"ganglion.outbox.retries", map[string]string{"transport": "telegram", "kind": "error"}, 1},
+		{"ganglion.outbox.failed", map[string]string{"transport": "telegram"}, 1},
+	} {
+		if got := rec.Value(t, c.name, c.attrs); got != c.want {
+			t.Errorf("%s %v = %v, want %v", c.name, c.attrs, got, c.want)
 		}
 	}
 }

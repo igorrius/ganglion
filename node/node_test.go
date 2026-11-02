@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 )
@@ -237,5 +239,31 @@ func TestSecondCoreOnSameDBRefused(t *testing.T) {
 	err := runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler)).result(t)
 	if err == nil || !strings.Contains(err.Error(), "another") || !strings.Contains(err.Error(), cfg.DB) {
 		t.Fatalf("second core on %s: %v, want a refusal naming the database", cfg.DB, err)
+	}
+}
+
+func TestAgentOverTelegram(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	model := providertest.NewServer(t, "sk-test")
+	model.Reply("Привет, Igor!")
+	catalog, err := rules.LoadCatalog(strings.NewReader("providers:\n  - {name: or, type: openai, base_url: " + model.URL() +
+		", key_env: OR_KEY}\nmodels:\n  - {provider: or, name: m1, tier: smart, tools: true, context: 64000}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := testConfig(t)
+	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
+	cfg.Agent = AgentConfig{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, DailyBudgetUSD: 1, TZ: time.UTC}
+	runNode(t, []Role{Core}, cfg, slog.New(slog.DiscardHandler))
+
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Name: "Igor", Text: "hi"})
+	eventually(t, "the model's reply", func() bool { return len(fake.Sent()) == 1 })
+	if got := fake.Sent()[0]; got.Text != "Привет, Igor!" || got.ChatID != 42 {
+		t.Fatalf("sent %+v", got)
+	}
+	reqs := model.Requests()
+	last := reqs[0].Messages[len(reqs[0].Messages)-1]
+	if reqs[0].Model != "m1" || last["content"] != "Igor: hi" {
+		t.Fatalf("model request %+v", reqs[0])
 	}
 }

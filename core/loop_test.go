@@ -14,6 +14,8 @@ import (
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func memQueue(t *testing.T) *sqlqueue.Queue {
@@ -153,7 +155,7 @@ func (c *countingQueue) count() int {
 func TestLoopWaitsOnReadyNotBusy(t *testing.T) {
 	q := memQueue(t)
 	cq := &countingQueue{Queue: q}
-	start(t, NewLoop(cq, q.InboxReady(), EchoHandler, slog.New(slog.DiscardHandler)))
+	start(t, NewLoop(cq, q.InboxReady(), EchoHandler, slog.New(slog.DiscardHandler), WithWorkers(1)))
 	eventually(t, "the first Lease", func() bool { return cq.count() >= 1 })
 	time.Sleep(300 * time.Millisecond)
 	if n := cq.count(); n != 1 {
@@ -186,4 +188,164 @@ func TestLoopKeepsOtherConversationsMoving(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventually(t, "the other conversation's echo", func() bool { return len(outbox(t, q)) == 1 })
+}
+
+func TestWorkersRunConversationsConcurrently(t *testing.T) {
+	q := memQueue(t)
+	release := make(chan struct{})
+	h := func(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		if e.Conv == "telegram:a" {
+			select {
+			case <-release:
+			case <-ctx.Done():
+			}
+		}
+		return EchoHandler(ctx, e)
+	}
+	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler), WithWorkers(4)))
+	ctx := context.Background()
+	if err := q.Put(ctx, msgEvent("a1", "telegram:a", "slow")); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.Put(ctx, msgEvent("b1", "telegram:b", "fast")); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "conv b answered while conv a is busy", func() bool {
+		ps := outbox(t, q)
+		return len(ps) == 1 && ps[0].Msg.Conv == "telegram:b"
+	})
+	close(release)
+	eventually(t, "conv a answered", func() bool { return len(outbox(t, q)) == 2 })
+}
+
+func TestOneConversationStaysSerial(t *testing.T) {
+	q := memQueue(t)
+	var alive, peak, done atomic.Int32
+	h := func(_ context.Context, _ event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		n := alive.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+		alive.Add(-1)
+		done.Add(1)
+		return nil, queue.StateUpdate{}, nil
+	}
+	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler), WithWorkers(4)))
+	for i := range 10 {
+		if err := q.Put(context.Background(), msgEvent("k"+string(rune('0'+i)), "telegram:a", "x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	eventually(t, "all ten handled", func() bool { return done.Load() == 10 })
+	if p := peak.Load(); p != 1 {
+		t.Fatalf("%d turns of one conversation ran at once", p)
+	}
+}
+
+func TestTurnTimeoutCancelsHandler(t *testing.T) {
+	q := memQueue(t)
+	got := make(chan error, 1)
+	h := func(ctx context.Context, _ event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		<-ctx.Done()
+		got <- ctx.Err()
+		return nil, queue.StateUpdate{}, ctx.Err()
+	}
+	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler), WithTurnTimeout(50*time.Millisecond)))
+	if err := q.Put(context.Background(), msgEvent("k1", "telegram:a", "x")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-got:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("handler ctx ended with %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the turn timeout did not cancel the handler")
+	}
+}
+
+func TestGiveUpAfterMaxAttempts(t *testing.T) {
+	q := memQueue(t)
+	var calls atomic.Int32
+	h := func(context.Context, event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		calls.Add(1)
+		return nil, queue.StateUpdate{}, errors.New("always fails")
+	}
+	giveUp := func(e event.Event) []event.Outgoing {
+		return []event.Outgoing{{IdemKey: e.IdemKey + ":give-up", Transport: "telegram", Conv: e.Conv, Text: "gave up"}}
+	}
+	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler),
+		WithLease(100*time.Millisecond), WithPoll(20*time.Millisecond), WithMaxAttempts(2, giveUp)))
+	if err := q.Put(context.Background(), msgEvent("k1", "telegram:a", "x")); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the give-up reply", func() bool {
+		ps := outbox(t, q)
+		return len(ps) == 1 && ps[0].Msg.Text == "gave up"
+	})
+	if n := calls.Load(); n != 2 {
+		t.Fatalf("handler called %d times, want 2", n)
+	}
+}
+
+func TestTurnHook(t *testing.T) {
+	q := memQueue(t)
+	var started, stopped atomic.Int32
+	inTurn := make(chan bool, 1)
+	hook := func(context.Context, event.Event) func() {
+		started.Add(1)
+		return func() { stopped.Add(1) }
+	}
+	h := func(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		inTurn <- started.Load() == 1 && stopped.Load() == 0
+		return EchoHandler(ctx, e)
+	}
+	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler), WithTurnHook(hook)))
+	if err := q.Put(context.Background(), msgEvent("k1", "telegram:a", "x")); err != nil {
+		t.Fatal(err)
+	}
+	if !<-inTurn {
+		t.Fatal("the hook did not start before the handler")
+	}
+	eventually(t, "the hook stopped after the turn", func() bool { return stopped.Load() == 1 })
+}
+
+func TestTurnSpanAndGiveUpMetric(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	q := memQueue(t)
+	inSpan := make(chan bool, 1)
+	h := func(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		if e.IdemKey == "k1" {
+			inSpan <- trace.SpanFromContext(ctx).SpanContext().IsValid()
+			return EchoHandler(ctx, e)
+		}
+		return nil, queue.StateUpdate{}, errors.New("always fails")
+	}
+	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler),
+		WithLease(100*time.Millisecond), WithPoll(20*time.Millisecond), WithMaxAttempts(1, nil)))
+	if err := q.Put(context.Background(), msgEvent("k1", "telegram:a", "x")); err != nil {
+		t.Fatal(err)
+	}
+	if !<-inSpan {
+		t.Fatal("the handler's context holds no span")
+	}
+	if err := q.Put(context.Background(), msgEvent("k2", "telegram:b", "y")); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the give-up metric", func() bool { return rec.Value(t, "ganglion.turns.given_up", nil) == 1 })
+	found := false
+	for _, s := range rec.Spans.Ended() {
+		for _, a := range s.Attributes() {
+			if s.Name() == "turn" && a.Key == "event.kind" && a.Value.AsString() == "message" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no turn span with event.kind")
+	}
 }

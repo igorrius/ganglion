@@ -15,6 +15,7 @@ import (
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 )
 
 var t0 = time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
@@ -162,5 +163,21 @@ func TestFilterPassesNextError(t *testing.T) {
 	sink := l.Filter(func(context.Context, event.Event) error { return boom }, slog.New(slog.DiscardHandler))
 	if err := sink(ctx, message("telegram:user:1", "", "hi")); !errors.Is(err, boom) {
 		t.Fatalf("Filter = %v, want next's error so the update is redelivered", err)
+	}
+}
+
+func TestFilterCountsDrops(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	l := newList(t)
+	sink := l.Filter((&recorder{}).sink, slog.New(slog.DiscardHandler))
+	_ = sink(context.Background(), message("telegram:user:666", "", "x"))
+	bad := message("telegram:user:1", "", "")
+	bad.Payload = json.RawMessage(`nope`)
+	_ = sink(context.Background(), bad)
+	if got := rec.Value(t, "ganglion.access.dropped", map[string]string{"reason": "stranger"}); got != 1 {
+		t.Errorf("stranger drops %v", got)
+	}
+	if got := rec.Value(t, "ganglion.access.dropped", map[string]string{"reason": "malformed"}); got != 1 {
+		t.Errorf("malformed drops %v", got)
 	}
 }

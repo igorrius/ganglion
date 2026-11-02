@@ -185,7 +185,7 @@ core process.
 | Memory | core | Facts, skills, semantic search; slices for edges | markdown in git; embeddings | P1 (files), P2 |
 | Core ↔ edge protocol | all | Registration, calls, events, modules, policies, context | envelope + MCP over NATS | P2 |
 | Bus | all | Delivery, buffering during outages, module object store | NATS: leaf node + JetStream | P2 |
-| Observability | all | Turn trace: input, route, tools, cost, reply | slog + `turns` table, later OpenTelemetry | P1 (logs) |
+| Observability | all | Turn trace: input, route, tools, cost, reply; metrics; traces | slog + `turns` table + OpenTelemetry (Prometheus `/metrics` with the promtop dashboard, OTLP traces) | P1 |
 
 ## 6. Key interfaces (draft)
 
@@ -220,9 +220,8 @@ type Queue interface {
 
 type Provider interface {
     Name() string
-    Caps() ModelCaps // tools, vision, context, local, price, latency
     Chat(ctx context.Context, req ChatRequest) (ChatResponse, error)
-}
+} // capabilities and prices are per model, in the router's catalogue (ADR-0020)
 
 type Router interface {
     // Ordered list of "provider + model" candidates.
@@ -274,6 +273,19 @@ Guarantee: **at-least-once + idempotency.**
   limit on turns and tokens; exceeding it alerts the administrator.
 - **R-AGT-5.** Every turn is written to the `turns` table: input, route, tool
   calls, cost, reply (a trace for observability and memory consolidation).
+- **R-AGT-6.** A conversation is split into sessions. A new session starts
+  on `/new` (or `/reset`) and on the first message after 6 hours of
+  silence (configurable). Ended sessions are archived with their summary
+  and messages. `/sessions` lists the last five, and `/resume <n>` brings
+  one back, archiving the current one. Facts that outlive a session live
+  in memory (7.7), not in history.
+- **R-AGT-7.** Who the agent is and how it talks is the operator's data,
+  not code. It is a set of Markdown files in the node's workspace
+  (`persona/*.md`), read every turn. The core adds only its own rules in
+  front: tool output is data, and the agent is honest about what it cannot
+  do. Without persona files a neutral default applies. A first-run
+  conversation that writes the persona comes with the agent's tools (M3b)
+  ([ADR-0024](adr/0024-persona-as-workspace-files.md)).
 
 ### 7.3. Model router
 
@@ -314,9 +326,15 @@ model:
   when needed.
 - **R-PRV-3.** Tools are described in MCP format; the core translates them
   into the specific API's schema.
-- **R-PRV-4.** The claude CLI worker runs an **unmodified** `claude -p`. It
-  suits standalone tasks (write a module, analyse logs), not conversation:
-  `--resume` does not work with history kept by the core.
+- **R-PRV-4.** The claude CLI runs **unmodified** as `claude -p`. As a
+  worker it does standalone tasks (write a module, analyse logs; P2). As a
+  conversation provider it gets the core's history in the prompt on every
+  call, with no session and no `--resume`
+  ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)).
+- **R-PRV-5.** The operator chooses the providers a node uses: one or
+  several, of any supported type (`openai`, `claude-cli`; `anthropic`
+  later), listed in the model catalogue. The router ranks and falls back
+  across all of them.
 
 Rules for access to Anthropic models (per
 [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance),
@@ -331,8 +349,10 @@ checked 2026-10-31):
 | A built-in "Sign in with Claude" | No |
 | One subscription worker serving other people's nodes | No |
 
-Routine work (conversation turns, crons, consolidation) goes to a cheap model
-over an API; the subscription is for the owner's heavy tasks.
+Routine work (conversation turns, crons, consolidation) goes to whatever
+the operator configured. A cheap API model is the recommendation; a
+subscription through the claude CLI is allowed for the owner's own node,
+within its limits (ADR-0009, ADR-0021).
 
 ### 7.5. Runner and WASM modules
 
@@ -465,8 +485,9 @@ undone with `git revert`.
   procedure, commit and re-index embeddings.
 - **R-MEM-2.** A dislike or a correction in chat flags the turn;
   consolidation handles flagged turns first.
-- **R-MEM-3.** Memory is markdown files compatible with the current bot
-  (migration without conversion).
+- **R-MEM-3.** Memory is Markdown files in the node's workspace, in git.
+  ganglion's formats are its own. Moving in from another assistant goes
+  through an importer that writes these files (spec 14).
 - **R-MEM-4.** P1 uses files; embedding search and edge slices are P2.
 
 ### 7.8. Security and operations (MVP)
@@ -480,6 +501,26 @@ undone with `git revert`.
 | Exhausted limits | Crons and consolidation on a cheap model; usage counter in `turns` | P1 |
 | Self-modification broke something | Regression scenarios (question → expected tool call) after every change | P3 |
 | Lost volume or corrupted DB | Daily backup of SQLite (`VACUUM INTO`) and the memory git repo to S3 or a private remote | P1 |
+
+### 7.9. Observability
+
+[ADR-0026](adr/0026-opentelemetry-prometheus-and-promtop.md).
+
+- **R-OBS-1.** The code is instrumented through the OpenTelemetry API:
+  - spans for a turn, a model call, a tool call, an outbox send and a
+    Telegram API call;
+  - metrics for turns, model calls, tokens, cost, sends, retries and
+    dropped messages.
+- **R-OBS-2.** Metrics are served in the Prometheus text format at
+  `/metrics` on a local address (`GANGLION_METRICS_ADDR`, default
+  `127.0.0.1:9464`). The promtop web dashboard is at `/webmetrics/`, for
+  localhost only.
+- **R-OBS-3.** Traces go out over OTLP/HTTP when the standard
+  `OTEL_EXPORTER_OTLP_ENDPOINT` (or `…_TRACES_ENDPOINT`) is set; otherwise
+  they are not recorded.
+- **R-OBS-4.** Logs are slog. A line written inside a span carries
+  `trace_id` and `span_id`. Message text and model output are never
+  logged, traced or exported as metric labels.
 
 ## 8. First flow: Deye and load shedding (P1)
 
@@ -787,8 +828,9 @@ fallback until the gate is passed.
 | Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Not chosen; P0 numbers (ADR-0011) favour Rust or TinyGo over standard Go | Start of P3: how reliably the model writes and fixes each, plus the P0 numbers |
 | Tuya access | Cloud · LAN | Cloud: the internet stays up during outages (0.7); LAN later with a home runner | P1, when the plugs are linked |
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
-| History and tool format | Own · Anthropic Messages · OpenAI | Neutral own format + MCP for tools | Two providers in P1 |
-| First API provider | Anthropic · Gemini · OpenAI-compatible | OpenAI-compatible | Price and quality of a cheap model on real turns |
+| History and tool format | Own · Anthropic Messages · OpenAI | Decided: neutral own format + MCP tool schemas ([ADR-0020](adr/0020-neutral-history-as-conversation-state.md)) | — |
+| First API provider | Anthropic · Gemini · OpenAI-compatible | Decided for development: the operator's choice ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)); Haiku via the claude CLI first, DeepSeek via OpenRouter as fallback ([ADR-0022](adr/0022-haiku-first-during-development.md)) | Revisit with more users or stronger tasks |
+| Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles (conversation, writing tools, analysis) | Not chosen | When a task needs a stronger model than the cheap tier |
 | Where nodes live | Cloud hosting · Pi · home PC | Edge in the cloud or on a Pi, claude CLI worker on the owner's PC | The P1 monthly bill |
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
 | Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Not chosen | What works in a container and on a Pi |
@@ -835,7 +877,6 @@ Reviewed at each gate.
 - Channels other than Telegram and MQTT; HTTP API; web UI.
 - Compiling flows into Home Assistant automations.
 - CBOR and microcontroller adapters.
-- OpenTelemetry instead of slog + `turns`.
 - An A2A endpoint on the core for external agents (after P3, ADR-0013).
 - Bot features contributed by tools and modules: commands, menus and
   buttons declared in the manifest in a channel-neutral form; a press is a
@@ -851,3 +892,41 @@ Reviewed at each gate.
   admin (the same idea as node enrolment with a one-time token, 9.3).
 - An encrypted secret store on the node's key, behind the secret source of
   D-3; secrets set and rotated without a restart.
+- Telegram, beyond formatting, typing and replies (ADR-0025). Each item
+  is to be checked against the Bot API docs of the day:
+  - a reaction on a message the agent has seen, useful in groups when
+    someone addresses the agent directly;
+  - streaming answers as they are generated (needs streaming providers
+    and must fit the outbox's delivery guarantee);
+  - per-group behaviour and limits in the node config.
+- Importers from popular assistants (OpenClaw first): persona, memory,
+  skills and settings turned into ganglion's workspace files, so their
+  users can move over (R-MEM-3, ADR-0024).
+- Audiences and several agents: a "family mode" with its own agent or
+  settings for a group of people, per-topic setups in Telegram forums,
+  sub-agents and parallel agents. Until there is a public repository
+  with install docs and settled processes, a node is one operator, one
+  agent, one bot (owner, 2026-11-02).
+- A decision model as a tool of the agent core: the owner's pick is
+  **Jev** by TypeSafe ([typesafe.ai](https://typesafe.ai/),
+  [docs](https://docs.typesafe.ai/)), a "System One" model.
+  - **What it answers:** typed questions about a given state (text or
+    JSON), without generating text. Three primitives:
+    - **Noul:** is a statement true, 0 to 1;
+    - **Score:** a rating on a rubric;
+    - **Choice:** an option from a list.
+  - **What it returns:** probabilities and a confidence. Several questions
+    go in one request and are evaluated in parallel.
+  - **Access:** its own API in early access, not OpenAI-compatible, so it
+    needs its own provider type. Pricing on 2026-10-28: $42 per billion
+    input tokens.
+  - **When it runs:** only when such a model is in the catalogue and the
+    operator allows it.
+  - **Likely uses:**
+    - the router's classifier (layer 4, P2);
+    - a cheap pre-check before the reviewer model (7.6);
+    - yes/no and rating checks inside skills and policies.
+  - Other decision models seen in October 2026: Strands Decider 2B (AWS,
+    open), the Decision 3.0 family, Liquid AI's d1.
+
+  Noted 2026-11-02.

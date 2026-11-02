@@ -14,15 +14,22 @@ interfaces only; **planned** — not in the repository yet.
 | `Event`, `Outgoing`, TTL expiry, ULID ids, the neutral `Message` payload | `event` | done | 6, 9.1 | — |
 | Transport interface, send errors (`ErrPermanent`, `RetryAfterError`), `Parter` | `transport` | interface | 6, 7.1 | [0017](../adr/0017-extension-points.md) |
 | Inbox / outbox: `Queue`, `Outbox` | `queue` | interface | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
-| Model providers | `provider` | interface | 7.4 | [0007](../adr/0007-openai-compatible-first-provider.md), [0009](../adr/0009-claude-subscription-only-via-cli-worker.md) |
-| Model router | `router` | interface | 7.3 | — |
-| Store (history, turns, cron_runs) | — | planned (P1) | 6 | — |
+| Model providers: neutral messages, MCP tools, error kinds | `provider` | interface | 7.4 | [0007](../adr/0007-openai-compatible-first-provider.md), [0020](../adr/0020-neutral-history-as-conversation-state.md) |
+| OpenAI-compatible provider (OpenRouter, Ollama, …); fake API for tests | `provider/openai`, `provider/providertest` | done (P1 M3a) | 7.4 | [0007](../adr/0007-openai-compatible-first-provider.md) |
+| claude CLI as a conversation provider (`claude -p`, history on stdin) | `provider/claudecli` | done (P1 M3a) | 7.4 | [0021](../adr/0021-providers-chosen-by-the-operator-claude-cli-included.md) |
+| Model router: catalogue types, `Route`, `Report` | `router` | interface | 7.3 | — |
+| Rules router and YAML model catalogue: filters, tiers, budget, cooldown | `router/rules` | done (P1 M3a) | 7.3 | [0021](../adr/0021-providers-chosen-by-the-operator-claude-cli-included.md), [0022](../adr/0022-haiku-first-during-development.md) |
+| Turn trace: route, tools, tokens, cache, cost; daily totals | `turns` | done (P1 M3a) | 7.2 | — |
+| History (as conversation state), cron_runs | history in `agent`; cron_runs planned (P1) | history done (P1 M3a) | 6 | [0020](../adr/0020-neutral-history-as-conversation-state.md) |
 | Access list: `allowed` table with roles; sink filter that drops strangers | `access` | done (P1 M2) | 7.8 | — |
 | SQLite queue: inbox (ordered leases, atomic `Complete`), outbox (heads per conversation, retries, parts), conversation state, prune | `queue/sqlqueue` | done (P1 M2) | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 | Outbox sender: order per conversation, backoff, `retry_after` pause, resumable parts | `outbox` | done (P1 M2) | 7.1 | — |
-| Telegram transport: own Bot API client, long polling (offset after the sink), conversation keys, send, split; fake Bot API for tests | `transport/telegram`, `transport/telegram/telegramtest` | done (P1 M2) | 7.1 | [0018](../adr/0018-own-telegram-bot-api-client.md) |
-| Turn loop: lease → handler → atomic complete; echo handler of M2 | `core` | done (P1 M2); the agent replaces `Echo` in M3 | 7.1, 7.2 | [0019](../adr/0019-release-leases-at-core-start.md) |
-| Agent loop and actors | — | planned (P1) | 7.2 | — |
+| Telegram transport: own Bot API client, long polling (offset after the sink), conversation keys, Markdown rendered to entities (goldmark), block-aware split, replies (auto/always/off), typing; fake Bot API for tests | `transport/telegram`, `transport/telegram/telegramtest` | done (P1 M2) | 7.1 | [0018](../adr/0018-own-telegram-bot-api-client.md) |
+| Turn loop: parallel workers, lease → handler → atomic complete, turn timeout, give up after max attempts; echo handler | `core` | done (P1 M2, workers M3a); the agent is the handler when a catalogue is set | 7.1, 7.2 | [0019](../adr/0019-release-leases-at-core-start.md) |
+| Agent: turn loop with fallback, step and daily limits, compaction, sessions (`/new`, idle, `/sessions`, `/resume`), core rules + persona from `workspace/persona/*.md` | `agent` | done (P1 M3a); tools, memory, depth limit, first-run introduction in M3b | 7.2 | [0020](../adr/0020-neutral-history-as-conversation-state.md), [0024](../adr/0024-persona-as-workspace-files.md) |
+| Compare models on scripted conversations (D-6 tool) | `cmd/modelcompare` | done (P1 M3a) | 7.4 | [0022](../adr/0022-haiku-first-during-development.md) |
+| Telemetry: OpenTelemetry setup, Prometheus `/metrics`, the promtop dashboard, OTLP traces, trace ids in logs; in-memory providers for tests | `telemetry`, `telemetry/telemetrytest` | done (P1) | 7.9 | [0026](../adr/0026-opentelemetry-prometheus-and-promtop.md) |
+| JSON Schemas of the YAML files (model catalogue, module manifest), embedded | `schemas` | done (P1 M3a); node config schema with D-3 in M4 | 7.3, 7.5 | [0023](../adr/0023-json-schemas-for-yaml-files.md) |
 | Policies | — | planned (P1) | 7.6 | — |
 | Memory | — | planned (P1) | 7.7 | — |
 | Runner: wazero host, manifest, limits | `runner` | done (P0 spike, own ABI); supervisor and scheduler planned (P1) | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md), [0012](../adr/0012-yaml-manifests.md) |
@@ -49,8 +56,22 @@ flowchart BT
     queue["queue"] --> event
     provider["provider"]
     router["router"]
+    openaip["provider/openai"] --> provider
+    claudecli["provider/claudecli"] --> provider
+    rulesp["router/rules"] --> router
+    rulesp --> provider
+    turnsp["turns"] --> sqlitedb
+    agentp["agent"] --> provider
+    agentp --> router
+    agentp --> turnsp
+    agentp --> queue
+    node --> agentp
+    node --> rulesp
+    node --> openaip
+    node --> claudecli
     node["node"]
     cmd["cmd/ganglion"] --> node
+    cmd --> telemetryp["telemetry"]
     corep["core"] --> queue
     corep --> event
     tgtest["transport/telegram/telegramtest"]

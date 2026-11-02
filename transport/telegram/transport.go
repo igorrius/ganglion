@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
@@ -24,6 +25,17 @@ var ErrConflict = errors.New("telegram: another poller or a webhook holds this b
 
 var tokenRE = regexp.MustCompile(`^[1-9][0-9]*:[A-Za-z0-9_-]+$`)
 
+// ReplyMode decides when an answer is sent as a reply to the person's
+// message (ADR-0025).
+type ReplyMode string
+
+// Reply modes.
+const (
+	ReplyAuto   ReplyMode = "auto"   // in groups, or when newer messages came after the one answered
+	ReplyAlways ReplyMode = "always" // every answer that has a ReplyTo
+	ReplyOff    ReplyMode = "off"
+)
+
 // Transport is the Telegram transport.
 type Transport struct {
 	c           *client
@@ -32,6 +44,12 @@ type Transport struct {
 	pollTimeout time.Duration
 	backoffMin  time.Duration
 	backoffMax  time.Duration
+	replyMode   ReplyMode
+	typingEvery time.Duration
+
+	mu     sync.Mutex
+	last   map[int64]int64 // chat → the newest incoming message id
+	groups map[int64]bool  // chats that are groups or supergroups
 }
 
 var (
@@ -45,6 +63,7 @@ type config struct {
 	now         func() time.Time
 	pollTimeout time.Duration
 	log         *slog.Logger
+	replyMode   ReplyMode
 }
 
 // Option configures a Transport.
@@ -64,6 +83,10 @@ func WithClock(now func() time.Time) Option { return func(c *config) { c.now = n
 // default is 50 s.
 func WithPollTimeout(d time.Duration) Option { return func(c *config) { c.pollTimeout = d } }
 
+// WithReplyMode sets when answers are sent as replies; the default is
+// ReplyAuto.
+func WithReplyMode(m ReplyMode) Option { return func(c *config) { c.replyMode = m } }
+
 // WithLogger sets the logger; the default discards.
 func WithLogger(l *slog.Logger) Option { return func(c *config) { c.log = l } }
 
@@ -75,7 +98,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 	if !tokenRE.MatchString(token) {
 		return nil, errors.New("telegram: token is not <bot_id>:<secret> (digits, a colon, then letters, digits, _ or -)")
 	}
-	cfg := config{now: time.Now, pollTimeout: pollTimeout, log: slog.New(slog.DiscardHandler)}
+	cfg := config{now: time.Now, pollTimeout: pollTimeout, log: slog.New(slog.DiscardHandler), replyMode: ReplyAuto}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -89,6 +112,10 @@ func New(token string, opts ...Option) (*Transport, error) {
 		pollTimeout: cfg.pollTimeout,
 		backoffMin:  time.Second,
 		backoffMax:  time.Minute,
+		replyMode:   cfg.replyMode,
+		typingEvery: 4 * time.Second,
+		last:        map[int64]int64{},
+		groups:      map[int64]bool{},
 	}, nil
 }
 
@@ -128,6 +155,7 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 		}
 		pollBackoff.reset()
 		for _, u := range ups {
+			t.seen(u)
 			if e, ok := t.toEvent(botID, u); ok {
 				if err := sink(ctx, e); err != nil {
 					if ctx.Err() != nil {
@@ -199,6 +227,7 @@ func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
 		Text: text,
 		From: Principal(m.From.ID),
 		Name: strings.TrimSpace(m.From.FirstName + " " + m.From.LastName),
+		Ref:  strconv.FormatInt(m.MessageID, 10),
 	})
 	if err != nil {
 		return event.Event{}, false // a struct of strings always marshals
@@ -228,11 +257,17 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", err, transport.ErrPermanent)
 	}
+	text, ents := render(msg.Text)
+	if strings.TrimSpace(text) == "" {
+		text, ents = msg.Text, nil // nothing visible left: send the source rather than nothing
+	}
 	_, err = t.c.sendMessage(ctx, sendParams{
 		ChatID:              chat,
 		MessageThreadID:     thread,
-		Text:                msg.Text,
+		Text:                text,
+		Entities:            ents,
 		DisableNotification: msg.Silent,
+		ReplyParameters:     t.replyTo(chat, msg.ReplyTo),
 	})
 	ae, ok := errors.AsType[*apiError](err)
 	if !ok {
@@ -245,6 +280,59 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 		return fmt.Errorf("%w: %w", err, transport.ErrPermanent)
 	}
 	return err
+}
+
+// seen records the newest message id and the kind of each chat, for
+// ReplyAuto.
+func (t *Transport) seen(u update) {
+	m := u.Message
+	if m == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.last[m.Chat.ID] = max(t.last[m.Chat.ID], m.MessageID)
+	if m.Chat.Type == "group" || m.Chat.Type == "supergroup" {
+		t.groups[m.Chat.ID] = true
+	}
+}
+
+// replyTo decides whether an answer quotes the message ref.
+func (t *Transport) replyTo(chat int64, ref string) *replyParameters {
+	id, err := strconv.ParseInt(ref, 10, 64)
+	if err != nil || id <= 0 || t.replyMode == ReplyOff {
+		return nil
+	}
+	if t.replyMode != ReplyAlways {
+		t.mu.Lock()
+		newer, group := t.last[chat] > id, t.groups[chat]
+		t.mu.Unlock()
+		if !newer && !group {
+			return nil
+		}
+	}
+	return &replyParameters{MessageID: id, AllowSendingWithoutReply: true}
+}
+
+// Typing shows "typing…" in conv until ctx ends, renewing it every few
+// seconds (Telegram shows it for about five). Errors are only logged.
+func (t *Transport) Typing(ctx context.Context, conv string) {
+	chat, thread, err := ParseConv(conv)
+	if err != nil {
+		return
+	}
+	tick := time.NewTicker(t.typingEvery)
+	defer tick.Stop()
+	for {
+		if err := t.c.sendChatAction(ctx, chat, thread, "typing"); err != nil && ctx.Err() == nil {
+			t.log.Debug("telegram: typing not shown", "conv", conv, "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
 }
 
 // backoff grows from min to max, doubling, with ±20% jitter.

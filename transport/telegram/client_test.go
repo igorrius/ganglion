@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 )
 
@@ -168,5 +169,34 @@ func TestClientAgainstFake(t *testing.T) {
 	var ae *apiError
 	if !errors.As(err, &ae) || ae.Code != 401 {
 		t.Fatalf("wrong token: %v, want 401", err)
+	}
+}
+
+func TestClientTelemetry(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	fake := telegramtest.NewServer(t, testToken)
+	c := newClient(fake.URL(), testToken, nil)
+	if _, err := c.getMe(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	fake.SetWebhook(true)
+	_, _ = c.getUpdates(context.Background(), 0, 0)
+	if got := rec.Value(t, "ganglion.telegram.api.duration", map[string]string{"method": "getMe", "code": "200"}); got != 1 {
+		t.Errorf("getMe 200: %v", got)
+	}
+	if got := rec.Value(t, "ganglion.telegram.api.duration", map[string]string{"method": "getUpdates", "code": "409"}); got != 1 {
+		t.Errorf("getUpdates 409: %v", got)
+	}
+	names := map[string]bool{}
+	for _, s := range rec.Spans.Ended() {
+		names[s.Name()] = true
+		for _, a := range s.Attributes() {
+			if strings.Contains(a.Value.String(), "secret_token") {
+				t.Fatalf("span %s carries the token", s.Name())
+			}
+		}
+	}
+	if !names["telegram getMe"] || !names["telegram getUpdates"] {
+		t.Fatalf("spans %v", names)
 	}
 }

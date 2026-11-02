@@ -34,14 +34,45 @@ Start here when coming back to the project.
     test bot. Decisions: [ADR-0018](adr/0018-own-telegram-bot-api-client.md)
     (own Bot API client), [ADR-0019](adr/0019-release-leases-at-core-start.md)
     (leases released at core start, database lock).
-- **Next:** the agent (M3), first after its foundations
-  ([ADR-0015](adr/0015-agent-first-p1.md)); it replaces `core.Echo`.
-  - Before M3's handler: a cap on attempts for a turn that always fails
-    (today it is retried every 10 minutes forever).
-  - Deferred minors from the M2 review: record a send's outcome with
-    `context.WithoutCancel` on shutdown; keep the seeded admin's name and
-    plan admin removal; do not end the node when the `409` alert cannot be
-    stored.
+  - M3a, the talking agent, built — `provider/openai`, `provider/claudecli`,
+    `router/rules`, `turns`, `agent`, core workers
+    ([plan](plans/p1-m3a-talking-agent.md)). The bot answers through
+    models the operator lists in a catalogue: Haiku through the claude CLI
+    first, DeepSeek V4.1 Flash on OpenRouter as the fallback. Sessions
+    (`/new`, idle reset, `/sessions`, `/resume`), daily limits, a
+    turns trace; 24 MB RSS. Decisions: [ADR-0020](adr/0020-neutral-history-as-conversation-state.md)
+    (history as conversation state), [ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)
+    (operator-chosen providers, CLI included), [ADR-0022](adr/0022-haiku-first-during-development.md)
+    (Haiku first during development), [ADR-0023](adr/0023-json-schemas-for-yaml-files.md)
+    (JSON Schemas for YAML files), [ADR-0024](adr/0024-persona-as-workspace-files.md)
+    (persona in workspace files), [ADR-0025](adr/0025-markdown-rendered-to-telegram-entities.md)
+    (Markdown rendered to Telegram entities; typing; replies). Run live
+    on the test bot by the owner; formatting checked after task 11.
+    Closed; the work after the M3a review (persona, schemas, formatting,
+    observability) has had no independent review yet.
+  - Observability ([plan](plans/p1-observability.md),
+    [ADR-0026](adr/0026-opentelemetry-prometheus-and-promtop.md)):
+    - one info log line per turn;
+    - OpenTelemetry metrics at `http://127.0.0.1:9464/metrics` with the
+      promtop dashboard at `/webmetrics/`;
+    - OTLP traces when `OTEL_EXPORTER_OTLP_ENDPOINT` is set;
+    - Go 1.27.3;
+    - the node is 33 MB on disk and 35 MB RSS after 1,000 turns.
+- **Next:** M3b — memory, tools and policies, skills, and the 3.8
+  acceptance under the crash harness; planned after M3a's live run.
+  - Scope stays one operator, one agent, one bot (spec 14).
+  - Carried into M3b: a first-run "introduction" conversation that
+    writes the persona ([ADR-0024](adr/0024-persona-as-workspace-files.md));
+    the current time in the last user message (the model
+    does not know the date); tools for the claude CLI through MCP
+    config; the depth limit (R-AGT-4) and tool placement (R-RTR-3).
+  - Deferred minors from the reviews:
+    - M2: record a send's outcome with `context.WithoutCancel` on
+      shutdown; keep the seeded admin's name and plan admin removal; do
+      not end the node when the `409` alert cannot be stored.
+    - M3a: move to goldmark v2 (`github.com/yuin/goldmark/v2`), where
+      upstream now lands some fixes first; remove or document `provider.Fallback`; clean up the claude
+      work dir; name people, not ids, in limit alerts.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

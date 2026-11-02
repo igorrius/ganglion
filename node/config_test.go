@@ -25,7 +25,7 @@ func TestConfigFromEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg != (Config{DB: "ganglion.db", BotAPIURL: "https://api.telegram.org"}) {
+	if cfg.DB != "ganglion.db" || cfg.BotAPIURL != "https://api.telegram.org" || cfg.BotToken != "" || cfg.Admin != "" {
 		t.Fatalf("defaults = %+v", cfg)
 	}
 	cfg, err = ConfigFromEnv(env(map[string]string{
@@ -37,9 +37,8 @@ func TestConfigFromEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Config{DB: "/data/g.db", BotToken: "7001:abc", BotAPIURL: "http://127.0.0.1:9", Admin: "telegram:user:123456"}
-	if cfg != want {
-		t.Fatalf("cfg = %+v, want %+v", cfg, want)
+	if cfg.DB != "/data/g.db" || cfg.BotToken != "7001:abc" || cfg.BotAPIURL != "http://127.0.0.1:9" || cfg.Admin != "telegram:user:123456" {
+		t.Fatalf("cfg = %+v", cfg)
 	}
 	for _, bad := range []string{"123456", "telegram:123456", "telegram:user:", "telegram:user:12 34", "@igor"} {
 		_, err := ConfigFromEnv(env(map[string]string{"GANGLION_ADMIN": bad}), files(nil))
@@ -90,5 +89,96 @@ func TestConfigTokenWhitespaceTrimmed(t *testing.T) {
 	cfg, err := ConfigFromEnv(env(map[string]string{"TELEGRAM_BOT_TOKEN": " 7001:abc\r\n"}), files(nil))
 	if err != nil || cfg.BotToken != "7001:abc" {
 		t.Fatalf("token %q, %v; want surrounding whitespace trimmed", cfg.BotToken, err)
+	}
+}
+
+const models = `
+providers:
+  - {name: claude, type: claude-cli}
+  - {name: openrouter, type: openai, base_url: https://openrouter.ai/api/v1, key_env: OPENROUTER_API_KEY}
+models:
+  - {provider: claude, name: haiku, tier: cheap, context: 200000}
+  - {provider: openrouter, name: some/model, tier: cheap, tools: true, context: 64000, price_in: 0.3, price_out: 1.2}
+`
+
+func TestConfigAgent(t *testing.T) {
+	cfg, err := ConfigFromEnv(env(nil), files(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := cfg.Agent
+	if a.Catalog != nil || a.DailyBudgetUSD != 1.0 || a.TZ == nil || a.TZ.String() != "Europe/Kyiv" || a.Workspace != "workspace" {
+		t.Fatalf("agent defaults %+v", a)
+	}
+	cfg, err = ConfigFromEnv(env(map[string]string{
+		"GANGLION_MODELS_FILE":      "/etc/ganglion/models.yaml",
+		"GANGLION_WORKSPACE":        "/var/lib/ganglion",
+		"OPENROUTER_API_KEY_FILE":   "/run/secrets/or",
+		"GANGLION_DAILY_BUDGET_USD": "2.5",
+		"GANGLION_DAILY_TURNS":      "100",
+		"GANGLION_DAILY_TOKENS":     "500000",
+		"GANGLION_SESSION_IDLE":     "4h",
+		"GANGLION_TZ":               "UTC",
+	}), files(map[string]string{
+		"/etc/ganglion/models.yaml": models,
+		"/run/secrets/or":           "sk-or-secret\n",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a = cfg.Agent
+	if a.Catalog == nil || len(a.Catalog.Models) != 2 || a.Keys["openrouter"] != "sk-or-secret" || a.Keys["claude"] != "" ||
+		a.Workspace != "/var/lib/ganglion" || a.DailyBudgetUSD != 2.5 || a.DailyTurns != 100 || a.DailyTokens != 500000 ||
+		a.SessionIdle.Hours() != 4 || a.TZ.String() != "UTC" {
+		t.Fatalf("agent config %+v", a)
+	}
+	for _, bad := range []map[string]string{
+		{"GANGLION_TZ": "Mars/Base"},
+		{"GANGLION_DAILY_BUDGET_USD": "-1"},
+		{"GANGLION_DAILY_BUDGET_USD": "lots"},
+		{"GANGLION_DAILY_TURNS": "many"},
+		{"GANGLION_SESSION_IDLE": "soon"},
+		{"GANGLION_MODELS_FILE": "/missing.yaml"},
+	} {
+		if _, err := ConfigFromEnv(env(bad), files(nil)); err == nil {
+			t.Errorf("%v accepted", bad)
+		}
+	}
+	if cfg, err := ConfigFromEnv(env(map[string]string{"GANGLION_DAILY_TURNS": "0", "GANGLION_DAILY_TOKENS": "0"}), files(nil)); err != nil ||
+		cfg.Agent.DailyTurns >= 0 || cfg.Agent.DailyTokens >= 0 {
+		t.Errorf("0 must turn the daily limits off: %+v, %v", cfg.Agent, err)
+	}
+	if cfg, err := ConfigFromEnv(env(map[string]string{"GANGLION_SESSION_IDLE": "off"}), files(nil)); err != nil || cfg.Agent.SessionIdle >= 0 {
+		t.Errorf("idle off: %v, %v", cfg.Agent.SessionIdle, err)
+	}
+}
+
+func TestMissingProviderKeyFailsAtStart(t *testing.T) {
+	_, err := ConfigFromEnv(env(map[string]string{"GANGLION_MODELS_FILE": "/m.yaml"}), files(map[string]string{"/m.yaml": models}))
+	if err == nil || !strings.Contains(err.Error(), "OPENROUTER_API_KEY") || !strings.Contains(err.Error(), "openrouter") {
+		t.Fatalf("missing key: %v", err)
+	}
+}
+
+func TestConfigTelegramReply(t *testing.T) {
+	for v, want := range map[string]string{"": "auto", "auto": "auto", "always": "always", "off": "off"} {
+		cfg, err := ConfigFromEnv(env(map[string]string{"GANGLION_TELEGRAM_REPLY": v}), files(nil))
+		if err != nil || cfg.TelegramReply != want {
+			t.Errorf("%q: %q, %v", v, cfg.TelegramReply, err)
+		}
+	}
+	if _, err := ConfigFromEnv(env(map[string]string{"GANGLION_TELEGRAM_REPLY": "sometimes"}), files(nil)); err == nil {
+		t.Error("a bad reply mode was accepted")
+	}
+}
+
+func TestConfigMetricsAddr(t *testing.T) {
+	cfg, err := ConfigFromEnv(env(nil), files(nil))
+	if err != nil || cfg.MetricsAddr != "127.0.0.1:9464" {
+		t.Fatalf("default %q, %v", cfg.MetricsAddr, err)
+	}
+	cfg, _ = ConfigFromEnv(env(map[string]string{"GANGLION_METRICS_ADDR": "off"}), files(nil))
+	if cfg.MetricsAddr != "off" {
+		t.Fatalf("off: %q", cfg.MetricsAddr)
 	}
 }
