@@ -173,6 +173,24 @@ func TestRunRecordedButNotPutIsPutAgain(t *testing.T) {
 	}
 }
 
+// A job whose event cannot be put does not hold back the others.
+func TestOneFailingJobDoesNotHoldBackOthers(t *testing.T) {
+	e := newEnv(t)
+	e.create(t, task("j1", "0 * * * *"))
+	e.create(t, task("j2", "0 * * * *"))
+	e.now = t0.Add(time.Hour)
+	e.q.fail = errors.New("disk full")
+	if err := e.sched.Tick(context.Background()); err == nil {
+		t.Fatal("the failure was not reported")
+	}
+	if got := e.q.take(); len(got) != 1 || got[0].Conv != "task:j2" {
+		t.Fatalf("events %+v, want j2's", got)
+	}
+	if got := e.tick(t); len(got) != 1 || got[0].Conv != "task:j1" {
+		t.Fatalf("the next tick: %+v, want j1's", got)
+	}
+}
+
 func TestDeletedJobDoesNotFire(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -238,9 +256,21 @@ func TestRunNowKey(t *testing.T) {
 		payload(t, got[0]) != (event.Schedule{Job: "j1", Scheduled: t0.UnixMilli()}) {
 		t.Fatalf("events %+v, want key %s", got, want)
 	}
-	// The same moment again is the same run.
-	if err := e.sched.RunAt(ctx, "j1", owner, t0); err != nil || len(e.q.take()) != 0 {
-		t.Fatalf("run at the same moment: %v", err)
+	// The same token is the same run; a caller that is rerun passes its
+	// own stable token.
+	if err := e.sched.RunKey(ctx, "j1", owner, strconv.FormatInt(t0.UnixMilli(), 10)); err != nil || len(e.q.take()) != 0 {
+		t.Fatalf("run with the same token: %v", err)
+	}
+	for range 2 {
+		if err := e.sched.RunKey(ctx, "j1", owner, "01CALL:3"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := e.q.take(); len(got) != 1 || got[0].IdemKey != "cron:j1:now:01CALL:3" {
+		t.Fatalf("run by token: %+v", got)
+	}
+	if err := e.sched.RunKey(ctx, "j1", owner, ""); !errors.Is(err, schedule.ErrInvalid) {
+		t.Fatalf("no token: %v", err)
 	}
 	if err := e.sched.RunNow(ctx, "j1", "telegram:user:7"); !errors.Is(err, schedule.ErrNotFound) {
 		t.Fatalf("someone else's job: %v", err)

@@ -177,7 +177,8 @@ func (s *Scheduler) Run(ctx context.Context) error {
 // Tick puts the events that are due: first those of runs recorded but
 // not put (a crash in between), then for each job at most one, for the
 // latest of its slots that came since its last run. That is the catch-up
-// rule: after downtime each missed job runs once (R-SCH-1).
+// rule: after downtime each missed job runs once (R-SCH-1). The error
+// joins the failures of the jobs that could not fire.
 func (s *Scheduler) Tick(ctx context.Context) error {
 	now := s.now()
 	if err := s.putUnput(ctx, now); err != nil {
@@ -187,16 +188,19 @@ func (s *Scheduler) Tick(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	var errs []error
 	for _, a := range jobs {
 		slot, ok := s.due(a, now)
 		if !ok {
 			continue
 		}
+		// One job that fails does not hold back the others; the next
+		// tick tries it again.
 		if err := s.fire(ctx, a.Job, slot, now); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // due is the slot a job runs for now: the latest one at or before now
@@ -255,15 +259,18 @@ func (s *Scheduler) put(ctx context.Context, j Job, key string, slot, now time.T
 }
 
 // RunNow puts an event that runs task id of owner now, outside its
-// schedule. ErrNotFound for a job that is not owner's or is deleted,
-// ErrNotTask for a reminder.
+// schedule, keyed by the current time. ErrNotFound for a job that is not
+// owner's or is deleted, ErrNotTask for a reminder. A caller that may be
+// rerun uses RunKey.
 func (s *Scheduler) RunNow(ctx context.Context, id, owner string) error {
-	return s.RunAt(ctx, id, owner, s.now())
+	return s.RunKey(ctx, id, owner, strconv.FormatInt(s.now().UnixMilli(), 10))
 }
 
-// RunAt is RunNow for a run asked at at: the same at is the same run, so
-// a caller that is rerun asks once. The key is "cron:<id>:now:<unix ms>".
-func (s *Scheduler) RunAt(ctx context.Context, id, owner string, at time.Time) error {
+// RunKey is RunNow for the run named by token, such as the key of the
+// confirmed call or the id of the press that asked for it: the same token
+// is the same run, so a rerun caller starts it once. The event's key is
+// "cron:<id>:now:<token>".
+func (s *Scheduler) RunKey(ctx context.Context, id, owner, token string) error {
 	j, err := s.st.Get(ctx, id)
 	switch {
 	case err != nil:
@@ -273,8 +280,11 @@ func (s *Scheduler) RunAt(ctx context.Context, id, owner string, at time.Time) e
 	case j.Kind != KindTask:
 		return fmt.Errorf("schedule: run %s: %w", id, ErrNotTask)
 	}
-	key := "cron:" + id + ":now:" + strconv.FormatInt(at.UnixMilli(), 10)
-	if err := s.q.Put(ctx, jobEvent(j, key, at, s.now())); err != nil {
+	if token == "" {
+		return fmt.Errorf("schedule: run %s: %w: no token", id, ErrInvalid)
+	}
+	now := s.now()
+	if err := s.q.Put(ctx, jobEvent(j, "cron:"+id+":now:"+token, now, now)); err != nil {
 		return fmt.Errorf("schedule: put the event of %s: %w", id, err)
 	}
 	return nil

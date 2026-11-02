@@ -120,7 +120,7 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 		t.closeButtons("", "")
 		return nil
 	}
-	e, err := run(ctx, pending.QuickPress{Button: b, Transport: t.event.Source, At: t.event.At})
+	e, err := run(ctx, pending.QuickPress{Button: b, Transport: t.event.Source, Event: t.event.ID})
 	if err != nil {
 		return fmt.Errorf("agent: quick action %s: %w", b.Action, err)
 	}

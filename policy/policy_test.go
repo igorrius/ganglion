@@ -54,6 +54,7 @@ func TestDecide(t *testing.T) {
 	send := spec("message.send", tool.ClassRead, tool.PolicyAuto)
 	fetch := spec("web.fetch", tool.ClassExternal, tool.PolicyAuto)
 	grant := &tool.Grant{Tools: []string{"clock", "web.fetch", "schedule.create"}, Hosts: []string{"Example.com"}}
+	sendGrant := &tool.Grant{Tools: []string{"message.send"}, ReplyTo: "telegram:42"}
 
 	for _, tc := range []struct {
 		name string
@@ -80,6 +81,22 @@ func TestDecide(t *testing.T) {
 			c.Grant = &tool.Grant{Tools: []string{"web.fetch"}}
 			c.Args = args("url", "https://example.com/")
 		}), tool.PolicyForbidden, journal.DecisionOutOfGrant},
+		{"grant: send to the reply target", send, with(base(), func(c *tool.Call) {
+			c.Grant, c.Tainted = sendGrant, true
+			c.Args = args("conv", "telegram:42")
+		}), tool.PolicyAuto, journal.DecisionAllowed},
+		{"grant: send to its own conv", send, with(base(), func(c *tool.Call) { c.Grant = sendGrant; c.Args = args("conv", "c1") }), tool.PolicyAuto, journal.DecisionAllowed},
+		{"grant: send without a conv", send, with(base(), func(c *tool.Call) { c.Grant = sendGrant; c.Args = args("text", "hi") }), tool.PolicyAuto, journal.DecisionAllowed},
+		{"grant: send elsewhere", send, with(base(), func(c *tool.Call) {
+			c.Grant, c.Tainted = sendGrant, true
+			c.Args = args("conv", "telegram:7")
+		}), tool.PolicyForbidden, journal.DecisionOutOfGrant},
+		{"grant: send to a principal", send, with(base(), func(c *tool.Call) { c.Grant = sendGrant; c.Args = args("conv", "telegram:user:7") }), tool.PolicyForbidden, journal.DecisionOutOfGrant},
+		{"grant: send with a conv that is not a string", send, with(base(), func(c *tool.Call) {
+			c.Grant = sendGrant
+			c.Args = json.RawMessage(`{"conv":["telegram:42"]}`)
+		}), tool.PolicyForbidden, journal.DecisionOutOfGrant},
+		{"grant: send with unparsable arguments", send, with(base(), func(c *tool.Call) { c.Grant = sendGrant; c.Args = json.RawMessage(`[1]`) }), tool.PolicyForbidden, journal.DecisionOutOfGrant},
 		{"grant covers a side effect in a tainted session (R-POL-8)", side, with(base(), func(c *tool.Call) { c.Grant = grant; c.Tainted = true }), tool.PolicyAuto, journal.DecisionAllowed},
 		{"grant naming a forbidden tool is still forbidden", denied, with(base(), func(c *tool.Call) { c.Grant = &tool.Grant{Tools: []string{"danger"}} }), tool.PolicyForbidden, journal.DecisionForbidden},
 		{"memory forget, clean, is auto", forget, base(), tool.PolicyAuto, journal.DecisionAllowed},

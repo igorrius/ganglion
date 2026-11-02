@@ -318,7 +318,7 @@ func TestQuickActionEditsWithoutAModel(t *testing.T) {
 	}
 	ev := press(owner, b.ID, "90")
 	out := e.turn(t, ev)
-	if len(got) != 1 || string(got[0].Button.Args) != `{"job":"j1"}` || got[0].Transport != "telegram" || !got[0].At.Equal(ev.At) {
+	if len(got) != 1 || string(got[0].Button.Args) != `{"job":"j1"}` || got[0].Transport != "telegram" || got[0].Event != ev.ID {
 		t.Fatalf("action got %+v", got)
 	}
 	if len(out) != 1 || out[0].Edit != "90" || out[0].Text != "Deleted." || len(out[0].Buttons) != 1 || len(e.smart.requests()) != 0 {

@@ -56,9 +56,10 @@ type Jobs interface {
 	Delete(ctx context.Context, id, owner string) error
 }
 
-// Runner runs a task outside its schedule (schedule.Scheduler).
+// Runner runs a task outside its schedule (schedule.Scheduler); the same
+// token is the same run.
 type Runner interface {
-	RunAt(ctx context.Context, id, owner string, at time.Time) error
+	RunKey(ctx context.Context, id, owner, token string) error
 }
 
 // SpecFunc returns the spec of a registered tool; false for an unknown
@@ -225,13 +226,25 @@ func (s Scheduling) grant(ctx context.Context, c tool.Call, j *schedule.Job, g *
 // toolWebFetch is the tool whose hosts a grant lists.
 const toolWebFetch = "web.fetch"
 
+// neverGranted are tools an unattended run may never use, registered or
+// not: memory is written only with the owner at hand (R-POL-7), so a
+// page a task reads cannot plant an instruction there.
+var neverGranted = []string{"memory.write", "memory.forget"}
+
+// ungrantable reports whether a grant may never name the tool: the
+// schedule tools (a task does not schedule or delete jobs) and
+// neverGranted. This is the one list of such tools.
+func ungrantable(name string) bool {
+	return strings.HasPrefix(name, "schedule.") || slices.Contains(neverGranted, name)
+}
+
 // grantTools checks the tools of a grant and returns them sorted, once
 // each.
 func (s Scheduling) grantTools(names []string) ([]string, error) {
 	for _, name := range names {
 		spec, ok := s.Specs(name)
 		switch {
-		case strings.HasPrefix(name, "schedule."):
+		case ungrantable(name):
 			return nil, fmt.Errorf("%w: a task cannot use %s", errInvalid, name)
 		case !ok:
 			return nil, fmt.Errorf("%w: unknown tool %q", errInvalid, name)
@@ -431,13 +444,15 @@ func (t *ScheduleRunNow) Question(ctx context.Context, c tool.Call) (string, err
 
 const runNowQuestion = "Run this task now?\n"
 
-// Run puts the task's run now; the call's key makes the run.
+// Run puts the task's run now, keyed by the call's key: a confirmed call
+// keeps its key, so a rerun of the turn that ran it (a crash before its
+// outcome was stored) starts the same run, not a second one (R-DLV-6).
 func (t *ScheduleRunNow) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	var a idArgs
 	if err := strictJSON(c.Args, &a); err != nil {
 		return tool.Result{}, fmt.Errorf("%s: arguments: %w", ActionRunNow, err)
 	}
-	if err := t.s.Runner.RunAt(ctx, a.ID, c.Principal, t.s.Now()); err != nil {
+	if err := t.s.Runner.RunKey(ctx, a.ID, c.Principal, c.Key()); err != nil {
 		return tool.Result{}, fmt.Errorf("%s: %w", ActionRunNow, err)
 	}
 	return tool.Result{Text: "started " + a.ID + "; its answer goes where its runs go"}, nil

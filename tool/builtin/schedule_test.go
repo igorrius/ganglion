@@ -6,7 +6,6 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -80,6 +79,9 @@ func newSchedEnv(t *testing.T) *schedEnv {
 		"message.send": {Name: "message.send", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm},
 		"cells.get":    {Name: "cells.get", Class: tool.ClassRead, Policy: tool.PolicyAuto},
 		"shell.exec":   {Name: "shell.exec", Class: tool.ClassSideEffect, Policy: tool.PolicyForbidden},
+		// Registered and not forbidden, yet never in a grant.
+		"memory.write":    {Name: "memory.write", Class: tool.ClassSideEffect, Policy: tool.PolicyAuto},
+		"schedule.delete": {Name: "schedule.delete", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm},
 	}}
 	e.sc = builtin.Scheduling{
 		Jobs:    st,
@@ -151,6 +153,9 @@ func TestScheduleCreateValidates(t *testing.T) {
 		"an unknown tool":        `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["rm.rf"]}}`,
 		"a forbidden tool":       `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["shell.exec"]}}`,
 		"a task that schedules":  `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["schedule.create"]}}`,
+		"a task that deletes":    `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["schedule.delete"]}}`,
+		"a task that remembers":  `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["memory.write"]}}`,
+		"a task that forgets":    `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["memory.forget"]}}`,
 		"a host with a scheme":   `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["web.fetch"],"hosts":["https://bank.gov.ua"]}}`,
 		"a host with a path":     `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["web.fetch"],"hosts":["bank.gov.ua/rates"]}}`,
 		"a host with a port":     `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["web.fetch"],"hosts":["bank.gov.ua:443"]}}`,
@@ -166,8 +171,13 @@ func TestScheduleCreateValidates(t *testing.T) {
 		if _, err := create.Question(context.Background(), c); err == nil {
 			t.Errorf("%s: asked about %s", name, args)
 		}
-		if _, err := create.Run(context.Background(), c); err == nil {
+		_, err := create.Run(context.Background(), c)
+		if err == nil {
 			t.Errorf("%s: created %s", name, args)
+		}
+		// Refused by name, before the registry is asked.
+		if strings.HasPrefix(name, "a task that ") && (err == nil || !strings.Contains(err.Error(), "a task cannot use")) {
+			t.Errorf("%s: %v, want a refusal by name", name, err)
 		}
 	}
 	if list, _ := e.jobs.List(context.Background(), me); len(list) != 0 {
@@ -247,7 +257,7 @@ func labels(bs []event.Button) string {
 }
 
 // pressAs presses a button the way the agent does and runs its action.
-func (e *schedEnv) pressAs(t *testing.T, b event.Button, at time.Time) pending.QuickEdit {
+func (e *schedEnv) pressAs(t *testing.T, b event.Button) pending.QuickEdit {
 	t.Helper()
 	ctx := context.Background()
 	p, err := e.pending.Press(ctx, b.ID, pending.By{Principal: me, Conv: "telegram:42", Event: "PRESS-" + b.ID})
@@ -258,7 +268,7 @@ func (e *schedEnv) pressAs(t *testing.T, b event.Button, at time.Time) pending.Q
 	if !ok {
 		t.Fatalf("no quick action %q", p.Button.Action)
 	}
-	edit, err := run(ctx, pending.QuickPress{Button: p.Button, Transport: "telegram", At: at})
+	edit, err := run(ctx, pending.QuickPress{Button: p.Button, Transport: "telegram", Event: "PRESS-" + b.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +307,7 @@ func TestListHasButtons(t *testing.T) {
 		}
 	}
 	// The buttons are stored for the person who listed, in that chat.
-	edit := e.pressAs(t, res.Out[0].Buttons[0], t0)
+	edit := e.pressAs(t, res.Out[0].Buttons[0])
 	if !strings.Contains(edit.Text, "bank.gov.ua") || !strings.Contains(edit.Text, "Next run") || labels(edit.Buttons) != "Delete,Run now" {
 		t.Fatalf("details %+v", edit)
 	}
@@ -318,7 +328,7 @@ func TestDeleteQuickAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	edit := e.pressAs(t, res.Out[0].Buttons[1], t0)
+	edit := e.pressAs(t, res.Out[0].Buttons[1])
 	if !strings.Contains(edit.Text, "Deleted") || len(edit.Buttons) != 0 {
 		t.Fatalf("edit %+v", edit)
 	}
@@ -326,7 +336,7 @@ func TestDeleteQuickAction(t *testing.T) {
 		t.Fatal("not deleted")
 	}
 	// Details of a deleted job, from an older button.
-	if edit := e.pressAs(t, res.Out[0].Buttons[0], t0); !strings.Contains(edit.Text, "no longer") || len(edit.Buttons) != 0 {
+	if edit := e.pressAs(t, res.Out[0].Buttons[0]); !strings.Contains(edit.Text, "no longer") || len(edit.Buttons) != 0 {
 		t.Fatalf("details of a deleted job %+v", edit)
 	}
 	// A system job's Delete, should a button exist.
@@ -335,7 +345,7 @@ func TestDeleteQuickAction(t *testing.T) {
 	if err := e.pending.AddButtons(ctx, b); err != nil {
 		t.Fatal(err)
 	}
-	if edit := e.pressAs(t, event.Button{ID: b.ID}, t0); !strings.Contains(edit.Text, "cannot be deleted") {
+	if edit := e.pressAs(t, event.Button{ID: b.ID}); !strings.Contains(edit.Text, "cannot be deleted") {
 		t.Fatalf("system delete %+v", edit)
 	}
 }
@@ -353,17 +363,16 @@ func TestRunNowQuickAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A task that only reads runs at once.
-	at := t0.Add(time.Minute)
-	edit := e.pressAs(t, res.Out[0].Buttons[2], at)
+	// A task that only reads runs at once, keyed by the press.
+	edit := e.pressAs(t, res.Out[0].Buttons[2])
 	if !strings.Contains(edit.Text, "Started") || labels(edit.Buttons) != "Details,Delete,Run now" {
 		t.Fatalf("edit %+v", edit)
 	}
-	if len(e.q.events) != 1 || e.q.events[0].IdemKey != "cron:j1:now:"+strconv.FormatInt(at.UnixMilli(), 10) {
+	if len(e.q.events) != 1 || e.q.events[0].IdemKey != "cron:j1:now:PRESS-"+res.Out[0].Buttons[2].ID {
 		t.Fatalf("events %+v", e.q.events)
 	}
 	// A task that may act asks first, in place.
-	edit = e.pressAs(t, res.Out[1].Buttons[2], at)
+	edit = e.pressAs(t, res.Out[1].Buttons[2])
 	if !strings.Contains(edit.Text, "message.send") || labels(edit.Buttons) != "Approve,Deny" || len(e.q.events) != 1 {
 		t.Fatalf("edit %+v, events %d", edit, len(e.q.events))
 	}
@@ -371,12 +380,19 @@ func TestRunNowQuickAction(t *testing.T) {
 	if err != nil || p.Item.Tool != "schedule.run_now" || string(p.Item.Args) != `{"id":"j2"}` {
 		t.Fatalf("press %+v, %v", p, err)
 	}
-	// The approved call runs the tool.
+	// The approved call runs the tool, keyed by the call: a rerun of the
+	// turn that ran it (a crash before its outcome was stored) starts the
+	// same run, not a second one.
 	runNow := builtin.NewScheduleRunNow(e.sc)
 	c := p.Item.Call()
 	c.Admin = true
-	if _, err := runNow.Run(ctx, c); err != nil || len(e.q.events) != 2 || e.q.events[1].Conv != "task:j2" {
-		t.Fatalf("run now: %v, events %+v", err, e.q.events)
+	for range 2 {
+		if _, err := runNow.Run(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(e.q.events) != 2 || e.q.events[1].Conv != "task:j2" || e.q.events[1].IdemKey != "cron:j2:now:"+c.Key() {
+		t.Fatalf("events %+v", e.q.events)
 	}
 }
 

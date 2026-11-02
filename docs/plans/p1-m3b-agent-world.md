@@ -147,7 +147,7 @@ ADRs:
 | Callback data | `c:<button id>`, where the button id is a random 16-byte base32 string, 26 chars | `c:3J7Q…` |
 | Decision event | `Kind "decision"`, `Source` = the transport, `Conv` = the conversation of the button, payload `{"button":"<id>","from":"<principal>","ref":"<message ref>"}` | — |
 | Resume event | `Kind "tool.result"`, payload `{"pending":"<id>","status":"approved\|denied\|expired"}` | — |
-| Schedule event | `Kind "schedule"`, `Source "cron"`, `IdemKey "cron:<job id>:<scheduled unix ms>"`, `Conv "task:<job id>"` for tasks or the owner's conv for reminders | `cron:01JD…:1793…` |
+| Schedule event | `Kind "schedule"`, `Source "cron"`, `IdemKey "cron:<job id>:<scheduled unix ms>"`; a run now `"cron:<job id>:now:<token>"`, where the token is the confirmed call's key or the press's event id (R14), `Conv "task:<job id>"` for tasks or the owner's conv for reminders | `cron:01JD…:1793…` |
 | Agent state | `v:2`: v1 plus `"tainted":true\|false` and `"pending":["<id>",…]`; v1 is read as untainted with no pending calls | — |
 | Memory file | `memory/<slug>.md`: YAML frontmatter `title`, `created`, `source_turn`, `tainted`, `checked` (`ok\|quarantined`), then the body | see task 7 |
 | Memory commit message | `memory: <verb> <slug> (turn <event id>)` | `memory: add inverter (turn 01JD…)` |
@@ -658,8 +658,12 @@ It records the callback abuse cases of design 5.2.
   - `cron_runs` row first (claimed with `put_ms` 0, in the transaction
     that checks `deleted`), then `Put`, then `put_ms`; a row left with
     0 is put again on the next tick.
-  - `RunAt(ctx, id, owner, at)` behind `RunNow`, so a rerun quick press
-    asks for the same run.
+  - `RunKey(ctx, id, owner, token)` behind `RunNow` (R14): the
+    `schedule.run_now` tool passes its call key, the button its press's
+    event id, so a rerun starts the same run.
+  - In a grant, `message.send` goes only to the task's own conversation
+    or its reply target (R15); a grant never names `schedule.*`,
+    `memory.write` or `memory.forget` (R16).
   - `schedule.run_now` is also a tool, so an approved Run now runs
     through the confirmation path; a question a quick action asked
     resumes no model turn.

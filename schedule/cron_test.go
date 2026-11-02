@@ -112,8 +112,9 @@ func TestNextAcrossDST(t *testing.T) {
 		// 03:00 does not exist on the spring day: the first valid minute after it.
 		{"skipped hour", "0 3 * * *", "2026-03-28T23:00:00Z", "2026-03-29T01:00:00Z"}, // 04:00 EEST
 		{"skipped half hour", "30 3 * * *", "2026-03-28T23:00:00Z", "2026-03-29T01:00:00Z"},
-		{"the day after spring", "0 3 * * *", "2026-03-29T01:00:00Z", "2026-03-30T00:00:00Z"}, // 03:00 EEST
-		{"hourly over the gap", "0 * * * *", "2026-03-29T00:00:00Z", "2026-03-29T01:00:00Z"},  // 02:00 → 04:00
+		{"the day after spring", "0 3 * * *", "2026-03-29T01:00:00Z", "2026-03-30T00:00:00Z"},          // 03:00 EEST
+		{"hourly over the gap", "0 * * * *", "2026-03-29T00:00:00Z", "2026-03-29T01:00:00Z"},           // 02:00 → 04:00
+		{"hourly over the repeated hour", "0 * * * *", "2026-10-25T00:00:00Z", "2026-10-25T02:00:00Z"}, // 03:00 EEST → 04:00 EET; the second 03:00 does not run
 		{"04:00 on the spring day", "0 4 * * *", "2026-03-28T23:00:00Z", "2026-03-29T01:00:00Z"},
 		// 03:00 happens twice on the autumn day: once, at the first.
 		{"repeated hour", "0 3 * * *", "2026-10-24T22:00:00Z", "2026-10-25T00:00:00Z"}, // 03:00 EEST

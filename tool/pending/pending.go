@@ -125,8 +125,8 @@ type Button struct {
 // QuickPress is a press of a quick-action button as its action sees it.
 type QuickPress struct {
 	Button    Button
-	Transport string    // the transport of the button's conversation
-	At        time.Time // when it was pressed; the same when its event is handled again
+	Transport string // the transport of the button's conversation
+	Event     string // the id of the press's event; the same when the event is handled again
 }
 
 // QuickEdit is the new content of the message that holds a quick-action

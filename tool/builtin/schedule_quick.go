@@ -115,7 +115,8 @@ func (s Scheduling) deleteByButton(ctx context.Context, p pending.QuickPress) (p
 
 // runByButton runs a task now. A task whose grant may act on the world
 // (a side-effect tool, or one no longer registered) asks first, in place
-// of the job's message; one that only reads runs at once.
+// of the job's message; one that only reads runs at once, keyed by the
+// press's event, so handling the press again starts the same run.
 func (s Scheduling) runByButton(ctx context.Context, p pending.QuickPress) (pending.QuickEdit, error) {
 	j, ok, err := s.pressedJob(ctx, p)
 	switch {
@@ -126,7 +127,7 @@ func (s Scheduling) runByButton(ctx context.Context, p pending.QuickPress) (pend
 	case s.mayAct(j):
 		return s.askRunNow(ctx, p, j)
 	}
-	if err := s.Runner.RunAt(ctx, j.ID, p.Button.Principal, p.At); err != nil {
+	if err := s.Runner.RunKey(ctx, j.ID, p.Button.Principal, p.Event); err != nil {
 		return pending.QuickEdit{}, err
 	}
 	buttons, err := s.buttons(ctx, j, p.Button.Principal, p.Button.Conv, ActionDetails, ActionDelete, ActionRunNow)

@@ -150,10 +150,13 @@ func TestDeletedJobIsSkipped(t *testing.T) {
 	e.jobs[moved.ID] = moved
 	wrongConv := fired(moved)
 	wrongConv.Conv = "telegram:42"
+	forged := fired(moved)
+	forged.Source = "telegram"
 	for name, ev := range map[string]event.Event{
-		"deleted":    fired(deleted),
-		"unknown":    fired(schedule.Job{ID: "gone", Kind: schedule.KindTask}),
-		"wrong conv": wrongConv,
+		"deleted":                fired(deleted),
+		"unknown":                fired(schedule.Job{ID: "gone", Kind: schedule.KindTask}),
+		"wrong conv":             wrongConv,
+		"not from the scheduler": forged,
 	} {
 		out := e.turn(t, ev)
 		if len(out) != 0 || len(e.smart.requests()) != 0 {

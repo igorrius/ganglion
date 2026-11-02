@@ -218,7 +218,9 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 //  2. an admin-only tool for a non-admin: forbidden;
 //  3. a forbidden tool: forbidden, whatever a grant says;
 //  4. a scheduled task's call: outside its grant is out_of_grant, inside
-//     it is auto, even in a tainted session (R-POL-8);
+//     it is auto, even in a tainted session (R-POL-8); web.fetch is
+//     inside only on a granted host, message.send only to the task's own
+//     conversation or its reply target;
 //  5. memory.write and memory.forget: confirm in a tainted session, auto
 //     otherwise (the memory guard still checks the entry), though they
 //     are side effects;
@@ -292,16 +294,46 @@ func ruleGrant(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, 
 }
 
 // inGrant reports whether the grant covers the call: the tool, and for
-// web.fetch the host of its address.
+// the tools in grantArgs their arguments.
 func inGrant(g tool.Grant, s tool.Spec, c tool.Call) bool {
 	if !slices.Contains(g.Tools, s.Name) {
 		return false
 	}
-	if s.Name != toolWebFetch {
-		return true
-	}
+	check, ok := grantArgs[s.Name]
+	return !ok || check(g, c)
+}
+
+// grantArgs check the arguments of granted tools that reach out: where
+// web.fetch reads and where message.send writes. An argument that does
+// not parse is outside the grant.
+var grantArgs = map[string]func(g tool.Grant, c tool.Call) bool{
+	toolWebFetch:    hostInGrant,
+	toolMessageSend: convInGrant,
+}
+
+// hostInGrant reports whether web.fetch's address is on a granted host.
+func hostInGrant(g tool.Grant, c tool.Call) bool {
 	host, ok := hostOf(c)
 	return ok && slices.ContainsFunc(g.Hosts, func(h string) bool { return strings.EqualFold(h, host) })
+}
+
+// convInGrant reports whether message.send goes where the task answers:
+// no conv (its own), its own conversation, or the grant's reply target
+// (R-POL-8); a task cannot send its findings anywhere else.
+func convInGrant(g tool.Grant, c tool.Call) bool {
+	var args map[string]json.RawMessage
+	if err := json.Unmarshal(c.Args, &args); err != nil || args == nil {
+		return false
+	}
+	raw, given := args["conv"]
+	if !given {
+		return true
+	}
+	var conv string
+	if err := json.Unmarshal(raw, &conv); err != nil {
+		return false
+	}
+	return conv == c.Conv || conv == g.ReplyTo
 }
 
 // hostOf is the host (with a non-default port) of the call's normalised
