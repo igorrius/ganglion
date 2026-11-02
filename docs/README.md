@@ -40,7 +40,10 @@ Start here when coming back to the project.
     step-by-step plan ([p1-m3a-talking-agent.md](plans/p1-m3a-talking-agent.md));
     it rests on [ADR-0020](adr/0020-neutral-history-as-conversation-state.md)
     (history in a neutral format, stored as the conversation state,
-    Accepted). Its live run needs an API key for a cheap model.
+    Accepted). The operator picks one or more providers, the local claude
+    CLI included ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md),
+    Proposed); the owner's node talks through the CLI, OpenRouter as a
+    fallback.
   - A cap on attempts for a turn that always fails is M3a task 6.
   - Deferred minors from the M2 review: record a send's outcome with
     `context.WithoutCancel` on shutdown; keep the seeded admin's name and

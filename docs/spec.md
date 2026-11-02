@@ -313,9 +313,15 @@ model:
   when needed.
 - **R-PRV-3.** Tools are described in MCP format; the core translates them
   into the specific API's schema.
-- **R-PRV-4.** The claude CLI worker runs an **unmodified** `claude -p`. It
-  suits standalone tasks (write a module, analyse logs), not conversation:
-  `--resume` does not work with history kept by the core.
+- **R-PRV-4.** The claude CLI runs **unmodified** as `claude -p`. As a
+  worker it does standalone tasks (write a module, analyse logs; P2). As a
+  conversation provider it gets the core's history in the prompt on every
+  call, with no session and no `--resume`
+  ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)).
+- **R-PRV-5.** The operator chooses the providers a node uses: one or
+  several, of any supported type (`openai`, `claude-cli`; `anthropic`
+  later), listed in the model catalogue. The router ranks and falls back
+  across all of them.
 
 Rules for access to Anthropic models (per
 [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance),
@@ -330,8 +336,10 @@ checked 2026-10-31):
 | A built-in "Sign in with Claude" | No |
 | One subscription worker serving other people's nodes | No |
 
-Routine work (conversation turns, crons, consolidation) goes to a cheap model
-over an API; the subscription is for the owner's heavy tasks.
+Routine work (conversation turns, crons, consolidation) goes to whatever
+the operator configured. A cheap API model is the recommendation; a
+subscription through the claude CLI is allowed for the owner's own node,
+within its limits (ADR-0009, ADR-0021).
 
 ### 7.5. Runner and WASM modules
 

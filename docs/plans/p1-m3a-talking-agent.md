@@ -5,10 +5,12 @@
 > by task. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** the bot answers through a model instead of echoing: history kept
-in the core, an OpenAI-compatible provider, a rules router with fallback,
+in the core, providers the operator chooses (one or several:
+OpenAI-compatible APIs and the local claude CLI, ADR-0021), a rules router
+with fallback across them,
 an agent loop with step and daily limits and a `turns` trace, turns of
 different chats running in parallel; then a live run on the test bot that
-picks the first cloud model (D-6).
+picks the first model (D-6).
 
 **Scope:** M3 tasks 3.1–3.4 of the [phase plan](p1-all-in-one.md#m3--the-agent-spec-72-74-76-77)
 and the talking half of 3.8. Memory (3.5), tools and policies (3.6), skills
@@ -34,6 +36,7 @@ flowchart LR
     A -->|State| Q
     A -->|Route| R["router/rules"]
     A -->|Chat| P["provider/openai"]
+    A -->|Chat| C["provider/claudecli"]
     A -.->|M3b| T["tools registry"]
     A -->|Record| TR[("turns")]
     R -->|SpentSince| TR
@@ -51,7 +54,8 @@ dependencies.
 [0007](../adr/0007-openai-compatible-first-provider.md),
 [0017](../adr/0017-extension-points.md),
 [0019](../adr/0019-release-leases-at-core-start.md),
-[0020](../adr/0020-neutral-history-as-conversation-state.md).
+[0020](../adr/0020-neutral-history-as-conversation-state.md),
+[0021](../adr/0021-providers-chosen-by-the-operator-claude-cli-included.md).
 
 ## Global constraints
 
@@ -85,18 +89,19 @@ dependencies.
 
 1. **A provider hangs.** A turn must end within its timeout (default 2 min,
    always shorter than the 10-minute lease), try the next candidate, and
-   never hold its conversation for the whole lease (tasks 5, 6).
+   never hold its conversation for the whole lease (tasks 6, 7).
 2. **Every candidate fails** (no key, all rate-limited, model removed).
    The person gets one short apology, the turn completes, and it is not
-   retried every 10 minutes forever (tasks 5, 6).
+   retried every 10 minutes forever (tasks 6, 7).
 3. **History grows without bound.** A long chat must stay inside the
    model's context: compaction runs in the turn that crosses the budget,
    and a failed compaction keeps the history and tries again next turn
-   (task 5).
+   (task 6).
 4. **A rerun after a crash.** The same event processed twice from the same
-   state gives the same reply key and one `turns` row (tasks 4, 5).
+   state gives the same reply key and one `turns` row (tasks 5, 6).
 5. **Key leak.** The API key is not in errors, logs or the `turns` table,
-   including when the base URL is unreachable (task 2).
+   including when the base URL is unreachable (task 2), and family
+   text never shows in `ps`: the CLI gets the prompt on stdin (task 3).
 
 ---
 
@@ -127,7 +132,7 @@ dependencies.
   func (e *Error) Error() string                    // "provider <name>: <kind>: <msg>"
   func Fallback(err error) bool                     // rate_limit, timeout, unavailable → true; auth, bad_request → false; context.Canceled → false; context.DeadlineExceeded → true
   ```
-  `ModelCaps` moves to the router (task 3) and is deleted here.
+  `ModelCaps` moves to the router (task 4) and is deleted here.
 
 - [ ] **Step 1: Write failing tests.** `TestMessageJSONRoundTrip` (a tool
   call with `Args: {"x":1}` and a tool result survive Marshal/Unmarshal;
@@ -189,7 +194,66 @@ dependencies.
 - [ ] **Step 4: Run** `go test -race ./provider/...` — PASS.
 - [ ] **Step 5: Commit** `provider/openai: Chat Completions client and a fake API`.
 
-### Task 3: model catalogue and the rules router (3.3)
+### Task 3: the claude CLI provider (ADR-0021)
+
+**Files:**
+- Create: `provider/claudecli/claudecli.go`, `provider/claudecli/claudecli_test.go`
+
+**Interfaces:**
+- Consumes: task 1.
+- Produces:
+  ```go
+  func New(name string, opts ...Option) *Client // WithCommand(path) default "claude"; WithMaxConcurrent(n) default 2; WithWorkDir(dir) default a private temp dir
+  func (c *Client) Name() string
+  func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error)
+  ```
+- One unmodified `claude` process per call, arguments exactly:
+  `-p --model <req.Model> --output-format json --no-session-persistence
+  --tools "" --strict-mcp-config --setting-sources "" --system-prompt <S>`.
+  `S` is all `system` messages joined by a blank line. The rest of the
+  history goes to **stdin**, never argv (argv shows in `ps`), as a
+  transcript:
+  ```
+  Conversation so far, oldest first:
+
+  User: Igor: hi
+
+  Assistant: Hello!
+
+  User: Igor: what can you do?
+  ```
+  The process runs in the work dir with the environment of the node
+  (the CLI finds its own login); stdout is parsed as the JSON result.
+- Result: `result` → reply text; `usage.input_tokens +
+  cache_creation_input_tokens + cache_read_input_tokens` → input tokens,
+  `output_tokens` → output. `req.Tools` non-empty → `KindBadRequest`
+  ("tools arrive in M3b"); the catalogue marks CLI models `tools: false`,
+  so the router never sends them a tool task.
+- Errors: binary missing → `KindUnavailable`; `ctx` deadline → kill the
+  process, `KindTimeout`; `ctx` cancelled → `context.Canceled`;
+  `is_error` with a result mentioning a usage or rate limit →
+  `KindRateLimit`; mentioning login or authentication → `KindAuth`;
+  anything else, or a non-zero exit without JSON → `KindUnavailable` with
+  at most 200 characters of stderr. Prompt text never goes into errors or
+  logs.
+- [ ] **Step 1: Write failing tests** with the test binary as a fake
+  `claude` (helper-process pattern: `WithCommand(os.Args[0])` and an
+  environment variable that selects the fake's behaviour):
+  `TestArgsAndStdin` (the flags above; the prompt is absent from argv;
+  stdin holds the transcript; `--system-prompt` holds the system text),
+  `TestParsesResultAndUsage`, `TestUsageLimitIsRateLimit`,
+  `TestNotLoggedInIsAuth`, `TestMissingBinaryIsUnavailable`,
+  `TestTimeoutKillsProcess` (the fake sleeps 10 s; a 100 ms ctx returns
+  `KindTimeout` within 2 s), `TestConcurrencyLimit` (three calls, limit 2:
+  never more than two fakes alive), `TestToolsRejected`.
+- [ ] **Step 2: Run** `go test ./provider/claudecli/` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** `go test -race ./provider/claudecli/` — PASS. One
+  opt-in live check, skipped unless `GANGLION_LIVE_CLAUDE=1`: a real
+  `claude` answers `Say OK` with non-empty text.
+- [ ] **Step 5: Commit** `provider/claudecli: the claude CLI as a conversation provider`.
+
+### Task 4: model catalogue and the rules router (3.3)
 
 **Files:**
 - Modify: `router/router.go`
@@ -215,7 +279,7 @@ dependencies.
   func New(models []router.Model, opts ...Option) (*Router, error) // WithClock, WithBudget(b, dailyUSD, loc), WithCooldown(d) default 60s
   func LoadCatalog(r io.Reader) (Catalog, error)
   type Catalog struct {
-      Providers []ProviderDef `yaml:"providers"` // name, base_url, key_env
+      Providers []ProviderDef `yaml:"providers"` // name, type (openai | claude-cli), base_url, key_env, command
       Models    []ModelDef    `yaml:"models"`    // provider, name, tier, tools, vision, local, context, price_in, price_out, latency_ms
   }
   func (c Catalog) RouterModels() []router.Model
@@ -235,22 +299,34 @@ dependencies.
   5. Within a group: lower `PriceInMTok + PriceOutMTok` first, then lower
      latency, then catalogue order.
 - `LoadCatalog` errors name the field: unknown provider in a model, empty
-  name, tier not cheap/smart, duplicate `provider/name`, a provider without
-  `key_env` unless its `base_url` is `http://localhost…` or
-  `http://127.0.0.1…` (Ollama).
+  name, tier not cheap/smart, duplicate `provider/name`, unknown `type`;
+  an `openai` provider without `base_url`, or without `key_env` unless its
+  `base_url` is `http://localhost…` or `http://127.0.0.1…` (Ollama); a
+  `claude-cli` model with `tools: true` (until M3b).
+- The owner's catalogue, for the record:
+  ```yaml
+  providers:
+    - {name: claude, type: claude-cli}
+    - {name: openrouter, type: openai, base_url: https://openrouter.ai/api/v1, key_env: OPENROUTER_API_KEY}
+  models:
+    - {provider: claude, name: haiku, tier: cheap, context: 200000}
+    - {provider: claude, name: sonnet, tier: smart, context: 200000}
+    - {provider: openrouter, name: <chosen in task 9>, tier: cheap, tools: true, context: 128000, price_in: …, price_out: …}
+  ```
 - [ ] **Step 1: Write failing tests.** `TestFiltersTools`,
   `TestPrivacyLocalOnly`, `TestLongContext`, `TestHumanMessageSmartFirst`,
   `TestCronCheapFirst`, `TestExplicitTierWins`, `TestPriceOrderWithinTier`,
   `TestCooldownAfterRateLimit` (reported with RetryAfter 30 s: last until
   the fake clock passes 60 s), `TestOverBudgetDropsSmart`,
   `TestNoCandidate`; catalogue: `TestLoadCatalog` (a two-provider example
-  file, including an Ollama provider without a key), `TestCatalogErrors`.
+  file with `claude-cli`, `openai` and an Ollama provider without a key),
+  `TestCatalogErrors`.
 - [ ] **Step 2: Run** `go test ./router/...` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** `go test -race ./router/...` — PASS.
 - [ ] **Step 5: Commit** `router/rules: model catalogue, filters, tiers, budget, cooldown`.
 
-### Task 4: the `turns` trace (R-AGT-5)
+### Task 5: the `turns` trace (R-AGT-5)
 
 **Files:**
 - Create: `turns/turns.go`, `turns/migrations/001_turns.sql`, `turns/turns_test.go`
@@ -290,7 +366,7 @@ dependencies.
 - [ ] **Step 4: Run** `go test -race ./turns/` — PASS.
 - [ ] **Step 5: Commit** `turns: per-turn trace with route, tools, tokens and cost`.
 
-### Task 5: the agent — state, turn loop, fallback, compaction, limits (3.1, 3.4)
+### Task 6: the agent — state, turn loop, fallback, compaction, limits (3.1, 3.4)
 
 **Files:**
 - Create: `agent/state.go`, `agent/agent.go`, `agent/compact.go`,
@@ -298,7 +374,7 @@ dependencies.
   `agent/agent_test.go`, `agent/state_test.go`
 
 **Interfaces:**
-- Consumes: tasks 1, 3, 4; `queue.StateUpdate`, `event.Message`.
+- Consumes: tasks 1, 4, 5; `queue.StateUpdate`, `event.Message`.
 - Produces:
   ```go
   type State struct { V int; Summary string; Messages []provider.Message } // json: v, summary, messages
@@ -401,7 +477,7 @@ dependencies.
 - [ ] **Step 4: Run** `go test -race ./agent/` — PASS.
 - [ ] **Step 5: Commit** `agent: turn loop with fallback, step and daily limits, compaction`.
 
-### Task 6: parallel turns, turn timeout and giving up (R-AGT-1)
+### Task 7: parallel turns, turn timeout and giving up (R-AGT-1)
 
 **Files:**
 - Modify: `core/loop.go`, `core/loop_test.go`, `queue/queue.go`
@@ -437,7 +513,7 @@ dependencies.
 - [ ] **Step 4: Run** `go test -race ./core/ ./queue/...` — PASS.
 - [ ] **Step 5: Commit** `core: parallel workers, turn timeout, give up after max attempts`.
 
-### Task 7: wiring the agent into the node
+### Task 8: wiring the agent into the node
 
 **Files:**
 - Modify: `node/config.go`, `node/config_test.go`, `node/node.go`,
@@ -446,7 +522,7 @@ dependencies.
 **Interfaces:**
 - Consumes: everything above.
 - Config additions (environment until D-3 in M4):
-  - `GANGLION_MODELS_FILE`: the catalogue (task 3). Empty → the core runs
+  - `GANGLION_MODELS_FILE`: the catalogue (task 4). Empty → the core runs
     `core.Echo` as in M2 and logs that the agent is off.
   - Each provider's `key_env` is read with the `secret` helper (value or
     `<NAME>_FILE`), trimmed.
@@ -457,8 +533,8 @@ dependencies.
   type AgentConfig struct { ModelsFile, SystemPromptFile string; DailyBudgetUSD float64; DailyTurns, DailyTokens int; TZ *time.Location }
   // Config gains Agent AgentConfig; ConfigFromEnv fills it.
   ```
-- `runCore` with a catalogue: `turns.New`, one `openai.Client` per
-  provider, `rules.New(catalog.RouterModels(), WithBudget(turnsLog, budget,
+- `runCore` with a catalogue: `turns.New`, one client per provider by
+  `type` (`openai.New` or `claudecli.New`), `rules.New(catalog.RouterModels(), WithBudget(turnsLog, budget,
   tz))`, `agent.New`, and `core.NewLoop(..., agent.Handle, WithWorkers(4),
   WithTurnTimeout(3m), WithMaxAttempts(3, giveUpAlert))`, where
   `giveUpAlert` tells the sender `Sorry, something went wrong with that
@@ -474,31 +550,30 @@ dependencies.
 - [ ] **Step 4: Run** `go test -race ./...` — PASS (the M2 crash harness still runs the echo path).
 - [ ] **Step 5: Commit** `node: run the agent when a model catalogue is configured`.
 
-### Task 8: live run, first cloud model (D-6), docs
+### Task 9: live run, first model (D-6), docs
 
 **Files:**
-- Create: `docs/research/<date>-first-cloud-model.md`, `docs/adr/0021-first-cloud-model.md`
+- Create: `docs/research/<date>-first-model.md`, `docs/adr/0022-first-model.md`
 - Modify: `Makefile` (`live-agent`), `docs/architecture/05-code-map.md`,
   `docs/architecture/03-components.md`, `docs/README.md`,
   `docs/plans/p1-all-in-one.md`, `docs/spec.md` (section 11: history format
-  resolved by ADR-0020, first API provider by ADR-0021)
+  resolved by ADR-0020, first API provider by ADR-0021 and ADR-0022)
 
 - [ ] **Step 1: `make live-agent`.** Like `live-echo`, plus
-  `GANGLION_MODELS_FILE=models.local.yaml` (git-ignored) and the provider
-  key from `.env`. Needs an API key from the owner; without it the step is
-  reported as blocked.
-- [ ] **Step 2: Compare candidates** over OpenRouter (the owner's key;
-  Claude Haiku is one of the candidates, reached through the API, not the
-  claude CLI, R-PRV-4). The same 20 prompts (Russian and
+  `GANGLION_MODELS_FILE=models.local.yaml` (git-ignored) and
+  `OPENROUTER_API_KEY` from `.env`. The CLI uses the owner's local login.
+- [ ] **Step 2: Compare candidates**: Haiku through the claude CLI and 2
+  cheap models over OpenRouter. The same 20 prompts (Russian and
   Ukrainian small talk, a household question, a follow-up that needs the
   history, a long message that forces compaction) on 2–3 cheap models from
   the catalogue. Record per model: answers judged good / acceptable / bad,
   median latency, tokens and cost per turn, any tool-format errors. The
-  owner reads the answers and picks; the result becomes ADR-0021.
+  owner reads the answers and picks; the result becomes ADR-0022.
 - [ ] **Step 3: Measure memory** with `make memory` and once with the agent
   on the fake API: RSS idle and after 1,000 turns.
 - [ ] **Step 4: Run** `make check`.
 - [ ] **Step 5: Update the docs**: code map (`provider/openai`,
+  `provider/claudecli`,
   `provider/providertest`, `router/rules`, `turns`, `agent`, core workers),
   component diagram, phase plan (M3a done with numbers), "Where we are".
 - [ ] **Step 6: Commit** `docs: M3a talking agent done`.
