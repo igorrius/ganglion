@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -13,8 +14,13 @@ import (
 // MaxPersonaBytes bounds the persona: it goes into every model call.
 const MaxPersonaBytes = 32 << 10
 
+// htmlComment matches <!-- … -->: notes for the operator editing the file,
+// which never reach the model.
+var htmlComment = regexp.MustCompile(`(?s)<!--.*?-->`)
+
 // PersonaDir returns a Persona source over <workspace>/persona: every *.md
-// file there, in name order, joined by blank lines (ADR-0024). The
+// file there, in name order, without HTML comments, joined by blank lines
+// (ADR-0024). The
 // operator splits the description as they like (identity, style, people);
 // importers from other assistants write the same files. A missing
 // directory is no persona.
@@ -45,7 +51,7 @@ func PersonaDir(workspace string) func() (string, error) {
 			if size += len(b); size > MaxPersonaBytes {
 				return "", fmt.Errorf("persona: %s is over %d KiB in total; it goes into every model call", dir, MaxPersonaBytes>>10)
 			}
-			if t := strings.TrimSpace(string(b)); t != "" {
+			if t := strings.TrimSpace(htmlComment.ReplaceAllString(string(b), "")); t != "" {
 				parts = append(parts, t)
 			}
 		}

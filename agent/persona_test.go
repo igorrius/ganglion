@@ -37,3 +37,19 @@ func TestPersonaDir(t *testing.T) {
 		t.Fatalf("an oversized persona: %v", err)
 	}
 }
+
+func TestPersonaDropsHTMLComments(t *testing.T) {
+	ws := t.TempDir()
+	dir := filepath.Join(ws, "persona")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "<!--\nOperator notes: persona files live in persona/.\n-->\n\n# Who you are\n\nJarvis. <!-- inline note --> Kind.\n"
+	if err := os.WriteFile(filepath.Join(dir, "10.md"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := PersonaDir(ws)()
+	if err != nil || got != "# Who you are\n\nJarvis.  Kind." {
+		t.Fatalf("persona %q, %v: comments are notes for the operator, not for the model", got, err)
+	}
+}
