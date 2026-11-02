@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -40,5 +41,17 @@ func TestRunStartsAllRolesByDefault(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "roles=core,edge,worker") {
 		t.Fatalf("default run did not start all roles:\n%s", out.String())
+	}
+}
+
+func TestLogLevel(t *testing.T) {
+	for v, want := range map[string]slog.Level{"": slog.LevelInfo, "debug": slog.LevelDebug, "WARN": slog.LevelWarn, "error": slog.LevelError} {
+		got, err := logLevel(v)
+		if err != nil || got != want {
+			t.Errorf("%q: %v, %v", v, got, err)
+		}
+	}
+	if _, err := logLevel("chatty"); err == nil {
+		t.Error("a bad level was accepted")
 	}
 }

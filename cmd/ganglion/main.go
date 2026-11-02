@@ -34,6 +34,18 @@ func main() {
 	}
 }
 
+// logLevel reads GANGLION_LOG_LEVEL: debug, info (default), warn or error.
+func logLevel(s string) (slog.Level, error) {
+	if s == "" {
+		return slog.LevelInfo, nil
+	}
+	var l slog.Level
+	if err := l.UnmarshalText([]byte(s)); err != nil {
+		return 0, fmt.Errorf("GANGLION_LOG_LEVEL=%q is not debug, info, warn or error", s)
+	}
+	return l, nil
+}
+
 // run parses args, then runs the node until ctx is cancelled. Logs and the
 // version string go to out.
 func run(ctx context.Context, args []string, out io.Writer) error {
@@ -58,6 +70,10 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	logger := slog.New(slog.NewTextHandler(out, nil)).With("version", version)
+	level, err := logLevel(os.Getenv("GANGLION_LOG_LEVEL"))
+	if err != nil {
+		return err
+	}
+	logger := slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: level})).With("version", version)
 	return node.Run(ctx, roles, cfg, logger)
 }

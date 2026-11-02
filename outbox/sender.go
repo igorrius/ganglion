@@ -205,7 +205,7 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	if err := s.ob.Sent(ctx, msg.ID); err != nil {
 		return true, err
 	}
-	log.Debug("outbox: sent", "parts", len(parts), "len", len(msg.Text))
+	log.Info("outbox: sent", "parts", len(parts), "len", len(msg.Text))
 	return true, nil
 }
 

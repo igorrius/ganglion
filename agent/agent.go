@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -185,6 +186,7 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 	}
 	finish := func(out []event.Outgoing, st State) ([]event.Outgoing, queue.StateUpdate, error) {
 		tr.Finished = a.d.Now()
+		a.logTurn(tr)
 		// The turn's context may have run out during compaction; the trace
 		// still counts for the budget and the limits.
 		rctx, rcancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -275,6 +277,21 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 		ccancel()
 	}
 	return finish([]event.Outgoing{reply(answer)}, st)
+}
+
+// logTurn writes one info line per turn: what an operator watches in the
+// console. Never message text.
+func (a *Agent) logTurn(tr *turnRecord) {
+	model := ""
+	for _, at := range tr.Route {
+		if at.Error == "" {
+			model = at.Provider + "/" + at.Model
+		}
+	}
+	a.log.Info("agent: turn", "id", tr.EventID, "conv", tr.Conv, "principal", tr.Principal, "outcome", tr.Outcome,
+		"steps", tr.Steps, "model", model, "attempts", len(tr.Route), "tools", len(tr.Tools),
+		"in_tokens", tr.InputTokens, "cached_tokens", tr.CacheReadTokens, "out_tokens", tr.OutputTokens,
+		"cost_usd", fmt.Sprintf("%.6f", tr.CostUSD), "ms", tr.Finished.Sub(tr.Started).Milliseconds())
 }
 
 // systemPrompt is the core's rules followed by the persona.

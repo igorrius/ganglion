@@ -560,3 +560,24 @@ func TestRepliesCarryTheRef(t *testing.T) {
 		t.Fatalf("the apology does not reply to its message: %q", out[0].ReplyTo)
 	}
 }
+
+func TestEveryTurnLogsOneInfoLine(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.smart.push(say("Секретный ответ"))
+	e.turn(t, message("telegram:user:42", "Igor", "секретный вопрос"))
+	var line string
+	for l := range strings.SplitSeq(e.logs.String(), "\n") {
+		if strings.Contains(l, `msg="agent: turn"`) {
+			line = l
+		}
+	}
+	for _, want := range []string{"level=INFO", "conv=telegram:42", "principal=telegram:user:42", "outcome=ok", "steps=1",
+		"model=p1/smart", "in_tokens=100", "out_tokens=10", "cost_usd=", "ms="} {
+		if !strings.Contains(line, want) {
+			t.Errorf("turn log lacks %q: %s", want, line)
+		}
+	}
+	if strings.Contains(e.logs.String(), "екретн") {
+		t.Fatal("message text in the logs")
+	}
+}
