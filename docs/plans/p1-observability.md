@@ -47,7 +47,7 @@ Prometheus names after the exporter's conversion:
 | `outbox.send` | `message.id`, `transport`, `parts` |
 | `telegram <method>` | `http.status_code` |
 
-### Task 1: the `telemetry` package
+### Task 1: the `telemetry` package — done
 
 **Files:** `telemetry/telemetry.go`, `telemetry/log.go`, `telemetry/telemetry_test.go`
 
