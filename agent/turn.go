@@ -7,6 +7,8 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -22,27 +24,37 @@ type turn struct {
 	calls  int    // tool calls so far in this turn; the next is calls+1
 	known  urlSet // addresses the sender gave or a search returned
 	// decision is the press of a KindDecision event; toolResult the
-	// pending call of a KindToolResult event.
+	// pending call of a KindToolResult event; schedule the job of a
+	// KindSchedule event.
 	decision   event.Decision
 	toolResult event.ToolResult
+	schedule   event.Schedule
+	// transport and replyConv are where the answer goes: the event's
+	// source and conversation, or for a scheduled job its owner's
+	// transport and the job's reply target.
+	transport, replyConv string
+	grant                *tool.Grant // a scheduled task's grant, on every call of its turn
 }
 
 // reply adds the answer to the person's message. A turn answers once, so
 // the key is fixed and a rerun turn's answer is sent once (R-DLV-6).
 func (t *turn) reply(text string) {
-	e := t.event
-	t.out = append(t.out, event.Outgoing{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv, Text: text, ReplyTo: t.msg.Ref})
+	t.out = append(t.out, event.Outgoing{IdemKey: t.event.IdemKey + ":reply:0", Transport: t.transport, Conv: t.replyConv, Text: text, ReplyTo: t.msg.Ref})
 }
 
 // edit changes the message holding the pressed button to text and removes
-// its buttons; "" keeps the text and removes only the buttons. A turn
-// edits once, so the key is fixed.
-func (t *turn) edit(text string) {
+// its buttons; "" keeps the text and removes only the buttons.
+func (t *turn) edit(text string) { t.editWith(pending.QuickEdit{Text: text}) }
+
+// editWith changes the message holding the pressed button to e's text and
+// buttons. A turn edits once, so the key is fixed.
+func (t *turn) editWith(e pending.QuickEdit) {
 	if t.decision.Ref == "" {
 		return
 	}
-	e := t.event
-	t.out = append(t.out, event.Outgoing{IdemKey: e.IdemKey + ":edit", Transport: e.Source, Conv: e.Conv, Text: text, Edit: t.decision.Ref})
+	ev := t.event
+	t.out = append(t.out, event.Outgoing{IdemKey: ev.IdemKey + ":edit", Transport: ev.Source, Conv: ev.Conv, Text: e.Text,
+		Buttons: e.Buttons, Edit: t.decision.Ref})
 }
 
 // stage does one step of a turn; done ends the turn early. An error

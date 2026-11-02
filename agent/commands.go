@@ -33,8 +33,12 @@ func parseCommand(text string) (string, string) {
 }
 
 // command runs the message's command from the table; other messages go
-// on to the model, unknown commands included.
+// on to the model, unknown commands included. A scheduled task's
+// instruction is never a command.
 func (a *Agent) command(ctx context.Context, t *turn) (bool, error) {
+	if t.grant != nil {
+		return false, nil
+	}
 	name, arg := parseCommand(t.msg.Text)
 	run, ok := a.commands[name]
 	if !ok {

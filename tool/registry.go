@@ -66,6 +66,16 @@ func (r *Registry) Lookup(name string) (Handler, bool) {
 	return h, ok
 }
 
+// Spec returns the spec of the tool called name, for whoever asks;
+// false when there is none.
+func (r *Registry) Spec(name string) (Spec, bool) {
+	h, ok := r.byName[name]
+	if !ok {
+		return Spec{}, false
+	}
+	return h.Spec(), true
+}
+
 // Run runs the tool the call names. It is the end of the middleware
 // chain, and it enforces the role itself: a name the model made up for a
 // tool it was not offered still stops here (ErrUnknown, ErrForbidden).

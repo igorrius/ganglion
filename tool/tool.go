@@ -59,6 +59,11 @@ type Spec struct {
 	AdminOnly   bool   // true for every M3b tool
 }
 
+// TaskConvPrefix starts the conversation of a scheduled task's turns,
+// "task:<job id>": its history is the task's earlier runs, and the
+// policy finds the task of a call outside its grant by it (R-POL-8).
+const TaskConvPrefix = "task:"
+
 // Grant is what a scheduled task may do, approved when the task was
 // created (design section 5.3).
 type Grant struct {
@@ -123,6 +128,15 @@ func Chain(f Func, mw ...Middleware) Func {
 type Handler interface {
 	Spec() Spec
 	Run(ctx context.Context, c Call) (Result, error)
+}
+
+// Questioner is a tool that words the owner's confirmation question
+// itself, from the call's arguments, so the owner sees what they approve
+// in plain words (a scheduled task's grant, design section 5.3). The
+// policy still removes secrets from it. An error means the call is
+// invalid: it is refused at once, without a question.
+type Questioner interface {
+	Question(ctx context.Context, c Call) (string, error)
 }
 
 // closingTag matches a closing external tag in any case and spacing.

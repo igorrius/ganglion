@@ -138,6 +138,17 @@ func TestMessageSendOnlyKnownStateConvUsesTheCallTransport(t *testing.T) {
 	}
 }
 
+// In a scheduled task's turn the call's own conversation is the task's;
+// a message to it goes to the task's reply target.
+func TestMessageSendInATaskGoesToItsReplyTarget(t *testing.T) {
+	c := call("message.send", `{"conv":"task:j1","text":"USD 41.2"}`)
+	c.Conv, c.Grant = "task:j1", &tool.Grant{Tools: []string{"message.send"}, ReplyTo: "telegram:42"}
+	res, err := builtin.NewMessageSend(convs()).Run(context.Background(), c)
+	if err != nil || len(res.Out) != 1 || res.Out[0].Conv != "telegram:42" || res.Out[0].Transport != "telegram" {
+		t.Fatalf("result %+v, %v", res, err)
+	}
+}
+
 func TestMessageSendSpec(t *testing.T) {
 	s := builtin.NewMessageSend(convs()).Spec()
 	if s.Name != "message.send" || s.Class != tool.ClassSideEffect || !s.AdminOnly {

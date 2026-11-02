@@ -11,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/cells/sqlstore"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
@@ -93,6 +94,13 @@ func Pending() do.Provider[*pending.Store] {
 	return func(i do.Injector) (*pending.Store, error) {
 		return pending.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*cells.Service](i),
 			time.Now, pending.DefaultTTL)
+	}
+}
+
+// Jobs provides the scheduled jobs and their runs.
+func Jobs() do.Provider[*schedule.Store] {
+	return func(i do.Injector) (*schedule.Store, error) {
+		return schedule.NewStore(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
 	}
 }
 

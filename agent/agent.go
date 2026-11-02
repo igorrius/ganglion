@@ -14,6 +14,7 @@ import (
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -40,8 +41,9 @@ type Deps struct {
 	Policy  tool.Middleware
 	Pending Confirmations // calls awaiting the owner and their buttons
 	// QuickActions run quick-action buttons by their action name; tools
-	// register them (none yet).
-	QuickActions map[string]QuickAction
+	// register them (schedule.details, schedule.delete, schedule.run_now).
+	QuickActions map[string]pending.QuickAction
+	Jobs         Jobs // scheduled jobs, read when their time comes
 	IsAdmin      AdminFunc
 	Turns        *turns.Log
 	Archive      SessionStore
@@ -74,7 +76,7 @@ func New(cfg Config, d Deps) *Agent {
 		cfg.Location = time.UTC
 	}
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
-	a.stages = []stage{a.resume, a.dropStalePending, a.idle, a.command, a.limits, a.answer, a.compactHistory}
+	a.stages = []stage{a.resume, a.scheduled, a.dropStalePending, a.idle, a.command, a.limits, a.answer, a.compactHistory}
 	a.commands = map[string]command{
 		"/new": a.newSession, "/reset": a.newSession,
 		"/sessions": a.listSessions, "/resume": a.resumeSession,
@@ -84,8 +86,9 @@ func New(cfg Config, d Deps) *Agent {
 }
 
 // Handle implements core.Handler: it runs the turn's stages and returns
-// the replies and the new state. It answers text messages, button presses
-// and the expiry of pending calls; other events are left alone.
+// the replies and the new state. It answers text messages, button
+// presses, the expiry of pending calls and scheduled jobs; other events
+// are left alone.
 func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
 	t, ok, err := a.begin(ctx, e)
 	if err != nil || !ok {
@@ -114,6 +117,9 @@ var payloads = map[event.Kind]func(t *turn) bool{
 	event.KindToolResult: func(t *turn) bool {
 		return json.Unmarshal(t.event.Payload, &t.toolResult) == nil && t.toolResult.Pending != ""
 	},
+	event.KindSchedule: func(t *turn) bool {
+		return json.Unmarshal(t.event.Payload, &t.schedule) == nil && t.schedule.Job != ""
+	},
 }
 
 // begin decodes the event and loads the conversation's state. ok is
@@ -134,6 +140,7 @@ func (a *Agent) begin(ctx context.Context, e event.Event) (*turn, bool, error) {
 		st = State{V: StateVersion}
 	}
 	t.state, t.now = st, a.d.Now()
+	t.transport, t.replyConv = e.Source, e.Conv
 	t.record = turns.Turn{EventID: e.ID, Conv: e.Conv, Principal: t.msg.From, Started: t.now, Outcome: turns.OutcomeOK}
 	return t, true, nil
 }

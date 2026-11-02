@@ -34,12 +34,12 @@ const (
 )
 
 const (
-	// taskConvPrefix starts the conversation of a scheduled task's turns:
-	// "task:<job id>".
-	taskConvPrefix = "task:"
-	confirmText    = "awaiting confirmation from the owner; the conversation continues when they answer"
+	confirmText = "awaiting confirmation from the owner; the conversation continues when they answer"
 	// questionArgsRunes caps the arguments shown in a confirmation question.
 	questionArgsRunes = 300
+	// toolQuestionRunes caps a question a tool words itself
+	// (tool.Questioner); the tool keeps its own well below it.
+	toolQuestionRunes = 3000
 )
 
 // DefaultMaxDepth is the deepest chain of agent-started turns allowed
@@ -140,7 +140,7 @@ func (p *Policy) Middleware() tool.Middleware {
 			case pol == tool.PolicyForbidden:
 				return tool.Result{}, fmt.Errorf("policy: %s is not allowed here: %w", c.Name, tool.ErrForbidden)
 			case pol == tool.PolicyConfirm:
-				return p.confirm(ctx, c)
+				return p.confirm(ctx, h, c)
 			case pol == tool.PolicyAuto:
 				return next(ctx, c)
 			default:
@@ -160,25 +160,39 @@ func (p *Policy) spec(s tool.Spec) tool.Spec {
 
 // confirm parks the call for the owner and returns its pending id with
 // the question, which the agent sends with the turn's replies.
-func (p *Policy) confirm(ctx context.Context, c tool.Call) (tool.Result, error) {
-	id, err := p.ask.Ask(ctx, c, question(c))
+func (p *Policy) confirm(ctx context.Context, h tool.Handler, c tool.Call) (tool.Result, error) {
+	q, err := question(ctx, h, c)
+	if err != nil {
+		return tool.Result{}, err
+	}
+	id, err := p.ask.Ask(ctx, c, q)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("policy: ask about %s: %w", c.Name, err)
 	}
 	if id == "" {
 		return tool.Result{}, fmt.Errorf("policy: ask about %s: the asker returned no pending id", c.Name)
 	}
-	q, err := p.ask.Outgoing(ctx, id)
+	out, err := p.ask.Outgoing(ctx, id)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("policy: question about %s: %w", c.Name, err)
 	}
-	return tool.Result{Pending: id, Text: confirmText, Out: []event.Outgoing{q}}, nil
+	return tool.Result{Pending: id, Text: confirmText, Out: []event.Outgoing{out}}, nil
 }
 
-// question is what the owner is asked: the tool and its arguments, with
-// secrets removed and the length capped.
-func question(c tool.Call) string {
-	return fmt.Sprintf("Run %s with %s?", c.Name, text.Truncate(journal.Redact(string(c.Args)), questionArgsRunes))
+// question is what the owner is asked, with secrets removed and the
+// length capped: the tool's own words when it is a tool.Questioner,
+// otherwise the tool and its arguments. A tool that cannot word its
+// question refuses the call.
+func question(ctx context.Context, h tool.Handler, c tool.Call) (string, error) {
+	q, ok := h.(tool.Questioner)
+	if !ok {
+		return fmt.Sprintf("Run %s with %s?", c.Name, text.Truncate(journal.Redact(string(c.Args)), questionArgsRunes)), nil
+	}
+	s, err := q.Question(ctx, c)
+	if err != nil {
+		return "", fmt.Errorf("policy: %s: %w", c.Name, err)
+	}
+	return text.Truncate(journal.Redact(s), toolQuestionRunes), nil
 }
 
 // outOfGrant refuses a call outside a task's grant and alerts the admins,
@@ -186,7 +200,7 @@ func question(c tool.Call) string {
 // outbox stores a message with a known IdemKey once.
 func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, error) {
 	err := fmt.Errorf("policy: %s is outside this task's grant: %w", c.Name, tool.ErrOutOfGrant)
-	job := strings.TrimPrefix(c.Conv, taskConvPrefix)
+	job := strings.TrimPrefix(c.Conv, tool.TaskConvPrefix)
 	day := p.now().In(p.loc).Format(time.DateOnly)
 	msgs, aerr := p.alerts.Messages(ctx, "alert:grant:"+job+":"+day,
 		fmt.Sprintf("Task %s tried to use %s, which its grant does not allow. The call was refused.", job, c.Name))

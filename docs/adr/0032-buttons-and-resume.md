@@ -131,9 +131,10 @@ The abuse cases:
    once. A crash between running the call and storing its outcome reruns
    it with the same key, which the tool's own idempotency covers
    (R-DLV-6).
-5. **"Run now" on a task with side effects:** a quick action is a direct
-   call that still passes the policy, so it asks for confirmation (task
-   6 registers the actions).
+5. **"Run now" on a task with side effects:** the quick action asks
+   through the pending store (`Ask`, the button as the call's turn) and
+   shows the question in place of the job's message; the approved call
+   (`schedule.run_now`) runs like any confirmed call (task 6).
 
 ## Consequences
 
@@ -144,9 +145,11 @@ The abuse cases:
 - The question message can only be edited from a press, which carries
   its message id; the expiry does not know it, so an expired question
   keeps its buttons until someone presses one ("Expired.").
-- A press is honoured even after `/new`: the call runs and the outcome
-  is told in the new session. An expiry of a call whose session moved on
-  is recorded without a model turn.
+- A press is honoured even after `/new`: the call runs and its question
+  is edited. The model hears of the outcome only while the call is in
+  the session's pending list, so an answer after `/new`, or to a
+  question a quick action asked, starts no model turn; an expiry of a
+  call whose session moved on is recorded the same way.
 - Pending ids that no longer wait are dropped from the state at the
   start of every message turn and on `/resume`.
 - An `Ask` that half-fails (the call stored, its request cell not) fails

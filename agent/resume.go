@@ -23,12 +23,6 @@ type Confirmations interface {
 	Waiting(ctx context.Context, ids []string) ([]string, error)
 }
 
-// QuickAction runs a quick-action button, such as Delete on a list entry.
-// It returns the new text of the message holding the button; no model
-// turn follows. A rerun of its event runs it again with the same button,
-// so it must be idempotent by the button.
-type QuickAction func(ctx context.Context, b pending.Button) (edit string, err error)
-
 // confirmationPrefix starts the user-role note that brings a confirmed
 // call's outcome into the history: "[confirmation] <tool>: <result>".
 const confirmationPrefix = "[confirmation] "
@@ -55,7 +49,7 @@ func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 		return true, a.pressed(ctx, t)
 	case event.KindToolResult:
 		return true, a.expired(ctx, t)
-	default: // event.KindMessage
+	default: // event.KindMessage, event.KindSchedule
 		return false, nil
 	}
 }
@@ -126,17 +120,19 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 		t.closeButtons("", "")
 		return nil
 	}
-	text, err := run(ctx, b)
+	e, err := run(ctx, pending.QuickPress{Button: b, Transport: t.event.Source, At: t.event.At})
 	if err != nil {
 		return fmt.Errorf("agent: quick action %s: %w", b.Action, err)
 	}
-	t.edit(text)
+	t.editWith(e)
 	return nil
 }
 
 // confirmed runs an approved call or declines a denied one, stores the
 // outcome, edits the question and resumes the conversation with it. A
-// rerun (the outcome is stored) does not run the call again.
+// rerun (the outcome is stored) does not run the call again. A call the
+// conversation does not wait for (a quick action asked it, or the
+// session moved on) is closed without a model turn.
 func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action string) error {
 	if err := a.setAdmin(ctx, t); err != nil {
 		return err
@@ -151,6 +147,9 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 	}
 	t.edit(answered(it.Question, line))
 	t.out = append(t.out, o.Out...) // again on a rerun: the outbox keeps one per key
+	if !slices.Contains(t.state.Pending, it.ID) {
+		return nil
+	}
 	return a.continueWith(ctx, t, it, o)
 }
 

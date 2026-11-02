@@ -10,6 +10,7 @@ import (
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/outbox"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/transport"
@@ -127,8 +128,24 @@ func AgentHousekeepers() do.Provider[Housekeeping] {
 	}
 }
 
+// Schedulers are the components that run jobs at their times.
+type Schedulers []node.Component
+
+// JobSchedulers provides the schedulers that are on.
+func JobSchedulers() do.Provider[Schedulers] {
+	return choose[Schedulers](agentOn, schedulersAgent, schedulersNone)
+}
+
+// AgentSchedulers provides the scheduler of the agent's reminders and
+// tasks.
+func AgentSchedulers() do.Provider[Schedulers] {
+	return func(i do.Injector) (Schedulers, error) {
+		return Schedulers{do.MustInvoke[*schedule.Scheduler](i)}, nil
+	}
+}
+
 // CoreComponents provides the core role's components: the sender, the
-// turn loop, the pruners and the inbound components.
+// turn loop, the pruners, the schedulers and the inbound components.
 func CoreComponents() do.Provider[[]node.Component] {
 	return func(i do.Injector) ([]node.Component, error) {
 		q := do.MustInvoke[*sqlqueue.Queue](i)
@@ -138,6 +155,7 @@ func CoreComponents() do.Provider[[]node.Component] {
 			sqlqueue.Pruner{Queue: q, Every: pruneEvery, Log: do.MustInvoke[*slog.Logger](i)},
 		}
 		comps = append(comps, do.MustInvoke[Housekeeping](i)...)
+		comps = append(comps, do.MustInvoke[Schedulers](i)...)
 		return append(comps, do.MustInvoke[Inbound](i)...), nil
 	}
 }

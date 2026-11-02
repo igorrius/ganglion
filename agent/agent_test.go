@@ -161,6 +161,7 @@ type env struct {
 	logs       *bytes.Buffer
 	persona    string
 	admin      bool // the sender is an admin (default true)
+	jobs       jobs
 	personaErr error
 }
 
@@ -180,7 +181,7 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{db: db, logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0, admin: true}
+	e := &env{db: db, logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0, admin: true, jobs: jobs{}}
 	e.router, err = rules.New([]router.Model{
 		{Provider: "p1", Name: "smart", Tier: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 2}},
 		{Provider: "p2", Name: "cheap", Tier: "cheap", Caps: router.ModelCaps{Tools: true}},
@@ -197,7 +198,7 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 		t.Fatal(err)
 	}
 	e.deps = Deps{
-		States: e.states, Router: e.router, Tools: tools, Policy: passThrough, Pending: e.pending, IsAdmin: func(context.Context, string) (bool, error) { return e.admin, nil }, Turns: tl, Archive: arch,
+		States: e.states, Router: e.router, Tools: tools, Policy: passThrough, Pending: e.pending, IsAdmin: func(context.Context, string) (bool, error) { return e.admin, nil }, Turns: tl, Archive: arch, Jobs: e.jobs,
 		Providers: map[string]provider.Provider{"p1": e.smart, "p2": e.cheap},
 		Alerts: alert.Admins{List: func(context.Context) ([]string, error) { return []string{"telegram:user:1"}, nil }, Private: func(p string) (string, string, bool) {
 			id, ok := strings.CutPrefix(p, "telegram:user:")

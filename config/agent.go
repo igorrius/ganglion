@@ -17,6 +17,7 @@ import (
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -57,15 +58,17 @@ func Agent() do.Provider[*agent.Agent] {
 			Tools:     do.MustInvoke[*tool.Registry](i),
 			// Around every tool call, outermost first: traced, journal, then
 			// the policy for the calls the model makes.
-			Middleware: []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
-			Policy:     do.MustInvoke[*policy.Policy](i).Middleware(),
-			Pending:    do.MustInvoke[*pending.Store](i),
-			IsAdmin:    do.MustInvoke[agent.AdminFunc](i),
-			Turns:      do.MustInvoke[*turns.Log](i),
-			Archive:    do.MustInvoke[agent.SessionStore](i),
-			Alerts:     do.MustInvoke[alert.Admins](i),
-			Persona:    agent.PersonaDir(b.Agent.Workspace),
-			Log:        do.MustInvoke[*slog.Logger](i),
+			Middleware:   []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
+			Policy:       do.MustInvoke[*policy.Policy](i).Middleware(),
+			Pending:      do.MustInvoke[*pending.Store](i),
+			QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
+			Jobs:         do.MustInvoke[*schedule.Store](i),
+			IsAdmin:      do.MustInvoke[agent.AdminFunc](i),
+			Turns:        do.MustInvoke[*turns.Log](i),
+			Archive:      do.MustInvoke[agent.SessionStore](i),
+			Alerts:       do.MustInvoke[alert.Admins](i),
+			Persona:      agent.PersonaDir(b.Agent.Workspace),
+			Log:          do.MustInvoke[*slog.Logger](i),
 		}), nil
 	}
 }
@@ -109,6 +112,36 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewMessageSend(do.MustInvoke[builtin.Convs](i)),
 		builtin.NewCellsGet(cs),
 		builtin.NewCellsSet(cs),
+		builtin.NewScheduleCreate(do.MustInvoke[builtin.Scheduling](i)),
+		builtin.NewScheduleList(do.MustInvoke[builtin.Scheduling](i)),
+		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
+		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
+	}
+}
+
+// Scheduler provides the scheduler of the jobs in the node's zone, which
+// puts their events into the inbox.
+func Scheduler() do.Provider[*schedule.Scheduler] {
+	return func(i do.Injector) (*schedule.Scheduler, error) {
+		return schedule.New(do.MustInvoke[*schedule.Store](i), do.MustInvoke[*sqlqueue.Queue](i), do.MustInvoke[Bootstrap](i).Agent.TZ,
+			time.Now, schedule.WithLogger(do.MustInvoke[*slog.Logger](i))), nil
+	}
+}
+
+// Scheduling provides what the schedule tools and their buttons need.
+// The tools check grants against the registry they are part of, so the
+// spec lookup reads the registry when called, not when built.
+func Scheduling() do.Provider[builtin.Scheduling] {
+	return func(i do.Injector) (builtin.Scheduling, error) {
+		return builtin.Scheduling{
+			Jobs:    do.MustInvoke[*schedule.Store](i),
+			Runner:  do.MustInvoke[*schedule.Scheduler](i),
+			Specs:   func(name string) (tool.Spec, bool) { return do.MustInvoke[*tool.Registry](i).Spec(name) },
+			Buttons: do.MustInvoke[*pending.Store](i),
+			Convs:   do.MustInvoke[builtin.Convs](i),
+			Loc:     do.MustInvoke[Bootstrap](i).Agent.TZ,
+			Now:     time.Now,
+		}, nil
 	}
 }
 

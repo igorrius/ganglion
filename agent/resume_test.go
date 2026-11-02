@@ -305,10 +305,10 @@ func TestExpiryResumesWithExpired(t *testing.T) {
 
 func TestQuickActionEditsWithoutAModel(t *testing.T) {
 	e := newConfirmEnv(t)
-	var got []pending.Button
-	e.deps.QuickActions = map[string]QuickAction{"test.delete": func(_ context.Context, b pending.Button) (string, error) {
-		got = append(got, b)
-		return "Deleted.", nil
+	var got []pending.QuickPress
+	e.deps.QuickActions = map[string]pending.QuickAction{"test.delete": func(_ context.Context, p pending.QuickPress) (pending.QuickEdit, error) {
+		got = append(got, p)
+		return pending.QuickEdit{Text: "Deleted.", Buttons: []event.Button{{ID: "B2", Label: "Undo"}}}, nil
 	}}
 	e.a = New(overDefaults(Config{}), e.deps)
 	b := pending.Button{ID: pending.NewButtonID(), Action: "test.delete", Label: "Delete", Principal: owner, Conv: "telegram:42",
@@ -316,11 +316,12 @@ func TestQuickActionEditsWithoutAModel(t *testing.T) {
 	if err := e.pending.AddButtons(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	out := e.turn(t, press(owner, b.ID, "90"))
-	if len(got) != 1 || string(got[0].Args) != `{"job":"j1"}` {
+	ev := press(owner, b.ID, "90")
+	out := e.turn(t, ev)
+	if len(got) != 1 || string(got[0].Button.Args) != `{"job":"j1"}` || got[0].Transport != "telegram" || !got[0].At.Equal(ev.At) {
 		t.Fatalf("action got %+v", got)
 	}
-	if len(out) != 1 || out[0].Edit != "90" || out[0].Text != "Deleted." || len(e.smart.requests()) != 0 {
+	if len(out) != 1 || out[0].Edit != "90" || out[0].Text != "Deleted." || len(out[0].Buttons) != 1 || len(e.smart.requests()) != 0 {
 		t.Fatalf("out %+v", out)
 	}
 }
@@ -412,7 +413,9 @@ func TestRerunKeepsTheOutcome(t *testing.T) {
 // message is a list entry the agent cannot write again.
 func TestRefusedQuickPressKeepsTheText(t *testing.T) {
 	e := newConfirmEnv(t)
-	e.deps.QuickActions = map[string]QuickAction{"test.delete": func(context.Context, pending.Button) (string, error) { return "Deleted.", nil }}
+	e.deps.QuickActions = map[string]pending.QuickAction{"test.delete": func(context.Context, pending.QuickPress) (pending.QuickEdit, error) {
+		return pending.QuickEdit{Text: "Deleted."}, nil
+	}}
 	e.a = New(overDefaults(Config{}), e.deps)
 	ctx := context.Background()
 	mk := func(action string, expires time.Time) pending.Button {
@@ -469,4 +472,30 @@ func (e *confirmEnv) pendingID(t *testing.T, q event.Outgoing) string {
 		t.Fatal(err)
 	}
 	return id
+}
+
+// A question a quick action asked (Run now of a task that may act) runs
+// its call when approved and edits the question, but no model turn
+// follows: the conversation never waited for it.
+func TestApprovedQuickQuestionDoesNotResumeTheModel(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	ctx := context.Background()
+	c := tool.Call{TurnID: "BUTTON1", N: 1, Conv: "telegram:42", Transport: "telegram", Principal: owner, Name: "schedule.create",
+		Args: json.RawMessage(`{}`)}
+	id, err := e.pending.Ask(ctx, c, "Run the task now?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, err := e.pending.Outgoing(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := e.turn(t, press(owner, q.Buttons[0].ID, "91"))
+	if len(side.calls) != 1 || side.calls[0].Key() != "BUTTON1:1" || !side.calls[0].Admin {
+		t.Fatalf("calls %+v", side.calls)
+	}
+	if len(out) != 1 || out[0].Edit != "91" || out[0].Text != "Run the task now?\n\nApproved." || len(e.smart.requests()) != 0 {
+		t.Fatalf("out %+v", out)
+	}
 }

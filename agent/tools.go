@@ -37,12 +37,15 @@ func (a *Agent) traced(next tool.Func) tool.Func {
 }
 
 // toolSpecs are the tools the model is offered in this turn, in the
-// provider's shape.
+// provider's shape; a scheduled task is offered only its grant's tools
+// (the policy refuses the others anyway).
 func (a *Agent) toolSpecs(t *turn) []provider.Tool {
 	specs := a.d.Tools.Specs(t.admin)
-	out := make([]provider.Tool, len(specs))
-	for i, s := range specs {
-		out[i] = provider.Tool{Name: s.Name, Description: s.Description, InputSchema: s.InputSchema}
+	out := make([]provider.Tool, 0, len(specs))
+	for _, s := range specs {
+		if t.grant == nil || slices.Contains(t.grant.Tools, s.Name) {
+			out = append(out, provider.Tool{Name: s.Name, Description: s.Description, InputSchema: s.InputSchema})
+		}
 	}
 	return out
 }
@@ -91,8 +94,8 @@ func (a *Agent) runTool(ctx context.Context, t *turn, call provider.ToolCall) pr
 // toolCall is the context of the turn's next call.
 func (a *Agent) toolCall(t *turn, call provider.ToolCall) tool.Call {
 	return tool.Call{
-		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Transport: t.event.Source, Principal: t.msg.From,
-		Admin: t.admin, Tainted: t.state.Tainted, KnownURL: t.known.has,
+		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Transport: t.transport, Principal: t.msg.From,
+		Admin: t.admin, Tainted: t.state.Tainted, Grant: t.grant, KnownURL: t.known.has,
 		Name: call.Name, Args: call.Args,
 	}
 }

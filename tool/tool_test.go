@@ -71,6 +71,19 @@ func TestSpecsHideAdminOnly(t *testing.T) {
 	}
 }
 
+func TestSpecByName(t *testing.T) {
+	r, err := tool.NewRegistry(local{}, named("b.admin", true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, ok := r.Spec("b.admin"); !ok || s.Name != "b.admin" || !s.AdminOnly {
+		t.Fatalf("spec %+v, %v", s, ok)
+	}
+	if _, ok := r.Spec("nope"); ok {
+		t.Fatal("an unknown tool has a spec")
+	}
+}
+
 func TestRunUnknownAndAdminOnly(t *testing.T) {
 	r, _ := tool.NewRegistry(local{}, named("x", true))
 	if _, err := r.Run(context.Background(), tool.Call{Name: "nope", Admin: true}); !errors.Is(err, tool.ErrUnknown) {

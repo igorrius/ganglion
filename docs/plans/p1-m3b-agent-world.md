@@ -651,7 +651,26 @@ It records the callback abuse cases of design 5.2.
 - Quick actions: `schedule.details`, `schedule.delete`,
   `schedule.run_now`. Each edits the list message in place.
 
-- [ ] **Step 1: Write failing tests.**
+- As built (rulings R2–R4 and the task-6 controller rulings):
+  - `Job` has `Transport` (the replies' transport); `Store.Get` and
+    `Store.Ensure` (idempotent by id, never changes a job); a one-time
+    job that has run leaves the list.
+  - `cron_runs` row first (claimed with `put_ms` 0, in the transaction
+    that checks `deleted`), then `Put`, then `put_ms`; a row left with
+    0 is put again on the next tick.
+  - `RunAt(ctx, id, owner, at)` behind `RunNow`, so a rerun quick press
+    asks for the same run.
+  - `schedule.run_now` is also a tool, so an approved Run now runs
+    through the confirmation path; a question a quick action asked
+    resumes no model turn.
+  - Tools word their own question through `tool.Questioner`; a grant may
+    not name `schedule.*`, an unknown or a forbidden tool; hosts are bare
+    lower-case names, exactly when `web.fetch` is granted.
+  - A task's turn is offered only its grant's tools; its instruction is
+    never a command and its session is never cut by silence.
+  - `QuickAction` moved to `tool/pending` with `QuickPress` and
+    `QuickEdit` (an edit may carry new buttons).
+- [x] **Step 1: Write failing tests.**
   - `TestParseCron`: a table of valid and invalid strings.
   - `TestNextAcrossDST`:
     - `0 3 * * *` on 2026-03-29 and 2026-10-25 in Europe/Kyiv;
@@ -665,9 +684,9 @@ It records the callback abuse cases of design 5.2.
   - `TestReminderNeedsNoModel`.
   - `TestRunNowKey`.
   - `TestListHasButtons`.
-- [ ] **Step 2–4: Run, implement, run** `go test -race ./...`; lint.
-- [ ] **Step 5: Code map** (`schedule`, `cron_runs` done).
-- [ ] **Step 6: Commit** `schedule: cron in the node's zone, catch-up, reminders and agent tasks with grants`.
+- [x] **Step 2–4: Run, implement, run** `go test -race ./...`; lint.
+- [x] **Step 5: Code map** (`schedule`, `cron_runs` done).
+- [x] **Step 6: Commit** `schedule: cron in the node's zone, catch-up, reminders and agent tasks with grants`.
 
 ### Task 7: memory in a git workspace, recall, and the clean-context guard
 

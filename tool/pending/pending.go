@@ -122,6 +122,27 @@ type Button struct {
 	Used            bool
 }
 
+// QuickPress is a press of a quick-action button as its action sees it.
+type QuickPress struct {
+	Button    Button
+	Transport string    // the transport of the button's conversation
+	At        time.Time // when it was pressed; the same when its event is handled again
+}
+
+// QuickEdit is the new content of the message that holds a quick-action
+// button. Text "" keeps the text; Buttons replace the message's buttons,
+// none removes them.
+type QuickEdit struct {
+	Text    string
+	Buttons []event.Button
+}
+
+// QuickAction runs a quick-action button, such as Delete on a list entry,
+// and returns the new content of the message holding it; no model turn
+// follows. A rerun of its event runs it again with the same press, so it
+// must be idempotent by the button.
+type QuickAction func(ctx context.Context, p QuickPress) (QuickEdit, error)
+
 // Press is a valid press: the button and, for a confirmation, its call.
 type Press struct {
 	Button Button

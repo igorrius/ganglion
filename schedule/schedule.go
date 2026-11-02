@@ -23,11 +23,6 @@ import (
 // Source is the Source of the events the scheduler puts.
 const Source = "cron"
 
-// TaskConvPrefix starts the conversation of a task's runs: "task:<id>".
-// Its history is the task's earlier runs, and the policy finds the job of
-// a call outside the grant by it.
-const TaskConvPrefix = "task:"
-
 // Kind is what a job does. Kinds are stored, so their values never
 // change.
 type Kind string
@@ -74,10 +69,10 @@ type Job struct {
 }
 
 // EventConv is the conversation of the job's events: a reminder's own
-// conversation, a task's "task:<id>".
+// conversation, a task's "task:<id>", whose history is its earlier runs.
 func (j Job) EventConv() string {
 	if j.Kind == KindTask {
-		return TaskConvPrefix + j.ID
+		return tool.TaskConvPrefix + j.ID
 	}
 	return j.Conv
 }

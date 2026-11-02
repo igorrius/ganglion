@@ -180,6 +180,43 @@ func TestConfirmDoesNotRun(t *testing.T) {
 	}
 }
 
+// questioner is a tool that words its own confirmation question.
+type questioner struct {
+	counter
+	question string
+	err      error
+}
+
+func (q *questioner) Question(_ context.Context, c tool.Call) (string, error) {
+	return q.question + " (" + c.Name + ")", q.err
+}
+
+// A tool that words its own question is asked about in its words, with
+// secrets still removed; a question it cannot word fails the call without
+// asking.
+func TestToolWordsItsQuestion(t *testing.T) {
+	h := &questioner{s: spec("schedule.create", tool.ClassSideEffect, tool.PolicyConfirm),
+		question: "Create a task?\nInstruction: use token=abcdefghijklmnopqrstuvwxyz"}
+	ask := &fakeAsker{id: "pend-1"}
+	reg, err := tool.NewRegistry(router.Local{}, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := tool.Chain(reg.Run, policy.New(policy.DefaultConfig(), reg, ask).Middleware())
+	c := with(base(), func(c *tool.Call) { c.Name = "schedule.create" })
+	if _, err := run(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
+	if len(ask.asked) != 1 || !strings.HasPrefix(ask.asked[0], "Create a task?\nInstruction: use token=") ||
+		!strings.HasSuffix(ask.asked[0], "(schedule.create)") || strings.Contains(ask.asked[0], "abcdefghijkl") {
+		t.Fatalf("asked %q", ask.asked)
+	}
+	h.err = errors.New("schedule.create: no such host")
+	if _, err := run(context.Background(), c); err == nil || !strings.Contains(err.Error(), "no such host") || len(ask.asked) != 1 || h.calls != 0 {
+		t.Fatalf("an invalid call: err %v, asked %d times, ran %d", err, len(ask.asked), h.calls)
+	}
+}
+
 func TestAskFailureFailsTheCall(t *testing.T) {
 	h := &counter{s: spec("schedule.create", tool.ClassSideEffect, tool.PolicyConfirm)}
 	run := chain(t, h, policy.NoAsk{})

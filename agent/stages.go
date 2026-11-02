@@ -14,9 +14,11 @@ import (
 )
 
 // idle starts a new session after a long silence, archiving the old one.
+// A scheduled task's session is never cut: its earlier runs are its
+// history (design section 5.3).
 func (a *Agent) idle(ctx context.Context, t *turn) (bool, error) {
 	st := t.state
-	if a.cfg.SessionIdle <= 0 || len(st.Messages) == 0 || st.Last.IsZero() || t.now.Sub(st.Last) <= a.cfg.SessionIdle {
+	if t.grant != nil || a.cfg.SessionIdle <= 0 || len(st.Messages) == 0 || st.Last.IsZero() || t.now.Sub(st.Last) <= a.cfg.SessionIdle {
 		return false, nil
 	}
 	if err := a.archive(ctx, t.event.Conv, st, "idle"); err != nil {

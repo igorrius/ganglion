@@ -22,7 +22,7 @@ flowchart TB
     tools["Tool registry<br/>memory.*, schedule.*,<br/>message.send, device.*"]
     policies["Policies<br/>risk classes, confirmations, audit"]
     memory["Memory<br/>memory/*.md in git"]
-    sched["Scheduler<br/>crons, catch-up"]
+    sched["Scheduler<br/>crons, catch-up;<br/>reminders, tasks with grants"]
     outbox[("Outbox")]
     sender["Outbox sender<br/>retries, 429 retry_after"]
     turns[("turns<br/>trace, cost")]
@@ -39,6 +39,7 @@ flowchart TB
     loop --> policies
     policies --> tools
     tools <--> memory
+    tools --> sched
     loop --> outbox
     loop --> turns
     outbox --> sender
@@ -60,7 +61,7 @@ flowchart TB
 | Policies | Decide autonomous / confirm / forbid; audit | R-POL-1…5 |
 | Tool registry | Tools available to the model, local and on edges | — |
 | Memory | Facts and skills in git, nightly consolidation | R-MEM-1…4 |
-| Scheduler | Crons with catch-up after downtime | — |
+| Scheduler | Crons in the node's zone with catch-up after downtime; reminders and agent tasks with grants, each task in its own conversation | R-SCH-1, R-SCH-2, R-POL-8 |
 | turns | Trace and cost of every turn | R-AGT-5 |
 
 ## Edge runner

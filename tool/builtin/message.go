@@ -40,11 +40,16 @@ type Convs struct {
 // resolve returns where a message to target goes. target is a
 // conversation key or a principal such as "telegram:user:7"; a known
 // conversation is reached on the transport of the call.
+// A scheduled task's own conversation ("task:<id>") is no chat: a message
+// to it goes to the task's reply target.
 func (v Convs) resolve(ctx context.Context, c tool.Call, target string) (transport, conv string, err error) {
 	switch target {
 	case "":
 		return "", "", fmt.Errorf("%w: no conv given", ErrUnknownConv)
 	case c.Conv:
+		if c.Grant != nil {
+			return c.Transport, c.Grant.ReplyTo, nil
+		}
 		return c.Transport, c.Conv, nil
 	}
 	if tr, cv, ok := v.Private(target); ok {

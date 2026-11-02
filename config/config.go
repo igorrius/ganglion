@@ -27,7 +27,7 @@ type ProcessStart time.Time
 // Core is the core role: storage, delivery, the turn loop and the agent.
 var Core = do.Package(
 	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Admins()),
-	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Convs()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Agent()),
+	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Agent()),
 	do.Lazy(Telegram()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
 	// Extension points: the interface, then each implementation under its name.
 	do.Lazy(Handler()), do.LazyNamed(handlerAgent, AgentHandler()), do.EagerNamed(handlerEcho, core.Handler(core.EchoHandler)),
@@ -35,6 +35,7 @@ var Core = do.Package(
 	do.Lazy(TurnHook()), do.LazyNamed(turnHookTyping, TypingHook()), do.EagerNamed(turnHookNone, core.TurnHook(core.NoTurnHook)),
 	do.Lazy(Transports()), do.LazyNamed(transportsTelegram, TelegramTransports()), do.EagerNamed(transportsNone, []transport.Transport(nil)),
 	do.Lazy(Housekeepers()), do.LazyNamed(housekeepingAgent, AgentHousekeepers()), do.EagerNamed(housekeepingNone, Housekeeping(nil)),
+	do.Lazy(JobSchedulers()), do.LazyNamed(schedulersAgent, AgentSchedulers()), do.EagerNamed(schedulersNone, Schedulers(nil)),
 	do.Lazy(Receivers()), do.LazyNamed(inboundTelegram, TelegramReceivers()), do.EagerNamed(inboundNone, Inbound(nil)),
 )
 
@@ -77,6 +78,8 @@ const (
 	transportsNone     = "transports.none"     // no transport
 	housekeepingAgent  = "housekeeping.agent"  // prune the tool-call journal, expire confirmations
 	housekeepingNone   = "housekeeping.none"   // nothing to clean up
+	schedulersAgent    = "schedulers.agent"    // the agent's reminders and tasks
+	schedulersNone     = "schedulers.none"     // nothing runs on a schedule
 	inboundTelegram    = "inbound.telegram"    // Telegram polling
 	inboundNone        = "inbound.none"        // nothing brings messages in
 )
