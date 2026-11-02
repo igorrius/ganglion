@@ -26,7 +26,7 @@ kitchen one. It runs without a model and escalates only on errors.
 
 ## Building
 
-Requires Go 1.26 and, for linting, golangci-lint v2.
+Requires Go 1.27 and, for linting, golangci-lint v2 built with Go 1.27.
 
 ```sh
 make check                      # lint, test, build

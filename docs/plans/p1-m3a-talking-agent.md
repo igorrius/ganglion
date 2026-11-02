@@ -43,7 +43,7 @@ flowchart LR
     L -->|Complete: reply + state + done| O[("outbox")]
 ```
 
-**Tech stack:** Go 1.26, `net/http`, `encoding/json`, `go.yaml.in/yaml/v3`
+**Tech stack:** Go 1.26 (1.27.3 from task 12), `net/http`, `encoding/json`, `go.yaml.in/yaml/v3`
 (already a dependency, ADR-0012) for the model catalogue. No new
 dependencies.
 

@@ -1,6 +1,6 @@
 module github.com/igorrius/ganglion
 
-go 1.26.3
+go 1.27.3
 
 require (
 	github.com/tetratelabs/wazero v1.12.0

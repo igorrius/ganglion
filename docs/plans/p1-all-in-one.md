@@ -17,7 +17,7 @@ cells are what it perceives and acts on, modules are its reflexes, the
 inbox/outbox is its nervous system. In-process bus; SQLite for inbox/outbox,
 history and cells; WASM modules on the runner.
 
-**Tech stack:** Go 1.26, wazero 1.12 (own ABI), modernc.org/sqlite (WAL),
+**Tech stack:** Go 1.27 (1.26 until 2026-11-02), wazero 1.12 (own ABI), modernc.org/sqlite (WAL),
 Telegram Bot API, an OpenAI-compatible model API, YAML config.
 
 **Spec:** [spec](../spec.md) sections 6–8 and 10.2; ADRs
