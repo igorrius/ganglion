@@ -171,7 +171,7 @@ policies and skills on it. The node is assembled in one place (`config`,
   components and runs one echo turn and one agent turn end to end.
 - [x] `make check`; commit.
 
-### Task 5: `urfave/cli` commands and flags
+### Task 5: `urfave/cli` commands and flags — done
 
 **Files:**
 - new: root `main.go`, `cmd/` (`root.go`, `run.go`, `version.go`,
@@ -182,8 +182,8 @@ policies and skills on it. The node is assembled in one place (`config`,
 - changed: `Makefile`, `.github/workflows/ci.yml` if paths appear there,
   `go.mod`.
 
-- [ ] `go get github.com/urfave/cli/v3@v3.14.0`.
-- [ ] `cmd/flags`: one flag per bootstrap setting, each with:
+- [x] `go get github.com/urfave/cli/v3@v3.14.0`.
+- [x] `cmd/flags`: one flag per bootstrap setting, each with:
   - `Sources: cli.EnvVars(<today's variable>)`;
   - today's default as `Value`;
   - `Destination` into `config.Bootstrap`;
@@ -192,14 +192,14 @@ policies and skills on it. The node is assembled in one place (`config`,
 
   `run`'s flags are `Local`, and `--log-level` sits on the root. Secrets
   are not flags: they come from `secrets.Env`.
-- [ ] Move the development tools to `tools/` as they are. Update their
+- [x] Move the development tools to `tools/` as they are. Update their
   `Makefile` targets and the docs that name their paths.
-- [ ] `ganglion run` (`--roles`, the flags above, `GANGLION_LOG_LEVEL` as
+- [x] `ganglion run` (`--roles`, the flags above, `GANGLION_LOG_LEVEL` as
   `--log-level`). It does three things:
   - sets up telemetry;
   - builds the container from `Bootstrap` and the role packages;
   - runs `node.RunAll` until a signal, then `injector.ShutdownWithContext`.
-- [ ] `internal/buildinfo`: `Info{Version, Commit, CommitTime, Modified,
+- [x] `internal/buildinfo`: `Info{Version, Commit, CommitTime, Modified,
   Go, OS, Arch}` read once. `Read()` takes, in order:
   - the `-X` version, if set;
   - the module version from `debug.ReadBuildInfo`, unless it is
@@ -208,23 +208,23 @@ policies and skills on it. The node is assembled in one place (`config`,
 
   Commit, commit time and the dirty flag come from the `vcs.*` settings.
   A table test feeds `debug.BuildInfo` values.
-- [ ] `ganglion version` prints every field as `key: value`, or JSON with
+- [x] `ganglion version` prints every field as `key: value`, or JSON with
   `--json`. `ganglion --version` prints `ganglion <version> (<short
   commit>[, dirty])`. Root without a command prints help. The root
   `main.go` holds only signal handling and `cmd.Execute`.
-- [ ] The start log line and the telemetry resource carry the version and
+- [x] The start log line and the telemetry resource carry the version and
   the commit from `buildinfo`. The resource gets the commit as
   `vcs.ref.head.revision`, so Prometheus' `target_info` shows which build
   runs.
-- [ ] `Makefile`: `-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)`.
+- [x] `Makefile`: `-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)`.
   A test builds the binary with and without `-X` and checks the
   `version` output.
-- [ ] Tests: every old environment variable still sets its setting;
+- [x] Tests: every old environment variable still sets its setting;
   `--help` lists them; a bad value fails with the variable's name. The
   crash harness and the memory test call `run --roles core`.
-- [ ] `Makefile`: `live-echo` and `live-agent` use `ganglion run --roles
+- [x] `Makefile`: `live-echo` and `live-agent` use `ganglion run --roles
   core`.
-- [ ] `make check`; commit.
+- [x] `make check`; commit.
 
 ### Task 6: lint guardrails
 

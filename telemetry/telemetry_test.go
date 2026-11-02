@@ -105,3 +105,19 @@ func TestLogHandlerAddsIDs(t *testing.T) {
 		t.Fatalf("outside a span: %s", lines[1])
 	}
 }
+
+// target_info says which build runs: the version and the commit.
+func TestResourceNamesTheCommit(t *testing.T) {
+	tel, err := Setup(context.Background(), Config{Addr: "127.0.0.1:0", Service: "ganglion-test", Version: "v0.1.1",
+		Commit: "86cda06f1d2e", Getenv: func(string) string { return "" }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tel.Shutdown(context.Background()) })
+	c, _ := otel.Meter("ganglion/test").Int64Counter("ganglion.test.build")
+	c.Add(context.Background(), 1)
+	_, body := get(t, "http://"+tel.Addr()+"/metrics")
+	if !strings.Contains(body, `vcs_ref_head_revision="86cda06f1d2e"`) || !strings.Contains(body, `service_version="v0.1.1"`) {
+		t.Fatalf("target_info lacks the build:\n%s", body)
+	}
+}

@@ -1,6 +1,6 @@
 //go:build unix
 
-package main
+package cmd
 
 import (
 	"bytes"
@@ -47,7 +47,7 @@ func TestCrashHarness(t *testing.T) {
 
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "ganglion")
-	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "build", "-o", bin, "..").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
 	fake := telegramtest.NewServer(t, crashToken)
@@ -83,7 +83,7 @@ func TestCrashHarness(t *testing.T) {
 	var lastLog bytes.Buffer
 	start := func() *exec.Cmd {
 		lastLog.Reset()
-		cmd := exec.Command(bin, "--roles", "core")
+		cmd := exec.Command(bin, "run", "--roles", "core")
 		cmd.Env = env
 		cmd.Stdout, cmd.Stderr = &lastLog, &lastLog
 		if err := cmd.Start(); err != nil {

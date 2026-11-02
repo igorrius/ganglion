@@ -7,6 +7,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	github.com/samber/do/v2 v2.1.0
 	github.com/tetratelabs/wazero v1.12.0
+	github.com/urfave/cli/v3 v3.14.0
 	github.com/yuin/goldmark v1.8.7
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0

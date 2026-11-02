@@ -1,6 +1,6 @@
 //go:build linux
 
-package main
+package cmd
 
 import (
 	"fmt"
@@ -44,7 +44,7 @@ func measure(t *testing.T, label string, extraEnv []string) {
 	}
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "ganglion")
-	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "build", "-o", bin, "..").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
 	fi, err := os.Stat(bin)
@@ -52,7 +52,7 @@ func measure(t *testing.T, label string, extraEnv []string) {
 		t.Fatal(err)
 	}
 	fake := telegramtest.NewServer(t, crashToken)
-	cmd := exec.Command(bin, "--roles", "core")
+	cmd := exec.Command(bin, "run", "--roles", "core")
 	cmd.Env = append(append(os.Environ(), extraEnv...),
 		"GANGLION_DB="+filepath.Join(dir, "mem.db"),
 		"TELEGRAM_BOT_TOKEN="+crashToken,

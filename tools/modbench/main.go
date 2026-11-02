@@ -5,7 +5,7 @@
 //
 //	modbench -wasm bin/deye-reader.tinygo.wasm \
 //	         -manifest modules/deye/deye-reader.yaml \
-//	         -replay cmd/modbench/testdata/deye-replay.json \
+//	         -replay tools/modbench/testdata/deye-replay.json \
 //	         -config inverter_sn=2400000001 -n 200
 //
 // Run one variant per process: the memory figures are process-wide.

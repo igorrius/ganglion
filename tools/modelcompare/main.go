@@ -2,7 +2,7 @@
 // of a catalogue and writes a Markdown report: answers side by side,
 // latency, tokens, cache and cost (M3a task 10, decision D-6).
 //
-//	modelcompare -models models.local.yaml -prompts cmd/modelcompare/prompts.yaml \
+//	modelcompare -models models.local.yaml -prompts tools/modelcompare/prompts.yaml \
 //	  -only claude:haiku,openrouter:deepseek/deepseek-v4.1-flash -out report.md
 //
 // Provider keys come from each provider's key_env (or <key_env>_FILE).
@@ -158,7 +158,7 @@ func key(p rules.ProviderDef) (string, error) {
 
 func main() {
 	models := flag.String("models", "models.local.yaml", "model catalogue")
-	prompts := flag.String("prompts", "cmd/modelcompare/prompts.yaml", "conversations")
+	prompts := flag.String("prompts", "tools/modelcompare/prompts.yaml", "conversations")
 	only := flag.String("only", "", "comma-separated provider:model to compare (default: every model)")
 	out := flag.String("out", "", "report file (default: stdout)")
 	timeout := flag.Duration("timeout", 90*time.Second, "per call")

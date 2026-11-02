@@ -98,7 +98,7 @@ We build from scratch. Neighbours are a source of ideas, not a base.
    comfortably on the cheapest hosts: a Raspberry Pi or a small container of
    about 128 MB. Workers that host heavy model runtimes (claude CLI, Ollama)
    are exempt: they run where the resources are (ADR-0009). Memory
-   is measured (`cmd/modbench`) and weighed in every decision about
+   is measured (`tools/modbench`) and weighed in every decision about
    dependencies, runtimes and module languages; a Pi is one target among
    others, not the reference.
 
@@ -138,7 +138,7 @@ the "Not now" list (section 14); the phase does not grow.
 
 ### 5.1. Roles, not machines
 
-One Go binary; roles are enabled with `--roles core,edge,worker`. A single
+One Go binary; roles are enabled with `ganglion run --roles core,edge,worker`. A single
 Raspberry Pi can carry all three. A distributed setup puts the core on a
 server, edges next to devices, and workers where the resources are.
 

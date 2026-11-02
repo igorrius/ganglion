@@ -3,7 +3,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 .PHONY: build test lint check live-echo live-agent compare memory modules modules-tinygo modules-rust modrun modbench bench
 
 build:
-	go build -ldflags "-X main.version=$(VERSION)" -o bin/ganglion ./cmd/ganglion
+	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
 
 test:
 	go test -race ./...
@@ -23,7 +23,7 @@ live-echo: build
 	@test -f .env || { echo "live-echo: no .env (see docs/README.md, owner setup)"; exit 1; }
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-echo: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
-	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) ./bin/ganglion --roles core
+	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) ./bin/ganglion run --roles core
 
 # The M3a agent on the test bot: live-echo plus a model catalogue
 # (models.local.yaml, git-ignored; see models.example.yaml) and the agent's
@@ -38,19 +38,19 @@ live-agent: build
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-agent: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
 	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) \
-	GANGLION_MODELS_FILE=$(LIVE_MODELS) GANGLION_WORKSPACE=$(LIVE_WORKSPACE) ./bin/ganglion --roles core
+	GANGLION_MODELS_FILE=$(LIVE_MODELS) GANGLION_WORKSPACE=$(LIVE_WORKSPACE) ./bin/ganglion run --roles core
 
 # Run the same conversations through several models of the catalogue and
 # write a report (D-6). COMPARE picks provider:model pairs; empty = all.
 COMPARE ?=
 compare:
 	@set -a; [ -f .env ] && . ./.env; set +a; \
-	go run ./cmd/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
+	go run ./tools/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
 
 # RSS of the echo bot and of the agent on a fake model API, idle and after
 # 1,000 messages through the fake Bot API.
 memory:
-	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent)' -v ./cmd/ganglion/
+	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent)' -v ./cmd/
 
 # The deye-reader module, built with three toolchains (Go, TinyGo, Rust) to
 # compare them (ADR-0011). TinyGo and Rust are optional, must be on PATH,
@@ -66,13 +66,13 @@ modules-rust:
 	cp modules/deye-rs/target/wasm32-wasip1/release/deye_reader.wasm bin/deye-reader.rust.wasm
 
 modrun:
-	go build -o bin/modrun ./cmd/modrun
+	go build -o bin/modrun ./tools/modrun
 
 modbench:
-	go build -o bin/modbench ./cmd/modbench
+	go build -o bin/modbench ./tools/modbench
 
 # Measure every built deye-reader variant, one process each.
 bench: modbench
 	for f in bin/deye-reader.*.wasm; do \
 	  ./bin/modbench -wasm $$f -manifest modules/deye/deye-reader.yaml \
-	    -replay cmd/modbench/testdata/deye-replay.json -config inverter_sn=2400000001 -n 300 || exit 1; done
+	    -replay tools/modbench/testdata/deye-replay.json -config inverter_sn=2400000001 -n 300 || exit 1; done
