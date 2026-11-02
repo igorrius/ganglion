@@ -641,11 +641,11 @@ could collide with old ones and be dropped as duplicates.
   wired differently from the diagram), `docs/README.md`,
   `docs/plans/p1-all-in-one.md` (mark M2 done)
 
-- [ ] **Step 1: `make live-echo`.** It loads `.env` and runs
+- [x] **Step 1: `make live-echo`.** It loads `.env` and runs
   `TELEGRAM_BOT_TOKEN=$TELEGRAM_TEST_BOT_TOKEN GANGLION_DB=bin/live.db ./bin/ganglion --roles core`.
   It needs the [owner setup](../README.md#owner-setup-for-live-checks);
   without it, the step is reported as blocked, not faked.
-- [ ] **Step 2: Manual checks on the test bot.**
+- [x] **Step 2: Manual checks on the test bot.**
   1. The admin's message is echoed.
   2. A message in a forum topic is echoed into the same topic.
   3. A message from a second, unlisted account gets no reply and leaves a
@@ -655,16 +655,36 @@ could collide with old ones and be dropped as duplicates.
      lock of ADR-0019): the newer poll wins, and the instance that got 409
      stops polling and sends one alert.
   5. Kill and restart during a burst of 20 messages: none is lost.
+
+  Run 2026-11-02 on a dedicated test bot, @ganglion_test_bot (the
+  development bot has another project's webhook; our run met it with
+  `409`, stopped polling and sent one alert per start, which is check 4's
+  path against a webhook):
+  1. Passed: 5 messages, 5 echoes.
+  2. Not run live: no forum group was at hand. Covered against the fake by
+     `TestTopicMessageGetsTopicConv` and `TestSendSilentToTopic`.
+  3. Not run live: no second account. Covered by `TestFilterDropsStranger`
+     and `TestEchoOverTelegram` (a stranger gets no reply, the log has no
+     text).
+  4. Passed: the second instance took the poll; the first got
+     `409 Conflict: terminated by other getUpdates request`, stopped
+     polling, kept running and sent one alert; both stopped cleanly on
+     SIGTERM.
+  5. Passed in the weaker form: 21 messages while the process was killed
+     with `kill -9` and restarted; 21 events, 21 replies in the same order,
+     no event leased twice, no reply resent, no lease left behind. A kill
+     by hand does not land inside a millisecond turn; the crash harness
+     (500 kills) covers that.
 - [x] **Step 3: Measure memory.** Record the RSS of the echo bot when idle
   and after 1,000 messages through the fake, plus the binary size. It must
   stay well inside 128 MB (principle 8).
   Measured 2026-11-02 with `make memory` (linux/amd64, Go 1.26.3): binary
   15.4 MB; RSS idle 14.1 MB; after 1,000 messages 21.0 MB, peak 21.0 MB.
-- [ ] **Step 4: Run** `make check`.
-- [ ] **Step 5: Update the docs.**
+- [x] **Step 4: Run** `make check`.
+- [x] **Step 5: Update the docs.**
   - Code map: `queue/sqlqueue`, `outbox`, `transport/telegram`,
     `transport/telegram/telegramtest`, `access`, `core`; update the
     dependency diagram.
   - Phase plan: mark M2 done with the measured numbers.
   - `docs/README.md`: "Where we are".
-- [ ] **Step 6: Commit** `docs: M2 delivery and Telegram done`.
+- [x] **Step 6: Commit** `docs: M2 delivery and Telegram done`.
