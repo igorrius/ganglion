@@ -396,17 +396,17 @@ could collide with old ones and be dropped as duplicates.
 - The client error text is `telegram: <method>: <code> <description>`. For
   transport errors it is `telegram: <method>: <err with the token replaced
   by "<token>">`. The HTTP client timeout is the poll timeout plus 10 s.
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestCallDecodesOK`, `TestCallMapsAPIError` (400 with a description),
     `TestCallReadsRetryAfter` (429, `parameters.retry_after: 7` → 7 s).
   - `TestErrorsNeverContainToken`: an unreachable base URL, a 500 and a
     cancelled context; none of the error strings contains the token.
   - Fake: `TestFakeOffsetConfirms`, `TestFakeLongPollWakesOnMessage`,
     `TestFakeSecondPollerConflicts`.
-- [ ] **Step 2: Run** `go test ./transport/telegram/...` — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./transport/telegram/...` — PASS.
-- [ ] **Step 5: Commit** `transport/telegram: own Bot API client and a fake Bot API`.
+- [x] **Step 2: Run** `go test ./transport/telegram/...` — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./transport/telegram/...` — PASS.
+- [x] **Step 5: Commit** `transport/telegram: own Bot API client and a fake Bot API`.
 
 ### Task 5: Telegram transport — polling, conversation keys, send, split, 409 (2.3, part 2)
 

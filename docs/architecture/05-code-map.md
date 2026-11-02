@@ -19,7 +19,7 @@ interfaces only; **planned** — not in the repository yet.
 | Store (history, turns, cron_runs, allowed) | — | planned (P1) | 6 | — |
 | SQLite queue: inbox (ordered leases, atomic `Complete`), outbox (heads per conversation, retries, parts), conversation state, prune | `queue/sqlqueue` | done (P1 M2) | 7.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 | Outbox sender: order per conversation, backoff, `retry_after` pause, resumable parts | `outbox` | done (P1 M2) | 7.1 | — |
-| Telegram transport | — | planned (P1) | 7.1 | — |
+| Telegram transport: own Bot API client; fake Bot API for tests | `transport/telegram`, `transport/telegram/telegramtest` | client and fake done (P1 M2); polling and send path in task 5 | 7.1 | [0018](../adr/0018-own-telegram-bot-api-client.md) |
 | Agent loop and actors | — | planned (P1) | 7.2 | — |
 | Policies | — | planned (P1) | 7.6 | — |
 | Memory | — | planned (P1) | 7.7 | — |
