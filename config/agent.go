@@ -18,54 +18,39 @@ import (
 )
 
 // Handler provides the turn handler.
-func Handler() do.Provider[core.Handler] { return choose[core.Handler](agentOrEcho) }
+func Handler() do.Provider[core.Handler] {
+	return choose[core.Handler](agentOn, handlerAgent, handlerEcho)
+}
 
 // AgentHandler provides the agent as the turn handler.
 func AgentHandler() do.Provider[core.Handler] {
-	return func(i do.Injector) (core.Handler, error) {
-		ag, err := do.Invoke[*agent.Agent](i)
-		if err != nil {
-			return nil, err
-		}
-		return ag.Handle, nil
-	}
+	return func(i do.Injector) (core.Handler, error) { return do.MustInvoke[*agent.Agent](i).Handle, nil }
 }
 
-// EchoHandler provides the M2 echo bot as the turn handler.
-func EchoHandler() do.Provider[core.Handler] { return value[core.Handler](core.EchoHandler) }
-
 // GiveUp provides the replies for an event that failed every attempt.
-func GiveUp() do.Provider[core.GiveUp] { return choose[core.GiveUp](agentOrEcho) }
+func GiveUp() do.Provider[core.GiveUp] { return choose[core.GiveUp](agentOn, giveUpAgent, giveUpNone) }
 
 // AgentGiveUp provides the agent's apology and admin alert.
 func AgentGiveUp() do.Provider[core.GiveUp] {
-	return func(i do.Injector) (core.GiveUp, error) {
-		ag, err := do.Invoke[*agent.Agent](i)
-		if err != nil {
-			return nil, err
-		}
-		return ag.GiveUp, nil
-	}
+	return func(i do.Injector) (core.GiveUp, error) { return do.MustInvoke[*agent.Agent](i).GiveUp, nil }
 }
-
-// NoGiveUp provides giving up silently.
-func NoGiveUp() do.Provider[core.GiveUp] { return value[core.GiveUp](core.NoGiveUp) }
 
 // Agent provides the agent over the catalogue's models.
 func Agent() do.Provider[*agent.Agent] {
 	return func(i do.Injector) (*agent.Agent, error) {
-		var err error
-		b, q, logger := need[Bootstrap](i, &err), need[*sqlqueue.Queue](i, &err), need[*slog.Logger](i, &err)
-		rt, providers, tl := need[router.Router](i, &err), need[map[string]provider.Provider](i, &err), need[*turns.Log](i, &err)
-		archive, admins := need[agent.SessionStore](i, &err), need[alert.Admins](i, &err)
-		if err != nil {
-			return nil, err
-		}
+		b := do.MustInvoke[Bootstrap](i)
 		cfg := agent.DefaultConfig()
 		cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
 		return agent.New(cfg, agent.Deps{
-			States: q, Router: rt, Providers: providers, Tools: agent.NoTools{}, Turns: tl, Archive: archive,
-			Alerts: admins, Log: logger, Persona: agent.PersonaDir(b.Agent.Workspace),
+			States:    do.MustInvoke[*sqlqueue.Queue](i),
+			Router:    do.MustInvoke[router.Router](i),
+			Providers: do.MustInvoke[map[string]provider.Provider](i),
+			Tools:     agent.NoTools{},
+			Turns:     do.MustInvoke[*turns.Log](i),
+			Archive:   do.MustInvoke[agent.SessionStore](i),
+			Alerts:    do.MustInvoke[alert.Admins](i),
+			Persona:   agent.PersonaDir(b.Agent.Workspace),
+			Log:       do.MustInvoke[*slog.Logger](i),
 		}), nil
 	}
 }
@@ -74,11 +59,7 @@ func Agent() do.Provider[*agent.Agent] {
 // budget from the turn trace.
 func Router() do.Provider[router.Router] {
 	return func(i do.Injector) (router.Router, error) {
-		var err error
-		b, tl := need[Bootstrap](i, &err), need[*turns.Log](i, &err)
-		if err != nil {
-			return nil, err
-		}
+		b, tl := do.MustInvoke[Bootstrap](i), do.MustInvoke[*turns.Log](i)
 		return rules.New(b.Agent.Catalog.RouterModels(), rules.WithBudget(tl, b.Agent.DailyBudgetUSD, b.Agent.TZ))
 	}
 }
@@ -97,10 +78,7 @@ var providerFactories = map[string]func(p rules.ProviderDef, key string) provide
 // Providers provides the catalogue's providers by name.
 func Providers() do.Provider[map[string]provider.Provider] {
 	return func(i do.Injector) (map[string]provider.Provider, error) {
-		b, err := do.Invoke[Bootstrap](i)
-		if err != nil {
-			return nil, err
-		}
+		b := do.MustInvoke[Bootstrap](i)
 		out := map[string]provider.Provider{}
 		for _, p := range b.Agent.Catalog.Providers {
 			build, ok := providerFactories[p.Type]

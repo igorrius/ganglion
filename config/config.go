@@ -9,10 +9,11 @@ package config
 import (
 	"context"
 	"log/slog"
-	"reflect"
 	"time"
 
+	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/node"
+	"github.com/igorrius/ganglion/transport"
 	"github.com/samber/do/v2"
 )
 
@@ -28,12 +29,12 @@ var Core = do.Package(
 	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Admins()),
 	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Agent()),
 	do.Lazy(Telegram()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
-	// Extension points: the interface, then each implementation.
-	do.Lazy(Handler()), impl(implAgent, AgentHandler()), impl(implEcho, EchoHandler()),
-	do.Lazy(GiveUp()), impl(implAgent, AgentGiveUp()), impl(implEcho, NoGiveUp()),
-	do.Lazy(TurnHook()), impl(implTelegram, TypingHook()), impl(implNone, NoTurnHook()),
-	do.Lazy(Transports()), impl(implTelegram, TelegramTransports()), impl(implNone, NoTransports()),
-	do.Lazy(Receivers()), impl(implTelegram, TelegramReceivers()), impl(implNone, NoReceivers()),
+	// Extension points: the interface, then each implementation under its name.
+	do.Lazy(Handler()), do.LazyNamed(handlerAgent, AgentHandler()), do.EagerNamed(handlerEcho, core.Handler(core.EchoHandler)),
+	do.Lazy(GiveUp()), do.LazyNamed(giveUpAgent, AgentGiveUp()), do.EagerNamed(giveUpNone, core.GiveUp(core.NoGiveUp)),
+	do.Lazy(TurnHook()), do.LazyNamed(turnHookTyping, TypingHook()), do.EagerNamed(turnHookNone, core.TurnHook(core.NoTurnHook)),
+	do.Lazy(Transports()), do.LazyNamed(transportsTelegram, TelegramTransports()), do.EagerNamed(transportsNone, []transport.Transport(nil)),
+	do.Lazy(Receivers()), do.LazyNamed(inboundTelegram, TelegramReceivers()), do.EagerNamed(inboundNone, Inbound(nil)),
 )
 
 // New returns a container with the bootstrap values and the role
@@ -62,71 +63,37 @@ func Run(ctx context.Context, roles []node.Role, b Bootstrap, logger *slog.Logge
 	return node.Run(ctx, roles, func() ([]node.Component, error) { return do.Invoke[[]node.Component](i) }, logger)
 }
 
-// Names of the implementations of an extension point.
+// Names of the implementations of the extension points. do names are
+// shared by all types, so each one is unique.
 const (
-	implAgent    = "agent"    // the model-driven agent
-	implEcho     = "echo"     // the M2 echo bot, when no model catalogue is set
-	implTelegram = "telegram" // the Telegram transport, when a bot token is set
-	implNone     = "none"     // nothing, when the part is off
+	handlerAgent       = "handler.agent"       // the model-driven agent
+	handlerEcho        = "handler.echo"        // the M2 echo bot
+	giveUpAgent        = "giveup.agent"        // an apology and an admin alert
+	giveUpNone         = "giveup.none"         // give up silently
+	turnHookTyping     = "turnhook.typing"     // "typing…" in Telegram
+	turnHookNone       = "turnhook.none"       // nothing around a turn
+	transportsTelegram = "transports.telegram" // Telegram
+	transportsNone     = "transports.none"     // no transport
+	inboundTelegram    = "inbound.telegram"    // Telegram polling
+	inboundNone        = "inbound.none"        // nothing brings messages in
 )
 
-// agentOrEcho selects the agent when a model catalogue is set.
-func agentOrEcho(b Bootstrap) string {
-	if b.Agent.Catalog != nil {
-		return implAgent
-	}
-	return implEcho
-}
+// agentOn reports whether the settings turn the agent on: a model
+// catalogue is set.
+func agentOn(b Bootstrap) bool { return b.Agent.Catalog != nil }
 
-// telegramOrNone selects Telegram when a bot token is set.
-func telegramOrNone(b Bootstrap) string {
-	if b.BotToken != "" {
-		return implTelegram
-	}
-	return implNone
-}
+// telegramOn reports whether the settings turn Telegram on: a bot token
+// is set.
+func telegramOn(b Bootstrap) bool { return b.BotToken != "" }
 
-// choose provides an extension point as the implementation that pick
-// names for the bootstrap settings; only that implementation is built.
-func choose[T any](pick func(Bootstrap) string) do.Provider[T] {
+// choose provides an extension point as the implementation named ifOn or
+// ifOff, by the bootstrap settings; only that implementation is built.
+func choose[T any](on func(Bootstrap) bool, ifOn, ifOff string) do.Provider[T] {
 	return func(i do.Injector) (T, error) {
-		b, err := do.Invoke[Bootstrap](i)
-		if err != nil {
-			var zero T
-			return zero, err
+		name := ifOff
+		if on(do.MustInvoke[Bootstrap](i)) {
+			name = ifOn
 		}
-		return do.InvokeNamed[T](i, implKey[T](pick(b)))
+		return do.InvokeNamed[T](i, name)
 	}
-}
-
-// impl registers p as the implementation called name of its extension
-// point.
-func impl[T any](name string, p do.Provider[T]) func(do.Injector) {
-	return do.LazyNamed(implKey[T](name), p)
-}
-
-// implKey is the container name of an implementation: do names are shared
-// by all types, so the extension point's type is part of it.
-func implKey[T any](name string) string {
-	return reflect.TypeFor[T]().String() + "#" + name
-}
-
-// need invokes a T for a provider, keeping the first error in *err; after
-// an error it returns zero values, so a provider checks err once.
-func need[T any](i do.Injector, err *error) T {
-	var zero T
-	if *err != nil {
-		return zero
-	}
-	v, e := do.Invoke[T](i)
-	if e != nil {
-		*err = e
-		return zero
-	}
-	return v
-}
-
-// value provides a fixed implementation.
-func value[T any](v T) do.Provider[T] {
-	return func(do.Injector) (T, error) { return v, nil }
 }

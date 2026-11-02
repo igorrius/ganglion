@@ -20,11 +20,11 @@ same commit as the code, not the other way round.
 - **One composition root.** Only the `config` package builds concrete
   implementations and connects them, through `samber/do` providers
   (ADR-0028). Domain packages never import `github.com/samber/do`.
-- **`config` holds dependency logic only.** A provider invokes what its
-  component needs, maps settings to constructor arguments and calls the
-  constructor. An extension point is an interface provider that only
-  selects (`choose`): each implementation, the no-op included, has its own
-  named provider. No texts, goroutines, defaults, policies or log lines
+- **`config` holds dependency logic only.** A provider takes what its
+  component needs with `do.MustInvoke` (ADR-0030), maps settings to
+  constructor arguments and calls the constructor. An extension point is
+  an interface provider that only selects (`choose`); each implementation,
+  the no-op included, is registered under its own name constant. No texts, goroutines, defaults, policies or log lines
   about the product in `config`: they belong to the package that owns the
   behaviour (the agent's give-up reply, Telegram's typing hook, the
   queue's lease release, the access list's admin seed).

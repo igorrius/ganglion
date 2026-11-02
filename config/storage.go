@@ -22,11 +22,7 @@ func (l DBLock) Shutdown() { l.release() }
 // Lock provides the database lock.
 func Lock() do.Provider[DBLock] {
 	return func(i do.Injector) (DBLock, error) {
-		b, err := do.Invoke[Bootstrap](i)
-		if err != nil {
-			return DBLock{}, err
-		}
-		release, err := node.LockDB(b.DB)
+		release, err := node.LockDB(do.MustInvoke[Bootstrap](i).DB)
 		return DBLock{release: release}, err
 	}
 }
@@ -40,12 +36,8 @@ func (d Database) Shutdown() error { return d.Close() }
 // DB provides the database, opened under the lock.
 func DB() do.Provider[Database] {
 	return func(i do.Injector) (Database, error) {
-		var err error
-		_, b, start := need[DBLock](i, &err), need[Bootstrap](i, &err), need[Startup](i, &err)
-		if err != nil {
-			return Database{}, err
-		}
-		db, err := sqlitedb.Open(start, b.DB)
+		do.MustInvoke[DBLock](i)
+		db, err := sqlitedb.Open(do.MustInvoke[Startup](i), do.MustInvoke[Bootstrap](i).DB)
 		return Database{db}, err
 	}
 }
@@ -53,47 +45,28 @@ func DB() do.Provider[Database] {
 // Queue provides the inbox and outbox, owned by this process.
 func Queue() do.Provider[*sqlqueue.Queue] {
 	return func(i do.Injector) (*sqlqueue.Queue, error) {
-		var err error
-		db, start, logger := need[Database](i, &err), need[Startup](i, &err), need[*slog.Logger](i, &err)
-		if err != nil {
-			return nil, err
-		}
-		return sqlqueue.OpenOwned(start, db.DB, logger)
+		return sqlqueue.OpenOwned(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*slog.Logger](i))
 	}
 }
 
 // Access provides the access list with the bootstrap admin.
 func Access() do.Provider[*access.List] {
 	return func(i do.Injector) (*access.List, error) {
-		var err error
-		db, b, start := need[Database](i, &err), need[Bootstrap](i, &err), need[Startup](i, &err)
-		if err != nil {
-			return nil, err
-		}
-		return access.New(start, db.DB, access.WithAdmin(b.Admin))
+		return access.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB,
+			access.WithAdmin(do.MustInvoke[Bootstrap](i).Admin))
 	}
 }
 
 // Turns provides the turn trace.
 func Turns() do.Provider[*turns.Log] {
 	return func(i do.Injector) (*turns.Log, error) {
-		var err error
-		db, start := need[Database](i, &err), need[Startup](i, &err)
-		if err != nil {
-			return nil, err
-		}
-		return turns.New(start, db.DB)
+		return turns.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
 	}
 }
 
 // Archive provides the session archive.
 func Archive() do.Provider[agent.SessionStore] {
 	return func(i do.Injector) (agent.SessionStore, error) {
-		var err error
-		db, start := need[Database](i, &err), need[Startup](i, &err)
-		if err != nil {
-			return nil, err
-		}
-		return agent.NewArchive(start, db.DB)
+		return agent.NewArchive(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
 	}
 }

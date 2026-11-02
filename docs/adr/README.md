@@ -35,6 +35,7 @@ considered, how they compare, the decision and its consequences. See
 | [0027](0027-written-go-conventions-and-lint-guardrails.md) | Write the Go conventions down and enforce what a linter can | Accepted | 2026-11-02 |
 | [0028](0028-samber-do-composition-root-in-config.md) | Assemble the node in a `config` package of `samber/do` providers | Accepted | 2026-11-02 |
 | [0029](0029-urfave-cli-for-commands-and-bootstrap-flags.md) | Use urfave/cli v3 for commands and bootstrap flags, with `main.go` at the root and the command tree in `cmd` | Accepted | 2026-11-02 |
+| [0030](0030-mustinvoke-inside-providers.md) | Take dependencies with do.MustInvoke inside providers (supersedes the `Must*` rule of ADR-0028) | Accepted | 2026-11-02 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

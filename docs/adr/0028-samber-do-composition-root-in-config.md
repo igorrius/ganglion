@@ -1,6 +1,6 @@
 # ADR-0028: Assemble the node in a `config` package of `samber/do` providers
 
-- **Status:** Accepted
+- **Status:** Accepted; the rule on `Must*` superseded by [ADR-0030](0030-mustinvoke-inside-providers.md)
 - **Date:** 2026-11-02
 - **Deciders:** Igor Artasevych
 - **Spec:** [2, principles 5, 7 and 8](../spec.md#2-principles), [5.1](../spec.md#51-roles-not-machines); [ADR-0004](0004-one-binary-with-roles.md), [ADR-0027](0027-written-go-conventions-and-lint-guardrails.md)
