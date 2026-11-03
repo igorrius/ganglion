@@ -1,8 +1,9 @@
 // Package telemetry sets up OpenTelemetry for a node (docs/spec.md, 7.9;
-// ADR-0026): metrics through the Prometheus exporter on /metrics with the
-// promtop dashboard on /webmetrics/, and traces over OTLP/HTTP when the
-// standard OTLP environment variables name a collector. Packages
-// instrument themselves through the global otel providers.
+// ADR-0026): metrics, the Go runtime and process ones among them, through
+// the Prometheus exporter on /metrics with the promtop dashboard on
+// /webmetrics/, and traces over OTLP/HTTP when the standard OTLP
+// environment variables name a collector. Packages instrument themselves
+// through the global otel providers.
 package telemetry
 
 import (
@@ -15,6 +16,7 @@ import (
 
 	"github.com/igorrius/promtop/dash"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -59,6 +61,9 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 	}
 	res := resource.NewSchemaless(attrs...)
 	reg := prometheus.NewRegistry()
+	// A fresh registry has none of the default registry's collectors; the
+	// runtime and process metrics are registered here by hand (R-OBS-1).
+	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	exp, err := otelprom.New(otelprom.WithRegisterer(reg))
 	if err != nil {
 		return nil, err

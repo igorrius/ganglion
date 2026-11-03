@@ -631,7 +631,10 @@ undone with `git revert`.
   - spans for a turn, a model call, a tool call, an outbox send and a
     Telegram API call;
   - metrics for turns, model calls, tokens, cost, sends, retries and
-    dropped messages.
+    dropped messages;
+  - the Go runtime and the process under their standard Prometheus names
+    (`go_*`: goroutines, heap, GC; `process_*`: CPU, resident memory,
+    open files, start time).
 - **R-OBS-2.** Metrics are served in the Prometheus text format at
   `/metrics` on a local address (`GANGLION_METRICS_ADDR`, default
   `127.0.0.1:9464`). The promtop web dashboard is at `/webmetrics/`, for

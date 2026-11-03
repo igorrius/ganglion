@@ -50,6 +50,19 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 }
 
+// The Go runtime and the process are on /metrics under their standard
+// names, as with the default registry (R-OBS-1).
+func TestRuntimeAndProcessMetrics(t *testing.T) {
+	tel := setup(t, nil)
+	_, body := get(t, "http://"+tel.Addr()+"/metrics")
+	for _, name := range []string{"go_goroutines", "go_memstats_heap_alloc_bytes", "go_gc_duration_seconds", "go_info",
+		"process_resident_memory_bytes", "process_cpu_seconds_total", "process_open_fds", "process_start_time_seconds"} {
+		if !strings.Contains(body, "\n"+name) {
+			t.Errorf("%s is missing", name)
+		}
+	}
+}
+
 func TestDashboardServedLocally(t *testing.T) {
 	tel := setup(t, nil)
 	code, body := get(t, "http://"+tel.Addr()+"/webmetrics/")
