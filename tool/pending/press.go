@@ -120,6 +120,10 @@ func (s *Store) refused(ctx context.Context, buttonID string, by By) (Press, err
 	switch {
 	case b.Used && usedBy == by.Event:
 		return p, nil
+	case !b.Used && !b.Expires.After(s.now()):
+		// Nobody pressed it in time; its call may be done since, by the
+		// expiry reaching the conversation.
+		return p, fmt.Errorf("pending: press %s: %w", buttonID, ErrExpired)
 	case b.Used || p.Item.Status == StatusApproved || p.Item.Status == StatusDenied || p.Item.Status == StatusDone:
 		return p, fmt.Errorf("pending: press %s: %w", buttonID, ErrUsed)
 	default:

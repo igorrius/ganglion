@@ -251,6 +251,26 @@ func TestPressExpired(t *testing.T) {
 	}
 }
 
+// A button nobody pressed in time says Expired, also after the expiry
+// reached the conversation (the call is done then), not "already used"
+// (found by the M3b acceptance, Task 12).
+func TestPressAfterExpiryWasHandled(t *testing.T) {
+	f := newFixture(t)
+	id, q := f.ask(t, 1)
+	ctx := context.Background()
+	f.clk.add(pending.DefaultTTL)
+	if items, err := f.s.ExpireDue(ctx); err != nil || len(items) != 1 {
+		t.Fatalf("ExpireDue = %+v, %v", items, err)
+	}
+	if err := f.s.Finish(ctx, id, pending.Outcome{Result: "the owner did not answer in time"}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := f.s.Press(ctx, q.Buttons[0].ID, by("ev1"))
+	if !errors.Is(err, pending.ErrExpired) || p.Item.ID != id {
+		t.Fatalf("press after the expiry was handled = %+v, %v; want ErrExpired", p, err)
+	}
+}
+
 // Everything is in SQLite: a button made before a restart works after it.
 func TestPressAfterRestart(t *testing.T) {
 	f := newFixture(t)
