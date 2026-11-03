@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/igorrius/ganglion/access"
@@ -10,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
+	"github.com/igorrius/ganglion/diag"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/claudecli"
@@ -120,7 +122,17 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleList(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
-	}, append(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools...)...)
+	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
+		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i)))...)
+}
+
+// Diagnostics provides the diagnostic searches over the node's own
+// database and log files (R-OBS-7); config.show and queues.state stay
+// with `ganglion mcp`, so no settings are passed.
+func Diagnostics() do.Provider[*diag.Diag] {
+	return func(i do.Injector) (*diag.Diag, error) {
+		return diag.New(do.MustInvoke[Database](i).DB, do.MustInvoke[Bootstrap](i).LogDir, nil, time.Now), nil
+	}
 }
 
 // Scheduler provides the scheduler of the jobs in the node's zone, which

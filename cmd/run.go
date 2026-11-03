@@ -41,7 +41,7 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 				return err
 			}
 			in := buildinfo.Read()
-			logger, closeLogs, err := newLogger(out, root.Level(), v, b)
+			logger, closeLogs, err := newLogger(out, root.Level(), b)
 			if err != nil {
 				return err
 			}
@@ -60,7 +60,7 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 // carry trace ids and hide the secrets the node read and the patterns of
 // redact.String. The disk comes first, so a line on stdout is already in
 // the file when a kill -9 lands.
-func newLogger(out io.Writer, level slog.Level, v flags.Run, b config.Bootstrap) (*slog.Logger, func(), error) {
+func newLogger(out io.Writer, level slog.Level, b config.Bootstrap) (*slog.Logger, func(), error) {
 	secrets := []string{b.BotToken, b.Agent.BraveKey}
 	for _, k := range b.Agent.Keys {
 		secrets = append(secrets, k)
@@ -70,11 +70,10 @@ func newLogger(out io.Writer, level slog.Level, v flags.Run, b config.Bootstrap)
 	opts := &slog.HandlerOptions{Level: level}
 	wrap := func(h slog.Handler) slog.Handler { return telemetry.LogHandler(telemetry.RedactHandler(h, hide)) }
 	stdout := wrap(slog.NewTextHandler(out, opts))
-	dir, on := flags.LogDir(b.DB, v.LogDir)
-	if !on {
+	if b.LogDir == "" {
 		return slog.New(stdout), func() {}, nil
 	}
-	rot, err := logfile.Open(logfile.DefaultConfig(dir), time.Now)
+	rot, err := logfile.Open(logfile.DefaultConfig(b.LogDir), time.Now)
 	if err != nil {
 		return nil, nil, fmt.Errorf("GANGLION_LOG_DIR: %w", err)
 	}
@@ -85,6 +84,9 @@ func newLogger(out io.Writer, level slog.Level, v flags.Run, b config.Bootstrap)
 // the secrets and the model catalogue.
 func bootstrap(v flags.Run, src secrets.Source, readFile func(string) ([]byte, error)) (config.Bootstrap, error) {
 	b := config.Bootstrap{DB: v.DB, BotAPIURL: v.TelegramAPIURL, Admin: v.Admin, MetricsAddr: v.MetricsAddr, TelegramReply: v.TelegramReply}
+	if dir, on := flags.LogDir(v.DB, v.LogDir); on {
+		b.LogDir = dir
+	}
 	var err error
 	if b.BotToken, err = src.Secret("TELEGRAM_BOT_TOKEN"); err != nil {
 		return config.Bootstrap{}, err

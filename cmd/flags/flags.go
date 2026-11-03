@@ -71,8 +71,7 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 	return []cli.Flag{
 		&cli.StringFlag{Name: "roles", Usage: "comma-separated roles to run: core, edge, worker", Value: "core,edge,worker",
 			Local: true, Destination: &r.Roles},
-		&cli.StringFlag{Name: "db", Usage: "the SQLite database file", Value: "ganglion.db", Category: catStorage,
-			Local: true, Sources: env("GANGLION_DB"), Destination: &r.DB, TakesFile: true},
+		DBFlag(&r.DB),
 		&cli.StringFlag{Name: "admin", Usage: "a principal seeded as admin, e.g. telegram:user:123", Category: catTelegram,
 			Local: true, Sources: env("GANGLION_ADMIN"), Destination: &r.Admin, Validator: in("GANGLION_ADMIN", validPrincipal)},
 		&cli.StringFlag{Name: "telegram-api-url", Usage: "the Bot API server", Value: "https://api.telegram.org", Category: catTelegram,
@@ -180,6 +179,12 @@ func (e setEnv) IsFromEnv() bool  { return true }
 func (e setEnv) Key() string      { return string(e) }
 func (e setEnv) String() string   { return "environment variable " + strconv.Quote(string(e)) }
 func (e setEnv) GoString() string { return "setEnv(" + strconv.Quote(string(e)) + ")" }
+
+// DBFlag is --db, shared by `run` and `mcp`.
+func DBFlag(dst *string) cli.Flag {
+	return &cli.StringFlag{Name: "db", Usage: "the SQLite database file", Value: "ganglion.db", Category: catStorage,
+		Local: true, Sources: env("GANGLION_DB"), Destination: dst, TakesFile: true}
+}
 
 // LogDirFlag is --log-dir, shared by `run` and `mcp`: where the log files
 // are (ADR-0043).

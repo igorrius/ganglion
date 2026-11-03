@@ -46,6 +46,22 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 	return db, nil
 }
 
+// OpenReadOnly opens the existing database at path for reading only
+// (mode=ro and query_only): diagnostics read beside a running core
+// without taking its lock or changing anything, and never run migrations
+// (R-OBS-7, ADR-0044). A missing file is an error.
+func OpenReadOnly(ctx context.Context, path string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		return nil, err
+	}
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("sqlitedb: open %s read-only: %w", path, err)
+	}
+	return db, nil
+}
+
 var migrationName = regexp.MustCompile(`^(\d{3,})_[a-z0-9_]+\.sql$`)
 
 // Migrate applies the migrations in fsys (top-level files named

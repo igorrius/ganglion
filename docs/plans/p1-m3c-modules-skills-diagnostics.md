@@ -602,7 +602,7 @@ Two repositories: promtop first, then ganglion.
   The same `Diag` sits behind both paths.
 - Metrics: `ganglion_diag_calls_total{tool,result}`.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestReadOnlyRefusesWrites` (`INSERT` fails).
   - `TestReadsBesideRunningWriter`: a writer in WAL mode keeps writing
     while `turn.show` reads; neither blocks past 1 s.
@@ -616,10 +616,10 @@ Two repositories: promtop first, then ganglion.
     following `message.send` asks.
   - `cmd`: `TestMCPInitializeAndList` drives `ganglion mcp` over a
     pipe; `TestMCPNoStdoutNoise` (stdout holds JSON-RPC lines only).
-- [ ] **Step 2: Run** — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
-- [ ] **Step 5: Seeded fault, locally.**
+- [x] **Step 2: Run** — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
+- [x] **Step 5: Seeded fault, locally.**
   - Run the node with a catalogue whose API key is wrong, send one
     message through the fake Bot API, stop.
   - Add `ganglion mcp --db … --log-dir …` to a Claude Code MCP config.
@@ -628,13 +628,13 @@ Two repositories: promtop first, then ganglion.
     `logs.search`.
   - Repeat with `scripts/diag-container.sh` and `docker exec -i`.
   - Record both runs in the commit message.
-- [ ] **Step 6: Docs.**
+- [x] **Step 6: Docs.**
   - `docs/README.md` "Owner setup": the MCP config snippet for local
     use, `ssh` and `docker exec`.
   - The warning that the data directory holds all history.
-- [ ] **Step 7: Code map** (`diag`, `cmd`, `sqlitedb`, `tool/builtin`);
+- [x] **Step 7: Code map** (`diag`, `cmd`, `sqlitedb`, `tool/builtin`);
   containers page: the diagnostic path.
-- [ ] **Step 8: Commit** `diag, cmd: ganglion mcp, read-only diagnostics over stdio (R-OBS-7)`.
+- [x] **Step 8: Commit** `diag, cmd: ganglion mcp, read-only diagnostics over stdio (R-OBS-7)`.
 
 ### Task 7: module install, update and rollback (3.15, R-RUN-8)
 

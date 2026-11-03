@@ -203,6 +203,27 @@ is needed for tests: they run against a fake Bot API.
      environment variables. A new session picks them up. Never paste the
      token into the chat.
 
+## Diagnosing the node from outside
+
+`ganglion mcp` serves read-only diagnostics (logs, the tool-call journal,
+failed turns, one turn whole, the queues, the settings) to Claude Code or
+any MCP client, with no running node and no model
+([ADR-0044](adr/0044-ganglion-mcp-diagnostics-over-stdio.md)). Add it to
+the client's MCP configuration (`.mcp.json` for Claude Code):
+
+```json
+{"mcpServers": {"ganglion": {"command": "ganglion", "args": ["mcp", "--db", "/path/to/ganglion.db"]}}}
+```
+
+- **Another machine:** `"command": "ssh", "args": ["host", "ganglion", "mcp", "--db", "/data/ganglion.db"]`.
+- **A container:** `"command": "docker", "args": ["exec", "-i", "<container>", "ganglion", "mcp", "--db", "/data/ganglion.db"]`;
+  `scripts/diag-container.sh <data dir>` starts a local one to try it.
+- Logs are read from `logs/` beside the database; `--log-dir` points
+  elsewhere.
+
+Whoever can run the command can read all conversation history in the
+data directory: give it to the people you would give the files to.
+
 ## Map
 
 | Question | Read |

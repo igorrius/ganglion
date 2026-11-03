@@ -76,10 +76,13 @@ flowchart TB
             w["worker: API client"]
         end
         db[("SQLite file")]
+        logs[("log files<br/>data/logs")]
         repo[("memory git repo")]
+        diag["ganglion mcp<br/>read-only, stdio"]
         cl["claude -p, a child per model call<br/>+ ganglion mcp-relay"]
     end
     pc["Owner's PC<br/>claude CLI worker, P2"]
+    cc["Claude Code or another MCP client"]
     net["The web"]
     c --- e
     c --- w
@@ -88,7 +91,16 @@ flowchart TB
     c -- "history on stdin;<br/>tools over MCP on a per-run Unix socket" --- cl
     c -- "web.fetch, web.search" --> net
     c -. "task queue" .- pc
+    c --> logs
+    diag -- "read-only" --> db
+    diag -- "read" --> logs
+    cc -- "stdio: local, ssh,<br/>docker exec -i, kubectl exec" --> diag
 ```
+
+`ganglion mcp` is a separate process started by the MCP client
+([ADR-0044](../adr/0044-ganglion-mcp-diagnostics-over-stdio.md)): it
+needs no running node and no model, opens the database read-only beside
+a running core, and opens no port.
 
 ## Deployment: P2, core + edges
 
