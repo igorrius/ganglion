@@ -49,15 +49,39 @@ func NewRegistry(p Placement, hs ...Handler) (*Registry, error) {
 	return r, nil
 }
 
-// Specs lists the tools by name; admin-only tools only for an admin.
+// Specs lists the tools on offer by name; admin-only tools only for an
+// admin, and a Gated tool only while it is offered.
 func (r *Registry) Specs(admin bool) []Spec {
 	out := make([]Spec, 0, len(r.names))
 	for _, name := range r.names {
-		if s := r.byName[name].Spec(); admin || !s.AdminOnly {
+		if s, ok := offered(r.byName[name], admin); ok {
 			out = append(out, s)
 		}
 	}
 	return out
+}
+
+// Offered reports whether the tool called name is on offer to the
+// caller, as Specs lists it.
+func (r *Registry) Offered(name string, admin bool) bool {
+	h, ok := r.byName[name]
+	if !ok {
+		return false
+	}
+	_, ok = offered(h, admin)
+	return ok
+}
+
+// offered returns h's spec and whether h is on offer.
+func offered(h Handler, admin bool) (Spec, bool) {
+	s := h.Spec()
+	if s.AdminOnly && !admin {
+		return s, false
+	}
+	if g, ok := h.(Gated); ok && !g.Offered() {
+		return s, false
+	}
+	return s, true
 }
 
 // Lookup returns the tool called name.

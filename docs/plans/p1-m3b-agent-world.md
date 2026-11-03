@@ -931,13 +931,13 @@ ADR-0035 (Proposed): web reading. It covers:
   - after that the tool is gone from the registry list.
 - After the introduction the persona changes only by hand (design 5.8).
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `TestIntroductionOnlyWhenEmpty`.
   - `TestProposeNeedsConfirm`.
   - `TestProposeGoneAfterWrite`.
   - `TestProposeRefusedWhenTainted`.
-- [ ] **Step 2–4: Run, implement, run**; lint.
-- [ ] **Step 5: Commit** `agent: first-run introduction that proposes the persona`.
+- [x] **Step 2–4: Run, implement, run**; lint.
+- [x] **Step 5: Commit** `agent: first-run introduction that proposes the persona`.
 
 ### Task 10: wiring, family scope and the agent's directives block
 

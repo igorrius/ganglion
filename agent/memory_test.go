@@ -69,6 +69,13 @@ type memoryEnv struct {
 
 func newMemoryEnv(t *testing.T, hs ...tool.Handler) *memoryEnv {
 	t.Helper()
+	return newMemoryEnvOf(t, func(*memory.Memory) []tool.Handler { return hs })
+}
+
+// newMemoryEnvOf is newMemoryEnv with the extra tools built over the
+// memory; the persona is read from the workspace's persona/.
+func newMemoryEnvOf(t *testing.T, extra func(*memory.Memory) []tool.Handler) *memoryEnv {
+	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("the git binary is not installed; memory lives in a git repository (ADR-0033)")
 	}
@@ -85,8 +92,9 @@ func newMemoryEnv(t *testing.T, hs ...tool.Handler) *memoryEnv {
 		Private: func(p string) (string, string, bool) {
 			return "telegram", "telegram:" + strings.TrimPrefix(p, "telegram:user:"), true
 		}}))
-	e = newConfirmEnv(t, append(builtin.MemoryTools(me.mem, privateOf), hs...)...)
+	e = newConfirmEnv(t, append(builtin.MemoryTools(me.mem, privateOf), extra(me.mem)...)...)
 	e.deps.Facts = me.mem.Index
+	e.deps.Persona = PersonaDir(repo.Dir())
 	e.a = New(overDefaults(Config{}), e.deps)
 	me.confirmEnv = e
 	return me

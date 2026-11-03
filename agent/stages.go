@@ -72,7 +72,7 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 	t.known = knownURLs(append(slices.Clone(t.state.Messages), user))
 	turnCtx, cancel := context.WithTimeout(ctx, a.cfg.TurnTimeout)
 	defer cancel()
-	added, text, ok, err := a.steps(ctx, turnCtx, t, append(a.prompt(t.state, t.admin), user))
+	added, text, ok, err := a.steps(ctx, turnCtx, t, append(a.prompt(t), user))
 	if err != nil {
 		return false, err
 	}
@@ -145,12 +145,12 @@ func (a *Agent) compactHistory(ctx context.Context, t *turn) (bool, error) {
 }
 
 // prompt is the system prompt, the summary and the kept history.
-func (a *Agent) prompt(st State, admin bool) []provider.Message {
-	msgs := []provider.Message{{Role: provider.RoleSystem, Content: a.systemPrompt(admin)}}
-	if st.Summary != "" {
-		msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: summaryPrefix + st.Summary})
+func (a *Agent) prompt(t *turn) []provider.Message {
+	msgs := []provider.Message{{Role: provider.RoleSystem, Content: a.systemPrompt(t.admin, a.introducing(t))}}
+	if t.state.Summary != "" {
+		msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: summaryPrefix + t.state.Summary})
 	}
-	return append(msgs, st.Messages...)
+	return append(msgs, t.state.Messages...)
 }
 
 // What the turn appends to the last user message: the time, and while the
@@ -187,10 +187,11 @@ func (a *Agent) turnLines(t *turn) string {
 }
 
 // systemPrompt is the core's rules followed by the persona and, for an
-// admin, the memory's known facts (R-MEM-5). A family member gets no
-// memory in M3b (design section 4, rule 8). It changes only when the
-// persona or the memory changes.
-func (a *Agent) systemPrompt(admin bool) string {
+// admin, the introduction rules while introducing and the memory's known
+// facts (R-MEM-5). A family member gets neither in M3b (design section 4,
+// rule 8). It changes only when the persona, the introduction or the
+// memory changes.
+func (a *Agent) systemPrompt(admin, introducing bool) string {
 	persona, err := a.d.Persona()
 	if err != nil {
 		a.log.Warn("agent: persona unreadable; using the default", "err", err)
@@ -202,6 +203,9 @@ func (a *Agent) systemPrompt(admin bool) string {
 	prompt := CoreRules + "\n\n" + persona
 	if !admin {
 		return prompt
+	}
+	if introducing {
+		prompt += "\n\n" + IntroductionRules
 	}
 	if facts := a.d.Facts(); facts != "" {
 		prompt += "\n\n" + facts

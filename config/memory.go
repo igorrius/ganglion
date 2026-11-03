@@ -50,7 +50,8 @@ type Remembering struct {
 	Facts agent.FactsFunc
 }
 
-// Remember provides the memory's tools and index, and makes sure its
+// Remember provides the memory's tools, the persona tool of the first-run
+// introduction and the memory's index, and makes sure its
 // scheduled audit exists. A host without git runs without memory: the
 // tools are not registered, the prompt has no facts, and a warning says
 // why (ADR-0033). Any other failure stops the start.
@@ -66,6 +67,7 @@ func Remember() do.Provider[Remembering] {
 		}
 		err = builtin.EnsureAudit(do.MustInvoke[Startup](i), do.MustInvoke[*schedule.Store](i), do.MustInvoke[alert.Admins](i),
 			time.Now(), do.MustInvoke[*slog.Logger](i))
-		return Remembering{Tools: builtin.MemoryTools(m, telegram.PrivateConv), Facts: m.Index}, err
+		tools := append(builtin.MemoryTools(m, telegram.PrivateConv), builtin.NewPersonaPropose(m))
+		return Remembering{Tools: tools, Facts: m.Index}, err
 	}
 }

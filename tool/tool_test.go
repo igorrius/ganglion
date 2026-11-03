@@ -170,3 +170,42 @@ func TestPlacementLocalOnly(t *testing.T) {
 		t.Errorf("a local tool = %+v, %v", res, err)
 	}
 }
+
+// gated is a tool that is on offer only while its flag is up.
+type gated struct {
+	stub
+	on *bool
+}
+
+func (g gated) Offered() bool { return *g.on }
+
+func TestGatedToolIsListedOnlyWhileOffered(t *testing.T) {
+	on := true
+	r, err := tool.NewRegistry(local{}, named("a.open", false), gated{stub: named("b.once", true), on: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := func(admin bool) string {
+		var out []string
+		for _, s := range r.Specs(admin) {
+			out = append(out, s.Name)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := names(true); got != "a.open,b.once" {
+		t.Errorf("while offered, an admin sees %q", got)
+	}
+	if !r.Offered("b.once", true) || r.Offered("b.once", false) || r.Offered("nope", true) {
+		t.Error("Offered disagrees with the listing")
+	}
+	on = false
+	if got := names(true); got != "a.open" {
+		t.Errorf("once gone, an admin sees %q", got)
+	}
+	if r.Offered("b.once", true) {
+		t.Error("Offered reports a gone tool")
+	}
+	if _, ok := r.Spec("b.once"); !ok {
+		t.Error("the spec of a gone tool is still known: grants and the policy look it up")
+	}
+}

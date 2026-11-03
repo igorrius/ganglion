@@ -19,6 +19,9 @@ import (
 // handled again; it never counts as "not an admin".
 type AdminFunc func(ctx context.Context, principal string) (bool, error)
 
+// proposeTool is the tool that ends the first-run introduction.
+const proposeTool = "persona.propose"
+
 // searchTool is the tool whose results make URLs known (design section 4,
 // rule 2).
 const searchTool = "web.search"
@@ -37,16 +40,29 @@ func (a *Agent) traced(next tool.Func) tool.Func {
 
 // toolSpecs are the tools the model is offered in this turn, in the
 // provider's shape; a scheduled task is offered only its grant's tools
-// (the policy refuses the others anyway).
+// (the policy refuses the others anyway), and the persona tool is offered
+// only where the introduction rules are (a session with outside content
+// is not asked for a persona; the tool refuses it anyway).
 func (a *Agent) toolSpecs(t *turn) []provider.Tool {
 	specs := a.d.Tools.Specs(t.admin)
 	out := make([]provider.Tool, 0, len(specs))
 	for _, s := range specs {
+		if s.Name == proposeTool && !a.introducing(t) {
+			continue
+		}
 		if t.grant == nil || slices.Contains(t.grant.Tools, s.Name) {
 			out = append(out, provider.Tool{Name: s.Name, Description: s.Description, InputSchema: s.InputSchema})
 		}
 	}
 	return out
+}
+
+// introducing reports whether the turn gets the introduction rules: an
+// admin's session that holds no outside content, outside a scheduled
+// task, while the persona tool is on offer, which the registry lists only
+// until persona/ has a *.md file.
+func (a *Agent) introducing(t *turn) bool {
+	return t.admin && !t.state.Tainted && t.grant == nil && a.d.Tools.Offered(proposeTool, true)
 }
 
 // runTools runs the model's tool calls in order and returns their results

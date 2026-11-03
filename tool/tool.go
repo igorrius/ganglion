@@ -130,6 +130,16 @@ type Handler interface {
 	Run(ctx context.Context, c Call) (Result, error)
 }
 
+// Gated is a tool that is on offer only while a condition holds, such as
+// the persona tool while there is no persona. The registry leaves a tool
+// that is not on offer out of its listing; the tool still refuses its own
+// calls then, because a name the model made up for a tool it was not
+// offered, and a call parked earlier, reach it all the same. Offered
+// fails closed: when it cannot tell, the tool is not offered.
+type Gated interface {
+	Offered() bool
+}
+
 // Questioner is a tool that words the owner's confirmation question
 // itself, from the call's arguments, so the owner sees what they approve
 // in plain words (a scheduled task's grant, design section 5.3). The

@@ -2,11 +2,8 @@ package memory
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
-	"slices"
 	"strings"
 
 	"github.com/igorrius/ganglion/guard"
@@ -75,24 +72,10 @@ func (r *Report) flag(path string, v guard.Verdict) {
 
 // auditPersona checks each persona/*.md file as it is on disk.
 func (m *Memory) auditPersona(ctx context.Context, r *Report) error {
-	dir, err := m.repo.Path(dirPersona)
+	names, err := m.personaFiles()
 	if err != nil {
 		return err
 	}
-	files, err := os.ReadDir(dir)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("memory: audit persona: %w", err)
-	}
-	names := make([]string, 0, len(files))
-	for _, f := range files {
-		if !f.IsDir() && strings.HasSuffix(f.Name(), ".md") {
-			names = append(names, f.Name())
-		}
-	}
-	slices.Sort(names)
 	for _, name := range names {
 		rel := dirPersona + "/" + name
 		full, err := m.repo.Path(rel)
