@@ -1,6 +1,8 @@
 /bin/
 /dist/
 *.wasm
+# The html2md module is committed: a Go build needs no Rust (ADR-0035).
+!/modules/html2md/html2md.wasm
 *.db
 *.sqlite3
 .env

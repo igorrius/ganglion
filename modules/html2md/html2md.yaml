@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=../../schemas/module-manifest.schema.json
+# Manifest of the html2md module (ADR-0035). The core calls it from
+# web.fetch to turn a page into Markdown; the model never calls it
+# directly, so it has no trigger. It is a pure function: it is granted no
+# capability (no network, no state, no secrets), and the runner refuses a
+# tool module whose manifest grants one.
+name: html2md
+version: 1
+limits:
+  memory: 64MiB
+  timeout: 5s

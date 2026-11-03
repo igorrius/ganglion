@@ -1,0 +1,5 @@
+# WASM SIMD (supported by wazero) lets memchr and the parser scan bytes a
+# vector at a time. `make modules-html2md` passes the same flag, since
+# RUSTFLAGS from the environment replaces this setting.
+[target.wasm32-wasip1]
+rustflags = ["-C", "target-feature=+simd128"]

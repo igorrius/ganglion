@@ -45,13 +45,14 @@ interfaces only; **planned** — not in the repository yet.
 | Workspace repository: `Open` (git init when the directory itself is not a repository), `Commit` of the given paths only (no change → the current commit), `Revert`, `Path` (refuses absolute, `..` and `.git` paths); the `git` binary with a fixed author, without the global, system or environment git settings; `ErrNoGit` | `gitrepo` | done (P1 M3b task 7) | 7.7 | [0033](../adr/0033-memory-in-the-workspace-git-with-the-git-binary.md) |
 | Clean-context check: a cheap model, one fixed prompt, the text wrapped as data, no tools, no history; verdict `{"ok","reason"}`; fails closed (`guard unavailable`, unparseable → not OK); facts (`CheckFact`) and persona files (`CheckPersona`) | `guard` | done (P1 M3b task 7) | 7.6 | [0034](../adr/0034-clean-context-guard.md) |
 | Memory: facts in `memory/<slug>.md` with frontmatter (title, created, source turn, tainted, checked), one commit per change; every write checked by the guard, a held-back one in `memory/quarantine/` with an admin alert; slugs from titles (Cyrillic transliterated, a hash otherwise, `-2` on collision); the index for the system prompt; `Read`, `Forget`, `Recall` over facts and the archived sessions of the caller's chats only (`Episodes`), `Audit` of facts and persona | `memory` | done (P1 M3b task 7); nightly consolidation (R-MEM-1) in M7, embeddings P2 | 7.7 | [0033](../adr/0033-memory-in-the-workspace-git-with-the-git-binary.md), [0034](../adr/0034-clean-context-guard.md) |
-| Runner: wazero host, manifest, limits | `runner` | done (P0 spike, own ABI); supervisor and scheduler planned (P1) | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md), [0012](../adr/0012-yaml-manifests.md) |
+| Runner: wazero host, manifest, limits; tool modules (`LoadTool` refuses a manifest with any capability, `Call` with trigger `tool`, `ModuleError` for a failure the module reports) | `runner` | done (P0 spike, own ABI); tool modules (P1 M3b task 8); the rest of task 4.4, supervisor and scheduler in M4 | 7.5 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0011](../adr/0011-module-abi.md), [0012](../adr/0012-yaml-manifests.md), [0035](../adr/0035-web-reading.md) |
 | Module-side kit: `Host`, wire types | `pdk` | done (P0) | 7.5 | [0011](../adr/0011-module-abi.md) |
 | Module-side ABI glue (Go, TinyGo) | `pdk/guest` | done (P0) | 7.5 | [0011](../adr/0011-module-abi.md) |
 | Host conformance suite and probe module | `runner/runnertest`, `runner/runnertest/probe` | done | 7.5 | [0011](../adr/0011-module-abi.md) |
 | Deye reader module | `modules/deye` (logic), `modules/deye/wasm` (main), `modules/deye/deye-reader.yaml` | done; matches `deye.py` on the live API | 8.3 |
 | Deye reader in Rust (toolchain comparison) | `modules/deye-rs` (cargo; not built in CI) | done | 8.3 |
-| Measure modules (size, load, latency, RSS) | `tools/modbench` | done (P0) | 10.1 | [0005](../adr/0005-wasm-on-wazero-for-modules.md) |
+| html2md module: the main content of a page as Markdown (a byte pre-pass dropping scripts, styles and `data:` values and capping nesting; an own Readability-style extractor on `dom_query`; links made absolute, only http(s) and mailto; `htmd`), no capabilities; the build `html2md.wasm` committed and embedded with its manifest (`Wasm`, `Manifest`); fixtures with golden Markdown and a generated hostile page, run against the built module | `modules/html2md` (cargo crate; Go package that embeds the build; rebuilt and checked in CI) | done (P1 M3b task 8) | 7.11 | [0035](../adr/0035-web-reading.md) |
+| Measure modules (size, load, latency, RSS); a tool module with `-payload`, html2md with `-html` (`make bench-html2md`) | `tools/modbench` | done (P0); tool modules (P1 M3b task 8) | 10.1 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0035](../adr/0035-web-reading.md) |
 | Run a module once (dev and acceptance tool) | `tools/modrun` | done (P0) | 10.1 | — |
 | State cells: switch, sensor, request (named by the caller with `AskAs`); service, watch, reconcile | `cells` | done (P1 M1); confirmations are request cells (P1 M3b task 4) | 8 | [0014](../adr/0014-state-cells.md) |
 | Cell stores | `cells` (`MemStore`), `cells/sqlstore`; suite `cells/storetest` | done (P1 M1) | 8 | [0014](../adr/0014-state-cells.md) |
@@ -168,7 +169,8 @@ flowchart BT
 - `internal/*` packages are helpers shared by several packages; they are
   not part of the library API and are left out of the diagram.
 - Module code (`modules/*`) depends only on `pdk`, never on `runner`, so it
-  compiles to WASM.
+  compiles to WASM. `modules/html2md` is a Rust crate; its Go package
+  only embeds the build.
 - Interface packages (`transport`, `queue`, `provider`, `router`) depend only
   on `event` and the standard library, so a node can be embedded as a
   library (spec principle 5).

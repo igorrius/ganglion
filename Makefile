@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo live-agent compare memory modules modules-tinygo modules-rust modrun modbench bench
+.PHONY: build test lint check live-echo live-agent compare memory modules modules-html2md modules-tinygo modules-rust modrun modbench bench bench-html2md
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
@@ -52,11 +52,23 @@ compare:
 memory:
 	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent)' -v ./cmd/
 
-# The deye-reader module, built with three toolchains (Go, TinyGo, Rust) to
-# compare them (ADR-0011). TinyGo and Rust are optional, must be on PATH,
-# and are not built in CI.
-modules:
+# The modules. html2md (ADR-0035) is a Rust crate whose build,
+# modules/html2md/html2md.wasm, is committed and embedded in the binary, so
+# a Go build needs no Rust; rebuilding it needs rustup, which installs the
+# toolchain pinned in modules/html2md/rust-toolchain.toml. Paths are
+# remapped so the module does not carry the builder's directories.
+modules: modules-html2md
 	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o bin/deye-reader.go.wasm ./modules/deye/wasm
+
+modules-html2md:
+	cd modules/html2md && \
+	RUSTFLAGS="-C target-feature=+simd128 --remap-path-prefix=$${CARGO_HOME:-$$HOME/.cargo}=/cargo --remap-path-prefix=$(CURDIR)=/src" \
+	cargo build --quiet --release --locked --target wasm32-wasip1
+	cp modules/html2md/target/wasm32-wasip1/release/html2md.wasm modules/html2md/html2md.wasm
+
+# The deye-reader module is also built with TinyGo and Rust to compare
+# toolchains (ADR-0011). Both are optional, must be on PATH, and are not
+# built in CI.
 
 modules-tinygo:
 	tinygo build -target=wasip1 -buildmode=c-shared -opt=2 -no-debug -o bin/deye-reader.tinygo.wasm ./modules/deye/wasm
@@ -70,6 +82,11 @@ modrun:
 
 modbench:
 	go build -o bin/modbench ./tools/modbench
+
+# Measure html2md on each saved page, one process each (ADR-0035).
+bench-html2md: modbench
+	for f in modules/html2md/testdata/*.html; do \
+	  ./bin/modbench -wasm modules/html2md/html2md.wasm -manifest modules/html2md/html2md.yaml -html $$f -n 100 || exit 1; done
 
 # Measure every built deye-reader variant, one process each.
 bench: modbench

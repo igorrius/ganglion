@@ -113,7 +113,7 @@ func (m *Module) Handle(ctx context.Context, in pdk.Input) (pdk.Output, error) {
 	ctx, cancel := context.WithTimeout(ctx, m.manifest.Limits.Timeout)
 	defer cancel()
 
-	input, err := json.Marshal(in)
+	input, err := marshal(in)
 	if err != nil {
 		return pdk.Output{}, err
 	}
@@ -255,6 +255,18 @@ func (m *Module) fetch(ctx context.Context, raw []byte) pdk.Response {
 		return pdk.Response{Error: "response body exceeds 1 MiB"}
 	}
 	return pdk.Response{Status: resp.StatusCode, Body: body}
+}
+
+// marshal encodes v without escaping '<', '>' and '&': a module that
+// reads HTML gets it at its size, not six bytes per angle bracket.
+func marshal(v any) ([]byte, error) {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
 }
 
 func readString(mod api.Module, p, n uint32) string {
