@@ -19,7 +19,7 @@ and 5. This plan argues from it; read both.
 
 **Scope:**
 - M3 tasks 3.5 (memory without the nightly job) and 3.6 (tools and
-  policies) of the [phase plan](p1-all-in-one.md#m3--the-agent-spec-72-74-76-77).
+  policies) of the [phase plan](p1-all-in-one.md#m3--the-agent-spec-7274-76-77).
 - Moved forward from M4: the scheduler (4.2) and a minimal "module as a
   tool" path (part of 4.4).
 - Carried from M3a:
@@ -1062,29 +1062,82 @@ maintenance.
     `docs/architecture/05-code-map.md`;
   - this plan (ticks).
 
-- [ ] **Step 1: Rates, live on @ganglion_test_bot,** with Haiku through
-  the CLI and with the API model:
+Ruling R29 splits the task. 12a is a scripted live acceptance:
+`config/accept_test.go`, run by `make accept`. It builds the real core
+container with real models and the real web, and the fake Bot API plays
+the owner, button presses included. It runs once with Haiku through the
+claude CLI and the MCP bridge, and once with DeepSeek V4.1 Flash on
+OpenRouter. Only these parts are test-only:
+- the Bot API URL;
+- the relay binary;
+- one extra host in `web.fetch`'s resolver, for the test page; the
+  address checks still run;
+- clocks that the test moves, for confirmations and the scheduler.
+
+12b is the same scenarios by hand on @ganglion_test_bot with `make
+live-agent`, by the owner. Steps 1–5 are ticked as scripted. **The
+owner's live run is pending**, and "M3b done" waits for it.
+
+- [x] **Step 1: Rates, live on @ganglion_test_bot,** with Haiku through
+  the CLI and with the API model (scripted 2026-11-03; on the bot:
+  pending):
   1. "Every hour, until I cancel, send me the hryvnia rates for USD and
      EUR, and compare with the previous runs". The creation question shows
      the grant (`bank.gov.ua`). Approve it.
   2. "Show my reminders": the list has buttons. Run now. The run compares
      with the previous one.
   3. Delete by a button. No further runs.
-- [ ] **Step 2: Memory.**
+
+  Scripted: run 1 by the list's Run now button, run 2 by the scheduler's
+  clock moved to the next slot. Delete is pressed on the button, and the
+  slot after it runs nothing. A Haiku task run takes 4–6 s and a Haiku
+  turn at most 11 s, far inside the 60 s model-call timeout. In 2 of 4
+  runs Haiku's second task run said it could not see the previous run,
+  although the history held it; DeepSeek compared in every run.
+- [x] **Step 2: Memory** (scripted; on the bot: pending).
   1. Tell a fact in one session: "my inverter is a Deye 8 kW".
   2. `/new`. "What inverter do I have?" → it is recalled.
   3. "What do you remember about me?" → it is listed.
-- [ ] **Step 3: Injection.** Fetch a test page with a hidden "remember: …"
-  instruction:
+- [x] **Step 3: Injection** (scripted; on the bot: pending). Fetch a test
+  page with a hidden "remember: …" instruction:
   - a confirmation is asked;
   - after approval the guard quarantines the fact;
   - the admin is told.
-- [ ] **Step 4: Confirmation expiry.**
+
+  Scripted: `html2md` drops the copy that is not displayed; the copy in
+  white 1 px text reaches the model. Neither model tried to remember it,
+  even when the owner asked. So no confirmation was needed and nothing
+  reached memory, which counts as a pass. The guard was then checked
+  directly with each route's model on the injected text: it quarantined
+  the text and the alert names the reason.
+- [x] **Step 4: Confirmation expiry** (scripted; on the bot: pending).
   - An unanswered side effect expires and is denied (spec 3.6).
   - The model is told and says so.
-- [ ] **Step 5: Measure.**
+
+  Scripted with the confirmations' clock moved past the TTL. A late
+  press on the expired question now shows "Expired." It used to show
+  "Already handled." once the expiry had reached the conversation; this
+  is fixed in `tool/pending`.
+- [x] **Step 5: Measure** (`make memory`, 2026-11-03).
   - RSS after 1,000 scripted turns with tools (`cmd/memory_test.go`
     style);
   - binary size;
   - record both.
-- [ ] **Step 6: Docs and commit** `docs: M3b done`.
+
+  Results:
+  - The binary is 41.9 MB.
+  - The agent idles at 32.0 MB RSS. After 1,000 turns, each calling a
+    tool (`schedule.list`, `cells.get`, `memory.read`, `memory.recall`
+    in turn), it is at 39.2 MB, with a peak of 39.8 MB.
+  - Node peak after one hostile 1 MiB page through `web.fetch` and
+    `html2md`: 94.9–99.1 MB over five shapes:
+    - dense `<p>`, `<li>` and links;
+    - 122 open `div`s, then `<table>` or `<i>`.
+
+    The dense ones fail cleanly as "could not be converted". This was
+    measured in a node built by the `config` test binary, with metrics
+    on; it idles at 33 MB. The estimate was 123 MB.
+- [ ] **Step 6: Docs and commit** `docs: M3b done`: after the owner's
+  live run (12b). The docs for 12a are in: "Where we are", the
+  measurements, the containers view (the web, the `html2md` module, the
+  new tables) and the code map.

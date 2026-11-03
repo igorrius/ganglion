@@ -71,7 +71,17 @@ Start here when coming back to the project.
       ([ADR-0029](adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md));
     - 34 MB on disk, 35 MB RSS after 1,000 agent turns.
 - **In progress:** M3b, the agent works with the world
-  ([plan](plans/p1-m3b-agent-world.md)). The rest of M3 is split in two by
+  ([plan](plans/p1-m3b-agent-world.md)). **M3b: acceptance scripted
+  (2026-11-03); live run on the test bot pending.** `make accept` runs
+  the acceptance (rates, memory, injection, expiry) against the real
+  core with real models and the real web, the fake Bot API playing the
+  owner, once with Haiku through the claude CLI and once with DeepSeek
+  V4.1 Flash on OpenRouter; both pass. The owner repeats it by hand on
+  the test bot with `make live-agent`. Measured (`make memory`): the
+  binary is 41.9 MB; the node idles at 32 MB RSS and is at 39 MB (peak
+  40 MB) after 1,000 turns that each call a tool; one hostile 1 MiB
+  page through `web.fetch` and `html2md` peaks the node at 99 MB,
+  under the 128 MB budget. The rest of M3 is split in two by
   the [M3b and M3c design](plans/p1-m3b-m3c-design.md), recorded in the
   [phase plan](plans/p1-all-in-one.md#m3--the-agent-spec-7274-76-77) and
   the [spec](spec.md#102-p1--all-in-one--scope-and-acceptance):
