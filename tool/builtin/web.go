@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -74,12 +75,18 @@ func (w *WebFetch) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 // code span, where Markdown changes nothing.
 const questionFetch = "Open this page?\n"
 
+// errUserinfo refuses an address with a user name or password before
+// the host, which the fetcher refuses too: asking would be pointless.
+var errUserinfo = errors.New("web.fetch: an address with a user name or password is not fetched")
+
 // errBacktick refuses an address a code span cannot hold.
 var errBacktick = errors.New("web.fetch: the address holds a backtick, which the question cannot show; write it as %60")
 
 // Question implements tool.Questioner: the owner sees the normalised
-// address, the one the fetcher reads, whole (rulings R34, R39). An
-// address that is not http(s), holds a backtick, is longer than a
+// address, the one the fetcher reads, whole (rulings R34, R39), with an
+// internationalised host in its ASCII form (urlnorm), so a look-alike
+// host shows as what it is. An address that is not http(s), has a user
+// name or password, holds a backtick, is longer than a
 // question shows or holds something the redaction would hide is refused
 // without a question.
 func (*WebFetch) Question(_ context.Context, c tool.Call) (string, error) {
@@ -92,6 +99,9 @@ func (*WebFetch) Question(_ context.Context, c tool.Call) (string, error) {
 	norm, ok := urlnorm.Normalize(a.URL)
 	if !ok {
 		return "", errors.New("web.fetch: want an http or https address")
+	}
+	if u, err := url.Parse(norm); err != nil || u.User != nil {
+		return "", errUserinfo
 	}
 	if strings.Contains(norm, "`") {
 		return "", errBacktick

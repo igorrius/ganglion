@@ -19,6 +19,13 @@ func TestNormalize(t *testing.T) {
 		{"https://[::1]:443/a", "https://[::1]/a", true},
 		{"https://[::1]:8080/a", "https://[::1]:8080/a", true},
 		{"https://example.com/a?x=%2F", "https://example.com/a?x=%2F", true},
+		// An internationalised host is put in its ASCII (punycode) form,
+		// so a look-alike host cannot pass for the real one.
+		{"https://Пример.испытание/путь", "https://xn--e1afmkfd.xn--80akhbyknj4f/%D0%BF%D1%83%D1%82%D1%8C", true},
+		{"https://аpple.com/", "https://xn--pple-43d.com/", true},
+		{"https://xn--pple-43d.com/", "https://xn--pple-43d.com/", true},
+		{"https://bad\u200d.example/", "", false},
+		{"https://my_host.example.com/", "https://my_host.example.com/", true},
 		{"ftp://example.com/a", "", false},
 		{"javascript:alert(1)", "", false},
 		{"//example.com/a", "", false},

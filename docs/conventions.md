@@ -172,7 +172,7 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Principal → private conversation | the transport (`telegram.PrivateConv`) |
 | Secrets from the environment and `*_FILE` | `secrets` |
 | Version, commit, toolchain of this binary | `internal/buildinfo` |
-| Comparing web addresses (lower-case host, no fragment, no default port); finding them in text (`Find`, the one URL pattern), defanging text (`Defang`) | `internal/urlnorm` |
+| Comparing web addresses (lower-case host, an internationalised host in punycode, no fragment, no default port); finding them in text (`Find`, the one URL pattern), defanging text (`Defang`) | `internal/urlnorm` |
 | Checking a call's arguments against the tool's declared parameters | `tool.CheckArgs` |
 | Whether two calls' arguments are the same (canonical JSON) | `tool.CanonicalArgs` |
 | Marking outside content as data for the model, and dropping it from a text (`StripExternal`) | `tool.WrapExternal` |

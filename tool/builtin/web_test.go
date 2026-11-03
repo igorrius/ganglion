@@ -180,6 +180,11 @@ func TestWebFetchQuestionShowsTheAddress(t *testing.T) {
 	if err != nil || got != want {
 		t.Fatalf("Question = %q, %v; want %q", got, err, want)
 	}
+	// A look-alike host shows in its ASCII form, the one fetched.
+	idn, err := ask.Question(context.Background(), call("web.fetch", `{"url":"https://аpple.com/login"}`))
+	if err != nil || idn != "Open this page?\n`https://xn--pple-43d.com/login`" {
+		t.Fatalf("Question(IDN) = %q, %v", idn, err)
+	}
 	long := "https://a.example/" + strings.Repeat("a", tool.MaxQuestionRunes)
 	for name, args := range map[string]string{
 		"too long":       `{"url":"` + long + `"}`,
@@ -187,6 +192,8 @@ func TestWebFetchQuestionShowsTheAddress(t *testing.T) {
 		"no address":     `{}`,
 		"a backtick":     "{\"url\":\"https://a.example/?q=a`b\"}",
 		"a secret in it": `{"url":"https://a.example/?token=sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789"}`,
+		"userinfo":       `{"url":"https://user:pass@a.example/"}`,
+		"a user only":    `{"url":"https://user@a.example/"}`,
 	} {
 		if q, err := ask.Question(context.Background(), call("web.fetch", args)); err == nil {
 			t.Errorf("%s: asked %q", name, q)

@@ -399,3 +399,17 @@ func (r reversed) LookupNetIP(ctx context.Context, network, host string) ([]neti
 	slices.Reverse(addrs)
 	return addrs, err
 }
+
+// An internationalised host is fetched in its ASCII (punycode) form, the
+// form the confirmation question shows (polish of R39): the look-alike
+// "аpple.example" with a Cyrillic а resolves as xn--pple-43d.example,
+// never as the Latin name.
+func TestFetchUsesTheASCIIFormOfAnIDNHost(t *testing.T) {
+	f, n, _ := newFetcher(t, web.DefaultFetchConfig())
+	n.Site(t, "xn--pple-43d.example", "93.184.216.20", webtest.Reply("text/plain", "look-alike"))
+	n.Site(t, "apple.example", "93.184.216.21", webtest.Reply("text/plain", "real"))
+	p, err := f.Fetch(context.Background(), "http://аpple.example/", web.AnyHost)
+	if err != nil || p.URL != "http://xn--pple-43d.example/" || !strings.Contains(p.Text, "look-alike") {
+		t.Fatalf("Fetch = %+v, %v", p, err)
+	}
+}
