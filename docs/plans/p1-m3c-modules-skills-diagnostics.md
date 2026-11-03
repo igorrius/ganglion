@@ -732,7 +732,7 @@ Two repositories: promtop first, then ganglion.
   - `ganglion_module_active_info{module,source}`;
   - the self-test duration histogram.
 
-- [ ] **Step 1: Write failing tests** (a fake release server in
+- [x] **Step 1: Write failing tests** (a fake release server in
   `modstore/release` tests, with a configurable host list so tests can
   use `httptest`).
   - `TestUpdateInstallsWithoutRestart`: calls before go to v1, after to
@@ -750,10 +750,10 @@ Two repositories: promtop first, then ganglion.
   - `TestStartWithCorruptFileFallsBackToBuiltin`.
   - `TestCrashBetweenRowsLeavesOneActive` (review focus 4).
   - `TestModulesCommandAdminOnly`.
-- [ ] **Step 2: Run** — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
-- [ ] **Step 5: First release.**
+- [x] **Step 2: Run** — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
+- [ ] **Step 5: First release.** (waits for the owner's tag)
   - The owner pushes `html2md/v0.1.0`; CI publishes it.
   - `/modules update html2md` on the test node reports `up_to_date`
     (same sum as the embedded build) or `installed`.
@@ -762,9 +762,9 @@ Two repositories: promtop first, then ganglion.
     self-test.
 
   Not part of CI.
-- [ ] **Step 6: Code map** (`runner`, `modstore`, `modules/html2md`,
+- [x] **Step 6: Code map** (`runner`, `modstore`, `modules/html2md`,
   `agent`); containers page: the release channel.
-- [ ] **Step 7: Commit** `modstore, runner: html2md updated and rolled back from the chat (R-RUN-8)`.
+- [x] **Step 7: Commit** `modstore, runner: html2md updated and rolled back from the chat (R-RUN-8)`.
 
 ### Task 8: skills, level 1 and 2 (3.7)
 

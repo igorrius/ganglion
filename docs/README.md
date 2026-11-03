@@ -203,6 +203,22 @@ is needed for tests: they run against a fake Bot API.
      environment variables. A new session picks them up. Never paste the
      token into the chat.
 
+## Releasing a module
+
+A built-in module ships in the binary and is updated on a running node
+without a new core ([ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)):
+
+1. Change `modules/html2md`, run `make modules-html2md`, commit the
+   rebuilt `html2md.wasm` with its sources.
+2. Push a tag `html2md/vX.Y.Z`. The `Module release` workflow rebuilds
+   it, checks it matches the commit, runs the fixtures and the self-test,
+   and publishes the `.wasm`, the manifest and `SHA256SUMS`.
+3. On the node: `/modules update html2md`; `/modules rollback html2md`
+   goes back; `/modules` lists the versions and why one was refused.
+
+A release that asks for a capability, more memory or time than the
+core's ceiling, or another ABI, is refused until the core is upgraded.
+
 ## Diagnosing the node from outside
 
 `ganglion mcp` serves read-only diagnostics (logs, the tool-call journal,

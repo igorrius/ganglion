@@ -311,7 +311,7 @@ func (h *acceptNode) override(t *testing.T, cat rules.Catalog, r acceptRoute) {
 		return out, nil
 	})
 	do.Override(h.i, func(i do.Injector) (*web.Fetcher, error) {
-		return web.NewFetcher(web.DefaultFetchConfig(), web.NewModuleConverter(do.MustInvoke[*runner.LazyTool](i)),
+		return web.NewFetcher(web.DefaultFetchConfig(), web.NewModuleConverter(do.MustInvoke[*runner.SwapTool](i)),
 			web.WithResolver(n), web.WithConnect(n.connect)), nil
 	})
 	do.Override(h.i, func(i do.Injector) (*pending.Store, error) {

@@ -84,12 +84,14 @@ flowchart TB
     pc["Owner's PC<br/>claude CLI worker, P2"]
     cc["Claude Code or another MCP client"]
     net["The web"]
+    gh["GitHub Releases<br/>module tags, html2md/v*"]
     c --- e
     c --- w
     c --- db
     c --- repo
     c -- "history on stdin;<br/>tools over MCP on a per-run Unix socket" --- cl
     c -- "web.fetch, web.search" --> net
+    c -- "/modules update: sum, ceiling, self-test" --> gh
     c -. "task queue" .- pc
     c --> logs
     diag -- "read-only" --> db

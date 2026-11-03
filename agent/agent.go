@@ -79,8 +79,11 @@ type Deps struct {
 	// Facts is the memory's index, shown to admins only (design section
 	// 4, rule 8); NoFacts when unset.
 	Facts FactsFunc
-	Now   func() time.Time
-	Log   *slog.Logger
+	// Modules updates and rolls back the node's modules for /modules
+	// (R-RUN-8); NoModules when unset.
+	Modules Modules
+	Now     func() time.Time
+	Log     *slog.Logger
 }
 
 // Agent handles conversation turns; Handle is a core.Handler.
@@ -101,6 +104,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Facts == nil {
 		d.Facts = NoFacts
+	}
+	if d.Modules == nil {
+		d.Modules = NoModules{}
 	}
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)

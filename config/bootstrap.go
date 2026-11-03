@@ -24,6 +24,9 @@ type Bootstrap struct {
 	// LogDir is where the log files are, from GANGLION_LOG_DIR; "" when
 	// logs are not on disk (R-OBS-6). The diagnostic tools search it.
 	LogDir string
+	// ModulesDir is where module updates are stored: modules/ beside the
+	// database (ADR-0041).
+	ModulesDir string
 }
 
 // AgentSettings turns the agent on. Without a catalogue the core echoes, as

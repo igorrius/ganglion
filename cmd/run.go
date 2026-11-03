@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/igorrius/ganglion/agent"
@@ -84,6 +85,7 @@ func newLogger(out io.Writer, level slog.Level, b config.Bootstrap) (*slog.Logge
 // the secrets and the model catalogue.
 func bootstrap(v flags.Run, src secrets.Source, readFile func(string) ([]byte, error)) (config.Bootstrap, error) {
 	b := config.Bootstrap{DB: v.DB, BotAPIURL: v.TelegramAPIURL, Admin: v.Admin, MetricsAddr: v.MetricsAddr, TelegramReply: v.TelegramReply}
+	b.ModulesDir = filepath.Join(filepath.Dir(v.DB), "modules")
 	if dir, on := flags.LogDir(v.DB, v.LogDir); on {
 		b.LogDir = dir
 	}
