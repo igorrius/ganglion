@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/urlnorm"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/tool"
 )
@@ -184,7 +185,7 @@ func TestKnownURLComesFromUserAndSearchResults(t *testing.T) {
 }
 
 func TestExtractURLs(t *testing.T) {
-	got := extractURLs(`a https://x.example/a?b=1, (http://y.example/p) <https://z.example> "http://q.example/r" ftp://no.example`)
+	got := urlnorm.Find(`a https://x.example/a?b=1, (http://y.example/p) <https://z.example> "http://q.example/r" ftp://no.example`)
 	want := []string{"https://x.example/a?b=1", "http://y.example/p", "https://z.example", "http://q.example/r"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("got %q, want %q", got, want)

@@ -172,7 +172,8 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Principal → private conversation | the transport (`telegram.PrivateConv`) |
 | Secrets from the environment and `*_FILE` | `secrets` |
 | Version, commit, toolchain of this binary | `internal/buildinfo` |
-| Comparing web addresses (lower-case host, no fragment, no default port) | `internal/urlnorm` |
+| Comparing web addresses (lower-case host, no fragment, no default port); finding them in text (`Find`, the one URL pattern), defanging text (`Defang`) | `internal/urlnorm` |
+| Checking a call's arguments against the tool's declared parameters | `tool.CheckArgs` |
 | Marking outside content as data for the model | `tool.WrapExternal` |
 | Removing secrets before anything is journalled | `journal.Redact` |
 | An id nobody can guess (button ids) | `event.RandomID` |

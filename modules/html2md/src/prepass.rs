@@ -8,17 +8,24 @@
 //! parsing); a page it misreads loses some formatting, never safety: the
 //! whole module runs in the sandbox.
 
+use std::collections::HashMap;
+
 /// Elements whose body is raw text, never shown as content.
 const RAW: [&str; 6] = ["script", "style", "noscript", "template", "textarea", "xmp"];
 
 /// Deepest nesting of elements passed to the parser.
 pub const MAX_NESTING: usize = 256;
 
-/// Tags that do not nest: void elements, and elements whose end tag is
-/// usually left out (a page of unclosed `<p>` or `<li>` is not deep).
-const FLAT: [&str; 22] = [
+/// Void elements: they never open, with or without "/>".
+const VOID: [&str; 15] = [
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track",
-    "wbr", "p", "li", "dt", "dd", "tr", "td", "th", "option", "colgroup",
+    "wbr", "param", "keygen",
+];
+
+/// Elements whose end tag is usually left out and that the parser closes
+/// by itself: a page of unclosed `<p>` or `<li>` is not deep.
+const IMPLIED: [&str; 9] = [
+    "p", "li", "dt", "dd", "tr", "td", "th", "option", "colgroup",
 ];
 
 /// Returns src without raw-text bodies and `data:` attribute values, and
@@ -126,12 +133,16 @@ fn strip_data(tag: &[u8], out: &mut Vec<u8>) {
     }
 }
 
-/// Nesting counts open elements; start tags past MAX_NESTING are left
-/// out, and as many end tags after them.
+/// Nesting keeps a stack of the elements open, as the parser would see
+/// them: a non-void element opens even when written `<div/>` (HTML
+/// ignores the slash), and an end tag closes only an element that is
+/// open (a stray `</q>` closes nothing). Start tags past MAX_NESTING are
+/// left out, and so are their end tags.
 #[derive(Default)]
 struct Nesting {
-    depth: usize,
-    dropped: usize,
+    open: Vec<Vec<u8>>,
+    open_by_name: HashMap<Vec<u8>, usize>, // how many of each name are open: a stray end tag is found at once
+    dropped: HashMap<Vec<u8>, usize>,      // start tags left out, by name
 }
 
 impl Nesting {
@@ -142,26 +153,51 @@ impl Nesting {
             .iter()
             .position(|c| !c.is_ascii_alphanumeric())
             .unwrap_or(tag.len() - start);
-        let name = &tag[start..start + name_len];
-        if name.is_empty()
-            || tag.ends_with(b"/>")
-            || FLAT.iter().any(|f| f.as_bytes().eq_ignore_ascii_case(name))
-        {
+        let name = tag[start..start + name_len].to_ascii_lowercase();
+        let listed = |list: &[&str]| list.iter().any(|v| v.as_bytes() == name.as_slice());
+        if name.is_empty() || listed(&VOID) || listed(&IMPLIED) {
             return true;
         }
         if end {
-            if self.dropped > 0 {
-                self.dropped -= 1;
-                return false;
-            }
-            self.depth = self.depth.saturating_sub(1);
-            return true;
+            return self.close(&name);
         }
-        if self.depth >= MAX_NESTING {
-            self.dropped += 1;
+        if self.open.len() >= MAX_NESTING {
+            *self.dropped.entry(name).or_default() += 1;
             return false;
         }
-        self.depth += 1;
+        *self.open_by_name.entry(name.clone()).or_default() += 1;
+        self.open.push(name);
+        true
+    }
+
+    /// Closes name: a dropped one goes with its tag; an open one closes
+    /// everything opened inside it; a stray one, which the parser would
+    /// ignore after searching its whole stack of open elements, is left
+    /// out.
+    fn close(&mut self, name: &[u8]) -> bool {
+        if let Some(n) = self.dropped.get_mut(name) {
+            *n -= 1;
+            if *n == 0 {
+                self.dropped.remove(name);
+            }
+            return false;
+        }
+        if !self.open_by_name.contains_key(name) {
+            return false;
+        }
+        while let Some(top) = self.open.pop() {
+            let left = self.open_by_name.get_mut(&top).map_or(0, |n| {
+                *n -= 1;
+                *n
+            });
+            if left == 0 {
+                self.open_by_name.remove(&top);
+            }
+            if top == name {
+                break;
+            }
+        }
+        self.dropped.clear();
         true
     }
 }
@@ -215,6 +251,39 @@ mod tests {
         assert_eq!(got.matches("<div>").count(), MAX_NESTING);
         assert_eq!(got.matches("</div>").count(), MAX_NESTING);
         assert!(got.contains('x'));
+    }
+
+    #[test]
+    fn self_closed_divs_count_as_open() {
+        // html5ever ignores the slash of a non-void element: <div/> opens a div.
+        let got = strip(&"<div/>".repeat(1000));
+        assert_eq!(got.matches("<div/>").count(), MAX_NESTING);
+    }
+
+    #[test]
+    fn stray_end_tags_do_not_close_anything() {
+        let got = strip(&"<div></q>".repeat(1000));
+        assert_eq!(got.matches("<div>").count(), MAX_NESTING);
+        let got = strip(&("<div>".repeat(300) + &"</span>".repeat(300) + &"<div>".repeat(300)));
+        assert_eq!(got.matches("<div>").count(), MAX_NESTING);
+    }
+
+    #[test]
+    fn stray_end_tags_are_left_out() {
+        assert_eq!(strip("<div>a</q></div></p></br>"), "<div>a</div></p></br>");
+    }
+
+    #[test]
+    fn matching_end_tags_close_to_their_element() {
+        // An end tag closes the elements opened inside its element.
+        let page = "<section><div><b>x</section>".repeat(1000);
+        assert_eq!(strip(&page).matches("<section>").count(), 1000);
+    }
+
+    #[test]
+    fn void_self_closed_tags_stay_flat() {
+        let page = "<br/><img/><input/>".repeat(1000) + "<div>y</div>";
+        assert!(strip(&page).contains("<div>y</div>"));
     }
 
     #[test]

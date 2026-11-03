@@ -110,6 +110,15 @@ func hostilePage() string {
 	return b.String()
 }
 
+// nestingPages open elements the parser nests although a naive count
+// would not: self-closed non-void elements and stray end tags.
+func nestingPages() map[string]string {
+	return map[string]string{
+		"self-closed divs": "<title>Deep</title><p>start</p>" + strings.Repeat("<div/>", 300_000) + "<p>end</p>",
+		"stray end tags":   "<title>Deep</title><p>start</p>" + strings.Repeat("<div></q>", 200_000) + "<p>end</p>",
+	}
+}
+
 func TestHostileHTMLNoTrap(t *testing.T) {
 	m := load(t)
 	html := hostilePage()
@@ -130,6 +139,16 @@ func TestHostileHTMLNoTrap(t *testing.T) {
 	for _, bad := range []string{"while(true)", "injected", "alert", "QUJD", "javascript:", "data:", "noscript", "tmpl"} {
 		if strings.Contains(p.Markdown, bad) {
 			t.Errorf("the Markdown holds %q:\n%s", bad, p.Markdown)
+		}
+	}
+	for name, html := range nestingPages() {
+		start := time.Now()
+		p, err := convert(t, m, "https://evil.example/", html)
+		if err != nil || !strings.Contains(p.Markdown, "end") {
+			t.Errorf("%s (%d bytes): %v, %q", name, len(html), err, p.Markdown)
+		}
+		if took := time.Since(start); took > 2*time.Second {
+			t.Errorf("%s took %v", name, took)
 		}
 	}
 }

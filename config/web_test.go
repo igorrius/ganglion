@@ -55,3 +55,19 @@ func TestEveryToolIsAdminOnly(t *testing.T) {
 		t.Fatal("no tools at all")
 	}
 }
+
+// Every tool declares its parameters, so tool.CheckArgs can hold the
+// model to them (ruling R18).
+func TestEveryToolDeclaresItsParameters(t *testing.T) {
+	i := New(context.Background(), agentConfig(t), slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	reg, err := do.Invoke[*tool.Registry](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range reg.Specs(true) {
+		if _, err := tool.Properties(s); err != nil {
+			t.Errorf("%s declares no properties: %s", s.Name, s.InputSchema)
+		}
+	}
+}

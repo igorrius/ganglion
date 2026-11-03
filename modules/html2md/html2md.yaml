@@ -7,5 +7,5 @@
 name: html2md
 version: 1
 limits:
-  memory: 64MiB
+  memory: 32MiB
   timeout: 5s

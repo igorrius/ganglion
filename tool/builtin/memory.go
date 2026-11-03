@@ -308,7 +308,7 @@ func (*MemoryAudit) Spec() tool.Spec {
 		Name: toolMemoryAudit,
 		Description: "Check every stored fact and persona file for hidden instructions with the clean-context check, " +
 			"and list what it flags. It changes nothing.",
-		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`),
+		InputSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
 		Class:       tool.ClassRead,
 		Policy:      tool.PolicyAuto,
 		AdminOnly:   true,

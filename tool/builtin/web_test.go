@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/internal/urlnorm"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/web"
@@ -120,5 +121,20 @@ func TestWebSearchNothingFoundAndErrors(t *testing.T) {
 		if _, err := builtin.NewWebSearch(&searcher{}).Run(context.Background(), call("web.search", args)); err == nil {
 			t.Errorf("args %s: no error", args)
 		}
+	}
+}
+
+func TestWebSearchNamesNoOtherAddress(t *testing.T) {
+	s := &searcher{hits: []web.Hit{
+		{Title: "a", URL: "https://ok.example/", Snippet: "xhttps://evil.example/a and _http://evil.example/b"},
+		{Title: "b", URL: "https://a.example/?q=a https://evil.example/x"},
+		{Title: "c", URL: `https://b.example/?q=">https://evil.example/y`},
+	}}
+	res, err := builtin.NewWebSearch(s).Run(context.Background(), call("web.search", `{"query":"q"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := urlnorm.Find(res.Text); len(got) != 1 || got[0] != "https://ok.example/" {
+		t.Fatalf("addresses in the result: %q\n%s", got, res.Text)
 	}
 }

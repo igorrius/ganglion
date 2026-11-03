@@ -43,15 +43,17 @@ var (
 // follows no redirect.
 type FetchConfig struct {
 	MaxBytes     int64         // the largest response body read
+	MaxHTMLBytes int64         // the largest HTML page; html2md's memory limit is sized for it (ADR-0035)
 	Timeout      time.Duration // the whole fetch, redirects included
+	DialTimeout  time.Duration // connecting to one address of a host
 	MaxRedirects int           // redirects followed
 	MaxChars     int           // runes of text returned; the rest is cut
 }
 
-// DefaultFetchConfig returns 2 MiB, 15 s, 5 redirects and 20,000
-// characters.
+// DefaultFetchConfig returns 2 MiB (1 MiB of HTML), 15 s (5 s to
+// connect to one address), 5 redirects and 20,000 characters.
 func DefaultFetchConfig() FetchConfig {
-	return FetchConfig{MaxBytes: 2 << 20, Timeout: 15 * time.Second, MaxRedirects: 5, MaxChars: 20_000}
+	return FetchConfig{MaxBytes: 2 << 20, MaxHTMLBytes: 1 << 20, Timeout: 15 * time.Second, DialTimeout: 5 * time.Second, MaxRedirects: 5, MaxChars: 20_000}
 }
 
 // Converter turns a page's HTML into its title and Markdown: the html2md
@@ -120,7 +122,7 @@ func NewFetcher(cfg FetchConfig, conv Converter, opts ...FetchOption) *Fetcher {
 	}
 	return &Fetcher{cfg: cfg, conv: conv, transport: &http.Transport{
 		Proxy:                  nil, // never a proxy from the environment: it would see every address
-		DialContext:            dialer(o).dial,
+		DialContext:            dialer{resolve: o.resolve, connect: o.connect, timeout: cfg.DialTimeout}.dial,
 		ForceAttemptHTTP2:      true,
 		TLSHandshakeTimeout:    10 * time.Second,
 		MaxIdleConns:           8,
@@ -247,6 +249,9 @@ func (f *Fetcher) read(ctx context.Context, resp *http.Response) (kind, string, 
 	}
 	if k == 0 {
 		return 0, "", nil, unsupported(mediaType)
+	}
+	if k == kindHTML && int64(len(body)) > f.cfg.MaxHTMLBytes {
+		return 0, "", nil, fmt.Errorf("%w (an HTML page over %s)", ErrTooLarge, size(f.cfg.MaxHTMLBytes))
 	}
 	return k, mediaType, body, nil
 }

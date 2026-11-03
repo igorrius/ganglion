@@ -125,7 +125,7 @@ func (f *fakeTool) Spec() tool.Spec {
 	if name == "" {
 		name = "clock"
 	}
-	return tool.Spec{Name: name, Description: "time", InputSchema: json.RawMessage(`{"type":"object"}`),
+	return tool.Spec{Name: name, Description: "time", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true}
 }
 

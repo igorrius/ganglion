@@ -36,13 +36,14 @@ type ToolModule struct {
 }
 
 // LoadTool parses the manifest, refuses one that grants any capability
-// (ErrCapabilities), and compiles the module.
+// (ErrCapabilities), and compiles the module. A tool module gets no log
+// host function: a module that imports one fails to instantiate.
 func LoadTool(ctx context.Context, wasm, manifest []byte, deps Deps) (*ToolModule, error) {
 	m, err := toolManifest(manifest)
 	if err != nil {
 		return nil, err
 	}
-	mod, err := Load(ctx, wasm, m, deps)
+	mod, err := load(ctx, wasm, m, deps, true)
 	if err != nil {
 		return nil, err
 	}

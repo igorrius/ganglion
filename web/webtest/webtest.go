@@ -32,7 +32,7 @@ func New() *Net {
 }
 
 // Site serves h at host, which resolves to addr (a public-looking
-// address such as 203.0.113.10). It returns the site's base URL,
+// address such as 93.184.216.10). It returns the site's base URL,
 // "http://host".
 func (n *Net) Site(t testing.TB, host, addr string, h http.Handler) string {
 	t.Helper()

@@ -43,7 +43,8 @@ granted hosts is refused; errors are fixed texts, never a response body.
 #### A. Rust: own extractor on `dom_query`, Markdown by `htmd`
 
 A byte-level pre-pass drops script and style bodies and `data:` values
-and caps nesting at 256; `dom_query` (html5ever) parses; an own
+and caps nesting at 256 with a stack of the open elements (`<div/>` opens
+a div, as HTML says; a stray end tag closes nothing and is dropped); `dom_query` (html5ever) parses; an own
 Readability-style extractor (iterative walks, table rows scored as
 paragraphs, data tables never pruned, link-heavy furniture pruned)
 picks the content; links are made absolute and only http(s) and mailto
@@ -114,13 +115,27 @@ Notes:
   (2–4 KiB each, written for the tests) take 8–9 ms p95.
 
 Memory of A (principle 8), process RSS in MiB: 11 before loading, 44–47
-after compiling the module (once, at start, about 300 ms), 21–25 after
-100 calls, peak 47–74 on the real pages and 108 on the 1.35 MB page. The
-module's own memory limit is 64 MiB: every saved page fits in 32 MiB, and
-a synthetic worst case (2 MiB of dense markup, 30,000 table rows and 8,000
-paragraphs) does not fit in 64 MiB; it fails cleanly ("could not be
-converted"). With 128 MiB it converted in 1.8 s, but the process peaked
-at 391 MiB, which a Raspberry Pi should not pay for one page.
+after compiling the module (once, about 300 ms), 21–25 after 100 calls,
+peak 47–74 on the real pages. The first limits (2 MiB of HTML, 64 MiB of
+module memory) let a 1.35 MB page peak at 108, and 1.8 MB of stray end
+tags at 143 after a 5 s timeout; a synthetic 2 MiB of dense markup took
+1.8 s at 128 MiB and peaked at 391. wazero grows a module's memory by
+copying a Go slice, and the old copy waits for the garbage collector,
+which roughly doubles a call's peak.
+
+The limits now (review fix, ruling R20): HTML at most 1 MiB (JSON and
+text keep 2 MiB), module memory 32 MiB, and the runner backs each
+instance's memory with one anonymous mapping of its maximum size, so
+growing never copies and closing the instance returns the pages at once.
+Worst cases at these limits, `modbench`, process maxrss with a 12 MiB
+baseline: 1 MiB of dense markup (30,000 table rows and paragraphs) and
+1 MiB of nested `div`/`span`/`a` both run out of the 32 MiB and fail
+cleanly ("could not be converted") at **79 MiB** at most; the first
+1 MiB of the Wikipedia list converts at 69 MiB (p95 326 ms);
+`<div></q>` and `<div/>` soup at 51 and 69 MiB (117 and 113 ms); the
+hostile page at 54 MiB. So the worst case adds about 67 MiB to a node
+whose agent runs at about 40 MB: about 107 MB, under 128 MB. The real
+pages keep their numbers (p95 news 29 ms, docs 67, forum 55, NBU 28).
 
 Search, measured from the development machine on 2026-11-03: four
 DuckDuckGo HTML requests in a row returned results three times and a bot
@@ -161,8 +176,9 @@ runs one.
   `net/url`: the string the policy checked;
 - a dialer resolves the name itself, refuses the host if any address is
   not public (loopback, private, unique-local `fc00::/7`, link-local with
-  `169.254.169.254`, CGNAT `100.64.0.0/10`, unspecified, multicast,
-  reserved; IPv4-mapped and NAT64 addresses judged by their IPv4
+  `169.254.169.254`, CGNAT `100.64.0.0/10`, documentation ranges,
+  local-use NAT64 `64:ff9b:1::/48`, unspecified, multicast,
+  reserved; IPv4-mapped, NAT64 and 6to4 addresses judged by their IPv4
   address), and connects only to the checked addresses, with a socket
   control hook checking once more; so DNS rebinding and redirects are
   covered;
@@ -170,11 +186,23 @@ runs one.
   address, no `Referer` on redirects;
 - redirects (at most 5) are checked like the first address and, in a
   scheduled task, must stay on the grant's hosts;
-- 2 MiB body, 15 s, 20,000 characters returned; HTML through `html2md`,
-  JSON and plain text as they are, any other type an error naming it;
-  charsets such as windows-1251 decoded to UTF-8;
+- a host written as one number or in short or hex form (`2130706433`,
+  `127.1`, `0x7f000001`) is read as the IPv4 address it is and checked;
+  each address gets its own connect timeout (5 s);
+- 2 MiB body (1 MiB for HTML), 15 s, 20,000 characters returned;
+  HTML through `html2md`, JSON and plain text as they are, any other
+  type an error naming it; charsets such as windows-1251 decoded to
+  UTF-8;
 - every error is a fixed text (status, type, limit), so remote words
-  reach the model only inside the `<external>` wrapper.
+  reach the model only inside the `<external>` wrapper;
+- the arguments of every tool call must be exactly the tool's declared
+  parameters (`tool.CheckArgs`, before the policy; ruling R18), so a
+  case-variant `URL` or a second `url` cannot carry an address past the
+  URL rule; and search results make known only each hit's own address,
+  written so the agent reads it back exactly, with every other address
+  in titles and snippets defanged (`internal/urlnorm`, ruling R19);
+- `html2md` runs as a tool module without the `log` host function, so
+  nothing it reads reaches the node's log.
 
 The core's `go.mod` gets no new module: `golang.org/x/net` (for
 `html/charset`) and `golang.org/x/text` move from indirect to direct.
@@ -195,9 +223,9 @@ The core's `go.mod` gets no new module: `golang.org/x/net` (for
   linked into the core, the charset tables); the agent's RSS after 1,000
   turns from 37.8 MB to 39.9 MB. The first page costs about 0.3 s of
   compiling and 10–14 MiB of RSS that stays; each page then costs tens
-  of ms and a transient peak of tens of MiB.
-- Pages beyond about 1 MB of markup take 0.3–0.5 s, and pathological
-  ones fail to convert rather than take the node's memory.
+  of ms and a transient peak of at most about 67 MiB.
+- HTML over 1 MiB is refused, and pages near that size of dense markup
+  take 0.3 s or fail to convert rather than take the node's memory.
 - The "module as a tool" path (`runner.LoadTool`, `Call`) exists before
   M4; a tool module's manifest that grants any capability is refused.
 - Without a key, search can fail with a bot check; the owner sees why.

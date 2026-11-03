@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -100,27 +99,13 @@ func (a *Agent) toolCall(t *turn, call provider.ToolCall) tool.Call {
 	}
 }
 
-// urlPattern finds an http(s) address in text: it runs up to whitespace
-// or a closing ")", ">" or quote.
-var urlPattern = regexp.MustCompile(`(?i)https?://[^\s)>"]+`)
-
-// extractURLs returns the addresses in text; punctuation that ends a
-// sentence after an address is not part of it.
-func extractURLs(text string) []string {
-	found := urlPattern.FindAllString(text, -1)
-	for i, u := range found {
-		found[i] = strings.TrimRight(u, ".,;:!?")
-	}
-	return found
-}
-
 // urlSet is the normalised addresses a turn may fetch without asking: the
 // ones in the user's messages and in earlier web.search results.
 type urlSet map[string]struct{}
 
 // add puts the addresses of text in the set.
 func (s urlSet) add(text string) {
-	for _, raw := range extractURLs(text) {
+	for _, raw := range urlnorm.Find(text) {
 		if u, ok := urlnorm.Normalize(raw); ok {
 			s[u] = struct{}{}
 		}

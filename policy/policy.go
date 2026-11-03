@@ -119,7 +119,9 @@ func New(cfg Config, reg *tool.Registry, ask Asker, opts ...Option) *Policy {
 	return p
 }
 
-// Middleware decides each call. A confirm parks the call with the Asker
+// Middleware decides each call. Arguments that are not exactly the
+// tool's declared parameters are refused first (tool.CheckArgs, ruling
+// R18): the rules below read them by exact name. A confirm parks the call with the Asker
 // and does not run it; a forbidden or out-of-grant call returns an error
 // for the model and does not run. The decision goes to the journal around
 // this middleware (journal.Annotate).
@@ -130,6 +132,10 @@ func (p *Policy) Middleware() tool.Middleware {
 			if !ok {
 				journal.Annotate(ctx, journal.DecisionForbidden)
 				return tool.Result{}, fmt.Errorf("policy: %s: %w", c.Name, tool.ErrUnknown)
+			}
+			if err := tool.CheckArgs(h.Spec(), c.Args); err != nil {
+				journal.Annotate(ctx, journal.DecisionForbidden)
+				return tool.Result{}, fmt.Errorf("policy: %s: %w", c.Name, err)
 			}
 			s := p.spec(h.Spec())
 			pol, d := Decide(p.cfg.MaxDepth, s, c)

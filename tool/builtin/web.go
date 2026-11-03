@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -135,20 +134,19 @@ func (w *WebSearch) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	return tool.Result{Text: hitsText(hits), External: true}, nil
 }
 
-// scheme finds the scheme of an address in running text.
-var scheme = regexp.MustCompile(`(?i)\bhttps?://`)
-
-// hitsText numbers the hits with one "URL:" line each; hits without a
-// web address are left out.
+// hitsText numbers the hits with one "URL:" line each. Titles and
+// snippets are defanged, and a hit whose address the agent would not
+// read back as exactly itself is left out, so a result makes no other
+// address known (ruling R19).
 func hitsText(hits []web.Hit) string {
 	var parts []string
 	for _, h := range hits {
 		u, ok := urlnorm.Normalize(h.URL)
-		if !ok {
+		if !ok || !urlnorm.Exact(u) {
 			continue
 		}
-		part := strconv.Itoa(len(parts)+1) + ". " + scheme.ReplaceAllString(h.Title, "") + "\nURL: " + u
-		if s := scheme.ReplaceAllString(h.Snippet, ""); s != "" {
+		part := strconv.Itoa(len(parts)+1) + ". " + urlnorm.Defang(h.Title) + "\nURL: " + u
+		if s := urlnorm.Defang(h.Snippet); s != "" {
 			part += "\n" + s
 		}
 		parts = append(parts, part)

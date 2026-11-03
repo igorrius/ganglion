@@ -150,6 +150,25 @@ mod tests {
     }
 
     #[test]
+    fn hostile_nesting_shapes_convert() {
+        for body in [
+            "<div/>".repeat(300_000),
+            "<div></q>".repeat(200_000),
+            "<div>".repeat(5_000),
+        ] {
+            let p = convert(
+                &format!("<title>T</title><p>start</p>{body}<p>end</p>"),
+                "https://e.example/",
+            );
+            assert!(
+                p.markdown.contains("end"),
+                "{}",
+                &p.markdown[..p.markdown.len().min(200)]
+            );
+        }
+    }
+
+    #[test]
     fn converts_a_small_page() {
         let p = convert(
             "<html><head><title>T</title></head><body><article><h1>Head</h1>\
