@@ -188,8 +188,14 @@ The core's `go.mod` gets no new module: `golang.org/x/net` (for
   (paths remapped, toolchain pinned), and CI rebuilds it, runs its tests
   and the Go fixture tests against the rebuilt module, and fails if the
   committed file differs from its sources.
-- A node pays about 10–14 MiB of RSS for the compiled module and 0.3 s
-  at start; a page costs tens of ms and a transient peak of tens of MiB.
+- The module is compiled on the first HTML page, not at start
+  (`runner.LazyTool`): the hourly rates task reads JSON and never needs
+  it. Measured with `make memory` against the commit before this ADR:
+  the binary grows from 35.3 MB to 41.5 MB (the 1.2 MB module, wazero now
+  linked into the core, the charset tables); the agent's RSS after 1,000
+  turns from 37.8 MB to 39.9 MB. The first page costs about 0.3 s of
+  compiling and 10–14 MiB of RSS that stays; each page then costs tens
+  of ms and a transient peak of tens of MiB.
 - Pages beyond about 1 MB of markup take 0.3–0.5 s, and pathological
   ones fail to convert rather than take the node's memory.
 - The "module as a tool" path (`runner.LoadTool`, `Call`) exists before

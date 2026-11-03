@@ -11,12 +11,12 @@ import (
 	"github.com/samber/do/v2"
 )
 
-// HTML2MD provides the html2md module embedded in the binary (ADR-0035);
-// updates from the data volume come in M3c.
-func HTML2MD() do.Provider[*runner.ToolModule] {
-	return func(i do.Injector) (*runner.ToolModule, error) {
-		return runner.LoadTool(do.MustInvoke[Startup](i), html2md.Wasm, html2md.Manifest,
-			runner.Deps{Logger: do.MustInvoke[*slog.Logger](i)})
+// HTML2MD provides the html2md module embedded in the binary, compiled
+// on the first HTML page (ADR-0035); updates from the data volume come
+// in M3c.
+func HTML2MD() do.Provider[*runner.LazyTool] {
+	return func(i do.Injector) (*runner.LazyTool, error) {
+		return runner.NewLazyTool(html2md.Wasm, html2md.Manifest, runner.Deps{Logger: do.MustInvoke[*slog.Logger](i)})
 	}
 }
 
@@ -24,7 +24,7 @@ func HTML2MD() do.Provider[*runner.ToolModule] {
 // converted by html2md.
 func Fetcher() do.Provider[*web.Fetcher] {
 	return func(i do.Injector) (*web.Fetcher, error) {
-		return web.NewFetcher(web.DefaultFetchConfig(), web.NewModuleConverter(do.MustInvoke[*runner.ToolModule](i))), nil
+		return web.NewFetcher(web.DefaultFetchConfig(), web.NewModuleConverter(do.MustInvoke[*runner.LazyTool](i))), nil
 	}
 }
 

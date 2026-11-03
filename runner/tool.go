@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/igorrius/ganglion/pdk"
 )
@@ -37,18 +38,28 @@ type ToolModule struct {
 // LoadTool parses the manifest, refuses one that grants any capability
 // (ErrCapabilities), and compiles the module.
 func LoadTool(ctx context.Context, wasm, manifest []byte, deps Deps) (*ToolModule, error) {
-	m, err := ParseManifest(manifest)
+	m, err := toolManifest(manifest)
 	if err != nil {
-		return nil, fmt.Errorf("runner: tool module: %w", err)
-	}
-	if c := m.Capabilities; len(c.HTTPFetch) > 0 || len(c.SecretGet) > 0 || len(c.EventEmit) > 0 || c.State {
-		return nil, fmt.Errorf("%w (%s)", ErrCapabilities, m.Name)
+		return nil, err
 	}
 	mod, err := Load(ctx, wasm, m, deps)
 	if err != nil {
 		return nil, err
 	}
 	return &ToolModule{mod: mod}, nil
+}
+
+// toolManifest parses a tool module's manifest and refuses one that
+// grants anything.
+func toolManifest(src []byte) (Manifest, error) {
+	m, err := ParseManifest(src)
+	if err != nil {
+		return Manifest{}, fmt.Errorf("runner: tool module: %w", err)
+	}
+	if c := m.Capabilities; len(c.HTTPFetch) > 0 || len(c.SecretGet) > 0 || len(c.EventEmit) > 0 || c.State {
+		return Manifest{}, fmt.Errorf("%w (%s)", ErrCapabilities, m.Name)
+	}
+	return m, nil
 }
 
 // Call runs the module once with trigger "tool" and payload, and returns
@@ -68,4 +79,60 @@ func (t *ToolModule) Call(ctx context.Context, payload json.RawMessage) (json.Ra
 // Shutdown frees the module.
 func (t *ToolModule) Shutdown(ctx context.Context) error {
 	return t.mod.Close(ctx)
+}
+
+// LazyTool is a tool module compiled on its first call, so a node that
+// never needs it does not pay for its compiled code (spec principle 8):
+// html2md is needed only when someone reads an HTML page. The manifest
+// is checked at once.
+type LazyTool struct {
+	wasm     []byte
+	manifest []byte
+	deps     Deps
+
+	mu  sync.Mutex
+	mod *ToolModule
+}
+
+// NewLazyTool checks the manifest as LoadTool does (ErrCapabilities)
+// and leaves compiling to the first Call.
+func NewLazyTool(wasm, manifest []byte, deps Deps) (*LazyTool, error) {
+	if _, err := toolManifest(manifest); err != nil {
+		return nil, err
+	}
+	return &LazyTool{wasm: wasm, manifest: manifest, deps: deps}, nil
+}
+
+// Call compiles the module if this is the first call (a failed compile
+// is tried again on the next one) and runs it.
+func (l *LazyTool) Call(ctx context.Context, payload json.RawMessage) (json.RawMessage, error) {
+	l.mu.Lock()
+	if l.mod == nil {
+		mod, err := LoadTool(ctx, l.wasm, l.manifest, l.deps)
+		if err != nil {
+			l.mu.Unlock()
+			return nil, err
+		}
+		l.mod = mod
+	}
+	mod := l.mod
+	l.mu.Unlock()
+	return mod.Call(ctx, payload)
+}
+
+// Loaded reports whether the module has been compiled.
+func (l *LazyTool) Loaded() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.mod != nil
+}
+
+// Shutdown frees the module if it was loaded.
+func (l *LazyTool) Shutdown(ctx context.Context) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.mod == nil {
+		return nil
+	}
+	return l.mod.Shutdown(ctx)
 }

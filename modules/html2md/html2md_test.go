@@ -153,3 +153,20 @@ func TestManifestGrantsNothing(t *testing.T) {
 		t.Fatalf("manifest = %+v", m)
 	}
 }
+
+func TestLazyToolLoadsOnFirstCall(t *testing.T) {
+	l, err := runner.NewLazyTool(html2md.Wasm, html2md.Manifest, runner.Deps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Loaded() {
+		t.Fatal("compiled before the first call")
+	}
+	raw, err := l.Call(context.Background(), json.RawMessage(`{"html":"<title>T</title><p>hello</p>","url":"https://example.org/"}`))
+	if err != nil || !strings.Contains(string(raw), "hello") || !l.Loaded() {
+		t.Fatalf("Call = %s, %v; loaded %v", raw, err, l.Loaded())
+	}
+	if err := l.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
