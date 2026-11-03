@@ -212,3 +212,20 @@ func waitPolling(t *testing.T, s *Server) {
 	}
 	t.Fatal("no poll in flight")
 }
+
+func TestFakeShowingFollowsEdits(t *testing.T) {
+	s := NewServer(t, token)
+	kb := map[string]any{"inline_keyboard": [][]map[string]any{{{"text": "Delete", "callback_data": "c:1"}}}}
+	post(t, s, token, "sendMessage", map[string]any{"chat_id": 42, "text": "first"})
+	post(t, s, token, "sendMessage", map[string]any{"chat_id": 42, "text": "second", "reply_markup": kb})
+	shown := s.Showing()
+	if len(shown) != 2 || shown[0].Text != "first" || shown[1].Text != "second" || shown[1].Keyboard == "" {
+		t.Fatalf("showing %+v", shown)
+	}
+	if a := post(t, s, token, "editMessageText", map[string]any{"chat_id": 42, "message_id": shown[1].MessageID, "text": "deleted"}); !a.OK {
+		t.Fatalf("edit: %+v", a)
+	}
+	if got := s.Showing()[1]; got.Text != "deleted" || got.Keyboard != "" || got.MessageID != shown[1].MessageID {
+		t.Fatalf("after the edit %+v", got)
+	}
+}

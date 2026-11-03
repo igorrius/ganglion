@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo live-agent compare memory modules modules-html2md modules-tinygo modules-rust modrun modbench bench bench-html2md
+.PHONY: build test lint check live-echo live-agent accept compare memory modules modules-html2md modules-tinygo modules-rust modrun modbench bench bench-html2md
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
@@ -40,6 +40,18 @@ live-agent: build
 	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) \
 	GANGLION_MODELS_FILE=$(LIVE_MODELS) GANGLION_WORKSPACE=$(LIVE_WORKSPACE) ./bin/ganglion run --roles core
 
+# The scripted acceptance of M3b (config/accept_test.go): the real core
+# with real models and the real web, the fake Bot API playing the owner.
+# ACCEPT_ROUTE picks a route: cli (Haiku through the claude CLI, logged
+# in), api (OPENROUTER_API_KEY from .env) or both (empty). Transcripts and
+# node logs go to bin/accept/. It spends a few cents and a few minutes.
+ACCEPT_ROUTE ?=
+accept: build
+	@mkdir -p bin/accept
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	GANGLION_LIVE_ACCEPT=1 GANGLION_RELAY=$(CURDIR)/bin/ganglion GANGLION_ACCEPT_OUT=$(CURDIR)/bin/accept \
+	go test -count=1 -timeout 60m -run 'TestAcceptance/$(ACCEPT_ROUTE)' -v ./config/
+
 # Run the same conversations through several models of the catalogue and
 # write a report (D-6). COMPARE picks provider:model pairs; empty = all.
 COMPARE ?=
@@ -48,9 +60,12 @@ compare:
 	go run ./tools/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
 
 # RSS of the echo bot and of the agent on a fake model API, idle and after
-# 1,000 messages through the fake Bot API.
+# 1,000 messages through the fake Bot API; the agent also with a tool call
+# in every turn; and the node's peak after one hostile 1 MiB page through
+# web.fetch and html2md.
 memory:
-	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent)' -v ./cmd/
+	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent|AgentTools)$$' -v ./cmd/
+	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemoryHostilePage' -v ./config/
 
 # The modules. html2md (ADR-0035) is a Rust crate whose build,
 # modules/html2md/html2md.wasm, is committed and embedded in the binary, so

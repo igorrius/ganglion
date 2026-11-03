@@ -36,11 +36,12 @@ type Server struct {
 	key    string
 	closed chan struct{}
 
-	mu    sync.Mutex
-	queue []step
-	reqs  []Request
-	calls int
-	tools int // tool calls answered so far: ids are call_1, call_2, …
+	mu      sync.Mutex
+	queue   []step
+	respond Responder
+	reqs    []Request
+	calls   int
+	tools   int // tool calls answered so far: ids are call_1, call_2, …
 }
 
 // NewServer starts a fake API that accepts apiKey; it is closed by
@@ -72,6 +73,26 @@ func (s *Server) Reply(text string) { s.push(step{text: text}) }
 // CallTool queues an answer with one tool call; args is its JSON.
 func (s *Server) CallTool(name, args string) { s.push(step{toolName: name, toolArgs: args}) }
 
+// Answer is what a Responder gives: a tool call when Tool is set, the
+// text otherwise.
+type Answer struct {
+	Text       string
+	Tool, Args string
+}
+
+// Responder answers a request when nothing is queued, so a test can drive
+// any number of turns by what each request holds (a tool result to reply
+// to, or a person's message).
+type Responder func(Request) Answer
+
+// Respond sets how requests are answered when nothing is queued; without
+// it they get "ok".
+func (s *Server) Respond(f Responder) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.respond = f
+}
+
 // Fail queues a failure with status; retryAfter > 0 sets Retry-After.
 func (s *Server) Fail(status, retryAfter int) { s.push(step{status: status, retryAfter: retryAfter}) }
 
@@ -99,8 +120,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.reqs = append(s.reqs, req)
 	st := step{text: "ok"}
-	if len(s.queue) > 0 {
+	switch {
+	case len(s.queue) > 0:
 		st, s.queue = s.queue[0], s.queue[1:]
+	case s.respond != nil:
+		a := s.respond(req)
+		st = step{text: a.Text, toolName: a.Tool, toolArgs: a.Args}
 	}
 	s.calls++
 	n := s.calls

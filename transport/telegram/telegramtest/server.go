@@ -6,6 +6,7 @@
 package telegramtest
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -244,6 +245,30 @@ func (s *Server) Sent() []Outgoing {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]Outgoing(nil), s.sent...)
+}
+
+// Shown is a message the bot sent as the chat shows it now, after any
+// edits.
+type Shown struct {
+	ChatID    int64
+	MessageID int64
+	Text      string
+	Keyboard  string // JSON; "" when none or empty
+}
+
+// Showing returns the bot's messages as they look now, in the order they
+// were sent, so a test can press a button that an edit put there.
+func (s *Server) Showing() []Shown {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []Shown
+	for chat, msgs := range s.messages {
+		for id, m := range msgs {
+			out = append(out, Shown{ChatID: chat, MessageID: id, Text: m.text, Keyboard: m.keyboard})
+		}
+	}
+	slices.SortFunc(out, func(a, b Shown) int { return cmp.Compare(a.MessageID, b.MessageID) })
+	return out
 }
 
 // Confirmed returns the highest update_id confirmed by an offset, or 0.
