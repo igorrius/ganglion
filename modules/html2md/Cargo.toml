@@ -14,6 +14,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 dom_query = "=0.28.0"
 htmd = "=0.5.6"
+# The parser dom_query uses (0.39.0, already in Cargo.lock), for the depth
+# gate's own sink.
+html5ever = "=0.39.0"
 memchr = "=2.8.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -25,7 +28,7 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
-# Tests parse thousands of tag soups (tests/depth.rs): optimise test
-# builds.
-[profile.dev]
+# Tests parse thousands of pages (tests/depth.rs): unoptimised, the
+# property tests take 144 s instead of 11 s.
+[profile.test]
 opt-level = 2

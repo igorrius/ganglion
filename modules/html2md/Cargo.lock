@@ -132,6 +132,7 @@ version = "0.1.0"
 dependencies = [
  "dom_query",
  "htmd",
+ "html5ever 0.39.0",
  "memchr",
  "serde",
  "serde_json",

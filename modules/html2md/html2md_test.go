@@ -114,7 +114,9 @@ func hostilePage() string {
 // nestingPages open elements the parser nests although a naive count
 // would not: self-closed non-void elements and stray end tags.
 // Formatting end tags (adoption agency) and end tags behind a scope
-// boundary close nothing in the parser either (ruling R23).
+// boundary close nothing in the parser either (ruling R23). The ruby,
+// foreign-content, html-in-SVG and select-in-table shapes defeated the
+// round-3 model; the depth gate measures the parser's own tree (R25).
 func nestingPages() map[string]string {
 	pages := map[string]string{
 		"self-closed divs": "<title>Deep</title><p>start</p>" + strings.Repeat("<div/>", 300_000) + "<p>end</p>",
@@ -128,6 +130,11 @@ func nestingPages() map[string]string {
 		"other end tag over p, div": "<span><p><div></span>",
 		"q over div":                "<q><div></q>",
 		"label over div":            "<label><div></label>",
+		"ruby rt closes p":          "<ruby><p><rt>",
+		"ruby rb closes p":          "<ruby><p><rb>",
+		"start tags in foreign":     "<video><rtc><button><g><math>",
+		"html in svg":               "<svg><html>",
+		"th in select in table":     "<table><select><th>",
 	} {
 		for _, size := range []int{120 << 10, 1 << 20} {
 			pages[fmt.Sprintf("%s, %d KiB", name, size>>10)] = "<title>Deep</title><p>start</p>" +
@@ -172,6 +179,42 @@ func TestHostileHTMLNoTrap(t *testing.T) {
 		}
 		if took := time.Since(start); took > 2*time.Second {
 			t.Errorf("%s took %v", name, took)
+		}
+	}
+}
+
+// TestDeepestTreeConverts runs pages nested to the depth gate's cap
+// (256 elements, html and body included) through the wasm build: every
+// walk over the tree (extractor, serializer, htmd) must handle the
+// deepest tree the gate lets through, within the module's stack.
+func TestDeepestTreeConverts(t *testing.T) {
+	m := load(t)
+	const bottom = `<p>Deep text with a few words, <a href=/x>a link</a>, and more.</p>`
+	for unit, levels := range map[string]int{
+		"<div>":           1,
+		"<blockquote>":    1,
+		"<ul><li>":        2,
+		"<ol><li>":        2,
+		"<dl><dd>":        2,
+		"<b>":             1,
+		"<em>":            1,
+		"<section>":       1,
+		"<table><tr><td>": 4, // table, tbody, tr, td
+		"<pre>":           1,
+		"<code>":          1,
+		"<span>":          1,
+		"<q>":             1,
+	} {
+		// html, body, the units, p and a: 256.
+		n := (256 - 4) / levels
+		html := "<title>t</title>" + strings.Repeat(unit, n) + bottom
+		p, err := convert(t, m, "https://e.example/", html)
+		if err != nil {
+			t.Errorf("%s x%d: %v", unit, n, err)
+			continue
+		}
+		if !strings.Contains(p.Markdown, "[a link](https://e.example/x)") {
+			t.Errorf("%s x%d: %q", unit, n, text.Truncate(p.Markdown, 200))
 		}
 	}
 }

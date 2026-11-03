@@ -42,20 +42,49 @@ granted hosts is refused; errors are fixed texts, never a response body.
 
 #### A. Rust: own extractor on `dom_query`, Markdown by `htmd`
 
-A byte-level pre-pass drops script and style bodies and `data:` values
-and caps nesting at 256 by modelling the parser's stack of open elements
-(ruling R24): end tags follow the tree-construction rules by element
-category (a special end tag closes its element only within scope, a
-formatting one only when it is on top, any other walks down and stops at
-a special element), with namespaces for SVG and MathML, the implied
-table body, row and p closings, and formatting elements reopened after
-another tag closed them; where the rules are more involved the model
-closes less, so it errs towards depth. A differential property test
-(`tests/depth.rs`) parses the pre-pass's output of random tag soups
-from a fixed seed with html5ever and asserts the tree is never more than
-12 deeper than the cap (the deepest seen: 8 over); after parsing, any
-element deeper than 320 is replaced by its text, so recursion stays
-bounded whatever the model missed; `dom_query` (html5ever) parses; an own
+A byte-level pre-pass drops script and style bodies and `data:` values.
+Depth is bounded by measuring, not modelling (ruling R25): a **depth
+gate** wraps `dom_query`'s own sink, so html5ever's tree builder parses
+the page once, fed in 4 KiB chunks, and the wrapper keeps the tree's
+shape alongside (each node's parent and a bound on the height below
+it). The parse stops as soon as any element would be deeper than 256
+(the html element is at depth 1). Every rule of the parser (implied end
+tags, the adoption agency, foster parenting, foreign content) is
+html5ever's, because it is html5ever running; the tree that passes is
+the tree the extractor walks. Moves are followed exactly: removing a
+node clears its parent, reparenting gives the node's container of
+children to the new parent in one step, and a template's contents count
+as its children. Depths are cached and invalidated by any move; height
+bounds may stay too high after a move, never too low, and when they say
+"too deep" the heights are recounted exactly from the parents (in
+O(nodes), rationed so the total stays linear) before the page is
+refused. A refused page is flattened by the pre-pass's model of the
+stack of open elements (`nesting`, ruling R24, now capped at 200),
+whose output is parsed through the gate as it is written, so a page the
+model cannot save costs only up to where it fails; the model only
+decides whether a refused page keeps a tree. If it still does not fit,
+the page becomes plain text: html5ever's tokenizer alone (no tree, so
+nesting costs nothing) drops the tags, turns block-level ones into line
+breaks and decodes character references, so the text is kept. The
+content the extractor picks is serialized and parsed again by `htmd`;
+that string goes first through the same gate with a sink that keeps
+only the shape (scripting on, as `htmd` parses), with the content's
+plain text as the fallback. Every walk over a gated tree (extractor,
+serializer, `htmd`'s recursive writer) is tested at the cap in the
+wasm build. A property test (`tests/depth.rs`) generates random units
+of 2–6 tags over every kind of element the parser treats differently
+(ruby, SVG and MathML with their integration points, raw text,
+html/head/body, tables, select, comments, CDATA, upper case),
+repeated 400 times, and mixed soups up to 20,000 tags, from fixed
+seeds; it parses everything the module parsed with `dom_query` and
+asserts no tree is deeper than 256, and asserts that a stated share of
+the pages (30–50 %, about 10 points under what the seeds give) reach
+the gate. Each verdict of both sinks on pages up to 64 KiB is compared
+with an oracle, `dom_query`'s own sink wrapped to measure the real tree
+after every change: the gate refuses exactly the pages whose tree goes
+deeper than 256 at some moment of the parse (a few are deep only midway:
+the adoption agency moves nodes back up). A regression corpus holds the
+317 shapes reviewers found against earlier pre-passes. `dom_query` (html5ever) parses; an own
 Readability-style extractor (iterative walks, table rows scored as
 paragraphs, data tables never pruned, link-heavy furniture pruned)
 picks the content; links are made absolute and only http(s) and mailto
@@ -153,6 +182,23 @@ which is what html2md gets (a windows-1251 page doubles in UTF-8). So the worst 
 whose agent runs at about 40 MB: about 107 MB, under 128 MB. The real
 pages keep their numbers (p95 news 29 ms, docs 67, forum 55, NBU 28).
 
+With the depth gate (ruling R25; same machine, one process per shape,
+fresh module instance per call, 20 calls): the shapes that beat the
+round-3 model convert at 1 MiB in p95 187 ms (`<ruby><p><rt>`), 218
+(`<ruby><p><rb>`), 174 (`<video><rtc><button><g><math>`), 192
+(`<svg><html>`) and 252 (`<table><select><th>`), where the model timed
+out after 5 s or trapped; every earlier shape stays under 290 ms at
+1 MiB, and real pages under 70 ms (p95 news 33, docs 67, forum 49, NBU
+43; the 870 KB Wikipedia table 296). A page at the cap's edge (250 open
+elements, then 1 MiB of small elements) is still the costliest input:
+`<table></table>` there takes 2.4 s (2.5 s before the gate), and
+`<p></p>`, `<li>`, `<i>` or links there run out of the 32 MiB, as they
+did before. Process peak, `modbench` method (12 MiB before loading):
+at most 94 MiB on those edge pages (97 MiB with the round-3 module on
+the same input), so the worst case adds about 83 MiB to a node whose
+agent runs at about 40 MB: about 123 MB, under 128 MB with little
+margin. The module grows from 1.20 MB to 1.43 MB.
+
 Search, measured from the development machine on 2026-11-03: four
 DuckDuckGo HTML requests in a row returned results three times and a bot
 check (`202`, an "anomaly" page) once.
@@ -176,8 +222,14 @@ The module is built with Rust 1.99.1 (`rust-toolchain.toml`) and these
 crates, all at least two weeks old when chosen: `dom_query` 0.28.0,
 `htmd` 0.5.6, `memchr` 2.8.3, `serde` 1.0.229, `serde_json` 1.0.154;
 `Cargo.lock` pins the rest, with `log` held at 0.4.34 and `smallvec` at
-1.16.3 because their latest releases were younger than two weeks. These
-are the module's dependencies, not the core's.
+1.16.3 because their latest releases were younger than two weeks. The
+depth gate (ruling R25) adds `html5ever` 0.39.0 (released 2026-03-13)
+as a direct dependency: it was already in `Cargo.lock` as the parser of
+`dom_query`, and the gate's sink must plug into exactly that version.
+`htmd` parses with `html5ever` 0.38.0; between the two versions only the
+tokenizer's duplicate-attribute flag differs, not tree construction, so
+the gate measures `htmd`'s tree too. These are the module's
+dependencies, not the core's.
 
 **Search: Brave when `BRAVE_API_KEY` is set, DuckDuckGo HTML
 otherwise**, and `GANGLION_SEARCH=off` removes `web.search`. DuckDuckGo
@@ -227,7 +279,7 @@ The core's `go.mod` gets no new module: `golang.org/x/net` (for
 
 - Updating the HTML parser or the extractor is a new `html2md.wasm`;
   M3c loads one from the data volume ahead of the embedded one.
-- The `.wasm` is committed (1.2 MB) and embedded, so building the core
+- The `.wasm` is committed (1.4 MB) and embedded, so building the core
   needs no Rust. Rebuilding it needs rustup; the build is reproducible
   (paths remapped, toolchain pinned), and CI rebuilds it, runs its tests
   and the Go fixture tests against the rebuilt module, and fails if the

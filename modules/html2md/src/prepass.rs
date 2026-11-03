@@ -1,12 +1,14 @@
 //! A byte-level pass before parsing. It drops what is never content and
 //! is the bulk of hostile or heavy pages: the bodies of scripts, styles
 //! and other raw-text elements, and `data:` values of attributes (inline
-//! images, fonts). It also caps the nesting of elements, because the
-//! parser's work grows with the depth of the tree.
+//! images, fonts). On request it also flattens nesting with a model of
+//! the parser's stack of open elements (`nesting`): the second chance
+//! for a page the depth gate refused.
 //!
 //! The pass is approximate (it does not model every rule of HTML
 //! parsing); a page it misreads loses some formatting, never safety: the
-//! whole module runs in the sandbox.
+//! depth gate (`gate`) checks what is parsed, and the whole module runs
+//! in the sandbox.
 
 /// Elements whose body is raw text, never shown as content.
 const RAW: [&str; 6] = ["script", "style", "noscript", "template", "textarea", "xmp"];
@@ -14,15 +16,41 @@ const RAW: [&str; 6] = ["script", "style", "noscript", "template", "textarea", "
 pub use crate::nesting::MAX_NESTING;
 use crate::nesting::{Nesting, Verdict};
 
-/// Returns src without raw-text bodies and `data:` attribute values, and
-/// with start tags nested deeper than MAX_NESTING (and their end tags)
-/// left out; their text stays.
+/// Returns src without raw-text bodies and `data:` attribute values.
 pub fn strip(src: &str) -> String {
+    scan(src, None, None).unwrap_or_default()
+}
+
+/// Returns src with start tags the model counts deeper than MAX_NESTING
+/// (and their end tags) left out; their text stays. src has been through
+/// strip. Each piece of output is handed to `take` as it is written (at
+/// least PIECE bytes, ending where a tag or a text of src ends); when
+/// `take` says no, the pass stops and returns None.
+pub fn flatten(src: &str, take: &mut dyn FnMut(&str) -> bool) -> Option<String> {
+    scan(src, Some(&mut Nesting::default()), Some(take))
+}
+
+/// How much output flatten writes between two calls of `take`.
+const PIECE: usize = 4096;
+
+fn scan(
+    src: &str,
+    mut nesting: Option<&mut Nesting>,
+    mut take: Option<&mut dyn FnMut(&str) -> bool>,
+) -> Option<String> {
     let b = src.as_bytes();
-    let mut out = Vec::with_capacity(b.len().min(1 << 20));
-    let mut nesting = Nesting::default();
+    let mut out = Vec::with_capacity(b.len());
+    let mut taken = 0;
     let mut i = 0;
     while i < b.len() {
+        if let Some(take) = take.as_mut()
+            && out.len() - taken >= PIECE
+        {
+            if !take(&String::from_utf8_lossy(&out[taken..])) {
+                return None;
+            }
+            taken = out.len();
+        }
         let Some(lt) = position(&b[i..], b'<').map(|p| p + i) else {
             out.extend_from_slice(&b[i..]);
             break;
@@ -33,16 +61,28 @@ pub fn strip(src: &str) -> String {
             break;
         };
         let tag = &b[lt..=gt];
-        if nesting.tag(tag) == Verdict::Keep {
+        let keep = nesting.as_mut().is_none_or(|n| n.tag(tag) == Verdict::Keep);
+        if keep {
             strip_data(tag, &mut out);
         }
         i = gt + 1;
-        if let Some(name) = RAW.iter().find(|n| opens(tag, n)) {
+        let raw = matches!(tag[1].to_ascii_lowercase(), b's' | b'n' | b't' | b'x');
+        if let Some(name) = RAW.iter().filter(|_| raw).find(|n| opens(tag, n)) {
             let close = format!("</{name}");
             i = find_ignore_case(b, i, close.as_bytes()).unwrap_or(b.len());
         }
     }
-    String::from_utf8_lossy(&out).into_owned()
+    if let Some(take) = take
+        && !take(&String::from_utf8_lossy(&out[taken..]))
+    {
+        return None;
+    }
+    // The output is whole pieces of src (valid UTF-8) minus whole
+    // attribute values: valid too, so this does not copy.
+    Some(
+        String::from_utf8(out)
+            .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()),
+    )
 }
 
 /// The index of the '>' that ends the tag starting at lt; a '>' inside a
@@ -50,10 +90,12 @@ pub fn strip(src: &str) -> String {
 /// hide the rest of the page: the tag then ends at the first '>'.
 fn tag_end(b: &[u8], lt: usize) -> Option<usize> {
     let mut i = lt + 1;
-    while i < b.len() {
+    // Jump from one '>' or quote to the next, a vector at a time.
+    while let Some(p) = memchr::memchr3(b'>', b'"', b'\'', &b[i..]) {
+        i += p;
         match b[i] {
             b'>' => return Some(i),
-            q @ (b'"' | b'\'') if b[i - 1] == b'=' => match position(&b[i + 1..], q) {
+            q if b[i - 1] == b'=' => match position(&b[i + 1..], q) {
                 Some(p) => i += p + 1,
                 None => return position(&b[lt..], b'>').map(|p| p + lt),
             },
@@ -97,6 +139,11 @@ fn opens(tag: &[u8], name: &str) -> bool {
 /// Writes tag to out with every quoted attribute value that starts with
 /// "data:" emptied.
 fn strip_data(tag: &[u8], out: &mut Vec<u8>) {
+    // Most tags hold no ':' at all, so no "data:" value: copy them whole.
+    if position(tag, b':').is_none() {
+        out.extend_from_slice(tag);
+        return;
+    }
     let mut i = 0;
     while i < tag.len() {
         let c = tag[i];
@@ -122,6 +169,29 @@ fn strip_data(tag: &[u8], out: &mut Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fl(src: &str) -> String {
+        flatten(src, &mut |_| true).unwrap()
+    }
+
+    #[test]
+    fn flatten_stops_when_refused() {
+        let page = "<p>x</p>".repeat(10_000);
+        let mut pieces = 0;
+        let got = flatten(&page, &mut |piece| {
+            assert!(piece.ends_with('>'), "{piece}");
+            pieces += 1;
+            pieces < 3
+        });
+        assert_eq!((got, pieces), (None, 3));
+        let mut all = String::new();
+        let got = flatten(&page, &mut |piece| {
+            all.push_str(piece);
+            true
+        });
+        assert_eq!(got.as_deref(), Some(page.as_str()));
+        assert_eq!(all, page);
+    }
 
     #[test]
     fn drops_raw_text_bodies() {
@@ -164,7 +234,7 @@ mod tests {
     #[test]
     fn caps_nesting() {
         let deep = "<div>".repeat(1000) + "x" + &"</div>".repeat(1000);
-        let got = strip(&deep);
+        let got = fl(&deep);
         assert_eq!(got.matches("<div>").count(), MAX_NESTING);
         assert_eq!(got.matches("</div>").count(), MAX_NESTING);
         assert!(got.contains('x'));
@@ -173,15 +243,15 @@ mod tests {
     #[test]
     fn self_closed_divs_count_as_open() {
         // html5ever ignores the slash of a non-void element: <div/> opens a div.
-        let got = strip(&"<div/>".repeat(1000));
+        let got = fl(&"<div/>".repeat(1000));
         assert_eq!(got.matches("<div/>").count(), MAX_NESTING);
     }
 
     #[test]
     fn stray_end_tags_do_not_close_anything() {
-        let got = strip(&"<div></q>".repeat(1000));
+        let got = fl(&"<div></q>".repeat(1000));
         assert_eq!(got.matches("<div>").count(), MAX_NESTING);
-        let got = strip(&("<div>".repeat(300) + &"</span>".repeat(300) + &"<div>".repeat(300)));
+        let got = fl(&("<div>".repeat(300) + &"</span>".repeat(300) + &"<div>".repeat(300)));
         assert_eq!(got.matches("<div>").count(), MAX_NESTING);
     }
 
@@ -189,23 +259,23 @@ mod tests {
     fn formatting_end_tags_close_only_their_own_top() {
         // </b> runs the adoption agency: the div stays, the tree deepens.
         assert_eq!(
-            strip(&"<b><div></b>".repeat(1000)).matches("<div>").count(),
+            fl(&"<b><div></b>".repeat(1000)).matches("<div>").count(),
             MAX_NESTING / 2
         );
-        assert_eq!(strip(&"<b>x</b>".repeat(1000)).matches("<b>").count(), 1000);
+        assert_eq!(fl(&"<b>x</b>".repeat(1000)).matches("<b>").count(), 1000);
     }
 
     #[test]
     fn end_tags_do_not_cross_scope_boundaries() {
         // </div> is ignored inside a marquee.
         assert_eq!(
-            strip(&"<div><marquee></div>".repeat(1000))
+            fl(&"<div><marquee></div>".repeat(1000))
                 .matches("<div>")
                 .count(),
             MAX_NESTING / 2
         );
         assert_eq!(
-            strip(&"<div><table></table></div>".repeat(1000))
+            fl(&"<div><table></table></div>".repeat(1000))
                 .matches("<div>")
                 .count(),
             1000
@@ -214,26 +284,32 @@ mod tests {
 
     #[test]
     fn stray_end_tags_are_left_out() {
-        assert_eq!(strip("<div>a</q></div></p></br>"), "<div>a</div></p></br>");
+        assert_eq!(fl("<div>a</q></div></p></br>"), "<div>a</div></p></br>");
     }
 
     #[test]
     fn matching_end_tags_close_to_their_element() {
         // An end tag closes the elements opened inside its element.
         let page = "<section><div><span>x</section>".repeat(1000);
-        assert_eq!(strip(&page).matches("<section>").count(), 1000);
+        assert_eq!(fl(&page).matches("<section>").count(), 1000);
     }
 
     #[test]
     fn void_self_closed_tags_stay_flat() {
         let page = "<br/><img/><input/>".repeat(1000) + "<div>y</div>";
-        assert!(strip(&page).contains("<div>y</div>"));
+        assert!(fl(&page).contains("<div>y</div>"));
     }
 
     #[test]
     fn unclosed_paragraphs_do_not_count() {
         let page = "<p>x".repeat(1000) + "<div>y</div>";
-        assert!(strip(&page).contains("<div>y</div>"));
+        assert!(fl(&page).contains("<div>y</div>"));
+    }
+
+    #[test]
+    fn strip_keeps_nesting() {
+        let deep = "<div>".repeat(1000);
+        assert_eq!(strip(&deep), deep);
     }
 
     #[test]

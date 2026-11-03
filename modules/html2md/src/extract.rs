@@ -155,7 +155,6 @@ pub fn title(doc: &Document) -> String {
 /// The element that holds the page's main content; the body when nothing
 /// scores.
 pub fn main_content(doc: &Document) -> NodeRef<'_> {
-    flatten(doc.root());
     clean(doc.root());
     let Some(body) = doc.select_single("body").nodes().first().copied() else {
         return doc.root();
@@ -170,26 +169,6 @@ pub fn main_content(doc: &Document) -> NodeRef<'_> {
     };
     prune(root, &st);
     root
-}
-
-/// Deepest element kept as a tree; deeper ones become their text. The
-/// pre-pass already caps nesting at 256, but the parser can nest deeper
-/// than it counts (it reopens formatting elements); the serializer and
-/// the Markdown writer recurse, so depth must stay bounded whatever the
-/// pre-pass missed.
-const MAX_TREE_DEPTH: usize = 320;
-
-/// Replaces every element deeper than MAX_TREE_DEPTH by its text.
-fn flatten(root: NodeRef) {
-    let mut stack = vec![(root, 0usize)];
-    while let Some((n, depth)) = stack.pop() {
-        if n.is_element() && depth >= MAX_TREE_DEPTH {
-            let text = n.text();
-            n.set_text(text);
-            continue;
-        }
-        stack.extend(n.children_it(true).map(|c| (c, depth + 1)));
-    }
 }
 
 /// Visits n and its descendants in document order without recursion;
@@ -502,32 +481,4 @@ fn data_table(n: &NodeRef) -> bool {
         !found
     });
     found
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn depth(root: NodeRef) -> usize {
-        let mut max = 0;
-        let mut stack = vec![(root, 0usize)];
-        while let Some((n, d)) = stack.pop() {
-            max = max.max(d);
-            stack.extend(n.children_it(false).map(|c| (c, d + 1)));
-        }
-        max
-    }
-
-    #[test]
-    fn flatten_bounds_the_tree() {
-        let doc = Document::from("<div>".repeat(1000) + "deep text" + &"</div>".repeat(1000));
-        assert!(depth(doc.root()) > 1000);
-        flatten(doc.root());
-        assert!(
-            depth(doc.root()) <= MAX_TREE_DEPTH + 1,
-            "{}",
-            depth(doc.root())
-        );
-        assert!(doc.root().text().contains("deep text"));
-    }
 }

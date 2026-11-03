@@ -8,12 +8,18 @@
 //! `{"ok":true,"result":{"title":…,"markdown":…}}` out.
 //!
 //! Hostile input must not trap or stall the module: raw-text bodies and
-//! `data:` values are dropped before parsing, nesting is capped twice
-//! (before parsing and before scoring), and every walk is iterative.
+//! `data:` values are dropped before parsing, and every HTML parse is
+//! behind the depth gate (`gate`, ruling R25), which runs the parser
+//! itself and refuses a page whose tree would be deeper than MAX_DEPTH;
+//! such a page is flattened by the pre-pass and gated again, or read as
+//! plain text (`plain`). The extractor's walks are iterative; the
+//! serializer and `htmd` are tested at MAX_DEPTH.
 
 mod extract;
+mod gate;
 mod links;
 mod nesting;
+mod plain;
 /// The pre-pass, public for the depth property test (tests/depth.rs).
 pub mod prepass;
 
@@ -50,22 +56,103 @@ const SKIPPED: [&str; 9] = [
     "script", "style", "noscript", "iframe", "svg", "template", "img", "picture", "video",
 ];
 
+pub use gate::MAX_DEPTH;
+/// The gate without the tree, for the depth property test.
+#[doc(hidden)]
+pub use gate::{Scripting, fits};
+
+/// The way a page went through the module.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Route {
+    /// The page fitted the depth gate and was converted as it is.
+    Direct,
+    /// Too deep; it fitted after the pre-pass flattened its nesting.
+    Flattened,
+    /// Too deep even flattened: its text, without a tree.
+    Text,
+    /// Its tree fitted, but the content handed to the Markdown writer (a
+    /// second parse) did not: the content's text.
+    ContentText,
+}
+
+/// What a conversion parsed: each string handed to an HTML parser, the
+/// way it went, and the result. For the depth property test.
+#[doc(hidden)]
+pub struct Trace {
+    pub route: Route,
+    /// The page as dom_query parsed it, if it did.
+    pub parsed: Option<String>,
+    /// The content as htmd parsed it, if it did.
+    pub markdown_input: Option<String>,
+    pub page: Page,
+}
+
 /// Returns the page's title and its main content as Markdown. `url` is
 /// the page's address, used to make links absolute.
 pub fn convert(html: &str, url: &str) -> Page {
+    inspect(html, url).page
+}
+
+/// convert, with what it parsed. Every HTML parse is behind the depth
+/// gate (ruling R25): the page, else the page flattened by the pre-pass,
+/// else its plain text; then the content for htmd, else its plain text.
+#[doc(hidden)]
+pub fn inspect(html: &str, url: &str) -> Trace {
     let cleaned = prepass::strip(html);
-    let doc = dom_query::Document::from(cleaned.as_str());
+    let (route, parsed, doc) = match gate::parse(&cleaned) {
+        Some(doc) => (Route::Direct, cleaned, doc),
+        None => {
+            // The model's output is parsed as it is written, so a page the
+            // model cannot save costs only up to where it fails.
+            let mut gate = gate::Gate::new(gate::Gated::default(), gate::Scripting::Off);
+            let flat = prepass::flatten(&cleaned, &mut |piece| gate.feed(piece));
+            match flat.and_then(|flat| Some((flat, gate.finish()?))) {
+                Some((flat, doc)) => (Route::Flattened, flat, doc),
+                None => {
+                    let (title, text) = plain::text(&cleaned);
+                    return Trace {
+                        route: Route::Text,
+                        parsed: None,
+                        markdown_input: None,
+                        page: Page {
+                            title,
+                            markdown: tidy(&text),
+                        },
+                    };
+                }
+            }
+        }
+    };
     let title = extract::title(&doc);
     let root = extract::main_content(&doc);
     let base = links::Base::parse(url);
     links::rewrite(&root, base.as_ref());
+    let content = root.html().to_string();
+    drop(doc);
+    if !gate::fits(&content, gate::Scripting::On) {
+        let (_, text) = plain::text(&content);
+        return Trace {
+            route: Route::ContentText,
+            parsed: Some(parsed),
+            markdown_input: None,
+            page: Page {
+                title,
+                markdown: tidy(&text),
+            },
+        };
+    }
     let writer = htmd::HtmlToMarkdown::builder()
         .skip_tags(SKIPPED.to_vec())
         .build();
-    let markdown = writer.convert(&root.html()).unwrap_or_default();
-    Page {
-        title,
-        markdown: tidy(&markdown),
+    let markdown = writer.convert(&content).unwrap_or_default();
+    Trace {
+        route,
+        parsed: Some(parsed),
+        markdown_input: Some(content),
+        page: Page {
+            title,
+            markdown: tidy(&markdown),
+        },
     }
 }
 
@@ -167,6 +254,91 @@ mod tests {
                 "{}",
                 &p.markdown[..p.markdown.len().min(200)]
             );
+        }
+    }
+
+    /// Pages nested to exactly MAX_DEPTH: every walk (extractor,
+    /// serializer, htmd) handles the deepest tree the gate lets through.
+    /// The Go test runs the same pages through the wasm build.
+    #[test]
+    fn the_deepest_tree_converts() {
+        for unit in [
+            "<div>",
+            "<blockquote>",
+            "<ul><li>",
+            "<ol><li>",
+            "<dl><dd>",
+            "<b>",
+            "<em>",
+            "<section>",
+            "<table><tr><td>",
+            "<pre>",
+            "<code>",
+            "<span>",
+            "<q>",
+        ] {
+            let page = |n: usize| {
+                format!(
+                    "<title>t</title>{}<p>Deep text with a few words, <a href=/x>a link</a>, and more.</p>",
+                    unit.repeat(n)
+                )
+            };
+            let n = (1..MAX_DEPTH)
+                .take_while(|n| gate::fits(&page(*n), gate::Scripting::Off))
+                .last()
+                .unwrap();
+            let t = inspect(&page(n), "https://e.example/");
+            assert_eq!(t.route, Route::Direct, "{unit} x{n}");
+            let md = &t.page.markdown;
+            assert!(
+                md.contains("[a link](https://e.example/x)"),
+                "{unit} x{n}: {md}"
+            );
+            assert!(
+                !gate::fits(&page(n + 1), gate::Scripting::Off),
+                "{unit} x{n}"
+            );
+        }
+    }
+
+    #[test]
+    fn too_deep_pages_keep_their_text() {
+        let page = format!(
+            "<title>T</title><p>start &amp; go</p>{}<p>end</p>",
+            "<ruby><p><rt>".repeat(2000)
+        );
+        let t = inspect(&page, "https://e.example/");
+        assert_eq!(t.route, Route::Text);
+        assert_eq!(t.page.title, "T");
+        assert!(
+            t.page.markdown.starts_with("start & go\n"),
+            "{}",
+            t.page.markdown
+        );
+        assert!(t.page.markdown.ends_with("end"), "{}", t.page.markdown);
+    }
+
+    #[test]
+    fn an_unclosed_div_per_comment_keeps_a_tree() {
+        // A thread whose template leaves one div open per comment: too
+        // deep for the gate, flat enough after the pre-pass's model. Tags
+        // past the model's cap are dropped, their text kept; the tree
+        // keeps the links of the comments before it (plain text keeps
+        // none). The extractor picks the deepest post as the content.
+        let comment = |i: usize| {
+            format!(
+                "<div class=post><a href=/u{i}>user {i}</a><p>Comment {i} with some words, and more.</p>"
+            )
+        };
+        let page = format!(
+            "<title>T</title><h1>Thread</h1>{}",
+            (0..400).map(comment).collect::<String>()
+        );
+        let t = inspect(&page, "https://e.example/");
+        assert_eq!(t.route, Route::Flattened);
+        let md = &t.page.markdown;
+        for want in ["[user 198](https://e.example/u198)", "user 399Comment 399"] {
+            assert!(md.contains(want), "{want}: {md}");
         }
     }
 

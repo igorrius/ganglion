@@ -1,9 +1,9 @@
-//! How deep the parser's tree gets, counted from the tags alone, so the
-//! pre-pass can cap it (ruling R24). The count follows the HTML
-//! tree-construction rules by element category and errs towards depth
-//! wherever it simplifies: a tag it is unsure about never makes the
-//! count smaller than the tree. `tests/depth.rs` checks the result
-//! against html5ever on random tag soups.
+//! How deep the parser's tree gets, estimated from the tags alone, so the
+//! pre-pass can flatten a page the depth gate refused (`gate`, ruling
+//! R25) and still give it a tree: the second chance, which keeps the
+//! links and headings that plain text loses. It is a model, and models
+//! miss: the gate checks its output like any other page, and a page the
+//! model misreads goes on to plain text.
 //!
 //! End tags by category (ruling R24): a special one closes its element
 //! only within scope; a formatting one closes its element only when it is
@@ -15,8 +15,10 @@
 
 use std::collections::HashMap;
 
-/// Deepest nesting of elements passed to the parser.
-pub const MAX_NESTING: usize = 256;
+/// Deepest nesting the model lets through. Under the gate's MAX_DEPTH
+/// (256, counting html and body), so that what the model counts short
+/// still fits.
+pub const MAX_NESTING: usize = 200;
 
 /// Void elements: they never open, with or without "/>".
 const VOID: &[&str] = &[
