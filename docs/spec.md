@@ -726,8 +726,9 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   in configuration the agent cannot edit.
 - **R-CMD-3.** Every command runs in a sandbox: it cannot gain privileges
   (`no_new_privs`), gets a clean environment, cannot see the node's
-  process, and cannot read the node's data directory, its secret files or
-  a default list of the owner's secret stores. If the node cannot set
+  process, and cannot read the node's data directory, its secret files,
+  `.env` and `.env.*` files in any folder, or a default list of the
+  owner's secret stores. If the node cannot set
   this up, or runs as root, `host.exec` is not offered and the node says
   why.
 - **R-CMD-4.** A command longer than a short wait continues in the
@@ -741,7 +742,9 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
 - **R-CMD-6.** Every table entry carries a fixed consequence line in
   plain words, in English, Russian and Ukrainian, shown wherever a press
   is asked for; the model's own reason is shown apart and marked as the
-  agent's words.
+  agent's words. Reading a file that git ignores in its repository adds
+  a warning that such files often hold passwords and keys; ignored paths
+  are not hidden, since caches and logs live there too.
 - **R-CMD-7.** Before work with several steps the agent posts a plan
   message and edits it as the steps run; it stays in the chat with the
   outcome. A plan with no step that needs a press runs without one. A

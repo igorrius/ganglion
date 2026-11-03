@@ -163,6 +163,13 @@ The model never chooses the class.
 
   The model adds its own one-line reason (why this step), shown apart from
   the fixed line and marked as the agent's words (call).
+- **Files git ignores** (owner, 2026-11-03): an ignored file is often a
+  secret (`.env`, a local config with keys) but just as often what the
+  owner needs (build caches, logs). So ignored paths are not hidden: their
+  names and sizes are read class like any other. A content command on a
+  file that git ignores in its repository adds a warning to the press:
+  "git ignores this file in <repo>; such files often hold passwords and
+  keys".
 - Unknown programs are **Change**, never Read (default deny, call).
 - Docker is reached through its command-line tool; only the subcommands in
   the table run (call). A user in the `docker` group is as good as root to
@@ -224,7 +231,8 @@ Every command:
    PID namespace is one way; the ADR compares others.
 4. **Cannot read the node's data or secret files**: the data directory
    (database, logs, workspace git), the token and key files (`*_FILE`),
-   `.env`. On the owner's machine also `~/.ssh`, `~/.gnupg` and the
+   and `.env` and `.env.*` files in any folder, not only the node's
+   (owner, 2026-11-03). On the owner's machine also `~/.ssh`, `~/.gnupg` and the
    config folders of other secret stores (call: a default list the owner
    can extend).
 5. **Has limits**: time, its own process group, and memory and CPU caps

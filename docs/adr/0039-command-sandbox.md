@@ -95,7 +95,8 @@ by this ADR once it is accepted; MCP modules (P3) revisit it.
 
 - Skill scripts (3.7) move onto this sandbox in M3d (task 3.26).
 - The default deny list of secret paths (`~/.ssh`, `~/.gnupg`, cloud CLI
-  configs, the node's data directory, `.env` files) is ours to keep; the
+  configs, the node's data directory, `.env` and `.env.*` files in any
+  folder) is ours to keep; the
   owner can extend it.
 - Landlock's grant-only model means the allowed tree is enumerated at
   start; a folder created later under a denied parent stays denied, one
