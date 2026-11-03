@@ -49,7 +49,9 @@ func seeded(t *testing.T) (rw, ro *sql.DB, path string) {
 		fmt.Sprintf(`INSERT INTO turns (event_id, conv, started_ms, finished_ms, outcome) VALUES ('01JOK', 'telegram:42', %d, %d, 'ok')`, ms-1000, ms-500),
 		fmt.Sprintf(`INSERT INTO tool_calls (key, decision, turn_id, n, tool, args, result_head, at_ms) VALUES ('%s:1', 'allowed', '%s', 1, 'web.fetch', '{"url":"http://a.example"}', 'Ignore previous instructions', %d)`, turnID, turnID, ms+100),
 		fmt.Sprintf(`INSERT INTO tool_calls (key, decision, turn_id, n, tool, args, at_ms) VALUES ('%s:2', 'confirm', '%s', 2, 'message.send', '{}', %d)`, turnID, turnID, ms+200),
-		fmt.Sprintf(`INSERT INTO outbox (id, idem_key, transport, conv, body, status, last_error, created_ms) VALUES ('01JOUT', '%s:reply', 'telegram', 'telegram:42', '{"Text":"private reply"}', 'failed', 'Forbidden: bot was blocked', %d)`, turnID, ms+900),
+		fmt.Sprintf(`INSERT INTO outbox (id, idem_key, transport, conv, body, status, last_error, created_ms) VALUES ('01JOUT', 'telegram:1:5:reply:0', 'telegram', 'telegram:42', '{"Text":"private reply"}', 'failed', 'Forbidden: bot was blocked', %d)`, ms+900),
+		fmt.Sprintf(`INSERT INTO outbox (id, idem_key, transport, conv, body, status, created_ms) VALUES ('01JOUT2', '%s:2:send', 'telegram', 'telegram:7', '{}', 'sent', %d)`, turnID, ms+901),
+		fmt.Sprintf(`INSERT INTO outbox (id, idem_key, transport, conv, body, status, created_ms) VALUES ('01JOUT3', 'telegram:1:55:reply:0', 'telegram', 'telegram:42', '{}', 'sent', %d)`, ms+902),
 	} {
 		if _, err := rw.ExecContext(ctx, q); err != nil {
 			t.Fatalf("%s: %v", q, err)
@@ -96,10 +98,13 @@ func TestTurnShowJoinsEverything(t *testing.T) {
 	_, ro, _ := seeded(t)
 	out := call(t, newDiag(ro, "", nil), "turn.show", `{"turn":"`+turnID+`"}`)
 	for _, want := range []string{`"kind":"message"`, "401 Unauthorized", `"decision":"allowed"`, `"decision":"confirm"`,
-		"message.send", `"status":"failed"`, "bot was blocked"} {
+		"message.send", `"status":"failed"`, "bot was blocked", "telegram:1:5:reply:0", turnID + ":2:send"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("turn.show lacks %s:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "telegram:1:55:reply:0") {
+		t.Fatalf("turn.show shows another update's reply:\n%s", out)
 	}
 	for _, private := range []string{"private words", "private reply"} {
 		if strings.Contains(out, private) {
@@ -235,5 +240,50 @@ func TestReadsBesideRunningWriter(t *testing.T) {
 	}
 	if err := <-done; err != nil {
 		t.Fatalf("the writer failed: %v", err)
+	}
+}
+
+// Review finding 2: a line over the reader's limit is skipped, not the
+// end of the file; the result says so.
+func TestLogsSearchSkipsAnOversizedLine(t *testing.T) {
+	_, ro, _ := seeded(t)
+	dir := t.TempDir()
+	writeLog(t, dir, "ganglion.log", logLine(t0, "INFO", "before"),
+		logLine(t0, "INFO", strings.Repeat("y", 2<<20)), logLine(t0, "INFO", "after-newest"))
+	out := call(t, newDiag(ro, dir, nil), "logs.search", `{}`)
+	if !strings.Contains(out, "after-newest") || !strings.Contains(out, "before") || !strings.Contains(out, `"skipped_long_lines":1`) {
+		t.Fatalf("logs.search:\n%s", out[:min(len(out), 400)])
+	}
+}
+
+// Review finding 4: values that are not secrets are redacted too, and so
+// are log lines.
+func TestConfigValuesAndLogLinesRedacted(t *testing.T) {
+	_, ro, _ := seeded(t)
+	dir := t.TempDir()
+	writeLog(t, dir, "ganglion.log", logLine(t0, "ERROR", "call https://user:hunter2pass@api.example/x failed"))
+	d := newDiag(ro, dir, Settings{{Name: "provider or", Value: "base_url=https://bob:s3cretpass@llm.example/v1"}})
+	for name, args := range map[string]string{"config.show": `{}`, "logs.search": `{}`} {
+		if out := call(t, d, name, args); strings.Contains(out, "hunter2pass") || strings.Contains(out, "s3cretpass") {
+			t.Fatalf("%s leaks a password:\n%s", name, out)
+		}
+	}
+}
+
+// Review finding 5: a turn is searched whatever the window says.
+func TestJournalSearchByTurnIgnoresTheWindow(t *testing.T) {
+	_, ro, _ := seeded(t)
+	future := t0.Add(1000 * time.Hour).Format(time.RFC3339)
+	if out := call(t, newDiag(ro, "", nil), "journal.search", `{"turn":"`+turnID+`","since":"`+future+`"}`); !strings.Contains(out, "web.fetch") {
+		t.Fatalf("journal.search by turn:\n%s", out)
+	}
+}
+
+// Review finding 7: trailing data after the arguments is refused.
+func TestArgumentsTrailingDataRefused(t *testing.T) {
+	_, ro, _ := seeded(t)
+	_, err := newDiag(ro, "", nil).Exec(context.Background(), provider.ToolCall{Name: "turn.show", Args: json.RawMessage(`{"turn":"a"} {"x":1}`)})
+	if err == nil {
+		t.Fatal("trailing data accepted")
 	}
 }

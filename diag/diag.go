@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/provider"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -158,6 +159,9 @@ func decode(raw json.RawMessage, v any) error {
 	if err := dec.Decode(v); err != nil {
 		return fmt.Errorf("diag: arguments: %w", err)
 	}
+	if dec.More() {
+		return errors.New("diag: arguments: one JSON object, nothing after it")
+	}
 	return nil
 }
 
@@ -205,6 +209,8 @@ func (d *Diag) configShow(_ context.Context, raw json.RawMessage) (any, error) {
 	for _, s := range d.settings {
 		if s.Secret {
 			s.Value = map[bool]string{true: "set", false: "unset"}[s.Value != ""]
+		} else {
+			s.Value = redact.String(s.Value) // a URL may carry a password
 		}
 		out = append(out, s)
 	}

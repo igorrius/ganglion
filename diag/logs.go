@@ -2,9 +2,11 @@ package diag
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +15,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/igorrius/ganglion/internal/redact"
 )
 
 // currentLog is the file being written; rotatedLog the files renamed aside
@@ -93,52 +97,96 @@ func (d *Diag) logsSearch(_ context.Context, raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("diag: logs: %w", err)
 	}
-	var lines []json.RawMessage
+	var (
+		lines   []json.RawMessage
+		skipped int
+	)
 	for _, f := range files {
-		got, err := lastMatches(f, q, limit-len(lines))
+		got, n, err := lastMatches(f, q, limit-len(lines))
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("diag: logs: %w", err)
 		}
-		lines = append(lines, got...)
+		lines, skipped = append(lines, got...), skipped+n
 		if len(lines) >= limit {
 			break
 		}
 	}
-	return map[string]any{"lines": lines}, nil
+	out := map[string]any{"lines": lines}
+	if skipped > 0 {
+		out["skipped_long_lines"] = skipped
+	}
+	return out, nil
 }
 
 // lastMatches reads one file and keeps its last n matching lines, newest
-// first, in a ring of n: memory stays bounded whatever the file's size.
-func lastMatches(path string, q logQuery, n int) ([]json.RawMessage, error) {
+// first, in a ring of n: memory stays bounded whatever the file's size. A
+// line longer than maxLogLine is skipped and counted, and the reading
+// goes on after it. Lines are redacted once more: a log written before a
+// pattern existed may still hold a secret.
+func lastMatches(path string, q logQuery, n int) ([]json.RawMessage, int, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer func() { _ = f.Close() }()
 	ring := make([]json.RawMessage, 0, n)
-	next := 0
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64<<10), maxLogLine)
-	for sc.Scan() {
-		line := sc.Bytes()
-		if !q.match(line) {
-			continue
+	next, skipped := 0, 0
+	r := bufio.NewReaderSize(f, 64<<10)
+	for {
+		line, long, err := readLine(r)
+		if long {
+			skipped++
+		} else if len(line) > 0 && q.match(line) {
+			cp := json.RawMessage(redactLine(line))
+			if len(ring) < n {
+				ring = append(ring, cp)
+			} else {
+				ring[next] = cp
+			}
+			next = (next + 1) % n
 		}
-		cp := json.RawMessage(slices.Clone(line))
-		if len(ring) < n {
-			ring = append(ring, cp)
-		} else {
-			ring[next] = cp
+		if errors.Is(err, io.EOF) {
+			break
 		}
-		next = (next + 1) % n
-	}
-	if err := sc.Err(); err != nil && !errors.Is(err, bufio.ErrTooLong) {
-		return nil, err
+		if err != nil {
+			return nil, 0, err
+		}
 	}
 	ordered := ring // not full: oldest first already
 	if len(ring) == n {
 		ordered = append(slices.Clone(ring[next:]), ring[:next]...)
 	}
 	slices.Reverse(ordered)
-	return ordered, nil
+	return ordered, skipped, nil
+}
+
+// readLine reads one line without its newline; long reports a line over
+// maxLogLine, read to its end and dropped.
+func readLine(r *bufio.Reader) (line []byte, long bool, err error) {
+	var buf []byte
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if !long {
+			if len(buf)+len(chunk) > maxLogLine {
+				long, buf = true, nil
+			} else {
+				buf = append(buf, chunk...)
+			}
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		return bytes.TrimRight(buf, "\r\n"), long, err
+	}
+}
+
+// redactLine redacts a JSON log line's string values, or the line as
+// text when it is not JSON.
+func redactLine(line []byte) []byte {
+	out := redact.String(string(line))
+	if !json.Valid([]byte(out)) {
+		raw, _ := json.Marshal(out)
+		return raw
+	}
+	return []byte(out)
 }

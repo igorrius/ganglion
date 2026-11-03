@@ -56,7 +56,8 @@ A Streamable HTTP endpoint on the node.
 
 The rules:
 - **Read-only by construction.** The database is opened with
-  `mode=ro` and `query_only`. Migrations never run, and the command
+  `mode=ro` and `query_only`, the path escaped so it cannot add URI
+  parameters of its own. Migrations never run, and the command
   never takes the writer's lock (ADR-0019). WAL lets it read beside a
   running core without blocking it.
 - **The tools:**
@@ -90,7 +91,16 @@ The rules:
   - *Outside text in a log steers the model reading it.* The agent's copy
     of the tools wraps results as data and taints the session. Claude
     Code reading them is the owner's own session.
-  - *A huge query exhausts memory.* Row and rune caps.
+  - *A huge query exhausts memory.* Row and rune caps; the log search
+    keeps a bounded ring per file and skips (and counts) a line over
+    1 MiB instead of stopping at it.
+  - *The agent's copy leaks one chat into another.* The searches read
+    every conversation, so an admin asking in a group could get another
+    chat's text into the group's answer. The agent's tools run only in
+    the caller's private chat with the bot, and refuse elsewhere.
+  - *A secret sits in a value that is not a secret* (a password in a
+    `base_url`). `config.show` values and log lines pass the redactor
+    too.
 
 ## Consequences
 

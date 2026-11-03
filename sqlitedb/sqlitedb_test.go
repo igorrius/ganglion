@@ -149,3 +149,26 @@ func TestReadOnlyRefusesWrites(t *testing.T) {
 	}
 	_ = db.Close()
 }
+
+// Review finding 6: a path with URI characters opens that file, and its
+// query cannot override the read-only mode.
+func TestReadOnlyPathIsEscaped(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "odd?mode=rw&x=%41#.db")
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE t (x INTEGER)`); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	ro, err := OpenReadOnly(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ro.Close() }()
+	if _, err := ro.ExecContext(ctx, `INSERT INTO t VALUES (1)`); err == nil {
+		t.Fatal("a write succeeded through an odd path")
+	}
+}

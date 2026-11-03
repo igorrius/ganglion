@@ -123,7 +123,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
-		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i)))...)
+		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv))...)
 }
 
 // Diagnostics provides the diagnostic searches over the node's own

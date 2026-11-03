@@ -74,7 +74,7 @@ func TestMCPDiagnosesAWrongKey(t *testing.T) {
 		t.Fatalf("turns_failed does not show the provider's auth error: %s", failed)
 	}
 	cfg, _ := json.Marshal(answers[2])
-	if !strings.Contains(string(cfg), "key_env=OR_KEY") || strings.Contains(string(cfg), "sk-wrong") {
+	if !strings.Contains(string(cfg), "its key in OR_KEY") || strings.Contains(string(cfg), "sk-wrong") {
 		t.Fatalf("config_show: %s", cfg)
 	}
 }

@@ -123,7 +123,7 @@ func catalogueSettings(path string, src secrets.Source, readFile func(string) ([
 	var out diag.Settings
 	for _, p := range cat.Providers {
 		out = append(out, diag.Setting{Name: "provider " + p.Name,
-			Value: fmt.Sprintf("type=%s base_url=%s key_env=%s", p.Type, p.BaseURL, p.KeyEnv)})
+			Value: fmt.Sprintf("type=%s base_url=%s, its key in %s", p.Type, p.BaseURL, p.KeyEnv)})
 		if p.KeyEnv != "" {
 			out = append(out, secretSetting(src, p.KeyEnv))
 		}

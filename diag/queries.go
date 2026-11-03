@@ -82,15 +82,14 @@ func (d *Diag) journalSearch(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	q := `SELECT ` + callColumns + ` FROM tool_calls WHERE at_ms >= ?`
 	args := []any{since.UnixMilli()}
+	if a.Turn != "" { // a turn is searched whole, whatever the window: its id bounds the rows
+		q, args = `SELECT `+callColumns+` FROM tool_calls WHERE 1 = 1`, nil
+	}
 	for col, v := range map[string]string{"turn_id": a.Turn, "tool": a.Tool, "decision": a.Decision} {
 		if v != "" {
 			q += " AND " + col + " = ?"
 			args = append(args, v)
 		}
-	}
-	if a.Turn != "" { // a turn is searched whole, whatever its age
-		q = strings.Replace(q, "at_ms >= ?", "at_ms >= ? - ?", 1)
-		args = append([]any{args[0], int64(maxSince / time.Millisecond)}, args[1:]...)
 	}
 	rows, err := d.db.QueryContext(ctx, q+` ORDER BY at_ms DESC, n DESC LIMIT ?`, append(args, limit)...)
 	if err != nil {
@@ -214,12 +213,12 @@ func (d *Diag) turnShow(ctx context.Context, raw json.RawMessage) (any, error) {
 	}
 	out := map[string]any{"turn_id": a.Turn}
 	var (
-		kind, source, conv, status string
-		at                         int64
-		attempts                   int
+		kind, source, conv, status, idem string
+		at                               int64
+		attempts                         int
 	)
-	err := d.db.QueryRowContext(ctx, `SELECT kind, source, conv, at_ms, status, attempts FROM inbox WHERE id = ?`, a.Turn).
-		Scan(&kind, &source, &conv, &at, &status, &attempts)
+	err := d.db.QueryRowContext(ctx, `SELECT kind, source, conv, at_ms, status, attempts, idem_key FROM inbox WHERE id = ?`, a.Turn).
+		Scan(&kind, &source, &conv, &at, &status, &attempts, &idem)
 	switch {
 	case err == nil:
 		out["event"] = map[string]any{"kind": kind, "source": source, "conv": conv, "at": stamp(at), "status": status, "attempts": attempts}
@@ -240,8 +239,15 @@ func (d *Diag) turnShow(ctx context.Context, raw json.RawMessage) (any, error) {
 	if out["calls"], err = scanCalls(rows); err != nil {
 		return nil, err
 	}
-	rows, err = d.db.QueryContext(ctx, `SELECT `+replyColumns+` FROM outbox WHERE idem_key = ? OR idem_key LIKE ? ESCAPE '\'
-		ORDER BY seq LIMIT ?`, a.Turn, likePrefix(a.Turn), MaxLimit)
+	// The answer is keyed by the incoming event's idempotency key
+	// ("<idem>:reply:0"); messages a call sent, by the call's key
+	// ("<turn>:<n>:…").
+	if idem == "" {
+		idem = a.Turn // no inbox row: match nothing extra
+	}
+	rows, err = d.db.QueryContext(ctx, `SELECT `+replyColumns+` FROM outbox
+		WHERE idem_key LIKE ? ESCAPE '\' OR idem_key LIKE ? ESCAPE '\' ORDER BY seq LIMIT ?`,
+		likePrefix(a.Turn), likePrefix(idem), MaxLimit)
 	if err != nil {
 		return nil, missing(err)
 	}
