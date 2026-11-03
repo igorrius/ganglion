@@ -63,8 +63,8 @@ Start here when coming back to the project.
       fallbacks, sessions and compactions, module runs, `web.fetch`
       results and sizes, guard verdicts, scheduler runs and lag, inbox
       and outbox depth; duration histograms now have sub-second buckets;
-      no measurable memory cost. The owner's look at the dashboard on a
-      live run is still open.
+      no measurable memory cost. The owner checked the dashboard on a
+      live run (2026-11-03): it works.
   - Refactoring before M3b done ([plan](plans/p1-refactor.md)); no
     behaviour change:
     - the [Go conventions](conventions.md) with lint guardrails

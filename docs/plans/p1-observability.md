@@ -100,7 +100,7 @@ through `sqlitedb.ObserveCount`.
   checks the metric and its labels after the action, plus the agent's
   "no text in spans" check: span attributes never contain the message.
 
-### Task 3: node wiring, config, live check — done; the owner's live look at the dashboard is pending
+### Task 3: node wiring, config, live check — done; the owner looked at the dashboard live on 2026-11-03
 
 - `GANGLION_METRICS_ADDR` (default `127.0.0.1:9464`; `off`).
 - `node.Run` sets telemetry up first and shuts it down last, and wraps the
@@ -171,4 +171,5 @@ log or journal what they do, but `/metrics` does not show it yet:
   with a tool call per turn at 40.2 MB RSS after 1,000 turns both (peak
   40.6 against 40.2 MB); the hostile page peaks at 101.1 against
   100.1 MB, within run-to-run spread.
-- [ ] The owner looks at the dashboard on a live run.
+- [x] The owner looks at the dashboard on a live run: done 2026-11-03,
+  it works.
