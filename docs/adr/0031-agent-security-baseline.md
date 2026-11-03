@@ -129,7 +129,14 @@ Rules:
 
 1. **Tainted session** (R-POL-6). A session is tainted once external
    content enters it: a page, a search result, a forwarded message, a
-   scheduled task's fetch. It lasts until the session ends. In a tainted
+   scheduled task's fetch. The transport marks text the sender did not
+   write (Telegram: `forward_origin`, `is_automatic_forward`,
+   `external_reply`, `quote`; ruling R35): a forward reaches the model
+   wrapped whole as outside content (Telegram puts a forward in a
+   message of its own), a quote is wrapped after the sender's own words,
+   which stay plain, and any of them taints the session before the
+   model runs. Outside text is never a command and its addresses do not
+   become known URLs. It lasts until the session ends. In a tainted
    session these need the owner's confirmation: any side effect, any send
    to anyone but the requester, any memory write. The exception is a
    scheduled task's run acting inside its grant (rule 6): its own fetches

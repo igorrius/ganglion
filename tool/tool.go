@@ -176,6 +176,25 @@ func WrapExternal(source, text string) string {
 	return wrapperOpen(source) + closingTag.ReplaceAllString(text, `<\/$1`) + wrapperClose
 }
 
+// StripExternal returns s without the wrappers WrapExternal made and the
+// text inside them: what is left is the text around them. A wrapper that
+// is not closed takes the rest of s with it.
+func StripExternal(s string) string {
+	const open = `<external source="`
+	var b strings.Builder
+	for {
+		before, rest, found := strings.Cut(s, open)
+		b.WriteString(before)
+		if !found {
+			return b.String()
+		}
+		_, s, found = strings.Cut(rest, wrapperClose)
+		if !found {
+			return b.String()
+		}
+	}
+}
+
 // Unwrap returns the text inside the wrapper WrapExternal made for
 // source; ok is false when s is not such a wrapper. Broken closing tags
 // stay broken.

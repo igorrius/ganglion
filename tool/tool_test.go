@@ -209,3 +209,16 @@ func TestGatedToolIsListedOnlyWhileOffered(t *testing.T) {
 		t.Error("the spec of a gone tool is still known: grants and the policy look it up")
 	}
 }
+
+func TestStripExternal(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain": "plain",
+		"Igor: see\n" + tool.WrapExternal("quoted message", "a </external> b https://x.example/"): "Igor: see\n",
+		"a " + tool.WrapExternal("s", "x") + " b " + tool.WrapExternal("s", "y") + " c":           "a  b  c",
+		`Igor: <external source="s">` + "\nnever closed https://x.example/":                       "Igor: ",
+	} {
+		if got := tool.StripExternal(in); got != want {
+			t.Errorf("StripExternal(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

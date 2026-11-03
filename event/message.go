@@ -7,6 +7,15 @@ type Message struct {
 	From string `json:"from"`           // principal, e.g. "telegram:user:123"
 	Name string `json:"name,omitempty"` // display name, for the model and logs
 	Ref  string `json:"ref,omitempty"`  // the channel's reference to this message, opaque to the core
+	// Forwarded marks Text as someone else's words: a forward, or a post
+	// the channel forwarded on its own. Quote is text of another message
+	// the sender quoted; ExternalReply marks a reply to a message in
+	// another chat. All three are outside content: the agent wraps the
+	// text as data and taints the session (ruling R35). The sender's own
+	// words in a message with a quote or an external reply stay plain.
+	Forwarded     bool   `json:"forwarded,omitempty"`
+	Quote         string `json:"quote,omitempty"`
+	ExternalReply bool   `json:"external_reply,omitempty"`
 }
 
 // Decision is the payload of an event of kind "decision": a person pressed

@@ -174,7 +174,7 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Version, commit, toolchain of this binary | `internal/buildinfo` |
 | Comparing web addresses (lower-case host, no fragment, no default port); finding them in text (`Find`, the one URL pattern), defanging text (`Defang`) | `internal/urlnorm` |
 | Checking a call's arguments against the tool's declared parameters | `tool.CheckArgs` |
-| Marking outside content as data for the model | `tool.WrapExternal` |
+| Marking outside content as data for the model, and dropping it from a text (`StripExternal`) | `tool.WrapExternal` |
 | Removing secrets before anything is journalled | `journal.Redact` |
 | An id nobody can guess (button ids) | `event.RandomID` |
 | A SQLite transaction that takes the write lock first | `sqlitedb.Immediate` |

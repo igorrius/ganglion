@@ -10,6 +10,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -48,8 +49,34 @@ func (a *Agent) answer(ctx context.Context, t *turn) (bool, error) {
 	if err := a.setAdmin(ctx, t); err != nil {
 		return false, err
 	}
-	user := provider.Message{Role: provider.RoleUser, Content: speaker(t.msg) + ": " + t.msg.Text}
+	content, outside := userContent(t.msg)
+	if outside {
+		t.state.Tainted = true // before the model runs: its calls in this turn see it
+	}
+	user := provider.Message{Role: provider.RoleUser, Content: content}
 	return a.converse(ctx, t, user)
+}
+
+// Sources of outside text in a person's message (ruling R35).
+const (
+	sourceForwarded = "forwarded message"
+	sourceQuoted    = "quoted message"
+)
+
+// userContent is the history's line for a person's message: "<speaker>:
+// <text>". Text the sender did not write is wrapped as outside content: a
+// forward whole, a quote after the sender's own words. outside reports
+// whether the message holds any, a reply to a message in another chat
+// included (ruling R35).
+func userContent(m event.Message) (content string, outside bool) {
+	if m.Forwarded {
+		return speaker(m) + ": " + tool.WrapExternal(sourceForwarded, m.Text), true
+	}
+	content = speaker(m) + ": " + m.Text
+	if m.Quote != "" {
+		content += "\n" + tool.WrapExternal(sourceQuoted, m.Quote)
+	}
+	return content, m.Quote != "" || m.ExternalReply
 }
 
 // setAdmin looks up whether the turn's principal may use tools.

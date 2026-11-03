@@ -226,7 +226,9 @@ func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
 }
 
 // messageEvent turns a message update into an event. Only text messages
-// (or captions) from people become events.
+// (or captions) from people become events. Text the sender did not write
+// is marked (ruling R35): Telegram puts a forward in a message of its
+// own, so a forward's whole text is someone else's.
 func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	m := u.Message
 	if m == nil || m.From == nil || m.From.IsBot {
@@ -245,12 +247,18 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	if m.IsTopicMessage {
 		thread = m.MessageThreadID
 	}
-	payload, err := json.Marshal(event.Message{
-		Text: text,
-		From: Principal(m.From.ID),
-		Name: strings.TrimSpace(m.From.FirstName + " " + m.From.LastName),
-		Ref:  strconv.FormatInt(m.MessageID, 10),
-	})
+	msg := event.Message{
+		Text:          text,
+		From:          Principal(m.From.ID),
+		Name:          strings.TrimSpace(m.From.FirstName + " " + m.From.LastName),
+		Ref:           strconv.FormatInt(m.MessageID, 10),
+		Forwarded:     present(m.ForwardOrigin) || m.IsAutomaticForward,
+		ExternalReply: present(m.ExternalReply),
+	}
+	if m.Quote != nil {
+		msg.Quote = m.Quote.Text
+	}
+	payload, err := json.Marshal(msg)
 	if err != nil {
 		return event.Event{}, false // a struct of strings always marshals
 	}

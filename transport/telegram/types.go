@@ -4,6 +4,8 @@
 // event.Outgoing (ADR-0017).
 package telegram
 
+import "encoding/json"
+
 // update is a Bot API Update; messages and button presses are requested.
 type update struct {
 	UpdateID      int64          `json:"update_id"`
@@ -31,6 +33,25 @@ type message struct {
 	From            *user  `json:"from,omitempty"`
 	Text            string `json:"text,omitempty"`
 	Caption         string `json:"caption,omitempty"`
+	// Outside content (ruling R35): a forward's origin, a post Telegram
+	// forwarded from a linked channel, a reply to a message in another
+	// chat, and the quoted part of the replied message. Only their
+	// presence and the quote's text are read.
+	ForwardOrigin      json.RawMessage `json:"forward_origin,omitempty"`
+	IsAutomaticForward bool            `json:"is_automatic_forward,omitempty"`
+	ExternalReply      json.RawMessage `json:"external_reply,omitempty"`
+	Quote              *textQuote      `json:"quote,omitempty"`
+}
+
+// textQuote is a Bot API TextQuote, reduced to its text.
+type textQuote struct {
+	Text string `json:"text"`
+}
+
+// present reports whether an optional object was sent: not missing and
+// not null.
+func present(raw json.RawMessage) bool {
+	return len(raw) > 0 && string(raw) != "null"
 }
 
 type chat struct {

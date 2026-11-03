@@ -133,7 +133,7 @@ the "Not now" list (section 14); the phase does not grow.
 | `idemKey` | Idempotency key of an event or call |
 | `ttl` | Command lifetime; an expired command is not executed |
 | Escalation | An event from a module to the agent: "a model is needed" |
-| Tainted session | A session that external content (a web page, a search result, a forwarded message) has entered; side effects in it need confirmation (R-POL-6) |
+| Tainted session | A session that external content (a web page, a search result, a forwarded message, a quoted message or a reply to a message in another chat) has entered; side effects in it need confirmation (R-POL-6) |
 | Grant | What a scheduled agent task may do, fixed and approved by the owner when the task is created (R-POL-8) |
 
 ## 5. Architecture
@@ -520,8 +520,10 @@ human); module install — tests + reviewer + admin.
   global one ([ADR-0014](adr/0014-state-cells.md)); toggled by a Telegram
   command.
 - **R-POL-6.** A session is **tainted** once external content enters it: a
-  web page, a search result, a forwarded message, a scheduled task's
-  fetch.
+  web page, a search result, a forwarded message (a quote of another
+  message and a reply to a message in another chat count too: the
+  transport marks them and the agent wraps that text as data), a
+  scheduled task's fetch.
   - The taint is per session, not per turn: the content stays in the
     history and would steer the next turn.
   - It lasts until the session ends (`/new`, idle reset, R-AGT-6) and
