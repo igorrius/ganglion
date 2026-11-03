@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
@@ -82,8 +83,11 @@ type Deps struct {
 	// Modules updates and rolls back the node's modules for /modules
 	// (R-RUN-8); NoModules when unset.
 	Modules Modules
-	Now     func() time.Time
-	Log     *slog.Logger
+	// Skills are listed in an admin's system prompt, and the one the
+	// model reads routes the rest of the turn (R-RTR-4); none when unset.
+	Skills Skills
+	Now    func() time.Time
+	Log    *slog.Logger
 }
 
 // Agent handles conversation turns; Handle is a core.Handler.
@@ -107,6 +111,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Modules == nil {
 		d.Modules = NoModules{}
+	}
+	if d.Skills == nil {
+		d.Skills = skills.Set{}
 	}
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)

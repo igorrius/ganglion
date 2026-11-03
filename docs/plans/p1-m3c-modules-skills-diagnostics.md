@@ -841,7 +841,7 @@ Two repositories: promtop first, then ganglion.
   bounded set: the loaded skills); the run duration histogram;
   `ganglion_skills_loaded{source}`.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestScriptSkillRuns`: output reaches the model wrapped (3.7 done
     when).
   - `TestEnvOutsideAllowlistNotPassed`: `FOO` set in the node and not
@@ -858,12 +858,12 @@ Two repositories: promtop first, then ganglion.
   - `TestSkillReadRoutesByModel`: after `skill.read` of a `tier: smart`
     skill, the next step goes to the catalogue's smart model.
   - `TestIndexStable`: two turns, the same system prompt bytes.
-- [ ] **Step 2: Run** — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
-- [ ] **Step 5: Code map** (`skills`, `tool/builtin`, `agent`);
+- [x] **Step 2: Run** — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
+- [x] **Step 5: Code map** (`skills`, `tool/builtin`, `agent`);
   components page: skills.
-- [ ] **Step 6: Commit** `skills: Markdown skills and scripts with an environment allowlist and a timeout (3.7)`.
+- [x] **Step 6: Commit** `skills: Markdown skills and scripts with an environment allowlist and a timeout (3.7)`.
 
 ### Task 9: end to end under the crash harness (3.8), acceptance and docs
 

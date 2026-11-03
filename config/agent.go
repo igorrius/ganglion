@@ -20,6 +20,7 @@ import (
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -75,6 +76,7 @@ func Agent() do.Provider[*agent.Agent] {
 			Facts:        do.MustInvoke[Remembering](i).Facts,
 			SystemJobs:   do.MustInvoke[Remembering](i).Jobs,
 			Modules:      do.MustInvoke[agent.Modules](i),
+			Skills:       do.MustInvoke[Skilled](i).Set,
 			Log:          do.MustInvoke[*slog.Logger](i),
 		}), nil
 	}
@@ -124,7 +126,35 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
-		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv))...)
+		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools)...)
+}
+
+// Skilled is the loaded skills and their tools.
+type Skilled struct {
+	Set   skills.Set
+	Tools []tool.Handler
+}
+
+// Skills loads the built-in and the workspace skills; a script never
+// gets a provider's key (R-RTR-5, ADR-0042).
+func Skills() do.Provider[Skilled] {
+	return func(i do.Injector) (Skilled, error) {
+		b := do.MustInvoke[Bootstrap](i)
+		var deny []string
+		if cat := b.Agent.Catalog; cat != nil {
+			for _, p := range cat.Providers {
+				deny = append(deny, p.KeyEnv)
+			}
+		}
+		set, problems, err := skills.Load(skills.Builtin, b.Agent.Workspace, deny)
+		if err != nil {
+			return Skilled{}, err
+		}
+		skills.Report(do.MustInvoke[*slog.Logger](i), problems)
+		cfg := skills.DefaultRunConfig()
+		cfg.TZ = b.Agent.TZ.String()
+		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg))}, nil
+	}
 }
 
 // Diagnostics provides the diagnostic searches over the node's own

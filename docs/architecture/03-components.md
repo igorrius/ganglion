@@ -64,11 +64,11 @@ flowchart TB
 | Conversation actors | One turn at a time per conversation, leases, timeouts | R-AGT-1, R-DLV-3 |
 | Agent loop | Model call → tool calls → next step, step limit, depth limit | R-AGT-3, R-AGT-4 |
 | History | Provider-neutral transcript, compaction | R-AGT-2 |
-| Router | Ordered candidates by skill requirements, budget, health | R-RTR-1…3 |
+| Router | Ordered candidates by skill requirements, budget, health; skills (`skills`): built-in and the owner's, a script per skill with an effect class, the rest of a turn routed by the skill read | R-RTR-1…5 |
 | Providers | Talk to model backends, translate MCP tools | R-PRV-1…4 |
 | Policies | Decide autonomous / confirm / forbid; audit | R-POL-1…5 |
 | Tool registry | Tools available to the model, local and on edges | — |
-| Memory | Facts in git with where they came from; the index in an admin's system prompt; recall over facts and archived sessions; skills (M3c) and nightly consolidation (M7) later | R-MEM-1…5 |
+| Memory | Facts in git with where they came from; the index in an admin's system prompt; recall over facts and archived sessions; nightly consolidation (M7) later | R-MEM-1…5 |
 | Clean-context check | Checks every memory write, and on schedule stored facts and the persona, with a cheap model that sees only the text; fails closed into quarantine | R-POL-7 |
 | Scheduler | Crons in the node's zone with catch-up after downtime; reminders and agent tasks with grants, each task in its own conversation | R-SCH-1, R-SCH-2, R-POL-8 |
 | Web reader | `web.fetch` on public addresses only (checked on every connection, redirects included, a task kept to its granted hosts) within size and time limits; `web.search` through Brave or DuckDuckGo; remote text only as outside content | R-WEB-1…3 |

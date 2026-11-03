@@ -203,6 +203,25 @@ is needed for tests: they run against a fake Bot API.
      environment variables. A new session picks them up. Never paste the
      token into the chat.
 
+## Installing a skill
+
+A skill is a procedure the agent reads before it follows it
+([ADR-0042](adr/0042-skills-and-scripts-before-the-sandbox.md)). Only you
+install one; the agent may propose the text.
+
+1. Make `workspace/skills/<name>/SKILL.md`: a frontmatter with `name`
+   (the directory's), `description`, optionally `model` and `script`,
+   then the steps in Markdown.
+2. A script sits beside it, executable, named by `script.run`, with
+   `effects: read` (runs by itself) or `effects: change` (asks with a
+   button). It gets only `PATH`, `HOME`, `LANG`, `TZ` and the names in
+   `script.env`; the node's secrets never.
+3. Restart the node; the log names a skill that was not loaded and why.
+
+Until the sandbox of M3d, a script can read whatever the node's user can
+read, the database and secret files included: install only scripts you
+trust with that.
+
 ## Releasing a module
 
 A built-in module ships in the binary and is updated on a running node

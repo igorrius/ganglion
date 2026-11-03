@@ -166,6 +166,7 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 			return added, msg.Content, turns.OutcomeOK, nil
 		}
 		results := a.runTools(turnCtx, t, msg.ToolCalls)
+		task = a.skillRoute(task, msg.ToolCalls)
 		msgs, added = append(msgs, results...), append(added, results...)
 	}
 	return added, "", turns.OutcomeOK, nil
@@ -264,6 +265,9 @@ func (a *Agent) systemPrompt(admin, introducing bool) string {
 	}
 	if introducing {
 		prompt += "\n\n" + IntroductionRules
+	}
+	if idx := a.d.Skills.Index(); idx != "" {
+		prompt += "\n\n" + skillsHeader + idx
 	}
 	if facts := a.d.Facts(); facts != "" {
 		prompt += "\n\n" + facts
