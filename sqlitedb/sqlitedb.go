@@ -7,7 +7,6 @@
 package sqlitedb
 
 import (
-	"strings"
 	"context"
 	"database/sql"
 	"database/sql/driver"
@@ -16,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" driver; pure Go, no CGO
 )
