@@ -45,6 +45,7 @@ Write in the language of the conversation. Output only the summary.`
 const (
 	replyNoModel    = "Sorry, no model is reachable right now. Please try again in a few minutes."
 	replyStepLimit  = "Sorry, I could not finish that."
+	replyExpired    = "The request expired without an answer, so nothing was done."
 	replyDailyLimit = "Daily limit reached; the bot answers again tomorrow."
 	// replyGiveUp ends a turn the agent gives up on: a message that failed
 	// every attempt (GiveUp), or a CLI run that failed after it ran tools.

@@ -115,7 +115,10 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 		t.reply(endReplies[end])
 		return true, nil
 	}
-	if text == "" {
+	switch {
+	case text == "" && t.noTools: // an expiry turn whose model wrote no text (R33)
+		text = replyExpired
+	case text == "":
 		t.record.Outcome = turns.OutcomeStepLimit
 		text = lastText(added)
 	}

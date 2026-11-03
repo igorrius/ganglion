@@ -635,6 +635,24 @@ func TestExpiryTurnRunsNoToolTheModelCalls(t *testing.T) {
 	}
 }
 
+// A model that answers an expiry turn only with a tool call (none was
+// offered) leaves no text: the owner still gets the fixed expiry reply,
+// not the step-limit apology.
+func TestExpiryTurnWithOnlyAToolCallSaysItExpired(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	e.ask(t, "schedule.create")
+	e.now = e.now.Add(pending.DefaultTTL)
+	e.smart.push(callWith("schedule.create", `{}`))
+	out := e.turn(t, expired(t, e))
+	if len(side.calls) != 0 {
+		t.Fatalf("a tool ran in the expiry turn: %d calls", len(side.calls))
+	}
+	if r, ok := findOut(out, isReply); !ok || r.Text != replyExpired {
+		t.Fatalf("out %+v, want the reply %q", out, replyExpired)
+	}
+}
+
 // Ruling R33: a resumed turn passes the daily limit like a message: the
 // approved call runs (the owner decided it), but no model turn follows
 // over the limit, and the outcome still joins the history.
