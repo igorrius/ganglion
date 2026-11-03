@@ -75,35 +75,60 @@ func (a *Agent) runTools(ctx context.Context, t *turn, calls []provider.ToolCall
 	return out
 }
 
-// runTool runs one call: it numbers it, runs it through the chain, marks
-// an external result as data and taints the session, keeps the tool's
-// outgoing messages for the turn, whether the call failed or not, and
-// remembers a call parked for confirmation in the state.
+// runTool runs one call of an API model's tool_calls and returns its
+// result as a tool message; a failed call's result is its error text.
 func (a *Agent) runTool(ctx context.Context, t *turn, call provider.ToolCall) provider.Message {
+	text, err := a.useTool(ctx, t, call)
+	if err != nil {
+		text = "error: " + err.Error()
+	}
+	return provider.Message{Role: provider.RoleTool, ToolCallID: call.ID, Content: text}
+}
+
+// exec is the turn's provider.Exec for a provider that runs its own tool
+// loop (the claude CLI over the MCP bridge, R-PRV-6): every call takes
+// the same path as an API model's, through useTool.
+func (a *Agent) exec(t *turn) provider.Exec {
+	return func(ctx context.Context, call provider.ToolCall) (string, error) {
+		return a.useTool(ctx, t, call)
+	}
+}
+
+// useTool runs one call and applies its result to the turn: it numbers
+// the call, runs it through the chain, marks an external result as data
+// and taints the session, keeps the tool's outgoing messages for the
+// turn, whether the call failed or not, and remembers a call parked for
+// confirmation in the state. It returns the text the model reads.
+//
+// It holds the turn's lock for the whole call: a CLI provider may call
+// in parallel, and a later call must see the taint an earlier external
+// result set (ADR-0036), with the call numbers continuing the
+// turn's count.
+func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.calls++
 	started := time.Now()
 	result, err := a.tool(ctx, a.toolCall(t, call))
-	text := result.Text
-	// A call that failed can still carry messages, such as the alert about
+	// A failed call can still carry messages, such as the alert about
 	// a call outside a task's grant.
 	t.out = append(t.out, result.Out...)
-	switch {
-	case err != nil:
-		text = "error: " + err.Error()
-	default:
-		if result.External {
-			t.state.Tainted = true
-			text = tool.WrapExternal(call.Name, result.Text)
-		}
-		if call.Name == searchTool {
-			t.known.add(result.Text)
-		}
-		if result.Pending != "" && !slices.Contains(t.state.Pending, result.Pending) {
-			t.state.Pending = append(t.state.Pending, result.Pending)
-		}
-	}
 	t.record.Tools = append(t.record.Tools, turns.ToolUse{Name: call.Name, OK: err == nil, Ms: time.Since(started).Milliseconds()})
-	return provider.Message{Role: provider.RoleTool, ToolCallID: call.ID, Content: text}
+	if err != nil {
+		return "", err
+	}
+	text := result.Text
+	if result.External {
+		t.state.Tainted = true
+		text = tool.WrapExternal(call.Name, result.Text)
+	}
+	if call.Name == searchTool {
+		t.known.add(result.Text)
+	}
+	if result.Pending != "" && !slices.Contains(t.state.Pending, result.Pending) {
+		t.state.Pending = append(t.state.Pending, result.Pending)
+	}
+	return text, nil
 }
 
 // toolCall is the context of the turn's next call.

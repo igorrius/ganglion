@@ -39,6 +39,7 @@ flowchart LR
     mods <--> cells
     api <--> bus
     cli <--> bus
+    cli -- "MCP bridge: the core's tools for one run,<br/>per-run Unix socket + token (ADR-0036)" --> corep
     mqttdev -.-> bus
 
     classDef planned stroke-dasharray: 5 5
@@ -54,7 +55,8 @@ flowchart LR
 | WASM modules | Compiled reflexes with manifests | TinyGo / Rust / AssemblyScript | P0 (Deye by hand), P3 (by the model) |
 | State cells | Desired and reported state of loads, sensors, kill switches, confirmations; backends and observers (ADR-0014) | KV: memory or SQLite in P1, NATS KV in P2 | P1 |
 | API provider client | Chat completions | net/http | P1 |
-| claude CLI worker | Standalone heavy tasks | unmodified `claude -p` | P2 (ADR-0015) |
+| claude CLI worker | A conversation provider (ADR-0021); standalone heavy tasks later | unmodified `claude -p` | P1 provider; P2 worker (ADR-0015) |
+| MCP bridge | The agent's tools for one `claude -p` run, under the core's policies, taint, journal and call keys | own MCP server in the core on a per-run Unix socket `0600` with a token; the hidden `ganglion mcp-relay` as the CLI's stdio server (ADR-0036, ADR-0037) | P1 (M3b) |
 | Bus | Messages between roles; across nodes buffering, KV, object store | in-process (P1), NATS (P2) | P1 / P2 |
 
 ## Deployment: P1, all-in-one
@@ -72,12 +74,14 @@ flowchart TB
         end
         db[("SQLite file")]
         repo[("memory git repo")]
+        cl["claude -p, a child per model call<br/>+ ganglion mcp-relay"]
     end
     pc["Owner's PC<br/>claude CLI worker, P2"]
     c --- e
     c --- w
     c --- db
     c --- repo
+    c -- "history on stdin;<br/>tools over MCP on a per-run Unix socket" --- cl
     c -. "task queue" .- pc
 ```
 

@@ -56,12 +56,23 @@ type Usage struct {
 	OutputTokens     int
 }
 
+// Exec runs one tool call for a provider that runs its own tool loop
+// (CLI providers, R-PRV-6). API providers ignore it and return
+// tool_calls. The text is what the model reads; an error is a failed
+// call, which the model reads too.
+type Exec func(ctx context.Context, call ToolCall) (string, error)
+
 // ChatRequest asks a model for the next step of a turn.
 type ChatRequest struct {
 	Model     string
 	Messages  []Message
 	Tools     []Tool
 	MaxTokens int // 0: the provider's default
+	// Exec runs the calls of a provider that runs its own tool loop. The
+	// agent sets it whenever Tools is not empty; it runs each call on the
+	// same path as an API model's tool_calls, and is safe for concurrent
+	// use.
+	Exec Exec
 }
 
 // ChatResponse is the model's reply: text, tool calls, or both.

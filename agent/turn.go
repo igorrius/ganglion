@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
@@ -14,6 +15,10 @@ import (
 
 // turn is everything one handled event needs and produces.
 type turn struct {
+	// mu guards the turn while a CLI provider runs tools from its own
+	// goroutines (agent.useTool); stages run one at a time and do not
+	// take it.
+	mu     sync.Mutex
 	event  event.Event
 	msg    event.Message
 	state  State

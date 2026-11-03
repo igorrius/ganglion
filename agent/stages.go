@@ -100,9 +100,13 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Message) (added []provider.Message, text string, ok bool, err error) {
 	tools := a.toolSpecs(t)
 	task := router.TaskReq{Kind: router.TaskMessage, Tools: len(tools) > 0}
+	var exec provider.Exec // a CLI provider runs the calls itself; no tools, nothing to run
+	if len(tools) > 0 {
+		exec = a.exec(t)
+	}
 	for t.record.Steps < a.cfg.MaxSteps {
 		t.record.Steps++
-		resp, ok := a.call(turnCtx, task, a.annotate(t, msgs), tools, &t.record)
+		resp, ok := a.call(turnCtx, task, provider.ChatRequest{Messages: a.annotate(t, msgs), Tools: tools, Exec: exec}, &t.record)
 		if ctx.Err() != nil {
 			return nil, "", false, ctx.Err()
 		}

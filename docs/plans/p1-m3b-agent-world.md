@@ -1034,7 +1034,7 @@ maintenance.
   Pending calls are already stored by the policy, so the next turn
   resumes as in task 4.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `TestServerInitializeAndList`.
   - `TestServerCallMapsNames`.
   - `TestServerUnknownMethod`.
@@ -1045,13 +1045,13 @@ maintenance.
     `tool_calls` with a call key.
   - `TestCatalogAllowsCLITools`.
   - `TestTokenNotInArgv`.
-- [ ] **Step 2–4: Run, implement, run** `go test -race ./...`; lint.
-- [ ] **Step 5: Live check.** Run a real `claude -p` on the dev machine.
+- [x] **Step 2–4: Run, implement, run** `go test -race ./...`; lint.
+- [x] **Step 5: Live check.** Run a real `claude -p` on the dev machine.
   Haiku calls `schedule.list` through the bridge, and the call is in
   `tool_calls`.
-- [ ] **Step 6: Code map** (`mcp`, `cmd` relay, `provider/claudecli`
+- [x] **Step 6: Code map** (`mcp`, `cmd` relay, `provider/claudecli`
   tools). Containers view: the bridge.
-- [ ] **Step 7: Commit** `mcp, claudecli: tools for the claude CLI over a per-run Unix socket bridge`.
+- [x] **Step 7: Commit** `mcp, claudecli: tools for the claude CLI over a per-run Unix socket bridge`.
 
 ### Task 12: acceptance on the test bot and docs
 

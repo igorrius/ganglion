@@ -63,7 +63,7 @@ func (a *Agent) compact(ctx context.Context, st State, rec *turns.Turn) State {
 		{Role: provider.RoleSystem, Content: compactPrompt},
 		{Role: provider.RoleUser, Content: compactInput(st.Summary, st.Messages[:split])},
 	}
-	resp, ok := a.call(ctx, router.TaskReq{Tier: router.TierCheap, Kind: router.TaskCompaction}, msgs, nil, rec)
+	resp, ok := a.call(ctx, router.TaskReq{Tier: router.TierCheap, Kind: router.TaskCompaction}, provider.ChatRequest{Messages: msgs}, rec)
 	if !ok || strings.TrimSpace(resp.Message.Content) == "" {
 		a.log.Warn("agent: compaction failed; history kept", "conv", rec.Conv, "messages", len(st.Messages))
 		return st

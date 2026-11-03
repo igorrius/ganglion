@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 
 	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
@@ -33,7 +34,7 @@ func newRoot(out io.Writer, start startFunc) *cli.Command {
 		Writer:    out,
 		ErrWriter: out,
 		Flags:     root.Flags(),
-		Commands:  []*cli.Command{runCommand(&root, out, start), versionCommand(out)},
+		Commands:  []*cli.Command{runCommand(&root, out, start), versionCommand(out), relayCommand(os.Stdin, out)},
 		// Without a command: help, and a failure, so a supervisor still
 		// starting the command line from before `run` sees an error
 		// instead of a clean exit.

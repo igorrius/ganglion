@@ -56,6 +56,8 @@ func fakeClaude(mode string) int {
 	case "sleep":
 		time.Sleep(10 * time.Second)
 		return 0
+	case "mcp", "mcp-crash", "mcp-hang":
+		return fakeMCP(mode)
 	case "slow":
 		record("start " + strconv.FormatInt(time.Now().UnixNano(), 10))
 		time.Sleep(300 * time.Millisecond)
@@ -250,7 +252,7 @@ func TestConcurrencyLimit(t *testing.T) {
 	}
 }
 
-func TestToolsRejected(t *testing.T) {
+func TestToolsWithoutExecRejected(t *testing.T) {
 	c, _ := fake(t, "ok")
 	_, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history,
 		Tools: []provider.Tool{{Name: "x", InputSchema: json.RawMessage(`{}`)}}})

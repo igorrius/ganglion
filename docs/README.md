@@ -89,7 +89,10 @@ Start here when coming back to the project.
       Rust, `web.search` through Brave or DuckDuckGo;
       [ADR-0035](adr/0035-web-reading.md), Proposed);
     - the tool-call journal;
-    - the same tools for the claude CLI through an MCP bridge;
+    - the same tools for the claude CLI through an MCP bridge on a
+      per-run Unix socket
+      ([ADR-0036](adr/0036-mcp-bridge-over-a-per-run-unix-socket.md),
+      [ADR-0037](adr/0037-own-minimal-mcp-server.md), Proposed);
     - carried from M3a: the first-run introduction that writes the persona
       ([ADR-0024](adr/0024-persona-as-workspace-files.md)), the current
       time in the last user message, the depth limit (R-AGT-4) and tool

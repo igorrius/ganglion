@@ -41,6 +41,8 @@ considered, how they compare, the decision and its consequences. See
 | [0033](0033-memory-in-the-workspace-git-with-the-git-binary.md) | Keep memory as Markdown files in the workspace's git repository, driven by the `git` binary (D-7) | Proposed | 2026-11-03 |
 | [0034](0034-clean-context-guard.md) | Check every memory write with a cheap model in a clean context, failing closed | Proposed | 2026-11-03 |
 | [0035](0035-web-reading.md) | Read pages through an html2md WASM module in Rust; search with Brave or DuckDuckGo | Proposed | 2026-11-03 |
+| [0036](0036-mcp-bridge-over-a-per-run-unix-socket.md) | Give CLI providers the agent's tools over MCP on a per-run Unix socket with a token | Proposed | 2026-11-03 |
+| [0037](0037-own-minimal-mcp-server.md) | Write a minimal MCP server of our own instead of using the official Go SDK | Proposed | 2026-11-03 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

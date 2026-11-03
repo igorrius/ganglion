@@ -13,11 +13,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// call routes task and tries the candidates in order until one answers.
-// Any error moves to the next candidate (spec 7.3, layer 3); a cancelled
-// ctx stops. Every attempt goes into the trace rec. ok is false when no
-// candidate answered.
-func (a *Agent) call(ctx context.Context, task router.TaskReq, msgs []provider.Message, tools []provider.Tool, rec *turns.Turn) (provider.ChatResponse, bool) {
+// call routes task and tries the candidates in order until one answers,
+// each with req for its model. Any error moves to the next candidate
+// (spec 7.3, layer 3); a cancelled ctx stops. Every attempt goes into the
+// trace rec. ok is false when no candidate answered.
+func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.ChatRequest, rec *turns.Turn) (provider.ChatResponse, bool) {
 	cands, err := a.d.Router.Route(ctx, task)
 	if err != nil {
 		a.log.Error("agent: no model fits", "conv", rec.Conv, "kind", task.Kind, "err", err)
@@ -32,7 +32,8 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, msgs []provider.M
 			rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model, Error: "no_provider"})
 			continue
 		}
-		resp, err := a.try(ctx, p, c, task, provider.ChatRequest{Model: c.Model, Messages: msgs, Tools: tools})
+		req.Model = c.Model
+		resp, err := a.try(ctx, p, c, task, req)
 		if err == nil {
 			rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model})
 			addUsage(rec, c, resp.Usage)

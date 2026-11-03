@@ -3,6 +3,12 @@
 // history (ADR-0020) and sends it on every call: there is no session and
 // no --resume. The CLI uses its own login; this package never sees a
 // token.
+//
+// A call with tools runs the CLI's own tool loop over an MCP bridge to
+// the core (R-PRV-6, ADR-0036): a per-run Unix socket in a private run
+// dir, reached through `ganglion mcp-relay`. Every call goes through the
+// request's Exec, so the core's policies, taint, journal and call keys
+// apply; the CLI's built-in tools stay off.
 package claudecli
 
 import (
@@ -18,8 +24,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/igorrius/ganglion/internal/buildinfo"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/internal/transcript"
+	"github.com/igorrius/ganglion/mcp"
 	"github.com/igorrius/ganglion/provider"
 )
 
@@ -27,6 +35,7 @@ import (
 type Client struct {
 	name    string
 	command string
+	relay   string // the binary with `mcp-relay`; "" is this executable
 	sem     chan struct{}
 
 	dirOnce sync.Once
@@ -47,6 +56,13 @@ func WithCommand(path string) Option {
 			c.command = path
 		}
 	}
+}
+
+// WithRelay sets the binary the CLI starts as the bridge's MCP server,
+// with the arguments `mcp-relay --socket <path>`; the default, and "",
+// is this executable.
+func WithRelay(path string) Option {
+	return func(c *Client) { c.relay = path }
 }
 
 // WithMaxConcurrent caps the claude processes alive at once; default 2.
@@ -122,10 +138,12 @@ type result struct {
 	} `json:"usage"`
 }
 
-// Chat implements provider.Provider.
+// Chat implements provider.Provider. A request with tools serves them
+// to the run over the MCP bridge and runs each call through req.Exec;
+// the run dir is removed whatever way the run ends.
 func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
-	if len(req.Tools) > 0 {
-		return provider.ChatResponse{}, c.fail(provider.KindBadRequest, "tools arrive in M3b")
+	if len(req.Tools) > 0 && req.Exec == nil {
+		return provider.ChatResponse{}, c.fail(provider.KindBadRequest, "tools without an executor")
 	}
 	select {
 	case c.sem <- struct{}{}:
@@ -139,17 +157,53 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 	}
 
 	system, transcript := prompt(req.Messages)
-	cmd := exec.CommandContext(ctx, c.command,
-		"-p", "--model", req.Model, "--output-format", "json", "--no-session-persistence",
-		"--tools", "", "--strict-mcp-config", "--setting-sources", "",
-		"--system-prompt", system)
+	args := []string{"-p", "--model", req.Model, "--output-format", "json", "--no-session-persistence",
+		"--tools", "", "--strict-mcp-config"}
+	if len(req.Tools) > 0 {
+		b, err := c.bridge(ctx, dir, req)
+		if err != nil {
+			return provider.ChatResponse{}, err
+		}
+		defer b.close()
+		args = append(args, b.args()...)
+	}
+	args = append(args, "--setting-sources", "", "--system-prompt", system)
+	stdout, stderr, runErr := c.run(ctx, dir, args, transcript)
+	return c.result(ctx, stdout, stderr, runErr)
+}
+
+// bridge opens the MCP bridge that serves req's tools to one run.
+func (c *Client) bridge(ctx context.Context, dir string, req provider.ChatRequest) (*bridge, error) {
+	relay := c.relay
+	if relay == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			return nil, c.fail(provider.KindUnavailable, "mcp bridge: relay: "+err.Error())
+		}
+		relay = exe
+	}
+	server := mcp.NewServer(serverName, buildinfo.Read().Version, req.Tools, req.Exec)
+	b, err := openBridge(ctx, dir, relay, authTimeout, server)
+	if err != nil {
+		return nil, c.fail(provider.KindUnavailable, "mcp bridge: "+err.Error())
+	}
+	return b, nil
+}
+
+// run runs claude with args in dir, the transcript on stdin, and returns
+// its output.
+func (c *Client) run(ctx context.Context, dir string, args []string, stdin string) (stdout, stderr bytes.Buffer, err error) {
+	cmd := exec.CommandContext(ctx, c.command, args...)
 	cmd.Dir = dir
-	cmd.Stdin = strings.NewReader(transcript) // never argv: argv shows in ps
-	var stdout, stderr bytes.Buffer
+	cmd.Stdin = strings.NewReader(stdin) // never argv: argv shows in ps
 	cmd.Stdout, cmd.Stderr = &stdout, &limited{b: &stderr, n: 4096}
 	cmd.WaitDelay = 2 * time.Second
-	runErr := cmd.Run()
+	err = cmd.Run()
+	return stdout, stderr, err
+}
 
+// result reads the CLI's answer from its output.
+func (c *Client) result(ctx context.Context, stdout, stderr bytes.Buffer, runErr error) (provider.ChatResponse, error) {
 	if ctx.Err() != nil {
 		return provider.ChatResponse{}, c.ctxError(ctx)
 	}

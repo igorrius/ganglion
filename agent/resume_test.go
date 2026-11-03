@@ -44,8 +44,15 @@ type confirmEnv struct {
 
 func newConfirmEnv(t *testing.T, hs ...tool.Handler) *confirmEnv {
 	t.Helper()
+	return newConfirmEnvOn(t, newEnv(t, Config{}, nil), hs...)
+}
+
+// newConfirmEnvOn is newConfirmEnv over an env made earlier, for tools
+// that need its database or pending store.
+func newConfirmEnvOn(t *testing.T, e *env, hs ...tool.Handler) *confirmEnv {
+	t.Helper()
 	reg := registry(t, hs...)
-	e := newEnv(t, Config{}, reg)
+	e.deps.Tools = reg
 	j, err := journal.New(context.Background(), e.db, func() time.Time { return e.now }, journal.DefaultRetain)
 	if err != nil {
 		t.Fatal(err)

@@ -354,7 +354,11 @@ model:
   - every call runs in the core under the same policies, taint, journal
     and idempotency keys as for an API model; the bridge only forwards.
 
-  The transport is decided in an ADR (planned: ADR-0036).
+  The transport is a per-run Unix socket with a token, reached through
+  a hidden `ganglion mcp-relay`
+  ([ADR-0036](adr/0036-mcp-bridge-over-a-per-run-unix-socket.md),
+  Proposed), served by an own minimal MCP server
+  ([ADR-0037](adr/0037-own-minimal-mcp-server.md), Proposed).
 
 Rules for access to Anthropic models (per
 [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance),
