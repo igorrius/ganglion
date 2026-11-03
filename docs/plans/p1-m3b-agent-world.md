@@ -1080,7 +1080,9 @@ OpenRouter. Only these parts are test-only:
 
 12b is the same scenarios by hand on @ganglion_test_bot with `make
 live-agent`, by the owner. Steps 1–5 are ticked as scripted. **The
-owner's live run is pending**, and "M3b done" waits for it.
+owner's first live run (2026-11-03) found seven issues, fixed under
+ rulings R38–R47; the owner merged M3b and rechecks the mechanics in
+ detail in the next session.**
 
 - [x] **Step 1: Rates, live on @ganglion_test_bot,** with Haiku through
   the CLI and with the API model (scripted 2026-11-03; on the bot:
@@ -1165,7 +1167,7 @@ owner's live run is pending**, and "M3b done" waits for it.
     The dense ones fail cleanly as "could not be converted". This was
     measured in a node built by the `config` test binary, with metrics
     on; it idles at 33 MB. The estimate was 123 MB.
-- [ ] **Step 6: Docs and commit** `docs: M3b done`: after the owner's
-  live run (12b). The docs for 12a are in: "Where we are", the
+- [x] **Step 6: Docs and commit** `docs: M3b done`: after the owner's
+  first live run (12b) and its fixes. The docs for 12a are in: "Where we are", the
   measurements, the containers view (the web, the `html2md` module, the
   new tables) and the code map.
