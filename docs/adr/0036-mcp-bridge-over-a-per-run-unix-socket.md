@@ -158,12 +158,13 @@ The details:
   may say `tools: true` for `claude-cli` models.
 - The binary must be runnable by the CLI as `os.Executable()`
   (`claudecli.WithRelay` overrides it).
-- The calls the CLI made are journalled and in the turn's trace, but
-  the conversation history keeps only the CLI's final answer: the CLI
-  does not report its intermediate tool messages. Taint and pending
-  calls are in the state, so nothing that guards a later turn is lost;
-  a `web.search` hit found in one CLI turn is not a known URL in the
-  next one, so fetching it then asks the owner (fails safe).
+- The calls the CLI made are journalled and in the turn's trace, and
+  the agent keeps each call and its result in the conversation history
+  in the API path's form, before the CLI's final answer (ruling R30): the
+  CLI does not report its intermediate tool messages, so the core logs
+  them as they pass through `Exec`. Later turns and task runs see them,
+  and a `web.search` hit found in one CLI turn is a known URL in the
+  next one, as on the API path.
 - A CLI run that ran tools and then failed gives up instead of falling
   back: the owner asks again and sees no tool run twice, at the cost of
   an answer the fallback model might have given.

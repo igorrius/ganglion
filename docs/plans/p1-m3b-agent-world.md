@@ -201,7 +201,7 @@ ADRs:
   - `docs/research/2026-11-02-agent-security-baseline.md`;
   - `docs/adr/0031-agent-security-baseline.md`.
 
-- [ ] **Step 1: Spec.** Change it as design section 9 lists:
+- [x] **Step 1: Spec.** Change it as design section 9 lists:
   - add the web tools, module update, the journal, logs on disk,
     `ganglion mcp`, attachments, the MCP bridge for CLI providers and the
     security baseline as requirements:
@@ -210,12 +210,12 @@ ADRs:
     - `R-POL-8` grants for scheduled tasks;
   - move the scheduler to M3b;
   - add voice and PDF to "Not now".
-- [ ] **Step 2: Phase plan.**
+- [x] **Step 2: Phase plan.**
   - Split M3 into M3b and M3c with the task lists of design sections 5
     and 6.
   - Mark M4 4.2 and the "module as a tool" part of 4.4 as moved.
   - Record that the cut list gains the design's section 8 order.
-- [ ] **Step 3: Research note.** It covers:
+- [x] **Step 3: Research note.** It covers:
   - the OWASP Top 10 for LLM applications (2025): prompt injection,
     sensitive information disclosure, excessive agency, data and model
     poisoning;
@@ -224,13 +224,13 @@ ADRs:
   - OpenClaw's external-content wrapping and MCP loopback bridge.
 
   Check every source on the day; cite URLs.
-- [ ] **Step 4: ADR-0031** (Proposed): the baseline of design section 4,
+- [x] **Step 4: ADR-0031** (Proposed): the baseline of design section 4,
   rules 1–9.
   - Options compared:
     - per-turn taint vs per-session taint;
     - confirm-everything vs grants for scheduled tasks.
   - Consequences: more presses.
-- [ ] **Step 5: Commit** `docs: M3b scope in the spec and the phase plan; ADR-0031 security baseline`.
+- [x] **Step 5: Commit** `docs: M3b scope in the spec and the phase plan; ADR-0031 security baseline`.
 
 ### Task 2: tool registry, call context and the journal
 

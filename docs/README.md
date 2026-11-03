@@ -119,6 +119,20 @@ Start here when coming back to the project.
     - M3a: move to goldmark v2 (`github.com/yuin/goldmark/v2`), where
       upstream now lands some fixes first; remove or document `provider.Fallback`; clean up the claude
       work dir; name people, not ids, in limit alerts.
+    - M3b: prune the `pending_calls`, `pending_buttons` and `cron_runs`
+      tables; scope `cells.set` grants per cell (M4); a URL becomes
+      known from any speaker's message, not only the owner's;
+      `message.send` reaches a known conversation on the calling
+      transport only; one poison `unput` row stops the scheduler's tick
+      for every job; `EnsureAudit` takes the first admin at start, not
+      when the first admin changes; episodes are a substring scan of the
+      newest 500 sessions, not full-text search; the M4 policy override
+      against the tainted-memory rule; the html2md worst case peaks at
+      99 MB of the 128 MB budget; transcript indentation covers only the
+      line breaks it lists; `web.WithResolver` and `web.WithConnect` are
+      exported test seams; no automated depth check of htmd's own
+      html5ever 0.38 tree; the nightly audit runs inside one event,
+      under the core's turn timeout.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.
