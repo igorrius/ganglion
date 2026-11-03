@@ -258,7 +258,7 @@ step-by-step plan is written after M3c.
 | Task | Done when |
 |---|---|
 | 7.1 Inventory of the current bot: skills, crons, topics, memory files (read-only) | A written list with a decision per item: port, drop or later |
-| 7.2 Memory import into the git memory repo; nightly consolidation cron and dislike handling (R-MEM-1–3) | Facts found by `memory.search`; a consolidation run commits |
+| 7.2 Memory import into the git memory repo; nightly consolidation cron and dislike handling (R-MEM-1–3); the retention of archived sessions, applied only to sessions consolidation has read (spec 11) | Facts found by `memory.search`; a consolidation run commits; a session past the retention is dropped only after a run read it |
 | 7.3 Port the remaining skills and crons from the inventory | Each ported item has a smoke test |
 | 7.4 Backups: daily `VACUUM INTO`, git push of the memory and config repos to a private remote or S3 | A restore from backup is tested once |
 | 7.5 Cutover runbook: stop the old bot's polling (zero overlap), switch the token, smoke test, rollback by restarting the old bot | Cutover done; rollback rehearsed |

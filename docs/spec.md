@@ -586,7 +586,8 @@ undone with `git revert`.
 - **R-MEM-1.** Nightly consolidation is a regular cron with its own prompt:
   re-read the day's turns, extract facts into `memory/*.md`, fix
   contradictions, delete stale entries, propose a skill for a recurring
-  procedure, commit and re-index embeddings.
+  procedure, commit and re-index embeddings. Archived sessions it has
+  read may then be dropped after a retention (section 11, M7).
 - **R-MEM-2.** A dislike or a correction in chat flags the turn;
   consolidation handles flagged turns first.
 - **R-MEM-3.** Memory is Markdown files in the node's workspace, in git.
@@ -1086,6 +1087,7 @@ fallback until the gate is passed.
 | Where nodes live | Cloud hosting · Pi · home PC | Edge in the cloud or on a Pi, claude CLI worker on the owner's PC | The P1 monthly bill |
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
 | Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Proposed for host commands and skill scripts in [ADR-0039](adr/0039-command-sandbox.md): `no_new_privs`, a clean environment, Landlock and a PID namespace, fail closed | A spike in M3d on the owner's machine, Railway and a Pi |
+| How long ended sessions (episodes) are kept | Forever, searched by `memory.recall` (today: the newest 500 per chat) · a retention: sessions older than N days are dropped after consolidation has read them | A retention after consolidation (owner, 2026-11-03): nothing is dropped that consolidation has not read, so a fact the owner never confirmed is still turned into one or kept; what was said by chance fades | M7 task 7.2, with the nightly consolidation; N is chosen there |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
 
 Each question becomes an ADR (status Proposed) when work on it starts and is
