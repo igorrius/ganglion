@@ -173,19 +173,26 @@ func (t *Transport) whoAmI(ctx context.Context, b *backoff.Backoff) (user, error
 func (t *Transport) hand(ctx context.Context, sink transport.Sink, botID int64, ups []update, offset int64, b *backoff.Backoff) (int64, error) {
 	for _, u := range ups {
 		t.seen(u)
-		t.answerCallback(ctx, u)
-		if e, ok := t.toEvent(botID, u); ok {
-			if err := sink(ctx, e); err != nil {
-				if ctx.Err() != nil {
-					return offset, ctx.Err()
-				}
-				d := b.Next()
-				t.log.Warn("telegram: sink failed, update not confirmed",
-					"update_id", u.UpdateID, "conv", e.Conv, "err", err, "retry_in", d)
-				return offset, sleep(ctx, d)
-			}
-			b.Reset()
+		e, ok := t.toEvent(botID, u)
+		if !ok {
+			t.answerCallback(ctx, u)
+			offset = u.UpdateID + 1
+			continue
 		}
+		err := sink(ctx, e)
+		switch {
+		case errors.Is(err, transport.ErrDropped):
+			t.answerCallback(ctx, u) // no handler will
+		case err != nil:
+			if ctx.Err() != nil {
+				return offset, ctx.Err()
+			}
+			d := b.Next()
+			t.log.Warn("telegram: sink failed, update not confirmed",
+				"update_id", u.UpdateID, "conv", e.Conv, "err", err, "retry_in", d)
+			return offset, sleep(ctx, d)
+		}
+		b.Reset()
 		offset = u.UpdateID + 1
 	}
 	return offset, nil
@@ -278,7 +285,8 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	}, true
 }
 
-// Send implements transport.Transport. The Markdown text is sent with
+// Send implements transport.Transport. A message with Ack answers that
+// button press with its Text as a toast. The Markdown text is sent with
 // entities, and Buttons as an inline keyboard; a message with Edit
 // changes that message instead (editMessageText, or editMessageReplyMarkup
 // for an Edit without Text), where "not modified" counts as done. A 429 becomes transport.RetryAfterError; 400 and 403
@@ -289,6 +297,9 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 	chat, thread, err := ParseConv(msg.Conv)
 	if err != nil {
 		return fmt.Errorf("%w: %w", err, transport.ErrPermanent)
+	}
+	if msg.Ack != "" {
+		return sendError(t.ack(ctx, msg.Ack, msg.Text))
 	}
 	if msg.Edit != "" && msg.Text == "" {
 		return sendError(t.editButtons(ctx, chat, msg.Edit, msg.Buttons))

@@ -63,6 +63,10 @@ type Outgoing struct {
 	// sending a new one; its buttons are replaced by Buttons (none removes
 	// them). An Edit without Text changes only the buttons.
 	Edit string `json:",omitempty"`
+	// Ack is a Decision.Query: the message acknowledges that press with
+	// Text as a short notice (a Telegram toast) and changes no message
+	// (ruling R40).
+	Ack string `json:",omitempty"`
 }
 
 // Button is one button under a message. ID is opaque to the transport and

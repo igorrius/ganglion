@@ -11,7 +11,8 @@ import (
 
 // Sink receives events from a transport. A transport must not advance its
 // own offset (for example the Telegram update offset) until Sink has
-// returned nil: the event is then durably in the inbox (R-DLV-2).
+// returned nil, or an error wrapping ErrDropped: the event is then durably
+// in the inbox, or deliberately not kept (R-DLV-2).
 type Sink func(context.Context, event.Event) error
 
 // Transport is a channel to people or devices.

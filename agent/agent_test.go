@@ -164,6 +164,30 @@ type env struct {
 	jobs       jobs
 	personaErr error
 	names      map[string]string // the access list's names by principal
+	early      *enqueued         // what the agent stored in the outbox before a turn's end
+}
+
+// enqueued is an outbox that records what is stored in it.
+type enqueued struct {
+	mu   sync.Mutex
+	msgs []event.Outgoing
+	err  error
+}
+
+func (q *enqueued) Enqueue(_ context.Context, msgs ...event.Outgoing) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.err != nil {
+		return q.err
+	}
+	q.msgs = append(q.msgs, msgs...)
+	return nil
+}
+
+func (q *enqueued) got() []event.Outgoing {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return append([]event.Outgoing(nil), q.msgs...)
 }
 
 func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
@@ -183,7 +207,7 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 		t.Fatal(err)
 	}
 	e := &env{db: db, logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0, admin: true, jobs: jobs{},
-		names: map[string]string{"telegram:user:42": "Igor Artasevych"}}
+		names: map[string]string{"telegram:user:42": "Igor Artasevych"}, early: &enqueued{}}
 	e.router, err = rules.New([]router.Model{
 		{Provider: "p1", Name: "smart", Tier: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 2}},
 		{Provider: "p2", Name: "cheap", Tier: "cheap", Caps: router.ModelCaps{Tools: true}},
@@ -207,6 +231,7 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 			return "telegram", "telegram:" + id, ok
 		}},
 		Names:   func(_ context.Context, p string) (string, error) { return e.names[p], nil },
+		Outbox:  e.early,
 		Now:     func() time.Time { return e.now },
 		Persona: func() (string, error) { return e.persona, e.personaErr },
 		Log:     slog.New(slog.NewTextHandler(e.logs, nil)),

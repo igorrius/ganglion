@@ -59,6 +59,9 @@ type Deps struct {
 	// the owner confirmed runs without it: it was decided (ADR-0032).
 	Policy  tool.Middleware
 	Pending Confirmations // calls awaiting the owner and their buttons
+	// Outbox takes a press's acknowledgement before the pressed action
+	// runs (ruling R40).
+	Outbox Enqueuer
 	// QuickActions run quick-action buttons by their action name; tools
 	// register them (schedule.details, schedule.delete, schedule.run_now).
 	QuickActions map[string]pending.QuickAction

@@ -73,22 +73,31 @@ func (a *Agent) dropStalePending(ctx context.Context, t *turn) (bool, error) {
 	return false, nil
 }
 
-// pressed handles a press: a refused one at most edits the message; a
-// quick action edits it; a confirmation runs or declines the call and
-// resumes the conversation.
+// pressed handles a press: a refused one gets a toast saying why and at
+// most an edit of the message; a quick action edits it; a confirmation
+// runs or declines the call and resumes the conversation. A valid press
+// is acknowledged before its action runs (ruling R40).
 func (a *Agent) pressed(ctx context.Context, t *turn) error {
 	t.record.Outcome = turns.OutcomeCommand
 	p, err := a.d.Pending.Press(ctx, t.decision.Button, pending.By{Principal: t.msg.From, Conv: t.event.Conv, Event: t.event.ID})
 	switch {
-	case errors.Is(err, pending.ErrNotYours), errors.Is(err, pending.ErrNotFound):
+	case errors.Is(err, pending.ErrNotYours):
 		a.log.Info("agent: press refused", "conv", t.event.Conv, "principal", t.msg.From, "err", err)
+		t.toast(toastNotYours)
+		return nil
+	case errors.Is(err, pending.ErrNotFound):
+		a.log.Info("agent: press refused", "conv", t.event.Conv, "principal", t.msg.From, "err", err)
+		t.toast(toastNoButton)
 		return nil
 	case errors.Is(err, pending.ErrUsed) && p.Item.ID == "":
+		t.toast(toastUsed)
 		return nil // a quick button tapped twice: the first tap's edit stands
 	case errors.Is(err, pending.ErrUsed):
+		t.toast(toastUsed)
 		t.closeButtons(p.Item.Question, usedLine(p))
 		return nil
 	case errors.Is(err, pending.ErrExpired):
+		t.toast(toastExpired)
 		t.closeButtons(p.Item.Question, lineExpired)
 		return nil
 	case err != nil:
@@ -104,6 +113,8 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 // the answer a press gave, or that it expired.
 func usedLine(p pending.Press) string {
 	switch {
+	case p.Answer == pending.ActionApprove && p.Item.Status == pending.StatusDone:
+		return approvedLine(p.Item.Result)
 	case p.Answer == pending.ActionApprove:
 		return lineApproved
 	case p.Answer == pending.ActionDeny:
@@ -143,14 +154,17 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 	}
 	if !t.admin {
 		a.log.Info("agent: quick action refused: not an admin", "action", b.Action, "principal", t.msg.From)
+		t.toast(toastNotAllowed)
 		return nil
 	}
 	run, ok := a.d.QuickActions[b.Action]
 	if !ok {
 		a.log.Warn("agent: no quick action", "action", b.Action, "conv", t.event.Conv)
+		t.toast(toastNoButton)
 		t.closeButtons("", "")
 		return nil
 	}
+	a.acknowledge(ctx, t, toastAccepted, "", "")
 	e, err := run(ctx, pending.QuickPress{Button: b, Transport: t.event.Source, Event: t.event.ID})
 	if err != nil {
 		return fmt.Errorf("agent: quick action %s: %w", b.Action, err)
@@ -172,8 +186,9 @@ func (t *turn) note(text string) {
 	t.state.Last = t.now
 }
 
-// confirmed runs an approved call or declines a denied one, stores the
-// outcome, edits the question and resumes the conversation with it. A
+// confirmed acknowledges the press, runs an approved call or declines a
+// denied one, stores the outcome, edits the question and resumes the
+// conversation with it. A
 // rerun (the outcome is stored) does not run the call again. A call the
 // conversation does not wait for (a quick action asked it, or the
 // session moved on) is closed without a model turn.
@@ -181,16 +196,23 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 	if err := a.setAdmin(ctx, t); err != nil {
 		return err
 	}
+	if action == pending.ActionApprove {
+		a.acknowledge(ctx, t, toastApproved, it.Question, lineRunning)
+	} else {
+		a.acknowledge(ctx, t, toastDeclined, it.Question, lineDeclined)
+	}
 	o, err := a.decide(ctx, t, it, action)
 	if err != nil {
 		return err
 	}
 	line := lineDeclined
 	if action == pending.ActionApprove {
-		line = lineApproved
+		line = approvedLine(o.Result)
 	}
+	// The call's messages, then the question with how it ended (ruling
+	// R40); again on a rerun: the outbox keeps one per key.
+	t.out = append(t.out, o.Out...)
 	t.edit(answered(it.Question, line))
-	t.out = append(t.out, o.Out...) // again on a rerun: the outbox keeps one per key
 	if !slices.Contains(t.state.Pending, it.ID) {
 		return nil
 	}
@@ -233,7 +255,7 @@ func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pendi
 	res, err := a.journalled(journal.DecisionApproved, a.d.Tools.Run)(ctx, c)
 	if err != nil {
 		// A failed call can still carry messages, as in runTool.
-		return pending.Outcome{Result: "error: " + err.Error(), Out: res.Out}
+		return pending.Outcome{Result: errorPrefix + err.Error(), Out: res.Out}
 	}
 	return pending.Outcome{Result: res.Text, External: a.external(it.Tool, res.External), Out: res.Out}
 }
@@ -268,7 +290,7 @@ func (a *Agent) refuseBadArgs(ctx context.Context, c tool.Call) (pending.Outcome
 	err = fmt.Errorf("agent: %s: %w", c.Name, err)
 	refuse := func(context.Context, tool.Call) (tool.Result, error) { return tool.Result{}, err }
 	_, _ = a.journalled(journal.DecisionForbidden, refuse)(ctx, c)
-	return pending.Outcome{Result: "error: " + err.Error()}, true
+	return pending.Outcome{Result: errorPrefix + err.Error()}, true
 }
 
 // journalled is f behind tracing and the journal, with decision d: the

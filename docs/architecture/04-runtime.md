@@ -46,6 +46,9 @@ reply is possible (R-DLV-5).
 A call that needs the owner's confirmation does not hold its turn open:
 the turn ends with the call parked, and the press is a new event that
 resumes the conversation ([ADR-0032](../adr/0032-buttons-and-resume.md)).
+The press is acknowledged before its action runs (ruling R40); a press
+that becomes no event, or that the access list drops, the transport
+answers itself.
 
 ```mermaid
 sequenceDiagram
@@ -64,10 +67,11 @@ sequenceDiagram
     A->>Q: Complete(question, reply, Pending += id)
     Q-->>TG: question with buttons c:<id>
     TG->>T: callback_query
-    T->>TG: answerCallbackQuery
-    T->>Q: Put(decision, idemKey = update_id)
+    T->>Q: Put(decision, idemKey = update_id, query id)
     A->>Q: Lease
     A->>D: Press (one-time, principal, chat, expiry)
+    A->>Q: Enqueue(toast "Approved", edit "⏳ Approved, running…")
+    Q-->>TG: answerCallbackQuery(text), editMessageText (no buttons)
     alt approve
         A->>X: stored call, same key, journal "approved", no policy
         X-->>A: result
@@ -76,7 +80,7 @@ sequenceDiagram
     end
     A->>D: Decide(done, result)
     A->>A: model on "[confirmation] tool: result"
-    A->>Q: Complete(edit "Approved.", answer)
+    A->>Q: Complete(the call's messages, edit "Approved. Done.", answer)
     Note over D,Q: unanswered: the expirer puts tool.result every 30 s, same resume with "expired"
 ```
 

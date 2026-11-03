@@ -12,6 +12,12 @@ import (
 // outbox sender then gives up on the message and moves the conversation on.
 var ErrPermanent = errors.New("transport: permanent failure")
 
+// ErrDropped is what a Sink returns, wrapped, for an event it chose not
+// to keep, such as a stranger's message or press (the access list). The
+// transport confirms the update as if it were stored, and answers a
+// press itself, since no handler will.
+var ErrDropped = errors.New("transport: event dropped")
+
 // RetryAfterError is returned when the channel asks the sender to wait
 // (Telegram's 429 with retry_after). The sender pauses the whole transport
 // for After and does not count it as a failed attempt.

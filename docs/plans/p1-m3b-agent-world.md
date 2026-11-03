@@ -145,7 +145,8 @@ ADRs:
 | Call key (R-DLV-6) | `<event id>:<call number>`; the call number counts calls within the turn from 1 | `01JD…:2` |
 | Pending call id | ULID; the request cell id is `request.call.<pending id in lower case>`, following the cell id rule (lower case, dot-separated) | `request.call.01jd…` |
 | Callback data | `c:<button id>`, where the button id is a random 16-byte base32 string, 26 chars | `c:3J7Q…` |
-| Decision event | `Kind "decision"`, `Source` = the transport, `Conv` = the conversation of the button, payload `{"button":"<id>","from":"<principal>","ref":"<message ref>"}` | — |
+| Decision event | `Kind "decision"`, `Source` = the transport, `Conv` = the conversation of the button, payload `{"button":"<id>","from":"<principal>","ref":"<message ref>","query":"<press id>"}`; `query` (the callback query id, R40) is left out by a channel without one | — |
+| Press feedback (R40) | stored early, before the action: the toast `<press IdemKey>:ack` (`Outgoing.Ack` = the press id) and the status edit `<press IdemKey>:status`; with the turn: the final edit `<press IdemKey>:edit` | — |
 | Resume event | `Kind "tool.result"`, payload `{"pending":"<id>","status":"approved\|denied\|expired"}` | — |
 | Schedule event | `Kind "schedule"`, `Source "cron"`, `IdemKey "cron:<job id>:<scheduled unix ms>"`; a run now `"cron:<job id>:now:<token>"`, where the token is the confirmed call's key or the press's event id (R14), `Conv "task:<job id>"` for tasks or the owner's conv for reminders | `cron:01JD…:1793…` |
 | Agent state | `v:2`: v1 plus `"tainted":true\|false` and `"pending":["<id>",…]`; v1 is read as untainted with no pending calls | — |
@@ -451,7 +452,10 @@ It records the callback abuse cases of design 5.2.
     `Kind decision` with
     `IdemKey "telegram:<bot>:<update_id>"`;
   - the transport answers `answerCallbackQuery` at once (no text), so the
-    client stops its spinner;
+    client stops its spinner; since the live-run fixes (R40) only for a
+    press that becomes no event or that the sink drops, while the agent
+    answers the others with a toast (`Outgoing.Ack`) before the action
+    runs;
   - `Send` with `Buttons` sets `reply_markup.inline_keyboard`;
   - `Send` with `Edit` calls `editMessageText` with the same rendering
     and an empty keyboard. A `400 message is not modified` counts as

@@ -26,6 +26,10 @@ type Decision struct {
 	From   string `json:"from"`           // principal who pressed
 	Name   string `json:"name,omitempty"` // display name
 	Ref    string `json:"ref,omitempty"`  // the message holding the button, for an Edit
+	// Query is the channel's id of this press, for an Outgoing.Ack: the
+	// handler acknowledges the press with a short notice (ruling R40).
+	// "" when the channel has none.
+	Query string `json:"query,omitempty"`
 }
 
 // ToolResult is the payload of an event of kind "tool.result": a pending

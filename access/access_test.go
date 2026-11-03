@@ -16,6 +16,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
+	"github.com/igorrius/ganglion/transport"
 )
 
 var t0 = time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
@@ -112,8 +113,8 @@ func TestFilterDropsStranger(t *testing.T) {
 	r := &recorder{}
 	sink := l.Filter(r.sink, slog.New(slog.NewJSONHandler(&logs, nil)))
 	const secret = "my card number is 4111"
-	if err := sink(context.Background(), message("telegram:user:666", "Stranger", secret)); err != nil {
-		t.Fatalf("Filter returned %v, want nil so the offset moves on", err)
+	if err := sink(context.Background(), message("telegram:user:666", "Stranger", secret)); !errors.Is(err, transport.ErrDropped) {
+		t.Fatalf("Filter returned %v, want ErrDropped so the offset moves on", err)
 	}
 	if len(r.got) != 0 {
 		t.Fatal("a stranger's message reached the inbox")
@@ -146,7 +147,8 @@ func TestFilterDropsStrangersPress(t *testing.T) {
 		p, _ := json.Marshal(event.Decision{Button: "01JCQ4ZK7Y3V8M2N6P9R5T1W0X", From: from, Ref: "17"})
 		return event.Event{ID: "01Z", IdemKey: "telegram:7001:9", Source: "telegram", Conv: "telegram:42", Kind: event.KindDecision, Payload: p, At: t0}
 	}
-	if err := sink(ctx, press("telegram:user:666")); err != nil || len(r.got) != 0 {
+	// Dropped, so the transport answers the press itself (ruling R40).
+	if err := sink(ctx, press("telegram:user:666")); !errors.Is(err, transport.ErrDropped) || len(r.got) != 0 {
 		t.Fatalf("stranger's press: err=%v passed=%d", err, len(r.got))
 	}
 	if err := sink(ctx, press("telegram:user:1")); err != nil || len(r.got) != 1 {
@@ -160,7 +162,7 @@ func TestFilterDropsMalformedMessage(t *testing.T) {
 	sink := l.Filter(r.sink, slog.New(slog.DiscardHandler))
 	e := message("telegram:user:1", "", "")
 	e.Payload = json.RawMessage(`not json`)
-	if err := sink(context.Background(), e); err != nil || len(r.got) != 0 {
+	if err := sink(context.Background(), e); !errors.Is(err, transport.ErrDropped) || len(r.got) != 0 {
 		t.Fatalf("malformed payload: err=%v passed=%d", err, len(r.got))
 	}
 }

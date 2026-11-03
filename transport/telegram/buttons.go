@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	txt "github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/transport"
 )
 
@@ -31,9 +32,14 @@ const answerTimeout = 5 * time.Second
 // message already shows it, so the edit is done.
 const notModified = "message is not modified"
 
+// maxToastRunes is the longest notice answerCallbackQuery shows.
+const maxToastRunes = 200
+
 // answerCallback answers a button press at once and without text, so the
-// person's client stops its spinner. Every press is answered, also one
-// that becomes no event or that the sink drops; a failure is only logged.
+// person's client stops its spinner: a press that becomes no event, or
+// whose event the sink dropped (a stranger's). A press that became an
+// event is answered by its handler, with a toast (Send with Ack, ruling
+// R40). A failure is only logged.
 func (t *Transport) answerCallback(ctx context.Context, u update) {
 	cq := u.CallbackQuery
 	if cq == nil {
@@ -41,9 +47,21 @@ func (t *Transport) answerCallback(ctx context.Context, u update) {
 	}
 	actx, cancel := context.WithTimeout(ctx, answerTimeout)
 	defer cancel()
-	if err := t.c.answerCallbackQuery(actx, cq.ID); err != nil && ctx.Err() == nil {
+	if err := t.c.answerCallbackQuery(actx, cq.ID, ""); err != nil && ctx.Err() == nil {
 		t.log.Debug("telegram: callback not answered", "update_id", u.UpdateID, "err", err)
 	}
+}
+
+// ack answers press id with text as a toast. Telegram refuses a press
+// too old to answer, or answered already, with 400: nothing more can be
+// done, so that is done, not a failure.
+func (t *Transport) ack(ctx context.Context, id, text string) error {
+	err := t.c.answerCallbackQuery(ctx, id, txt.Truncate(text, maxToastRunes-1))
+	if ae, ok := errors.AsType[*apiError](err); ok && ae.Code == http.StatusBadRequest {
+		t.log.Debug("telegram: press not acknowledged", "err", err)
+		return nil
+	}
+	return err
 }
 
 // decisionEvent turns a press of one of our buttons into a KindDecision
@@ -71,6 +89,7 @@ func (t *Transport) decisionEvent(botID int64, u update) (event.Event, bool) {
 		From:   Principal(cq.From.ID),
 		Name:   strings.TrimSpace(cq.From.FirstName + " " + cq.From.LastName),
 		Ref:    strconv.FormatInt(m.MessageID, 10),
+		Query:  cq.ID,
 	})
 	if err != nil {
 		return event.Event{}, false // a struct of strings always marshals

@@ -94,11 +94,35 @@ How it works:
   buttons. A button id is 26
   characters of Crockford base32 from 16 random bytes; callback data is
   `c:<id>`.
-- The Telegram transport asks for `callback_query` updates, answers each
-  at once (`answerCallbackQuery`, even a refused one), and turns a press
-  of `c:<id>` into an event `decision` with the update's key
-  `telegram:<bot>:<update_id>`. The access list drops a stranger's press
-  like a stranger's message.
+- The Telegram transport asks for `callback_query` updates and turns a
+  press of `c:<id>` into an event `decision` with the update's key
+  `telegram:<bot>:<update_id>` and the callback query's id (`query`). The
+  access list drops a stranger's press like a stranger's message, with
+  `transport.ErrDropped`. The transport answers at once, without text
+  (`answerCallbackQuery`), only a press that becomes no event or whose
+  event is dropped; the handler answers the others, with a toast.
+- **Feedback on a press** (ruling R40). The live run showed that a press
+  had no visible effect until its action ended, and the buttons stayed
+  pressable meanwhile. A valid press is acknowledged before its action
+  runs: the agent stores in the outbox, at once and outside the turn's
+  final transaction (`Enqueue`), a toast ("Approved", "Declined",
+  "Accepted"; an `Outgoing` with `Ack`, the press's id) and, for a
+  question, an edit that replaces its buttons with a status line
+  ("⏳ Approved, running…"). The outbox sender is woken by the store and
+  delivers them while the action runs; the turn's own messages follow in
+  the same conversation's order: the call's messages, then the final
+  edit with the outcome ("Approved. Done.", "Approved, but it failed.",
+  "Declined."), then the model's answer. The keys are the press's
+  (`:ack`, `:status`, `:edit`), so a rerun of the press stores nothing
+  twice. A press that does not take keeps its handling and gets a toast
+  saying why ("This button is not yours.", "Expired.", "Already
+  handled.", "This button no longer works.", "Not allowed."). Two other
+  ways were weighed: the transport answering every press itself cannot
+  say whether the press took, which only the pending store knows; and
+  the agent calling the transport directly for the early edit would
+  bypass the outbox's order and retries, so the status line could land
+  after the final edit. Storing the early messages in the outbox keeps
+  one delivery path and its order per conversation.
 - The agent's first stage handles `decision`: `Press` marks the button
   used in one immediate transaction, checks the presser and the chat,
   moves the call from waiting to approved or denied and spends the other
@@ -132,15 +156,20 @@ The abuse cases:
 1. **Forged or replayed button:** the data is only a random one-time id;
    the tool and its arguments are in SQLite, fixed when the button was
    made. An unknown id does nothing.
-2. **Someone else presses:** the access list drops strangers; `Press`
-   accepts only the principal the button was made for, in the chat it
-   was sent to (`ErrNotYours`: nothing happens, nothing is edited).
+2. **Someone else presses:** the access list drops strangers (the
+   transport answers the press without text); `Press` accepts only the
+   principal the button was made for, in the chat it was sent to
+   (`ErrNotYours`: nothing happens, nothing is edited, the presser sees
+   "This button is not yours.").
 3. **Late press:** a button expires with its question; a late press
-   edits the message to "Expired." and runs nothing.
+   edits the message to "Expired.", shows the toast "Expired." and runs
+   nothing.
 4. **Double press:** the inbox drops a redelivered update by its key;
-   two different updates race on `Press`, which lets one through and
-   edits the question for the other to how it really ended ("Approved."
-   or "Declined."; a quick-action button tapped twice leaves the first
+   the first press replaces the buttons with a status line before its
+   call runs, so a second press is rare; two different updates race on
+   `Press`, which lets one through and, with the toast "Already handled.",
+   edits the question for the other to how it really ended ("Approved.
+   Done." or "Declined."; a quick-action button tapped twice leaves the first
    tap's edit, and its new buttons, alone); a rerun of the same event gets
    the same press back and finds the outcome stored, so the call runs
    once. A crash between running the call and storing its outcome reruns
@@ -191,6 +220,14 @@ The abuse cases:
   the owner. A call parked in a resumed turn stores its depth, one more
   than the call that turn resumed, and the policy's depth limit
   (R-AGT-4, 3 by default) ends a chain of approvals that keeps asking.
+
+- The early toast and status line are stored outside the turn's final
+  transaction: a turn that fails after them leaves the status line until
+  its retry or its give-up apology. A press that waits behind a long turn
+  of its conversation (one turn at a time) is acknowledged only when its
+  own turn starts; Telegram refuses a toast for a press that old, which
+  the transport counts as done, and the client's spinner stops by
+  itself.
 
 ## Revisit when
 

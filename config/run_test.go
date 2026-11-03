@@ -283,3 +283,68 @@ func TestAgentOverTelegram(t *testing.T) {
 		t.Fatalf("the admin was offered %q", got)
 	}
 }
+
+// A press over the real core and the fake Bot API (ruling R40): the toast
+// and the status line reach Telegram first, then the approved call's
+// message, then the question's final line, then the model's answer. A
+// second press of the same button gets a toast and runs nothing again.
+func TestPressFeedbackOrderOverTelegram(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	model := providertest.NewServer(t, "sk-test")
+	model.CallTool("message.send", `{"conv":"telegram:user:42","text":"the effect"}`)
+	model.Reply("I asked you.")
+	model.Reply("Sent.")
+	catalog, err := rules.LoadCatalog(strings.NewReader("providers:\n  - {name: or, type: openai, base_url: " + model.URL() +
+		", key_env: OR_KEY}\nmodels:\n  - {provider: or, name: m1, tier: smart, tools: true, context: 64000}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := testConfig(t)
+	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
+	cfg.Agent = AgentSettings{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, DailyBudgetUSD: 1, TZ: time.UTC,
+		Workspace: t.TempDir()}
+	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
+
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Name: "Igor", Text: "send me a note"})
+	eventually(t, "the question", func() bool { return len(fake.Sent()) == 2 })
+	var question telegramtest.Shown
+	for _, m := range fake.Showing() {
+		if m.Keyboard != "" {
+			question = m
+		}
+	}
+	var rows [][]struct {
+		Text string `json:"text"`
+		Data string `json:"callback_data"`
+	}
+	if err := json.Unmarshal([]byte(question.Keyboard), &rows); err != nil || len(rows) != 2 || rows[0][0].Text != "Approve" {
+		t.Fatalf("question %+v: %v", question, err)
+	}
+	before := len(fake.Methods())
+	fake.AddCallback(telegramtest.Callback{ChatID: 42, UserID: 42, Name: "Igor", MessageID: question.MessageID, Data: rows[0][0].Data})
+	eventually(t, "the model's answer", func() bool { return len(fake.Sent()) == 4 })
+	var did []string
+	for _, m := range fake.Methods()[before:] {
+		if m != "sendChatAction" {
+			did = append(did, m)
+		}
+	}
+	want := "answerCallbackQuery,editMessageText,sendMessage,editMessageText,sendMessage"
+	if got := strings.Join(did, ","); got != want {
+		t.Fatalf("Bot API calls %s, want %s", got, want)
+	}
+	edits, sent := fake.Edits(), fake.Sent()
+	if toasts := fake.Toasts(); len(toasts) != 1 || toasts[0].Text != "Approved" {
+		t.Fatalf("toasts %+v", toasts)
+	}
+	if !strings.HasSuffix(edits[0].Text, "⏳ Approved, running…") || edits[0].Keyboard != "" ||
+		!strings.HasSuffix(edits[1].Text, "Approved. Done.") || sent[2].Text != "the effect" || sent[3].Text != "Sent." {
+		t.Fatalf("edits %+v, sent %+v", edits, sent)
+	}
+	// A double press: a toast, nothing runs again.
+	fake.AddCallback(telegramtest.Callback{ChatID: 42, UserID: 42, Name: "Igor", MessageID: question.MessageID, Data: rows[0][0].Data})
+	eventually(t, "the second toast", func() bool { return len(fake.Toasts()) == 2 })
+	if got := fake.Toasts()[1].Text; got != "Already handled." || len(fake.Sent()) != 4 {
+		t.Fatalf("second press: toast %q, sent %d", got, len(fake.Sent()))
+	}
+}

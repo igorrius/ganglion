@@ -70,12 +70,20 @@ func (t *turn) edit(text string) { t.editWith(pending.QuickEdit{Text: text}) }
 // editWith changes the message holding the pressed button to e's text and
 // buttons. A turn edits once, so the key is fixed.
 func (t *turn) editWith(e pending.QuickEdit) {
+	if o, ok := t.editOut(":edit", e); ok {
+		t.out = append(t.out, o)
+	}
+}
+
+// editOut is the edit of the message holding the pressed button, keyed by
+// the press and suffix; false when the press names no message.
+func (t *turn) editOut(suffix string, e pending.QuickEdit) (event.Outgoing, bool) {
 	if t.decision.Ref == "" {
-		return
+		return event.Outgoing{}, false
 	}
 	ev := t.event
-	t.out = append(t.out, event.Outgoing{IdemKey: ev.IdemKey + ":edit", Transport: ev.Source, Conv: ev.Conv, Text: e.Text,
-		Buttons: e.Buttons, Edit: t.decision.Ref})
+	return event.Outgoing{IdemKey: ev.IdemKey + suffix, Transport: ev.Source, Conv: ev.Conv, Text: e.Text,
+		Buttons: e.Buttons, Edit: t.decision.Ref}, true
 }
 
 // stage does one step of a turn; done ends the turn early. An error

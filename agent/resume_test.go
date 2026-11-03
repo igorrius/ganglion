@@ -3,7 +3,9 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -66,7 +68,7 @@ func newConfirmEnvOn(t *testing.T, e *env, hs ...tool.Handler) *confirmEnv {
 // press is a decision event: from pressed button in the message ref.
 func press(from, button, ref string) event.Event {
 	seq++
-	p, _ := json.Marshal(event.Decision{Button: button, From: from, Name: "Igor", Ref: ref})
+	p, _ := json.Marshal(event.Decision{Button: button, From: from, Name: "Igor", Ref: ref, Query: fmt.Sprintf("cq%d", seq)})
 	return event.Event{ID: fmt.Sprintf("01PR%04d", seq), IdemKey: fmt.Sprintf("telegram:7001:%d", seq), Source: "telegram",
 		Conv: "telegram:42", Kind: event.KindDecision, Payload: p, At: t0}
 }
@@ -127,8 +129,13 @@ func findOut(out []event.Outgoing, pred func(event.Outgoing) bool) (event.Outgoi
 	return event.Outgoing{}, false
 }
 
+// noAcks is out without the toasts that answer presses (ruling R40).
+func noAcks(out []event.Outgoing) []event.Outgoing {
+	return slices.DeleteFunc(slices.Clone(out), func(o event.Outgoing) bool { return o.Ack != "" })
+}
+
 func isEdit(o event.Outgoing) bool  { return o.Edit != "" }
-func isReply(o event.Outgoing) bool { return o.Edit == "" && len(o.Buttons) == 0 }
+func isReply(o event.Outgoing) bool { return o.Edit == "" && o.Ack == "" && len(o.Buttons) == 0 }
 
 func TestConfirmThenApproveResumes(t *testing.T) {
 	side := newSideTool()
@@ -151,7 +158,7 @@ func TestConfirmThenApproveResumes(t *testing.T) {
 		t.Fatalf("calls %+v", side.calls)
 	}
 	edit, ok := findOut(out, isEdit)
-	if !ok || edit.Edit != "77" || !strings.HasPrefix(edit.Text, q.Text) || !strings.HasSuffix(edit.Text, "Approved.") || len(edit.Buttons) != 0 {
+	if !ok || edit.Edit != "77" || !strings.HasPrefix(edit.Text, q.Text) || !strings.HasSuffix(edit.Text, "Approved. Done.") || len(edit.Buttons) != 0 {
 		t.Fatalf("edit %+v in %+v", edit, out)
 	}
 	reply, ok := findOut(out, isReply)
@@ -237,7 +244,7 @@ func TestPressNotYoursDoesNothing(t *testing.T) {
 	q, _ := e.ask(t, "schedule.create")
 	calls := len(e.smart.requests())
 	for _, ev := range []event.Event{press("telegram:user:7", q.Buttons[0].ID, "77"), press(owner, "NOSUCHBUTTON00000000000000", "77")} {
-		if out := e.turn(t, ev); len(out) != 0 {
+		if out := noAcks(e.turn(t, ev)); len(out) != 0 {
 			t.Fatalf("out %+v", out)
 		}
 	}
@@ -257,8 +264,8 @@ func TestSecondPressShowsTheRealOutcome(t *testing.T) {
 		first, second int
 		want          string
 	}{
-		"approve, then deny": {0, 1, "Approved."},
-		"approve twice":      {0, 0, "Approved."},
+		"approve, then deny": {0, 1, "Approved. Done."},
+		"approve twice":      {0, 0, "Approved. Done."},
 		"deny, then approve": {1, 0, "Declined."},
 		"deny twice":         {1, 1, "Declined."},
 	} {
@@ -267,7 +274,7 @@ func TestSecondPressShowsTheRealOutcome(t *testing.T) {
 		q, _ := e.ask(t, "schedule.create")
 		e.turn(t, press(owner, q.Buttons[tc.first].ID, "77"))
 		calls, ran := len(e.smart.requests()), len(side.calls)
-		out := e.turn(t, press(owner, q.Buttons[tc.second].ID, "77"))
+		out := noAcks(e.turn(t, press(owner, q.Buttons[tc.second].ID, "77")))
 		if len(out) != 1 || out[0].Edit != "77" || out[0].Text != q.Text+"\n\n"+tc.want || len(out[0].Buttons) != 0 {
 			t.Errorf("%s: out %+v", name, out)
 		}
@@ -290,10 +297,10 @@ func TestSecondTapOfAQuickButtonKeepsTheFirstEdit(t *testing.T) {
 	if err := e.pending.AddButtons(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	if out := e.turn(t, press(owner, b.ID, "90")); len(out) != 1 || len(out[0].Buttons) != 1 {
+	if out := noAcks(e.turn(t, press(owner, b.ID, "90"))); len(out) != 1 || len(out[0].Buttons) != 1 {
 		t.Fatalf("first tap %+v", out)
 	}
-	if out := e.turn(t, press(owner, b.ID, "90")); len(out) != 0 {
+	if out := noAcks(e.turn(t, press(owner, b.ID, "90"))); len(out) != 0 {
 		t.Fatalf("the second tap edited the message: %+v", out)
 	}
 }
@@ -314,7 +321,7 @@ func TestQuickActionNeedsAnAdminAtPressTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.admin = false
-	if out := e.turn(t, press(owner, b.ID, "90")); len(out) != 0 || ran != 0 {
+	if out := noAcks(e.turn(t, press(owner, b.ID, "90"))); len(out) != 0 || ran != 0 {
 		t.Fatalf("a former admin's press: out %+v, ran %d", out, ran)
 	}
 }
@@ -324,7 +331,7 @@ func TestLatePressSaysExpired(t *testing.T) {
 	e := newConfirmEnv(t, side)
 	q, _ := e.ask(t, "schedule.create")
 	e.now = e.now.Add(pending.DefaultTTL)
-	out := e.turn(t, press(owner, q.Buttons[0].ID, "77"))
+	out := noAcks(e.turn(t, press(owner, q.Buttons[0].ID, "77")))
 	if len(out) != 1 || !strings.HasSuffix(out[0].Text, "Expired.") || len(side.calls) != 0 {
 		t.Fatalf("out %+v, calls %d", out, len(side.calls))
 	}
@@ -493,7 +500,7 @@ func TestRefusedQuickPressKeepsTheText(t *testing.T) {
 	unknown := mk("test.gone", e.now.Add(time.Hour))
 	e.now = e.now.Add(2 * time.Minute)
 	for name, b := range map[string]pending.Button{"expired": late, "no action": unknown} {
-		out := e.turn(t, press(owner, b.ID, "90"))
+		out := noAcks(e.turn(t, press(owner, b.ID, "90")))
 		if len(out) != 1 || out[0].Edit != "90" || out[0].Text != "" || len(out[0].Buttons) != 0 {
 			t.Errorf("%s: out %+v, want an edit of the buttons only", name, out)
 		}
@@ -557,7 +564,7 @@ func TestApprovedQuickQuestionDoesNotResumeTheModel(t *testing.T) {
 	if len(side.calls) != 1 || side.calls[0].Key() != "BUTTON1:1" || !side.calls[0].Admin {
 		t.Fatalf("calls %+v", side.calls)
 	}
-	if len(out) != 1 || out[0].Edit != "91" || out[0].Text != "Run the task now?\n\nApproved." || len(e.smart.requests()) != 0 {
+	if len(out) != 1 || out[0].Edit != "91" || out[0].Text != "Run the task now?\n\nApproved. Done." || len(e.smart.requests()) != 0 {
 		t.Fatalf("out %+v", out)
 	}
 }
@@ -781,5 +788,158 @@ func TestQuickActionNoteJoinsTheHistory(t *testing.T) {
 	}
 	if knownURLs(e.state(t).Messages).has("https://bank.example/x") {
 		t.Fatal("an address in a button note became known")
+	}
+}
+
+// queryOf is the press's callback query id.
+func queryOf(t *testing.T, ev event.Event) string {
+	t.Helper()
+	var d event.Decision
+	if err := json.Unmarshal(ev.Payload, &d); err != nil {
+		t.Fatal(err)
+	}
+	return d.Query
+}
+
+// watchTool is a side-effect tool that, when it runs, records what the
+// outbox held then, and sends a message.
+type watchTool struct {
+	sideTool
+	early *enqueued
+	seen  []event.Outgoing
+}
+
+func (w *watchTool) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
+	w.seen = w.early.got()
+	_, _ = w.sideTool.Run(ctx, c)
+	return tool.Result{Text: "sent", Out: []event.Outgoing{{IdemKey: c.Key() + ":send", Transport: "telegram", Conv: "telegram:42", Text: "the effect"}}}, nil
+}
+
+// A valid press is acknowledged before the call runs: a toast and the
+// question with a status line in place of its buttons are in the outbox
+// by then. The turn's own messages are the call's effects, then the
+// final edit with the outcome, then the model's answer (ruling R40).
+func TestPressIsAcknowledgedBeforeTheCallRuns(t *testing.T) {
+	e := newConfirmEnv(t)
+	w := &watchTool{sideTool: *newSideTool(), early: e.early}
+	e = newConfirmEnvOn(t, e.env, w)
+	q, _ := e.ask(t, "schedule.create")
+	e.smart.push(say("Done."))
+	ev := press(owner, q.Buttons[0].ID, "77")
+	out := e.turn(t, ev)
+	ack := event.Outgoing{IdemKey: ev.IdemKey + ":ack", Transport: "telegram", Conv: "telegram:42", Text: "Approved", Ack: queryOf(t, ev)}
+	status := event.Outgoing{IdemKey: ev.IdemKey + ":status", Transport: "telegram", Conv: "telegram:42", Edit: "77",
+		Text: q.Text + "\n\n⏳ Approved, running…"}
+	if len(w.calls) != 1 || len(w.seen) != 2 || !reflect.DeepEqual(w.seen[0], ack) || !reflect.DeepEqual(w.seen[1], status) {
+		t.Fatalf("the outbox held %+v when the call ran", w.seen)
+	}
+	var kinds []string
+	for _, o := range out {
+		kinds = append(kinds, o.Text)
+	}
+	if len(out) != 3 || out[0].Text != "the effect" || out[1].Edit != "77" || out[1].Text != q.Text+"\n\nApproved. Done." ||
+		out[1].IdemKey != ev.IdemKey+":edit" || out[2].Text != "Done." {
+		t.Fatalf("turn out %q", kinds)
+	}
+	// A rerun of the same press stores nothing new and runs nothing again.
+	e.smart.push(say("Done."))
+	e.turn(t, ev)
+	if len(w.calls) != 1 {
+		t.Fatalf("the call ran %d times", len(w.calls))
+	}
+}
+
+// A denied call is acknowledged at once too; a failed call's final line
+// says so.
+func TestDenyAndFailureAreShown(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	q, _ := e.ask(t, "schedule.create")
+	e.smart.push(say("OK."))
+	ev := press(owner, q.Buttons[1].ID, "77")
+	e.turn(t, ev)
+	early := e.early.got()
+	if len(early) != 2 || early[0].Text != "Declined" || early[0].Ack == "" || early[1].Text != q.Text+"\n\nDeclined." {
+		t.Fatalf("early %+v", early)
+	}
+	if got := approvedLine("error: boom"); got != "Approved, but it failed." {
+		t.Fatalf("approvedLine(error) = %q", got)
+	}
+}
+
+// Presses that do not take keep today's handling, with a toast saying
+// why: someone else's (no edit), a late one and a second one; none runs
+// the call or stores anything early.
+func TestRefusedPressesGetAToast(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	q, _ := e.ask(t, "schedule.create")
+	toast := func(out []event.Outgoing) (string, bool) {
+		var text string
+		edited := false
+		for _, o := range out {
+			if o.Ack != "" {
+				text = o.Text
+			}
+			edited = edited || o.Edit != ""
+		}
+		return text, edited
+	}
+	if got, edited := toast(e.turn(t, press("telegram:user:43", q.Buttons[0].ID, "77"))); got != "This button is not yours." || edited {
+		t.Fatalf("someone else's press: toast %q, edited %v", got, edited)
+	}
+	if got, _ := toast(e.turn(t, press(owner, "UNKNOWNBUTTON0000000000000", "77"))); got != "This button no longer works." {
+		t.Fatalf("an unknown button: toast %q", got)
+	}
+	e.smart.push(say("Done."))
+	e.turn(t, press(owner, q.Buttons[0].ID, "77"))
+	n := len(e.early.got())
+	out := e.turn(t, press(owner, q.Buttons[0].ID, "77"))
+	if got, edited := toast(out); got != "Already handled." || !edited || len(side.calls) != 1 {
+		t.Fatalf("a double press: toast %q, edited %v, ran %d", got, edited, len(side.calls))
+	}
+	q2, _ := e.ask(t, "schedule.create")
+	e.now = e.now.Add(pending.DefaultTTL + time.Second)
+	out = e.turn(t, press(owner, q2.Buttons[0].ID, "78"))
+	if got, edited := toast(out); got != "Expired." || !edited || len(side.calls) != 1 {
+		t.Fatalf("a late press: toast %q, edited %v, ran %d", got, edited, len(side.calls))
+	}
+	if len(e.early.got()) != n {
+		t.Fatalf("a refused press stored early messages: %+v", e.early.got()[n:])
+	}
+}
+
+// A quick action's press gets its toast before the action runs.
+func TestQuickPressIsAcknowledgedFirst(t *testing.T) {
+	e := newConfirmEnv(t)
+	var seen []event.Outgoing
+	e.deps.QuickActions = map[string]pending.QuickAction{"test.delete": func(context.Context, pending.QuickPress) (pending.QuickEdit, error) {
+		seen = e.early.got()
+		return pending.QuickEdit{Text: "Deleted."}, nil
+	}}
+	e.a = New(overDefaults(Config{}), e.deps)
+	b := pending.Button{ID: pending.NewButtonID(), Action: "test.delete", Label: "Delete", Principal: owner, Conv: "telegram:42",
+		Args: json.RawMessage(`{}`), Expires: e.now.Add(time.Hour)}
+	if err := e.pending.AddButtons(context.Background(), b); err != nil {
+		t.Fatal(err)
+	}
+	ev := press(owner, b.ID, "90")
+	e.turn(t, ev)
+	if len(seen) != 1 || seen[0].Ack != queryOf(t, ev) || seen[0].Text != "Accepted" || seen[0].IdemKey != ev.IdemKey+":ack" {
+		t.Fatalf("the outbox held %+v when the action ran", seen)
+	}
+}
+
+// The early acknowledgement is a convenience: an outbox that fails it
+// does not stop the press.
+func TestEarlyAckFailureDoesNotStopThePress(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	q, _ := e.ask(t, "schedule.create")
+	e.early.err = errors.New("disk full")
+	e.smart.push(say("Done."))
+	e.turn(t, press(owner, q.Buttons[0].ID, "77"))
+	if len(side.calls) != 1 {
+		t.Fatalf("the call ran %d times", len(side.calls))
 	}
 }

@@ -24,7 +24,7 @@ const maxTextUnits = 4096
 // message. The result depends only on msg, so a resumed sender gets the
 // same parts.
 func (t *Transport) Parts(msg event.Outgoing) []event.Outgoing {
-	if msg.Edit != "" || renderedUnits(msg.Text) <= maxTextUnits {
+	if msg.Edit != "" || msg.Ack != "" || renderedUnits(msg.Text) <= maxTextUnits {
 		return []event.Outgoing{msg}
 	}
 	chunks := splitMarkdown(msg.Text)

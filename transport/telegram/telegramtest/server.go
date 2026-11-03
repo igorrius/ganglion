@@ -73,6 +73,13 @@ type shown struct {
 	text, entities, keyboard string
 }
 
+// Toast is one answerCallbackQuery call: the press answered and the
+// notice shown with it ("" for none).
+type Toast struct {
+	ID   string
+	Text string
+}
+
 // ChatAction is one sendChatAction call.
 type ChatAction struct {
 	ChatID   int64
@@ -109,6 +116,8 @@ type Server struct {
 	messages   map[int64]map[int64]shown // chat → message id → what the bot's message shows
 	edits      []Edit
 	answered   []string // callback query ids answered
+	toasts     []Toast
+	methods    []string // every call with the right token, in order
 	nextQuery  int64
 }
 
@@ -224,6 +233,22 @@ func (s *Server) Answered() []string {
 	return append([]string(nil), s.answered...)
 }
 
+// Toasts returns the answerCallbackQuery calls with their texts, in
+// order.
+func (s *Server) Toasts() []Toast {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]Toast(nil), s.toasts...)
+}
+
+// Methods returns the Bot API methods called with the right token, in the
+// order they arrived, getUpdates and getMe left out: what the bot did.
+func (s *Server) Methods() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.methods...)
+}
+
 // Edits returns the successful edits (editMessageText and
 // editMessageReplyMarkup), in order.
 func (s *Server) Edits() []Edit {
@@ -335,6 +360,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 
 	s.mu.Lock()
 	s.calls[method]++
+	if method != "getUpdates" && method != "getMe" {
+		s.methods = append(s.methods, method)
+	}
 	if f, ok := s.fail[method]; ok {
 		delete(s.fail, method)
 		s.mu.Unlock()
@@ -359,10 +387,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case "editMessageReplyMarkup":
 		s.editMessageReplyMarkup(w, params)
 	case "answerCallbackQuery":
-		var id string
+		var id, text string
 		_ = json.Unmarshal(params["callback_query_id"], &id)
+		_ = json.Unmarshal(params["text"], &text)
 		s.mu.Lock()
 		s.answered = append(s.answered, id)
+		s.toasts = append(s.toasts, Toast{ID: id, Text: text})
 		s.mu.Unlock()
 		writeOK(w, true)
 	case "sendChatAction":

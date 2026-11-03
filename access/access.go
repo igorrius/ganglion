@@ -168,9 +168,9 @@ func (l *List) Admins(ctx context.Context) ([]string, error) {
 var fromPerson = map[event.Kind]bool{event.KindMessage: true, event.KindDecision: true}
 
 // Filter wraps next so that messages and button presses from principals
-// not on the list never reach it. A dropped event returns nil, so the
-// transport confirms it and the stranger gets no reply; it is logged
-// without its text. Other events pass through. An error reading the list
+// not on the list never reach it. A dropped event returns
+// transport.ErrDropped, so the transport confirms it, answers a press at
+// once, and the stranger gets no reply; it is logged without its text. Other events pass through. An error reading the list
 // is returned, so the transport offers the update again later.
 func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 	return func(ctx context.Context, e event.Event) error {
@@ -181,7 +181,7 @@ func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 		if err := json.Unmarshal(e.Payload, &m); err != nil || m.From == "" {
 			l.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "malformed")))
 			logger.Warn("access: malformed message dropped", "id", e.ID, "conv", e.Conv, "source", e.Source)
-			return nil
+			return fmt.Errorf("access: malformed: %w", transport.ErrDropped)
 		}
 		_, ok, err := l.Role(ctx, m.From)
 		if err != nil {
@@ -191,7 +191,7 @@ func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 			l.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "stranger")))
 			logger.Warn("access: message from a stranger dropped", "kind", e.Kind,
 				"principal", m.From, "name", m.Name, "conv", e.Conv, "text_len", len(m.Text))
-			return nil
+			return fmt.Errorf("access: stranger: %w", transport.ErrDropped)
 		}
 		return next(ctx, e)
 	}

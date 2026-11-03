@@ -240,9 +240,10 @@ func (c *client) editMessageReplyMarkup(ctx context.Context, p markupParams) err
 }
 
 // answerCallbackQuery tells Telegram a button press was received, so the
-// client stops its spinner. No text is shown.
-func (c *client) answerCallbackQuery(ctx context.Context, id string) error {
+// client stops its spinner, and shows text as a toast ("" shows none).
+func (c *client) answerCallbackQuery(ctx context.Context, id, text string) error {
 	return c.call(ctx, "answerCallbackQuery", struct {
 		CallbackQueryID string `json:"callback_query_id"`
-	}{id}, nil)
+		Text            string `json:"text,omitempty"`
+	}{id, text}, nil)
 }

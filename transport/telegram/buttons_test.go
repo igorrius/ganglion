@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
@@ -31,8 +33,13 @@ func TestCallbackBecomesDecisionEvent(t *testing.T) {
 	if err := json.Unmarshal(e.Payload, &d); err != nil {
 		t.Fatal(err)
 	}
-	if d != (event.Decision{Button: buttonID, From: "telegram:user:42", Name: "Igor", Ref: "17"}) {
+	if d != (event.Decision{Button: buttonID, From: "telegram:user:42", Name: "Igor", Ref: "17", Query: "cq1"}) {
 		t.Fatalf("decision %+v", d)
+	}
+	// A press that became an event is acknowledged by its handler, with a
+	// toast (ruling R40), not by the transport.
+	if got := fake.Answered(); len(got) != 0 {
+		t.Fatalf("the transport answered %v", got)
 	}
 	if got := fake.AllowedUpdates(); !reflect.DeepEqual(got, []string{"message", "callback_query"}) {
 		t.Fatalf("allowed_updates %v", got)
@@ -62,17 +69,48 @@ func TestForeignCallbackDataIsSkipped(t *testing.T) {
 	eventually(t, "offset past the callbacks", func() bool { return fake.Confirmed() >= last })
 }
 
-// Every callback is answered at once, so the client stops its spinner,
-// also when the sink drops it (a stranger's press) or it is not ours.
-func TestAnswerCallbackQueryCalled(t *testing.T) {
+// A press that becomes no event (not ours) and one the sink drops (a
+// stranger's, transport.ErrDropped) are answered at once without text,
+// so the client stops its spinner: no handler will answer them.
+func TestUnhandledCallbacksAreAnsweredAtOnce(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
-	drop := func(context.Context, event.Event) error { return nil }
+	c := &collector{}
+	drop := func(ctx context.Context, e event.Event) error {
+		var d event.Decision
+		_ = json.Unmarshal(e.Payload, &d)
+		if d.From == "telegram:user:7" {
+			return fmt.Errorf("stranger: %w", transport.ErrDropped)
+		}
+		return c.sink(ctx, e)
+	}
 	run(t, newTransport(t, fake), drop)
 	fake.AddCallback(telegramtest.Callback{ChatID: 42, UserID: 7, MessageID: 5, Data: "c:" + buttonID})
 	fake.AddCallback(telegramtest.Callback{ChatID: 42, UserID: 7, MessageID: 5, Data: "nonsense"})
-	eventually(t, "both answered", func() bool { return len(fake.Answered()) == 2 })
-	if got := fake.Answered(); got[0] != "cq1" || got[1] != "cq2" {
-		t.Fatalf("answered %v", got)
+	fake.AddCallback(telegramtest.Callback{ChatID: 42, UserID: 42, MessageID: 5, Data: "c:" + buttonID})
+	eventually(t, "the owner's press stored", func() bool { return len(c.got()) == 1 })
+	if got := fake.Toasts(); len(got) != 2 || got[0] != (telegramtest.Toast{ID: "cq1"}) || got[1] != (telegramtest.Toast{ID: "cq2"}) {
+		t.Fatalf("answered %+v", got)
+	}
+}
+
+// An Ack message answers the press with its text as a toast; Telegram's
+// 400 for a press too old to answer is done, not a failure to retry.
+func TestSendAckShowsAToast(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	ack := event.Outgoing{IdemKey: "k:ack", Transport: "telegram", Conv: "telegram:42", Text: "Approved", Ack: "cq9"}
+	if err := tr.Send(context.Background(), ack); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.Toasts(); len(got) != 1 || got[0] != (telegramtest.Toast{ID: "cq9", Text: "Approved"}) || len(fake.Sent()) != 0 {
+		t.Fatalf("toasts %+v, sent %+v", got, fake.Sent())
+	}
+	fake.FailNext("answerCallbackQuery", http.StatusBadRequest, 0)
+	if err := tr.Send(context.Background(), ack); err != nil {
+		t.Fatalf("a press too old to answer: %v", err)
+	}
+	if parts := tr.Parts(event.Outgoing{Ack: "cq9", Text: strings.Repeat("a", 5000)}); len(parts) != 1 {
+		t.Fatalf("an ack split into %d parts", len(parts))
 	}
 }
 
