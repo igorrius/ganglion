@@ -467,14 +467,14 @@ Two repositories: promtop first, then ganglion.
   - A family member's `/metrics` gets the existing "not for you" path of
     the command table.
 
-- [ ] **Step 1 (promtop): failing tests** `TestRenderPNG` (a valid PNG
+- [x] **Step 1 (promtop): failing tests** `TestRenderPNG` (a valid PNG
   header), `TestRenderSummaryNotable` (the `promtop.summary/v1` schema),
   `TestRenderBeforeFirstScrape`, `TestRenderClosed` (error); run, FAIL;
   implement; `make check` in promtop; PASS.
-- [ ] **Step 2 (promtop):** dependency check with `go list -deps` from a
+- [x] **Step 2 (promtop):** dependency check with `go list -deps` from a
   file that imports only `dash`; commit; the owner reviews and tags
   `v0.4.0`.
-- [ ] **Step 3: Write failing tests (ganglion).**
+- [x] **Step 3: Write failing tests (ganglion).**
   - `TestMetricsShowSendsPicture`: `Out[0].Attach.Kind == AttachPhoto`,
     a PNG header, the text is the summary.
   - `TestMetricsShowRejectsBadArgs`: a glob with `/`, nine globs, a
@@ -483,13 +483,13 @@ Two repositories: promtop first, then ganglion.
     still sends a picture.
   - `TestMetricsCommandFamilyRefused`.
   - `TestRendererWithMetricsAddrOff`.
-- [ ] **Step 4: Run** — FAIL.
-- [ ] **Step 5: Implement**; `go get github.com/igorrius/promtop@v0.4.0`.
-- [ ] **Step 6: Run** `go test -race ./...`, `make lint`. Then `make
+- [x] **Step 4: Run** — FAIL.
+- [x] **Step 5: Implement**; `go get github.com/igorrius/promtop@v0.4.0`.
+- [x] **Step 6: Run** `go test -race ./...`, `make lint`. Then `make
   build` and record the binary size against 41.9 MB: more than +3 MB is
   a finding for the owner before going on.
-- [ ] **Step 7: Code map** (`telemetry`, `tool/builtin`, `agent`).
-- [ ] **Step 8: Commit** `telemetry, agent: the agent's metrics as a picture (metrics.show, /metrics)`.
+- [x] **Step 7: Code map** (`telemetry`, `tool/builtin`, `agent`).
+- [x] **Step 8: Commit** `telemetry, agent: the agent's metrics as a picture (metrics.show, /metrics)`.
 
 ### Task 5: logs on disk (3.17, R-OBS-6)
 

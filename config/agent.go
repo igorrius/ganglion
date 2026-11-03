@@ -126,7 +126,16 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
-		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools)...)
+		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
+		metricsTools(do.MustInvoke[Bootstrap](i)))...)
+}
+
+// metricsTools is metrics.show when the command line gave a renderer.
+func metricsTools(b Bootstrap) []tool.Handler {
+	if b.Metrics == nil {
+		return nil
+	}
+	return []tool.Handler{builtin.NewMetricsShow(b.Metrics)}
 }
 
 // Skilled is the loaded skills and their tools.

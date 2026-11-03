@@ -246,21 +246,24 @@ func TestRunWritesLogsToDisk(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("GANGLION_LOG_DIR", "")
 	dir := t.TempDir()
-	_, _, out, err := captured(t, "run", "--db", filepath.Join(dir, "ganglion.db"))
+	b, _, out, err := captured(t, "run", "--db", filepath.Join(dir, "ganglion.db"), "--metrics-addr", "off")
 	if err != nil || !strings.Contains(out, "the bot echoes") {
 		t.Fatalf("%v:\n%s", err, out)
 	}
-	b, err := os.ReadFile(filepath.Join(dir, "logs", "ganglion.log"))
+	if b.Metrics == nil {
+		t.Fatal("no metrics renderer reached the node with --metrics-addr off")
+	}
+	logs, err := os.ReadFile(filepath.Join(dir, "logs", "ganglion.log"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var rec map[string]any
-	first, _, _ := strings.Cut(string(b), "\n")
+	first, _, _ := strings.Cut(string(logs), "\n")
 	if err := json.Unmarshal([]byte(first), &rec); err != nil || rec["level"] == nil {
 		t.Fatalf("not a JSON line: %q (%v)", first, err)
 	}
-	if !strings.Contains(string(b), "the bot echoes") {
-		t.Fatalf("log file lacks the announce line:\n%s", b)
+	if !strings.Contains(string(logs), "the bot echoes") {
+		t.Fatalf("log file lacks the announce line:\n%s", logs)
 	}
 }
 

@@ -153,3 +153,23 @@ func TestSecondsBucketsOnMetrics(t *testing.T) {
 		}
 	}
 }
+
+// The picture is drawn with /metrics off: the dashboard reads the
+// in-process handler and nothing listens (ADR-0045).
+func TestRendererWithMetricsAddrOff(t *testing.T) {
+	tel, err := Setup(context.Background(), Config{Addr: "off", Service: "ganglion", Getenv: func(string) string { return "" }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tel.Shutdown(context.Background()) })
+	var png, sum bytes.Buffer
+	if err := tel.Renderer().Picture(context.Background(), &png, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(png.Bytes(), []byte("\x89PNG")) {
+		t.Fatal("not a PNG")
+	}
+	if err := tel.Renderer().Summary(context.Background(), &sum, []string{"go_*"}, true); err != nil || !bytes.Contains(sum.Bytes(), []byte("promtop.summary/v1")) {
+		t.Fatalf("summary %s, %v", sum.String(), err)
+	}
+}

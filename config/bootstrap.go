@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/tool/builtin"
 )
 
 // Bootstrap is what a node needs to start: where its data lives, its
@@ -27,6 +28,10 @@ type Bootstrap struct {
 	// ModulesDir is where module updates are stored: modules/ beside the
 	// database (ADR-0041).
 	ModulesDir string
+	// Metrics draws the node's own metrics for metrics.show and /metrics
+	// (ADR-0045); the command line sets it from telemetry, nil leaves the
+	// tool out.
+	Metrics builtin.MetricsRenderer
 }
 
 // AgentSettings turns the agent on. Without a catalogue the core echoes, as

@@ -9,6 +9,7 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -42,10 +43,11 @@ type Config struct {
 
 // Telemetry owns the providers and the HTTP server.
 type Telemetry struct {
-	mp  *sdkmetric.MeterProvider
-	tp  *sdktrace.TracerProvider // nil when no OTLP endpoint is set
-	srv *http.Server
-	ln  net.Listener
+	mp   *sdkmetric.MeterProvider
+	tp   *sdktrace.TracerProvider // nil when no OTLP endpoint is set
+	srv  *http.Server
+	ln   net.Listener
+	dash *dash.Dashboard
 }
 
 // Setup installs the global meter provider (and tracer provider, when
@@ -80,6 +82,13 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 		otel.SetTracerProvider(t.tp)
 	}
 
+	// HandlerFor without a Registry in the options does not count its own
+	// calls, so the dashboard's polling stays out of what scrapers see.
+	metrics := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
+	// The dashboard runs even with nothing listening: it reads the
+	// handler in process, and the picture in the chat is drawn from it
+	// (ADR-0045).
+	t.dash = dash.New(metrics, dash.Title(cfg.Service))
 	if cfg.Addr == "off" {
 		return t, nil
 	}
@@ -91,15 +100,31 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 	if err != nil {
 		return nil, errors.Join(err, t.Shutdown(ctx))
 	}
-	// HandlerFor without a Registry in the options does not count its own
-	// calls, so the dashboard's polling stays out of what scrapers see.
-	metrics := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", metrics)
-	mux.Handle("/webmetrics/", dash.New(metrics, dash.Title(cfg.Service)))
+	mux.Handle("/webmetrics/", t.dash)
 	t.ln, t.srv = ln, &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = t.srv.Serve(ln) }()
 	return t, nil
+}
+
+// Renderer draws the node's own metrics for the chat.
+func (t *Telemetry) Renderer() *Renderer { return &Renderer{d: t.dash} }
+
+// Renderer draws the dashboard's history: a PNG for the owner, the
+// promtop summary for the model (ADR-0045). It reads the registry in
+// process, never over the network.
+type Renderer struct{ d *dash.Dashboard }
+
+// Picture writes the dashboard, or the metrics the globs name, as a PNG.
+func (r *Renderer) Picture(ctx context.Context, w io.Writer, globs []string) error {
+	return r.d.Render(ctx, w, dash.RenderOptions{Format: dash.FormatPNG, Metrics: globs})
+}
+
+// Summary writes the promtop.summary/v1 document; notable keeps only what
+// stands out.
+func (r *Renderer) Summary(ctx context.Context, w io.Writer, globs []string, notable bool) error {
+	return r.d.Render(ctx, w, dash.RenderOptions{Format: dash.FormatSummary, Metrics: globs, Notable: notable})
 }
 
 // Addr is the address metrics are served on, or "" when they are off.
@@ -118,6 +143,9 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 	}
 	if t.tp != nil {
 		errs = append(errs, t.tp.Shutdown(ctx))
+	}
+	if t.dash != nil {
+		errs = append(errs, t.dash.Close())
 	}
 	errs = append(errs, t.mp.Shutdown(ctx))
 	return errors.Join(errs...)

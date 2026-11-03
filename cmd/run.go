@@ -48,8 +48,11 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 			}
 			defer closeLogs()
 			logger = logger.With("version", in.Version, "commit", shortCommit(in))
-			stop := startTelemetry(ctx, b.MetricsAddr, in, logger)
+			tel, stop := startTelemetry(ctx, b.MetricsAddr, in, logger)
 			defer stop()
+			if tel != nil {
+				b.Metrics = tel.Renderer()
+			}
 			announce(logger, b)
 			return start(ctx, roles, b, logger)
 		},
@@ -155,19 +158,19 @@ func announce(logger *slog.Logger, b config.Bootstrap) {
 
 // startTelemetry serves metrics and returns the stop. Watching the node
 // must never stop it: a busy port runs the node without metrics.
-func startTelemetry(ctx context.Context, addr string, in buildinfo.Info, logger *slog.Logger) (stop func()) {
+func startTelemetry(ctx context.Context, addr string, in buildinfo.Info, logger *slog.Logger) (_ *telemetry.Telemetry, stop func()) {
 	cfg := telemetry.Config{Addr: addr, Service: "ganglion", Version: in.Version, Commit: in.Commit}
 	tel, err := telemetry.Setup(ctx, cfg)
 	if err != nil {
 		logger.Warn("telemetry: metrics are off", "addr", addr, "err", err)
 		cfg.Addr = "off"
 		if tel, err = telemetry.Setup(ctx, cfg); err != nil {
-			return func() {}
+			return nil, func() {}
 		}
 	} else if a := tel.Addr(); a != "" {
 		logger.Info("telemetry: serving", "metrics", "http://"+a+"/metrics", "dashboard", "http://"+a+"/webmetrics/")
 	}
-	return func() {
+	return tel, func() {
 		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		_ = tel.Shutdown(sctx)

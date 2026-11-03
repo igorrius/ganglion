@@ -225,7 +225,7 @@ func TestCommandHintsComeFromTheTable(t *testing.T) {
 			}
 		}
 	}
-	if strings.Join(names, ",") != "new,sessions,resume,tasks,modules" {
+	if strings.Join(names, ",") != "new,sessions,resume,tasks,metrics,modules" {
 		t.Fatalf("listed %q", names)
 	}
 	e.smart.push()
