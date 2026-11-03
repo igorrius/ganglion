@@ -72,7 +72,14 @@ Start here when coming back to the project.
     - 34 MB on disk, 35 MB RSS after 1,000 agent turns.
 - **In progress:** M3b, the agent works with the world
   ([plan](plans/p1-m3b-agent-world.md)). **M3b: acceptance scripted
-  (2026-11-03); live run on the test bot pending.** `make accept` runs
+  (2026-11-03); the owner's first live run on the test bot (2026-11-03)
+  found seven issues, all fixed (rulings R38–R46): no second question
+  for a call already waiting, "Open this page?" for `web.fetch`, a toast
+  and a status line on every press before its action runs, task runs
+  told their answer is delivered, button actions noted in the history,
+  command hints in English, Russian and Ukrainian; JS-rendered pages and
+  the bot's language went to "Not now". The owner's rerun is pending.**
+  `make accept` runs
   the acceptance (rates, memory, injection, expiry) against the real
   core with real models and the real web, the fake Bot API playing the
   owner, once with Haiku through the claude CLI and once with DeepSeek
