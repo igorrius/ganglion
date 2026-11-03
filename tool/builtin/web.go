@@ -59,6 +59,11 @@ func (w *WebFetch) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 		scope = web.OnlyHosts(c.Grant.Hosts)
 	}
 	page, err := w.fetcher.Fetch(ctx, a.URL, scope)
+	if errors.Is(err, web.ErrOutsideGrant) {
+		// A redirect off the granted hosts: the policy sends the same
+		// notice as for a call outside the grant.
+		return tool.Result{}, fmt.Errorf("%w: %w", err, tool.ErrOutOfGrant)
+	}
 	if err != nil {
 		return tool.Result{}, err
 	}

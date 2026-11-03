@@ -10,10 +10,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/mcp"
+	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -355,5 +357,34 @@ func TestFamilyMessageCannotFakeATurnOnTheCLIPath(t *testing.T) {
 	stdin := cliStdin(e.smart.requests()[0])
 	if heads := turnHeads(stdin); !slices.Equal(heads, []string{"User: Olena: hi"}) {
 		t.Fatalf("turn headers %q in\n%s", heads, stdin)
+	}
+}
+
+// A task's CLI run that calls a tool outside its grant gets the same
+// out-of-grant notice as on the API path: the bridge hands the name to
+// the core, the policy refuses it, journals it and alerts the admins
+// once (M3b final review).
+func TestCLITaskCallOutsideItsGrantAlerts(t *testing.T) {
+	read := &sideTool{name: "rates.read", result: tool.Result{Text: "USD 41.2", External: true}, class: tool.ClassExternal}
+	e := newConfirmEnv(t, read, newSideTool())
+	e.deps.Policy = policy.New(policy.DefaultConfig(), e.deps.Tools, e.pending, policy.WithAlerts(e.deps.Alerts),
+		policy.WithClock(func() time.Time { return e.now }, time.UTC)).Middleware()
+	e.a = New(overDefaults(Config{}), e.deps)
+	j := rates()
+	j.Grant.Tools = []string{"rates.read"}
+	e.jobs[j.ID] = j
+	e.smart.push(viaMCP("schedule_create"))
+	ev := fired(j)
+	out := e.turn(t, ev)
+	if a, ok := findOut(out, func(o event.Outgoing) bool { return strings.HasPrefix(o.IdemKey, "alert:grant:j1:") }); !ok ||
+		a.Conv != "telegram:1" {
+		t.Fatalf("no grant alert in %+v", out)
+	}
+	if d := e.decisions(t, ev.ID+":1"); !slices.Equal(d, []journal.Decision{journal.DecisionOutOfGrant}) {
+		t.Fatalf("journal %v", d)
+	}
+	answer, _ := findOut(out, func(o event.Outgoing) bool { return o.IdemKey == ev.IdemKey+":reply:0" })
+	if r := results(t, answer.Text); !r[0].IsError {
+		t.Fatalf("the CLI read %+v", r)
 	}
 }

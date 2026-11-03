@@ -264,7 +264,9 @@ runs one.
 - no proxy from the environment, no cookie jar, no credentials in an
   address, no `Referer` on redirects;
 - redirects (at most 5) are checked like the first address and, in a
-  scheduled task, must stay on the grant's hosts;
+  scheduled task, must stay on the grant's hosts; one that leaves them
+  is an out-of-grant call, with the same alert to the admins as a call
+  the policy refuses;
 - a host written as one number or in short or hex form (`2130706433`,
   `127.1`, `0x7f000001`) is read as the IPv4 address it is and checked;
   each address gets its own connect timeout (5 s);

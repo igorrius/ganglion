@@ -61,8 +61,11 @@ dependency and 57 KB, against megabytes and seven direct modules.
 The server speaks revisions 2024-11-05 to 2025-11-25 (the `initialize`
 handshake); it answers a client's version when it knows it, otherwise
 its newest. Notifications get no answer; an unknown method is `-32601`;
-a tool name not on offer is `-32602` and runs nothing; a tool's error
-is a result with `isError: true`.
+a call without a tool name is `-32602`; a tool name not on offer goes to
+the core as it came, where the policy refuses it and journals it (in a
+scheduled task, as a call outside the grant, with the same alert as on
+the API path); a tool's error, and the policy's, is a result with
+`isError: true`.
 The arguments pass to the policy as they came, with one normalisation:
 absent or `"arguments": null` becomes `{}`. That is the strictest
 value `tool.CheckArgs` accepts: an object that names no parameter, so

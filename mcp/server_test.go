@@ -206,19 +206,31 @@ func TestServerCallMapsNames(t *testing.T) {
 	}
 }
 
-// A name that is not offered is a protocol error, and nothing runs.
-func TestServerRefusesNamesNotOffered(t *testing.T) {
+// A name that is not offered goes to exec as it came, so the core's
+// policy refuses it and journals it, and a task's call outside its grant
+// alerts the admins as on the API path; only a call without a name is a
+// protocol error (M3b final review).
+func TestServerForwardsNamesNotOffered(t *testing.T) {
 	rec := &recorder{}
 	s := serve(t, rec.exec)
-	for _, name := range []string{"schedule.list", "memory_write", "schedule_run.now", ""} {
+	names := []string{"memory_write", "schedule.list", "schedule_run.now"}
+	for _, name := range names {
 		s.send(t, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"`+name+`","arguments":{}}}`)
-		r := s.recv(t)
-		if r.Error == nil || r.Error.Code != codeInvalidParams {
-			t.Errorf("%q: %+v, want error %d", name, r, codeInvalidParams)
+		if r := s.recv(t); r.Error != nil {
+			t.Errorf("%q: %+v, want a result", name, r)
 		}
 	}
-	if len(rec.calls) != 0 {
-		t.Fatalf("ran %+v", rec.calls)
+	if len(rec.calls) != len(names) {
+		t.Fatalf("exec got %+v", rec.calls)
+	}
+	for i, c := range rec.calls {
+		if c.Name != names[i] {
+			t.Errorf("exec got %q, want %q as it came", c.Name, names[i])
+		}
+	}
+	s.send(t, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"","arguments":{}}}`)
+	if r := s.recv(t); r.Error == nil || r.Error.Code != codeInvalidParams {
+		t.Errorf("no name: %+v, want error %d", r, codeInvalidParams)
 	}
 }
 

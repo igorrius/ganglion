@@ -205,8 +205,11 @@ type callResult struct {
 	IsError bool      `json:"isError"`
 }
 
-// call runs a tool. A name that is not offered is a protocol error; the
-// tool's own error is a result with isError, which the model reads. The
+// call runs a tool. A name that is not offered goes to exec as it came:
+// the core's policy refuses it and journals it, and a scheduled task's
+// call outside its grant alerts the admins as on the API path. Only a
+// call without a name is a protocol error. The tool's own error, and
+// the policy's, is a result with isError, which the model reads. The
 // arguments pass through as they came: the policy checks them against
 // the tool's declared parameters (R18).
 func (s *Server) call(ctx context.Context, params json.RawMessage) (any, *rpcError) {
@@ -214,12 +217,12 @@ func (s *Server) call(ctx context.Context, params json.RawMessage) (any, *rpcErr
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
 	}
-	if err := json.Unmarshal(params, &p); err != nil {
+	if err := json.Unmarshal(params, &p); err != nil || p.Name == "" {
 		return nil, &rpcError{Code: codeInvalidParams, Message: "invalid tools/call params"}
 	}
 	name, ok := s.byMCP[p.Name]
 	if !ok {
-		return nil, &rpcError{Code: codeInvalidParams, Message: "unknown tool: " + p.Name}
+		name = p.Name
 	}
 	args := p.Arguments
 	if len(args) == 0 || string(args) == "null" {

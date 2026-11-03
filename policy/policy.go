@@ -118,7 +118,8 @@ func New(cfg Config, reg *tool.Registry, ask Asker, opts ...Option) *Policy {
 	return p
 }
 
-// Middleware decides each call. Arguments that are not exactly the
+// Middleware decides each call. In a scheduled task's turn, a tool that
+// is not registered is outside the grant. Arguments that are not exactly the
 // tool's declared parameters are refused first (tool.CheckArgs, ruling
 // R18): the rules below read them by exact name. A confirm parks the call with the Asker
 // and does not run it; a forbidden or out-of-grant call returns an error
@@ -128,7 +129,11 @@ func (p *Policy) Middleware() tool.Middleware {
 	return func(next tool.Func) tool.Func {
 		return func(ctx context.Context, c tool.Call) (tool.Result, error) {
 			h, ok := p.reg.Lookup(c.Name)
-			if !ok {
+			switch {
+			case !ok && c.Grant != nil:
+				journal.Annotate(ctx, journal.DecisionOutOfGrant)
+				return p.outOfGrant(ctx, c)
+			case !ok:
 				journal.Annotate(ctx, journal.DecisionForbidden)
 				return tool.Result{}, fmt.Errorf("policy: %s: %w", c.Name, tool.ErrUnknown)
 			}
@@ -147,12 +152,27 @@ func (p *Policy) Middleware() tool.Middleware {
 			case pol == tool.PolicyConfirm:
 				return p.confirm(ctx, h, c)
 			case pol == tool.PolicyAuto:
-				return next(ctx, c)
+				return p.run(ctx, next, c)
 			default:
 				return tool.Result{}, fmt.Errorf("policy: %s: unknown policy %q: %w", c.Name, pol, tool.ErrForbidden)
 			}
 		}
 	}
+}
+
+// run runs an allowed call. A task's call that the tool itself finds
+// outside the grant (web.fetch redirected to another host) is an
+// out-of-grant call too: journalled so, with the same notice to the
+// admins as a call the rules refuse.
+func (p *Policy) run(ctx context.Context, next tool.Func, c tool.Call) (tool.Result, error) {
+	res, err := next(ctx, c)
+	if c.Grant == nil || !errors.Is(err, tool.ErrOutOfGrant) {
+		return res, err
+	}
+	journal.Annotate(ctx, journal.DecisionOutOfGrant)
+	alerts, _ := p.outOfGrant(ctx, c)
+	res.Out = append(res.Out, alerts.Out...)
+	return res, err
 }
 
 // spec returns s with its default policy replaced by the configured one.

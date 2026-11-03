@@ -5,8 +5,12 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/internal/urlnorm"
+	"github.com/igorrius/ganglion/policy"
+	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/web"
@@ -136,5 +140,29 @@ func TestWebSearchNamesNoOtherAddress(t *testing.T) {
 	}
 	if got := urlnorm.Find(res.Text); len(got) != 1 || got[0] != "https://ok.example/" {
 		t.Fatalf("addresses in the result: %q\n%s", got, res.Text)
+	}
+}
+
+// A redirect outside a task's grant is refused by the fetcher after the
+// policy let the call through; it is still an out-of-grant call, with the
+// same notice to the admins as a policy denial (M3b final review).
+func TestWebFetchRedirectOutsideTheGrantAlerts(t *testing.T) {
+	f := &fetcher{err: web.ErrOutsideGrant}
+	reg, err := tool.NewRegistry(router.Local{}, builtin.NewWebFetch(f))
+	if err != nil {
+		t.Fatal(err)
+	}
+	admins := alert.Admins{List: func(context.Context) ([]string, error) { return []string{"telegram:user:42"}, nil }, Private: private}
+	pol := policy.New(policy.DefaultConfig(), reg, &asker{}, policy.WithAlerts(admins),
+		policy.WithClock(func() time.Time { return time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC) }, time.UTC))
+	c := call("web.fetch", `{"url":"https://bank.gov.ua/x"}`)
+	c.Conv = tool.TaskConvPrefix + "j1"
+	c.Grant = &tool.Grant{Tools: []string{"web.fetch"}, Hosts: []string{"bank.gov.ua"}, ReplyTo: "telegram:42"}
+	res, err := tool.Chain(reg.Run, pol.Middleware())(context.Background(), c)
+	if !errors.Is(err, tool.ErrOutOfGrant) || !errors.Is(err, web.ErrOutsideGrant) {
+		t.Fatalf("err %v", err)
+	}
+	if len(res.Out) != 1 || !strings.HasPrefix(res.Out[0].IdemKey, "alert:grant:j1:2026-11-03:") || res.Out[0].Conv != "telegram:42" {
+		t.Fatalf("out %+v, want the grant alert", res.Out)
 	}
 }
