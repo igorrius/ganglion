@@ -215,7 +215,7 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Checking a call's arguments against the tool's declared parameters | `tool.CheckArgs` |
 | Whether two calls' arguments are the same (canonical JSON) | `tool.CanonicalArgs` |
 | Marking outside content as data for the model, and dropping it from a text (`StripExternal`) | `tool.WrapExternal` |
-| Removing secrets before anything is journalled | `journal.Redact` |
+| Removing secrets before anything is journalled or logged | `redact.String` (`internal/redact`) |
 | An id nobody can guess (button ids) | `event.RandomID` |
 | A SQLite transaction that takes the write lock first | `sqlitedb.Immediate` |
 | Running git in the workspace (fixed author, no user git settings, paths kept inside) | `gitrepo` |
@@ -263,7 +263,7 @@ code that means:
   - a Unix socket readable only by the node's user.
 - **Secrets** come from `secrets`. They are never written anywhere else:
   - not into logs, spans or metric labels;
-  - not into the journal (`journal.Redact`);
+  - not into the journal or the logs (`redact.String`);
   - not into an error a model reads;
   - not into a child process's argv.
 - **Randomness** that someone could guess or replay comes from

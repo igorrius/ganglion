@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -53,6 +54,7 @@ type Run struct {
 	TelegramAPIURL string
 	TelegramReply  string
 	MetricsAddr    string
+	LogDir         string
 	ModelsFile     string
 	Workspace      string
 	DailyBudgetUSD float64
@@ -80,6 +82,7 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 			Validator: in("GANGLION_TELEGRAM_REPLY", oneOf("auto", "always", "off"))},
 		&cli.StringFlag{Name: "metrics-addr", Usage: "where /metrics and the dashboard are served, or off (ADR-0026)",
 			Value: "127.0.0.1:9464", Category: catTelemetry, Local: true, Sources: env("GANGLION_METRICS_ADDR"), Destination: &r.MetricsAddr},
+		LogDirFlag(&r.LogDir),
 		&cli.StringFlag{Name: "models-file", Usage: "the model catalogue; without it the agent is off and the bot echoes",
 			Category: catAgent, Local: true, Sources: env("GANGLION_MODELS_FILE"), Destination: &r.ModelsFile, TakesFile: true},
 		&cli.StringFlag{Name: "workspace", Usage: "the agent's files (persona/*.md)", Value: "workspace", Category: catAgent,
@@ -177,3 +180,23 @@ func (e setEnv) IsFromEnv() bool  { return true }
 func (e setEnv) Key() string      { return string(e) }
 func (e setEnv) String() string   { return "environment variable " + strconv.Quote(string(e)) }
 func (e setEnv) GoString() string { return "setEnv(" + strconv.Quote(string(e)) + ")" }
+
+// LogDirFlag is --log-dir, shared by `run` and `mcp`: where the log files
+// are (ADR-0043).
+func LogDirFlag(dst *string) cli.Flag {
+	return &cli.StringFlag{Name: "log-dir", Usage: "the log files' directory, or off; default: logs beside the database",
+		Category: catTelemetry, Local: true, Sources: env("GANGLION_LOG_DIR"), Destination: dst, TakesFile: true}
+}
+
+// LogDir is the log directory for the database at db and the --log-dir
+// value v: v itself, "logs" beside the database when v is empty, and
+// off (false) for "off".
+func LogDir(db, v string) (string, bool) {
+	switch v {
+	case "off":
+		return "", false
+	case "":
+		return filepath.Join(filepath.Dir(db), "logs"), true
+	}
+	return v, true
+}

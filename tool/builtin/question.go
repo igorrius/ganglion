@@ -6,9 +6,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/tool"
-	"github.com/igorrius/ganglion/tool/journal"
 )
 
 // Errors of an action a confirmation question cannot show whole (ruling
@@ -24,14 +24,14 @@ var (
 const maxNameRunes = 64
 
 // showable checks a text the question shows: at most limit runes, and
-// nothing journal.Redact would change. The text is checked as a question
+// nothing redact.String would change. The text is checked as a question
 // shows it, after words, so a text that is a JSON document alone is not
 // read as one.
 func showable(name, s string, limit int) error {
 	if utf8.RuneCountInString(s) > limit {
 		return fmt.Errorf("%s: %w", name, ErrTooLongToShow)
 	}
-	if shown := "Text: " + s; journal.Redact(shown) != shown {
+	if shown := "Text: " + s; redact.String(shown) != shown {
 		return fmt.Errorf("%s: %w", name, ErrSecretShown)
 	}
 	return nil

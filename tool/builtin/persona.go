@@ -10,9 +10,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/igorrius/ganglion/guard"
+	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/tool"
-	"github.com/igorrius/ganglion/tool/journal"
 )
 
 const toolPersonaPropose = "persona.propose"
@@ -106,7 +106,7 @@ func (*PersonaPropose) args(c tool.Call) (string, error) {
 		return "", errors.New("persona.propose: the text is empty")
 	case utf8.RuneCountInString(text) > MaxPersonaRunes:
 		return "", fmt.Errorf("persona.propose: the text is longer than %d characters", MaxPersonaRunes)
-	case journal.Redact(text) != text:
+	case redact.String(text) != text:
 		// The question is redacted before the owner reads it: what is
 		// shown must be what is written.
 		return "", errPersonaSecret

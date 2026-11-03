@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
-	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
 )
 
@@ -197,7 +197,7 @@ func (s Scheduling) askRunNow(ctx context.Context, p pending.QuickPress, j sched
 	}
 	c := tool.Call{TurnID: p.Button.ID, N: 1, Conv: p.Button.Conv, Transport: p.Transport, Principal: p.Button.Principal,
 		Name: ActionRunNow, Args: args}
-	id, err := s.Buttons.Ask(ctx, c, journal.Redact(runNowQuestion+s.summary(j, p.Button.Conv)))
+	id, err := s.Buttons.Ask(ctx, c, redact.String(runNowQuestion+s.summary(j, p.Button.Conv)))
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}

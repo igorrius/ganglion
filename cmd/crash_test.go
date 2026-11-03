@@ -177,3 +177,64 @@ func logStuckLeases(t *testing.T, path string) {
 		}
 	}
 }
+
+// R-OBS-6: the last line the node logged before a kill -9 is on disk.
+// The disk handler runs before stdout's, so a line seen on stdout is
+// already in the file.
+func TestLastLineSurvivesKill(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the binary")
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ganglion")
+	if out, err := exec.Command("go", "build", "-o", bin, "..").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	fake := telegramtest.NewServer(t, crashToken)
+	cmd := exec.Command(bin, "run", "--roles", "core")
+	cmd.Env = append(os.Environ(), "GANGLION_DB="+filepath.Join(dir, "kill.db"), "GANGLION_LOG_DIR=",
+		"TELEGRAM_BOT_TOKEN="+crashToken, "TELEGRAM_BOT_TOKEN_FILE=", "TELEGRAM_API_URL="+fake.URL(),
+		"GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID), "GANGLION_METRICS_ADDR=off", "GANGLION_MODELS_FILE=")
+	var stdout lockedBuffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stdout
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	fake.AddMessage(telegramtest.Incoming{ChatID: adminID, UserID: adminID, Name: "Admin", Text: "marker-7731"})
+	deadline := time.Now().Add(20 * time.Second)
+	for !strings.Contains(stdout.String(), "outbox: sent") {
+		if time.Now().After(deadline) {
+			_ = cmd.Process.Kill()
+			t.Fatalf("no send logged:\n%s", stdout.String())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	_ = cmd.Process.Signal(syscall.SIGKILL)
+	_ = cmd.Wait()
+	b, err := os.ReadFile(filepath.Join(dir, "logs", "ganglion.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"msg":"outbox: sent"`) {
+		t.Fatalf("the last line before the kill is not on disk:\n%s", b)
+	}
+}
+
+// lockedBuffer is a bytes.Buffer a child process writes while the test
+// reads it.
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}

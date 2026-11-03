@@ -13,6 +13,8 @@ import (
 	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/buildinfo"
+	"github.com/igorrius/ganglion/internal/redact"
+	"github.com/igorrius/ganglion/logfile"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/secrets"
@@ -39,14 +41,44 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 				return err
 			}
 			in := buildinfo.Read()
-			logger := slog.New(telemetry.LogHandler(slog.NewTextHandler(out, &slog.HandlerOptions{Level: root.Level()}))).
-				With("version", in.Version, "commit", shortCommit(in))
+			logger, closeLogs, err := newLogger(out, root.Level(), v, b)
+			if err != nil {
+				return err
+			}
+			defer closeLogs()
+			logger = logger.With("version", in.Version, "commit", shortCommit(in))
 			stop := startTelemetry(ctx, b.MetricsAddr, in, logger)
 			defer stop()
 			announce(logger, b)
 			return start(ctx, roles, b, logger)
 		},
 	}
+}
+
+// newLogger logs as text to out and, unless --log-dir is off, as JSON
+// lines to the rotated files on disk (R-OBS-6, ADR-0043). Both sides
+// carry trace ids and hide the secrets the node read and the patterns of
+// redact.String. The disk comes first, so a line on stdout is already in
+// the file when a kill -9 lands.
+func newLogger(out io.Writer, level slog.Level, v flags.Run, b config.Bootstrap) (*slog.Logger, func(), error) {
+	secrets := []string{b.BotToken, b.Agent.BraveKey}
+	for _, k := range b.Agent.Keys {
+		secrets = append(secrets, k)
+	}
+	values := redact.Values(secrets...)
+	hide := func(s string) string { return values(redact.String(s)) }
+	opts := &slog.HandlerOptions{Level: level}
+	wrap := func(h slog.Handler) slog.Handler { return telemetry.LogHandler(telemetry.RedactHandler(h, hide)) }
+	stdout := wrap(slog.NewTextHandler(out, opts))
+	dir, on := flags.LogDir(b.DB, v.LogDir)
+	if !on {
+		return slog.New(stdout), func() {}, nil
+	}
+	rot, err := logfile.Open(logfile.DefaultConfig(dir), time.Now)
+	if err != nil {
+		return nil, nil, fmt.Errorf("GANGLION_LOG_DIR: %w", err)
+	}
+	return slog.New(slog.NewMultiHandler(wrap(slog.NewJSONHandler(rot, opts)), stdout)), func() { _ = rot.Close() }, nil
 }
 
 // bootstrap turns the flags into the node's bootstrap settings, reading

@@ -531,7 +531,7 @@ Two repositories: promtop first, then ganglion.
   `ganglion_log_write_errors_total`. A failed disk write never fails a
   log call to stdout.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestRotatesBySize`.
   - `TestKeepsAtMostMaxFiles` (review focus 3: 10,000 lines of 1 KiB
     with `MaxBytes` 64 KiB leave at most 6 files).
@@ -542,12 +542,12 @@ Two repositories: promtop first, then ganglion.
   - In `cmd/crash_test.go`, `TestLastLineSurvivesKill`: the node logs a
     marker line, it is killed with `SIGKILL` at once, and the marker is
     in `ganglion.log`.
-- [ ] **Step 2: Run** — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
-- [ ] **Step 5: Code map** (`logfile`, `internal/redact`, `telemetry`,
+- [x] **Step 2: Run** — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
+- [x] **Step 5: Code map** (`logfile`, `internal/redact`, `telemetry`,
   `cmd`).
-- [ ] **Step 6: Commit** `logfile: logs on disk, synchronous, rotated, redacted (R-OBS-6)`.
+- [x] **Step 6: Commit** `logfile: logs on disk, synchronous, rotated, redacted (R-OBS-6)`.
 
 ### Task 6: `ganglion mcp` and the agent's diagnostic tools (3.18, R-OBS-7)
 
