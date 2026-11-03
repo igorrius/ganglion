@@ -166,7 +166,7 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 			return added, msg.Content, turns.OutcomeOK, nil
 		}
 		results := a.runTools(turnCtx, t, msg.ToolCalls)
-		task = a.skillRoute(task, msg.ToolCalls)
+		task = a.skillRoute(task, msg.ToolCalls, t.admin)
 		msgs, added = append(msgs, results...), append(added, results...)
 	}
 	return added, "", turns.OutcomeOK, nil

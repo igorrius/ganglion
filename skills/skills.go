@@ -7,6 +7,7 @@ package skills
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -21,6 +22,9 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/router"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -173,7 +177,10 @@ func loadDir(root string, d fs.DirEntry, deny []string) (Skill, error) {
 	if !d.IsDir() || d.Type()&fs.ModeSymlink != 0 {
 		return Skill{}, errors.New("not a directory")
 	}
-	dir := filepath.Join(root, d.Name())
+	dir, err := filepath.Abs(filepath.Join(root, d.Name())) // a script runs by its absolute path, from another directory
+	if err != nil {
+		return Skill{}, err
+	}
 	src, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
 	if err != nil {
 		return Skill{}, err
@@ -194,6 +201,7 @@ func loadDir(root string, d fs.DirEntry, deny []string) (Skill, error) {
 // parse reads a SKILL.md: the frontmatter between "---" lines, then the
 // body. The name must be the directory's.
 func parse(dirName string, src []byte) (Skill, error) {
+	src = bytes.ReplaceAll(bytes.TrimPrefix(src, []byte("\ufeff")), []byte("\r\n"), []byte("\n")) // saved on Windows
 	rest, ok := bytes.CutPrefix(src, []byte("---\n"))
 	head, body, found := bytes.Cut(rest, []byte("\n---\n"))
 	if !ok || !found {
@@ -210,10 +218,16 @@ func parse(dirName string, src []byte) (Skill, error) {
 		return Skill{}, fmt.Errorf("name %q: want %s", fm.Name, skillName)
 	case fm.Name != dirName:
 		return Skill{}, fmt.Errorf("name %q differs from its directory %q", fm.Name, dirName)
+	case fm.Name == reservedName:
+		return Skill{}, fmt.Errorf("name %q is reserved: its tool would be skill.read", reservedName)
 	case strings.TrimSpace(fm.Description) == "":
 		return Skill{}, errors.New("description is empty")
 	}
-	sk := Skill{Name: fm.Name, Description: strings.TrimSpace(fm.Description), Body: strings.TrimSpace(string(body)),
+	if err := checkModel(fm.Model.Tier, fm.Model.Context, fm.Model.Privacy); err != nil {
+		return Skill{}, err
+	}
+	desc := strings.Join(strings.Fields(fm.Description), " ") // one line in the index
+	sk := Skill{Name: fm.Name, Description: desc, Body: strings.TrimSpace(string(body)),
 		Model: router.TaskReq{Tier: fm.Model.Tier, Tools: fm.Model.Tools, Context: fm.Model.Context, Vision: fm.Model.Vision,
 			Privacy: fm.Model.Privacy}}
 	if s := fm.Script; s != nil {
@@ -233,6 +247,26 @@ func parse(dirName string, src []byte) (Skill, error) {
 	return sk, nil
 }
 
+// reservedName is the skill name whose tool would be skill.read.
+const reservedName = "read"
+
+// PrivacyLocalOnly keeps a turn on local models.
+const PrivacyLocalOnly = "local-only"
+
+// checkModel refuses a model block value the router would not read: a
+// typo must not fail open (privacy: local would route to the cloud).
+func checkModel(tier router.Tier, context, privacy string) error {
+	switch {
+	case tier != "" && tier != router.TierCheap && tier != router.TierSmart:
+		return fmt.Errorf("model.tier %q: want cheap or smart", tier)
+	case context != "" && context != "short" && context != "long":
+		return fmt.Errorf("model.context %q: want short or long", context)
+	case privacy != "" && privacy != PrivacyLocalOnly:
+		return fmt.Errorf("model.privacy %q: want %s", privacy, PrivacyLocalOnly)
+	}
+	return nil
+}
+
 // fixedEnv are the variables every script gets; a skill cannot list them.
 var fixedEnv = []string{"PATH", "HOME"}
 
@@ -240,8 +274,12 @@ var fixedEnv = []string{"PATH", "HOME"}
 var denied = regexp.MustCompile(`^(TELEGRAM_.*|GANGLION_.*|.*_KEY|.*_TOKEN|.*_SECRET|.*_PASSWORD|.*_FILE)$`)
 
 // checkScript holds a script to its rules: a regular executable file in
-// the skill's directory, not a symlink; no denied variable.
+// the skill's directory, not a symlink, neither it nor the directory
+// writable by others; no denied variable.
 func checkScript(dir string, s Script, deny []string) error {
+	if st, err := os.Lstat(dir); err != nil || !st.IsDir() || st.Mode().Perm()&0o022 != 0 {
+		return fmt.Errorf("the skill's directory is missing, a symlink, or writable by others")
+	}
 	if s.Run == "" || s.Run != filepath.Base(s.Run) || strings.HasPrefix(s.Run, ".") {
 		return fmt.Errorf("script.run %q: a file name in the skill's directory", s.Run)
 	}
@@ -253,6 +291,8 @@ func checkScript(dir string, s Script, deny []string) error {
 		return fmt.Errorf("script.run %q is not a regular file (a symlink is refused)", s.Run)
 	case st.Mode().Perm()&0o111 == 0:
 		return fmt.Errorf("script.run %q is not executable", s.Run)
+	case st.Mode().Perm()&0o022 != 0:
+		return fmt.Errorf("script.run %q is writable by others", s.Run)
 	}
 	for _, name := range s.Env {
 		if denied.MatchString(name) || slices.Contains(deny, name) || slices.Contains(fixedEnv, name) {
@@ -262,10 +302,19 @@ func checkScript(dir string, s Script, deny []string) error {
 	return nil
 }
 
-// Report logs the skills that were not loaded, one warning each: the
-// owner's own files, so the reasons are safe to log.
-func Report(log *slog.Logger, problems []Problem) {
+// Report logs the skills that were not loaded, one warning each (the
+// owner's own files, so the reasons are safe to log), and records how
+// many are loaded, by source.
+func Report(log *slog.Logger, set Set, problems []Problem) {
 	for _, p := range problems {
 		log.Warn("skills: not loaded", "skill", p.Skill, "reason", p.Reason)
+	}
+	g, _ := otel.Meter("ganglion/skills").Int64Gauge("ganglion.skills.loaded", metric.WithDescription("Skills loaded at start, by source."))
+	counts := map[string]int64{"builtin": 0, "workspace": 0, "refused": int64(len(problems))}
+	for _, sk := range set.byName {
+		counts[map[bool]string{true: "builtin", false: "workspace"}[sk.Builtin]]++
+	}
+	for src, n := range counts {
+		g.Record(context.Background(), n, metric.WithAttributes(attribute.String("source", src)))
 	}
 }

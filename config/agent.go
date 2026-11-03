@@ -150,7 +150,7 @@ func Skills() do.Provider[Skilled] {
 		if err != nil {
 			return Skilled{}, err
 		}
-		skills.Report(do.MustInvoke[*slog.Logger](i), problems)
+		skills.Report(do.MustInvoke[*slog.Logger](i), set, problems)
 		cfg := skills.DefaultRunConfig()
 		cfg.TZ = b.Agent.TZ.String()
 		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg))}, nil

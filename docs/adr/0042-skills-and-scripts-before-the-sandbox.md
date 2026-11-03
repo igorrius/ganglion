@@ -99,7 +99,18 @@ What holds for every run, enforced by code:
     read. Installing a script is trusting it with that, and the owner
     setup says so.
   - *A script hangs or floods.* Killed with its group at the timeout;
-    output capped.
+    output capped. A script can leave its group with `setsid`; only the
+    M3d sandbox holds it then. Under PID 1 without an init, the children
+    killed after a run stay zombies: run the node under an init.
+  - *A script fails and prints an injection on stderr.* The failure is
+    a result marked as outside content, not an error in the node's
+    words.
+  - *A typo in the model block fails open* (`privacy: local` would send
+    a local-only skill to the cloud). Values are checked at load; a
+    `local-only` turn stays local whatever skill is read next.
+  - *A file is swapped after the start, or another local user can write
+    it.* A script or skill directory writable by group or others is
+    refused, and the checks run again before each run.
   - *A workspace skill shadows a built-in one.* Not loaded.
 
 ## Consequences

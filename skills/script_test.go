@@ -1,11 +1,13 @@
-//go:build linux || darwin
+//go:build unix
 
 package skills
 
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -74,9 +76,12 @@ func TestHangingScriptKilledWithGroup(t *testing.T) {
 	}
 	b, _ := os.ReadFile(pidFile)
 	pid := strings.TrimSpace(string(b))
+	if pid == "" {
+		t.Fatal("the script did not start its child")
+	}
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		if _, err := os.Stat("/proc/" + pid); os.IsNotExist(err) || pid == "" {
+		if err := syscall.Kill(atoi(pid), 0); err != nil {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -106,5 +111,28 @@ func TestNonZeroExit(t *testing.T) {
 	out, err := runner(nil).Run(context.Background(), sk, nil)
 	if err != nil || out.Exit != 3 || !strings.Contains(out.Stderr, "oops") {
 		t.Fatalf("out %+v, %v", out, err)
+	}
+}
+
+func atoi(s string) int { n, _ := strconv.Atoi(s); return n }
+
+// A script whose child keeps stdout open after it exits still returns
+// what it printed.
+func TestForkingScriptKeepsItsOutput(t *testing.T) {
+	sk := scriptSkill(t, "echo before\n(sleep 5) &\n", "", 0)
+	out, err := runner(nil).Run(context.Background(), sk, nil)
+	if err != nil || !strings.Contains(out.Stdout, "before") {
+		t.Fatalf("out %+v, %v", out, err)
+	}
+}
+
+// Review: a file changed after load is checked again before it runs.
+func TestScriptRecheckedAtRun(t *testing.T) {
+	sk := scriptSkill(t, "echo hi\n", "", 0)
+	if err := os.Chmod(sk.Dir+"/run.sh", 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner(nil).Run(context.Background(), sk, nil); err == nil {
+		t.Fatal("a script made writable by others after load ran")
 	}
 }

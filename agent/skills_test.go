@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/tool/builtin"
 )
@@ -62,5 +64,31 @@ func TestSkillsIndexStable(t *testing.T) {
 	e.turn(t, message(owner, "Igor", "three"))
 	if fam := e.smart.requests()[2].Messages[0].Content; strings.Contains(fam, "quick-sum") {
 		t.Fatal("a family member's prompt lists the skills")
+	}
+}
+
+func TestSkillRouteKeepsLocalOnly(t *testing.T) {
+	a := &Agent{d: Deps{Skills: fakeSkillSet{"private": {Model: router.TaskReq{Privacy: skills.PrivacyLocalOnly}},
+		"cloudy": {Model: router.TaskReq{Tier: router.TierSmart}}}}}
+	task := a.skillRoute(router.TaskReq{}, []provider.ToolCall{readCall("private"), readCall("cloudy")}, true)
+	if task.Privacy != skills.PrivacyLocalOnly || task.Tier != router.TierSmart {
+		t.Fatalf("task %+v", task)
+	}
+	if task := a.skillRoute(router.TaskReq{}, []provider.ToolCall{readCall("cloudy")}, false); task.Tier != "" {
+		t.Fatalf("a family turn was re-routed: %+v", task)
+	}
+}
+
+type fakeSkillSet map[string]skills.Skill
+
+func (f fakeSkillSet) Index() string                        { return "" }
+func (f fakeSkillSet) Get(name string) (skills.Skill, bool) { s, ok := f[name]; return s, ok }
+func readCall(name string) provider.ToolCall {
+	return provider.ToolCall{Name: "skill.read", Args: []byte(`{"name":"` + name + `"}`)}
+}
+
+func TestCoreRulesSayHowToProposeASkill(t *testing.T) {
+	if !strings.Contains(CoreRules, "propose a skill") {
+		t.Fatal("the core rules do not say the agent may propose a skill")
 	}
 }

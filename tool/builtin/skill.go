@@ -6,11 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/igorrius/ganglion/internal/buckets"
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/tool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // SkillReadTool is the name of the tool that reads a skill; the agent
@@ -20,10 +25,14 @@ const SkillReadTool = "skill.read"
 // NewSkillTools gives the agent skill.read and one tool per script skill
 // (R-RTR-5, ADR-0042), all for admins only.
 func NewSkillTools(set skills.Set, run *skills.Runner) []tool.Handler {
+	m := otel.Meter("ganglion/skills")
+	runs, _ := m.Int64Counter("ganglion.skill.runs", metric.WithDescription("Skill script runs, by skill and result."))
+	dur, _ := m.Float64Histogram("ganglion.skill.run.duration", metric.WithUnit("s"), buckets.Seconds,
+		metric.WithDescription("How long a skill script ran, by skill."))
 	out := []tool.Handler{&skillRead{set: set}}
 	for _, name := range set.Names() {
 		if sk, _ := set.Get(name); sk.Script != nil {
-			out = append(out, &skillScript{sk: sk, run: run})
+			out = append(out, &skillScript{sk: sk, run: run, runs: runs, dur: dur})
 		}
 	}
 	return out
@@ -58,8 +67,10 @@ func (r *skillRead) Run(_ context.Context, c tool.Call) (tool.Result, error) {
 }
 
 type skillScript struct {
-	sk  skills.Skill
-	run *skills.Runner
+	sk   skills.Skill
+	run  *skills.Runner
+	runs metric.Int64Counter
+	dur  metric.Float64Histogram
 }
 
 func (s *skillScript) Spec() tool.Spec {
@@ -91,7 +102,17 @@ func (s *skillScript) Question(_ context.Context, c tool.Call) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return whole(s.sk.ToolName(), fmt.Sprintf("Run the script of skill %s?\n%s\nInput: %s", s.sk.Name, oneLine(s.sk.Description), in))
+	return whole(s.sk.ToolName(), fmt.Sprintf("Run the script of skill %s?\n%s\nInput:\n%s", s.sk.Name, oneLine(s.sk.Description), quote(in)))
+}
+
+// quote prefixes every line of s with "> ", so an input's lines cannot
+// read as the question's own.
+func quote(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = "> " + l
+	}
+	return strings.Join(lines, "\n")
 }
 
 // errHead caps a failed script's stderr in its error.
@@ -104,12 +125,23 @@ func (s *skillScript) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 	if err != nil {
 		return tool.Result{}, err
 	}
+	started := time.Now()
 	out, err := s.run.Run(ctx, s.sk, []byte(in))
+	s.dur.Record(ctx, time.Since(started).Seconds(), metric.WithAttributes(attribute.String("skill", s.sk.Name)))
+	result := "ok"
+	defer func() {
+		s.runs.Add(ctx, 1, metric.WithAttributes(attribute.String("skill", s.sk.Name), attribute.String("result", result)))
+	}()
 	if err != nil {
+		result = "error"
 		return tool.Result{}, fmt.Errorf("%s: %w", s.sk.ToolName(), err)
 	}
 	if out.Exit != 0 {
-		return tool.Result{}, fmt.Errorf("%s: exit %d: %s", s.sk.ToolName(), out.Exit, text.Truncate(redact.String(out.Stderr), errHead))
+		// stderr is the script's own text, maybe a page it read: outside
+		// content, never the node's words in an error.
+		result = "exit"
+		return tool.Result{Text: fmt.Sprintf("the script failed (exit %d): %s", out.Exit, text.Truncate(redact.String(out.Stderr), errHead)),
+			External: true}, nil
 	}
 	res := out.Stdout
 	if out.Truncated {

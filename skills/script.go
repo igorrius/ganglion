@@ -40,7 +40,10 @@ type Output struct {
 	Exit           int
 }
 
-// ErrTimeout is a script that ran past its timeout and was killed.
+// ErrTimeout is a script that ran past its timeout and was killed. A
+// script can leave its process group with setsid; only the sandbox of
+// ADR-0039 (M3d) holds it then. Under PID 1 without an init, the
+// children killed after a run stay zombies: run the node under one.
 var ErrTimeout = errors.New("skills: the script ran past its timeout and was stopped")
 
 // Run runs sk's script with input on stdin. A non-zero exit is an
@@ -52,6 +55,9 @@ func (r *Runner) Run(ctx context.Context, sk Skill, input []byte) (Output, error
 	}
 	if len(input) > r.cfg.MaxIn {
 		return Output{}, fmt.Errorf("skills: input of %d bytes is over %d", len(input), r.cfg.MaxIn)
+	}
+	if err := checkScript(sk.Dir, *sk.Script, nil); err != nil { // the file may have changed since the start
+		return Output{}, fmt.Errorf("skills: %s: %w", sk.Name, err)
 	}
 	work, err := os.MkdirTemp("", "ganglion-skill-")
 	if err != nil {
@@ -71,8 +77,12 @@ func (r *Runner) Run(ctx context.Context, sk Skill, input []byte) (Output, error
 	out := Output{Stdout: stdout.b.String(), Stderr: stderr.b.String(), Truncated: stdout.cut}
 	var exit *exec.ExitError
 	switch {
-	case ctx.Err() != nil:
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		return out, ErrTimeout
+	case ctx.Err() != nil:
+		return out, ctx.Err()
+	case errors.Is(err, exec.ErrWaitDelay): // the script exited; a child held its output and was killed
+		return out, nil
 	case errors.As(err, &exit):
 		out.Exit = exit.ExitCode()
 		return out, nil

@@ -20,7 +20,13 @@ const skillsHeader = "Skills (read one with skill.read before you follow it):\n"
 
 // skillRoute returns task with the model block of a skill the model just
 // read: the rest of the turn runs on what the skill asks for (R-RTR-4).
-func (a *Agent) skillRoute(task router.TaskReq, calls []provider.ToolCall) router.TaskReq {
+// Only an admin's turn is re-routed (skill.read is theirs alone), and
+// local-only, once set, stays for the turn: reading another skill cannot
+// send it to the cloud.
+func (a *Agent) skillRoute(task router.TaskReq, calls []provider.ToolCall, admin bool) router.TaskReq {
+	if !admin {
+		return task
+	}
 	for _, c := range calls {
 		if c.Name != builtin.SkillReadTool {
 			continue
@@ -42,7 +48,7 @@ func (a *Agent) skillRoute(task router.TaskReq, calls []provider.ToolCall) route
 		if m.Context != "" {
 			task.Context = m.Context
 		}
-		if m.Privacy != "" {
+		if m.Privacy != "" && task.Privacy != skills.PrivacyLocalOnly {
 			task.Privacy = m.Privacy
 		}
 		task.Vision = task.Vision || m.Vision
