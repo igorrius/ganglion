@@ -152,6 +152,11 @@ The details:
   an answer the fallback model might have given.
 - A CLI run with tools has the provider's call timeout (60 s) for its
   whole loop.
+- A CLI run with tools may wait on a run without tools (the guard check
+  of a memory write), so runs without tools may also take one reserved
+  slot that runs with tools never take: at most three `claude`
+  processes run at once by default, and a guard check is never starved
+  (ruling R36).
 - The relay inherits the CLI's environment, so another process of the
   same user could read the token from `/proc`; that user can reach the
   socket anyway, which is outside this boundary.

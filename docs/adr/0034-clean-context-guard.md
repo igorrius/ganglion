@@ -101,11 +101,20 @@ Package `guard`:
   fact was held back as a possible injection: <title> — <reason>." The
   model is told only that the fact was held back; the reason, a model's
   words about outside text, goes to the owner and not into its context.
-- **On schedule.** A system task (`system:memory-audit`, daily at 04:00
-  in the node's zone, owned by the first admin, answering in their
-  private chat) runs the `memory.audit` tool, whose grant is that tool
-  only. It checks every stored fact and every persona file and reports
-  what it flags. Nothing is deleted automatically.
+- **On schedule.** A system job (`system:memory-audit`, kind `system`,
+  daily at 04:00 in the node's zone, owned by the first admin, reporting
+  in their private chat) runs `memory.Audit` in code, without a model
+  turn (ruling R36): it checks every stored fact and every persona file
+  and sends what it flags through the outbox. The node replaces the
+  stored job at every start, so the owner is the current first admin
+  and an older release's version (a model task granted `memory.audit`)
+  gives way. The job runs only while its owner is an admin. Nothing is
+  deleted automatically.
+- **A slot of its own on the CLI.** A guard check through the claude CLI
+  is a run without tools, and such runs may take one slot that runs with
+  tools never take. A CLI run with tools that writes memory waits on its
+  guard check, so two such runs holding both shared slots cannot starve
+  it (ruling R36).
 - **Logs.** The check logs the provider, the model, the tokens and the
   cost at debug; never the text or the reason.
 
@@ -119,9 +128,13 @@ Package `guard`:
   not added to the turn's trace (the guard sits inside a tool call).
 - A flaky model that answers in prose quarantines good facts; the
   examples and the "JSON only" line in the prompt keep that rare.
-- Contradictions and stale entries are left to the scheduled task's
-  model, which sees the known facts in its prompt; the check itself
-  looks at one entry at a time.
+- Contradictions and stale entries are not looked for in M3b: the check
+  looks at one entry at a time, and the audit has no model turn. Nightly
+  consolidation (R-MEM-1) takes them on.
+- The audit runs inside one handled event, under the core's turn
+  timeout (3 minutes by default): one cheap call per fact, a few seconds
+  each through the CLI, fits a few dozen facts. A longer one fails and
+  is retried, then given up with an alert to the admins.
 
 ## Revisit when
 

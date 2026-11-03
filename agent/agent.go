@@ -36,9 +36,15 @@ type FactsFunc func() string
 // NoFacts is the FactsFunc of an agent without memory.
 func NoFacts() string { return "" }
 
+// SystemJob is the code of a system job (schedule.KindSystem), such as
+// the memory audit: it runs without a model and returns the report sent
+// to the job's conversation (ruling R36). An error leaves the event to be
+// handled again.
+type SystemJob func(ctx context.Context) (string, error)
+
 // Deps are the agent's collaborators. All are required except Middleware,
-// QuickActions, Facts, Now and Log; the composition root passes no-op
-// implementations where a part is off (ADR-0028).
+// QuickActions, SystemJobs, Facts, Now and Log; the composition root
+// passes no-op implementations where a part is off (ADR-0028).
 type Deps struct {
 	States     StateReader
 	Router     router.Router
@@ -53,11 +59,13 @@ type Deps struct {
 	// register them (schedule.details, schedule.delete, schedule.run_now).
 	QuickActions map[string]pending.QuickAction
 	Jobs         Jobs // scheduled jobs, read when their time comes
-	IsAdmin      AdminFunc
-	Turns        *turns.Log
-	Archive      SessionStore
-	Alerts       alert.Admins // who hears about a reached daily limit
-	Persona      PersonaFunc
+	// SystemJobs are the system jobs' code by job id (builtin.AuditJobID).
+	SystemJobs map[string]SystemJob
+	IsAdmin    AdminFunc
+	Turns      *turns.Log
+	Archive    SessionStore
+	Alerts     alert.Admins // who hears about a reached daily limit
+	Persona    PersonaFunc
 	// Facts is the memory's index, shown to admins only (design section
 	// 4, rule 8); NoFacts when unset.
 	Facts FactsFunc

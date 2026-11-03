@@ -71,6 +71,14 @@ func fakeClaude(mode string) int {
 		return 0
 	case "mcp", "mcp-crash", "mcp-hang":
 		return fakeMCP(mode)
+	case "toolhold": // a run with tools holds its slot; one without answers at once
+		if slices.Contains(os.Args[1:], "--mcp-config") {
+			record("hold")
+			time.Sleep(30 * time.Second)
+			return 0
+		}
+		fmt.Print(`{"type":"result","is_error":false,"result":"{\"ok\":true}","usage":{"input_tokens":1,"output_tokens":1}}`)
+		return 0
 	case "slow":
 		record("start " + strconv.FormatInt(time.Now().UnixNano(), 10))
 		time.Sleep(300 * time.Millisecond)
@@ -226,7 +234,7 @@ func TestCancelIsReturnedAsCanceled(t *testing.T) {
 func TestConcurrencyLimit(t *testing.T) {
 	c, rec := fake(t, "slow", WithMaxConcurrent(2))
 	var wg sync.WaitGroup
-	for range 3 {
+	for range 4 {
 		wg.Go(func() {
 			if _, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history}); err != nil {
 				t.Error(err)
@@ -260,8 +268,47 @@ func TestConcurrencyLimit(t *testing.T) {
 		alive += e.delta
 		peak = max(peak, alive)
 	}
-	if len(evs) != 6 || peak != 2 {
-		t.Fatalf("%d events, peak %d alive; want 6 events, peak 2", len(evs), peak)
+	if len(evs) != 8 || peak != 3 {
+		t.Fatalf("%d events, peak %d alive; want 8 events, peak 3 (2 slots and the reserved one)", len(evs), peak)
+	}
+}
+
+// Ruling R36: a run with tools may wait on a guard check (memory.write
+// inside the CLI's own loop), which is a run without tools. Runs with
+// tools never take the reserved slot, so a guard check made while two of
+// them hold every slot still runs; a third run with tools waits.
+func TestRunWithoutToolsIsNotStarvedByRunsWithTools(t *testing.T) {
+	c, rec := toolsFake(t, "toolhold", t.TempDir())
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	x := &execRecorder{}
+	for range 2 {
+		wg.Go(func() {
+			_, _ = c.Chat(ctx, provider.ChatRequest{Model: "haiku", Messages: history, Tools: tools, Exec: x.exec})
+		})
+	}
+	t.Cleanup(func() { cancel(); wg.Wait() })
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		raw, _ := os.ReadFile(rec)
+		if strings.Count(string(raw), "hold") == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the runs with tools did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	gctx, gcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer gcancel()
+	resp, err := c.Chat(gctx, provider.ChatRequest{Model: "haiku", Messages: history})
+	if err != nil || resp.Message.Content != `{"ok":true}` {
+		t.Fatalf("the guard check: %+v, %v", resp, err)
+	}
+	tctx, tcancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer tcancel()
+	if _, err := c.Chat(tctx, provider.ChatRequest{Model: "haiku", Messages: history, Tools: tools, Exec: x.exec}); kind(t, err) != provider.KindTimeout {
+		t.Fatalf("a third run with tools took a slot: %v", err)
 	}
 }
 

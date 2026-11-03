@@ -57,6 +57,35 @@ func (s *Store) Ensure(ctx context.Context, j Job) error {
 	return err
 }
 
+// EnsureSystem stores system job j (Kind KindSystem, System set), or
+// replaces the stored system job of its id with it: the node owns its
+// system jobs, so the current release's shape and the current first
+// admin win at every start (ruling R36). ErrInvalid for any other job,
+// ErrExists when the id belongs to a job that is not a system job.
+func (s *Store) EnsureSystem(ctx context.Context, j Job) error {
+	if j.Kind != KindSystem || !j.System {
+		return fmt.Errorf("%w %s: not a system job", ErrInvalid, j.ID)
+	}
+	if err := j.validate(); err != nil {
+		return err
+	}
+	at := int64(0)
+	if !j.At.IsZero() {
+		at = j.At.UnixMilli()
+	}
+	res, err := s.db.ExecContext(ctx, `INSERT INTO schedule_jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 1, ?, 0)
+		ON CONFLICT (id) DO UPDATE SET owner = excluded.owner, conv = excluded.conv, transport = excluded.transport,
+		kind = excluded.kind, cron = excluded.cron, at_ms = excluded.at_ms, text = excluded.text, grant_json = '', deleted = 0
+		WHERE schedule_jobs.system = 1`, j.ID, j.Owner, j.Conv, j.Transport, string(j.Kind), j.Cron, at, j.Text, j.Created.UnixMilli())
+	if err != nil {
+		return fmt.Errorf("schedule: ensure %s: %w", j.ID, err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return fmt.Errorf("schedule: ensure %s: %w", j.ID, ErrExists)
+	}
+	return nil
+}
+
 // insert stores j; false when its id is taken.
 func (s *Store) insert(ctx context.Context, j Job) (bool, error) {
 	if err := j.validate(); err != nil {

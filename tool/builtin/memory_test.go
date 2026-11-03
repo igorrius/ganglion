@@ -144,7 +144,7 @@ func TestMemoryAuditReports(t *testing.T) {
 
 type ensured []schedule.Job
 
-func (e *ensured) Ensure(_ context.Context, j schedule.Job) error {
+func (e *ensured) EnsureSystem(_ context.Context, j schedule.Job) error {
 	*e = append(*e, j)
 	return nil
 }
@@ -156,9 +156,9 @@ func TestEnsureAuditJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	j := jobs[0]
-	if len(jobs) != 1 || j.ID != "system:memory-audit" || !j.System || j.Kind != schedule.KindTask || j.Cron != "0 4 * * *" ||
-		j.Owner != "telegram:user:42" || j.Conv != "telegram:42" || j.Transport != "telegram" || j.Grant.ReplyTo != "telegram:42" ||
-		len(j.Grant.Tools) != 1 || j.Grant.Tools[0] != "memory.audit" || !strings.Contains(j.Text, "memory.audit") {
+	if len(jobs) != 1 || j.ID != "system:memory-audit" || !j.System || j.Kind != schedule.KindSystem || j.Cron != "0 4 * * *" ||
+		j.Owner != "telegram:user:42" || j.Conv != "telegram:42" || j.Transport != "telegram" || j.Grant.ReplyTo != "" ||
+		len(j.Grant.Tools) != 0 || j.Text == "" {
 		t.Fatalf("job %+v", jobs)
 	}
 	logs := &bytes.Buffer{}

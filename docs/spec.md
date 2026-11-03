@@ -539,9 +539,11 @@ human); module install — tests + reviewer + admin.
     fact about the owner, or a hidden instruction? Imperative entries
     ("always do…", "ignore…") are rejected. Suspicious ones go to
     quarantine, and the owner gets a notice.
-  - **On schedule:** a system task audits memory, persona and skills for
-    injections, contradictions and stale entries. A system task is marked
-    as such and cannot be deleted.
+  - **On schedule:** a system job audits memory, persona and skills for
+    injections with the same check, in code and without a model turn,
+    and reports to the owner. It is marked as a system job and cannot be
+    deleted. Contradictions and stale entries are left to nightly
+    consolidation (R-MEM-1), which has a model.
 - **R-POL-8.** A scheduled agent task carries a **grant**, fixed when the
   task is created.
   - The creation confirmation shows what the runs may do: the

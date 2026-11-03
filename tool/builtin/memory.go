@@ -333,27 +333,47 @@ func (a *MemoryAudit) Run(ctx context.Context, _ tool.Call) (tool.Result, error)
 	return tool.Result{Text: rep.String(), External: true}, nil
 }
 
-// The scheduled audit of memory and persona (R-POL-7): a system job that
-// cannot be deleted, run as the first admin, answering in their private
-// chat.
-const (
-	AuditJobID       = "system:memory-audit"
-	auditCron        = "0 4 * * *"
-	auditInstruction = "Run the memory.audit tool. Tell the owner in a short message what it flagged and why, " +
-		"or that nothing was flagged. Also point out known facts that contradict each other or look out of date. " +
-		"Do not change or delete anything: the owner decides."
-)
+// AuditJob is the code of the scheduled audit of memory and persona
+// (R-POL-7): it runs memory.Audit, without a model turn, and returns the
+// report for the owner (ruling R36).
+type AuditJob struct{ facts Facts }
 
-// JobEnsurer stores a job unless its id exists (schedule.Store).
-type JobEnsurer interface {
-	Ensure(ctx context.Context, j schedule.Job) error
+// NewAuditJob returns the audit job over f.
+func NewAuditJob(f Facts) AuditJob { return AuditJob{facts: f} }
+
+// auditTitle starts the report the owner gets.
+const auditTitle = "Nightly memory check. "
+
+// Run audits and returns the report. The reasons are a model's words
+// about stored text: they go to the owner only, never into a model's
+// context.
+func (a AuditJob) Run(ctx context.Context) (string, error) {
+	rep, err := a.facts.Audit(ctx)
+	if err != nil {
+		return "", fmt.Errorf("memory audit: %w", err)
+	}
+	return auditTitle + rep.String(), nil
 }
 
-// EnsureAudit makes sure the scheduled audit exists, owned by the first
-// admin and answering in their private chat, with a grant of
-// memory.audit only. With no admin, or none with a private chat, there is
-// no one to tell: it is skipped and logged. An existing job is left as it
-// is.
+// The scheduled audit: a system job that cannot be deleted, run as the
+// first admin, reporting in their private chat.
+const (
+	AuditJobID = "system:memory-audit"
+	auditCron  = "0 4 * * *"
+	auditText  = "Memory audit: every stored fact and persona file checked for hidden instructions; nothing is changed."
+)
+
+// JobEnsurer stores a system job, replacing the stored one of its id
+// (schedule.Store).
+type JobEnsurer interface {
+	EnsureSystem(ctx context.Context, j schedule.Job) error
+}
+
+// EnsureAudit makes sure the scheduled audit exists as a system job
+// (schedule.KindSystem, ruling R36), owned by the first admin and
+// reporting in their private chat; a stored one, an older release's
+// model task among them, is replaced. With no admin, or none with a
+// private chat, there is no one to tell: it is skipped and logged.
 func EnsureAudit(ctx context.Context, jobs JobEnsurer, admins alert.Admins, now time.Time, log *slog.Logger) error {
 	list, err := admins.List(ctx)
 	if err != nil {
@@ -364,9 +384,9 @@ func EnsureAudit(ctx context.Context, jobs JobEnsurer, admins alert.Admins, now 
 		if !ok {
 			continue
 		}
-		j := schedule.Job{ID: AuditJobID, Owner: adm, Conv: conv, Transport: transport, Kind: schedule.KindTask, Cron: auditCron,
-			Text: auditInstruction, Grant: tool.Grant{Tools: []string{toolMemoryAudit}, ReplyTo: conv}, System: true, Created: now}
-		if err := jobs.Ensure(ctx, j); err != nil {
+		j := schedule.Job{ID: AuditJobID, Owner: adm, Conv: conv, Transport: transport, Kind: schedule.KindSystem, Cron: auditCron,
+			Text: auditText, System: true, Created: now}
+		if err := jobs.EnsureSystem(ctx, j); err != nil {
 			return fmt.Errorf("builtin: memory audit: %w", err)
 		}
 		return nil

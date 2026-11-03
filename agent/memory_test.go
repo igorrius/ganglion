@@ -17,6 +17,7 @@ import (
 	"github.com/igorrius/ganglion/guard"
 	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -293,5 +294,68 @@ func TestRecallStaysInTheCallersChats(t *testing.T) {
 	result := msgs[len(msgs)-1].Content
 	if !strings.Contains(result, "comes on Friday") || strings.Contains(result, "owes me money") {
 		t.Fatalf("recall gave %q", result)
+	}
+}
+
+// Ruling R36: the nightly audit is a system job, not a model task: the
+// scheduled event runs memory.Audit in code (one guard check per fact,
+// each a plain cheap call) and sends the report to the job's chat. No
+// model turn runs, so the CLI's call timeout does not bound it.
+func TestMemoryAuditJobRunsWithoutAModelTurn(t *testing.T) {
+	m := newMemoryEnv(t)
+	const facts = 30
+	ok := say(`{"ok":true,"reason":"a fact"}`)
+	for i := range facts {
+		m.cheap.push(ok)
+		if _, err := m.mem.Write(context.Background(), memory.Entry{Title: fmt.Sprintf("Fact %d", i), Body: "The owner has a cat."}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range facts {
+		m.cheap.push(ok)
+	}
+	m.deps.SystemJobs = map[string]SystemJob{builtin.AuditJobID: builtin.NewAuditJob(m.mem).Run}
+	m.a = New(overDefaults(Config{}), m.deps)
+	j := schedule.Job{ID: builtin.AuditJobID, Owner: owner, Conv: "telegram:42", Transport: "telegram", Kind: schedule.KindSystem,
+		Cron: "0 4 * * *", Text: "Memory audit", System: true, Created: t0}
+	m.jobs[j.ID] = j
+	out := m.turn(t, fired(j))
+	if len(out) != 1 || out[0].Conv != "telegram:42" || out[0].Transport != "telegram" ||
+		!strings.Contains(out[0].Text, fmt.Sprintf("Checked %d stored facts", facts)) {
+		t.Fatalf("out %+v", out)
+	}
+	if n := len(m.smart.requests()); n != 0 {
+		t.Fatalf("%d model turns ran", n)
+	}
+	if n := len(m.guardCalls()); n != 2*facts {
+		t.Fatalf("%d guard calls, want %d", n, 2*facts)
+	}
+}
+
+// A system job runs only for an admin and only when the node knows its
+// code; neither case starts a model turn.
+func TestSystemJobNeedsAnAdminAndItsCode(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	ran := 0
+	e.deps.SystemJobs = map[string]SystemJob{"system:x": func(context.Context) (string, error) { ran++; return "report", nil }}
+	e.a = New(overDefaults(Config{}), e.deps)
+	j := schedule.Job{ID: "system:x", Owner: owner, Conv: "telegram:42", Transport: "telegram", Kind: schedule.KindSystem,
+		Cron: "0 4 * * *", Text: "x", System: true, Created: t0}
+	unknown := j
+	unknown.ID = "system:gone"
+	e.jobs[j.ID], e.jobs[unknown.ID] = j, unknown
+	e.admin = false
+	if out := e.turn(t, fired(j)); len(out) != 0 || ran != 0 {
+		t.Fatalf("for a non-admin: out %+v, ran %d", out, ran)
+	}
+	e.admin = true
+	if out := e.turn(t, fired(unknown)); len(out) != 0 {
+		t.Fatalf("unknown code: %+v", out)
+	}
+	if out := e.turn(t, fired(j)); len(out) != 1 || out[0].Text != "report" || ran != 1 {
+		t.Fatalf("out %+v, ran %d", out, ran)
+	}
+	if len(e.smart.requests())+len(e.cheap.requests()) != 0 {
+		t.Fatal("a model ran")
 	}
 }

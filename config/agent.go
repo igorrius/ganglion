@@ -69,6 +69,7 @@ func Agent() do.Provider[*agent.Agent] {
 			Alerts:       do.MustInvoke[alert.Admins](i),
 			Persona:      agent.PersonaDir(b.Agent.Workspace),
 			Facts:        do.MustInvoke[Remembering](i).Facts,
+			SystemJobs:   do.MustInvoke[Remembering](i).Jobs,
 			Log:          do.MustInvoke[*slog.Logger](i),
 		}), nil
 	}

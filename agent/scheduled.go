@@ -26,7 +26,8 @@ const taskSpeaker = "Scheduled task"
 // as a turn of its own conversation: the owner is the principal (an
 // admin check at run time decides the tools), the fixed instruction is
 // the message, the grant is on every call, and the answer goes to the
-// grant's reply target.
+// grant's reply target. A system job runs its registered code, without
+// a model, and ends the turn.
 func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 	if t.event.Kind != event.KindSchedule {
 		return false, nil
@@ -59,8 +60,35 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 		t.grant, t.replyConv = &g, g.ReplyTo
 		t.record.Outcome = turns.OutcomeOK
 		return false, nil
+	case schedule.KindSystem:
+		t.replyConv = j.Conv
+		return true, a.system(ctx, t, j)
 	default:
 		a.log.Warn("agent: scheduled job of an unknown kind", "job", j.ID, "kind", j.Kind)
 		return true, nil
 	}
+}
+
+// system runs a system job's code for its owner, if the owner is still
+// an admin, and sends the report to the job's conversation (ruling R36).
+// A job whose code the node does not have does nothing.
+func (a *Agent) system(ctx context.Context, t *turn, j schedule.Job) error {
+	run, ok := a.d.SystemJobs[j.ID]
+	if !ok {
+		a.log.Warn("agent: no code for a system job", "job", j.ID)
+		return nil
+	}
+	if err := a.setAdmin(ctx, t); err != nil {
+		return err
+	}
+	if !t.admin {
+		a.log.Warn("agent: system job of a principal who is not an admin; skipped", "job", j.ID, "principal", j.Owner)
+		return nil
+	}
+	report, err := run(ctx)
+	if err != nil {
+		return fmt.Errorf("agent: system job %s: %w", j.ID, err)
+	}
+	t.reply(report)
+	return nil
 }

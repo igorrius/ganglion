@@ -37,6 +37,10 @@ type Client struct {
 	command string
 	relay   string // the binary with `mcp-relay`; "" is this executable
 	sem     chan struct{}
+	// reserve is one more slot, for runs without tools only: a run with
+	// tools may wait on one without (a guard check of memory.write), so
+	// runs with tools holding every slot cannot starve it (ruling R36).
+	reserve chan struct{}
 
 	dirOnce sync.Once
 	dir     string
@@ -66,6 +70,8 @@ func WithRelay(path string) Option {
 }
 
 // WithMaxConcurrent caps the claude processes alive at once; default 2.
+// A run without tools may also take one reserved slot, so at most n+1
+// run at once.
 func WithMaxConcurrent(n int) Option {
 	return func(c *Client) {
 		if n > 0 {
@@ -82,7 +88,7 @@ func WithWorkDir(dir string) Option {
 
 // New returns a client named name.
 func New(name string, opts ...Option) *Client {
-	c := &Client{name: name, command: "claude", sem: make(chan struct{}, 2)}
+	c := &Client{name: name, command: "claude", sem: make(chan struct{}, 2), reserve: make(chan struct{}, 1)}
 	for _, o := range opts {
 		o(c)
 	}
@@ -145,12 +151,11 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 	if len(req.Tools) > 0 && req.Exec == nil {
 		return provider.ChatResponse{}, c.fail(provider.KindBadRequest, "tools without an executor")
 	}
-	select {
-	case c.sem <- struct{}{}:
-		defer func() { <-c.sem }()
-	case <-ctx.Done():
-		return provider.ChatResponse{}, c.ctxError(ctx)
+	release, err := c.acquire(ctx, len(req.Tools) > 0)
+	if err != nil {
+		return provider.ChatResponse{}, err
 	}
+	defer release()
 	dir, err := c.workDir()
 	if err != nil {
 		return provider.ChatResponse{}, c.fail(provider.KindUnavailable, "work dir: "+err.Error())
@@ -170,6 +175,24 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 	args = append(args, "--setting-sources", "", "--system-prompt", system)
 	stdout, stderr, runErr := c.run(ctx, dir, args, transcript)
 	return c.result(ctx, stdout, stderr, runErr)
+}
+
+// acquire takes a slot for one run and returns its release: a run with
+// tools waits for one of the shared slots; a run without tools takes a
+// shared slot or the reserved one, whichever is free first.
+func (c *Client) acquire(ctx context.Context, tools bool) (func(), error) {
+	reserve := c.reserve
+	if tools {
+		reserve = nil // a nil channel is never ready
+	}
+	select {
+	case c.sem <- struct{}{}:
+		return func() { <-c.sem }, nil
+	case reserve <- struct{}{}:
+		return func() { <-c.reserve }, nil
+	case <-ctx.Done():
+		return nil, c.ctxError(ctx)
+	}
 }
 
 // bridge opens the MCP bridge that serves req's tools to one run.

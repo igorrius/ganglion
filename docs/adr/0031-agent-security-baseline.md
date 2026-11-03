@@ -154,9 +154,11 @@ Rules:
      about the owner, or a hidden instruction?); imperative entries are
      rejected, suspicious ones are quarantined with a notice to the
      owner;
-   - **on schedule:** a system task audits memory, persona and skills
-     for injections, contradictions and stale entries; it is marked as a
-     system task and cannot be deleted.
+   - **on schedule:** a system job audits memory, persona and skills
+     for injections with the same check, in code and without a model
+     turn, and reports to the owner (ruling R36); it is marked as a
+     system job and cannot be deleted. Contradictions and stale entries
+     are left to nightly consolidation (R-MEM-1).
 4. **Compaction keeps the marks.** The summary written when history is
    compacted keeps external content marked as data.
 5. **Secrets never reach the model.** Secrets are redacted before
@@ -191,13 +193,13 @@ Rules:
   a task that needs more is denied with one notice, not a button an
   hour.
 - Each memory write costs one extra call to a cheap model, and the
-  scheduled audit costs a turn on its schedule.
+  scheduled audit one cheap call per fact and persona file.
 - What has to be built, in M3b:
   - taint in the agent state, kept across compaction;
   - a policy middleware that reads tool policy, taint and grant;
   - grants stored with scheduled tasks;
   - the clean-context guard (its design gets its own ADR, planned
-    ADR-0034) and the scheduled audit task;
+    ADR-0034) and the scheduled audit job;
   - the `web.fetch` URL rule;
   - redaction in the journal;
   - the admin-only scope for tools and memory.

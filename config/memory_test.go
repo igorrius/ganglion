@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/samber/do/v2"
 )
 
@@ -46,8 +47,12 @@ func TestMemoryOnRegistersToolsAndTheAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !j.System || j.Owner != "telegram:user:42" || j.Conv != "telegram:42" || j.Transport != "telegram" {
+	if !j.System || j.Kind != schedule.KindSystem || j.Owner != "telegram:user:42" || j.Conv != "telegram:42" || j.Transport != "telegram" {
 		t.Fatalf("audit job %+v", j)
+	}
+	// The agent has the audit's code (ruling R36).
+	if jobs := do.MustInvoke[Remembering](i).Jobs; jobs[builtin.AuditJobID] == nil {
+		t.Fatalf("the audit's code is not wired: %v", jobs)
 	}
 }
 

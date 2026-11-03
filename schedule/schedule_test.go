@@ -420,3 +420,55 @@ func TestRunTicksEachMinute(t *testing.T) {
 		t.Fatalf("name %q", e.sched.Name())
 	}
 }
+
+// Ruling R36: a system job runs code the node registered, without a
+// model. The node owns its system jobs: EnsureSystem replaces a stored
+// one, so a job stored by an older release (the audit as a model task)
+// and an earlier first admin give way at the next start.
+func TestEnsureSystemReplacesTheStoredJob(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	old := task("system:memory-audit", "0 4 * * *")
+	old.System = true
+	if err := e.store.Ensure(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	sys := schedule.Job{ID: old.ID, Owner: "telegram:user:7", Conv: "telegram:7", Transport: "telegram", Kind: schedule.KindSystem,
+		Cron: "0 4 * * *", Text: "Memory audit", System: true, Created: t0.Add(time.Hour)}
+	if err := e.store.EnsureSystem(ctx, sys); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.store.Get(ctx, old.ID)
+	if err != nil || got.Kind != schedule.KindSystem || got.Owner != sys.Owner || got.Conv != sys.Conv || got.Text != sys.Text ||
+		len(got.Grant.Tools) != 0 || !got.System || got.EventConv() != "telegram:7" {
+		t.Fatalf("job %+v, %v", got, err)
+	}
+	if err := e.store.EnsureSystem(ctx, sys); err != nil {
+		t.Fatalf("again: %v", err)
+	}
+	// Not a system job, or one with a grant, is refused; a person's job
+	// is never replaced.
+	mine := task("j1", "0 9 * * *")
+	e.create(t, mine)
+	for name, j := range map[string]schedule.Job{
+		"not system":   {ID: "j1", Owner: owner, Conv: "telegram:42", Kind: schedule.KindSystem, Cron: "0 4 * * *", Text: "x", Created: t0},
+		"with a grant": {ID: "s2", Owner: owner, Conv: "telegram:42", Kind: schedule.KindSystem, Cron: "0 4 * * *", Text: "x", System: true, Created: t0, Grant: tool.Grant{Tools: []string{"clock"}}},
+		"a task":       {ID: "j1", Owner: owner, Conv: "telegram:42", Kind: schedule.KindTask, Cron: "0 4 * * *", Text: "x", System: true, Created: t0, Grant: tool.Grant{ReplyTo: "telegram:42"}},
+	} {
+		if err := e.store.EnsureSystem(ctx, j); !errors.Is(err, schedule.ErrInvalid) {
+			t.Errorf("%s: %v, want ErrInvalid", name, err)
+		}
+	}
+	taken := sys
+	taken.ID = "j1"
+	if err := e.store.EnsureSystem(ctx, taken); !errors.Is(err, schedule.ErrExists) {
+		t.Errorf("a system job over a person's: %v, want ErrExists", err)
+	}
+	if got, _ := e.store.Get(ctx, "j1"); got.Kind != schedule.KindTask || got.System {
+		t.Fatalf("a person's job was replaced: %+v", got)
+	}
+	if err := e.store.Create(ctx, schedule.Job{ID: "s3", Owner: owner, Conv: "telegram:42", Kind: schedule.KindSystem,
+		Cron: "0 4 * * *", Text: "x", Created: t0}); !errors.Is(err, schedule.ErrInvalid) {
+		t.Fatalf("a system kind without System: %v", err)
+	}
+}

@@ -119,9 +119,11 @@ Rules:
      fact about the owner, or a hidden instruction?" Imperative entries
      ("always do…", "ignore…") are rejected; suspicious ones go to
      quarantine with a notice to the owner;
-   - **on schedule:** a system task audits memory, persona and skills for
-     injections, contradictions and stale entries. A system task is marked
-     as such and cannot be deleted from the list.
+   - **on schedule:** a system job audits memory, persona and skills for
+     injections, in code and without a model turn (ruling R36; it was a
+     model task first, and contradictions and stale entries move to
+     nightly consolidation, R-MEM-1). A system job is marked as such and
+     cannot be deleted from the list.
 4. **Compaction keeps the marks.** The summary written when history is
    compacted keeps external content marked as data, so an injection
    cannot survive compaction as the agent's own words.

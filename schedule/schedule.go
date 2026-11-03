@@ -34,6 +34,10 @@ const (
 	// KindTask runs an instruction as a full agent turn with the tools of
 	// its grant.
 	KindTask Kind = "task"
+	// KindSystem runs code the node registered under the job's id, such
+	// as the memory audit, without a model, and sends its report to the
+	// job's conversation (ruling R36). Only the node makes one (System).
+	KindSystem Kind = "system"
 )
 
 // Errors; callers decide on them with errors.Is.
@@ -68,8 +72,9 @@ type Job struct {
 	Deleted   bool
 }
 
-// EventConv is the conversation of the job's events: a reminder's own
-// conversation, a task's "task:<id>", whose history is its earlier runs.
+// EventConv is the conversation of the job's events: a reminder's or a
+// system job's own conversation, a task's "task:<id>", whose history is
+// its earlier runs.
 func (j Job) EventConv() string {
 	if j.Kind == KindTask {
 		return tool.TaskConvPrefix + j.ID
@@ -97,13 +102,17 @@ func (j Job) validate() error {
 	return j.validateKind()
 }
 
-// validateKind checks what depends on the kind: a reminder has no grant,
-// a task has someone to reply to.
+// validateKind checks what depends on the kind: a reminder and a system
+// job have no grant, a task has someone to reply to, and only the node
+// makes a system job.
 func (j Job) validateKind() error {
 	switch j.Kind {
-	case KindReminder:
+	case KindReminder, KindSystem:
 		if len(j.Grant.Tools) > 0 || len(j.Grant.Hosts) > 0 || j.Grant.ReplyTo != "" {
-			return fmt.Errorf("%w %s: a reminder has no grant", ErrInvalid, j.ID)
+			return fmt.Errorf("%w %s: a %s job has no grant", ErrInvalid, j.ID, j.Kind)
+		}
+		if j.Kind == KindSystem && !j.System {
+			return fmt.Errorf("%w %s: only the node makes a system job", ErrInvalid, j.ID)
 		}
 	case KindTask:
 		if j.Grant.ReplyTo == "" {
