@@ -122,6 +122,7 @@ type Server struct {
 	nextMsg    int64
 	confirmed  int64
 	sent       []Outgoing
+	uploads    []Upload
 	fail       map[string]failure
 	webhook    bool
 	kick       chan struct{}            // closed to end the getUpdates call in flight
@@ -393,7 +394,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := map[string]json.RawMessage{}
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil && err.Error() != "EOF" {
+	var file *formFile
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		var err error
+		if params, file, err = readForm(r); err != nil {
+			writeErr(w, http.StatusBadRequest, "Bad Request: can't parse the form", 0)
+			return
+		}
+	} else if err := json.NewDecoder(r.Body).Decode(&params); err != nil && err.Error() != "EOF" {
 		writeErr(w, http.StatusBadRequest, "Bad Request: can't parse JSON", 0)
 		return
 	}
@@ -435,6 +443,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.getUpdates(w, r, params)
 	case "sendMessage":
 		s.sendMessage(w, params)
+	case "sendPhoto", "sendDocument":
+		s.sendFile(w, method, params, file)
 	case "editMessageText":
 		s.editMessageText(w, params)
 	case "editMessageReplyMarkup":

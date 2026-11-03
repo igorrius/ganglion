@@ -320,6 +320,9 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", err, transport.ErrPermanent)
 	}
+	if msg.Attach != nil {
+		return t.sendAttachment(ctx, chat, thread, msg)
+	}
 	if msg.Ack != "" {
 		return sendError(t.ack(ctx, msg.Ack, msg.Text))
 	}

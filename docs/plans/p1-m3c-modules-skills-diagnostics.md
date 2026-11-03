@@ -381,7 +381,7 @@ script:           # optional: a level-2 skill
   - The upload is `multipart/form-data`, streamed from `Data`; the token
     is redacted from errors as today.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestSendPhotoWithCaption`: the fake Bot API got `sendPhoto` with
     the bytes and the caption entities.
   - `TestLongCaptionSplitsIntoParts`: photo without caption, then the
@@ -392,12 +392,12 @@ script:           # optional: a level-2 skill
   - `TestAttachmentWithButtonsIsPermanent`.
   - Metric: `ganglion_outbox_attachments_total{kind,result}` and the
     bytes histogram `ganglion_outbox_attachment_bytes`.
-- [ ] **Step 2: Run** — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
-- [ ] **Step 5: Code map** (`event`, `queue/sqlqueue`,
+- [x] **Step 2: Run** — FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
+- [x] **Step 5: Code map** (`event`, `queue/sqlqueue`,
   `transport/telegram`).
-- [ ] **Step 6: Commit** `telegram, outbox: photos and documents with the delivery guarantee (R-DLV-9)`.
+- [x] **Step 6: Commit** `telegram, outbox: photos and documents with the delivery guarantee (R-DLV-9)`.
 
 ### Task 4: the metrics picture, `metrics.show` and `/metrics` (3.16)
 

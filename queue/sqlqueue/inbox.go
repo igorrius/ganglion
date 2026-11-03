@@ -10,6 +10,7 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/queue"
+	"github.com/igorrius/ganglion/transport"
 )
 
 // Put implements queue.Queue. An empty ID gets a fresh ULID; a zero At is
@@ -187,6 +188,10 @@ func upsertState(ctx context.Context, c *sql.Conn, st queue.StateUpdate, now tim
 func insertOutgoing(ctx context.Context, c *sql.Conn, m event.Outgoing, now time.Time) (bool, error) {
 	if m.IdemKey == "" || m.Transport == "" || m.Conv == "" {
 		return false, fmt.Errorf("outgoing message needs an IdemKey, a Transport and a Conv")
+	}
+	if a := m.Attach; a != nil && len(a.Data) > event.MaxAttachmentBytes {
+		return false, fmt.Errorf("outbox %s: attachment of %d bytes is over %d: %w",
+			m.IdemKey, len(a.Data), event.MaxAttachmentBytes, transport.ErrPermanent)
 	}
 	if m.ID == "" {
 		m.ID = event.NewID(now)

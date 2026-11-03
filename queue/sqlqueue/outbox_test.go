@@ -2,6 +2,7 @@ package sqlqueue_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/queue"
+	"github.com/igorrius/ganglion/transport"
 )
 
 func enqueue(t *testing.T, f fixture, msgs ...event.Outgoing) {
@@ -212,5 +214,27 @@ func TestPartSentSurvivesReopen(t *testing.T) {
 	ps, _ := due(t, f, 100)
 	if len(ps) != 1 || ps[0].PartsSent != 2 {
 		t.Fatalf("after reopen: %+v, want PartsSent 2", ps)
+	}
+}
+
+// Review focus 3: an attachment over the limit is refused before
+// anything is stored.
+func TestOversizeAttachmentRefusedAtEnqueue(t *testing.T) {
+	f := setup(t)
+	big := reply("telegram:a", "big")
+	big.Attach = &event.Attachment{Kind: event.AttachPhoto, Name: "x.png", Type: "image/png", Data: make([]byte, event.MaxAttachmentBytes+1)}
+	err := f.q.Enqueue(context.Background(), reply("telegram:a", "first"), big)
+	if !errors.Is(err, transport.ErrPermanent) {
+		t.Fatalf("Enqueue = %v, want ErrPermanent", err)
+	}
+	if ps, _ := due(t, f, 10); len(ps) != 0 {
+		t.Fatalf("stored %v", keys(ps))
+	}
+	ok := reply("telegram:a", "ok")
+	ok.Attach = &event.Attachment{Kind: event.AttachPhoto, Name: "x.png", Type: "image/png", Data: make([]byte, event.MaxAttachmentBytes)}
+	enqueue(t, f, ok)
+	ps, _ := due(t, f, 10)
+	if len(ps) != 1 || ps[0].Msg.Attach == nil || len(ps[0].Msg.Attach.Data) != event.MaxAttachmentBytes {
+		t.Fatalf("the largest allowed attachment did not round-trip: %+v", ps)
 	}
 }

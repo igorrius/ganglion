@@ -488,3 +488,30 @@ func TestSenderTelemetry(t *testing.T) {
 		}
 	}
 }
+
+func TestAttachmentTelemetry(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	e := newEnv(t)
+	pic := out("telegram:a", "a1")
+	pic.Attach = &event.Attachment{Kind: event.AttachPhoto, Name: "m.png", Type: "image/png", Data: make([]byte, 3000)}
+	bad := out("telegram:b", "b1")
+	bad.Attach = &event.Attachment{Kind: event.AttachDocument, Name: "r.txt", Type: "text/plain", Data: []byte("x")}
+	e.enqueue(t, pic, bad)
+	tr := newFake(e.clock, func(m event.Outgoing, _ int) error {
+		if m.IdemKey == "b1" {
+			return fmt.Errorf("refused: %w", transport.ErrPermanent)
+		}
+		return nil
+	})
+	e.start(t, tr)
+	e.runUntil(t, t0.Add(time.Minute), func() bool { return len(tr.records()) == 2 })
+	if got := rec.Value(t, "ganglion.outbox.attachments", map[string]string{"kind": "photo", "result": "sent"}); got != 1 {
+		t.Errorf("photo sent = %v", got)
+	}
+	if got := rec.Value(t, "ganglion.outbox.attachments", map[string]string{"kind": "document", "result": "failed"}); got != 1 {
+		t.Errorf("document failed = %v", got)
+	}
+	if got := rec.Sum(t, "ganglion.outbox.attachment.bytes", map[string]string{"kind": "photo"}); got != 3000 {
+		t.Errorf("photo bytes = %v", got)
+	}
+}

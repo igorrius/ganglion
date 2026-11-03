@@ -9,8 +9,11 @@ import (
 )
 
 // maxTextUnits is the longest message Telegram accepts, in UTF-16 code
-// units.
-const maxTextUnits = 4096
+// units; maxCaptionUnits the longest caption of a picture or a document.
+const (
+	maxTextUnits    = 4096
+	maxCaptionUnits = 1024
+)
 
 // Parts implements transport.Parter (ADR-0025). A message whose rendered
 // text fits maxTextUnits comes back unchanged. A longer one is split
@@ -21,19 +24,49 @@ const maxTextUnits = 4096
 // hard), which may lose formatting at the cut but never breaks a message.
 // Part i gets IdemKey + ":p<i>"; only the first part keeps ReplyTo and
 // only the last keeps the buttons. An edit is never split: it changes one
-// message. The result depends only on msg, so a resumed sender gets the
-// same parts.
+// message. An attachment whose text does not fit a caption goes first
+// without one, and the text follows as the next parts (R-DLV-9). The
+// result depends only on msg, so a resumed sender gets the same parts.
 func (t *Transport) Parts(msg event.Outgoing) []event.Outgoing {
-	if msg.Edit != "" || msg.Ack != "" || renderedUnits(msg.Text) <= maxTextUnits {
+	if msg.Edit != "" || msg.Ack != "" {
 		return []event.Outgoing{msg}
 	}
-	chunks := splitMarkdown(msg.Text)
+	if msg.Attach != nil {
+		return attachmentParts(msg)
+	}
+	if renderedUnits(msg.Text) <= maxTextUnits {
+		return []event.Outgoing{msg}
+	}
+	return textParts(msg, splitMarkdown(msg.Text), 0)
+}
+
+// attachmentParts keeps an attachment whole when its text fits a caption
+// (or it has buttons, which Send refuses); otherwise the attachment is
+// part 0 with no caption and the text the parts after it.
+func attachmentParts(msg event.Outgoing) []event.Outgoing {
+	if len(msg.Buttons) > 0 || renderedUnits(msg.Text) <= maxCaptionUnits {
+		return []event.Outgoing{msg}
+	}
+	first := msg
+	first.IdemKey, first.Text = msg.IdemKey+":p0", ""
+	text := msg
+	text.Attach, text.ReplyTo = nil, ""
+	chunks := []string{msg.Text}
+	if renderedUnits(msg.Text) > maxTextUnits {
+		chunks = splitMarkdown(msg.Text)
+	}
+	return append([]event.Outgoing{first}, textParts(text, chunks, 1)...)
+}
+
+// textParts makes one part of msg per chunk, numbered from first: only
+// part 0 keeps ReplyTo and only the last keeps the buttons.
+func textParts(msg event.Outgoing, chunks []string, first int) []event.Outgoing {
 	parts := make([]event.Outgoing, 0, len(chunks))
 	for i, chunk := range chunks {
 		part := msg
-		part.IdemKey = msg.IdemKey + ":p" + strconv.Itoa(i)
+		part.IdemKey = msg.IdemKey + ":p" + strconv.Itoa(first+i)
 		part.Text = chunk
-		if i > 0 {
+		if first+i > 0 {
 			part.ReplyTo = ""
 		}
 		if i < len(chunks)-1 {

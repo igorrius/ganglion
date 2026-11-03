@@ -115,7 +115,20 @@ type envelope struct {
 
 // call POSTs params as JSON to method and decodes the result into result
 // (skipped when result is nil).
-func (c *client) call(ctx context.Context, method string, params, result any) (err error) {
+func (c *client) call(ctx context.Context, method string, params, result any) error {
+	body := []byte("{}")
+	if params != nil {
+		var err error
+		if body, err = json.Marshal(params); err != nil {
+			return c.fail(method, err)
+		}
+	}
+	return c.do(ctx, method, "application/json", body, result)
+}
+
+// do posts body of type ctype to method, traced and timed, and decodes
+// the answer into result.
+func (c *client) do(ctx context.Context, method, ctype string, body []byte, result any) (err error) {
 	ctx, span := c.tracer.Start(ctx, "telegram "+method, trace.WithSpanKind(trace.SpanKindClient))
 	started, code := time.Now(), "error"
 	defer func() {
@@ -126,7 +139,7 @@ func (c *client) call(ctx context.Context, method string, params, result any) (e
 		}
 		span.End()
 	}()
-	status, raw, err := c.post(ctx, method, params)
+	status, raw, err := c.post(ctx, method, ctype, body)
 	if status != 0 {
 		code = strconv.Itoa(status)
 	}
@@ -136,21 +149,13 @@ func (c *client) call(ctx context.Context, method string, params, result any) (e
 	return c.decode(method, status, raw, result)
 }
 
-// post sends params as JSON to method and returns the HTTP status and the
-// body.
-func (c *client) post(ctx context.Context, method string, params any) (int, []byte, error) {
-	body := []byte("{}")
-	if params != nil {
-		var err error
-		if body, err = json.Marshal(params); err != nil {
-			return 0, nil, c.fail(method, err)
-		}
-	}
+// post sends body to method and returns the HTTP status and the answer.
+func (c *client) post(ctx context.Context, method, ctype string, body []byte) (int, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/bot"+c.token+"/"+method, bytes.NewReader(body))
 	if err != nil {
 		return 0, nil, c.fail(method, err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", ctype)
 	resp, err := c.hc.Do(req)
 	if err != nil {
 		return 0, nil, c.fail(method, err)
