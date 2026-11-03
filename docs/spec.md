@@ -1073,6 +1073,16 @@ Reviewed at each gate.
   - per-group behaviour and limits in the node config.
 - Voice messages: understanding them, later, as a separate module or
   model (owner, 2026-11-02).
+- Reading pages that build their content with JavaScript: `web.fetch`
+  reads the HTML the server sends, so a page rendered in the browser
+  comes back empty. It needs a headless browser, too heavy for the core:
+  later, as a job for a worker node, behind the same address checks and
+  limits as `web.fetch` (owner, 2026-11-03, ruling R44).
+- The bot's language as an install-time setting: the fixed texts, the
+  confirmation questions and the toasts in the operator's language. In
+  M3b they are English; only the command hints follow the client's
+  language (English, Russian, Ukrainian, ruling R45) (owner, 2026-11-03,
+  ruling R46).
 - PDF generation: deferred, since Cyrillic fonts add weight; replies
   carry pictures and documents as attachments first (R-DLV-9) (owner,
   2026-11-02).
