@@ -5,9 +5,16 @@ package transcript
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/tool"
 )
+
+// MaxToolResult is how much of one tool result a transcript keeps, in
+// runes: a page a tool read earlier stays readable without filling the
+// prompt. The API path sends results whole; compaction bounds both.
+const MaxToolResult = 4000
 
 // ToolCalls says whether the model's tool calls appear in the transcript.
 type ToolCalls bool
@@ -37,9 +44,24 @@ func Lines(msgs []provider.Message, calls ToolCalls) []string {
 				}
 			}
 		case provider.RoleTool:
-			out = append(out, "Tool result: "+m.Content)
+			out = append(out, "Tool result: "+toolResult(m.Content))
 		case provider.RoleSystem:
 		}
 	}
 	return out
+}
+
+// toolResult is a tool result cut to MaxToolResult runes with a note of
+// how much was left out. A result marked as outside content keeps its
+// closing tag, so what follows is not read as part of it.
+func toolResult(s string) string {
+	body, closing := s, ""
+	if inner, ok := strings.CutSuffix(s, tool.ExternalClose); ok {
+		body, closing = inner, tool.ExternalClose
+	}
+	r := []rune(body)
+	if len(r) <= MaxToolResult {
+		return s
+	}
+	return string(r[:MaxToolResult]) + fmt.Sprintf("\n[%d more characters left out]", len(r)-MaxToolResult) + closing
 }

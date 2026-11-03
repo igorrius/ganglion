@@ -120,6 +120,10 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 		if got != turns.OutcomeOK {
 			return nil, "", got, nil
 		}
+		// The calls a CLI provider ran go into the history before its
+		// answer, as an API model's would, so later turns see them.
+		ran := t.takeExecLog()
+		msgs, added = append(msgs, ran...), append(added, ran...)
 		msg := resp.Message
 		msg.Role = provider.RoleAssistant
 		msgs, added = append(msgs, msg), append(added, msg)

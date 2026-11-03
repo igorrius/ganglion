@@ -161,6 +161,10 @@ func wrapperOpen(source string) string {
 
 const wrapperClose = "\n</external>"
 
+// ExternalClose is the end of every wrapper WrapExternal makes, so a
+// renderer that shortens a wrapped text can keep the wrapper closed.
+const ExternalClose = wrapperClose
+
 // WrapExternal marks text from outside as data for the model. A closing
 // tag inside text is broken, so the text cannot end the wrapper early.
 func WrapExternal(source, text string) string {

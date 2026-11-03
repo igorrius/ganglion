@@ -102,9 +102,39 @@ func TestToolsThroughBridgeAreJournalled(t *testing.T) {
 	if r := results(t, reply(t, out)); r[0].IsError || r[0].Content[0].Text != "12:00" {
 		t.Fatalf("the CLI read %+v", r)
 	}
-	// The turn trace counts the call as on the API path.
-	if st := e.state(t); len(st.Messages) != 2 {
-		t.Fatalf("history %+v, want the message and the answer", st.Messages)
+	// The history keeps the call and its result as on the API path
+	// (ruling R30): the message, the call, its result, the answer.
+	st := e.state(t)
+	if len(st.Messages) != 4 || len(st.Messages[1].ToolCalls) != 1 || st.Messages[1].ToolCalls[0].Name != "clock" ||
+		st.Messages[2].Role != provider.RoleTool || st.Messages[2].ToolCallID != st.Messages[1].ToolCalls[0].ID ||
+		st.Messages[2].Content != "12:00" || st.Messages[1].ToolCalls[0].ID != "cli_"+strings.ToLower(ev.ID)+"_1" {
+		t.Fatalf("history %+v, want the message, the call, its result and the answer", st.Messages)
+	}
+}
+
+// Ruling R30: a task run through the CLI keeps its tool calls and results
+// in the task's history, so the next run sees the figures the previous
+// one read, still marked as outside content.
+func TestCLITaskRunSeesEarlierToolResults(t *testing.T) {
+	read := &sideTool{name: "rates.read", result: tool.Result{Text: "USD 41.2", External: true}, class: tool.ClassExternal}
+	e := newConfirmEnv(t, read)
+	j := rates()
+	j.Grant.Tools = []string{"rates.read"}
+	e.jobs[j.ID] = j
+	e.smart.push(viaMCP("rates_read"))
+	e.turn(t, fired(j))
+	e.smart.push(say("USD 41.2, unchanged"))
+	e.turn(t, fired(j))
+	reqs := e.smart.requests()
+	msgs := reqs[len(reqs)-1].Messages
+	i := slices.IndexFunc(msgs, func(m provider.Message) bool { return len(m.ToolCalls) == 1 && m.ToolCalls[0].Name == "rates.read" })
+	if i < 0 || i+1 >= len(msgs) {
+		t.Fatalf("the second run does not see the first run's call: %+v", msgs)
+	}
+	res := msgs[i+1]
+	want := tool.WrapExternal("rates.read", "USD 41.2")
+	if res.Role != provider.RoleTool || res.ToolCallID != msgs[i].ToolCalls[0].ID || res.Content != want {
+		t.Fatalf("result %+v, want %q", res, want)
 	}
 }
 

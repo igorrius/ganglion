@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,11 +94,38 @@ func (a *Agent) runTool(ctx context.Context, t *turn, call provider.ToolCall) pr
 // exec is the turn's provider.Exec for a provider that runs its own tool
 // loop (the claude CLI over the MCP bridge, R-PRV-6): every call takes
 // the same path as an API model's, through useTool, and the turn's CLI
-// calls are capped at MaxSteps, the API loop's limit (ADR-0036).
+// calls are capped at MaxSteps, the API loop's limit (ADR-0036). Each
+// call that ran is logged for the history as an API model's call would
+// be (takeExecLog).
 func (a *Agent) exec(t *turn) provider.Exec {
 	return func(ctx context.Context, call provider.ToolCall) (string, error) {
 		return a.useTool(ctx, t, call, true)
 	}
+}
+
+// logExec keeps a CLI provider's call and its result for the history, in
+// the API path's form: an assistant message with the call and the tool
+// message that answers it. The call has no id over MCP, so it gets one
+// from the turn and its number, unique in the session. The caller holds
+// t.mu.
+func (t *turn) logExec(call provider.ToolCall, text string, err error) {
+	call.ID = "cli_" + strings.ToLower(t.event.ID) + "_" + strconv.Itoa(t.calls)
+	if err != nil {
+		text = "error: " + err.Error()
+	}
+	t.execLog = append(t.execLog,
+		provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{call}},
+		provider.Message{Role: provider.RoleTool, ToolCallID: call.ID, Content: text})
+}
+
+// takeExecLog returns the calls a CLI provider ran since the last take,
+// for the history, and forgets them.
+func (t *turn) takeExecLog() []provider.Message {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := t.execLog
+	t.execLog = nil
+	return out
 }
 
 // toolCalls is the number of calls the turn has run; a callCount.
@@ -128,6 +156,16 @@ func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall, ca
 		t.execCalls++
 	}
 	t.calls++
+	text, err := a.applyTool(ctx, t, call)
+	if capped {
+		t.logExec(call, text, err)
+	}
+	return text, err
+}
+
+// applyTool runs the turn's numbered call through the chain and applies
+// its result to the turn (useTool). The caller holds t.mu.
+func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) (string, error) {
 	started := time.Now()
 	result, err := a.tool(ctx, a.toolCall(t, call))
 	// A failed call can still carry messages, such as the alert about

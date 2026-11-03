@@ -30,7 +30,10 @@ type turn struct {
 	// execCalls are the calls a CLI provider ran through Exec; at most
 	// MaxSteps a turn.
 	execCalls int
-	known     urlSet // addresses the sender gave or a search returned
+	// execLog are the CLI provider's calls and results for the history,
+	// in the API path's form (logExec).
+	execLog []provider.Message
+	known   urlSet // addresses the sender gave or a search returned
 	// decision is the press of a KindDecision event; toolResult the
 	// pending call of a KindToolResult event; schedule the job of a
 	// KindSchedule event.
