@@ -91,8 +91,13 @@ func TestUnknownURLAsksConfirmation(t *testing.T) {
 	e := newWebEnv(t)
 	e.smart.push(callWith("web.fetch", `{"url":"http://news.example/a?d=history"}`), say("I asked."))
 	out := e.turn(t, message(owner, "Igor", "what is new on the news site?"))
-	if _, ok := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 }); !ok {
+	q, ok := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 })
+	if !ok {
 		t.Fatalf("no question in %+v", out)
+	}
+	// The owner reads the address that will be fetched (ruling R39).
+	if q.Text != "Open this page?\n`http://news.example/a?d=history`" {
+		t.Fatalf("question %q", q.Text)
 	}
 	if len(e.net.Dialed()) != 0 {
 		t.Fatalf("the page was fetched before the owner answered: %v", e.net.Dialed())

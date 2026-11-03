@@ -169,10 +169,12 @@ The abuse cases:
 - The confirmed call's arguments sit in SQLite until the call is done,
   like the history that holds them anyway; the question shown is
   redacted. What the owner approves is what runs (ruling R34):
-  `message.send`, `memory.write`, `memory.forget`, `cells.set` and
-  `persona.propose` word their own question and show the whole action
-  (the recipient by name and the full text; the title and body; the
-  slug and the fact; the cell and the value), and refuse, with a fixed
+  `message.send`, `memory.write`, `memory.forget`, `cells.set`,
+  `persona.propose` and `web.fetch` word their own question and show the
+  whole action (the recipient by name and the full text; the title and
+  body; the slug and the fact; the cell and the value; "Open this
+  page?" and the normalised address that is fetched, ruling R39), and
+  refuse, with a fixed
   error and no question, an action longer than a question shows (3,000
   characters; a message's text at most 2,500) or text the redaction
   would change. Another tool's question shows its arguments cut at 300

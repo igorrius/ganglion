@@ -70,6 +70,35 @@ func (w *WebFetch) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	return tool.Result{Text: pageText(page), External: true}, nil
 }
 
+// questionFetch starts web.fetch's question; the address follows in a
+// code span, where Markdown changes nothing.
+const questionFetch = "Open this page?\n"
+
+// errBacktick refuses an address a code span cannot hold.
+var errBacktick = errors.New("web.fetch: the address holds a backtick, which the question cannot show; write it as %60")
+
+// Question implements tool.Questioner: the owner sees the normalised
+// address, the one the fetcher reads, whole (rulings R34, R39). An
+// address that is not http(s), holds a backtick, is longer than a
+// question shows or holds something the redaction would hide is refused
+// without a question.
+func (*WebFetch) Question(_ context.Context, c tool.Call) (string, error) {
+	var a struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(c.Args, &a); err != nil {
+		return "", errors.New("web.fetch: arguments: want {\"url\": \"https://…\"}")
+	}
+	norm, ok := urlnorm.Normalize(a.URL)
+	if !ok {
+		return "", errors.New("web.fetch: want an http or https address")
+	}
+	if strings.Contains(norm, "`") {
+		return "", errBacktick
+	}
+	return whole("web.fetch: the address", questionFetch+"`"+norm+"`")
+}
+
 // pageText is the page with its address, title and type on top.
 func pageText(p web.Page) string {
 	var b strings.Builder

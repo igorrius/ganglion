@@ -166,3 +166,30 @@ func TestWebFetchRedirectOutsideTheGrantAlerts(t *testing.T) {
 		t.Fatalf("out %+v, want the grant alert", res.Out)
 	}
 }
+
+// web.fetch's question shows the normalised address it will fetch, in a
+// code span so Markdown cannot change it; an address the question cannot
+// show exactly is refused without a question (rulings R34, R39).
+func TestWebFetchQuestionShowsTheAddress(t *testing.T) {
+	ask, isQ := tool.Handler(builtin.NewWebFetch(&fetcher{})).(tool.Questioner)
+	if !isQ {
+		t.Fatal("web.fetch words no question")
+	}
+	got, err := ask.Question(context.Background(), call("web.fetch", `{"url":"HTTPS://Bank.Example:443/rates?valcode=EUR&json#top"}`))
+	want := "Open this page?\n`https://bank.example/rates?valcode=EUR&json`"
+	if err != nil || got != want {
+		t.Fatalf("Question = %q, %v; want %q", got, err, want)
+	}
+	long := "https://a.example/" + strings.Repeat("a", tool.MaxQuestionRunes)
+	for name, args := range map[string]string{
+		"too long":       `{"url":"` + long + `"}`,
+		"not an address": `{"url":"ftp://a.example/"}`,
+		"no address":     `{}`,
+		"a backtick":     "{\"url\":\"https://a.example/?q=a`b\"}",
+		"a secret in it": `{"url":"https://a.example/?token=sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789"}`,
+	} {
+		if q, err := ask.Question(context.Background(), call("web.fetch", args)); err == nil {
+			t.Errorf("%s: asked %q", name, q)
+		}
+	}
+}
