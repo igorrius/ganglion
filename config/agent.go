@@ -134,13 +134,16 @@ func Scheduler() do.Provider[*schedule.Scheduler] {
 
 // Scheduling provides what the schedule tools and their buttons need.
 // The tools check grants against the registry they are part of, so the
-// spec lookup reads the registry when called, not when built.
+// spec lookup reads the registry when called, not when built, and from
+// the root scope: the scope a provider gets carries the invoker chain of
+// its build, which a later lookup would read as a circular dependency.
 func Scheduling() do.Provider[builtin.Scheduling] {
 	return func(i do.Injector) (builtin.Scheduling, error) {
+		root := i.RootScope()
 		return builtin.Scheduling{
 			Jobs:    do.MustInvoke[*schedule.Store](i),
 			Runner:  do.MustInvoke[*schedule.Scheduler](i),
-			Specs:   func(name string) (tool.Spec, bool) { return do.MustInvoke[*tool.Registry](i).Spec(name) },
+			Specs:   func(name string) (tool.Spec, bool) { return do.MustInvoke[*tool.Registry](root).Spec(name) },
 			Buttons: do.MustInvoke[*pending.Store](i),
 			Convs:   do.MustInvoke[builtin.Convs](i),
 			Loc:     do.MustInvoke[Bootstrap](i).Agent.TZ,

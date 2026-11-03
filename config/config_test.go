@@ -20,6 +20,7 @@ import (
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 	"github.com/samber/do/v2"
@@ -198,5 +199,28 @@ func TestFamilyHasNoTools(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Decision != journal.DecisionForbidden || entries[0].Principal != "telegram:user:7" {
 		t.Fatalf("journal %+v", entries)
+	}
+}
+
+// The schedule tools read the registry when a call is checked, long after
+// the container was built. The make accept run of the live-run fixes
+// panicked there with a false circular dependency once Telegram's command
+// hints made the transport build the agent: the lookup used the build-time
+// scope, whose invoker chain was stale. It reads from the root scope now.
+func TestScheduleSpecsLookupAfterTheBuild(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	b := agentConfig(t)
+	b.BotToken, b.BotAPIURL = testToken, fake.URL()
+	i := New(context.Background(), b, slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	if _, err := do.Invoke[[]node.Component](i); err != nil {
+		t.Fatal(err)
+	}
+	sc, err := do.Invoke[builtin.Scheduling](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, ok := sc.Specs("web.fetch"); !ok || s.Name != "web.fetch" {
+		t.Fatalf("Specs(web.fetch) = %+v, %v", s, ok)
 	}
 }
