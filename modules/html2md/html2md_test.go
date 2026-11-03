@@ -121,9 +121,13 @@ func nestingPages() map[string]string {
 		"stray end tags":   "<title>Deep</title><p>start</p>" + strings.Repeat("<div></q>", 200_000) + "<p>end</p>",
 	}
 	for name, unit := range map[string]string{
-		"formatting end tags": "<b><div></b>",
-		"scope boundaries":    "<div><marquee></div>",
-		"mixed":               "<i><table><div></i><object><span></div></table>",
+		"formatting end tags":       "<b><div></b>",
+		"scope boundaries":          "<div><marquee></div>",
+		"mixed":                     "<i><table><div></i><applet><span></div></table>",
+		"other end tag over div":    "<span><div></span>",
+		"other end tag over p, div": "<span><p><div></span>",
+		"q over div":                "<q><div></q>",
+		"label over div":            "<label><div></label>",
 	} {
 		for _, size := range []int{120 << 10, 1 << 20} {
 			pages[fmt.Sprintf("%s, %d KiB", name, size>>10)] = "<title>Deep</title><p>start</p>" +
@@ -163,7 +167,7 @@ func TestHostileHTMLNoTrap(t *testing.T) {
 		case errors.As(err, &me): // ran out of its memory: a clean failure
 		case err != nil:
 			t.Errorf("%s (%d bytes): %v", name, len(html), err) // a trap or a timeout
-		case !strings.Contains(p.Markdown, "start"): // in the mixed shape the last words end up inside an <object>, which is dropped
+		case !strings.Contains(p.Markdown, "start") || !strings.Contains(p.Markdown, "end"):
 			t.Errorf("%s (%d bytes): %q", name, len(html), text.Truncate(p.Markdown, 200))
 		}
 		if took := time.Since(start); took > 2*time.Second {

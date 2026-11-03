@@ -24,3 +24,8 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# Tests parse thousands of tag soups (tests/depth.rs): optimise test
+# builds.
+[profile.dev]
+opt-level = 2

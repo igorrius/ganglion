@@ -8,54 +8,11 @@
 //! parsing); a page it misreads loses some formatting, never safety: the
 //! whole module runs in the sandbox.
 
-use std::collections::HashMap;
-
 /// Elements whose body is raw text, never shown as content.
 const RAW: [&str; 6] = ["script", "style", "noscript", "template", "textarea", "xmp"];
 
-/// Deepest nesting of elements passed to the parser.
-pub const MAX_NESTING: usize = 256;
-
-/// Void elements: they never open, with or without "/>".
-const VOID: [&str; 15] = [
-    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track",
-    "wbr", "param", "keygen",
-];
-
-/// Elements whose end tag is optional and that the parser closes by
-/// itself: a page of unclosed `<p>` or `<li>` is not deep. They are not
-/// counted at all.
-const IMPLIED: [&str; 15] = [
-    "p", "li", "dt", "dd", "option", "optgroup", "tr", "td", "th", "thead", "tbody", "tfoot", "rp",
-    "rt", "colgroup",
-];
-
-/// Elements an end tag of another name never closes in the parser: the
-/// boundaries of its default scope (html5ever ignores such an end tag).
-const BOUNDARY: [&str; 15] = [
-    "applet",
-    "caption",
-    "html",
-    "table",
-    "marquee",
-    "object",
-    "template",
-    "mi",
-    "mo",
-    "mn",
-    "ms",
-    "mtext",
-    "annotation",
-    "foreignobject",
-    "desc",
-];
-
-/// Formatting elements: their end tags go through the adoption agency
-/// algorithm, which can leave the tree as deep as before, and the
-/// parser reopens them; an end tag passes them only when it names them.
-const FORMATTING: [&str; 14] = [
-    "a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u",
-];
+pub use crate::nesting::MAX_NESTING;
+use crate::nesting::{Nesting, Verdict};
 
 /// Returns src without raw-text bodies and `data:` attribute values, and
 /// with start tags nested deeper than MAX_NESTING (and their end tags)
@@ -76,7 +33,7 @@ pub fn strip(src: &str) -> String {
             break;
         };
         let tag = &b[lt..=gt];
-        if nesting.keep(tag) {
+        if nesting.tag(tag) == Verdict::Keep {
             strip_data(tag, &mut out);
         }
         i = gt + 1;
@@ -159,101 +116,6 @@ fn strip_data(tag: &[u8], out: &mut Vec<u8>) {
         }
         out.push(c);
         i += 1;
-    }
-}
-
-/// Nesting keeps a stack of the elements open, erring towards depth
-/// (ruling R23): a non-void element opens even when written `<div/>`
-/// (HTML ignores the slash), and an end tag closes its element only when
-/// nothing between them could stop the parser from doing so: a scope
-/// boundary or another formatting element. A formatting end tag closes
-/// only the element right on top. Start tags past MAX_NESTING are left
-/// out, and so are their end tags; an end tag whose element is not open
-/// at all is left out too, since the parser ignores it.
-#[derive(Default)]
-struct Nesting {
-    open: Vec<Vec<u8>>,
-    open_by_name: HashMap<Vec<u8>, usize>, // how many of each name are open: a stray end tag is found at once
-    dropped: HashMap<Vec<u8>, usize>,      // start tags left out, by name
-}
-
-fn listed(list: &[&str], name: &[u8]) -> bool {
-    list.iter().any(|v| v.as_bytes() == name)
-}
-
-impl Nesting {
-    fn keep(&mut self, tag: &[u8]) -> bool {
-        let end = tag.len() > 1 && tag[1] == b'/';
-        let start = if end { 2 } else { 1 };
-        let name_len = tag[start..]
-            .iter()
-            .position(|c| !c.is_ascii_alphanumeric())
-            .unwrap_or(tag.len() - start);
-        let name = tag[start..start + name_len].to_ascii_lowercase();
-        if name.is_empty() || listed(&VOID, &name) || listed(&IMPLIED, &name) {
-            return true;
-        }
-        if end {
-            return self.close(&name);
-        }
-        if self.open.len() >= MAX_NESTING {
-            *self.dropped.entry(name).or_default() += 1;
-            return false;
-        }
-        *self.open_by_name.entry(name.clone()).or_default() += 1;
-        self.open.push(name);
-        true
-    }
-
-    /// Closes name: a dropped one goes with its tag; an open one is
-    /// popped when the parser surely closes it; a stray one is left out.
-    fn close(&mut self, name: &[u8]) -> bool {
-        if let Some(n) = self.dropped.get_mut(name) {
-            *n -= 1;
-            if *n == 0 {
-                self.dropped.remove(name);
-            }
-            return false;
-        }
-        if !self.open_by_name.contains_key(name) {
-            return false;
-        }
-        if let Some(depth) = self.reach(name) {
-            for _ in depth..self.open.len() {
-                self.pop();
-            }
-            self.dropped.clear();
-        }
-        true
-    }
-
-    /// The index of the open element name closes, or None when the
-    /// parser might not close it: a formatting end tag reaches only the
-    /// top element; any other stops at a boundary or a formatting element.
-    fn reach(&self, name: &[u8]) -> Option<usize> {
-        let top = self.open.len().checked_sub(1)?;
-        if listed(&FORMATTING, name) {
-            return (self.open[top] == name).then_some(top);
-        }
-        for (i, open) in self.open.iter().enumerate().rev() {
-            if open == name {
-                return Some(i);
-            }
-            if listed(&BOUNDARY, open) || listed(&FORMATTING, open) {
-                return None;
-            }
-        }
-        None
-    }
-
-    fn pop(&mut self) {
-        let Some(top) = self.open.pop() else { return };
-        if let Some(n) = self.open_by_name.get_mut(&top) {
-            *n -= 1;
-            if *n == 0 {
-                self.open_by_name.remove(&top);
-            }
-        }
     }
 }
 

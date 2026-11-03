@@ -13,7 +13,9 @@
 
 mod extract;
 mod links;
-mod prepass;
+mod nesting;
+/// The pre-pass, public for the depth property test (tests/depth.rs).
+pub mod prepass;
 
 #[cfg(target_arch = "wasm32")]
 mod guest;
