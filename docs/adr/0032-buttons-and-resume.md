@@ -228,6 +228,12 @@ The abuse cases:
   own turn starts; Telegram refuses a toast for a press that old, which
   the transport counts as done, and the client's spinner stops by
   itself.
+- A node without the agent (the echo handler) answers no decision
+  event, so a press of a button left from an earlier run with the agent
+  is not acknowledged: the event is stored and skipped, and the client's
+  spinner stops by itself after a few seconds. The echo bot sends no
+  buttons, so only such leftovers can be pressed; answering them in the
+  echo handler is not worth the code.
 
 ## Revisit when
 
