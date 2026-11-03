@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
 )
@@ -22,7 +23,7 @@ type env struct {
 	now time.Time
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T, opts ...journal.Option) *env {
 	t.Helper()
 	ctx := context.Background()
 	db, err := sqlitedb.Open(ctx, filepath.Join(t.TempDir(), "j.db"))
@@ -31,7 +32,7 @@ func newEnv(t *testing.T) *env {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	e := &env{db: db, now: t0}
-	e.j, err = journal.New(ctx, db, func() time.Time { return e.now }, 30*24*time.Hour)
+	e.j, err = journal.New(ctx, db, func() time.Time { return e.now }, 30*24*time.Hour, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,5 +203,41 @@ func TestRedact(t *testing.T) {
 	}
 	if got := journal.Redact("plain words"); got != "plain words" {
 		t.Errorf("plain text changed: %q", got)
+	}
+}
+
+// Every call is counted by tool, decision and result, and timed by tool;
+// a name the model made up is counted as "unknown", never as itself.
+func TestJournalCountsCalls(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	e := newEnv(t, journal.WithTools(func(name string) bool { return name == "web.fetch" }))
+	run := e.j.Middleware()(func(ctx context.Context, c tool.Call) (tool.Result, error) {
+		switch string(c.Args) {
+		case "confirm":
+			journal.Annotate(ctx, journal.DecisionConfirm)
+		case "fail":
+			return tool.Result{}, errors.New("boom")
+		}
+		return tool.Result{}, nil
+	})
+	for _, c := range []tool.Call{call(1, "web.fetch", "ok"), call(2, "web.fetch", "confirm"), call(3, "web.fetch", "fail"), call(4, "rm -rf /", "ok")} {
+		_, _ = run(context.Background(), c)
+	}
+	for _, c := range []struct {
+		attrs map[string]string
+		want  float64
+	}{
+		{map[string]string{"tool": "web.fetch", "decision": "allowed", "result": "ok"}, 1},
+		{map[string]string{"tool": "web.fetch", "decision": "confirm", "result": "ok"}, 1},
+		{map[string]string{"tool": "web.fetch", "decision": "allowed", "result": "error"}, 1},
+		{map[string]string{"tool": "unknown"}, 1},
+		{map[string]string{"tool": "rm -rf /"}, 0},
+	} {
+		if got := rec.Value(t, "ganglion.tool.calls", c.attrs); got != c.want {
+			t.Errorf("ganglion.tool.calls %v = %v, want %v", c.attrs, got, c.want)
+		}
+	}
+	if got := rec.Value(t, "ganglion.tool.call.duration", map[string]string{"tool": "web.fetch"}); got != 3 {
+		t.Errorf("web.fetch timed %v times, want 3", got)
 	}
 }

@@ -153,12 +153,13 @@ type Scheduler struct {
 	now   func() time.Time
 	after AfterFunc
 	log   *slog.Logger
+	in    instruments
 }
 
 // New returns a scheduler of st's jobs in loc (R-SCH-1) that puts their
 // events into q.
 func New(st *Store, q Inbox, loc *time.Location, now func() time.Time, opts ...Option) *Scheduler {
-	s := &Scheduler{st: st, q: q, loc: loc, now: now, after: time.After, log: slog.New(slog.DiscardHandler)}
+	s := &Scheduler{st: st, q: q, loc: loc, now: now, after: time.After, log: slog.New(slog.DiscardHandler), in: newInstruments()}
 	for _, o := range opts {
 		o(s)
 	}
@@ -262,9 +263,12 @@ func (s *Scheduler) putUnput(ctx context.Context, now time.Time) error {
 
 // put stores the job's event and, for a scheduled run, marks it put.
 func (s *Scheduler) put(ctx context.Context, j Job, key string, slot, now time.Time) error {
-	if err := s.q.Put(ctx, jobEvent(j, key, slot, now)); err != nil {
+	err := s.q.Put(ctx, jobEvent(j, key, slot, now))
+	s.in.observeRun(ctx, j.Kind, err)
+	if err != nil {
 		return fmt.Errorf("schedule: put the event of %s: %w", j.ID, err)
 	}
+	s.in.observeLag(ctx, j.Kind, now.Sub(slot))
 	return s.st.markPut(ctx, j.ID, slot, now)
 }
 
@@ -294,7 +298,9 @@ func (s *Scheduler) RunKey(ctx context.Context, id, owner, token string) error {
 		return fmt.Errorf("schedule: run %s: %w: no token", id, ErrInvalid)
 	}
 	now := s.now()
-	if err := s.q.Put(ctx, jobEvent(j, "cron:"+id+":now:"+token, now, now)); err != nil {
+	err = s.q.Put(ctx, jobEvent(j, "cron:"+id+":now:"+token, now, now))
+	s.in.observeRun(ctx, j.Kind, err)
+	if err != nil {
 		return fmt.Errorf("schedule: put the event of %s: %w", id, err)
 	}
 	return nil

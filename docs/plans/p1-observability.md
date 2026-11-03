@@ -36,6 +36,26 @@ Prometheus names after the exporter's conversion:
 | `ganglion_outbox_failed_total` | counter | `transport` |
 | `ganglion_telegram_api_duration_seconds` | histogram | `method`, `code` |
 | `ganglion_access_dropped_total` | counter | `reason` (stranger, malformed) |
+| `ganglion_turn_steps` | histogram | `outcome` |
+| `ganglion_model_context_tokens` | histogram | `provider`, `model` |
+| `ganglion_model_fallbacks_total` | counter | `reason` (the first candidate's error kind) |
+| `ganglion_sessions_ended_total` | counter | `reason` (idle, new, resume) |
+| `ganglion_compactions_total` | counter | `result` (ok, failed) |
+| `ganglion_tool_calls_total` | counter | `tool` (registered, else `unknown`), `decision`, `result` (ok, error) |
+| `ganglion_tool_call_duration_seconds` | histogram | `tool` |
+| `ganglion_confirmations_pending` | gauge | — |
+| `ganglion_module_calls_total` | counter | `module`, `result` (ok, failed, timeout, trap, bad_output, error) |
+| `ganglion_module_call_duration_seconds` | histogram | `module` |
+| `ganglion_web_fetches_total` | counter | `result` (ok or the refusal's kind) |
+| `ganglion_web_fetch_bytes` | histogram | — |
+| `ganglion_guard_verdicts_total` | counter | `check` (fact, persona), `verdict` (ok, refused, unparseable, unavailable) |
+| `ganglion_schedule_runs_total` | counter | `kind`, `result` (ok, error) |
+| `ganglion_schedule_lag_seconds` | histogram | `kind` |
+| `ganglion_inbox_pending`, `ganglion_outbox_pending` | gauge | — |
+
+Histograms take their buckets from `internal/buckets` by base unit (`Seconds`,
+`Bytes`, `Tokens`, `Counts`); a count of rows in one state is a gauge
+through `sqlitedb.ObserveCount`.
 
 ## Spans
 
@@ -123,7 +143,32 @@ log or journal what they do, but `/metrics` does not show it yet:
 | `ganglion_inbox_pending`, `ganglion_outbox_pending` | gauge | — | Queue depth |
 | `ganglion_sessions_total` | counter | `reason` (idle, new, resume, compacted) | Session churn and compaction |
 
-- [ ] Add these, each in its package's `telemetry.go`, with a test per
+- [x] Add these, each in its package's `telemetry.go`, with a test per
   package. Names and labels may change while building; R-OBS-8 holds.
-- [ ] `make memory` after, to record what they cost.
+  Built (2026-11-03) under the names in the [metrics table](#metrics),
+  with these changes:
+  - `ganglion_turn_fallbacks_total` became `ganglion_model_fallbacks_total`:
+    it counts model calls answered by a later candidate, so a compaction's
+    fallback counts too.
+  - `ganglion_confirmations_total` was not added: the owner's answers are
+    journal decisions, so `ganglion_tool_calls_total` with `decision`
+    approved, denied or expired already counts them (one source).
+  - `ganglion_tool_calls_total` has `decision` (the journal's set) and a
+    separate `result`; a tool name the model made up is `unknown`.
+  - Modules: out of memory is a `trap`, since a module that cannot grow
+    aborts like any other; `failed` is a failure the module reports.
+  - `ganglion_web_fetches_total` was added beside the bytes histogram:
+    refusals by kind, a private address among them.
+  - `ganglion_sessions_total` became `ganglion_sessions_ended_total`
+    (idle, new, resume) and `ganglion_compactions_total` (ok, failed).
+  - Found while building: the SDK's default buckets (0, 5, 10, … 10000)
+    put every sub-second time in one bucket, so the three duration
+    histograms from tasks 1–2 now use `buckets.Seconds` too; and the
+    SDK keeps only the first callback passed when a gauge is made, so
+    `sqlitedb.ObserveCount` registers its callback separately.
+- [x] `make memory` after, to record what they cost: nothing measurable.
+  Against the same run without them: the binary 42.3 MB both; the agent
+  with a tool call per turn at 40.2 MB RSS after 1,000 turns both (peak
+  40.6 against 40.2 MB); the hostile page peaks at 101.1 against
+  100.1 MB, within run-to-run spread.
 - [ ] The owner looks at the dashboard on a live run.

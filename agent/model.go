@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"strings"
@@ -33,6 +34,7 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.Chat
 		a.log.Error("agent: no model fits", "conv", rec.Conv, "kind", task.Kind, "err", err)
 		return provider.ChatResponse{}, turns.OutcomeNoModel
 	}
+	firstFail := "" // the first candidate's error kind, for a fallback
 	for _, c := range cands {
 		if ctx.Err() != nil {
 			return provider.ChatResponse{}, turns.OutcomeNoModel
@@ -40,6 +42,7 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.Chat
 		p, ok := a.d.Providers[c.Provider]
 		if !ok {
 			rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model, Error: "no_provider"})
+			firstFail = cmp.Or(firstFail, "no_provider")
 			continue
 		}
 		req.Model = c.Model
@@ -48,9 +51,14 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.Chat
 		if err == nil {
 			rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model})
 			addUsage(rec, c, resp.Usage)
+			if firstFail != "" {
+				a.observeFallback(ctx, firstFail)
+			}
 			return resp, turns.OutcomeOK
 		}
-		rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model, Error: errorKind(err)})
+		kind := errorKind(err)
+		rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model, Error: kind})
+		firstFail = cmp.Or(firstFail, kind)
 		a.logFailure(rec, c, err)
 		if calls := ran() - before; calls > 0 {
 			rec.Error = "the model failed after running tools; no fallback"

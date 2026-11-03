@@ -17,6 +17,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/pending"
 )
@@ -569,5 +570,22 @@ func TestFinishStoresWhetherTheCallFailed(t *testing.T) {
 	}
 	if it, err := f.s.Get(ctx, ok); err != nil || it.Failed {
 		t.Fatalf("a call whose text starts with error: %+v, %v", it, err)
+	}
+}
+
+// The questions waiting for the owner are a gauge: an answered one leaves it.
+func TestWaitingGauge(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	f := newFixture(t)
+	_, q := f.ask(t, 1)
+	f.ask(t, 2)
+	if got := rec.Value(t, "ganglion.confirmations.pending", nil); got != 2 {
+		t.Fatalf("pending = %v, want 2", got)
+	}
+	if _, err := f.s.Press(context.Background(), q.Buttons[0].ID, by("ev1")); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.Value(t, "ganglion.confirmations.pending", nil); got != 1 {
+		t.Fatalf("pending after a press = %v, want 1", got)
 	}
 }

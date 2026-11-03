@@ -69,6 +69,8 @@ type Journal struct {
 	now    func() time.Time
 	retain time.Duration
 	log    *slog.Logger
+	known  func(name string) bool
+	in     instruments
 }
 
 // Option configures a Journal.
@@ -76,6 +78,11 @@ type Option func(*Journal)
 
 // WithLogger sets where a failed write is reported. The default drops it.
 func WithLogger(l *slog.Logger) Option { return func(j *Journal) { j.log = l } }
+
+// WithTools sets which tool names are real, the registry's: only they
+// label the metrics. A name the model made up is counted as "unknown",
+// and so is every name when this is not set.
+func WithTools(known func(name string) bool) Option { return func(j *Journal) { j.known = known } }
 
 // New migrates the "tool_journal" component. Entries older than retain are
 // removed by Prune; retain <= 0 keeps them forever (Prune does nothing).
@@ -88,7 +95,7 @@ func New(ctx context.Context, db *sql.DB, now func() time.Time, retain time.Dura
 	if err := sqlitedb.Migrate(ctx, db, "tool_journal", sub); err != nil {
 		return nil, err
 	}
-	j := &Journal{db: db, now: now, retain: retain, log: slog.New(slog.DiscardHandler)}
+	j := &Journal{db: db, now: now, retain: retain, log: slog.New(slog.DiscardHandler), known: func(string) bool { return false }, in: newInstruments()}
 	for _, o := range opts {
 		o(j)
 	}
@@ -119,7 +126,9 @@ func (j *Journal) Middleware() tool.Middleware {
 			h := &holder{decision: DecisionAllowed}
 			started := j.now()
 			res, err := next(context.WithValue(ctx, holderKey{}, h), c)
-			j.record(ctx, entryOf(c, res, err, h.decision, started, j.now()))
+			ended := j.now()
+			j.record(ctx, entryOf(c, res, err, h.decision, started, ended))
+			j.observe(ctx, c.Name, h.decision, err, ended.Sub(started))
 			return res, err
 		}
 	}

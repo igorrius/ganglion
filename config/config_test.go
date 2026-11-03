@@ -19,6 +19,7 @@ import (
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -150,6 +151,27 @@ func TestPolicyHasDepthAndAsker(t *testing.T) {
 	res, err := run(context.Background(), c)
 	if err != nil || res.Pending == "" || len(res.Out) != 1 || ran != 1 {
 		t.Fatalf("a side effect was not parked for the owner: %+v, %v", res, err)
+	}
+}
+
+// The journal the core wires labels its metrics with the registry's tool
+// names; a made-up name stays "unknown".
+func TestJournalKnowsTheRegistry(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	i := New(context.Background(), agentConfig(t), slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	j, err := do.Invoke[*journal.Journal](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := j.Middleware()(func(context.Context, tool.Call) (tool.Result, error) { return tool.Result{}, nil })
+	_, _ = run(context.Background(), tool.Call{TurnID: "01EV1", N: 1, Name: "cells.get"})
+	_, _ = run(context.Background(), tool.Call{TurnID: "01EV1", N: 2, Name: "made.up"})
+	if got := rec.Value(t, "ganglion.tool.calls", map[string]string{"tool": "cells.get"}); got != 1 {
+		t.Errorf("cells.get counted %v times, want 1", got)
+	}
+	if got := rec.Value(t, "ganglion.tool.calls", map[string]string{"tool": "unknown"}); got != 1 {
+		t.Errorf("made.up counted as unknown %v times, want 1", got)
 	}
 }
 

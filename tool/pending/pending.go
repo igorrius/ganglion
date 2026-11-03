@@ -23,6 +23,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/tool"
+	"go.opentelemetry.io/otel"
 )
 
 //go:embed migrations/*.sql
@@ -187,6 +188,10 @@ func New(ctx context.Context, db *sql.DB, cs *cells.Service, now func() time.Tim
 		return nil, err
 	}
 	if err := sqlitedb.Migrate(ctx, db, "pending", sub); err != nil {
+		return nil, err
+	}
+	if err := sqlitedb.ObserveCount(otel.Meter("ganglion/pending"), db, "ganglion.confirmations.pending",
+		"Questions waiting for the owner's answer.", `SELECT COUNT(*) FROM pending_calls WHERE status = 'waiting'`); err != nil {
 		return nil, err
 	}
 	return &Store{db: db, cells: cs, now: now, ttl: ttl}, nil

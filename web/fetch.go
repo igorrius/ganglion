@@ -111,6 +111,7 @@ type Fetcher struct {
 	cfg       FetchConfig
 	conv      Converter
 	transport *http.Transport
+	in        instruments
 }
 
 // NewFetcher returns a fetcher with cfg's limits that converts HTML with
@@ -120,7 +121,7 @@ func NewFetcher(cfg FetchConfig, conv Converter, opts ...FetchOption) *Fetcher {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return &Fetcher{cfg: cfg, conv: conv, transport: &http.Transport{
+	return &Fetcher{cfg: cfg, conv: conv, in: newInstruments(), transport: &http.Transport{
 		Proxy:                  nil, // never a proxy from the environment: it would see every address
 		DialContext:            dialer{resolve: o.resolve, connect: o.connect, timeout: cfg.DialTimeout}.dial,
 		ForceAttemptHTTP2:      true,
@@ -138,6 +139,13 @@ func NewFetcher(cfg FetchConfig, conv Converter, opts ...FetchOption) *Fetcher {
 // naming it. The address fetched is exactly the normalised one the
 // policy checked (urlnorm), so the two cannot read it differently.
 func (f *Fetcher) Fetch(ctx context.Context, rawURL string, scope Scope) (Page, error) {
+	p, err := f.fetch(ctx, rawURL, scope)
+	f.in.observe(ctx, err)
+	return p, err
+}
+
+// fetch is one Fetch, before its metrics.
+func (f *Fetcher) fetch(ctx context.Context, rawURL string, scope Scope) (Page, error) {
 	u, err := target(rawURL, scope)
 	if err != nil {
 		return Page{}, err
@@ -240,6 +248,7 @@ func (f *Fetcher) read(ctx context.Context, resp *http.Response) (kind, string, 
 	if int64(len(body)) > f.cfg.MaxBytes {
 		return 0, "", nil, fmt.Errorf("%w (over %s)", ErrTooLarge, size(f.cfg.MaxBytes))
 	}
+	f.in.bytes.Record(ctx, int64(len(body)))
 	if header == "" {
 		mediaType = parseMediaType(http.DetectContentType(body))
 	}

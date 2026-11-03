@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/igorrius/ganglion/internal/buckets"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -53,7 +54,7 @@ func newClient(base, token string, hc *http.Client) *client {
 		hc = &http.Client{Timeout: httpTimeout}
 	}
 	c := &client{base: strings.TrimRight(base, "/"), token: token, hc: hc, tracer: otel.Tracer("ganglion/telegram")}
-	c.dur, _ = otel.Meter("ganglion/telegram").Float64Histogram("ganglion.telegram.api.duration", metric.WithUnit("s"),
+	c.dur, _ = otel.Meter("ganglion/telegram").Float64Histogram("ganglion.telegram.api.duration", metric.WithUnit("s"), buckets.Seconds,
 		metric.WithDescription("Bot API call duration, by method and HTTP status (\"error\" when unreachable)."))
 	return c
 }

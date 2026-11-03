@@ -8,6 +8,7 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/transport"
@@ -26,6 +27,7 @@ func (e *env) userTexts(t *testing.T, call int) []string {
 }
 
 func TestIdleStartsNewSession(t *testing.T) {
+	rec := telemetrytest.Install(t)
 	e := newEnv(t, Config{}, nil)
 	first := message("telegram:user:42", "Igor", "вечер")
 	e.turn(t, first)
@@ -42,6 +44,9 @@ func TestIdleStartsNewSession(t *testing.T) {
 	if len(list) != 1 || list[0].Session != first.ID || list[0].Turns != 1 || list[0].Title != "Igor: вечер" {
 		t.Fatalf("archive %+v", list)
 	}
+	if got := rec.Value(t, "ganglion.sessions.ended", map[string]string{"reason": "idle"}); got != 1 {
+		t.Fatalf("sessions ended by idle = %v, want 1", got)
+	}
 }
 
 func TestWithinIdleKeepsSession(t *testing.T) {
@@ -55,6 +60,7 @@ func TestWithinIdleKeepsSession(t *testing.T) {
 }
 
 func TestNewArchivesAndResets(t *testing.T) {
+	rec := telemetrytest.Install(t)
 	e := newEnv(t, Config{}, nil)
 	e.turn(t, message("telegram:user:42", "Igor", "раз"))
 	out := e.turn(t, message("telegram:user:42", "Igor", "/new"))
@@ -69,6 +75,9 @@ func TestNewArchivesAndResets(t *testing.T) {
 	}
 	if list, _ := e.archive.List(context.Background(), "telegram:42", 5, ""); len(list) != 1 {
 		t.Fatalf("archive %+v", list)
+	}
+	if got := rec.Value(t, "ganglion.sessions.ended", map[string]string{"reason": "new"}); got != 1 {
+		t.Fatalf("sessions ended by /new = %v, want 1", got)
 	}
 	e.turn(t, message("telegram:user:42", "Igor", "два"))
 	if got := e.userTexts(t, 1); len(got) != 1 {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -186,6 +187,9 @@ func TestClientTelemetry(t *testing.T) {
 	}
 	if got := rec.Value(t, "ganglion.telegram.api.duration", map[string]string{"method": "getUpdates", "code": "409"}); got != 1 {
 		t.Errorf("getUpdates 409: %v", got)
+	}
+	if b := rec.Bounds(t, "ganglion.telegram.api.duration"); !slices.ContainsFunc(b, func(v float64) bool { return v > 0 && v < 1 }) {
+		t.Errorf("buckets %v do not split sub-second calls", b)
 	}
 	names := map[string]bool{}
 	for _, s := range rec.Spans.Ended() {

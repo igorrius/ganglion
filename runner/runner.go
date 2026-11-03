@@ -59,6 +59,7 @@ type Module struct {
 	deps     Deps
 	rt       wazero.Runtime
 	compiled wazero.CompiledModule
+	in       instruments
 
 	mu      sync.Mutex
 	pending []byte // host → module buffer, copied out by take
@@ -81,7 +82,7 @@ func load(ctx context.Context, wasm []byte, m Manifest, deps Deps, tool bool) (*
 		WithMemoryLimitPages(pages).
 		WithCloseOnContextDone(true).
 		WithCompilationCache(compilationCache))
-	mod := &Module{manifest: m, tool: tool, deps: deps, rt: rt}
+	mod := &Module{manifest: m, tool: tool, deps: deps, rt: rt, in: newInstruments()}
 
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
 		_ = rt.Close(ctx)
@@ -115,13 +116,21 @@ func (m *Module) Close(ctx context.Context) error {
 func (m *Module) Handle(ctx context.Context, in pdk.Input) (pdk.Output, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	started := time.Now()
+	out, result, err := m.handle(ctx, in)
+	m.observe(ctx, result, time.Since(started))
+	return out, err
+}
 
+// handle is one call of Handle; result says how it ended, for the
+// metrics.
+func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, m.manifest.Limits.Timeout)
 	defer cancel()
 
 	input, err := marshal(in)
 	if err != nil {
-		return pdk.Output{}, err
+		return pdk.Output{}, resultError, err
 	}
 	var stderr limitedBuffer
 	inst, err := m.rt.InstantiateModule(experimental.WithMemoryAllocator(ctx, allocator), m.compiled, wazero.NewModuleConfig().
@@ -132,35 +141,42 @@ func (m *Module) Handle(ctx context.Context, in pdk.Input) (pdk.Output, error) {
 		WithRandSource(rand.Reader).
 		WithStderr(&stderr))
 	if err != nil {
-		return pdk.Output{}, m.callError(ctx, "instantiate", err, &stderr)
+		result, err := m.callError(ctx, "instantiate", err, &stderr)
+		return pdk.Output{}, result, err
 	}
 	defer func() { _ = inst.Close(context.Background()) }()
 
 	m.pending = input
 	res, err := inst.ExportedFunction("handle").Call(ctx, uint64(len(input)))
 	if err != nil {
-		return pdk.Output{}, m.callError(ctx, "handle", err, &stderr)
+		result, err := m.callError(ctx, "handle", err, &stderr)
+		return pdk.Output{}, result, err
 	}
 	ptr, size := uint32(res[0]>>32), uint32(res[0])
 	raw, ok := inst.Memory().Read(ptr, size)
 	if !ok {
-		return pdk.Output{}, fmt.Errorf("runner: %s returned an out-of-range result", m.manifest.Name)
+		return pdk.Output{}, resultBadOutput, fmt.Errorf("runner: %s returned an out-of-range result", m.manifest.Name)
 	}
 	var out pdk.Output
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return pdk.Output{}, fmt.Errorf("runner: %s returned bad output: %w", m.manifest.Name, err)
+		return pdk.Output{}, resultBadOutput, fmt.Errorf("runner: %s returned bad output: %w", m.manifest.Name, err)
 	}
-	return out, nil
+	if !out.OK {
+		return out, resultFailed, nil
+	}
+	return out, resultOK, nil
 }
 
-func (m *Module) callError(ctx context.Context, stage string, err error, stderr *limitedBuffer) error {
+// callError is a call that did not finish: a timeout, or a trap (out of
+// memory among them: the module cannot grow and aborts).
+func (m *Module) callError(ctx context.Context, stage string, err error, stderr *limitedBuffer) (callResult, error) {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("runner: %s: timed out after %v", m.manifest.Name, m.manifest.Limits.Timeout)
+		return resultTimeout, fmt.Errorf("runner: %s: timed out after %v", m.manifest.Name, m.manifest.Limits.Timeout)
 	}
 	if s := stderr.String(); s != "" {
-		return fmt.Errorf("runner: %s %s: %w\n%s", m.manifest.Name, stage, err, s)
+		return resultTrap, fmt.Errorf("runner: %s %s: %w\n%s", m.manifest.Name, stage, err, s)
 	}
-	return fmt.Errorf("runner: %s %s: %w", m.manifest.Name, stage, err)
+	return resultTrap, fmt.Errorf("runner: %s %s: %w", m.manifest.Name, stage, err)
 }
 
 // instantiateHost registers the "ganglion" host functions. Each checks the

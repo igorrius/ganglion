@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
@@ -107,7 +108,9 @@ func Jobs() do.Provider[*schedule.Store] {
 // Journal provides the tool-call journal.
 func Journal() do.Provider[*journal.Journal] {
 	return func(i do.Injector) (*journal.Journal, error) {
+		reg := do.MustInvoke[*tool.Registry](i)
 		return journal.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, time.Now, journal.DefaultRetain,
-			journal.WithLogger(do.MustInvoke[*slog.Logger](i)))
+			journal.WithLogger(do.MustInvoke[*slog.Logger](i)),
+			journal.WithTools(func(name string) bool { _, ok := reg.Lookup(name); return ok }))
 	}
 }

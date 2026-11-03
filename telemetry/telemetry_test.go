@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/internal/buckets"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -132,5 +134,22 @@ func TestResourceNamesTheCommit(t *testing.T) {
 	_, body := get(t, "http://"+tel.Addr()+"/metrics")
 	if !strings.Contains(body, `vcs_ref_head_revision="86cda06f1d2e"`) || !strings.Contains(body, `service_version="v0.1.1"`) {
 		t.Fatalf("target_info lacks the build:\n%s", body)
+	}
+}
+
+// A histogram in seconds with buckets.Seconds splits sub-second
+// times on /metrics: the SDK's default buckets start at 0, 5, 10.
+func TestSecondsBucketsOnMetrics(t *testing.T) {
+	tel := setup(t, nil)
+	h, err := otel.Meter("ganglion/test").Float64Histogram("ganglion.test.wait", metric.WithUnit("s"), buckets.Seconds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Record(context.Background(), 0.03)
+	_, body := get(t, "http://"+tel.Addr()+"/metrics")
+	for _, le := range []string{`le="0.05"`, `le="0.5"`, `le="60"`} {
+		if !strings.Contains(body, "ganglion_test_wait_seconds_bucket{") || !strings.Contains(body, le) {
+			t.Fatalf("/metrics lacks the %s bucket of ganglion_test_wait_seconds:\n%s", le, body)
+		}
 	}
 }

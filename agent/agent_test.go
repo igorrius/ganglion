@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -451,6 +452,7 @@ func TestCancelledTurnReturnsError(t *testing.T) {
 }
 
 func TestCompaction(t *testing.T) {
+	rec := telemetrytest.Install(t)
 	e := newEnv(t, Config{HistoryTokens: 60, KeepRecent: 4}, registry(t, newClock()))
 	long := strings.Repeat("слово ", 20)
 	e.turn(t, message("telegram:user:42", "Igor", long))
@@ -471,9 +473,13 @@ func TestCompaction(t *testing.T) {
 	if !strings.Contains(creq.Messages[len(creq.Messages)-1].Content, "Igor: слово") {
 		t.Fatalf("compaction prompt %+v", creq.Messages)
 	}
+	if got := rec.Value(t, "ganglion.compactions", map[string]string{"result": "ok"}); got != 1 {
+		t.Fatalf("compactions ok = %v, want 1", got)
+	}
 }
 
 func TestCompactionFailureKeepsHistory(t *testing.T) {
+	rec := telemetrytest.Install(t)
 	e := newEnv(t, Config{HistoryTokens: 10, KeepRecent: 2}, nil)
 	e.turn(t, message("telegram:user:42", "Igor", strings.Repeat("a ", 50)))
 	before := len(e.state(t).Messages)
@@ -483,6 +489,9 @@ func TestCompactionFailureKeepsHistory(t *testing.T) {
 	st := e.state(t)
 	if st.Summary != "" || len(st.Messages) != before+2 {
 		t.Fatalf("after a failed compaction: summary %q, %d messages", st.Summary, len(st.Messages))
+	}
+	if got := rec.Value(t, "ganglion.compactions", map[string]string{"result": "failed"}); got != 1 {
+		t.Fatalf("compactions failed = %v, want 1", got)
 	}
 }
 
@@ -698,9 +707,25 @@ func TestAgentTelemetry(t *testing.T) {
 		{"ganglion.model.call.duration", map[string]string{"provider": "p2", "model": "cheap"}, 1},
 		{"ganglion.model.tokens", map[string]string{"provider": "p2", "kind": "input"}, 100},
 		{"ganglion.model.tokens", map[string]string{"provider": "p2", "kind": "output"}, 10},
+		{"ganglion.model.context_tokens", map[string]string{"provider": "p2", "model": "cheap"}, 1},
+		{"ganglion.model.context_tokens", map[string]string{"provider": "p1", "model": "smart"}, 1}, // a failed call has no usage
+		{"ganglion.turn.steps", map[string]string{"outcome": "ok"}, 2},
+		{"ganglion.model.fallbacks", map[string]string{"reason": "rate_limit"}, 1},
+		{"ganglion.model.fallbacks", nil, 1},
 	} {
 		if got := rec.Value(t, c.name, c.attrs); got != c.want {
 			t.Errorf("%s %v = %v, want %v", c.name, c.attrs, got, c.want)
+		}
+	}
+	if got := rec.Sum(t, "ganglion.model.context_tokens", map[string]string{"provider": "p2"}); got != 100 {
+		t.Errorf("context tokens of p2 sum to %v, want 100", got)
+	}
+	if got := rec.Sum(t, "ganglion.turn.steps", nil); got != 2 {
+		t.Errorf("steps sum to %v, want one model call in each of two turns", got)
+	}
+	for _, name := range []string{"ganglion.turn.duration", "ganglion.model.call.duration"} {
+		if b := rec.Bounds(t, name); !slices.ContainsFunc(b, func(v float64) bool { return v > 0 && v < 1 }) {
+			t.Errorf("%s buckets %v do not split sub-second times", name, b)
 		}
 	}
 	if got := rec.Value(t, "ganglion.model.cost_usd", map[string]string{"provider": "p1"}); got < 0.000119 || got > 0.000121 {

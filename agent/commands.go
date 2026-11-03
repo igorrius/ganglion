@@ -172,7 +172,11 @@ func (a *Agent) archive(ctx context.Context, conv string, st State, by string) e
 	if len(st.Messages) == 0 {
 		return nil
 	}
-	return a.d.Archive.Put(ctx, conv, st, by)
+	if err := a.d.Archive.Put(ctx, conv, st, by); err != nil {
+		return err
+	}
+	a.observeEnded(ctx, by)
+	return nil
 }
 
 func (a *Agent) formatSpan(s SessionInfo) string {

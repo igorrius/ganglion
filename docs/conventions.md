@@ -181,6 +181,13 @@ ids and kinds, never message text or secrets.
     time or size matters;
   - an observable gauge for a level (queue depth, pending
     confirmations).
+- **Buckets come from `internal/buckets`** by base unit: `buckets.Seconds`,
+  `Bytes`, `Tokens`, `Counts`. The SDK's default buckets suit
+  milliseconds: a histogram in seconds without them puts every
+  sub-second time in one bucket.
+- **A count of rows is a gauge through `sqlitedb.ObserveCount`**: it
+  registers its callback apart from the instrument, since the SDK keeps
+  only the first callback passed when an instrument is made.
 - **Label values come from a closed set:**
   - a named type's constants;
   - tool names from the registry, models from the catalogue, modules from
@@ -212,6 +219,8 @@ Before writing a helper, look for it. These exist and are the only copies:
 | An id nobody can guess (button ids) | `event.RandomID` |
 | A SQLite transaction that takes the write lock first | `sqlitedb.Immediate` |
 | Running git in the workspace (fixed author, no user git settings, paths kept inside) | `gitrepo` |
+| Histogram buckets by unit | `internal/buckets` (`Seconds`, `Bytes`, `Tokens`, `Counts`) |
+| A count of rows in one state as a gauge | `sqlitedb.ObserveCount` |
 | Asking a model whether a text is a fact or a hidden instruction | `guard` |
 
 (The table describes the state after the [refactoring plan](plans/p1-refactor.md).)

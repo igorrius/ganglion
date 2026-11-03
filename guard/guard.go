@@ -18,6 +18,7 @@ import (
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/tool"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // Reasons the guard gives itself, when the model gave none it can use.
@@ -91,11 +92,12 @@ type Guard struct {
 	providers map[string]provider.Provider
 	log       *slog.Logger
 	timeout   time.Duration
+	verdicts  metric.Int64Counter
 }
 
 // New returns a guard over the router's models.
 func New(r router.Router, ps map[string]provider.Provider, opts ...Option) *Guard {
-	g := &Guard{router: r, providers: ps, log: slog.New(slog.DiscardHandler), timeout: 30 * time.Second}
+	g := &Guard{router: r, providers: ps, log: slog.New(slog.DiscardHandler), timeout: 30 * time.Second, verdicts: newVerdicts()}
 	for _, o := range opts {
 		o(g)
 	}
@@ -107,14 +109,18 @@ func New(r router.Router, ps map[string]provider.Provider, opts ...Option) *Guar
 // the context's: on shutdown nothing is decided. Every other failure is a
 // verdict that is not OK.
 func (g *Guard) CheckFact(ctx context.Context, fact string) (Verdict, error) {
-	return g.check(ctx, FactPrompt, sourceFact, fact)
+	v, err := g.check(ctx, FactPrompt, sourceFact, fact)
+	g.observe(ctx, checkFact, v, err)
+	return v, err
 }
 
 // CheckPersona asks whether a persona file is an ordinary description of
 // the assistant with no instruction that works against the owner (the
 // scheduled audit). Errors as CheckFact.
 func (g *Guard) CheckPersona(ctx context.Context, persona string) (Verdict, error) {
-	return g.check(ctx, PersonaPrompt, sourcePersona, persona)
+	v, err := g.check(ctx, PersonaPrompt, sourcePersona, persona)
+	g.observe(ctx, checkPersona, v, err)
+	return v, err
 }
 
 // check asks the cheap models in the router's order until one answers:

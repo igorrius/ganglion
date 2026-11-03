@@ -53,6 +53,9 @@ func New(ctx context.Context, db *sql.DB, opts ...Option) (*Queue, error) {
 	if err := sqlitedb.Migrate(ctx, db, "queue", sub); err != nil {
 		return nil, err
 	}
+	if err := observeDepths(db); err != nil {
+		return nil, err
+	}
 	q := &Queue{
 		db:          db,
 		now:         time.Now,
