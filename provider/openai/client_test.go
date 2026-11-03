@@ -151,3 +151,19 @@ func TestKeyNeverInErrors(t *testing.T) {
 		}
 	}
 }
+
+// Some backends send "" for a tool without parameters; it arrives as an
+// empty object, which the tool argument check accepts (ruling R21).
+func TestEmptyToolArgumentsBecomeAnObject(t *testing.T) {
+	for _, args := range []string{"", "  \n"} {
+		fake := providertest.NewServer(t, key)
+		fake.CallTool("memory_audit", args)
+		resp, err := New("or", fake.URL(), key).Chat(context.Background(), provider.ChatRequest{Model: "m", Messages: user("audit")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if calls := resp.Message.ToolCalls; len(calls) != 1 || string(calls[0].Args) != `{}` {
+			t.Fatalf("arguments %q: tool calls %+v", args, calls)
+		}
+	}
+}

@@ -179,17 +179,26 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 		out.Content = *wm.Content
 	}
 	for _, tc := range wm.ToolCalls {
-		args := json.RawMessage(tc.Function.Arguments)
-		if !json.Valid(args) {
-			args = json.RawMessage(strconv.Quote(tc.Function.Arguments))
-		}
-		out.ToolCalls = append(out.ToolCalls, provider.ToolCall{ID: tc.ID, Name: tc.Function.Name, Args: args})
+		out.ToolCalls = append(out.ToolCalls, provider.ToolCall{ID: tc.ID, Name: tc.Function.Name, Args: toolArgs(tc.Function.Arguments)})
 	}
 	return provider.ChatResponse{Message: out, Usage: provider.Usage{
 		InputTokens:     wr.Usage.PromptTokens,
 		CacheReadTokens: wr.Usage.PromptTokensDetails.CachedTokens,
 		OutputTokens:    wr.Usage.CompletionTokens,
 	}}, nil
+}
+
+// toolArgs is a tool call's arguments as JSON: "" (some backends send it
+// for a tool without parameters) is an empty object; text that is not
+// JSON is kept as a JSON string, which the tool argument check refuses.
+func toolArgs(raw string) json.RawMessage {
+	if strings.TrimSpace(raw) == "" {
+		return json.RawMessage(`{}`)
+	}
+	if !json.Valid([]byte(raw)) {
+		return json.RawMessage(strconv.Quote(raw))
+	}
+	return json.RawMessage(raw)
 }
 
 func kindOf(status int) provider.ErrorKind {
