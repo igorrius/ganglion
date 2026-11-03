@@ -22,10 +22,39 @@ const VOID: [&str; 15] = [
     "wbr", "param", "keygen",
 ];
 
-/// Elements whose end tag is usually left out and that the parser closes
-/// by itself: a page of unclosed `<p>` or `<li>` is not deep.
-const IMPLIED: [&str; 9] = [
-    "p", "li", "dt", "dd", "tr", "td", "th", "option", "colgroup",
+/// Elements whose end tag is optional and that the parser closes by
+/// itself: a page of unclosed `<p>` or `<li>` is not deep. They are not
+/// counted at all.
+const IMPLIED: [&str; 15] = [
+    "p", "li", "dt", "dd", "option", "optgroup", "tr", "td", "th", "thead", "tbody", "tfoot", "rp",
+    "rt", "colgroup",
+];
+
+/// Elements an end tag of another name never closes in the parser: the
+/// boundaries of its default scope (html5ever ignores such an end tag).
+const BOUNDARY: [&str; 15] = [
+    "applet",
+    "caption",
+    "html",
+    "table",
+    "marquee",
+    "object",
+    "template",
+    "mi",
+    "mo",
+    "mn",
+    "ms",
+    "mtext",
+    "annotation",
+    "foreignobject",
+    "desc",
+];
+
+/// Formatting elements: their end tags go through the adoption agency
+/// algorithm, which can leave the tree as deep as before, and the
+/// parser reopens them; an end tag passes them only when it names them.
+const FORMATTING: [&str; 14] = [
+    "a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u",
 ];
 
 /// Returns src without raw-text bodies and `data:` attribute values, and
@@ -133,16 +162,23 @@ fn strip_data(tag: &[u8], out: &mut Vec<u8>) {
     }
 }
 
-/// Nesting keeps a stack of the elements open, as the parser would see
-/// them: a non-void element opens even when written `<div/>` (HTML
-/// ignores the slash), and an end tag closes only an element that is
-/// open (a stray `</q>` closes nothing). Start tags past MAX_NESTING are
-/// left out, and so are their end tags.
+/// Nesting keeps a stack of the elements open, erring towards depth
+/// (ruling R23): a non-void element opens even when written `<div/>`
+/// (HTML ignores the slash), and an end tag closes its element only when
+/// nothing between them could stop the parser from doing so: a scope
+/// boundary or another formatting element. A formatting end tag closes
+/// only the element right on top. Start tags past MAX_NESTING are left
+/// out, and so are their end tags; an end tag whose element is not open
+/// at all is left out too, since the parser ignores it.
 #[derive(Default)]
 struct Nesting {
     open: Vec<Vec<u8>>,
     open_by_name: HashMap<Vec<u8>, usize>, // how many of each name are open: a stray end tag is found at once
     dropped: HashMap<Vec<u8>, usize>,      // start tags left out, by name
+}
+
+fn listed(list: &[&str], name: &[u8]) -> bool {
+    list.iter().any(|v| v.as_bytes() == name)
 }
 
 impl Nesting {
@@ -154,8 +190,7 @@ impl Nesting {
             .position(|c| !c.is_ascii_alphanumeric())
             .unwrap_or(tag.len() - start);
         let name = tag[start..start + name_len].to_ascii_lowercase();
-        let listed = |list: &[&str]| list.iter().any(|v| v.as_bytes() == name.as_slice());
-        if name.is_empty() || listed(&VOID) || listed(&IMPLIED) {
+        if name.is_empty() || listed(&VOID, &name) || listed(&IMPLIED, &name) {
             return true;
         }
         if end {
@@ -170,10 +205,8 @@ impl Nesting {
         true
     }
 
-    /// Closes name: a dropped one goes with its tag; an open one closes
-    /// everything opened inside it; a stray one, which the parser would
-    /// ignore after searching its whole stack of open elements, is left
-    /// out.
+    /// Closes name: a dropped one goes with its tag; an open one is
+    /// popped when the parser surely closes it; a stray one is left out.
     fn close(&mut self, name: &[u8]) -> bool {
         if let Some(n) = self.dropped.get_mut(name) {
             *n -= 1;
@@ -185,20 +218,42 @@ impl Nesting {
         if !self.open_by_name.contains_key(name) {
             return false;
         }
-        while let Some(top) = self.open.pop() {
-            let left = self.open_by_name.get_mut(&top).map_or(0, |n| {
-                *n -= 1;
-                *n
-            });
-            if left == 0 {
-                self.open_by_name.remove(&top);
+        if let Some(depth) = self.reach(name) {
+            for _ in depth..self.open.len() {
+                self.pop();
             }
-            if top == name {
-                break;
+            self.dropped.clear();
+        }
+        true
+    }
+
+    /// The index of the open element name closes, or None when the
+    /// parser might not close it: a formatting end tag reaches only the
+    /// top element; any other stops at a boundary or a formatting element.
+    fn reach(&self, name: &[u8]) -> Option<usize> {
+        let top = self.open.len().checked_sub(1)?;
+        if listed(&FORMATTING, name) {
+            return (self.open[top] == name).then_some(top);
+        }
+        for (i, open) in self.open.iter().enumerate().rev() {
+            if open == name {
+                return Some(i);
+            }
+            if listed(&BOUNDARY, open) || listed(&FORMATTING, open) {
+                return None;
             }
         }
-        self.dropped.clear();
-        true
+        None
+    }
+
+    fn pop(&mut self) {
+        let Some(top) = self.open.pop() else { return };
+        if let Some(n) = self.open_by_name.get_mut(&top) {
+            *n -= 1;
+            if *n == 0 {
+                self.open_by_name.remove(&top);
+            }
+        }
     }
 }
 
@@ -269,6 +324,33 @@ mod tests {
     }
 
     #[test]
+    fn formatting_end_tags_close_only_their_own_top() {
+        // </b> runs the adoption agency: the div stays, the tree deepens.
+        assert_eq!(
+            strip(&"<b><div></b>".repeat(1000)).matches("<div>").count(),
+            MAX_NESTING / 2
+        );
+        assert_eq!(strip(&"<b>x</b>".repeat(1000)).matches("<b>").count(), 1000);
+    }
+
+    #[test]
+    fn end_tags_do_not_cross_scope_boundaries() {
+        // </div> is ignored inside a marquee.
+        assert_eq!(
+            strip(&"<div><marquee></div>".repeat(1000))
+                .matches("<div>")
+                .count(),
+            MAX_NESTING / 2
+        );
+        assert_eq!(
+            strip(&"<div><table></table></div>".repeat(1000))
+                .matches("<div>")
+                .count(),
+            1000
+        );
+    }
+
+    #[test]
     fn stray_end_tags_are_left_out() {
         assert_eq!(strip("<div>a</q></div></p></br>"), "<div>a</div></p></br>");
     }
@@ -276,7 +358,7 @@ mod tests {
     #[test]
     fn matching_end_tags_close_to_their_element() {
         // An end tag closes the elements opened inside its element.
-        let page = "<section><div><b>x</section>".repeat(1000);
+        let page = "<section><div><span>x</section>".repeat(1000);
         assert_eq!(strip(&page).matches("<section>").count(), 1000);
     }
 

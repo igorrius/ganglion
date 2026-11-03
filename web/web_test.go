@@ -152,6 +152,21 @@ func TestFetchHTMLSizeLimit(t *testing.T) {
 	}
 }
 
+// The bound is on what html2md gets: a windows-1251 page doubles in
+// size when decoded to UTF-8.
+func TestFetchHTMLSizeLimitAfterDecoding(t *testing.T) {
+	cfg := web.DefaultFetchConfig()
+	cfg.MaxHTMLBytes = 1024
+	f, n, c := newFetcher(t, cfg)
+	page := n.Site(t, "cp1251.example", "93.184.216.10", webtest.Reply("text/html; charset=windows-1251", strings.Repeat("\xcf", 1000)))
+	if _, err := f.Fetch(context.Background(), page, web.AnyHost); !errors.Is(err, web.ErrTooLarge) {
+		t.Fatalf("decoded page over the HTML limit = %v", err)
+	}
+	if len(c.calls) != 0 {
+		t.Fatal("the decoded page reached the converter")
+	}
+}
+
 func TestFetchJSONPassThrough(t *testing.T) {
 	f, n, c := newFetcher(t, web.DefaultFetchConfig())
 	site := n.Site(t, "bank.gov.ua", "93.184.216.20", webtest.Reply("application/json; charset=utf-8", webtest.NBURates))

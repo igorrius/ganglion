@@ -43,8 +43,14 @@ granted hosts is refused; errors are fixed texts, never a response body.
 #### A. Rust: own extractor on `dom_query`, Markdown by `htmd`
 
 A byte-level pre-pass drops script and style bodies and `data:` values
-and caps nesting at 256 with a stack of the open elements (`<div/>` opens
-a div, as HTML says; a stray end tag closes nothing and is dropped); `dom_query` (html5ever) parses; an own
+and caps nesting at 256 with a stack of the open elements, erring
+towards depth (`<div/>` opens a div, as HTML says; a stray end tag is
+dropped; an end tag closes its element only when no scope boundary such
+as `table` or `marquee` and no other formatting element lies between,
+and a formatting end tag closes only the element on top, since the
+parser runs the adoption agency for it; ruling R23); after parsing, any
+element deeper than 320 is replaced by its text, so recursion stays
+bounded whatever the pre-pass missed; `dom_query` (html5ever) parses; an own
 Readability-style extractor (iterative walks, table rows scored as
 paragraphs, data tables never pruned, link-heavy furniture pruned)
 picks the content; links are made absolute and only http(s) and mailto
@@ -133,7 +139,11 @@ baseline: 1 MiB of dense markup (30,000 table rows and paragraphs) and
 cleanly ("could not be converted") at **79 MiB** at most; the first
 1 MiB of the Wikipedia list converts at 69 MiB (p95 326 ms);
 `<div></q>` and `<div/>` soup at 51 and 69 MiB (117 and 113 ms); the
-hostile page at 54 MiB. So the worst case adds about 67 MiB to a node
+hostile page at 54 MiB. After R23, 1 MiB of `<b><div></b>`,
+`<div><marquee></div>` and a mix of both convert in p95 116, 127 and
+134 ms, at 67, 52 and 56 MiB (they had timed out or trapped with the
+first stack). The HTML bound applies to the text after charset decoding,
+which is what html2md gets (a windows-1251 page doubles in UTF-8). So the worst case adds about 67 MiB to a node
 whose agent runs at about 40 MB: about 107 MB, under 128 MB. The real
 pages keep their numbers (p95 news 29 ms, docs 67, forum 55, NBU 28).
 

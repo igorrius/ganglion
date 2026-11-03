@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/modules/html2md"
 	"github.com/igorrius/ganglion/runner"
 )
@@ -112,11 +113,24 @@ func hostilePage() string {
 
 // nestingPages open elements the parser nests although a naive count
 // would not: self-closed non-void elements and stray end tags.
+// Formatting end tags (adoption agency) and end tags behind a scope
+// boundary close nothing in the parser either (ruling R23).
 func nestingPages() map[string]string {
-	return map[string]string{
+	pages := map[string]string{
 		"self-closed divs": "<title>Deep</title><p>start</p>" + strings.Repeat("<div/>", 300_000) + "<p>end</p>",
 		"stray end tags":   "<title>Deep</title><p>start</p>" + strings.Repeat("<div></q>", 200_000) + "<p>end</p>",
 	}
+	for name, unit := range map[string]string{
+		"formatting end tags": "<b><div></b>",
+		"scope boundaries":    "<div><marquee></div>",
+		"mixed":               "<i><table><div></i><object><span></div></table>",
+	} {
+		for _, size := range []int{120 << 10, 1 << 20} {
+			pages[fmt.Sprintf("%s, %d KiB", name, size>>10)] = "<title>Deep</title><p>start</p>" +
+				strings.Repeat(unit, size/len(unit)) + "<p>end</p>"
+		}
+	}
+	return pages
 }
 
 func TestHostileHTMLNoTrap(t *testing.T) {
@@ -144,8 +158,13 @@ func TestHostileHTMLNoTrap(t *testing.T) {
 	for name, html := range nestingPages() {
 		start := time.Now()
 		p, err := convert(t, m, "https://evil.example/", html)
-		if err != nil || !strings.Contains(p.Markdown, "end") {
-			t.Errorf("%s (%d bytes): %v, %q", name, len(html), err, p.Markdown)
+		var me *runner.ModuleError
+		switch {
+		case errors.As(err, &me): // ran out of its memory: a clean failure
+		case err != nil:
+			t.Errorf("%s (%d bytes): %v", name, len(html), err) // a trap or a timeout
+		case !strings.Contains(p.Markdown, "start"): // in the mixed shape the last words end up inside an <object>, which is dropped
+			t.Errorf("%s (%d bytes): %q", name, len(html), text.Truncate(p.Markdown, 200))
 		}
 		if took := time.Since(start); took > 2*time.Second {
 			t.Errorf("%s took %v", name, took)

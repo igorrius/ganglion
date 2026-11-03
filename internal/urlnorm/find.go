@@ -23,17 +23,38 @@ func Find(text string) []string {
 	return found
 }
 
-// Defang removes the scheme of every address Find would see in text,
-// again until none is left (a removal can join two halves into a new
-// one), so the text names no address.
+// Defang removes the scheme of every address Find would see in text, in
+// one pass: at each "://" it looks at what it has written so far, and
+// when that ends in "http" or "https" (any case) it drops both. A drop
+// can join two halves into a new scheme ("ht" + "tps"), but that one is
+// seen at the next "://", so nothing is left for Find, and nested
+// schemes cost no extra pass.
 func Defang(text string) string {
-	for pattern.MatchString(text) {
-		text = pattern.ReplaceAllStringFunc(text, func(u string) string {
-			_, rest, _ := strings.Cut(u, "://")
-			return rest
-		})
+	out := make([]byte, 0, len(text))
+	for {
+		i := strings.Index(text, "://")
+		if i < 0 {
+			return string(append(out, text...))
+		}
+		out = append(out, text[:i]...)
+		text = text[i+3:]
+		if n := schemeSuffix(out); n > 0 {
+			out = out[:len(out)-n]
+			continue
+		}
+		out = append(out, "://"...)
 	}
-	return text
+}
+
+// schemeSuffix is the length of "https" or "http" at the end of s, any
+// case, or 0.
+func schemeSuffix(s []byte) int {
+	for _, scheme := range []string{"https", "http"} {
+		if len(s) >= len(scheme) && strings.EqualFold(string(s[len(s)-len(scheme):]), scheme) {
+			return len(scheme)
+		}
+	}
+	return 0
 }
 
 // Exact reports whether Find reads text as exactly one address, text

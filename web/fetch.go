@@ -250,9 +250,6 @@ func (f *Fetcher) read(ctx context.Context, resp *http.Response) (kind, string, 
 	if k == 0 {
 		return 0, "", nil, unsupported(mediaType)
 	}
-	if k == kindHTML && int64(len(body)) > f.cfg.MaxHTMLBytes {
-		return 0, "", nil, fmt.Errorf("%w (an HTML page over %s)", ErrTooLarge, size(f.cfg.MaxHTMLBytes))
-	}
 	return k, mediaType, body, nil
 }
 
@@ -261,6 +258,11 @@ func (f *Fetcher) read(ctx context.Context, resp *http.Response) (kind, string, 
 func (f *Fetcher) page(ctx context.Context, final string, k kind, mediaType, body string) (Page, error) {
 	p := Page{URL: final, ContentType: mediaType, Text: body}
 	if k == kindHTML {
+		// The bound is on the decoded text html2md gets: a windows-1251
+		// page doubles in UTF-8.
+		if int64(len(body)) > f.cfg.MaxHTMLBytes {
+			return Page{}, fmt.Errorf("%w (an HTML page over %s)", ErrTooLarge, size(f.cfg.MaxHTMLBytes))
+		}
 		title, md, err := f.conv.Convert(ctx, final, body)
 		if err != nil {
 			return Page{}, ErrConvert

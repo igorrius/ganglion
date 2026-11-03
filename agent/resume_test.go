@@ -499,3 +499,29 @@ func TestApprovedQuickQuestionDoesNotResumeTheModel(t *testing.T) {
 		t.Fatalf("out %+v", out)
 	}
 }
+
+// A call parked before arguments were checked (ruling R18) is checked
+// when it is approved or declined: a bad one does not run and is
+// journalled forbidden.
+func TestStoredCallWithBadArgsIsRefusedOnResume(t *testing.T) {
+	for _, button := range []int{0, 1} { // Approve, Deny
+		side := newSideTool()
+		e := newConfirmEnv(t, side)
+		q, ev := e.ask(t, "schedule.create")
+		if _, err := e.db.ExecContext(context.Background(), `UPDATE pending_calls SET args = ?`, `{"Text":"smuggled"}`); err != nil {
+			t.Fatal(err)
+		}
+		e.smart.push(say("ok"))
+		e.turn(t, press(owner, q.Buttons[button].ID, "77"))
+		if len(side.calls) != 0 {
+			t.Fatalf("button %d: the stored call ran: %+v", button, side.calls)
+		}
+		if d := e.decisions(t, ev.ID+":1"); len(d) == 0 || d[len(d)-1] != journal.DecisionForbidden {
+			t.Fatalf("button %d: journal %v", button, d)
+		}
+		reqs := e.smart.requests()
+		if got := lastUser(reqs[len(reqs)-1]); !strings.Contains(got, tool.ErrBadArgs.Error()) {
+			t.Fatalf("button %d: the model saw %q", button, got)
+		}
+	}
+}

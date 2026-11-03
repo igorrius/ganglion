@@ -183,6 +183,9 @@ func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pendi
 	c := it.Call()
 	c.Admin, c.Tainted = t.admin, it.Tainted || t.state.Tainted
 	c.KnownURL = knownURLs(t.state.Messages).has
+	if o, refused := a.refuseBadArgs(ctx, c); refused {
+		return o
+	}
 	res, err := a.journalled(journal.DecisionApproved, a.d.Tools.Run)(ctx, c)
 	if err != nil {
 		// A failed call can still carry messages, as in runTool.
@@ -196,9 +199,32 @@ func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pendi
 func (a *Agent) settle(ctx context.Context, t *turn, it pending.Item, d journal.Decision, text string) pending.Outcome {
 	c := it.Call()
 	c.Admin, c.Tainted = t.admin, it.Tainted || t.state.Tainted
+	if o, refused := a.refuseBadArgs(ctx, c); refused {
+		return o
+	}
 	skip := func(context.Context, tool.Call) (tool.Result, error) { return tool.Result{Text: text}, nil }
 	_, _ = a.journalled(d, skip)(ctx, c)
 	return pending.Outcome{Result: text}
+}
+
+// refuseBadArgs checks a stored call's arguments against its tool's
+// declared parameters, as the policy checks a new call (ruling R18), so
+// a call parked before that check existed cannot run or be recorded as
+// declined with arguments the policy never read. A refused call is
+// journalled forbidden and its outcome is the fixed error.
+func (a *Agent) refuseBadArgs(ctx context.Context, c tool.Call) (pending.Outcome, bool) {
+	h, ok := a.d.Tools.Lookup(c.Name)
+	if !ok {
+		return pending.Outcome{}, false // the registry refuses an unknown tool when it runs
+	}
+	err := tool.CheckArgs(h.Spec(), c.Args)
+	if err == nil {
+		return pending.Outcome{}, false
+	}
+	err = fmt.Errorf("agent: %s: %w", c.Name, err)
+	refuse := func(context.Context, tool.Call) (tool.Result, error) { return tool.Result{}, err }
+	_, _ = a.journalled(journal.DecisionForbidden, refuse)(ctx, c)
+	return pending.Outcome{Result: "error: " + err.Error()}, true
 }
 
 // journalled is f behind tracing and the journal, with decision d: the

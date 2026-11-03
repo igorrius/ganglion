@@ -2,7 +2,9 @@ package urlnorm
 
 import (
 	"slices"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestFind(t *testing.T) {
@@ -35,5 +37,20 @@ func TestExact(t *testing.T) {
 		if Exact(in) != want {
 			t.Errorf("Exact(%q) = %v", in, !want)
 		}
+	}
+}
+
+// Nested schemes cost one pass, not one per layer (a search snippet is
+// remote text).
+func TestDefangIsLinear(t *testing.T) {
+	const k = 200_000
+	in := strings.Repeat("ht", k) + "https://" + strings.Repeat("tps://", k)
+	start := time.Now()
+	out := Defang(in)
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("Defang took %v", took)
+	}
+	if len(Find(out)) != 0 {
+		t.Fatal("an address is left")
 	}
 }
