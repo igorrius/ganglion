@@ -27,7 +27,8 @@ const (
 
 // Lines returns one line per message, oldest first. System messages are
 // left out: each caller places them itself. An assistant message without
-// text adds no "Assistant:" line.
+// text adds no "Assistant:" line. A tool result's own lines are indented,
+// so outside content cannot fake a turn.
 func Lines(msgs []provider.Message, calls ToolCalls) []string {
 	var out []string
 	for _, m := range msgs {
@@ -44,7 +45,7 @@ func Lines(msgs []provider.Message, calls ToolCalls) []string {
 				}
 			}
 		case provider.RoleTool:
-			out = append(out, "Tool result: "+toolResult(m.Content))
+			out = append(out, "Tool result: "+indent(toolResult(m.Content)))
 		case provider.RoleSystem:
 		}
 	}
@@ -64,4 +65,14 @@ func toolResult(s string) string {
 		return s
 	}
 	return string(r[:MaxToolResult]) + fmt.Sprintf("\n[%d more characters left out]", len(r)-MaxToolResult) + closing
+}
+
+// resultIndent starts every line of a tool result after its first, so no
+// line of outside content can start like a turn ("User: …") in the
+// transcript.
+const resultIndent = "  "
+
+// indent puts resultIndent before every line of s after the first.
+func indent(s string) string {
+	return strings.ReplaceAll(s, "\n", "\n"+resultIndent)
 }
