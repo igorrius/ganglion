@@ -131,7 +131,8 @@ type Server struct {
 	answered   []string // callback query ids answered
 	toasts     []Toast
 	commands   []CommandSet
-	methods    []string // every call with the right token, in order
+	held       map[string]chan struct{} // methods whose calls wait until released
+	methods    []string                 // every call with the right token, in order
 	nextQuery  int64
 }
 
@@ -154,6 +155,7 @@ func NewServer(t testing.TB, token string) *Server {
 		threads:    map[int64]map[int64]bool{},
 		calls:      map[string]int{},
 		messages:   map[int64]map[int64]shown{},
+		held:       map[string]chan struct{}{},
 	}
 	s.ts = httptest.NewServer(http.HandlerFunc(s.serve))
 	t.Cleanup(func() {
@@ -345,6 +347,18 @@ func (s *Server) Calls(method string) int {
 	return s.calls[method]
 }
 
+// Hold makes every call of method wait, before it is answered, until the
+// returned release is called or the caller gives up; release is safe to
+// call more than once.
+func (s *Server) Hold(method string) (release func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ch := make(chan struct{})
+	s.held[method] = ch
+	var once sync.Once
+	return func() { once.Do(func() { close(ch) }) }
+}
+
 // FailNext makes the next call of method fail with code; retryAfter > 0
 // adds parameters.retry_after (use it with 429).
 func (s *Server) FailNext(method string, code, retryAfter int) {
@@ -377,6 +391,19 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil && err.Error() != "EOF" {
 		writeErr(w, http.StatusBadRequest, "Bad Request: can't parse JSON", 0)
 		return
+	}
+
+	s.mu.Lock()
+	hold := s.held[method]
+	s.mu.Unlock()
+	if hold != nil {
+		select {
+		case <-hold:
+		case <-r.Context().Done():
+			return
+		case <-s.closed:
+			return
+		}
 	}
 
 	s.mu.Lock()

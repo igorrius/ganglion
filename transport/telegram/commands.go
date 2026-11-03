@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"time"
@@ -9,7 +10,7 @@ import (
 	"github.com/igorrius/ganglion/transport"
 )
 
-// commandsTimeout bounds one setMyCommands call at start.
+// commandsTimeout bounds all the setMyCommands calls at start together.
 const commandsTimeout = 10 * time.Second
 
 // botCommand is a Bot API BotCommand.
@@ -19,7 +20,7 @@ type botCommand struct {
 }
 
 // registerCommands lists the transport's commands in Telegram's command
-// hints, once for the default language (no language_code) and once for
+// hints, within ctx's deadline, once for the default language (no language_code) and once for
 // each other language a command is described in (rulings R43, R45).
 // setMyCommands replaces the list, so doing it at every start is
 // idempotent. A failure is logged and does not stop the transport: the
@@ -29,10 +30,8 @@ func (t *Transport) registerCommands(ctx context.Context) {
 		return
 	}
 	for _, lang := range languages(t.commands) {
-		cctx, cancel := context.WithTimeout(ctx, commandsTimeout)
-		err := t.c.setMyCommands(cctx, hintsIn(t.commands, lang), string(lang))
-		cancel()
-		if err != nil && ctx.Err() == nil {
+		err := t.c.setMyCommands(ctx, hintsIn(t.commands, lang), string(lang))
+		if err != nil && !errors.Is(err, context.Canceled) {
 			t.log.Warn("telegram: command hints not set", "language", string(lang), "err", err)
 		}
 	}

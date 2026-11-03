@@ -490,3 +490,31 @@ func TestNoCommandHintsWithoutCommands(t *testing.T) {
 		t.Fatal("commands registered without any")
 	}
 }
+
+// Registering the command hints does not hold up polling: a message
+// arrives while setMyCommands still waits, and Run returns at once when
+// stopped, without waiting for the hints (polish of R43).
+func TestCommandHintsDoNotDelayPolling(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	release := fake.Hold("setMyCommands")
+	t.Cleanup(release)
+	tr, err := New(testToken, WithBaseURL(fake.URL()), WithPollTimeout(time.Second), WithCommands(hints))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	cancel, result := run(t, tr, c.sink)
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hi"})
+	eventually(t, "the message while the hints wait", func() bool { return len(c.got()) == 1 })
+	if len(fake.CommandSets()) != 0 {
+		t.Fatal("the hints were set while held")
+	}
+	started := time.Now()
+	cancel()
+	if err := result(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run = %v", err)
+	}
+	if d := time.Since(started); d > 2*time.Second {
+		t.Fatalf("Run took %v to stop", d)
+	}
+}

@@ -133,7 +133,8 @@ func New(token string, opts ...Option) (*Transport, error) {
 func (t *Transport) Name() string { return Name }
 
 // Run implements transport.Transport. At start it lists its commands in
-// the command hints (registerCommands). It polls updates and hands each
+// the command hints (registerCommands), beside polling, under one short
+// deadline. It polls updates and hands each
 // message to sink in order. The offset moves past an update only after
 // sink returned nil for it, and Telegram learns the offset on the next
 // poll, so an update is confirmed only once it is in the inbox (R-DLV-2).
@@ -145,7 +146,12 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 	if err != nil {
 		return err
 	}
-	t.registerCommands(ctx)
+	// The command hints go out beside polling, never ahead of it; Run
+	// waits for them, bounded by their deadline, before it returns.
+	hctx, stopHints := context.WithTimeout(ctx, commandsTimeout)
+	var hints sync.WaitGroup
+	hints.Go(func() { t.registerCommands(hctx) })
+	defer func() { stopHints(); hints.Wait() }()
 	t.log.Info("telegram: polling", "bot_id", me.ID, "username", me.Username)
 	sinkRetry := backoff.New(t.retry)
 	var offset int64
