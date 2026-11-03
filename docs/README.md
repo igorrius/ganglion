@@ -132,7 +132,12 @@ Start here when coming back to the project.
       line breaks it lists; `web.WithResolver` and `web.WithConnect` are
       exported test seams; no automated depth check of htmd's own
       html5ever 0.38 tree; the nightly audit runs inside one event,
-      under the core's turn timeout.
+      under the core's turn timeout (batch the guard calls); nothing
+      locks the workspace to one node (removing a stale `index.lock`
+      assumes it); a crash can leave a quarantined copy's deletion
+      uncommitted; a Telegram display name can read like the owner's in
+      the speaker prefix; an approved page is capped like a tool result
+      while an auto-allowed one is not.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.
