@@ -90,6 +90,7 @@ type Item struct {
 	Expires                                time.Time
 	Result                                 string
 	External                               bool             // Result is outside content
+	Failed                                 bool             // the call ran and failed; Result is its error
 	Tainted                                bool             // the session was tainted when the call was parked
 	Depth                                  int              // the call's depth (R-AGT-4); its resumed turn runs one deeper
 	Out                                    []event.Outgoing // messages the call produced
@@ -100,6 +101,7 @@ type Item struct {
 type Outcome struct {
 	Result   string
 	External bool
+	Failed   bool // the call ran and returned an error; Result is the error as the model reads it
 	Out      []event.Outgoing
 }
 
@@ -381,8 +383,8 @@ func (s *Store) Finish(ctx context.Context, id string, o Outcome) error {
 		}
 		out = string(b)
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE pending_calls SET status = ?, result = ?, external = ?, out = ? WHERE id = ?`,
-		string(StatusDone), o.Result, o.External, out, id)
+	res, err := s.db.ExecContext(ctx, `UPDATE pending_calls SET status = ?, result = ?, external = ?, failed = ?, out = ? WHERE id = ?`,
+		string(StatusDone), o.Result, o.External, o.Failed, out, id)
 	if err != nil {
 		return fmt.Errorf("pending: finish %s: %w", id, err)
 	}
@@ -460,7 +462,7 @@ func (s *Store) ExpireDue(ctx context.Context) ([]Item, error) {
 	return out, rows.Err()
 }
 
-const itemColumns = `id, conv, transport, principal, turn_id, n, tool, args, question, status, expires_ms, result, external, out, tainted, depth`
+const itemColumns = `id, conv, transport, principal, turn_id, n, tool, args, question, status, expires_ms, result, external, failed, out, tainted, depth`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -469,7 +471,7 @@ func scanItem(r scanner) (Item, error) {
 	var args, status, out string
 	var expires int64
 	if err := r.Scan(&it.ID, &it.Conv, &it.Transport, &it.Principal, &it.TurnID, &it.N, &it.Tool, &args, &it.Question,
-		&status, &expires, &it.Result, &it.External, &out, &it.Tainted, &it.Depth); err != nil {
+		&status, &expires, &it.Result, &it.External, &it.Failed, &out, &it.Tainted, &it.Depth); err != nil {
 		return Item{}, err
 	}
 	if out != "" {

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"strings"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/tool/pending"
@@ -39,9 +38,9 @@ const (
 const errorPrefix = "error: "
 
 // approvedLine is the last line of an approved question: whether its call
-// did what it was asked.
-func approvedLine(result string) string {
-	if strings.HasPrefix(result, errorPrefix) {
+// did what it was asked, from the stored outcome's flag.
+func approvedLine(failed bool) string {
+	if failed {
 		return lineApprovedFailed
 	}
 	return lineApprovedDone

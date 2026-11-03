@@ -550,3 +550,24 @@ func TestParkedFindsAWaitingIdenticalCall(t *testing.T) {
 		t.Fatalf("an expired call is still found: %q", got)
 	}
 }
+
+// Whether a call failed is stored as a flag, not read from its text: a
+// rerun and a second press show how it really ended.
+func TestFinishStoresWhetherTheCallFailed(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	failed, _ := f.ask(t, 1)
+	ok, _ := f.ask(t, 2)
+	if err := f.s.Finish(ctx, failed, pending.Outcome{Result: "boom", Failed: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.s.Finish(ctx, ok, pending.Outcome{Result: "error: none found"}); err != nil {
+		t.Fatal(err)
+	}
+	if it, err := f.s.Get(ctx, failed); err != nil || !it.Failed {
+		t.Fatalf("failed call %+v, %v", it, err)
+	}
+	if it, err := f.s.Get(ctx, ok); err != nil || it.Failed {
+		t.Fatalf("a call whose text starts with error: %+v, %v", it, err)
+	}
+}

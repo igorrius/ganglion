@@ -114,7 +114,7 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 func usedLine(p pending.Press) string {
 	switch {
 	case p.Answer == pending.ActionApprove && p.Item.Status == pending.StatusDone:
-		return approvedLine(p.Item.Result)
+		return approvedLine(p.Item.Failed)
 	case p.Answer == pending.ActionApprove:
 		return lineApproved
 	case p.Answer == pending.ActionDeny:
@@ -207,7 +207,7 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 	}
 	line := lineDeclined
 	if action == pending.ActionApprove {
-		line = approvedLine(o.Result)
+		line = approvedLine(o.Failed)
 	}
 	// The call's messages, then the question with how it ended (ruling
 	// R40); again on a rerun: the outbox keeps one per key.
@@ -240,7 +240,7 @@ func (a *Agent) decide(ctx context.Context, t *turn, it pending.Item, action str
 // stored is the outcome of a done call as the first run stored it; the
 // tool's spec still marks outside content when the call ran.
 func (a *Agent) stored(it pending.Item, ran bool) pending.Outcome {
-	return pending.Outcome{Result: it.Result, External: it.External || ran && a.external(it.Tool, false), Out: it.Out}
+	return pending.Outcome{Result: it.Result, External: it.External || ran && a.external(it.Tool, false), Failed: it.Failed, Out: it.Out}
 }
 
 // runApproved runs the stored call as it was asked, with its original key
@@ -255,7 +255,7 @@ func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pendi
 	res, err := a.journalled(journal.DecisionApproved, a.d.Tools.Run)(ctx, c)
 	if err != nil {
 		// A failed call can still carry messages, as in runTool.
-		return pending.Outcome{Result: errorPrefix + err.Error(), Out: res.Out}
+		return pending.Outcome{Result: errorPrefix + err.Error(), Failed: true, Out: res.Out}
 	}
 	return pending.Outcome{Result: res.Text, External: a.external(it.Tool, res.External), Out: res.Out}
 }
@@ -290,7 +290,7 @@ func (a *Agent) refuseBadArgs(ctx context.Context, c tool.Call) (pending.Outcome
 	err = fmt.Errorf("agent: %s: %w", c.Name, err)
 	refuse := func(context.Context, tool.Call) (tool.Result, error) { return tool.Result{}, err }
 	_, _ = a.journalled(journal.DecisionForbidden, refuse)(ctx, c)
-	return pending.Outcome{Result: errorPrefix + err.Error()}, true
+	return pending.Outcome{Result: errorPrefix + err.Error(), Failed: true}, true
 }
 
 // journalled is f behind tracing and the journal, with decision d: the

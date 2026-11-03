@@ -862,9 +862,6 @@ func TestDenyAndFailureAreShown(t *testing.T) {
 	if len(early) != 2 || early[0].Text != "Declined" || early[0].Ack == "" || early[1].Text != q.Text+"\n\nDeclined." {
 		t.Fatalf("early %+v", early)
 	}
-	if got := approvedLine("error: boom"); got != "Approved, but it failed." {
-		t.Fatalf("approvedLine(error) = %q", got)
-	}
 }
 
 // Presses that do not take keep today's handling, with a toast saying
@@ -941,5 +938,46 @@ func TestEarlyAckFailureDoesNotStopThePress(t *testing.T) {
 	e.turn(t, press(owner, q.Buttons[0].ID, "77"))
 	if len(side.calls) != 1 {
 		t.Fatalf("the call ran %d times", len(side.calls))
+	}
+}
+
+// failTool is a side-effect tool that fails, or answers with text that
+// merely starts like an error.
+type failTool struct {
+	sideTool
+	err error
+}
+
+func (f *failTool) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
+	res, _ := f.sideTool.Run(ctx, c)
+	return res, f.err
+}
+
+// The final line says whether the call failed from the stored outcome's
+// flag, not from its text; a second press shows the same (polish of
+// R40).
+func TestFinalLineFollowsTheTypedOutcome(t *testing.T) {
+	for name, tc := range map[string]struct {
+		text string
+		err  error
+		want string
+	}{
+		"failed":                 {"", errors.New("boom"), "Approved, but it failed."},
+		"ok, text like an error": {"error: none found", nil, "Approved. Done."},
+	} {
+		tl := &failTool{sideTool: *newSideTool(), err: tc.err}
+		tl.result = tool.Result{Text: tc.text}
+		e := newConfirmEnv(t, tl)
+		q, _ := e.ask(t, "schedule.create")
+		e.smart.push(say("ok"))
+		out := noAcks(e.turn(t, press(owner, q.Buttons[0].ID, "77")))
+		edit, _ := findOut(out, isEdit)
+		if edit.Text != q.Text+"\n\n"+tc.want {
+			t.Errorf("%s: final edit %q", name, edit.Text)
+		}
+		again, _ := findOut(noAcks(e.turn(t, press(owner, q.Buttons[0].ID, "77"))), isEdit)
+		if again.Text != q.Text+"\n\n"+tc.want {
+			t.Errorf("%s: second press edit %q", name, again.Text)
+		}
 	}
 }
