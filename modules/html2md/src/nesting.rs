@@ -16,9 +16,9 @@
 use std::collections::HashMap;
 
 /// Deepest nesting the model lets through. Under the gate's MAX_DEPTH
-/// (256, counting html and body), so that what the model counts short
+/// (128, counting html and body), so that what the model counts short
 /// still fits.
-pub const MAX_NESTING: usize = 200;
+pub const MAX_NESTING: usize = 100;
 
 /// Void elements: they never open, with or without "/>".
 const VOID: &[&str] = &[

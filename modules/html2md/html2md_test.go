@@ -184,7 +184,7 @@ func TestHostileHTMLNoTrap(t *testing.T) {
 }
 
 // TestDeepestTreeConverts runs pages nested to the depth gate's cap
-// (256 elements, html and body included) through the wasm build: every
+// (128 elements, html and body included) through the wasm build: every
 // walk over the tree (extractor, serializer, htmd) must handle the
 // deepest tree the gate lets through, within the module's stack.
 func TestDeepestTreeConverts(t *testing.T) {
@@ -205,8 +205,8 @@ func TestDeepestTreeConverts(t *testing.T) {
 		"<span>":          1,
 		"<q>":             1,
 	} {
-		// html, body, the units, p and a: 256.
-		n := (256 - 4) / levels
+		// html, body, the units, p and a: 128.
+		n := (128 - 4) / levels
 		html := "<title>t</title>" + strings.Repeat(unit, n) + bottom
 		p, err := convert(t, m, "https://e.example/", html)
 		if err != nil {

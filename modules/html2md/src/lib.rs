@@ -337,7 +337,11 @@ mod tests {
         let t = inspect(&page, "https://e.example/");
         assert_eq!(t.route, Route::Flattened);
         let md = &t.page.markdown;
-        for want in ["[user 198](https://e.example/u198)", "user 399Comment 399"] {
+        // One level per comment (its a and p close); the last comment
+        // whose link fits under the model's cap is two below it.
+        let last = prepass::MAX_NESTING - 2;
+        let link = format!("[user {last}](https://e.example/u{last})");
+        for want in [link.as_str(), "user 399Comment 399"] {
             assert!(md.contains(want), "{want}: {md}");
         }
     }

@@ -29,8 +29,10 @@ use html5ever::tree_builder::TreeBuilderOpts;
 use html5ever::{Attribute, ExpandedName, ParseOpts, QualName, local_name, ns};
 
 /// The deepest element any tree the module builds may have; the html
-/// element is at depth 1.
-pub const MAX_DEPTH: usize = 256;
+/// element is at depth 1. Real pages stay under 30 (the deepest saved
+/// page is 22); html5ever's cost per tag grows with the depth, so a lower
+/// cap makes the costliest pages cheaper (ruling R26).
+pub const MAX_DEPTH: usize = 128;
 
 /// How much of the page the parser gets between two checks.
 const CHUNK: usize = 4096;

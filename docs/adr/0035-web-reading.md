@@ -47,8 +47,10 @@ Depth is bounded by measuring, not modelling (ruling R25): a **depth
 gate** wraps `dom_query`'s own sink, so html5ever's tree builder parses
 the page once, fed in 4 KiB chunks, and the wrapper keeps the tree's
 shape alongside (each node's parent and a bound on the height below
-it). The parse stops as soon as any element would be deeper than 256
-(the html element is at depth 1). Every rule of the parser (implied end
+it). The parse stops as soon as any element would be deeper than 128
+(the html element is at depth 1; ruling R26 lowered the cap from 256:
+the deepest saved real page is 22, and html5ever's cost per tag grows
+with the depth of the stack of open elements). Every rule of the parser (implied end
 tags, the adoption agency, foster parenting, foreign content) is
 html5ever's, because it is html5ever running; the tree that passes is
 the tree the extractor walks. Moves are followed exactly: removing a
@@ -59,7 +61,7 @@ bounds may stay too high after a move, never too low, and when they say
 "too deep" the heights are recounted exactly from the parents (in
 O(nodes), rationed so the total stays linear) before the page is
 refused. A refused page is flattened by the pre-pass's model of the
-stack of open elements (`nesting`, ruling R24, now capped at 200),
+stack of open elements (`nesting`, ruling R24, now capped at 100),
 whose output is parsed through the gate as it is written, so a page the
 model cannot save costs only up to where it fails; the model only
 decides whether a refused page keeps a tree. If it still does not fit,
@@ -77,12 +79,12 @@ of 2–6 tags over every kind of element the parser treats differently
 html/head/body, tables, select, comments, CDATA, upper case),
 repeated 400 times, and mixed soups up to 20,000 tags, from fixed
 seeds; it parses everything the module parsed with `dom_query` and
-asserts no tree is deeper than 256, and asserts that a stated share of
+asserts no tree is deeper than 128, and asserts that a stated share of
 the pages (30–50 %, about 10 points under what the seeds give) reach
 the gate. Each verdict of both sinks on pages up to 64 KiB is compared
 with an oracle, `dom_query`'s own sink wrapped to measure the real tree
 after every change: the gate refuses exactly the pages whose tree goes
-deeper than 256 at some moment of the parse (a few are deep only midway:
+deeper than 128 at some moment of the parse (a few are deep only midway:
 the adoption agency moves nodes back up). A regression corpus holds the
 317 shapes reviewers found against earlier pre-passes. `dom_query` (html5ever) parses; an own
 Readability-style extractor (iterative walks, table rows scored as
@@ -182,22 +184,25 @@ which is what html2md gets (a windows-1251 page doubles in UTF-8). So the worst 
 whose agent runs at about 40 MB: about 107 MB, under 128 MB. The real
 pages keep their numbers (p95 news 29 ms, docs 67, forum 55, NBU 28).
 
-With the depth gate (ruling R25; same machine, one process per shape,
-fresh module instance per call, 20 calls): the shapes that beat the
-round-3 model convert at 1 MiB in p95 187 ms (`<ruby><p><rt>`), 218
-(`<ruby><p><rb>`), 174 (`<video><rtc><button><g><math>`), 192
-(`<svg><html>`) and 252 (`<table><select><th>`), where the model timed
-out after 5 s or trapped; every earlier shape stays under 290 ms at
-1 MiB, and real pages under 70 ms (p95 news 33, docs 67, forum 49, NBU
-43; the 870 KB Wikipedia table 296). A page at the cap's edge (250 open
-elements, then 1 MiB of small elements) is still the costliest input:
-`<table></table>` there takes 2.4 s (2.5 s before the gate), and
-`<p></p>`, `<li>`, `<i>` or links there run out of the 32 MiB, as they
-did before. Process peak, `modbench` method (12 MiB before loading):
-at most 94 MiB on those edge pages (97 MiB with the round-3 module on
-the same input), so the worst case adds about 83 MiB to a node whose
-agent runs at about 40 MB: about 123 MB, under 128 MB with little
-margin. The module grows from 1.20 MB to 1.43 MB.
+With the depth gate at 128 (rulings R25, R26; same machine, one
+process per shape, fresh module instance per call, 20 calls): the
+shapes that beat the round-3 model convert at 1 MiB in p95 206 ms
+(`<ruby><p><rt>`), 205 (`<ruby><p><rb>`), 167
+(`<video><rtc><button><g><math>`), 176 (`<svg><html>`) and 226
+(`<table><select><th>`), where the model timed out after 5 s or
+trapped; every earlier shape stays under 270 ms at 1 MiB, and real
+pages under 65 ms (p95 news 27, docs 62, forum 38, NBU 26; the 870 KB
+Wikipedia table 287). The costliest input is a page at the cap's edge
+(122 open elements, then 1 MiB of a small element): `<table></table>`
+there takes 1.5 s (2.4 s at the edge of a 256 cap), and pages 250 deep
+are now refused and read in at most 0.4 s. Dense 1 MiB of tiny
+elements (`<p></p>`, `<li>`, `<i>`, links) still runs out of the
+32 MiB, at any depth: that is the node count, not the depth, and it
+fails cleanly as "could not be converted". Process peak, `modbench`
+method (12 MiB before loading): at most 95 MiB, on those out-of-memory
+pages (97 MiB with the round-3 module), so the worst case adds about
+83 MiB to a node whose agent runs at about 40 MB: about 123 MB, under
+128 MB with little margin. The module grows from 1.20 MB to 1.43 MB.
 
 Search, measured from the development machine on 2026-11-03: four
 DuckDuckGo HTML requests in a row returned results three times and a bot
