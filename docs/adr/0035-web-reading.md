@@ -83,8 +83,10 @@ asserts no tree is deeper than 128, and asserts that a stated share of
 the pages (30–50 %, about 10 points under what the seeds give) reach
 the gate. Each verdict of both sinks on pages up to 64 KiB is compared
 with an oracle, `dom_query`'s own sink wrapped to measure the real tree
-after every change: the gate refuses exactly the pages whose tree goes
-deeper than 128 at some moment of the parse (a few are deep only midway:
+after every change: the gate refuses every page whose tree goes deeper
+than 128 at some moment of the parse, and in the tests only those (past
+its ration of exact recounts the bound's verdict stands, so a page that
+fits can in principle be refused) (a few are deep only midway:
 the adoption agency moves nodes back up). A regression corpus holds the
 317 shapes reviewers found against earlier pre-passes. `dom_query` (html5ever) parses; an own
 Readability-style extractor (iterative walks, table rows scored as
@@ -181,7 +183,8 @@ hostile page at 54 MiB. With the category rules, 1 MiB of
 converts in p95 132, 145, 132, 133, 122 and 140 ms, at 50 to 67 MiB
 (earlier versions of the pre-pass timed out or trapped on them). The HTML bound applies to the text after charset decoding,
 which is what html2md gets (a windows-1251 page doubles in UTF-8). So the worst case adds about 67 MiB to a node
-whose agent runs at about 40 MB: about 107 MB, under 128 MB. The real
+whose agent runs at about 40 MB: about 107 MB, under 128 MB (superseded
+by the depth-gate figures below: about 123 MB). The real
 pages keep their numbers (p95 news 29 ms, docs 67, forum 55, NBU 28).
 
 With the depth gate at 128 (rulings R25, R26; same machine, one
@@ -231,9 +234,12 @@ crates, all at least two weeks old when chosen: `dom_query` 0.28.0,
 depth gate (ruling R25) adds `html5ever` 0.39.0 (released 2026-03-13)
 as a direct dependency: it was already in `Cargo.lock` as the parser of
 `dom_query`, and the gate's sink must plug into exactly that version.
-`htmd` parses with `html5ever` 0.38.0; between the two versions only the
-tokenizer's duplicate-attribute flag differs, not tree construction, so
-the gate measures `htmd`'s tree too. These are the module's
+`htmd` parses with `html5ever` 0.38.0. Between the two versions the
+tokenizer's duplicate-attribute flag differs, and 0.39 also reconstructs
+the active formatting elements on `<svg>` and `<math>` start tags in
+body, so the gate measures `htmd`'s tree by test, not by construction: a
+reviewer's check of 10,500 generated pages (svg, math and formatting
+heavy) parsed with 0.38 found none deeper than 128 that 0.39 let through. These are the module's
 dependencies, not the core's.
 
 **Search: Brave when `BRAVE_API_KEY` is set, DuckDuckGo HTML
