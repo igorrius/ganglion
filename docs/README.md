@@ -123,10 +123,14 @@ Start here when coming back to the project.
       ([ADR-0024](adr/0024-persona-as-workspace-files.md)), the current
       time in the last user message, the depth limit (R-AGT-4) and tool
       placement (R-RTR-3).
-  - **M3c, next:** module update and rollback, skills, attachments, logs
-    on disk, `ganglion mcp` for diagnosis from outside, a notice when a
-    file is sent to the agent (R-DLV-10), and the 3.8 acceptance under the
-    crash harness.
+  - **M3c, in progress** (branch `m3c`,
+    [plan](plans/p1-m3c-modules-skills-diagnostics.md)): module update
+    and rollback, skills, attachments and the metrics picture in
+    Telegram (`/metrics`), logs on disk, `ganglion mcp` for diagnosis
+    from outside, a notice when a file is sent to the agent (R-DLV-10),
+    and the 3.8 acceptance under the crash harness. Decisions:
+    [ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)–[ADR-0045](adr/0045-metrics-in-the-chat-and-attachments-in-the-outbox.md),
+    Proposed.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that

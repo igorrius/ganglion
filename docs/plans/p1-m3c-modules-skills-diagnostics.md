@@ -3,6 +3,11 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task
 > by task. Steps use checkbox (`- [ ]`) syntax.
+>
+> **Execution (owner, 2026-11-03):** hybrid. Tasks are implemented inline;
+> a fresh reviewer, given the task's diff and its section of this plan,
+> checks tasks 6, 7 and 8 (the security boundary), and one more reviews
+> the whole branch at the end.
 
 **Goal:** the node can be looked after from the chat and from outside:
 - the owner sees the agent's metrics as a picture in Telegram (`/metrics`
@@ -229,7 +234,7 @@ script:           # optional: a level-2 skill
   - `docs/adr/0044-ganglion-mcp-diagnostics-over-stdio.md`;
   - `docs/adr/0045-metrics-in-the-chat-and-attachments-in-the-outbox.md`.
 
-- [ ] **Step 1: Spec.**
+- [x] **Step 1: Spec.**
   - R-OBS-6: `<data>` is the directory of the database; `--log-dir`
     and `off`.
   - R-DLV-9: one attachment per message, 4 MiB, the caption limit.
@@ -239,7 +244,7 @@ script:           # optional: a level-2 skill
   - 7.3 / 9.8: the script block of `SKILL.md` and its `effects` classes
     (ruling M4); built-in skills reserved by name.
   - The commands `/metrics` and `/modules`.
-- [ ] **Step 2: ADRs** (Proposed), each comparing at least two options,
+- [x] **Step 2: ADRs** (Proposed), each comparing at least two options,
   each with a Security section:
   - 0041: install mechanism and source (design 6.1). Options:
     - a URL plus sha256 from GitHub Releases;
@@ -277,9 +282,9 @@ script:           # optional: a level-2 skill
     Storage options:
     - bytes in the outbox row, capped (chosen);
     - files on disk beside the database.
-- [ ] **Step 3: Phase plan.** The M3c section links this plan and names
+- [x] **Step 3: Phase plan.** The M3c section links this plan and names
   the rulings M1–M4.
-- [ ] **Step 4: Commit** `docs: M3c plan; ADR-0041-0045 (modules, skills, logs, ganglion mcp, attachments)`.
+- [x] **Step 4: Commit** `docs: M3c plan; ADR-0041-0045 (modules, skills, logs, ganglion mcp, attachments)`.
 
 ### Task 2: a file sent to the agent is noticed (3.19, R-DLV-10)
 

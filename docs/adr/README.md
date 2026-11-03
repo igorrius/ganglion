@@ -46,6 +46,11 @@ considered, how they compare, the decision and its consequences. See
 | [0038](0038-host-commands-as-argv-with-classes-in-code.md) | Give the agent host commands as argv, classed by a table in code, in a milestone M3d | Proposed | 2026-11-03 |
 | [0039](0039-command-sandbox.md) | Run host commands and skill scripts in a sandbox that fails closed | Proposed | 2026-11-03 |
 | [0040](0040-plans-as-approvals.md) | Let one press on a plan approve exactly the commands it lists | Proposed | 2026-11-03 |
+| [0041](0041-module-install-update-and-trust-boundary.md) | Install module updates from the project's GitHub Releases, checked, self-tested and switched without a restart | Proposed | 2026-11-03 |
+| [0042](0042-skills-and-scripts-before-the-sandbox.md) | Run skill scripts with a declared effect class, an environment allowlist and a timeout until the sandbox lands | Proposed | 2026-11-03 |
+| [0043](0043-logs-on-disk-with-an-own-rotator.md) | Write logs to disk through a small own rotator, synchronously | Proposed | 2026-11-03 |
+| [0044](0044-ganglion-mcp-diagnostics-over-stdio.md) | Serve read-only diagnostics as `ganglion mcp` over stdio, with the own MCP server | Proposed | 2026-11-03 |
+| [0045](0045-metrics-in-the-chat-and-attachments-in-the-outbox.md) | Render the metrics picture in process with promtop, and keep attachments in the outbox row | Proposed | 2026-11-03 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

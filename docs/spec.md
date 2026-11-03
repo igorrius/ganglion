@@ -283,7 +283,11 @@ Guarantee: **at-least-once + idempotency.**
 - **R-DLV-9.** A reply may carry attachments (a picture, a document) in a
   channel-neutral form; they go through the outbox with the same delivery
   guarantee as text. The Telegram transport sends them with `sendPhoto`
-  and `sendDocument` (M3c).
+  and `sendDocument` (M3c). A message carries at most one attachment of
+  at most 4 MiB, refused before the outbox; a text longer than the
+  channel's caption (1,024 characters on Telegram) follows the attachment
+  as its own parts. Bytes are kept in the outbox row
+  ([ADR-0045](adr/0045-metrics-in-the-chat-and-attachments-in-the-outbox.md)).
 - **R-DLV-10.** A file or a picture sent to the agent is never dropped
   silently. Until the agent can read them, the transport tells it that a
   file came (name, type, size) beside the caption, and the agent says it
@@ -346,6 +350,23 @@ model:
   not dependencies.
 - **R-RTR-3.** The router also picks where a tool runs (from the node
   registry); P1 has one node, but the interface accounts for more.
+- **R-RTR-4.** Skills (M3c, levels 1 and 2 of 9.8) live in
+  `workspace/skills/<name>/SKILL.md`; built-in skills are embedded in the
+  binary and reserved by name, so a workspace skill of the same name is
+  not loaded and the owner is told. The system prompt lists each skill's
+  name and description; the model reads one with `skill.read`, and the
+  rest of the turn is routed by that skill's `model` block. Only the
+  owner installs a skill; the agent may propose one by showing its text.
+- **R-RTR-5.** A level-2 skill declares its script in the frontmatter:
+  `script: {run, effects, env, timeout}`. `effects: read` runs by
+  itself, `effects: change` asks with a button; the output is outside
+  content. The script runs without a shell, in its own process group,
+  with an environment built from scratch plus the names it lists (the
+  node's secrets never pass), a timeout of at most 120 s, and capped
+  output. Until the sandbox of
+  [ADR-0039](adr/0039-command-sandbox.md) (M3d) it can read what the
+  node's user can read
+  ([ADR-0042](adr/0042-skills-and-scripts-before-the-sandbox.md)).
 
 ### 7.4. Providers and model access
 
@@ -492,7 +513,13 @@ escalate:                    # when to call the model
     any widening is a separately worded approval;
   - the core embeds, for each built-in module, the ABI version and a
     ceiling of rights; a release that asks for more is refused until the
-    core itself is upgraded.
+    core itself is upgraded. html2md's ceiling grants no capability, so
+    in M3c a widening is refused outright; the worded approval comes
+    with modules that have rights (M4).
+
+  The owner drives it with `/modules`, `/modules update <name>` and
+  `/modules rollback <name>`, without a model
+  ([ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)).
 
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation
@@ -673,6 +700,9 @@ undone with `git revert`.
   `<data>/logs/`, beside stdout (M3c). Writes are synchronous, so the last
   lines before a `kill -9` survive. Files rotate by size with limits on
   their count and age, so the disk never fills. Secrets are redacted.
+  `<data>` is the directory of the database; `--log-dir`
+  (`GANGLION_LOG_DIR`) moves the logs, and `off` keeps them on stdout
+  only ([ADR-0043](adr/0043-logs-on-disk-with-an-own-rotator.md)).
 - **R-OBS-7.** `ganglion mcp` is an MCP server over stdio for diagnosis
   from outside (M3c). It needs no running node and no model: it opens the
   database read-only and the log files, and offers read-only tools (search
@@ -680,7 +710,11 @@ undone with `git revert`.
   with secrets redacted, queue state). It is reached by running the
   command, locally or through `ssh`, `docker exec` or `kubectl exec`; it
   opens no port. The agent gets the same search tools, for admins only,
-  with results marked as external data.
+  with results marked as external data. `config.show` shows the
+  configuration this process reads (the flags and the environment), each
+  secret only as set or unset; `turn.show` gives one turn whole: the
+  event, the route, every call with its decision, and the replies
+  (R-OBS-5) ([ADR-0044](adr/0044-ganglion-mcp-diagnostics-over-stdio.md)).
 - **R-OBS-8.** Everything significant about how the node works is a
   metric, not only a log line or a journal row (owner, 2026-11-03). That
   covers:
@@ -693,7 +727,10 @@ undone with `git revert`.
   blind spot. A change that adds such behaviour adds its metric in the
   same commit, beside the log line and journal row that R-OBS-4–7 ask for
   diagnosis. The metric shows how the node is doing; the log line shows
-  why one case went wrong.
+  why one case went wrong. The owner sees the metrics in Telegram (M3c):
+  `/metrics`, without a model, and the agent's `metrics.show` send a
+  promtop picture rendered in process from the node's own registry, never
+  through `web.fetch`.
 - **R-OBS-9.** In a network (P2) the core collects the telemetry of every
   node over the bus (owner, 2026-11-03). An edge dials out and opens no
   port, so nothing can scrape its `/metrics`.
@@ -1061,7 +1098,7 @@ replay on history → approval → shadow → rollout.
 |---|---|---|---|---|
 | 0. Configuration | Changes to bindings, thresholds, observers, cell backends — proposed, approved by the owner, validated, committed to git | no | validation + approval; rollback | Yes, P1 (ADR-0015) |
 | 1. Skills | Markdown instructions | no | not needed | Yes, P1 |
-| 2. Scripts | Python/sh next to a skill | no | filesystem and network sandbox | Yes, P1 |
+| 2. Scripts | Python/sh next to a skill | no | environment allowlist and timeout (M3c, R-RTR-5); the filesystem and network sandbox of ADR-0039 (M3d) | Yes, P1 |
 | 3. MCP modules | A separate process + manifest with permissions | no | process, limits, granted secrets | Yes, the main path, P3 |
 | 4. WASM | `.wasm` in wazero | no | capability list | Yes, P1 by hand, P3 by the model |
 | 5. Core rebuild | `go build`, binary swap | yes | none | **Never** |

@@ -147,8 +147,8 @@ R-OBS-5–7 and R-POL-6–8 were added for it). Step-by-step plans:
   run that picks the first model;
 - [M3b, the agent works with the world](p1-m3b-agent-world.md): 3.5, 3.6
   and 3.9–3.14, design section 5;
-- M3c, modules, skills and diagnostics: 3.7, 3.15–3.18 and the 3.8
-  acceptance, design section 6; planned after M3b.
+- [M3c, modules, skills and diagnostics](p1-m3c-modules-skills-diagnostics.md):
+  3.7, 3.15–3.19 and the 3.8 acceptance, design section 6.
 
 Tasks 3.1–3.8 keep their numbers; the tasks the design added are numbered
 from 3.9.
@@ -192,7 +192,13 @@ and 5. Security baseline:
 
 #### M3c · Modules, skills, diagnostics
 
-Design section 6; the step-by-step plan is written after M3b.
+Plan: [p1-m3c-modules-skills-diagnostics.md](p1-m3c-modules-skills-diagnostics.md);
+design section 6. Owner rulings (2026-11-03): the metrics picture is
+rendered in process by promtop v0.4.0 (M1); a model-free `/metrics` (M2);
+an own log rotator (M3); skill scripts declare `effects: read` or
+`change` (M4). Decisions:
+[ADR-0041](../adr/0041-module-install-update-and-trust-boundary.md)–[ADR-0045](../adr/0045-metrics-in-the-chat-and-attachments-in-the-outbox.md)
+(Proposed).
 
 | Task | Done when |
 |---|---|
