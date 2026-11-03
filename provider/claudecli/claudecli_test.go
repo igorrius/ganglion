@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -55,6 +56,18 @@ func fakeClaude(mode string) int {
 		return 2
 	case "sleep":
 		time.Sleep(10 * time.Second)
+		return 0
+	case "spawn": // like claude with its relay: a child that outlives nothing on its own
+		child := exec.Command(os.Args[0])
+		child.Env = append(os.Environ(), "FAKE_CLAUDE=child")
+		if err := child.Start(); err != nil {
+			return 5
+		}
+		record("child " + strconv.Itoa(child.Process.Pid))
+		time.Sleep(30 * time.Second)
+		return 0
+	case "child":
+		time.Sleep(30 * time.Second)
 		return 0
 	case "mcp", "mcp-crash", "mcp-hang":
 		return fakeMCP(mode)

@@ -184,3 +184,87 @@ func TestFamilyTurnHasNoExec(t *testing.T) {
 		t.Fatalf("owner request: %d tools, exec set %v", len(req.Tools), req.Exec != nil)
 	}
 }
+
+// execOnce is a CLI step that runs one tool call through the bridge's
+// Exec and then fails the way end says.
+func execOnce(name string, end func() (provider.ChatResponse, error)) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		if _, err := req.Exec(ctx, provider.ToolCall{Name: name, Args: json.RawMessage(`{}`)}); err != nil {
+			return provider.ChatResponse{}, err
+		}
+		return end()
+	}
+}
+
+// ADR-0036 (R27): a CLI run that ran a tool and then failed is not
+// handed to the next model, which would not know the call ran: the turn
+// gives up with the fixed reply.
+func TestFailedCLIRunAfterToolsDoesNotFallBack(t *testing.T) {
+	for name, end := range map[string]func() (provider.ChatResponse, error){
+		"timeout": func() (provider.ChatResponse, error) {
+			return provider.ChatResponse{}, &provider.Error{Provider: "p1", Kind: provider.KindTimeout, Msg: "deadline exceeded"}
+		},
+		"non-zero exit": func() (provider.ChatResponse, error) {
+			return provider.ChatResponse{}, &provider.Error{Provider: "p1", Kind: provider.KindUnavailable, Msg: "no result: exit status 1"}
+		},
+		"empty answer": func() (provider.ChatResponse, error) { return answerText(""), nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			clock := newClock()
+			e := newConfirmEnv(t, clock)
+			e.smart.push(execOnce("clock", end))
+			ev := message(owner, "Igor", "what time is it?")
+			out := e.turn(t, ev)
+			entries, err := e.journal.Entries(context.Background())
+			if err != nil || len(entries) != 1 || entries[0].Key != ev.ID+":1" {
+				t.Fatalf("journal %+v (%v), want one row", entries, err)
+			}
+			if n := len(e.cheap.requests()); n != 0 {
+				t.Fatalf("the fallback model was asked %d times", n)
+			}
+			rec, err := e.turns.Get(context.Background(), ev.ID)
+			if err != nil || len(rec.Route) != 1 || rec.Route[0].Provider != "p1" {
+				t.Fatalf("route %+v (%v), want only p1", rec.Route, err)
+			}
+			if got := reply(t, out); got != replyGiveUp {
+				t.Fatalf("reply %q, want %q", got, replyGiveUp)
+			}
+		})
+	}
+}
+
+// A failed attempt that ran no tool still falls back as before.
+func TestFailedCLIRunWithoutToolsFallsBack(t *testing.T) {
+	e := newConfirmEnv(t, newClock())
+	e.smart.push(fail(provider.KindUnavailable))
+	e.cheap.push(say("from the fallback"))
+	if got := reply(t, e.turn(t, message(owner, "Igor", "hi"))); got != "from the fallback" {
+		t.Fatalf("reply %q", got)
+	}
+}
+
+// ADR-0036 (R28): a turn's CLI tool calls are capped at MaxSteps; the
+// next one is refused without a number, a run or a journal row.
+func TestCLIToolCallsAreCappedAtMaxSteps(t *testing.T) {
+	clock := newClock()
+	e := newConfirmEnv(t, clock)
+	limit := e.a.cfg.MaxSteps
+	names := make([]string, limit+1)
+	for i := range names {
+		names[i] = "clock"
+	}
+	e.smart.push(viaMCP(names...))
+	ev := message(owner, "Igor", "go")
+	out := e.turn(t, ev)
+	if len(clock.calls) != limit {
+		t.Fatalf("%d calls ran, want %d", len(clock.calls), limit)
+	}
+	r := results(t, reply(t, out))
+	if last := r[len(r)-1]; !last.IsError || last.Content[0].Text != errCallLimit.Error() {
+		t.Fatalf("the call over the limit got %+v", last)
+	}
+	entries, _ := e.journal.Entries(context.Background())
+	if len(entries) != limit {
+		t.Fatalf("%d journal rows, want %d", len(entries), limit)
+	}
+}

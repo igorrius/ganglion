@@ -411,3 +411,27 @@ func TestBridgeCloseWaitsForServe(t *testing.T) {
 	}
 	b.close() // twice is harmless
 }
+
+// Silent connections of the same user cannot hold the real relay up:
+// each is authenticated on its own, and the first valid one wins.
+func TestSilentConnectionsDoNotDelayTheRelay(t *testing.T) {
+	b := openTest(t, (&execRecorder{}).exec, authTimeout)
+	var silent []net.Conn
+	for range 5 {
+		silent = append(silent, dial(t, b))
+	}
+	start := time.Now()
+	var out strings.Builder
+	err := mcp.Relay(context.Background(), b.socket, b.token, strings.NewReader(`{"jsonrpc":"2.0","id":5,"method":"ping"}`+"\n"), &out)
+	if err != nil || !strings.Contains(out.String(), `"id":5`) {
+		t.Fatalf("relay: %q, %v", out.String(), err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("the relay waited %v behind silent connections", d)
+	}
+	for _, c := range silent {
+		if !readsEOF(t, c) {
+			t.Fatal("a silent connection stayed open")
+		}
+	}
+}

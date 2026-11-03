@@ -42,7 +42,7 @@ func (a *Agent) GiveUp(e event.Event, attempts int) []event.Outgoing {
 	var out []event.Outgoing
 	if e.Kind != event.KindSchedule {
 		out = append(out, event.Outgoing{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv,
-			Text: "Sorry, something went wrong with that message."})
+			Text: replyGiveUp})
 	}
 	alerts, err := a.d.Alerts.Messages(context.Background(), "alert:give-up:"+e.ID,
 		"Gave up on event "+e.ID+" in "+e.Conv+" after "+strconv.Itoa(attempts)+" attempts.")

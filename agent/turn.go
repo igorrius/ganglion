@@ -25,9 +25,12 @@ type turn struct {
 	now    time.Time
 	record turns.Turn // the trace: route, tools, tokens, outcome
 	out    []event.Outgoing
-	admin  bool   // the sender may use tools
-	calls  int    // tool calls so far in this turn; the next is calls+1
-	known  urlSet // addresses the sender gave or a search returned
+	admin  bool // the sender may use tools
+	calls  int  // tool calls so far in this turn; the next is calls+1
+	// execCalls are the calls a CLI provider ran through Exec; at most
+	// MaxSteps a turn.
+	execCalls int
+	known     urlSet // addresses the sender gave or a search returned
 	// decision is the press of a KindDecision event; toolResult the
 	// pending call of a KindToolResult event; schedule the job of a
 	// KindSchedule event.

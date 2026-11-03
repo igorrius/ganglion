@@ -46,4 +46,7 @@ const (
 	replyNoModel    = "Sorry, no model is reachable right now. Please try again in a few minutes."
 	replyStepLimit  = "Sorry, I could not finish that."
 	replyDailyLimit = "Daily limit reached; the bot answers again tomorrow."
+	// replyGiveUp ends a turn the agent gives up on: a message that failed
+	// every attempt (GiveUp), or a CLI run that failed after it ran tools.
+	replyGiveUp = "Sorry, something went wrong with that message."
 )

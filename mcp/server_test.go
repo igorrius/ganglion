@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -116,15 +118,29 @@ func TestServerInitializeAndList(t *testing.T) {
 	}
 
 	s.send(t, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+	// The wire keys are MCP's, checked raw rather than through provider.Tool.
 	var list struct {
-		Tools []provider.Tool `json:"tools"`
+		Tools []map[string]json.RawMessage `json:"tools"`
 	}
 	if err := json.Unmarshal(s.recv(t).Result, &list); err != nil {
 		t.Fatal(err)
 	}
-	if len(list.Tools) != 2 || list.Tools[0].Name != "schedule_list" || list.Tools[1].Name != "schedule_run_now" ||
-		list.Tools[0].Description != "List the jobs." || string(list.Tools[1].InputSchema) != string(tools[1].InputSchema) {
-		t.Fatalf("tools/list %+v", list.Tools)
+	want := []map[string]string{
+		{"name": `"schedule_list"`, "description": `"List the jobs."`, "inputSchema": string(tools[0].InputSchema)},
+		{"name": `"schedule_run_now"`, "description": `"Run a job now."`, "inputSchema": string(tools[1].InputSchema)},
+	}
+	if len(list.Tools) != len(want) {
+		t.Fatalf("tools/list has %d tools", len(list.Tools))
+	}
+	for i, w := range want {
+		if len(list.Tools[i]) != len(w) {
+			t.Errorf("tool %d has keys %v, want exactly %v", i, slices.Collect(maps.Keys(list.Tools[i])), slices.Collect(maps.Keys(w)))
+		}
+		for k, v := range w {
+			if got := string(list.Tools[i][k]); got != v {
+				t.Errorf("tool %d %s = %s, want %s", i, k, got, v)
+			}
+		}
 	}
 }
 

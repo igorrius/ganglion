@@ -63,6 +63,11 @@ handshake); it answers a client's version when it knows it, otherwise
 its newest. Notifications get no answer; an unknown method is `-32601`;
 a tool name not on offer is `-32602` and runs nothing; a tool's error
 is a result with `isError: true`.
+The arguments pass to the policy as they came, with one normalisation:
+absent or `"arguments": null` becomes `{}`. That is the strictest
+value `tool.CheckArgs` accepts: an object that names no parameter, so
+nothing reaches the policy or the tool that either could misread; a tool
+still refuses a call without its required parameters.
 
 ## Consequences
 

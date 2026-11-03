@@ -62,6 +62,12 @@ func (a *Agent) setAdmin(ctx context.Context, t *turn) error {
 	return nil
 }
 
+// endReplies are the fixed replies of a turn no model answered.
+var endReplies = map[turns.Outcome]string{
+	turns.OutcomeNoModel: replyNoModel,
+	turns.OutcomeError:   replyGiveUp, // a CLI run failed after it ran tools
+}
+
 // converse adds user to the history and runs the model on it, with tools
 // in between, and replies with its answer. done is true when no model
 // answered.
@@ -72,14 +78,14 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 	t.known = knownURLs(append(slices.Clone(t.state.Messages), user))
 	turnCtx, cancel := context.WithTimeout(ctx, a.cfg.TurnTimeout)
 	defer cancel()
-	added, text, ok, err := a.steps(ctx, turnCtx, t, append(a.prompt(t), user))
+	added, text, end, err := a.steps(ctx, turnCtx, t, append(a.prompt(t), user))
 	if err != nil {
 		return false, err
 	}
-	if !ok {
-		t.record.Outcome = turns.OutcomeNoModel
+	if end != turns.OutcomeOK {
+		t.record.Outcome = end
 		t.state.Messages, t.state.Last = append(t.state.Messages, user), t.now
-		t.reply(replyNoModel)
+		t.reply(endReplies[end])
 		return true, nil
 	}
 	if text == "" {
@@ -94,10 +100,11 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 
 // steps runs model calls and tools until the model answers without tool
 // calls or MaxSteps run out. It returns the messages the turn added after
-// the user's and the answer, "" at the step limit. ok is false when no
-// model answered a step. A cancelled ctx (shutdown) is an error, so the
-// event is offered again.
-func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Message) (added []provider.Message, text string, ok bool, err error) {
+// the user's and the answer, "" at the step limit. end is the outcome of
+// a step no model answered (OutcomeNoModel, or OutcomeError after a CLI
+// run that ran tools failed), OutcomeOK otherwise. A cancelled ctx
+// (shutdown) is an error, so the event is offered again.
+func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Message) (added []provider.Message, text string, end turns.Outcome, err error) {
 	tools := a.toolSpecs(t)
 	task := router.TaskReq{Kind: router.TaskMessage, Tools: len(tools) > 0}
 	var exec provider.Exec // a CLI provider runs the calls itself; no tools, nothing to run
@@ -106,23 +113,23 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 	}
 	for t.record.Steps < a.cfg.MaxSteps {
 		t.record.Steps++
-		resp, ok := a.call(turnCtx, task, provider.ChatRequest{Messages: a.annotate(t, msgs), Tools: tools, Exec: exec}, &t.record)
+		resp, got := a.call(turnCtx, task, provider.ChatRequest{Messages: a.annotate(t, msgs), Tools: tools, Exec: exec}, &t.record, t.toolCalls)
 		if ctx.Err() != nil {
-			return nil, "", false, ctx.Err()
+			return nil, "", got, ctx.Err()
 		}
-		if !ok {
-			return nil, "", false, nil
+		if got != turns.OutcomeOK {
+			return nil, "", got, nil
 		}
 		msg := resp.Message
 		msg.Role = provider.RoleAssistant
 		msgs, added = append(msgs, msg), append(added, msg)
 		if len(msg.ToolCalls) == 0 {
-			return added, msg.Content, true, nil
+			return added, msg.Content, turns.OutcomeOK, nil
 		}
 		results := a.runTools(turnCtx, t, msg.ToolCalls)
 		msgs, added = append(msgs, results...), append(added, results...)
 	}
-	return added, "", true, nil
+	return added, "", turns.OutcomeOK, nil
 }
 
 // lastText is the newest text the model wrote, for a turn cut by the step

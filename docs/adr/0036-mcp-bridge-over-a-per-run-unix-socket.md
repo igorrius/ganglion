@@ -94,14 +94,19 @@ The details:
 4. The listener reads the first line of each connection, at most 128
    bytes within 2 seconds, compares it with `subtle.ConstantTimeCompare`,
    serves the first connection that matches and closes every other
-   one, before and after.
+   one, before and after. Each connection is authenticated in its own
+   goroutine, at most 16 at once, so silent connections cannot hold the
+   relay up.
 5. The relay (`ganglion mcp-relay`, hidden) does stdio ↔ socket and the
    token, nothing else, and logs nothing. Both it and the server read
    lines through a reader bounded at 8 MiB; a longer line ends the
    connection.
 6. The run dir is removed on every path: success, error, a cancelled
    context, a killed or crashed CLI. The serve goroutine and the calls
-   it runs are waited for before the provider call returns.
+   it runs are waited for before the provider call returns. On Linux
+   and macOS `claude` runs in a process group of its own, and a
+   cancelled or timed-out call kills the whole group, so the relay does
+   not outlive it.
 7. Tools offered are exactly the turn's (`Specs(admin)`, `Offered`
    gating, a task's grant). A turn without tools (a family member's)
    starts no bridge.
@@ -112,6 +117,16 @@ The details:
    confirmation" to the CLI (not an error) and is pending in the state;
    the run ends normally, and the press resumes the conversation
    (ADR-0032).
+9. A turn's CLI tool calls are capped at `MaxSteps`, the API loop's
+   limit (8 by default); no separate setting. A call past it is refused
+   with a fixed error result ("tool call limit for this turn reached;
+   answer with what you have"): it is not numbered, run or journalled.
+10. A CLI attempt that ran any tool and then failed (a timeout, a
+    non-zero exit, an empty answer) does not fall back to the next
+    model, which would not know those calls ran. The turn ends with the
+    fixed give-up reply ("Sorry, something went wrong with that
+    message."), outcome `error` in the trace. An attempt that ran no
+    tool falls back as before.
 
 ## Consequences
 
@@ -125,14 +140,18 @@ The details:
   calls are in the state, so nothing that guards a later turn is lost;
   a `web.search` hit found in one CLI turn is not a known URL in the
   next one, so fetching it then asks the owner (fails safe).
-- A CLI run that ran tools and then failed falls back to the next model,
-  which does not know those calls ran; a side effect is confirm-class,
-  so the owner sees a second question at worst.
+- A CLI run that ran tools and then failed gives up instead of falling
+  back: the owner asks again and sees no tool run twice, at the cost of
+  an answer the fallback model might have given.
 - A CLI run with tools has the provider's call timeout (60 s) for its
   whole loop.
 - The relay inherits the CLI's environment, so another process of the
   same user could read the token from `/proc`; that user can reach the
   socket anyway, which is outside this boundary.
+- A SIGKILL of the core itself skips the deferred removal: a stale
+  `run-*` dir with its `mcp.json` stays in the work dir. Its token is
+  useless, since nothing listens on that run's socket any more; the
+  dirs are left for the work dir's cleanup (a deferred M3a minor).
 
 ## Revisit when
 

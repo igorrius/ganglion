@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -18,6 +19,10 @@ import (
 // tools (design section 4, rule 8). An error leaves the turn to be
 // handled again; it never counts as "not an admin".
 type AdminFunc func(ctx context.Context, principal string) (bool, error)
+
+// errCallLimit refuses a CLI provider's tool call once the turn's
+// budget, MaxSteps calls, is spent (ADR-0036); the model reads it.
+var errCallLimit = errors.New("tool call limit for this turn reached; answer with what you have")
 
 // proposeTool is the tool that ends the first-run introduction.
 const proposeTool = "persona.propose"
@@ -78,7 +83,7 @@ func (a *Agent) runTools(ctx context.Context, t *turn, calls []provider.ToolCall
 // runTool runs one call of an API model's tool_calls and returns its
 // result as a tool message; a failed call's result is its error text.
 func (a *Agent) runTool(ctx context.Context, t *turn, call provider.ToolCall) provider.Message {
-	text, err := a.useTool(ctx, t, call)
+	text, err := a.useTool(ctx, t, call, false)
 	if err != nil {
 		text = "error: " + err.Error()
 	}
@@ -87,11 +92,19 @@ func (a *Agent) runTool(ctx context.Context, t *turn, call provider.ToolCall) pr
 
 // exec is the turn's provider.Exec for a provider that runs its own tool
 // loop (the claude CLI over the MCP bridge, R-PRV-6): every call takes
-// the same path as an API model's, through useTool.
+// the same path as an API model's, through useTool, and the turn's CLI
+// calls are capped at MaxSteps, the API loop's limit (ADR-0036).
 func (a *Agent) exec(t *turn) provider.Exec {
 	return func(ctx context.Context, call provider.ToolCall) (string, error) {
-		return a.useTool(ctx, t, call)
+		return a.useTool(ctx, t, call, true)
 	}
+}
+
+// toolCalls is the number of calls the turn has run; a callCount.
+func (t *turn) toolCalls() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.calls
 }
 
 // useTool runs one call and applies its result to the turn: it numbers
@@ -103,10 +116,17 @@ func (a *Agent) exec(t *turn) provider.Exec {
 // It holds the turn's lock for the whole call: a CLI provider may call
 // in parallel, and a later call must see the taint an earlier external
 // result set (ADR-0036), with the call numbers continuing the
-// turn's count.
-func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall) (string, error) {
+// turn's count. A capped call (a CLI provider's) past the turn's budget
+// is refused with errCallLimit before it is numbered, run or journalled.
+func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall, capped bool) (string, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if capped {
+		if t.execCalls >= a.cfg.MaxSteps {
+			return "", errCallLimit
+		}
+		t.execCalls++
+	}
 	t.calls++
 	started := time.Now()
 	result, err := a.tool(ctx, a.toolCall(t, call))

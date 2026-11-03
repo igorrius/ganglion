@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/igorrius/ganglion/mcp"
@@ -28,6 +29,7 @@ const (
 	configName  = "mcp.json"         // in the run dir
 	relayArg    = "mcp-relay"        // the hidden relay command
 	authTimeout = 2 * time.Second    // for the relay's first line
+	maxAuth     = 16                 // connections authenticated at once
 	tokenBytes  = 32                 // of crypto/rand, sent in hex
 	maxToken    = 2*tokenBytes + 64  // the longest first line read
 	runPattern  = "run-"             // os.MkdirTemp's pattern for run dirs
@@ -142,28 +144,41 @@ func (b *bridge) args() []string {
 	return []string{"--mcp-config", b.config, "--allowedTools", allowTools}
 }
 
-// serve accepts connections until the listener closes: the first one
-// that sends the token is served, every other one is closed.
+// serve accepts connections until the listener closes. Each one is
+// authenticated in its own goroutine, at most maxAuth at once, so a
+// silent connection cannot hold the relay up; the first that sends the
+// token is served and every other one is closed.
 func (b *bridge) serve(ctx context.Context) {
-	var wg sync.WaitGroup
+	var (
+		wg     sync.WaitGroup
+		served atomic.Bool
+		slots  = make(chan struct{}, maxAuth)
+	)
 	defer wg.Wait()
-	served := false
 	for {
 		conn, err := b.ln.AcceptUnix()
 		if err != nil {
 			return // closed by close
 		}
-		if served {
+		if served.Load() {
 			_ = conn.Close()
 			continue
 		}
-		r, ok := b.authenticate(ctx, conn)
-		if !ok {
+		select {
+		case slots <- struct{}{}:
+		case <-ctx.Done():
 			_ = conn.Close()
-			continue
+			return
 		}
-		served = true
-		wg.Go(func() { b.session(ctx, conn, r) })
+		wg.Go(func() {
+			r, ok := b.authenticate(ctx, conn)
+			<-slots
+			if !ok || !served.CompareAndSwap(false, true) {
+				_ = conn.Close()
+				return
+			}
+			b.session(ctx, conn, r)
+		})
 	}
 }
 
