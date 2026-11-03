@@ -134,8 +134,40 @@ func (s Scheduling) job(ctx context.Context, c tool.Call) (schedule.Job, error) 
 	if err := s.grant(ctx, c, &j, a.Grant); err != nil {
 		return schedule.Job{}, err
 	}
+	if err := s.unique(ctx, j); err != nil {
+		return schedule.Job{}, err
+	}
 	return j, nil
 }
+
+// unique refuses a job that a live job of the same owner does already:
+// the same conversation, kind, schedule and text, white space aside
+// (ruling R31). A model that asks twice for one job gets no second
+// question, and the fixed answer names the job it has. The job a rerun
+// of this call created is not a duplicate.
+func (s Scheduling) unique(ctx context.Context, j schedule.Job) error {
+	live, err := s.Jobs.List(ctx, j.Owner)
+	if err != nil {
+		return fmt.Errorf("schedule.create: %w", err)
+	}
+	for _, o := range live {
+		if o.ID != j.ID && !o.Deleted && sameJob(o, j) {
+			return fmt.Errorf("schedule.create: job %s already does exactly this and is live; it was not created again", o.ID)
+		}
+	}
+	return nil
+}
+
+// sameJob reports whether a and b do the same thing at the same times in
+// the same conversation, comparing the cron and the text with white
+// space collapsed.
+func sameJob(a, b schedule.Job) bool {
+	return a.Conv == b.Conv && a.Kind == b.Kind && oneSpace(a.Cron) == oneSpace(b.Cron) && a.At.Equal(b.At) &&
+		oneSpace(a.Text) == oneSpace(b.Text)
+}
+
+// oneSpace is s with every run of white space one space, trimmed.
+func oneSpace(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // checkText checks the kind and the text.
 func checkText(j schedule.Job) error {

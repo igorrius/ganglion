@@ -232,6 +232,48 @@ func TestScheduleCreateNeedsConfirm(t *testing.T) {
 	}
 }
 
+// Ruling R31: a second schedule.create of a live job (same chat, kind,
+// schedule and text, white space aside) asks nothing and names the job;
+// a different text, or a deleted job, is not a duplicate.
+func TestScheduleCreateRefusesALiveDuplicate(t *testing.T) {
+	e := newSchedEnv(t)
+	ctx := context.Background()
+	create := builtin.NewScheduleCreate(e.sc)
+	if _, err := create.Run(ctx, call("schedule.create", ratesArgs)); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := tool.NewRegistry(router.Local{}, create)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ask := &asker{}
+	run := tool.Chain(reg.Run, policy.New(policy.DefaultConfig(), reg, ask).Middleware())
+	again := call("schedule.create", `{"kind":"task","cron":" 0  * * * * ","text":"send me the exchange rates,\n compared with the previous runs ",`+
+		`"grant":{"tools":["web.fetch"],"hosts":["bank.gov.ua"]}}`)
+	again.TurnID = "E2"
+	_, err = run(ctx, again)
+	want := "schedule.create: job e1-2 already does exactly this and is live; it was not created again"
+	if err == nil || !strings.HasSuffix(err.Error(), want) || len(ask.asked) != 0 {
+		t.Fatalf("duplicate = %v, asked %q; want %q and no question", err, ask.asked, want)
+	}
+	// An approved duplicate that was asked before the first job existed
+	// does not run either.
+	if _, err := create.Run(ctx, again); err == nil || err.Error() != want {
+		t.Fatalf("run of the duplicate = %v", err)
+	}
+	other := call("schedule.create", strings.Replace(ratesArgs, "exchange rates", "fuel prices", 1))
+	other.TurnID = "E3"
+	if _, err := run(ctx, other); err != nil || len(ask.asked) != 1 {
+		t.Fatalf("another text = %v, asked %q", err, ask.asked)
+	}
+	if err := e.jobs.Delete(ctx, "e1-2", me); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(ctx, again); err != nil || len(ask.asked) != 2 {
+		t.Fatalf("after the delete = %v, asked %q", err, ask.asked)
+	}
+}
+
 func (e *schedEnv) add(t *testing.T, j schedule.Job) {
 	t.Helper()
 	if err := e.jobs.Ensure(context.Background(), j); err != nil {
