@@ -37,3 +37,30 @@ func TestCheckArgs(t *testing.T) {
 		}
 	}
 }
+
+// Two argument texts are the same call when their canonical forms match:
+// keys sorted, no insignificant whitespace, numbers kept exactly
+// (ruling R38).
+func TestCanonicalArgs(t *testing.T) {
+	for in, want := range map[string]string{
+		`{"url":"https://a.example/?x=1&y=2"}`:          `{"url":"https://a.example/?x=1&y=2"}`,
+		` { "b" : 1 , "a" : {"z": [1, 2], "y": null} }`: `{"a":{"y":null,"z":[1,2]},"b":1}`,
+		`{"n":12345678901234567890}`:                    `{"n":12345678901234567890}`,
+		`{"t":"<x>"}`:                                   `{"t":"<x>"}`,
+	} {
+		got, err := tool.CanonicalArgs(json.RawMessage(in))
+		if err != nil || got != want {
+			t.Errorf("CanonicalArgs(%s) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	a, _ := tool.CanonicalArgs(json.RawMessage(`{"a":1,"b":"x"}`))
+	b, _ := tool.CanonicalArgs(json.RawMessage("{\n  \"b\": \"x\",\n  \"a\": 1\n}"))
+	if a != b {
+		t.Errorf("the same arguments differ: %q and %q", a, b)
+	}
+	for _, bad := range []string{``, `{`, `{"a":1} {}`} {
+		if _, err := tool.CanonicalArgs(json.RawMessage(bad)); err == nil {
+			t.Errorf("CanonicalArgs(%q) accepted", bad)
+		}
+	}
+}

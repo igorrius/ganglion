@@ -689,3 +689,54 @@ func TestResumeChainDeeperThanMaxDepthIsForbidden(t *testing.T) {
 		t.Fatalf("last journal entry %+v, want the deep call forbidden", last)
 	}
 }
+
+// toolResults are the tool messages of the last request the model got.
+func toolResults(req provider.ChatRequest) []string {
+	var out []string
+	for _, m := range req.Messages {
+		if m.Role == provider.RoleTool {
+			out = append(out, m.Content)
+		}
+	}
+	return out
+}
+
+// The live run of 2026-11-03: a later turn asked the same call again
+// while the first question still waited. The same call now makes no
+// second question; once the first is answered or expired it asks again
+// (ruling R38).
+func TestSameCallWaitingIsNotAskedTwice(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	q, _ := e.ask(t, "schedule.create")
+
+	e.smart.push(callTool("schedule.create"), say("It is waiting for you."))
+	out := e.turn(t, message(owner, "Igor", "and again"))
+	if _, asked := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 }); asked {
+		t.Fatalf("a second question: %+v", out)
+	}
+	reqs := e.smart.requests()
+	if got := toolResults(reqs[len(reqs)-1]); got[len(got)-1] != policy.AlreadyWaiting {
+		t.Fatalf("the model read %q", got[len(got)-1])
+	}
+	if st := e.state(t); len(st.Pending) != 1 {
+		t.Fatalf("pending %v: want the one waiting call", st.Pending)
+	}
+
+	// Answered: it runs once, and the same call asks again.
+	e.smart.push(say("Done."))
+	e.turn(t, press(owner, q.Buttons[0].ID, "77"))
+	if len(side.calls) != 1 {
+		t.Fatalf("the call ran %d times", len(side.calls))
+	}
+	q2, _ := e.ask(t, "schedule.create")
+	if q2.IdemKey == q.IdemKey {
+		t.Fatal("no new question after the answer")
+	}
+	// Expired: the same call asks again.
+	e.now = e.now.Add(pending.DefaultTTL)
+	q3, _ := e.ask(t, "schedule.create")
+	if q3.IdemKey == q2.IdemKey {
+		t.Fatal("no new question after the expiry")
+	}
+}

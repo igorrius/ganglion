@@ -80,7 +80,14 @@ How it works:
   with the turn's replies (IdemKey `<call key>:confirm`) and keeps the
   pending id in `State.Pending`. The call's tool message is the
   placeholder "awaiting confirmation". `Ask` is idempotent by the call
-  key, so a rerun turn parks the same call.
+  key, so a rerun turn parks the same call. A call identical to one
+  that already waits in the conversation (the same person, tool and
+  canonical arguments, `tool.CanonicalArgs`; not past its expiry; not
+  the call itself) is not asked again (ruling R38): it gets the waiting
+  call's pending id, so the answer resumes the current session, and a
+  fixed "already waiting for the owner's confirmation" result; the
+  journal keeps it as `confirm`. Once the first is answered or expired,
+  the same call asks again.
 - `tool/pending` stores the call (its turn id and number, tool,
   arguments, the redacted question), a request cell
   `request.call.<id>` (ADR-0014; lower case, like every cell id) and two

@@ -7,6 +7,7 @@ import (
 	"io"
 	"maps"
 	"slices"
+	"strings"
 )
 
 // ErrBadArgs is a call whose arguments are not a JSON object of the
@@ -73,4 +74,27 @@ func properties(s Spec) (map[string]json.RawMessage, error) {
 		return nil, ErrBadArgs
 	}
 	return schema.Properties, nil
+}
+
+// CanonicalArgs is args as canonical JSON: object keys sorted, no
+// insignificant whitespace, numbers kept exactly as written. Two calls of
+// one tool with the same canonical arguments are the same call (ruling
+// R38). An error means args is not one JSON value.
+func CanonicalArgs(args json.RawMessage) (string, error) {
+	dec := json.NewDecoder(bytes.NewReader(args))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return "", ErrBadArgs
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return "", ErrBadArgs
+	}
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return "", ErrBadArgs
+	}
+	return strings.TrimSuffix(out.String(), "\n"), nil
 }

@@ -305,6 +305,8 @@ func TestCellsSpecs(t *testing.T) {
 // asker parks a call without storing it.
 type asker struct{ asked []string }
 
+func (a *asker) Parked(context.Context, tool.Call) (string, error) { return "", nil }
+
 func (a *asker) Ask(_ context.Context, _ tool.Call, q string) (string, error) {
 	a.asked = append(a.asked, q)
 	return "pend-1", nil

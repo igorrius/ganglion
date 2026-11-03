@@ -494,3 +494,59 @@ func TestAskKeepsTheDepth(t *testing.T) {
 		t.Fatalf("item %+v, %v", it, err)
 	}
 }
+
+// Parked finds a waiting call identical to c (tool and canonical
+// arguments) in the same conversation by the same person; the call's own
+// key, another URL, another conversation, an answered and an expired call
+// are not it (ruling R38).
+func TestParkedFindsAWaitingIdenticalCall(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	id, q := f.ask(t, 1)
+	later := call(1)
+	later.TurnID, later.Args = "01LATER", json.RawMessage("{ \"url\" : \"https://example.com/x\" }")
+	parked := func(c tool.Call) string {
+		t.Helper()
+		got, err := f.s.Parked(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if got := parked(later); got != id {
+		t.Fatalf("Parked(the same call in a later turn) = %q, want %q", got, id)
+	}
+	if got := parked(call(1)); got != "" {
+		t.Fatalf("the call's own key (a rerun of its turn) found %q", got)
+	}
+	other := later
+	other.Args = json.RawMessage(`{"url":"https://example.com/y"}`)
+	elsewhere := later
+	elsewhere.Conv = "telegram:43"
+	someoneElse := later
+	someoneElse.Principal = "telegram:user:43"
+	otherTool := later
+	otherTool.Name = "web.search"
+	for name, c := range map[string]tool.Call{"another url": other, "another conversation": elsewhere,
+		"another person": someoneElse, "another tool": otherTool} {
+		if got := parked(c); got != "" {
+			t.Errorf("%s: Parked = %q", name, got)
+		}
+	}
+	// Answered: the same call asks again.
+	if _, err := f.s.Press(ctx, q.Buttons[1].ID, by("01PRESS")); err != nil {
+		t.Fatal(err)
+	}
+	if got := parked(later); got != "" {
+		t.Fatalf("an answered call is still found: %q", got)
+	}
+	// Past its expiry, even before the expirer marks it: asks again.
+	id2, _ := f.ask(t, 2)
+	if got := parked(later); got != id2 {
+		t.Fatalf("Parked = %q, want %q", got, id2)
+	}
+	f.clk.add(pending.DefaultTTL)
+	if got := parked(later); got != "" {
+		t.Fatalf("an expired call is still found: %q", got)
+	}
+}

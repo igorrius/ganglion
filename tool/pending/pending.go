@@ -225,6 +225,39 @@ func (s *Store) Ask(ctx context.Context, c tool.Call, question string) (string, 
 	return id, nil
 }
 
+// Parked returns the id of a call identical to c that still waits for
+// an answer, or "" when there is none: the same conversation, the same
+// person, the same tool and the same canonical arguments
+// (tool.CanonicalArgs), not past its expiry, and not c itself (a rerun of
+// the turn that parked it asks again, so its question goes out). The
+// policy then does not ask a second time (ruling R38).
+func (s *Store) Parked(ctx context.Context, c tool.Call) (string, error) {
+	want, err := tool.CanonicalArgs(c.Args)
+	if err != nil {
+		return "", nil // arguments that do not parse are never the same call
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, args FROM pending_calls WHERE conv = ? AND principal = ? AND tool = ?
+		AND status = ? AND expires_ms > ? AND NOT (turn_id = ? AND n = ?) ORDER BY created_ms, id`,
+		c.Conv, c.Principal, c.Name, string(StatusWaiting), s.now().UnixMilli(), c.TurnID, c.N)
+	if err != nil {
+		return "", fmt.Errorf("pending: parked %s: %w", c.Name, err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id, args string
+		if err := rows.Scan(&id, &args); err != nil {
+			return "", fmt.Errorf("pending: parked %s: %w", c.Name, err)
+		}
+		if got, err := tool.CanonicalArgs(json.RawMessage(args)); err == nil && got == want {
+			return id, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("pending: parked %s: %w", c.Name, err)
+	}
+	return "", nil
+}
+
 // insert stores it with its two buttons, unless its call key is stored
 // already; it returns the stored id.
 func (s *Store) insert(ctx context.Context, it Item, now time.Time) (string, error) {

@@ -205,15 +205,20 @@ func TestTaintFromAPageGuardsMemoryWrites(t *testing.T) {
 	}
 	e.smart.push(callWith("web.fetch", `{"url":"http://news.example/a"}`), callWith("memory.write", `{}`), say("noted"))
 	out := e.turn(t, message(owner, "Igor", "read http://news.example/a"))
-	if _, ok := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 }); !ok || len(e.remember.calls) != 1 {
+	q, ok := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 })
+	if !ok || len(e.remember.calls) != 1 {
 		t.Fatalf("a write after the page ran without asking: calls %d, out %+v", len(e.remember.calls), out)
 	}
+	// The owner declines, so the same write in the next turn is a new
+	// question, not one already waiting (ruling R38).
+	e.smart.push(say("ok"))
+	e.turn(t, press(owner, q.Buttons[1].ID, "77"))
 	e.smart.push(callWith("memory.write", `{}`), say("noted"))
 	out = e.turn(t, message(owner, "Igor", "and now?"))
 	if _, ok := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 }); !ok || len(e.remember.calls) != 1 {
 		t.Fatalf("the next turn's write ran without asking: calls %d", len(e.remember.calls))
 	}
-	if st := e.state(t); !st.Tainted || len(st.Pending) != 2 {
+	if st := e.state(t); !st.Tainted || len(st.Pending) != 1 {
 		t.Fatalf("state tainted=%v pending=%v", st.Tainted, st.Pending)
 	}
 }

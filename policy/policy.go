@@ -41,6 +41,12 @@ const (
 	questionArgsRunes = 300
 )
 
+// AlreadyWaiting is what the model reads for a call identical to one
+// that already waits for the owner's answer in the conversation: it is
+// not asked again (ruling R38).
+const AlreadyWaiting = "this exact call is already waiting for the owner's confirmation; do not ask again: " +
+	"the conversation continues when they answer"
+
 // DefaultMaxDepth is the deepest chain of agent-started turns allowed
 // (R-AGT-4).
 const DefaultMaxDepth = 3
@@ -50,8 +56,11 @@ var ErrNoAsker = errors.New("policy: confirmations are not available")
 
 // Asker parks a call for a person (tool/pending). Ask returns the pending
 // id and never an empty one without an error; Outgoing is the message that
-// asks, which goes out with the turn's replies.
+// asks, which goes out with the turn's replies. Parked returns the id of a
+// call identical to c (tool and canonical arguments) that already waits
+// in c's conversation, other than c itself, or "" (ruling R38).
 type Asker interface {
+	Parked(ctx context.Context, c tool.Call) (pending string, err error)
 	Ask(ctx context.Context, c tool.Call, question string) (pending string, err error)
 	Outgoing(ctx context.Context, pending string) (event.Outgoing, error)
 }
@@ -59,6 +68,9 @@ type Asker interface {
 // NoAsk is the Asker of a node without confirmations: every call that
 // needs one fails, so it never runs.
 type NoAsk struct{}
+
+// Parked implements Asker: nothing is ever parked.
+func (NoAsk) Parked(context.Context, tool.Call) (string, error) { return "", nil }
 
 // Ask implements Asker.
 func (NoAsk) Ask(context.Context, tool.Call, string) (string, error) { return "", ErrNoAsker }
@@ -184,8 +196,19 @@ func (p *Policy) spec(s tool.Spec) tool.Spec {
 }
 
 // confirm parks the call for the owner and returns its pending id with
-// the question, which the agent sends with the turn's replies.
+// the question, which the agent sends with the turn's replies. A call
+// identical to one already waiting is not asked again: it gets that
+// call's pending id, so the answer resumes this session too, and the
+// fixed AlreadyWaiting text, with no question (ruling R38); the journal
+// keeps it as confirm, the decision Decide made.
 func (p *Policy) confirm(ctx context.Context, h tool.Handler, c tool.Call) (tool.Result, error) {
+	waiting, err := p.ask.Parked(ctx, c)
+	if err != nil {
+		return tool.Result{}, fmt.Errorf("policy: ask about %s: %w", c.Name, err)
+	}
+	if waiting != "" {
+		return tool.Result{Pending: waiting, Text: AlreadyWaiting}, nil
+	}
 	q, err := question(ctx, h, c)
 	if err != nil {
 		return tool.Result{}, err

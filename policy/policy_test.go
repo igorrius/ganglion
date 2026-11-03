@@ -142,9 +142,15 @@ func (c *counter) Run(context.Context, tool.Call) (tool.Result, error) {
 }
 
 type fakeAsker struct {
-	asked []string
-	id    string
-	err   error
+	asked  []string
+	id     string
+	err    error
+	parked map[string]string // canonical arguments → the id of a call waiting with them
+}
+
+func (a *fakeAsker) Parked(_ context.Context, c tool.Call) (string, error) {
+	key, _ := tool.CanonicalArgs(c.Args)
+	return a.parked[c.Name+" "+key], nil
 }
 
 func (a *fakeAsker) Ask(_ context.Context, _ tool.Call, q string) (string, error) {
@@ -301,10 +307,14 @@ func TestDecisionReachesTheJournal(t *testing.T) {
 	}
 	h := &counter{s: spec("schedule.create", tool.ClassSideEffect, tool.PolicyConfirm)}
 	reg, _ := tool.NewRegistry(router.Local{}, h)
-	run := tool.Chain(reg.Run, j.Middleware(), policy.New(policy.DefaultConfig(), reg, &fakeAsker{id: "p"}).Middleware())
+	ask := &fakeAsker{id: "p", parked: map[string]string{`schedule.create {"id":"dup"}`: "p0"}}
+	run := tool.Chain(reg.Run, j.Middleware(), policy.New(policy.DefaultConfig(), reg, ask).Middleware())
 	_, _ = run(ctx, with(base(), func(c *tool.Call) { c.Name = "schedule.create"; c.TurnID = "E1"; c.N = 1 }))
+	// A call already waiting is journalled as confirm too (ruling R38).
+	_, _ = run(ctx, with(base(), func(c *tool.Call) { c.Name = "schedule.create"; c.TurnID = "E2"; c.N = 1; c.Args = args("id", "dup") }))
 	es, err := j.Entries(ctx)
-	if err != nil || len(es) != 1 || es[0].Decision != journal.DecisionConfirm {
+	if err != nil || len(es) != 2 || es[0].Decision != journal.DecisionConfirm || es[1].Decision != journal.DecisionConfirm ||
+		es[1].ResultHead != policy.AlreadyWaiting {
 		t.Fatalf("entries %+v, %v", es, err)
 	}
 }
@@ -415,5 +425,31 @@ func TestUndeclaredArgumentsAreForbidden(t *testing.T) {
 	})
 	if _, err := run(context.Background(), c); !errors.Is(err, tool.ErrBadArgs) || h.calls != 0 {
 		t.Fatalf("err %v, calls %d", err, h.calls)
+	}
+}
+
+// A call identical to one already waiting for the owner in this
+// conversation is not asked again: the model reads a fixed result, the
+// call joins the waiting one's pending id, nothing runs and no second
+// question goes out; it is journalled as confirm (ruling R38).
+func TestWaitingCallIsNotAskedAgain(t *testing.T) {
+	h := &counter{s: spec("web.fetch", tool.ClassExternal, tool.PolicyAuto)}
+	ask := &fakeAsker{id: "pend-2", parked: map[string]string{`web.fetch {"url":"https://bank.example/eur"}`: "pend-1"}}
+	run := chain(t, h, ask)
+	same := with(base(), func(c *tool.Call) {
+		c.Name = "web.fetch"
+		c.Args = json.RawMessage(`{ "url": "https://bank.example/eur" }`)
+	})
+	res, err := run(context.Background(), same)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Pending != "pend-1" || res.Text != policy.AlreadyWaiting || len(res.Out) != 0 || len(ask.asked) != 0 || h.calls != 0 {
+		t.Fatalf("the same call: result %+v, asked %d, ran %d", res, len(ask.asked), h.calls)
+	}
+	other := with(same, func(c *tool.Call) { c.Args = args("url", "https://bank.example/usd") })
+	res, err = run(context.Background(), other)
+	if err != nil || res.Pending != "pend-2" || len(res.Out) != 1 || len(ask.asked) != 1 {
+		t.Fatalf("another url: result %+v, err %v, asked %d", res, err, len(ask.asked))
 	}
 }
