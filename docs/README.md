@@ -85,8 +85,9 @@ Start here when coming back to the project.
     - memory with a clean-context check
       ([ADR-0033](adr/0033-memory-in-the-workspace-git-with-the-git-binary.md),
       [ADR-0034](adr/0034-clean-context-guard.md), Proposed);
-    - reading the web (`web.fetch` with an `html2md` WASM module,
-      `web.search`);
+    - reading the web (`web.fetch` with an `html2md` WASM module in
+      Rust, `web.search` through Brave or DuckDuckGo;
+      [ADR-0035](adr/0035-web-reading.md), Proposed);
     - the tool-call journal;
     - the same tools for the claude CLI through an MCP bridge;
     - carried from M3a: the first-run introduction that writes the persona

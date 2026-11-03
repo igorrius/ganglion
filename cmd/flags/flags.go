@@ -60,6 +60,7 @@ type Run struct {
 	DailyTokens    int
 	SessionIdle    string
 	TZ             string
+	Search         string
 }
 
 // Flags returns the flags of `ganglion run` bound to r. Defaults that the
@@ -96,6 +97,9 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 		&cli.StringFlag{Name: "tz", Usage: "the time zone of days, limits and the budget", Value: "Europe/Kyiv", Category: catAgent,
 			Local: true, Sources: env("GANGLION_TZ"), Destination: &r.TZ,
 			Validator: in("GANGLION_TZ", func(v string) error { _, err := time.LoadLocation(v); return err })},
+		&cli.StringFlag{Name: "search", Usage: "web.search: auto (Brave with BRAVE_API_KEY, else DuckDuckGo) or off (ADR-0035)",
+			Value: "auto", Category: catAgent, Local: true, Sources: env("GANGLION_SEARCH"), Destination: &r.Search,
+			Validator: in("GANGLION_SEARCH", oneOf("auto", "off"))},
 	}
 }
 

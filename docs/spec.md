@@ -678,7 +678,8 @@ The scheduler moves up from M4 to M3b; M4 reuses it for module triggers.
   ([ADR-0031](adr/0031-agent-security-baseline.md)).
 - **R-WEB-3.** `web.search` has one backend behind an interface. The
   default needs no key; keyed backends are enabled by setting a key. The
-  backends are chosen in an ADR (planned: ADR-0035).
+  backends are chosen in [ADR-0035](adr/0035-web-reading.md): Brave with
+  a key, DuckDuckGo without one.
 
 ## 8. First flow: Deye and load shedding (P1)
 

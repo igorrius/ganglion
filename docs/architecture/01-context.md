@@ -15,6 +15,7 @@ flowchart TB
     llm["Model APIs<br/>OpenAI-compatible cloud, Ollama"]
     claude["Claude Code CLI<br/>owner's own login"]
     backup["Git remote and S3<br/>memory repo, backups"]
+    webs["The web<br/>pages, JSON APIs (NBU rates),<br/>Brave Search or DuckDuckGo"]
     ha["Home Assistant<br/>P3"]
 
     owner -- "asks, approves actions,<br/>installs modules" --> g
@@ -25,6 +26,7 @@ flowchart TB
     g -- "chat completions" --> llm
     g -- "standalone tasks" --> claude
     g -- "push, daily backup" --> backup
+    g -- "HTTPS: web.fetch, web.search" --> webs
     g -.-> ha
 
     classDef planned stroke-dasharray: 5 5
@@ -40,6 +42,7 @@ flowchart TB
 | Model APIs | Routine turns on a cheap model; local models for `privacy: local-only` | [ADR-0007](../adr/0007-openai-compatible-first-provider.md) |
 | Claude Code CLI | Heavy standalone tasks on the owner's subscription | Unmodified binary, the project never touches tokens; [ADR-0009](../adr/0009-claude-subscription-only-via-cli-worker.md) |
 | Git remote and S3 | Memory history and backups | Memory is Markdown in git; rollback with `git revert` |
+| The web | Pages and JSON APIs the owner asks about or a task's grant names; search | Untrusted content; [ADR-0035](../adr/0035-web-reading.md) |
 | Home Assistant | Planned second automation backend | P3 |
 
 Trust boundaries at this level:

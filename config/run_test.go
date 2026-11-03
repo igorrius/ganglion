@@ -275,9 +275,9 @@ func TestAgentOverTelegram(t *testing.T) {
 		offered = append(offered, tl["function"].(map[string]any)["name"].(string))
 	}
 	want := "cells.get,cells.set,memory.audit,memory.forget,memory.read,memory.recall,memory.write,message.send," +
-		"schedule.create,schedule.delete,schedule.list,schedule.run_now"
+		"schedule.create,schedule.delete,schedule.list,schedule.run_now,web.fetch,web.search"
 	if _, err := exec.LookPath("git"); err != nil {
-		want = "cells.get,cells.set,message.send,schedule.create,schedule.delete,schedule.list,schedule.run_now"
+		want = "cells.get,cells.set,message.send,schedule.create,schedule.delete,schedule.list,schedule.run_now,web.fetch,web.search"
 	}
 	if got := strings.Join(offered, ","); got != want {
 		t.Fatalf("the admin was offered %q", got)

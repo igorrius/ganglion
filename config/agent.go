@@ -117,7 +117,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleList(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
-	}, do.MustInvoke[Remembering](i).Tools...)
+	}, append(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools...)...)
 }
 
 // Scheduler provides the scheduler of the jobs in the node's zone, which

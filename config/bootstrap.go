@@ -34,4 +34,6 @@ type AgentSettings struct {
 	DailyTokens    int               // GANGLION_DAILY_TOKENS per person; unset = the agent's default (1M), 0 = off
 	SessionIdle    time.Duration     // GANGLION_SESSION_IDLE: a duration, or "off" (0); unset = the agent's default (6h)
 	TZ             *time.Location    // GANGLION_TZ, default Europe/Kyiv
+	BraveKey       string            // BRAVE_API_KEY or the file named by BRAVE_API_KEY_FILE; empty → the key-free search (ADR-0035)
+	SearchOff      bool              // GANGLION_SEARCH=off: no web.search tool
 }

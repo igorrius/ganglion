@@ -27,7 +27,7 @@ type ProcessStart time.Time
 // Core is the core role: storage, delivery, the turn loop and the agent.
 var Core = do.Package(
 	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Admins()),
-	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Agent()),
+	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(HTML2MD()), do.Lazy(Fetcher()), do.Lazy(Read()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Agent()),
 	do.Lazy(Telegram()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
 	// Extension points: the interface, then each implementation under its name.
 	do.Lazy(Handler()), do.LazyNamed(handlerAgent, AgentHandler()), do.EagerNamed(handlerEcho, core.Handler(core.EchoHandler)),
@@ -37,6 +37,8 @@ var Core = do.Package(
 	do.Lazy(Housekeepers()), do.LazyNamed(housekeepingAgent, AgentHousekeepers()), do.EagerNamed(housekeepingNone, Housekeeping(nil)),
 	do.Lazy(JobSchedulers()), do.LazyNamed(schedulersAgent, AgentSchedulers()), do.EagerNamed(schedulersNone, Schedulers(nil)),
 	do.Lazy(Receivers()), do.LazyNamed(inboundTelegram, TelegramReceivers()), do.EagerNamed(inboundNone, Inbound(nil)),
+	// The search backends; Read picks one, or none.
+	do.LazyNamed(searchBrave, BraveSearch()), do.LazyNamed(searchDuckDuckGo, DuckDuckGoSearch()),
 )
 
 // New returns a container with the bootstrap values and the role
@@ -78,6 +80,8 @@ const (
 	transportsNone     = "transports.none"     // no transport
 	housekeepingAgent  = "housekeeping.agent"  // prune the tool-call journal, expire confirmations
 	housekeepingNone   = "housekeeping.none"   // nothing to clean up
+	searchBrave        = "search.brave"        // the Brave Search API, with BRAVE_API_KEY
+	searchDuckDuckGo   = "search.duckduckgo"   // DuckDuckGo's HTML results, no key
 	schedulersAgent    = "schedulers.agent"    // the agent's reminders and tasks
 	schedulersNone     = "schedulers.none"     // nothing runs on a schedule
 	inboundTelegram    = "inbound.telegram"    // Telegram polling

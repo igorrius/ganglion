@@ -19,7 +19,9 @@ flowchart TB
     history["History<br/>neutral format, summaries"]
     router["Router<br/>filters, rules, weights, fallback"]
     providers["Providers<br/>OpenAI-compatible, claude CLI"]
-    tools["Tool registry<br/>memory.*, schedule.*,<br/>message.send, device.*"]
+    tools["Tool registry<br/>memory.*, schedule.*, web.*,<br/>message.send, device.*"]
+    web["Web reader<br/>public addresses only, limits,<br/>fixed errors; search backends"]
+    html2md["html2md module<br/>WASM, no capabilities:<br/>HTML to Markdown"]
     policies["Policies<br/>risk classes, confirmations, audit"]
     memory["Memory<br/>memory/*.md in git,<br/>quarantine, recall, audit"]
     guard["Clean-context check<br/>cheap model, no history, no tools"]
@@ -44,6 +46,8 @@ flowchart TB
     memory --> guard
     guard --> router
     tools --> sched
+    tools --> web
+    web --> html2md
     loop --> outbox
     loop --> turns
     outbox --> sender
@@ -67,6 +71,8 @@ flowchart TB
 | Memory | Facts in git with where they came from; the index in an admin's system prompt; recall over facts and archived sessions; skills (M3c) and nightly consolidation (M7) later | R-MEM-1…5 |
 | Clean-context check | Checks every memory write, and on schedule stored facts and the persona, with a cheap model that sees only the text; fails closed into quarantine | R-POL-7 |
 | Scheduler | Crons in the node's zone with catch-up after downtime; reminders and agent tasks with grants, each task in its own conversation | R-SCH-1, R-SCH-2, R-POL-8 |
+| Web reader | `web.fetch` on public addresses only (checked on every connection, redirects included, a task kept to its granted hosts) within size and time limits; `web.search` through Brave or DuckDuckGo; remote text only as outside content | R-WEB-1…3 |
+| html2md module | Turns a page into Markdown in the WASM sandbox, granted nothing; replaced without a core release | R-WEB-1 |
 | turns | Trace and cost of every turn | R-AGT-5 |
 
 ## Edge runner
