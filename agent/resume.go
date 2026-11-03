@@ -79,8 +79,10 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 	case errors.Is(err, pending.ErrNotYours), errors.Is(err, pending.ErrNotFound):
 		a.log.Info("agent: press refused", "conv", t.event.Conv, "principal", t.msg.From, "err", err)
 		return nil
+	case errors.Is(err, pending.ErrUsed) && p.Item.ID == "":
+		return nil // a quick button tapped twice: the first tap's edit stands
 	case errors.Is(err, pending.ErrUsed):
-		t.closeButtons(p.Item.Question, lineUsed)
+		t.closeButtons(p.Item.Question, usedLine(p))
 		return nil
 	case errors.Is(err, pending.ErrExpired):
 		t.closeButtons(p.Item.Question, lineExpired)
@@ -92,6 +94,21 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 		return a.quick(ctx, t, p.Button)
 	}
 	return a.confirmed(ctx, t, p.Item, p.Button.Action)
+}
+
+// usedLine is how an answered question ended, for a second press of it:
+// the answer a press gave, or that it expired.
+func usedLine(p pending.Press) string {
+	switch {
+	case p.Answer == pending.ActionApprove:
+		return lineApproved
+	case p.Answer == pending.ActionDeny:
+		return lineDeclined
+	case p.Item.Status == pending.StatusExpired || p.Item.Status == pending.StatusDone:
+		return lineExpired
+	default:
+		return lineUsed
+	}
 }
 
 // closeButtons removes the buttons of a message whose press did not take.
@@ -113,8 +130,17 @@ func answered(question, line string) string {
 	return question + "\n\n" + line
 }
 
-// quick runs a quick action and edits its message.
+// quick runs a quick action and edits its message. The presser must
+// still be an admin: the button was made for one, who may have lost the
+// role since.
 func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
+	if err := a.setAdmin(ctx, t); err != nil {
+		return err
+	}
+	if !t.admin {
+		a.log.Info("agent: quick action refused: not an admin", "action", b.Action, "principal", t.msg.From)
+		return nil
+	}
 	run, ok := a.d.QuickActions[b.Action]
 	if !ok {
 		a.log.Warn("agent: no quick action", "action", b.Action, "conv", t.event.Conv)

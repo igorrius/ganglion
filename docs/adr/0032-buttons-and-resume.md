@@ -111,7 +111,8 @@ How it works:
   without tools.
 - Quick-action buttons (Delete, Details; later tasks) are stored the same
   way with an action name; a press runs the registered action, edits the
-  message and starts no model turn. A refused press on one removes only
+  message and starts no model turn. The presser must still be an admin
+  at press time. A refused press on one removes only
   its buttons (an `Edit` without text, `editMessageReplyMarkup`), so the
   list entry keeps its text.
 
@@ -127,7 +128,9 @@ The abuse cases:
    edits the message to "Expired." and runs nothing.
 4. **Double press:** the inbox drops a redelivered update by its key;
    two different updates race on `Press`, which lets one through and
-   answers the other "Already handled."; a rerun of the same event gets
+   edits the question for the other to how it really ended ("Approved."
+   or "Declined."; a quick-action button tapped twice leaves the first
+   tap's edit, and its new buttons, alone); a rerun of the same event gets
    the same press back and finds the outcome stored, so the call runs
    once. A crash between running the call and storing its outcome reruns
    it with the same key, which the tool's own idempotency covers

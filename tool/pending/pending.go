@@ -151,6 +151,9 @@ type QuickAction func(ctx context.Context, p QuickPress) (QuickEdit, error)
 type Press struct {
 	Button Button
 	Item   Item // zero for a quick action
+	// Answer is, with ErrUsed, the action of the button that answered the
+	// call (ActionApprove or ActionDeny); "" when no press answered it.
+	Answer string
 }
 
 // By is who pressed a button, where, and the event that carries the

@@ -249,18 +249,73 @@ func TestPressNotYoursDoesNothing(t *testing.T) {
 	}
 }
 
-func TestSecondPressSaysAlreadyHandled(t *testing.T) {
-	side := newSideTool()
-	e := newConfirmEnv(t, side)
-	q, _ := e.ask(t, "schedule.create")
-	e.turn(t, press(owner, q.Buttons[0].ID, "77"))
-	calls := len(e.smart.requests())
-	out := e.turn(t, press(owner, q.Buttons[1].ID, "77"))
-	if len(out) != 1 || out[0].Edit != "77" || !strings.HasSuffix(out[0].Text, "Already handled.") {
-		t.Fatalf("out %+v", out)
+// A second press of an answered question (the other button, or the same
+// one tapped twice) runs nothing and edits the question to how it really
+// ended, not to a line that hides it (M3b final review).
+func TestSecondPressShowsTheRealOutcome(t *testing.T) {
+	for name, tc := range map[string]struct {
+		first, second int
+		want          string
+	}{
+		"approve, then deny": {0, 1, "Approved."},
+		"approve twice":      {0, 0, "Approved."},
+		"deny, then approve": {1, 0, "Declined."},
+		"deny twice":         {1, 1, "Declined."},
+	} {
+		side := newSideTool()
+		e := newConfirmEnv(t, side)
+		q, _ := e.ask(t, "schedule.create")
+		e.turn(t, press(owner, q.Buttons[tc.first].ID, "77"))
+		calls, ran := len(e.smart.requests()), len(side.calls)
+		out := e.turn(t, press(owner, q.Buttons[tc.second].ID, "77"))
+		if len(out) != 1 || out[0].Edit != "77" || out[0].Text != q.Text+"\n\n"+tc.want || len(out[0].Buttons) != 0 {
+			t.Errorf("%s: out %+v", name, out)
+		}
+		if len(side.calls) != ran || len(e.smart.requests()) != calls {
+			t.Errorf("%s: a second press ran something", name)
+		}
 	}
-	if len(side.calls) != 1 || len(e.smart.requests()) != calls {
-		t.Fatal("a second press ran something")
+}
+
+// A second tap of a quick-action button (Details tapped twice) leaves the
+// message as the first tap made it: its new keyboard stays.
+func TestSecondTapOfAQuickButtonKeepsTheFirstEdit(t *testing.T) {
+	e := newConfirmEnv(t)
+	e.deps.QuickActions = map[string]pending.QuickAction{"test.details": func(context.Context, pending.QuickPress) (pending.QuickEdit, error) {
+		return pending.QuickEdit{Text: "Details.", Buttons: []event.Button{{ID: "B2", Label: "Delete"}}}, nil
+	}}
+	e.a = New(overDefaults(Config{}), e.deps)
+	b := pending.Button{ID: pending.NewButtonID(), Action: "test.details", Label: "Details", Principal: owner, Conv: "telegram:42",
+		Expires: e.now.Add(time.Hour)}
+	if err := e.pending.AddButtons(context.Background(), b); err != nil {
+		t.Fatal(err)
+	}
+	if out := e.turn(t, press(owner, b.ID, "90")); len(out) != 1 || len(out[0].Buttons) != 1 {
+		t.Fatalf("first tap %+v", out)
+	}
+	if out := e.turn(t, press(owner, b.ID, "90")); len(out) != 0 {
+		t.Fatalf("the second tap edited the message: %+v", out)
+	}
+}
+
+// Quick actions re-check the admin role at press time: a button made for
+// an admin who has since lost the role does nothing (M3b final review).
+func TestQuickActionNeedsAnAdminAtPressTime(t *testing.T) {
+	e := newConfirmEnv(t)
+	ran := 0
+	e.deps.QuickActions = map[string]pending.QuickAction{"test.delete": func(context.Context, pending.QuickPress) (pending.QuickEdit, error) {
+		ran++
+		return pending.QuickEdit{Text: "Deleted."}, nil
+	}}
+	e.a = New(overDefaults(Config{}), e.deps)
+	b := pending.Button{ID: pending.NewButtonID(), Action: "test.delete", Label: "Delete", Principal: owner, Conv: "telegram:42",
+		Expires: e.now.Add(time.Hour)}
+	if err := e.pending.AddButtons(context.Background(), b); err != nil {
+		t.Fatal(err)
+	}
+	e.admin = false
+	if out := e.turn(t, press(owner, b.ID, "90")); len(out) != 0 || ran != 0 {
+		t.Fatalf("a former admin's press: out %+v, ran %d", out, ran)
 	}
 }
 
@@ -437,7 +492,7 @@ func TestRefusedQuickPressKeepsTheText(t *testing.T) {
 	late := mk("test.delete", e.now.Add(time.Minute))
 	unknown := mk("test.gone", e.now.Add(time.Hour))
 	e.now = e.now.Add(2 * time.Minute)
-	for name, b := range map[string]pending.Button{"used": used, "expired": late, "no action": unknown} {
+	for name, b := range map[string]pending.Button{"expired": late, "no action": unknown} {
 		out := e.turn(t, press(owner, b.ID, "90"))
 		if len(out) != 1 || out[0].Edit != "90" || out[0].Text != "" || len(out[0].Buttons) != 0 {
 			t.Errorf("%s: out %+v, want an edit of the buttons only", name, out)

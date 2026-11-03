@@ -125,10 +125,31 @@ func (s *Store) refused(ctx context.Context, buttonID string, by By) (Press, err
 		// expiry reaching the conversation.
 		return p, fmt.Errorf("pending: press %s: %w", buttonID, ErrExpired)
 	case b.Used || p.Item.Status == StatusApproved || p.Item.Status == StatusDenied || p.Item.Status == StatusDone:
+		if p.Answer, err = s.answer(ctx, b.Pending); err != nil {
+			return Press{}, err
+		}
 		return p, fmt.Errorf("pending: press %s: %w", buttonID, ErrUsed)
 	default:
 		return p, fmt.Errorf("pending: press %s: %w", buttonID, ErrExpired)
 	}
+}
+
+// answer is the action of the button a press used to answer call id;
+// "" for a quick action's button or a call no press answered.
+func (s *Store) answer(ctx context.Context, id string) (string, error) {
+	if id == "" {
+		return "", nil
+	}
+	var action string
+	err := s.db.QueryRowContext(ctx, `SELECT action FROM pending_buttons WHERE pending = ? AND used = 1 AND used_by <> ?
+		ORDER BY rowid LIMIT 1`, id, spentBy).Scan(&action)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("pending: answer of %s: %w", id, err)
+	}
+	return action, nil
 }
 
 // answerCell records the press in the call's request cell. A cell that
