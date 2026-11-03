@@ -17,12 +17,28 @@ func NewID(now time.Time) string {
 		b[i] = byte(ms)
 		ms >>= 8
 	}
-	if _, err := rand.Read(b[6:]); err != nil {
+	random(b[6:])
+	return encode(b)
+}
+
+// RandomID returns 16 random bytes in Crockford base32 (26 characters):
+// an id that cannot be guessed, such as a button's.
+func RandomID() string {
+	var b [16]byte
+	random(b[:])
+	return encode(b)
+}
+
+func random(b []byte) {
+	if _, err := rand.Read(b); err != nil {
 		// crypto/rand does not fail on supported platforms.
 		panic("event: crypto/rand: " + err.Error())
 	}
+}
 
-	// 128 bits as 26 base32 digits: the first digit carries the top 3 bits.
+// encode writes 128 bits as 26 base32 digits: the first digit carries the
+// top 3 bits.
+func encode(b [16]byte) string {
 	var out [26]byte
 	hi := uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |
 		uint64(b[4])<<24 | uint64(b[5])<<16 | uint64(b[6])<<8 | uint64(b[7])

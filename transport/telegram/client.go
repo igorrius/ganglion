@@ -199,13 +199,13 @@ func (c *client) getMe(ctx context.Context) (user, error) {
 }
 
 // getUpdates confirms every update below offset and returns the next
-// messages, waiting up to timeout for one to arrive.
+// messages and button presses, waiting up to timeout for one to arrive.
 func (c *client) getUpdates(ctx context.Context, offset int64, timeout time.Duration) ([]update, error) {
 	params := struct {
 		Offset         int64    `json:"offset,omitempty"`
 		Timeout        int      `json:"timeout"`
 		AllowedUpdates []string `json:"allowed_updates"`
-	}{offset, int(timeout / time.Second), []string{"message"}}
+	}{offset, int(timeout / time.Second), []string{"message", "callback_query"}}
 	var ups []update
 	err := c.call(ctx, "getUpdates", params, &ups)
 	return ups, err
@@ -225,4 +225,34 @@ func (c *client) sendMessage(ctx context.Context, p sendParams) (message, error)
 	var m message
 	err := c.call(ctx, "sendMessage", p, &m)
 	return m, err
+}
+
+// editMessageText changes the text and the buttons of a message the bot
+// sent.
+func (c *client) editMessageText(ctx context.Context, p editParams) error {
+	return c.call(ctx, "editMessageText", p, nil)
+}
+
+// editMessageReplyMarkup changes only the buttons of a message the bot
+// sent.
+func (c *client) editMessageReplyMarkup(ctx context.Context, p markupParams) error {
+	return c.call(ctx, "editMessageReplyMarkup", p, nil)
+}
+
+// answerCallbackQuery tells Telegram a button press was received, so the
+// client stops its spinner, and shows text as a toast ("" shows none).
+func (c *client) answerCallbackQuery(ctx context.Context, id, text string) error {
+	return c.call(ctx, "answerCallbackQuery", struct {
+		CallbackQueryID string `json:"callback_query_id"`
+		Text            string `json:"text,omitempty"`
+	}{id, text}, nil)
+}
+
+// setMyCommands sets the bot's command hints for clients in lang ("" for
+// every language without its own list).
+func (c *client) setMyCommands(ctx context.Context, cmds []botCommand, lang string) error {
+	return c.call(ctx, "setMyCommands", struct {
+		Commands     []botCommand `json:"commands"`
+		LanguageCode string       `json:"language_code,omitempty"`
+	}{cmds, lang}, nil)
 }

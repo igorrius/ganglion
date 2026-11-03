@@ -49,6 +49,7 @@ type Transport struct {
 	retry       backoff.Policy // between failed polls and failed sinks
 	replyMode   ReplyMode
 	typingEvery time.Duration
+	commands    []transport.Command // listed in the command hints at start
 
 	mu     sync.Mutex
 	last   map[int64]int64 // chat → the newest incoming message id
@@ -67,6 +68,7 @@ type config struct {
 	pollTimeout time.Duration
 	log         *slog.Logger
 	replyMode   ReplyMode
+	commands    []transport.Command
 }
 
 // Option configures a Transport.
@@ -89,6 +91,11 @@ func WithPollTimeout(d time.Duration) Option { return func(c *config) { c.pollTi
 // WithReplyMode sets when answers are sent as replies; the default is
 // ReplyAuto.
 func WithReplyMode(m ReplyMode) Option { return func(c *config) { c.replyMode = m } }
+
+// WithCommands sets the commands listed in Telegram's command hints at
+// start (setMyCommands, rulings R43, R45); the default lists none and
+// leaves the hints alone.
+func WithCommands(cmds []transport.Command) Option { return func(c *config) { c.commands = cmds } }
 
 // WithLogger sets the logger; the default discards.
 func WithLogger(l *slog.Logger) Option { return func(c *config) { c.log = l } }
@@ -116,6 +123,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 		retry:       backoff.Policy{Min: time.Second, Max: time.Minute},
 		replyMode:   cfg.replyMode,
 		typingEvery: 4 * time.Second,
+		commands:    cfg.commands,
 		last:        map[int64]int64{},
 		groups:      map[int64]bool{},
 	}, nil
@@ -124,7 +132,9 @@ func New(token string, opts ...Option) (*Transport, error) {
 // Name implements transport.Transport.
 func (t *Transport) Name() string { return Name }
 
-// Run implements transport.Transport. It polls updates and hands each
+// Run implements transport.Transport. At start it lists its commands in
+// the command hints (registerCommands), beside polling, under one short
+// deadline. It polls updates and hands each
 // message to sink in order. The offset moves past an update only after
 // sink returned nil for it, and Telegram learns the offset on the next
 // poll, so an update is confirmed only once it is in the inbox (R-DLV-2).
@@ -136,6 +146,12 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 	if err != nil {
 		return err
 	}
+	// The command hints go out beside polling, never ahead of it; Run
+	// waits for them, bounded by their deadline, before it returns.
+	hctx, stopHints := context.WithTimeout(ctx, commandsTimeout)
+	var hints sync.WaitGroup
+	hints.Go(func() { t.registerCommands(hctx) })
+	defer func() { stopHints(); hints.Wait() }()
 	t.log.Info("telegram: polling", "bot_id", me.ID, "username", me.Username)
 	sinkRetry := backoff.New(t.retry)
 	var offset int64
@@ -173,18 +189,26 @@ func (t *Transport) whoAmI(ctx context.Context, b *backoff.Backoff) (user, error
 func (t *Transport) hand(ctx context.Context, sink transport.Sink, botID int64, ups []update, offset int64, b *backoff.Backoff) (int64, error) {
 	for _, u := range ups {
 		t.seen(u)
-		if e, ok := t.toEvent(botID, u); ok {
-			if err := sink(ctx, e); err != nil {
-				if ctx.Err() != nil {
-					return offset, ctx.Err()
-				}
-				d := b.Next()
-				t.log.Warn("telegram: sink failed, update not confirmed",
-					"update_id", u.UpdateID, "conv", e.Conv, "err", err, "retry_in", d)
-				return offset, sleep(ctx, d)
-			}
-			b.Reset()
+		e, ok := t.toEvent(botID, u)
+		if !ok {
+			t.answerCallback(ctx, u)
+			offset = u.UpdateID + 1
+			continue
 		}
+		err := sink(ctx, e)
+		switch {
+		case errors.Is(err, transport.ErrDropped):
+			t.answerCallback(ctx, u) // no handler will
+		case err != nil:
+			if ctx.Err() != nil {
+				return offset, ctx.Err()
+			}
+			d := b.Next()
+			t.log.Warn("telegram: sink failed, update not confirmed",
+				"update_id", u.UpdateID, "conv", e.Conv, "err", err, "retry_in", d)
+			return offset, sleep(ctx, d)
+		}
+		b.Reset()
 		offset = u.UpdateID + 1
 	}
 	return offset, nil
@@ -215,9 +239,20 @@ func (t *Transport) onError(ctx context.Context, err error, b *backoff.Backoff) 
 	return sleep(ctx, d)
 }
 
-// toEvent turns an update into an event. Only text messages (or captions)
-// from people become events.
+// toEvent turns an update into an event: a text message (or caption)
+// from a person, or a press of one of our buttons.
 func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
+	if u.CallbackQuery != nil {
+		return t.decisionEvent(botID, u)
+	}
+	return t.messageEvent(botID, u)
+}
+
+// messageEvent turns a message update into an event. Only text messages
+// (or captions) from people become events. Text the sender did not write
+// is marked (ruling R35): Telegram puts a forward in a message of its
+// own, so a forward's whole text is someone else's.
+func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	m := u.Message
 	if m == nil || m.From == nil || m.From.IsBot {
 		t.log.Debug("telegram: update skipped", "update_id", u.UpdateID, "reason", "not a message from a person")
@@ -235,12 +270,18 @@ func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
 	if m.IsTopicMessage {
 		thread = m.MessageThreadID
 	}
-	payload, err := json.Marshal(event.Message{
-		Text: text,
-		From: Principal(m.From.ID),
-		Name: strings.TrimSpace(m.From.FirstName + " " + m.From.LastName),
-		Ref:  strconv.FormatInt(m.MessageID, 10),
-	})
+	msg := event.Message{
+		Text:          text,
+		From:          Principal(m.From.ID),
+		Name:          strings.TrimSpace(m.From.FirstName + " " + m.From.LastName),
+		Ref:           strconv.FormatInt(m.MessageID, 10),
+		Forwarded:     present(m.ForwardOrigin) || m.IsAutomaticForward,
+		ExternalReply: present(m.ExternalReply),
+	}
+	if m.Quote != nil {
+		msg.Quote = m.Quote.Text
+	}
+	payload, err := json.Marshal(msg)
 	if err != nil {
 		return event.Event{}, false // a struct of strings always marshals
 	}
@@ -251,7 +292,7 @@ func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
 	}
 	return event.Event{
 		ID:      event.NewID(now),
-		IdemKey: "telegram:" + strconv.FormatInt(botID, 10) + ":" + strconv.FormatInt(u.UpdateID, 10),
+		IdemKey: idemKey(botID, u.UpdateID),
 		Source:  Name,
 		Conv:    ConvKey(m.Chat.ID, thread),
 		Kind:    event.KindMessage,
@@ -260,18 +301,31 @@ func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
 	}, true
 }
 
-// Send implements transport.Transport. The text is sent as plain text. A
-// 429 becomes transport.RetryAfterError; 400 and 403 (and a conversation
-// that is not a Telegram one) wrap transport.ErrPermanent; anything else
-// is returned as is and retried by the sender.
+// Send implements transport.Transport. A message with Ack answers that
+// button press with its Text as a toast. The Markdown text is sent with
+// entities, and Buttons as an inline keyboard; a message with Edit
+// changes that message instead (editMessageText, or editMessageReplyMarkup
+// for an Edit without Text), where "not modified" counts as done. A 429 becomes transport.RetryAfterError; 400 and 403
+// (a message to edit that is gone among them, and a conversation that is
+// not a Telegram one) wrap transport.ErrPermanent; anything else is
+// returned as is and retried by the sender.
 func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 	chat, thread, err := ParseConv(msg.Conv)
 	if err != nil {
 		return fmt.Errorf("%w: %w", err, transport.ErrPermanent)
 	}
+	if msg.Ack != "" {
+		return sendError(t.ack(ctx, msg.Ack, msg.Text))
+	}
+	if msg.Edit != "" && msg.Text == "" {
+		return sendError(t.editButtons(ctx, chat, msg.Edit, msg.Buttons))
+	}
 	text, ents := render(msg.Text)
 	if strings.TrimSpace(text) == "" {
 		text, ents = msg.Text, nil // nothing visible left: send the source rather than nothing
+	}
+	if msg.Edit != "" {
+		return sendError(t.edit(ctx, chat, msg.Edit, text, ents, msg.Buttons))
 	}
 	_, err = t.c.sendMessage(ctx, sendParams{
 		ChatID:              chat,
@@ -280,7 +334,13 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 		Entities:            ents,
 		DisableNotification: msg.Silent,
 		ReplyParameters:     t.replyTo(chat, msg.ReplyTo),
+		ReplyMarkup:         keyboard(msg.Buttons),
 	})
+	return sendError(err)
+}
+
+// sendError maps a Bot API error of a send to the sender's terms.
+func sendError(err error) error {
 	ae, ok := errors.AsType[*apiError](err)
 	if !ok {
 		return err // nil, or a network error: retried

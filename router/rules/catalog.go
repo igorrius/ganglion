@@ -122,8 +122,6 @@ func checkModels(models []ModelDef, types map[string]string) error {
 			return fmt.Errorf("%s: tier %q is not cheap or smart", at, m.Tier)
 		case seen[m.Provider+"/"+m.Name]:
 			return fmt.Errorf("%s: duplicate model %s/%s", at, m.Provider, m.Name)
-		case typ == TypeClaudeCLI && m.Tools:
-			return fmt.Errorf("%s: tools: true is not supported by claude-cli yet (M3b)", at)
 		}
 		seen[m.Provider+"/"+m.Name] = true
 	}

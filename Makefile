@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo live-agent compare memory modules modules-tinygo modules-rust modrun modbench bench
+.PHONY: build test lint check live-echo live-agent accept compare memory modules modules-html2md modules-tinygo modules-rust modrun modbench bench bench-html2md
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
@@ -40,6 +40,18 @@ live-agent: build
 	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) \
 	GANGLION_MODELS_FILE=$(LIVE_MODELS) GANGLION_WORKSPACE=$(LIVE_WORKSPACE) ./bin/ganglion run --roles core
 
+# The scripted acceptance of M3b (config/accept_test.go): the real core
+# with real models and the real web, the fake Bot API playing the owner.
+# ACCEPT_ROUTE picks a route: cli (Haiku through the claude CLI, logged
+# in), api (OPENROUTER_API_KEY from .env) or both (empty). Transcripts and
+# node logs go to bin/accept/. It spends a few cents and a few minutes.
+ACCEPT_ROUTE ?=
+accept: build
+	@mkdir -p bin/accept
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	GANGLION_LIVE_ACCEPT=1 GANGLION_RELAY=$(CURDIR)/bin/ganglion GANGLION_ACCEPT_OUT=$(CURDIR)/bin/accept \
+	go test -count=1 -timeout 60m -run 'TestAcceptance/$(ACCEPT_ROUTE)' -v ./config/
+
 # Run the same conversations through several models of the catalogue and
 # write a report (D-6). COMPARE picks provider:model pairs; empty = all.
 COMPARE ?=
@@ -48,15 +60,30 @@ compare:
 	go run ./tools/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
 
 # RSS of the echo bot and of the agent on a fake model API, idle and after
-# 1,000 messages through the fake Bot API.
+# 1,000 messages through the fake Bot API; the agent also with a tool call
+# in every turn; and the node's peak after one hostile 1 MiB page through
+# web.fetch and html2md.
 memory:
-	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent)' -v ./cmd/
+	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent|AgentTools)$$' -v ./cmd/
+	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemoryHostilePage' -v ./config/
 
-# The deye-reader module, built with three toolchains (Go, TinyGo, Rust) to
-# compare them (ADR-0011). TinyGo and Rust are optional, must be on PATH,
-# and are not built in CI.
-modules:
+# The modules. html2md (ADR-0035) is a Rust crate whose build,
+# modules/html2md/html2md.wasm, is committed and embedded in the binary, so
+# a Go build needs no Rust; rebuilding it needs rustup, which installs the
+# toolchain pinned in modules/html2md/rust-toolchain.toml. Paths are
+# remapped so the module does not carry the builder's directories.
+modules: modules-html2md
 	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o bin/deye-reader.go.wasm ./modules/deye/wasm
+
+modules-html2md:
+	cd modules/html2md && \
+	RUSTFLAGS="-C target-feature=+simd128 --remap-path-prefix=$${CARGO_HOME:-$$HOME/.cargo}=/cargo --remap-path-prefix=$(CURDIR)=/src" \
+	cargo build --quiet --release --locked --target wasm32-wasip1
+	cp modules/html2md/target/wasm32-wasip1/release/html2md.wasm modules/html2md/html2md.wasm
+
+# The deye-reader module is also built with TinyGo and Rust to compare
+# toolchains (ADR-0011). Both are optional, must be on PATH, and are not
+# built in CI.
 
 modules-tinygo:
 	tinygo build -target=wasip1 -buildmode=c-shared -opt=2 -no-debug -o bin/deye-reader.tinygo.wasm ./modules/deye/wasm
@@ -70,6 +97,11 @@ modrun:
 
 modbench:
 	go build -o bin/modbench ./tools/modbench
+
+# Measure html2md on each saved page, one process each (ADR-0035).
+bench-html2md: modbench
+	for f in modules/html2md/testdata/*.html; do \
+	  ./bin/modbench -wasm modules/html2md/html2md.wasm -manifest modules/html2md/html2md.yaml -html $$f -n 100 || exit 1; done
 
 # Measure every built deye-reader variant, one process each.
 bench: modbench

@@ -16,6 +16,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
+	"github.com/igorrius/ganglion/transport"
 )
 
 var t0 = time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
@@ -112,8 +113,8 @@ func TestFilterDropsStranger(t *testing.T) {
 	r := &recorder{}
 	sink := l.Filter(r.sink, slog.New(slog.NewJSONHandler(&logs, nil)))
 	const secret = "my card number is 4111"
-	if err := sink(context.Background(), message("telegram:user:666", "Stranger", secret)); err != nil {
-		t.Fatalf("Filter returned %v, want nil so the offset moves on", err)
+	if err := sink(context.Background(), message("telegram:user:666", "Stranger", secret)); !errors.Is(err, transport.ErrDropped) {
+		t.Fatalf("Filter returned %v, want ErrDropped so the offset moves on", err)
 	}
 	if len(r.got) != 0 {
 		t.Fatal("a stranger's message reached the inbox")
@@ -132,13 +133,36 @@ func TestFilterDropsStranger(t *testing.T) {
 	}
 }
 
+// A press of a button is checked like a message: a stranger who got hold
+// of a button id cannot answer a question (design section 5.2).
+func TestFilterDropsStrangersPress(t *testing.T) {
+	l := newList(t)
+	ctx := context.Background()
+	if err := l.Allow(ctx, "telegram:user:1", access.RoleAdmin, "Igor"); err != nil {
+		t.Fatal(err)
+	}
+	r := &recorder{}
+	sink := l.Filter(r.sink, slog.New(slog.DiscardHandler))
+	press := func(from string) event.Event {
+		p, _ := json.Marshal(event.Decision{Button: "01JCQ4ZK7Y3V8M2N6P9R5T1W0X", From: from, Ref: "17"})
+		return event.Event{ID: "01Z", IdemKey: "telegram:7001:9", Source: "telegram", Conv: "telegram:42", Kind: event.KindDecision, Payload: p, At: t0}
+	}
+	// Dropped, so the transport answers the press itself (ruling R40).
+	if err := sink(ctx, press("telegram:user:666")); !errors.Is(err, transport.ErrDropped) || len(r.got) != 0 {
+		t.Fatalf("stranger's press: err=%v passed=%d", err, len(r.got))
+	}
+	if err := sink(ctx, press("telegram:user:1")); err != nil || len(r.got) != 1 {
+		t.Fatalf("admin's press: err=%v passed=%d", err, len(r.got))
+	}
+}
+
 func TestFilterDropsMalformedMessage(t *testing.T) {
 	l := newList(t)
 	r := &recorder{}
 	sink := l.Filter(r.sink, slog.New(slog.DiscardHandler))
 	e := message("telegram:user:1", "", "")
 	e.Payload = json.RawMessage(`not json`)
-	if err := sink(context.Background(), e); err != nil || len(r.got) != 0 {
+	if err := sink(context.Background(), e); !errors.Is(err, transport.ErrDropped) || len(r.got) != 0 {
 		t.Fatalf("malformed payload: err=%v passed=%d", err, len(r.got))
 	}
 }
@@ -198,5 +222,46 @@ func TestWithAdminSeedsTheAdmin(t *testing.T) {
 	}
 	if _, err := access.New(ctx, db, access.WithAdmin("")); err != nil {
 		t.Fatalf("an empty admin is no admin: %v", err)
+	}
+}
+
+func TestIsAdmin(t *testing.T) {
+	l := newList(t)
+	ctx := context.Background()
+	_ = l.Allow(ctx, "telegram:user:1", access.RoleAdmin, "Igor")
+	_ = l.Allow(ctx, "telegram:user:2", access.RoleFamily, "Anna")
+	for p, want := range map[string]bool{"telegram:user:1": true, "telegram:user:2": false, "telegram:user:3": false} {
+		got, err := l.IsAdmin(ctx, p)
+		if err != nil || got != want {
+			t.Errorf("IsAdmin(%s) = %v, %v; want %v", p, got, err, want)
+		}
+	}
+}
+
+func TestListed(t *testing.T) {
+	l := newList(t)
+	ctx := context.Background()
+	_ = l.Allow(ctx, "telegram:user:1", access.RoleAdmin, "Igor")
+	_ = l.Allow(ctx, "telegram:user:2", access.RoleFamily, "Anna")
+	for p, want := range map[string]bool{"telegram:user:1": true, "telegram:user:2": true, "telegram:user:3": false} {
+		got, err := l.Listed(ctx, p)
+		if err != nil || got != want {
+			t.Errorf("Listed(%s) = %v, %v; want %v", p, got, err, want)
+		}
+	}
+}
+
+// Name is who a listed principal is, for a confirmation question; ""
+// for one not listed or listed without a name.
+func TestName(t *testing.T) {
+	l := newList(t)
+	ctx := context.Background()
+	if err := l.Allow(ctx, "telegram:user:2", access.RoleFamily, "Anna"); err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]string{"telegram:user:2": "Anna", "telegram:user:9": ""} {
+		if got, err := l.Name(ctx, p); err != nil || got != want {
+			t.Errorf("Name(%s) = %q, %v; want %q", p, got, err, want)
+		}
 	}
 }

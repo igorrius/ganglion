@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -24,20 +27,60 @@ type StateReader interface {
 // every turn so edits apply at once. "" means DefaultPersona.
 type PersonaFunc func() (string, error)
 
-// Deps are the agent's collaborators. All are required except Now and
-// Log; the composition root passes no-op implementations where a part is
-// off (ADR-0028).
+// FactsFunc returns the known-facts block of the memory for the system
+// prompt (memory.Memory.Index); "" when nothing is stored. It must give
+// the same text for the same memory, so the prompt's cache keeps
+// hitting.
+type FactsFunc func() string
+
+// NoFacts is the FactsFunc of an agent without memory.
+func NoFacts() string { return "" }
+
+// NameFunc returns the name a principal is listed under
+// (access.List.Name); "" when none.
+type NameFunc func(ctx context.Context, principal string) (string, error)
+
+// SystemJob is the code of a system job (schedule.KindSystem), such as
+// the memory audit: it runs without a model and returns the report sent
+// to the job's conversation (ruling R36). An error leaves the event to be
+// handled again.
+type SystemJob func(ctx context.Context) (string, error)
+
+// Deps are the agent's collaborators. All are required except Middleware,
+// QuickActions, SystemJobs, Facts, Now and Log; the composition root
+// passes no-op implementations where a part is off (ADR-0028).
 type Deps struct {
-	States    StateReader
-	Router    router.Router
-	Providers map[string]provider.Provider
-	Tools     Tools
-	Turns     *turns.Log
-	Archive   SessionStore
-	Alerts    alert.Admins // who hears about a reached daily limit
-	Persona   PersonaFunc
-	Now       func() time.Time
-	Log       *slog.Logger
+	States     StateReader
+	Router     router.Router
+	Providers  map[string]provider.Provider
+	Tools      *tool.Registry
+	Middleware []tool.Middleware // around every tool call, after tracing; the first runs first
+	// Policy decides the calls the model makes, inside Middleware. A call
+	// the owner confirmed runs without it: it was decided (ADR-0032).
+	Policy  tool.Middleware
+	Pending Confirmations // calls awaiting the owner and their buttons
+	// Outbox takes a press's acknowledgement before the pressed action
+	// runs (ruling R40).
+	Outbox Enqueuer
+	// QuickActions run quick-action buttons by their action name; tools
+	// register them (schedule.details, schedule.delete, schedule.run_now).
+	QuickActions map[string]pending.QuickAction
+	Jobs         Jobs // scheduled jobs, read when their time comes
+	// SystemJobs are the system jobs' code by job id (builtin.AuditJobID).
+	SystemJobs map[string]SystemJob
+	IsAdmin    AdminFunc
+	// Names are the access list's names, for the line that tells a task
+	// run who receives its answer (ruling R41).
+	Names   NameFunc
+	Turns   *turns.Log
+	Archive SessionStore
+	Alerts  alert.Admins // who hears about a reached daily limit
+	Persona PersonaFunc
+	// Facts is the memory's index, shown to admins only (design section
+	// 4, rule 8); NoFacts when unset.
+	Facts FactsFunc
+	Now   func() time.Time
+	Log   *slog.Logger
 }
 
 // Agent handles conversation turns; Handle is a core.Handler.
@@ -48,13 +91,16 @@ type Agent struct {
 	in       instruments
 	stages   []stage
 	commands map[string]command
-	tool     ToolFunc
+	tool     tool.Func
 }
 
 // New returns an agent.
 func New(cfg Config, d Deps) *Agent {
 	if d.Now == nil {
 		d.Now = time.Now
+	}
+	if d.Facts == nil {
+		d.Facts = NoFacts
 	}
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)
@@ -63,18 +109,19 @@ func New(cfg Config, d Deps) *Agent {
 		cfg.Location = time.UTC
 	}
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
-	a.stages = []stage{a.idle, a.command, a.limits, a.answer, a.compactHistory}
-	a.commands = map[string]command{
-		"/new": a.newSession, "/reset": a.newSession,
-		"/sessions": a.listSessions, "/resume": a.resume,
+	a.stages = []stage{a.resume, a.scheduled, a.dropStalePending, a.idle, a.command, a.limits, a.answer, a.compactHistory}
+	a.commands = map[string]command{}
+	for _, c := range a.commandTable() {
+		a.commands[c.word] = c.run
 	}
-	a.tool = chain(d.Tools.Call, a.traced)
+	a.tool = tool.Chain(d.Tools.Run, slices.Concat([]tool.Middleware{a.traced}, d.Middleware, []tool.Middleware{d.Policy})...)
 	return a
 }
 
 // Handle implements core.Handler: it runs the turn's stages and returns
-// the replies and the new state. Events that are not text messages are
-// left alone.
+// the replies and the new state. It answers text messages, button
+// presses, the expiry of pending calls and scheduled jobs; other events
+// are left alone.
 func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
 	t, ok, err := a.begin(ctx, e)
 	if err != nil || !ok {
@@ -86,14 +133,34 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 	return a.finish(ctx, t)
 }
 
-// begin decodes the message and loads the conversation's state. ok is
+// payloads decode the payload of each kind of event the agent handles
+// into the turn; false means the event is not one to answer.
+var payloads = map[event.Kind]func(t *turn) bool{
+	event.KindMessage: func(t *turn) bool {
+		return json.Unmarshal(t.event.Payload, &t.msg) == nil && strings.TrimSpace(t.msg.Text) != ""
+	},
+	event.KindDecision: func(t *turn) bool {
+		d := &t.decision
+		if json.Unmarshal(t.event.Payload, d) != nil || d.Button == "" || d.From == "" {
+			return false
+		}
+		t.msg = event.Message{From: d.From, Name: d.Name, Ref: d.Ref}
+		return true
+	},
+	event.KindToolResult: func(t *turn) bool {
+		return json.Unmarshal(t.event.Payload, &t.toolResult) == nil && t.toolResult.Pending != ""
+	},
+	event.KindSchedule: func(t *turn) bool {
+		return json.Unmarshal(t.event.Payload, &t.schedule) == nil && t.schedule.Job != ""
+	},
+}
+
+// begin decodes the event and loads the conversation's state. ok is
 // false for an event the agent does not answer.
 func (a *Agent) begin(ctx context.Context, e event.Event) (*turn, bool, error) {
-	if e.Kind != event.KindMessage {
-		return nil, false, nil
-	}
-	var m event.Message
-	if err := json.Unmarshal(e.Payload, &m); err != nil || strings.TrimSpace(m.Text) == "" {
+	decode, ok := payloads[e.Kind]
+	t := &turn{event: e}
+	if !ok || !decode(t) {
 		return nil, false, nil
 	}
 	raw, err := a.d.States.State(ctx, e.Conv)
@@ -105,10 +172,10 @@ func (a *Agent) begin(ctx context.Context, e event.Event) (*turn, bool, error) {
 		a.log.Error("agent: unreadable state; starting a new session", "conv", e.Conv, "err", err)
 		st = State{V: StateVersion}
 	}
-	now := a.d.Now()
-	return &turn{event: e, msg: m, state: st, now: now, record: turns.Turn{
-		EventID: e.ID, Conv: e.Conv, Principal: m.From, Started: now, Outcome: turns.OutcomeOK,
-	}}, true, nil
+	t.state, t.now = st, a.d.Now()
+	t.transport, t.replyConv = e.Source, e.Conv
+	t.record = turns.Turn{EventID: e.ID, Conv: e.Conv, Principal: t.msg.From, Started: t.now, Outcome: turns.OutcomeOK}
+	return t, true, nil
 }
 
 // finish logs and records the turn and encodes the new state.

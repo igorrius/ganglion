@@ -5,11 +5,15 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/access"
+	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/outbox"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/tool/journal"
+	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/transport"
 	"github.com/igorrius/ganglion/transport/telegram"
 	"github.com/samber/do/v2"
@@ -31,7 +35,19 @@ func Telegram() do.Provider[*telegram.Transport] {
 	return func(i do.Injector) (*telegram.Transport, error) {
 		b := do.MustInvoke[Bootstrap](i)
 		return telegram.New(b.BotToken, telegram.WithBaseURL(b.BotAPIURL), telegram.WithLogger(do.MustInvoke[*slog.Logger](i)),
-			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)))
+			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)), telegram.WithCommands(do.MustInvoke[[]transport.Command](i)))
+	}
+}
+
+// CommandHints provides the commands the transports list for people.
+func CommandHints() do.Provider[[]transport.Command] {
+	return choose[[]transport.Command](agentOn, commandsAgent, commandsNone)
+}
+
+// AgentCommandHints provides the agent's command table as the hints.
+func AgentCommandHints() do.Provider[[]transport.Command] {
+	return func(i do.Injector) ([]transport.Command, error) {
+		return do.MustInvoke[*agent.Agent](i).Commands(), nil
 	}
 }
 
@@ -104,15 +120,55 @@ func TelegramReceivers() do.Provider[Inbound] {
 	}
 }
 
+// Housekeeping are the components that clean up after the parts that are
+// on.
+type Housekeeping []node.Component
+
+// Housekeepers provides the cleanup components that are on.
+func Housekeepers() do.Provider[Housekeeping] {
+	return choose[Housekeeping](agentOn, housekeepingAgent, housekeepingNone)
+}
+
+// AgentHousekeepers provides the daily prune of the tool-call journal and
+// the expiry of unanswered confirmations.
+func AgentHousekeepers() do.Provider[Housekeeping] {
+	return func(i do.Injector) (Housekeeping, error) {
+		logger := do.MustInvoke[*slog.Logger](i)
+		return Housekeeping{
+			journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: logger},
+			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger),
+		}, nil
+	}
+}
+
+// Schedulers are the components that run jobs at their times.
+type Schedulers []node.Component
+
+// JobSchedulers provides the schedulers that are on.
+func JobSchedulers() do.Provider[Schedulers] {
+	return choose[Schedulers](agentOn, schedulersAgent, schedulersNone)
+}
+
+// AgentSchedulers provides the scheduler of the agent's reminders and
+// tasks.
+func AgentSchedulers() do.Provider[Schedulers] {
+	return func(i do.Injector) (Schedulers, error) {
+		return Schedulers{do.MustInvoke[*schedule.Scheduler](i)}, nil
+	}
+}
+
 // CoreComponents provides the core role's components: the sender, the
-// turn loop, the pruner and the inbound components.
+// turn loop, the pruners, the schedulers and the inbound components.
 func CoreComponents() do.Provider[[]node.Component] {
 	return func(i do.Injector) ([]node.Component, error) {
 		q := do.MustInvoke[*sqlqueue.Queue](i)
-		return append([]node.Component{
+		comps := []node.Component{
 			node.Named("sender", do.MustInvoke[*outbox.Sender](i).Run),
 			node.Named("loop", do.MustInvoke[*core.Loop](i).Run),
 			sqlqueue.Pruner{Queue: q, Every: pruneEvery, Log: do.MustInvoke[*slog.Logger](i)},
-		}, do.MustInvoke[Inbound](i)...), nil
+		}
+		comps = append(comps, do.MustInvoke[Housekeeping](i)...)
+		comps = append(comps, do.MustInvoke[Schedulers](i)...)
+		return append(comps, do.MustInvoke[Inbound](i)...), nil
 	}
 }

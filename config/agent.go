@@ -1,18 +1,28 @@
 package config
 
 import (
-	"log/slog"
-
 	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/alert"
+	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
+	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/claudecli"
 	"github.com/igorrius/ganglion/provider/openai"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/builtin"
+	"github.com/igorrius/ganglion/tool/journal"
+	"github.com/igorrius/ganglion/tool/pending"
+	"github.com/igorrius/ganglion/transport/telegram"
 	"github.com/igorrius/ganglion/turns"
 	"github.com/samber/do/v2"
 )
@@ -45,13 +55,113 @@ func Agent() do.Provider[*agent.Agent] {
 			States:    do.MustInvoke[*sqlqueue.Queue](i),
 			Router:    do.MustInvoke[router.Router](i),
 			Providers: do.MustInvoke[map[string]provider.Provider](i),
-			Tools:     agent.NoTools{},
-			Turns:     do.MustInvoke[*turns.Log](i),
-			Archive:   do.MustInvoke[agent.SessionStore](i),
-			Alerts:    do.MustInvoke[alert.Admins](i),
-			Persona:   agent.PersonaDir(b.Agent.Workspace),
-			Log:       do.MustInvoke[*slog.Logger](i),
+			Tools:     do.MustInvoke[*tool.Registry](i),
+			// Around every tool call, outermost first: traced, journal, then
+			// the policy for the calls the model makes.
+			Middleware:   []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
+			Policy:       do.MustInvoke[*policy.Policy](i).Middleware(),
+			Pending:      do.MustInvoke[*pending.Store](i),
+			Outbox:       do.MustInvoke[*sqlqueue.Queue](i),
+			QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
+			Jobs:         do.MustInvoke[*schedule.Store](i),
+			IsAdmin:      do.MustInvoke[agent.AdminFunc](i),
+			Names:        do.MustInvoke[*access.List](i).Name,
+			Turns:        do.MustInvoke[*turns.Log](i),
+			Archive:      do.MustInvoke[agent.SessionStore](i),
+			Alerts:       do.MustInvoke[alert.Admins](i),
+			Persona:      agent.PersonaDir(b.Agent.Workspace),
+			Facts:        do.MustInvoke[Remembering](i).Facts,
+			SystemJobs:   do.MustInvoke[Remembering](i).Jobs,
+			Log:          do.MustInvoke[*slog.Logger](i),
 		}), nil
+	}
+}
+
+// Policy provides the tool policy: the default settings, alerts to the
+// admins, the node's calendar day.
+func Policy() do.Provider[*policy.Policy] {
+	return func(i do.Injector) (*policy.Policy, error) {
+		b := do.MustInvoke[Bootstrap](i)
+		return policy.New(policy.DefaultConfig(), do.MustInvoke[*tool.Registry](i), do.MustInvoke[policy.Asker](i),
+			policy.WithAlerts(do.MustInvoke[alert.Admins](i)),
+			policy.WithClock(time.Now, b.Agent.TZ),
+			policy.WithLogger(do.MustInvoke[*slog.Logger](i))), nil
+	}
+}
+
+// Asker provides the owner's confirmations: pending calls with buttons.
+func Asker() do.Provider[policy.Asker] {
+	return func(i do.Injector) (policy.Asker, error) { return do.MustInvoke[*pending.Store](i), nil }
+}
+
+// IsAdmin provides the agent's role check, backed by the access list.
+func IsAdmin() do.Provider[agent.AdminFunc] {
+	return func(i do.Injector) (agent.AdminFunc, error) {
+		return do.MustInvoke[*access.List](i).IsAdmin, nil
+	}
+}
+
+// Tools provides the tool registry. Each tool joins by one line in
+// toolHandlers.
+func Tools() do.Provider[*tool.Registry] {
+	return func(i do.Injector) (*tool.Registry, error) {
+		return tool.NewRegistry(router.Local{}, toolHandlers(i)...)
+	}
+}
+
+// toolHandlers lists the tools the agent has; each tool joins by one line.
+func toolHandlers(i do.Injector) []tool.Handler {
+	cs := do.MustInvoke[*cells.Service](i)
+	return append([]tool.Handler{
+		builtin.NewMessageSend(do.MustInvoke[builtin.Convs](i)),
+		builtin.NewCellsGet(cs),
+		builtin.NewCellsSet(cs),
+		builtin.NewScheduleCreate(do.MustInvoke[builtin.Scheduling](i)),
+		builtin.NewScheduleList(do.MustInvoke[builtin.Scheduling](i)),
+		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
+		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
+	}, append(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools...)...)
+}
+
+// Scheduler provides the scheduler of the jobs in the node's zone, which
+// puts their events into the inbox.
+func Scheduler() do.Provider[*schedule.Scheduler] {
+	return func(i do.Injector) (*schedule.Scheduler, error) {
+		return schedule.New(do.MustInvoke[*schedule.Store](i), do.MustInvoke[*sqlqueue.Queue](i), do.MustInvoke[Bootstrap](i).Agent.TZ,
+			time.Now, schedule.WithLogger(do.MustInvoke[*slog.Logger](i))), nil
+	}
+}
+
+// Scheduling provides what the schedule tools and their buttons need.
+// The tools check grants against the registry they are part of, so the
+// spec lookup reads the registry when called, not when built, and from
+// the root scope: the scope a provider gets carries the invoker chain of
+// its build, which a later lookup would read as a circular dependency.
+func Scheduling() do.Provider[builtin.Scheduling] {
+	return func(i do.Injector) (builtin.Scheduling, error) {
+		root := i.RootScope()
+		return builtin.Scheduling{
+			Jobs:    do.MustInvoke[*schedule.Store](i),
+			Runner:  do.MustInvoke[*schedule.Scheduler](i),
+			Specs:   func(name string) (tool.Spec, bool) { return do.MustInvoke[*tool.Registry](root).Spec(name) },
+			Buttons: do.MustInvoke[*pending.Store](i),
+			Convs:   do.MustInvoke[builtin.Convs](i),
+			Loc:     do.MustInvoke[Bootstrap](i).Agent.TZ,
+			Now:     time.Now,
+		}, nil
+	}
+}
+
+// Convs provides where message.send may deliver: conversations with a
+// stored state and the private chats of principals on the access list.
+func Convs() do.Provider[builtin.Convs] {
+	return func(i do.Injector) (builtin.Convs, error) {
+		return builtin.Convs{
+			States:  do.MustInvoke[*sqlqueue.Queue](i),
+			Listed:  do.MustInvoke[*access.List](i).Listed,
+			Private: telegram.PrivateConv,
+			Names:   do.MustInvoke[*access.List](i).Name,
+		}, nil
 	}
 }
 

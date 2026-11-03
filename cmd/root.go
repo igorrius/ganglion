@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 
 	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
@@ -19,21 +20,21 @@ import (
 type startFunc func(ctx context.Context, roles []node.Role, b config.Bootstrap, logger *slog.Logger) error
 
 // Execute runs the command line in args (os.Args) until ctx ends. Output
-// and logs go to out.
-func Execute(ctx context.Context, args []string, out io.Writer) error {
-	return newRoot(out, config.Run).Run(ctx, args)
+// and logs go to out, the command line's own errors to errOut.
+func Execute(ctx context.Context, args []string, out, errOut io.Writer) error {
+	return newRoot(out, errOut, config.Run).Run(ctx, args)
 }
 
-func newRoot(out io.Writer, start startFunc) *cli.Command {
+func newRoot(out, errOut io.Writer, start startFunc) *cli.Command {
 	var root flags.Root
 	return &cli.Command{
 		Name:      "ganglion",
 		Usage:     "a node of the ganglion agent network",
 		Version:   buildinfo.Read().Short(),
 		Writer:    out,
-		ErrWriter: out,
+		ErrWriter: errOut,
 		Flags:     root.Flags(),
-		Commands:  []*cli.Command{runCommand(&root, out, start), versionCommand(out)},
+		Commands:  []*cli.Command{runCommand(&root, out, start), versionCommand(out), relayCommand(os.Stdin, out)},
 		// Without a command: help, and a failure, so a supervisor still
 		// starting the command line from before `run` sees an error
 		// instead of a clean exit.

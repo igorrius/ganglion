@@ -13,39 +13,61 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// call routes task and tries the candidates in order until one answers.
-// Any error moves to the next candidate (spec 7.3, layer 3); a cancelled
-// ctx stops. Every attempt goes into the trace rec. ok is false when no
-// candidate answered.
-func (a *Agent) call(ctx context.Context, task router.TaskReq, msgs []provider.Message, tools []provider.Tool, rec *turns.Turn) (provider.ChatResponse, bool) {
+// callCount reports the tool calls a turn has run so far; a CLI provider
+// runs them during an attempt, through provider.Exec.
+type callCount func() int
+
+// noCalls is the callCount of a model call without tools (compaction).
+func noCalls() int { return 0 }
+
+// call routes task and tries the candidates in order until one answers,
+// each with req for its model. Any error moves to the next candidate
+// (spec 7.3, layer 3); a cancelled ctx stops. Every attempt goes into the
+// trace rec. The outcome is OutcomeOK when a candidate answered,
+// OutcomeNoModel when none did, and OutcomeError when an attempt failed
+// after it ran tools (ran counts them): the next model would not know
+// those calls ran, so there is no fallback then (ADR-0036).
+func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.ChatRequest, rec *turns.Turn, ran callCount) (provider.ChatResponse, turns.Outcome) {
 	cands, err := a.d.Router.Route(ctx, task)
 	if err != nil {
 		a.log.Error("agent: no model fits", "conv", rec.Conv, "kind", task.Kind, "err", err)
-		return provider.ChatResponse{}, false
+		return provider.ChatResponse{}, turns.OutcomeNoModel
 	}
 	for _, c := range cands {
 		if ctx.Err() != nil {
-			return provider.ChatResponse{}, false
+			return provider.ChatResponse{}, turns.OutcomeNoModel
 		}
 		p, ok := a.d.Providers[c.Provider]
 		if !ok {
 			rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model, Error: "no_provider"})
 			continue
 		}
-		resp, err := a.try(ctx, p, c, task, provider.ChatRequest{Model: c.Model, Messages: msgs, Tools: tools})
+		req.Model = c.Model
+		before := ran()
+		resp, err := a.try(ctx, p, c, task, req)
 		if err == nil {
 			rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model})
 			addUsage(rec, c, resp.Usage)
-			return resp, true
+			return resp, turns.OutcomeOK
 		}
 		rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model, Error: errorKind(err)})
-		attrs := []any{"conv", rec.Conv, "provider", c.Provider, "model", c.Model, "kind", errorKind(err)}
-		if pe, ok := errors.AsType[*provider.Error](err); ok {
-			attrs = append(attrs, "status", pe.Status, "msg", pe.Msg) // provider text, keys redacted; never the prompt
+		a.logFailure(rec, c, err)
+		if calls := ran() - before; calls > 0 {
+			rec.Error = "the model failed after running tools; no fallback"
+			a.log.Warn("agent: no fallback after a failed run with tools", "conv", rec.Conv, "provider", c.Provider, "calls", calls)
+			return provider.ChatResponse{}, turns.OutcomeError
 		}
-		a.log.Warn("agent: model call failed", attrs...)
 	}
-	return provider.ChatResponse{}, false
+	return provider.ChatResponse{}, turns.OutcomeNoModel
+}
+
+// logFailure logs a failed model call.
+func (a *Agent) logFailure(rec *turns.Turn, c router.Candidate, err error) {
+	attrs := []any{"conv", rec.Conv, "provider", c.Provider, "model", c.Model, "kind", errorKind(err)}
+	if pe, ok := errors.AsType[*provider.Error](err); ok {
+		attrs = append(attrs, "status", pe.Status, "msg", pe.Msg) // provider text, keys redacted; never the prompt
+	}
+	a.log.Warn("agent: model call failed", attrs...)
 }
 
 // try makes one call to candidate c through p under CallTimeout,

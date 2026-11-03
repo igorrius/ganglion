@@ -6,7 +6,6 @@ package sqlqueue
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -118,33 +117,9 @@ func (q *Queue) Prune(ctx context.Context, olderThan time.Duration) (int, error)
 	return int(total), nil
 }
 
-// immediate runs fn in a BEGIN IMMEDIATE transaction on one connection, so
-// the write lock is taken before fn reads: two callers cannot both pick the
-// same row. fn's error rolls the transaction back.
-func (q *Queue) immediate(ctx context.Context, fn func(c *sql.Conn) error) (err error) {
-	conn, err := q.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = conn.Close() }()
-	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
-		return err
-	}
-	defer func() {
-		if err == nil {
-			return
-		}
-		if _, rbErr := conn.ExecContext(context.WithoutCancel(ctx), "ROLLBACK"); rbErr != nil {
-			// The connection may still be inside a transaction: drop it
-			// instead of returning it to the pool.
-			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
-		}
-	}()
-	if err = fn(conn); err != nil {
-		return err
-	}
-	_, err = conn.ExecContext(ctx, "COMMIT")
-	return err
+// immediate runs fn in a BEGIN IMMEDIATE transaction (sqlitedb.Immediate).
+func (q *Queue) immediate(ctx context.Context, fn func(c *sql.Conn) error) error {
+	return sqlitedb.Immediate(ctx, q.db, fn)
 }
 
 func fromMS(v int64) time.Time {

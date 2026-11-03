@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -83,7 +84,7 @@ func TestEcho(t *testing.T) {
 		t.Fatalf("Echo: state %+v, err %v", st, err)
 	}
 	want := event.Outgoing{IdemKey: "telegram:7001:5:reply:0", Transport: "telegram", Conv: "telegram:42", Text: "echo: hi"}
-	if len(out) != 1 || out[0] != want {
+	if len(out) != 1 || !reflect.DeepEqual(out[0], want) {
 		t.Fatalf("Echo = %+v, want %+v", out, want)
 	}
 	if out, _, err := Echo(event.Event{Kind: "cron.tick", Source: "cron", Conv: "cron:x"}); err != nil || len(out) != 0 {

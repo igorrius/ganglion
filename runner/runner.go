@@ -25,6 +25,7 @@ import (
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
+	"github.com/tetratelabs/wazero/experimental"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	"github.com/igorrius/ganglion/pdk"
@@ -54,6 +55,7 @@ type Deps struct {
 // Module is a compiled module ready to handle calls. Calls are serialized.
 type Module struct {
 	manifest Manifest
+	tool     bool // a tool module (LoadTool): no log host function
 	deps     Deps
 	rt       wazero.Runtime
 	compiled wazero.CompiledModule
@@ -64,6 +66,10 @@ type Module struct {
 
 // Load compiles a module and prepares its host functions.
 func Load(ctx context.Context, wasm []byte, m Manifest, deps Deps) (*Module, error) {
+	return load(ctx, wasm, m, deps, false)
+}
+
+func load(ctx context.Context, wasm []byte, m Manifest, deps Deps, tool bool) (*Module, error) {
 	if deps.Logger == nil {
 		deps.Logger = slog.New(slog.DiscardHandler)
 	}
@@ -75,7 +81,7 @@ func Load(ctx context.Context, wasm []byte, m Manifest, deps Deps) (*Module, err
 		WithMemoryLimitPages(pages).
 		WithCloseOnContextDone(true).
 		WithCompilationCache(compilationCache))
-	mod := &Module{manifest: m, deps: deps, rt: rt}
+	mod := &Module{manifest: m, tool: tool, deps: deps, rt: rt}
 
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
 		_ = rt.Close(ctx)
@@ -113,12 +119,12 @@ func (m *Module) Handle(ctx context.Context, in pdk.Input) (pdk.Output, error) {
 	ctx, cancel := context.WithTimeout(ctx, m.manifest.Limits.Timeout)
 	defer cancel()
 
-	input, err := json.Marshal(in)
+	input, err := marshal(in)
 	if err != nil {
 		return pdk.Output{}, err
 	}
 	var stderr limitedBuffer
-	inst, err := m.rt.InstantiateModule(ctx, m.compiled, wazero.NewModuleConfig().
+	inst, err := m.rt.InstantiateModule(experimental.WithMemoryAllocator(ctx, allocator), m.compiled, wazero.NewModuleConfig().
 		WithName("").
 		WithStartFunctions("_initialize").
 		WithSysWalltime().
@@ -162,12 +168,17 @@ func (m *Module) callError(ctx context.Context, stage string, err error, stderr 
 func (m *Module) instantiateHost(ctx context.Context) error {
 	name := m.manifest.Name
 	caps := m.manifest.Capabilities
-	_, err := m.rt.NewHostModuleBuilder("ganglion").
-		NewFunctionBuilder().WithFunc(func(_ context.Context, mod api.Module, p, n uint32) {
-		if b, ok := mod.Memory().Read(p, n); ok {
-			m.deps.Logger.Info(string(b), "module", name)
-		}
-	}).Export("log").
+	b := m.rt.NewHostModuleBuilder("ganglion")
+	if !m.tool {
+		// A tool module reads remote text: it gets no log, so what it reads
+		// never reaches the node's log (ADR-0035).
+		b = b.NewFunctionBuilder().WithFunc(func(_ context.Context, mod api.Module, p, n uint32) {
+			if msg, ok := mod.Memory().Read(p, n); ok {
+				m.deps.Logger.Info(string(msg), "module", name)
+			}
+		}).Export("log")
+	}
+	_, err := b.
 		NewFunctionBuilder().WithFunc(func() int64 {
 		return time.Now().UnixMilli()
 	}).Export("now_ms").
@@ -255,6 +266,18 @@ func (m *Module) fetch(ctx context.Context, raw []byte) pdk.Response {
 		return pdk.Response{Error: "response body exceeds 1 MiB"}
 	}
 	return pdk.Response{Status: resp.StatusCode, Body: body}
+}
+
+// marshal encodes v without escaping '<', '>' and '&': a module that
+// reads HTML gets it at its size, not six bytes per angle bracket.
+func marshal(v any) ([]byte, error) {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
 }
 
 func readString(mod api.Module, p, n uint32) string {

@@ -82,3 +82,27 @@ func TestFakeHangReleasedOnCancel(t *testing.T) {
 		t.Fatal("hang not released by the cancelled request")
 	}
 }
+
+func TestFakeRespondAfterQueue(t *testing.T) {
+	s := NewServer(t, "k")
+	s.Reply("queued")
+	s.Respond(func(r Request) Answer {
+		if r.Messages[len(r.Messages)-1]["role"] == "tool" {
+			return Answer{Text: "done"}
+		}
+		return Answer{Tool: "cells.get", Args: `{"id":"x"}`}
+	})
+	user := map[string]any{"model": "m", "messages": []any{map[string]any{"role": "user", "content": "hi"}}}
+	if _, out := post(t, s, "k", user); content(out) != "queued" {
+		t.Fatalf("the queue goes first: %v", out)
+	}
+	_, out := post(t, s, "k", user)
+	fn := out["choices"].([]any)[0].(map[string]any)["message"].(map[string]any)["tool_calls"].([]any)[0].(map[string]any)["function"].(map[string]any)
+	if fn["name"] != "cells.get" || fn["arguments"] != `{"id":"x"}` {
+		t.Fatalf("tool call %v", fn)
+	}
+	result := map[string]any{"model": "m", "messages": []any{map[string]any{"role": "tool", "content": "{}"}}}
+	if _, out := post(t, s, "k", result); content(out) != "done" {
+		t.Fatalf("after the tool result: %v", out)
+	}
+}

@@ -1,0 +1,6 @@
+# The toolchain html2md.wasm is built with (ADR-0035); CI installs the same.
+[toolchain]
+channel = "1.99.1"
+targets = ["wasm32-wasip1"]
+profile = "minimal"
+components = ["rustfmt", "clippy"]

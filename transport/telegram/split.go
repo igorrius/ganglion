@@ -19,19 +19,25 @@ const maxTextUnits = 4096
 // long becomes several code blocks; any other block that alone is too long
 // is cut by the M2 rule (a newline or space in the final quarter, else
 // hard), which may lose formatting at the cut but never breaks a message.
-// Part i gets IdemKey + ":p<i>"; only the first part keeps ReplyTo. The
-// result depends only on msg, so a resumed sender gets the same parts.
+// Part i gets IdemKey + ":p<i>"; only the first part keeps ReplyTo and
+// only the last keeps the buttons. An edit is never split: it changes one
+// message. The result depends only on msg, so a resumed sender gets the
+// same parts.
 func (t *Transport) Parts(msg event.Outgoing) []event.Outgoing {
-	if renderedUnits(msg.Text) <= maxTextUnits {
+	if msg.Edit != "" || msg.Ack != "" || renderedUnits(msg.Text) <= maxTextUnits {
 		return []event.Outgoing{msg}
 	}
-	var parts []event.Outgoing
-	for i, chunk := range splitMarkdown(msg.Text) {
+	chunks := splitMarkdown(msg.Text)
+	parts := make([]event.Outgoing, 0, len(chunks))
+	for i, chunk := range chunks {
 		part := msg
 		part.IdemKey = msg.IdemKey + ":p" + strconv.Itoa(i)
 		part.Text = chunk
 		if i > 0 {
 			part.ReplyTo = ""
+		}
+		if i < len(chunks)-1 {
+			part.Buttons = nil
 		}
 		parts = append(parts, part)
 	}

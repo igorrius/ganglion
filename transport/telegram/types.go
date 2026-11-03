@@ -4,10 +4,23 @@
 // event.Outgoing (ADR-0017).
 package telegram
 
-// update is a Bot API Update; only messages are requested.
+import "encoding/json"
+
+// update is a Bot API Update; messages and button presses are requested.
 type update struct {
-	UpdateID int64    `json:"update_id"`
-	Message  *message `json:"message,omitempty"`
+	UpdateID      int64          `json:"update_id"`
+	Message       *message       `json:"message,omitempty"`
+	CallbackQuery *callbackQuery `json:"callback_query,omitempty"`
+}
+
+// callbackQuery is a press of an inline button. Message is the message
+// holding the button; Telegram sends date 0 when it is no longer
+// accessible.
+type callbackQuery struct {
+	ID      string   `json:"id"`
+	From    user     `json:"from"`
+	Message *message `json:"message,omitempty"`
+	Data    string   `json:"data,omitempty"`
 }
 
 // message is a Bot API Message, reduced to the fields we read.
@@ -20,6 +33,25 @@ type message struct {
 	From            *user  `json:"from,omitempty"`
 	Text            string `json:"text,omitempty"`
 	Caption         string `json:"caption,omitempty"`
+	// Outside content (ruling R35): a forward's origin, a post Telegram
+	// forwarded from a linked channel, a reply to a message in another
+	// chat, and the quoted part of the replied message. Only their
+	// presence and the quote's text are read.
+	ForwardOrigin      json.RawMessage `json:"forward_origin,omitempty"`
+	IsAutomaticForward bool            `json:"is_automatic_forward,omitempty"`
+	ExternalReply      json.RawMessage `json:"external_reply,omitempty"`
+	Quote              *textQuote      `json:"quote,omitempty"`
+}
+
+// textQuote is a Bot API TextQuote, reduced to its text.
+type textQuote struct {
+	Text string `json:"text"`
+}
+
+// present reports whether an optional object was sent: not missing and
+// not null.
+func present(raw json.RawMessage) bool {
+	return len(raw) > 0 && string(raw) != "null"
 }
 
 type chat struct {
@@ -44,6 +76,33 @@ type sendParams struct {
 	Entities            []entity         `json:"entities,omitempty"`
 	DisableNotification bool             `json:"disable_notification,omitempty"`
 	ReplyParameters     *replyParameters `json:"reply_parameters,omitempty"`
+	ReplyMarkup         *inlineMarkup    `json:"reply_markup,omitempty"`
+}
+
+// editParams are the parameters of editMessageText that we use.
+type editParams struct {
+	ChatID      int64        `json:"chat_id"`
+	MessageID   int64        `json:"message_id"`
+	Text        string       `json:"text"`
+	Entities    []entity     `json:"entities,omitempty"`
+	ReplyMarkup inlineMarkup `json:"reply_markup"` // always sent: an empty keyboard removes the buttons
+}
+
+// markupParams are the parameters of editMessageReplyMarkup.
+type markupParams struct {
+	ChatID      int64        `json:"chat_id"`
+	MessageID   int64        `json:"message_id"`
+	ReplyMarkup inlineMarkup `json:"reply_markup"`
+}
+
+// inlineMarkup is an InlineKeyboardMarkup.
+type inlineMarkup struct {
+	InlineKeyboard [][]inlineButton `json:"inline_keyboard"`
+}
+
+type inlineButton struct {
+	Text         string `json:"text"`
+	CallbackData string `json:"callback_data"`
 }
 
 type replyParameters struct {

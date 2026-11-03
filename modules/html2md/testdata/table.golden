@@ -1,0 +1,18 @@
+Official Exchange Rates | National Bank
+
+## Official Exchange Rates
+
+As at 03.11.2026
+
+| Digital code | Letter code | Units | Currency | Rate, UAH |
+| --- | --- | --- | --- | --- |
+| 036 | AUD | 1 | [Australian Dollar](https://bank.example/chart?cc=AUD) | 27.1043 |
+| 124 | CAD | 1 | [Canadian Dollar](https://bank.example/chart?cc=CAD) | 29.8807 |
+| 203 | CZK | 10 | [Czech Koruna](https://bank.example/chart?cc=CZK) | 19.6215 |
+| 756 | CHF | 1 | [Swiss Franc](https://bank.example/chart?cc=CHF) | 51.6630 |
+| 826 | GBP | 1 | [Pound Sterling](https://bank.example/chart?cc=GBP) | 55.0911 |
+| 840 | USD | 1 | [US Dollar](https://bank.example/chart?cc=USD) | 41.4529 |
+| 978 | EUR | 1 | [Euro](https://bank.example/chart?cc=EUR) | 48.1023 |
+| 985 | PLN | 1 | [Polish Zloty](https://bank.example/chart?cc=PLN) | 11.3054 |
+
+Rates are set daily and apply to accounting; the bank does not buy or sell at these rates.

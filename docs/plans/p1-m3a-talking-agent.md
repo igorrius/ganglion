@@ -12,7 +12,7 @@ an agent loop with step and daily limits and a `turns` trace, turns of
 different chats running in parallel; then a live run on the test bot that
 picks the first model (D-6).
 
-**Scope:** sessions (R-AGT-6), M3 tasks 3.1–3.4 of the [phase plan](p1-all-in-one.md#m3--the-agent-spec-72-74-76-77)
+**Scope:** sessions (R-AGT-6), M3 tasks 3.1–3.4 of the [phase plan](p1-all-in-one.md#m3--the-agent-spec-7274-76-77)
 and the talking half of 3.8. Memory (3.5), tools and policies (3.6), skills
 (3.7) and the end-to-end acceptance under the crash harness (3.8) are M3b,
 planned after this one. M3a has a tool registry but registers no tools.

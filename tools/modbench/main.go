@@ -8,6 +8,14 @@
 //	         -replay tools/modbench/testdata/deye-replay.json \
 //	         -config inverter_sn=2400000001 -n 200
 //
+// A tool module that makes no requests is measured with a tool call's
+// payload instead of a replay, or for html2md with a saved page
+// (ADR-0035):
+//
+//	modbench -wasm modules/html2md/html2md.wasm \
+//	         -manifest modules/html2md/html2md.yaml \
+//	         -html modules/html2md/testdata/news.html -n 100
+//
 // Run one variant per process: the memory figures are process-wide.
 package main
 
@@ -33,6 +41,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/pdk"
 	"github.com/igorrius/ganglion/runner"
 )
@@ -82,16 +91,26 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	wasmPath := fs.String("wasm", "", "module .wasm file (required)")
 	manifestPath := fs.String("manifest", "", "module manifest .yaml (required)")
-	replayPath := fs.String("replay", "", "JSON object mapping URL paths to response bodies; __NOW__ becomes the current Unix time (required)")
+	replayPath := fs.String("replay", "", "JSON object mapping URL paths to response bodies; __NOW__ becomes the current Unix time")
+	payloadPath := fs.String("payload", "", "JSON payload of a tool call; the module is called with trigger \"tool\" instead of \"cron\"")
+	htmlPath := fs.String("html", "", "a saved web page, sent as the tool payload {\"html\", \"url\"} (html2md)")
 	n := fs.Int("n", 100, "number of measured calls")
 	config := kvFlag{}
 	fs.Var(config, "config", "override a manifest config value, key=value (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *wasmPath == "" || *manifestPath == "" || *replayPath == "" {
+	if *htmlPath != "" {
+		p, err := htmlPayload(*htmlPath)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = os.Remove(p) }()
+		payloadPath = &p
+	}
+	if *wasmPath == "" || *manifestPath == "" || (*replayPath == "") == (*payloadPath == "") {
 		fs.Usage()
-		return errors.New("-wasm, -manifest and -replay are required")
+		return errors.New("-wasm, -manifest and one of -replay, -payload, -html are required")
 	}
 
 	wasm, err := os.ReadFile(*wasmPath)
@@ -110,15 +129,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		m.Config = map[string]string{}
 	}
 	maps.Copy(m.Config, config)
-	replaySrc, err := os.ReadFile(*replayPath)
+	in, target, err := benchInput(*replayPath, *payloadPath)
 	if err != nil {
 		return err
 	}
-	replay, err := newReplay(replaySrc)
-	if err != nil {
-		return err
-	}
-	srv := httptest.NewServer(replay)
+	srv := httptest.NewServer(target)
 	defer srv.Close()
 
 	// Every host name the module may reach is answered by the replay server.
@@ -145,7 +160,6 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	r.LoadMillis = millis(time.Since(start))
 	r.RSSAfterLoadMiB = rssMiB()
 
-	in := pdk.Input{Trigger: "cron"}
 	start = time.Now()
 	out, err := inst.Handle(ctx, in) // logs in and caches the token
 	if err != nil {
@@ -165,7 +179,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			r.Failures++
 		}
 	}
-	r.LastResult = string(out.Result)
+	r.LastResult = text.Truncate(string(out.Result), 1000)
 	slices.Sort(durations)
 	r.CallP50Micros = micros(percentile(durations, 50))
 	r.CallP95Micros = micros(percentile(durations, 95))
@@ -181,6 +195,53 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(r)
+}
+
+// benchInput is the input of every call and the server that answers the
+// module's requests: a cron call against a replay, or a tool call with a
+// payload and a server that answers nothing.
+func benchInput(replayPath, payloadPath string) (pdk.Input, http.Handler, error) {
+	if payloadPath != "" {
+		payload, err := os.ReadFile(payloadPath)
+		if err != nil {
+			return pdk.Input{}, nil, err
+		}
+		if !json.Valid(payload) {
+			return pdk.Input{}, nil, fmt.Errorf("payload %s is not JSON", payloadPath)
+		}
+		return pdk.Input{Trigger: "tool", Payload: payload}, http.NotFoundHandler(), nil
+	}
+	src, err := os.ReadFile(replayPath)
+	if err != nil {
+		return pdk.Input{}, nil, err
+	}
+	replay, err := newReplay(src)
+	if err != nil {
+		return pdk.Input{}, nil, err
+	}
+	return pdk.Input{Trigger: "cron"}, replay, nil
+}
+
+// htmlPayload writes the html2md payload for a saved page to a
+// temporary file and returns its path.
+func htmlPayload(path string) (string, error) {
+	page, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	payload, err := json.Marshal(map[string]string{"html": string(page), "url": "https://example.org/"})
+	if err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp("", "modbench-*.json")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	if _, err := f.Write(payload); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 // replay answers requests by URL path with recorded bodies.

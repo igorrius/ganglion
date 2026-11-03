@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -40,7 +42,15 @@ func fakeClaude(mode string) int {
 	stdin, _ := io.ReadAll(os.Stdin)
 	switch mode {
 	case "ok":
-		b, _ := json.Marshal(map[string]any{"args": os.Args[1:], "stdin": string(stdin)})
+		system, mode := "", ""
+		if i := slices.Index(os.Args, "--system-prompt-file"); i > 0 && i+1 < len(os.Args) {
+			raw, _ := os.ReadFile(os.Args[i+1])
+			system = string(raw)
+			if fi, err := os.Stat(os.Args[i+1]); err == nil {
+				mode = fi.Mode().Perm().String()
+			}
+		}
+		b, _ := json.Marshal(map[string]any{"args": os.Args[1:], "stdin": string(stdin), "system": system, "mode": mode, "env": os.Environ()})
 		record(string(b))
 		fmt.Print(`{"type":"result","subtype":"success","is_error":false,"result":"Привет!","usage":{"input_tokens":3,"cache_creation_input_tokens":20,"cache_read_input_tokens":100,"output_tokens":7}}`)
 		return 0
@@ -55,6 +65,28 @@ func fakeClaude(mode string) int {
 		return 2
 	case "sleep":
 		time.Sleep(10 * time.Second)
+		return 0
+	case "spawn": // like claude with its relay: a child that outlives nothing on its own
+		child := exec.Command(os.Args[0])
+		child.Env = append(os.Environ(), "FAKE_CLAUDE=child")
+		if err := child.Start(); err != nil {
+			return 5
+		}
+		record("child " + strconv.Itoa(child.Process.Pid))
+		time.Sleep(30 * time.Second)
+		return 0
+	case "child":
+		time.Sleep(30 * time.Second)
+		return 0
+	case "mcp", "mcp-crash", "mcp-hang":
+		return fakeMCP(mode)
+	case "toolhold": // a run with tools holds its slot; one without answers at once
+		if slices.Contains(os.Args[1:], "--mcp-config") {
+			record("hold")
+			time.Sleep(30 * time.Second)
+			return 0
+		}
+		fmt.Print(`{"type":"result","is_error":false,"result":"{\"ok\":true}","usage":{"input_tokens":1,"output_tokens":1}}`)
 		return 0
 	case "slow":
 		record("start " + strconv.FormatInt(time.Now().UnixNano(), 10))
@@ -71,7 +103,9 @@ func fake(t *testing.T, mode string, opts ...Option) (*Client, string) {
 	rec := filepath.Join(t.TempDir(), "record")
 	t.Setenv("FAKE_CLAUDE", mode)
 	t.Setenv("FAKE_CLAUDE_RECORD", rec)
-	return New("claude", append([]Option{WithCommand(os.Args[0])}, opts...)...), rec
+	// The fake reads its mode from the environment, which claude gets
+	// only in part.
+	return New("claude", append([]Option{WithCommand(os.Args[0]), WithEnv("FAKE_CLAUDE", "FAKE_CLAUDE_RECORD", "FAKE_CLAUDE_TOOL")}, opts...)...), rec
 }
 
 var history = []provider.Message{
@@ -91,28 +125,84 @@ func TestArgsAndStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got struct {
-		Args  []string `json:"args"`
-		Stdin string   `json:"stdin"`
-	}
+	var got recorded
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
+	i := slices.Index(got.Args, "--system-prompt-file")
+	if i < 0 || i+1 >= len(got.Args) {
+		t.Fatalf("no --system-prompt-file in %q", got.Args)
+	}
 	wantArgs := []string{"-p", "--model", "haiku", "--output-format", "json", "--no-session-persistence",
 		"--tools", "", "--strict-mcp-config", "--setting-sources", "",
-		"--system-prompt", "You are the family assistant."}
+		"--system-prompt-file", got.Args[i+1]}
 	if !slices.Equal(got.Args, wantArgs) {
 		t.Fatalf("args\n got %q\nwant %q", got.Args, wantArgs)
 	}
+	// No prompt text is in argv, which shows in ps: the system prompt
+	// (it holds the facts index) is a 0600 file, removed after the run.
 	for _, a := range got.Args {
-		if strings.Contains(a, "секретный") || strings.Contains(a, "boiler") {
-			t.Fatal("family text (a message or the summary) is in argv, visible in ps")
+		if strings.Contains(a, "секретный") || strings.Contains(a, "boiler") || strings.Contains(a, "family assistant") {
+			t.Fatal("prompt text (the system prompt, a message or the summary) is in argv, visible in ps")
 		}
 	}
-	wantStdin := "Summary of the conversation so far:\nThey talked about the boiler.\n\n" +
+	if got.System != "You are the family assistant." || got.Mode != "-rw-------" {
+		t.Fatalf("system prompt file %q, mode %s", got.System, got.Mode)
+	}
+	if _, err := os.Stat(got.Args[i+1]); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the system prompt file is left behind: %v", err)
+	}
+	wantStdin := "Summary of the conversation so far:\n  They talked about the boiler.\n\n" +
 		"Conversation so far, oldest first:\n\nUser: Igor: hi\n\nAssistant: Hello!\n\nUser: Igor: секретный вопрос про дом"
 	if got.Stdin != wantStdin {
 		t.Fatalf("stdin\n got %q\nwant %q", got.Stdin, wantStdin)
+	}
+}
+
+// recorded is what the fake claude saw.
+type recorded struct {
+	Args   []string `json:"args"`
+	Stdin  string   `json:"stdin"`
+	System string   `json:"system"`
+	Mode   string   `json:"mode"`
+	Env    []string `json:"env"`
+}
+
+// claude runs with a minimal environment: what it needs to run and stay
+// logged in, and nothing of the node's own secrets (M3b final review).
+func TestClaudeGetsAMinimalEnvironment(t *testing.T) {
+	for k, v := range map[string]string{"TELEGRAM_BOT_TOKEN": "7001:AAH-secret", "OPENROUTER_API_KEY": "sk-or-secret",
+		"BRAVE_API_KEY": "brave-secret", "GANGLION_MCP_TOKEN": "relay-secret", "TELEGRAM_BOT_TOKEN_FILE": "/run/secrets/t",
+		"CLAUDE_CONFIG_DIR": "/home/x/.claude", "ANTHROPIC_BASE_URL": "https://proxy.example", "HTTPS_PROXY": "http://p:3128",
+		"LANG": "C.UTF-8"} {
+		t.Setenv(k, v)
+	}
+	c, rec := fake(t, "ok")
+	if _, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got recorded
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{}
+	for _, kv := range got.Env {
+		k, v, _ := strings.Cut(kv, "=")
+		env[k] = v
+	}
+	for _, k := range []string{"TELEGRAM_BOT_TOKEN", "OPENROUTER_API_KEY", "BRAVE_API_KEY", "GANGLION_MCP_TOKEN", "TELEGRAM_BOT_TOKEN_FILE"} {
+		if _, ok := env[k]; ok {
+			t.Errorf("%s reached claude", k)
+		}
+	}
+	for _, k := range []string{"PATH", "HOME", "CLAUDE_CONFIG_DIR", "ANTHROPIC_BASE_URL", "HTTPS_PROXY", "LANG"} {
+		if env[k] != os.Getenv(k) {
+			t.Errorf("%s = %q, want %q", k, env[k], os.Getenv(k))
+		}
 	}
 }
 
@@ -211,7 +301,7 @@ func TestCancelIsReturnedAsCanceled(t *testing.T) {
 func TestConcurrencyLimit(t *testing.T) {
 	c, rec := fake(t, "slow", WithMaxConcurrent(2))
 	var wg sync.WaitGroup
-	for range 3 {
+	for range 4 {
 		wg.Go(func() {
 			if _, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history}); err != nil {
 				t.Error(err)
@@ -245,12 +335,51 @@ func TestConcurrencyLimit(t *testing.T) {
 		alive += e.delta
 		peak = max(peak, alive)
 	}
-	if len(evs) != 6 || peak != 2 {
-		t.Fatalf("%d events, peak %d alive; want 6 events, peak 2", len(evs), peak)
+	if len(evs) != 8 || peak != 3 {
+		t.Fatalf("%d events, peak %d alive; want 8 events, peak 3 (2 slots and the reserved one)", len(evs), peak)
 	}
 }
 
-func TestToolsRejected(t *testing.T) {
+// Ruling R36: a run with tools may wait on a guard check (memory.write
+// inside the CLI's own loop), which is a run without tools. Runs with
+// tools never take the reserved slot, so a guard check made while two of
+// them hold every slot still runs; a third run with tools waits.
+func TestRunWithoutToolsIsNotStarvedByRunsWithTools(t *testing.T) {
+	c, rec := toolsFake(t, "toolhold", t.TempDir())
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	x := &execRecorder{}
+	for range 2 {
+		wg.Go(func() {
+			_, _ = c.Chat(ctx, provider.ChatRequest{Model: "haiku", Messages: history, Tools: tools, Exec: x.exec})
+		})
+	}
+	t.Cleanup(func() { cancel(); wg.Wait() })
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		raw, _ := os.ReadFile(rec)
+		if strings.Count(string(raw), "hold") == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the runs with tools did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	gctx, gcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer gcancel()
+	resp, err := c.Chat(gctx, provider.ChatRequest{Model: "haiku", Messages: history})
+	if err != nil || resp.Message.Content != `{"ok":true}` {
+		t.Fatalf("the guard check: %+v, %v", resp, err)
+	}
+	tctx, tcancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer tcancel()
+	if _, err := c.Chat(tctx, provider.ChatRequest{Model: "haiku", Messages: history, Tools: tools, Exec: x.exec}); kind(t, err) != provider.KindTimeout {
+		t.Fatalf("a third run with tools took a slot: %v", err)
+	}
+}
+
+func TestToolsWithoutExecRejected(t *testing.T) {
 	c, _ := fake(t, "ok")
 	_, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history,
 		Tools: []provider.Tool{{Name: "x", InputSchema: json.RawMessage(`{}`)}}})

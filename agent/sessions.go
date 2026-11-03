@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/internal/text"
+	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/sqlitedb"
 )
@@ -26,6 +27,9 @@ type SessionStore interface {
 	List(ctx context.Context, conv string, n int, except string) ([]SessionInfo, error)
 	// Get returns an archived session.
 	Get(ctx context.Context, conv, session string) (State, error)
+	// Search finds archived sessions of convs by text, for recall
+	// (memory.Episodes).
+	Search(ctx context.Context, q string, convs []string, limit int) ([]memory.Episode, error)
 }
 
 // NoArchive is a SessionStore that keeps nothing: ended sessions are
@@ -37,6 +41,11 @@ func (NoArchive) Put(context.Context, string, State, string) error { return nil 
 
 // List implements SessionStore.
 func (NoArchive) List(context.Context, string, int, string) ([]SessionInfo, error) { return nil, nil }
+
+// Search implements SessionStore: there is nothing to find.
+func (NoArchive) Search(context.Context, string, []string, int) ([]memory.Episode, error) {
+	return nil, nil
+}
 
 // Get implements SessionStore.
 func (NoArchive) Get(_ context.Context, _, session string) (State, error) {

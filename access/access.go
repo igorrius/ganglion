@@ -118,6 +118,33 @@ func (l *List) Role(ctx context.Context, principal string) (Role, bool, error) {
 	return Role(role), true, nil
 }
 
+// Name returns the name principal is listed under; "" when it is not
+// listed or has none.
+func (l *List) Name(ctx context.Context, principal string) (string, error) {
+	var name string
+	err := l.db.QueryRowContext(ctx, `SELECT name FROM allowed WHERE principal = ?`, principal).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("access: name of %s: %w", principal, err)
+	}
+	return name, nil
+}
+
+// Listed reports whether principal is on the list, in any role.
+func (l *List) Listed(ctx context.Context, principal string) (bool, error) {
+	_, ok, err := l.Role(ctx, principal)
+	return ok, err
+}
+
+// IsAdmin reports whether principal is listed with the admin role. A
+// principal that is not listed is not an admin.
+func (l *List) IsAdmin(ctx context.Context, principal string) (bool, error) {
+	role, ok, err := l.Role(ctx, principal)
+	return ok && role == RoleAdmin, err
+}
+
 // Admins returns the admin principals, sorted.
 func (l *List) Admins(ctx context.Context) ([]string, error) {
 	rows, err := l.db.QueryContext(ctx, `SELECT principal FROM allowed WHERE role = ? ORDER BY principal`, string(RoleAdmin))
@@ -136,21 +163,26 @@ func (l *List) Admins(ctx context.Context) ([]string, error) {
 	return out, rows.Err()
 }
 
-// Filter wraps next so that messages from principals not on the list never
-// reach it. A dropped message returns nil, so the transport confirms it and
-// the stranger gets no reply; it is logged without its text. Events that
-// are not messages pass through. An error reading the list is returned, so
+// fromPerson are the kinds of events a person sends; their payloads name
+// the sender under "from" (event.Message, event.Decision).
+var fromPerson = map[event.Kind]bool{event.KindMessage: true, event.KindDecision: true}
+
+// Filter wraps next so that messages and button presses from principals
+// not on the list never reach it. A dropped event returns
+// transport.ErrDropped, so the transport confirms it, answers a press at
+// once, and the stranger gets no reply; it is logged without its text.
+// Other events pass through. An error reading the list is returned, so
 // the transport offers the update again later.
 func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 	return func(ctx context.Context, e event.Event) error {
-		if e.Kind != event.KindMessage {
+		if !fromPerson[e.Kind] {
 			return next(ctx, e)
 		}
 		var m event.Message
 		if err := json.Unmarshal(e.Payload, &m); err != nil || m.From == "" {
 			l.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "malformed")))
 			logger.Warn("access: malformed message dropped", "id", e.ID, "conv", e.Conv, "source", e.Source)
-			return nil
+			return fmt.Errorf("access: malformed: %w", transport.ErrDropped)
 		}
 		_, ok, err := l.Role(ctx, m.From)
 		if err != nil {
@@ -158,9 +190,9 @@ func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 		}
 		if !ok {
 			l.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "stranger")))
-			logger.Warn("access: message from a stranger dropped",
+			logger.Warn("access: message from a stranger dropped", "kind", e.Kind,
 				"principal", m.From, "name", m.Name, "conv", e.Conv, "text_len", len(m.Text))
-			return nil
+			return fmt.Errorf("access: stranger: %w", transport.ErrDropped)
 		}
 		return next(ctx, e)
 	}

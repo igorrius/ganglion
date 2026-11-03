@@ -26,6 +26,7 @@ type TaskKind string
 const (
 	TaskMessage    TaskKind = "message"    // answer a person
 	TaskCompaction TaskKind = "compaction" // fold old history into a summary
+	TaskGuard      TaskKind = "guard"      // the clean-context check of what the agent keeps (R-POL-7)
 )
 
 // TaskReq is what a task needs from a model. Skills declare it in the
@@ -85,3 +86,10 @@ type Router interface {
 	Route(ctx context.Context, task TaskReq) ([]Candidate, error)
 	Report(c Candidate, err error)
 }
+
+// Local is the P1 placement: every tool runs on the node that handles
+// the turn (R-RTR-3). It satisfies tool.Placement.
+type Local struct{}
+
+// Where returns "local" for every tool; it is tool.PlacementLocal.
+func (Local) Where(string) string { return "local" }

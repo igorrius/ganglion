@@ -1,0 +1,87 @@
+package agent
+
+import (
+	"context"
+
+	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/tool/pending"
+)
+
+// Enqueuer stores messages in the outbox outside a turn's end
+// (queue.Outbox): the acknowledgement of a press goes out while the
+// pressed action still runs (ruling R40).
+type Enqueuer interface {
+	Enqueue(ctx context.Context, msgs ...event.Outgoing) error
+}
+
+// Toasts: the short notice that answers a press (ruling R40).
+const (
+	toastApproved   = "Approved"
+	toastDeclined   = "Declined"
+	toastAccepted   = "Accepted"
+	toastNotYours   = "This button is not yours."
+	toastNoButton   = "This button no longer works."
+	toastUsed       = "Already handled."
+	toastExpired    = "Expired."
+	toastNotAllowed = "Not allowed."
+)
+
+// Lines of an approved question: while its call runs, and when it ended.
+const (
+	lineRunning        = "⏳ Approved, running…"
+	lineApprovedDone   = "Approved. Done."
+	lineApprovedFailed = "Approved, but it failed."
+)
+
+// errorPrefix starts the outcome of a call that failed, as the model
+// reads it.
+const errorPrefix = "error: "
+
+// approvedLine is the last line of an approved question: whether its call
+// did what it was asked, from the stored outcome's flag.
+func approvedLine(failed bool) string {
+	if failed {
+		return lineApprovedFailed
+	}
+	return lineApprovedDone
+}
+
+// ack is the message that answers the press with text as a toast; false
+// when the press has no id to answer (a channel without toasts).
+func (t *turn) ack(text string) (event.Outgoing, bool) {
+	if t.decision.Query == "" {
+		return event.Outgoing{}, false
+	}
+	ev := t.event
+	return event.Outgoing{IdemKey: ev.IdemKey + ":ack", Transport: ev.Source, Conv: ev.Conv, Text: text, Ack: t.decision.Query}, true
+}
+
+// toast answers a press that did not take with text, among the turn's
+// replies.
+func (t *turn) toast(text string) {
+	if o, ok := t.ack(text); ok {
+		t.out = append(t.out, o)
+	}
+}
+
+// acknowledge stores, before the pressed action runs, the toast and, for
+// a question, the question with status in place of its buttons, so the
+// owner sees the press taken and cannot press again while it runs
+// (ruling R40). They go to the outbox now, not with the turn's replies;
+// their keys are the press's, so a rerun stores them once. A failure
+// costs only the early feedback: it is logged and the press goes on.
+func (a *Agent) acknowledge(ctx context.Context, t *turn, toast, question, status string) {
+	var msgs []event.Outgoing
+	if o, ok := t.ack(toast); ok {
+		msgs = append(msgs, o)
+	}
+	if o, ok := t.editOut(":status", pending.QuickEdit{Text: answered(question, status)}); ok && question != "" {
+		msgs = append(msgs, o)
+	}
+	if len(msgs) == 0 {
+		return
+	}
+	if err := a.d.Outbox.Enqueue(ctx, msgs...); err != nil {
+		a.log.Warn("agent: press not acknowledged early", "conv", t.event.Conv, "err", err)
+	}
+}

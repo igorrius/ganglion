@@ -27,14 +27,19 @@ type ProcessStart time.Time
 // Core is the core role: storage, delivery, the turn loop and the agent.
 var Core = do.Package(
 	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Admins()),
-	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Agent()),
+	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(HTML2MD()), do.Lazy(Fetcher()), do.Lazy(Read()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Agent()),
 	do.Lazy(Telegram()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
 	// Extension points: the interface, then each implementation under its name.
 	do.Lazy(Handler()), do.LazyNamed(handlerAgent, AgentHandler()), do.EagerNamed(handlerEcho, core.Handler(core.EchoHandler)),
 	do.Lazy(GiveUp()), do.LazyNamed(giveUpAgent, AgentGiveUp()), do.EagerNamed(giveUpNone, core.GiveUp(core.NoGiveUp)),
 	do.Lazy(TurnHook()), do.LazyNamed(turnHookTyping, TypingHook()), do.EagerNamed(turnHookNone, core.TurnHook(core.NoTurnHook)),
 	do.Lazy(Transports()), do.LazyNamed(transportsTelegram, TelegramTransports()), do.EagerNamed(transportsNone, []transport.Transport(nil)),
+	do.Lazy(Housekeepers()), do.LazyNamed(housekeepingAgent, AgentHousekeepers()), do.EagerNamed(housekeepingNone, Housekeeping(nil)),
+	do.Lazy(JobSchedulers()), do.LazyNamed(schedulersAgent, AgentSchedulers()), do.EagerNamed(schedulersNone, Schedulers(nil)),
 	do.Lazy(Receivers()), do.LazyNamed(inboundTelegram, TelegramReceivers()), do.EagerNamed(inboundNone, Inbound(nil)),
+	do.Lazy(CommandHints()), do.LazyNamed(commandsAgent, AgentCommandHints()), do.EagerNamed(commandsNone, []transport.Command(nil)),
+	// The search backends; Read picks one, or none.
+	do.LazyNamed(searchBrave, BraveSearch()), do.LazyNamed(searchDuckDuckGo, DuckDuckGoSearch()),
 )
 
 // New returns a container with the bootstrap values and the role
@@ -74,8 +79,16 @@ const (
 	turnHookNone       = "turnhook.none"       // nothing around a turn
 	transportsTelegram = "transports.telegram" // Telegram
 	transportsNone     = "transports.none"     // no transport
+	housekeepingAgent  = "housekeeping.agent"  // prune the tool-call journal, expire confirmations
+	housekeepingNone   = "housekeeping.none"   // nothing to clean up
+	searchBrave        = "search.brave"        // the Brave Search API, with BRAVE_API_KEY
+	searchDuckDuckGo   = "search.duckduckgo"   // DuckDuckGo's HTML results, no key
+	schedulersAgent    = "schedulers.agent"    // the agent's reminders and tasks
+	schedulersNone     = "schedulers.none"     // nothing runs on a schedule
 	inboundTelegram    = "inbound.telegram"    // Telegram polling
 	inboundNone        = "inbound.none"        // nothing brings messages in
+	commandsAgent      = "commands.agent"      // the agent's command table as command hints
+	commandsNone       = "commands.none"       // no command hints
 )
 
 // agentOn reports whether the settings turn the agent on: a model

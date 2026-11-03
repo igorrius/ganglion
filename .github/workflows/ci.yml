@@ -41,3 +41,35 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
+
+  # The html2md module (ADR-0035) is committed as html2md.wasm; the test
+  # job above runs its fixture tests against that file. This job rebuilds
+  # it from the Rust sources with the pinned toolchain, runs the module's
+  # own tests and the fixture tests against the rebuilt module, and checks
+  # that the committed file is what the sources build.
+  html2md:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Rust toolchain (modules/html2md/rust-toolchain.toml)
+        working-directory: modules/html2md
+        run: rustup toolchain install
+      - name: Module format, lint and unit tests
+        working-directory: modules/html2md
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+      - name: Build the module
+        run: make modules-html2md
+      - name: Fixture tests against the rebuilt module
+        run: go test -count=1 ./modules/html2md/... ./tools/modbench/...
+      - name: The committed module matches its sources
+        run: |
+          git diff --quiet -- modules/html2md/html2md.wasm || {
+            echo "::error::modules/html2md/html2md.wasm differs from a build of its sources; run make modules-html2md and commit it"
+            exit 1
+          }

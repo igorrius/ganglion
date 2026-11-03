@@ -57,7 +57,7 @@ pinned by a test in the task that owns the code.
    `409 Conflict`. Expect the newer process to stop polling and alert, not
    fight (task 2.3).
 4. **Time** — Kyiv time in every message, cron across DST changes, catch-up
-   after downtime firing each missed job once (task 4.2).
+   after downtime firing each missed job once (task 3.10, moved from 4.2).
 5. **An approved configuration change breaks something** — a threshold that
    makes the flow oscillate, an observer pointed at a missing chat. Expect
    validation before applying, and a one-command rollback (task 6.3).
@@ -68,32 +68,39 @@ pinned by a test in the task that owns the code.
 |---|---|---|---|
 | M1 | State cells — **done** ([plan](p1-m1-cells.md)) | Switch, sensor and request cells; `virtual` backend with fault injection; SQLite store | 0.5 weekend |
 | M2 | Delivery and Telegram | Inbox/outbox, outbox sender, Telegram transport; crash-tested echo bot | 1 weekend |
-| M3 | **The agent** | History, actors, provider, router, agent loop, memory, skills, policies; a talking agent on the test bot | 1–1.5 weekends |
-| M3r | Refactoring before M3b ([plan](p1-refactor.md)) | Go conventions and lint guardrails, the agent as a stage pipeline, `config` with `samber/do`, `ganglion run` on urfave/cli; no behaviour change | 0.25 weekend |
-| M4 | Reflexes: runner and Deye | Config, scheduler, modules on cron writing sensor cells, exposed to the agent as tools; deployed next to the current bot | 0.5 weekend |
+| M3 | **The agent**, in three parts: M3a talks — **done** ([plan](p1-m3a-talking-agent.md)); M3b and M3c below ([design](p1-m3b-m3c-design.md)) | History, actors, provider, router, agent loop; a talking agent on the test bot | 1–1.5 weekends (M3a) |
+| M3r | Refactoring before M3b — **done** ([plan](p1-refactor.md)) | Go conventions and lint guardrails, the agent as a stage pipeline, `config` with `samber/do`, `ganglion run` on urfave/cli; no behaviour change | 0.25 weekend |
+| M3b | **The agent works with the world** — **done** ([plan](p1-m3b-agent-world.md)) | Tools under policies and the security baseline, confirmations and quick actions on buttons, the scheduler with reminders and scheduled agent tasks, memory, web reading, the tool-call journal, tools for the claude CLI over MCP | over 1 weekend |
+| M3c | Modules, skills, diagnostics | Module update and rollback, skills, attachments, logs on disk, `ganglion mcp`, the 3.8 acceptance | about 1 weekend |
+| M4 | Reflexes: runner and Deye | Config, modules on cron writing sensor cells, exposed to the agent as tools (the scheduler and the first module-as-tool path come from M3b); deployed next to the current bot | 0.5 weekend |
 | M5 | Load-shedding flow | The 8.1 state machine on `virtual` load cells; Telegram notifier; shadow week | 0.5 weekend |
 | M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback | 0.25–0.5 weekend |
 | M7 | Migration | Memory import and consolidation, remaining skills and crons, backups, cutover, gate | 0.5–1 weekend |
 
-Total 4.25–5.5 weekends against a 4-weekend budget: the cut list is
-expected to be used.
+Total 4.25–5.5 weekends against a 4-weekend budget, counted before the M3
+split. M3b (over one weekend) and M3c (about one) take more than the
+original M3 estimate left for memory, skills and policies
+([design](p1-m3b-m3c-design.md#8-size-and-order), section 8). The cut list
+is expected to be used.
 
 ```mermaid
 flowchart LR
-    M1["M1 State cells"] --> M3["M3 Agent"]
+    M1["M1 State cells"] --> M3["M3a Agent talks"]
     M2["M2 Delivery + Telegram"] --> M3
+    M3 --> M3B["M3b Agent works with the world"]
+    M3B --> M3C["M3c Modules, skills, diagnostics"]
     M1 --> M4["M4 Runner + Deye"]
-    M3 --> M4
+    M3B --> M4
     M4 --> M5["M5 Load-shedding flow"]
     M2 --> M5
-    M3 --> M6["M6 Agent reconfigures"]
+    M3C --> M6["M6 Agent reconfigures"]
     M5 --> M6
     M6 --> M7["M7 Migration"]
 ```
 
-M1 and M2 are independent. After M3 the agent talks on the test bot; from
-M4 on, every reflex is wired to it as a tool. The "Deye two weeks without
-the model" clock of the gate starts at M4.
+M1 and M2 are independent. After M3a the agent talks on the test bot,
+after M3b it acts; from M4 on, every reflex is wired to it as a tool. The
+"Deye two weeks without the model" clock of the gate starts at M4.
 
 ### M1 · State cells (ADR-0014) — done
 
@@ -129,9 +136,18 @@ core start, database lock).
 
 ### M3 · The agent (spec 7.2–7.4, 7.6, 7.7)
 
-Step-by-step plans: [M3a, the talking agent](p1-m3a-talking-agent.md)
-(3.1–3.4 and a live run that picks the first model); M3b (memory, tools
-and policies, skills, 3.8 acceptance) is planned after M3a.
+M3 is split in three; the split comes from the
+[M3b and M3c design](p1-m3b-m3c-design.md) of 2026-11-02 (spec 7.10–7.11,
+R-OBS-5–7 and R-POL-6–8 were added for it). Step-by-step plans:
+- [M3a, the talking agent](p1-m3a-talking-agent.md): 3.1–3.4 and a live
+  run that picks the first model;
+- [M3b, the agent works with the world](p1-m3b-agent-world.md): 3.5, 3.6
+  and 3.9–3.14, design section 5;
+- M3c, modules, skills and diagnostics: 3.7, 3.15–3.18 and the 3.8
+  acceptance, design section 6; planned after M3b.
+
+Tasks 3.1–3.8 keep their numbers; the tasks the design added are numbered
+from 3.9.
 
 **M3a built 2026-11-02**:
 - **Providers:** the operator chooses them (ADR-0021): OpenAI-compatible
@@ -152,9 +168,35 @@ Closed 2026-11-02 after the live run on the test bot.
 | 3.2 OpenAI-compatible provider with tool calls (R-PRV-1, 3); the first cloud model chosen on real turns (decision D-6) | Tests against a fake API; live turns compared on cost and quality |
 | 3.3 Router: `SKILL.md` frontmatter, hard filters, rules and weights, fallback on error, 429 and timeout (R-RTR-1–3) | Router tests including `privacy: local-only` and fallback |
 | 3.4 Agent loop with step, depth and daily limits; `turns` trace with cost (R-AGT-3–5) | Limit tests; a turn's trace is complete |
-| 3.5 Memory: Markdown in a git repo (decision D-7), `memory.*` tools, index in the system prompt (R-MEM-1–3 without the nightly job) | A fact told in one chat is recalled in a later turn |
-| 3.6 Tools and policies, base: `schedule.*`, `message.send`, `cells.get`/`cells.set`; side-effect tools need a confirmation request cell; external text marked as data; `turn_id` + call number on side effects (R-POL-1–4, R-DLV-6) | Tests: an unconfirmed action does not run; an expired request denies |
-| 3.7 Skills level 1 and 2: Markdown skills; scripts as subprocesses with an environment allowlist and timeout (decision D-5) | A skill with a script runs; a variable outside the allowlist is not passed |
+
+#### M3b · The agent works with the world
+
+Plan: [p1-m3b-agent-world.md](p1-m3b-agent-world.md); design sections 4
+and 5. Security baseline:
+[ADR-0031](../adr/0031-agent-security-baseline.md) (Proposed).
+
+| Task | Done when |
+|---|---|
+| 3.5 Memory: Markdown in the workspace git repo (decision D-7), `memory.*` tools, an index in the system prompt, facts not instructions with their source recorded, episodic search over past turns; every write passes the clean-context check (R-MEM-2–5, R-POL-7; R-MEM-1, the nightly job, stays in M7) | A fact told in one conversation is recalled in a later one; an injected "remember: …" in a test page does not reach memory without the owner and is flagged by the check |
+| 3.6 Tools and policies, base: `schedule.*`, `message.send`, `cells.get`/`cells.set`; side-effect tools need a confirmation request cell; external text marked as data; `turn_id` + call number on side effects; tainted sessions and the security baseline (R-POL-1–4, 6, R-DLV-6, ADR-0031) | Tests: an unconfirmed action does not run; an expired request denies; a tainted session cannot write memory or send without a press |
+| 3.9 Confirmations and quick actions on buttons: inline keyboards and `callback_query` in the transport; a confirmation asked in the middle of a turn resumes the conversation after the press (design 5.2) | A double press runs once; a late press or one by someone else does nothing; a press after a restart still works |
+| 3.10 Scheduler, moved from M4 (4.2): cron in Europe/Kyiv, `cron_runs`, catch-up runs each missed job once, `idemKey` = job + scheduled time; reminders and scheduled agent tasks with grants, listed with buttons (R-SCH-1, 2, R-POL-8) | "Every hour send me the rates": confirmed by a button, listed, each run compares with the previous ones, deleted by a button or in words; tests across a DST change and a simulated downtime |
+| 3.11 Reading the web: `web.fetch` with the URL rule and address checks, the `html2md` WASM module embedded in the binary (the minimal module-as-tool path, moved from 4.4), `web.search` behind one backend interface (R-WEB-1–3, R-RUN-7) | A page read with `web.fetch` is summarised; a private address is refused; a URL the model built asks for confirmation |
+| 3.12 Tool-call journal: `tool_calls` beside `turns`, secrets redacted, retention by age (R-OBS-5, R-POL-3) | One turn id finds the message, the route, every call with its policy decision, and the reply |
+| 3.13 Tools for the claude CLI through an MCP bridge to the core, under the same policies (R-PRV-6) | The 3.5, 3.6 and 3.10 checks pass with Haiku through the CLI and with an API model |
+| 3.14 Carried from M3a: the depth limit (R-AGT-4), tool placement (R-RTR-3), the current time in the last user message, the first-run introduction that writes the persona with the owner's approval (R-AGT-7) | Tests; the introduction runs only for an admin, only while `persona/` is empty |
+
+#### M3c · Modules, skills, diagnostics
+
+Design section 6; the step-by-step plan is written after M3b.
+
+| Task | Done when |
+|---|---|
+| 3.7 Skills level 1 and 2: Markdown skills; scripts as subprocesses with an environment allowlist and timeout (decision D-5); built-in skills cannot be replaced silently; a promtop skill | A skill with a script runs; a variable outside the allowlist is not passed |
+| 3.15 Module install, update and rollback: version store, sha256 check, self-test, atomic switch, `/modules rollback`; built-in modules only from the project's releases; a module release workflow in CI (R-RUN-8) | `/modules update html2md` installs a new release without restart; a broken release fails its self-test and stays off; rollback restores |
+| 3.16 Attachments: `sendPhoto` and `sendDocument` through the outbox (R-DLV-9) | "Show me the agent's metrics" → a promtop picture in Telegram |
+| 3.17 Logs on disk: JSON lines in `<data>/logs/`, synchronous writes, rotation by size, count and age, secrets redacted (R-OBS-6) | The last lines before a `kill -9` are on disk; rotation keeps the limits |
+| 3.18 `ganglion mcp`: read-only diagnostics over stdio (R-OBS-7) | Claude Code diagnoses a seeded fault through `ganglion mcp`, locally and in a local container |
 | 3.8 End to end on the test bot: message → inbox → model → tools → outbox → reply, under the M2 crash harness | 10.2 acceptance for turns |
 
 ### M4 · Reflexes: runner and Deye (spec 7.5, 8)
@@ -162,11 +204,11 @@ Closed 2026-11-02 after the live run on the test bot.
 | Task | Done when |
 |---|---|
 | 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets through a secret source (environment and `*_FILE` first), never in the YAML; `GOMEMLIMIT` (R-RUN-6); a JSON Schema in `schemas/` kept in sync by a test ([ADR-0023](../adr/0023-json-schemas-for-yaml-files.md)) | Config tests; a bad config fails at start with a clear message |
-| 4.2 Scheduler: cron in Europe/Kyiv, `cron_runs` table, catch-up after downtime runs each missed job once; `idemKey` = job + scheduled time; the agent's `schedule.*` uses it | Tests across a DST change and a simulated downtime |
+| 4.2 **Done in M3b (task 3.10).** Scheduler: cron in Europe/Kyiv, `cron_runs` table, catch-up after downtime runs each missed job once; `idemKey` = job + scheduled time; the agent's `schedule.*` uses it. M4 adds module cron triggers on it | Tests across a DST change and a simulated downtime |
 | 4.3 Cell host functions for modules (`cell.get`, `cell.report`, `cell.set`), granted per cell in the manifest; `pdk` and `pdk/guest` updated | Runner conformance suite extended and green |
-| 4.4 Runner in `node.Run`: modules from config, triggered by the scheduler or called by the agent as tools (`deye.status`); optional `init` and `health` exports (spec 7.5); a minimal supervisor — backoff after failures, N failures in M minutes disable the module and emit `module.crashloop`; failures and `auth_failed` reach the agent as events; `cells.Reconcile` at start and periodically, `ExpireDue` on a short tick (M1 review) | `deye-reader` writes the `grid` and `soc` sensor cells on schedule; the agent answers "how is the battery?" through the tool; a failing probe module is disabled |
+| 4.4 Runner in `node.Run`: modules from config, triggered by the scheduler or called by the agent as tools (`deye.status`; the minimal "module as a tool" path, with an embedded module, **moved to M3b**, task 3.11; M4 extends it to modules from config); optional `init` and `health` exports (spec 7.5); a minimal supervisor — backoff after failures, N failures in M minutes disable the module and emit `module.crashloop`; failures and `auth_failed` reach the agent as events; `cells.Reconcile` at start and periodically, `ExpireDue` on a short tick (M1 review) | `deye-reader` writes the `grid` and `soc` sensor cells on schedule; the agent answers "how is the battery?" through the tool; a failing probe module is disabled |
 | 4.5 Deye cadence and limits: 30 min with grid, 5 min without; HTTP 429 backs off honouring `Retry-After`; stale data reported once | Tests with the replay server from `tools/modbench` |
-| 4.6 Deploy: container image, a Railway service next to the current bot, test bot token; compare with `deye.py` for a few days (R-LS-4) | Samples match `deye.py`; RSS within budget; the two-week clock starts |
+| 4.6 Deploy: container image, a Railway service next to the current bot, test bot token; compare with `deye.py` for a few days (R-LS-4); check that `ganglion mcp` works over `railway ssh` (moved from M3c) | Samples match `deye.py`; RSS within budget; the two-week clock starts |
 
 ### M5 · Load-shedding flow (spec 8)
 
@@ -206,9 +248,9 @@ starting point, not a decision.
 |---|---|---|---|
 | D-1 | SQLite migrations: own small migrator over embedded `.sql` files, or goose | Own: a few dozen lines, no dependency | M1 |
 | D-2 | Telegram client: own minimal Bot API client, or a library | Decided: own ([ADR-0018](../adr/0018-own-telegram-bot-api-client.md)) | M2 |
-| D-5 | Sandbox for level-2 scripts | P1: subprocess, environment allowlist, timeout; Landlock or bubblewrap later (spec 11) | M3 |
+| D-5 | Sandbox for level-2 scripts | P1: subprocess, environment allowlist, timeout; Landlock or bubblewrap later (spec 11) | M3c |
 | D-6 | First cloud model for routine turns | Chosen on cost and quality of real turns (spec 11) | M3 |
-| D-7 | Git for memory and config: the `git` binary or go-git | The binary: smaller process (principle 8) | M3 |
+| D-7 | Git for memory and config: the `git` binary or go-git | The binary: smaller process (principle 8); measured in [ADR-0033](../adr/0033-memory-in-the-workspace-git-with-the-git-binary.md) (Proposed) | M3b |
 | D-3 | Node config and secrets | YAML, like manifests (ADR-0012), for the node config. Requirements: (1) three kinds of data — bootstrap (data directory, roles) from flags or environment; node config (chats, cells, modules, policies) as YAML in a git repo that the agent changes only with approval (M6); secrets never in the YAML; (2) secrets come through one secret-source interface: environment and `*_FILE` files (Docker and Kubernetes secrets) in P1, an encrypted store later; the runner's `secret.get` reads from it; (3) the same binary works on Railway, in Docker or Kubernetes and as a local install | M4 |
 | D-4 | The flow as a WASM module with cell host functions, or native Go | WASM module: it is the project's core hypothesis | M5 |
 
@@ -222,7 +264,18 @@ If the budget runs out, cut in this order and record each cut in "Not now":
 4. M6 beyond 6.1–6.3 — keep approved threshold and observer changes, defer
    backend switching.
 
+Within M3b and M3c, cut in the order of
+[design section 8](p1-m3b-m3c-design.md#8-size-and-order) (a call the owner
+may change):
+
+1. PDF generation (already out, spec 14).
+2. `web.search` reduced to keyed backends only.
+3. The scheduled memory audit; the check on every write stays.
+4. `ganglion mcp` over `railway ssh`; the local form stays.
+
 Never cut: delivery guarantees (M2), the flow's invariants (5.3), backups
 (7.4), the cutover rollback (7.5).
 
-Moved out of P1 already: the claude CLI worker, to P2 (ADR-0015).
+Moved out of P1 already: the claude CLI worker, to P2 (ADR-0015); voice
+messages and PDF generation, to "Not now" (spec 14, design of M3b and
+M3c).

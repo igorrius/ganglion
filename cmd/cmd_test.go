@@ -29,7 +29,7 @@ func captured(t *testing.T, args ...string) (config.Bootstrap, []node.Role, stri
 		b, roles = got, r
 		return nil
 	}
-	err := newRoot(&out, start).Run(context.Background(), append([]string{"ganglion"}, args...))
+	err := newRoot(&out, &out, start).Run(context.Background(), append([]string{"ganglion"}, args...))
 	return b, roles, out.String(), err
 }
 
@@ -38,7 +38,8 @@ func clearEnv(t *testing.T) {
 	for _, k := range []string{"GANGLION_DB", "GANGLION_ADMIN", "TELEGRAM_API_URL", "GANGLION_TELEGRAM_REPLY",
 		"GANGLION_METRICS_ADDR", "GANGLION_MODELS_FILE", "GANGLION_WORKSPACE", "GANGLION_DAILY_BUDGET_USD",
 		"GANGLION_DAILY_TURNS", "GANGLION_DAILY_TOKENS", "GANGLION_SESSION_IDLE", "GANGLION_TZ", "GANGLION_LOG_LEVEL",
-		"TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN_FILE", "OPENROUTER_API_KEY", "OPENROUTER_API_KEY_FILE"} {
+		"TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN_FILE", "OPENROUTER_API_KEY", "OPENROUTER_API_KEY_FILE",
+		"GANGLION_SEARCH", "BRAVE_API_KEY", "BRAVE_API_KEY_FILE"} {
 		t.Setenv(k, "")
 	}
 }
@@ -55,7 +56,7 @@ func TestRunDefaults(t *testing.T) {
 	}
 	a := b.Agent
 	if a.Catalog != nil || a.DailyBudgetUSD != 1.0 || a.TZ.String() != "Europe/Kyiv" || a.Workspace != "workspace" ||
-		a.DailyTurns != 300 || a.DailyTokens != 1_000_000 || a.SessionIdle != 6*time.Hour {
+		a.DailyTurns != 300 || a.DailyTokens != 1_000_000 || a.SessionIdle != 6*time.Hour || a.SearchOff || a.BraveKey != "" {
 		t.Fatalf("agent defaults %+v", a)
 	}
 }
@@ -87,6 +88,7 @@ func TestRunReadsEveryVariable(t *testing.T) {
 		"GANGLION_DAILY_BUDGET_USD": "2.5", "GANGLION_DAILY_TURNS": "100", "GANGLION_DAILY_TOKENS": "500000",
 		"GANGLION_SESSION_IDLE": "4h", "GANGLION_TZ": "UTC",
 		"TELEGRAM_BOT_TOKEN_FILE": write(t, "tg", "7001:from-file\n"), "OPENROUTER_API_KEY": " sk-or-secret\n",
+		"GANGLION_SEARCH": "off", "BRAVE_API_KEY_FILE": write(t, "brave", "BSA-key\n"),
 	} {
 		t.Setenv(k, v)
 	}
@@ -101,7 +103,7 @@ func TestRunReadsEveryVariable(t *testing.T) {
 	}
 	if a.Catalog == nil || len(a.Catalog.Models) != 2 || a.Keys["openrouter"] != "sk-or-secret" || a.Keys["claude"] != "" ||
 		a.Workspace != "/var/lib/ganglion" || a.DailyBudgetUSD != 2.5 || a.DailyTurns != 100 || a.DailyTokens != 500000 ||
-		a.SessionIdle != 4*time.Hour || a.TZ.String() != "UTC" {
+		a.SessionIdle != 4*time.Hour || a.TZ.String() != "UTC" || !a.SearchOff || a.BraveKey != "BSA-key" {
 		t.Fatalf("agent %+v", a)
 	}
 }
@@ -119,7 +121,7 @@ func TestBadValuesNameTheirVariable(t *testing.T) {
 	for k, v := range map[string]string{
 		"GANGLION_ADMIN": "@igor", "GANGLION_TELEGRAM_REPLY": "sometimes", "GANGLION_TZ": "Mars/Base",
 		"GANGLION_DAILY_BUDGET_USD": "-1", "GANGLION_DAILY_TURNS": "many", "GANGLION_SESSION_IDLE": "soon",
-		"GANGLION_LOG_LEVEL": "chatty", "GANGLION_MODELS_FILE": "/missing.yaml",
+		"GANGLION_LOG_LEVEL": "chatty", "GANGLION_MODELS_FILE": "/missing.yaml", "GANGLION_SEARCH": "google",
 	} {
 		t.Run(k, func(t *testing.T) {
 			clearEnv(t)

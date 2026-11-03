@@ -115,8 +115,8 @@ A `switch` over such a type lists every constant or says why not
   audit wrap the thing they guard, the way `net/http` handlers are wrapped:
 
   ```go
-  type ToolFunc func(ctx context.Context, call provider.ToolCall) (string, error)
-  type ToolMiddleware func(next ToolFunc) ToolFunc
+  type Func func(ctx context.Context, c tool.Call) (tool.Result, error)
+  type Middleware func(next Func) Func
   ```
 
   A policy is a function that decides; it does not edit the code it guards
@@ -172,6 +172,15 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Principal → private conversation | the transport (`telegram.PrivateConv`) |
 | Secrets from the environment and `*_FILE` | `secrets` |
 | Version, commit, toolchain of this binary | `internal/buildinfo` |
+| Comparing web addresses (lower-case host, an internationalised host in punycode, no fragment, no default port); finding them in text (`Find`, the one URL pattern), defanging text (`Defang`) | `internal/urlnorm` |
+| Checking a call's arguments against the tool's declared parameters | `tool.CheckArgs` |
+| Whether two calls' arguments are the same (canonical JSON) | `tool.CanonicalArgs` |
+| Marking outside content as data for the model, and dropping it from a text (`StripExternal`) | `tool.WrapExternal` |
+| Removing secrets before anything is journalled | `journal.Redact` |
+| An id nobody can guess (button ids) | `event.RandomID` |
+| A SQLite transaction that takes the write lock first | `sqlitedb.Immediate` |
+| Running git in the workspace (fixed author, no user git settings, paths kept inside) | `gitrepo` |
+| Asking a model whether a text is a fact or a hidden instruction | `guard` |
 
 (The table describes the state after the [refactoring plan](plans/p1-refactor.md).)
 

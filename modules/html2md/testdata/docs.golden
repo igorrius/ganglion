@@ -1,0 +1,38 @@
+Configuring the scheduler — Example Docs
+
+# Configuring the scheduler
+
+The scheduler runs jobs on a cron schedule in the node's time zone. Each job has an id, a schedule and an action; a job that misses its slot while the node is down runs once when the node starts again.
+
+## Schedule syntax
+
+Schedules use five fields, separated by spaces: minute, hour, day of month, month and day of week.
+
+| Field | Values | Example |
+| --- | --- | --- |
+| minute | 0–59 | `*/15` |
+| hour | 0–23 | `9-18` |
+| day of month | 1–31 | `1,15` |
+| month | 1–12 | `*` |
+| day of week | 0–6 (Sunday is 0) | `1-5` |
+
+## An example
+
+This job fetches the exchange rates every hour, on weekdays only:
+
+```yaml
+jobs:
+  - id: rates
+    schedule: "0 * * * 1-5"
+    action: fetch-rates
+```
+
+Save the file and reload the node with `ganglion reload`. The new job appears in `ganglion jobs`.
+
+### Notes
+
+1.  Times are read in the node's zone, set by `GANGLION_TZ`.
+2.  A wall time skipped in spring runs at the jump; one repeated in autumn runs once.
+3.  See [Storage](https://example.org/storage) for where job state is kept.
+
+**Warning:** a job that runs longer than its period is not started twice.

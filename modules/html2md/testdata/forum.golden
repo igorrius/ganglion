@@ -1,0 +1,25 @@
+Inverter shuts down at 40% battery - Solar Owners Forum
+
+# Inverter shuts down at 40% battery
+
+volt\_ua 1 Nov 2026, 21:14
+
+My hybrid inverter switches the house to the grid when the battery reaches 40%, even though I set the cut-off to 20% in the app. The grid was down last night, so we lost power for two hours, with half the battery left.
+
+Firmware is 2.31, battery is a 10 kWh LiFePO4 pack. Has anyone seen this?
+
+kateryna\_s 1 Nov 2026, 22:03
+
+> I set the cut-off to 20% in the app
+
+There are two settings, and the app only shows one of them. The "battery low" value in the app is for grid-tied mode; off-grid uses a separate shutdown value, which on 2.31 defaults to 40%. You have to change it on the inverter's own screen, under Battery → Shutdown.
+
+volt\_ua 2 Nov 2026, 08:40
+
+That was it, thank you! I set Shutdown to 15% and Restart to 25%. Steps, for anyone else:
+
+1.  Hold the Enter button for three seconds.
+2.  Go to Battery, then Shutdown.
+3.  Set the value and press Enter again.
+
+Marking this as solved.

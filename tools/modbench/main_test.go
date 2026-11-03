@@ -92,6 +92,24 @@ func TestBenchDeyeModuleEndToEnd(t *testing.T) {
 	}
 }
 
+func TestBenchToolModuleWithASavedPage(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := run(context.Background(), []string{
+		"-wasm", "../../modules/html2md/html2md.wasm", "-manifest", "../../modules/html2md/html2md.yaml",
+		"-html", "../../modules/html2md/testdata/table.html", "-n", "3",
+	}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, stderr.String())
+	}
+	var r report
+	if err := json.Unmarshal(stdout.Bytes(), &r); err != nil {
+		t.Fatalf("report %s: %v", stdout.String(), err)
+	}
+	if r.Calls != 3 || r.Failures != 0 || !strings.Contains(r.LastResult, "US Dollar") {
+		t.Fatalf("report = %+v", r)
+	}
+}
+
 func get(t *testing.T, url string) string {
 	t.Helper()
 	resp, err := http.Get(url)

@@ -4,7 +4,7 @@ Start here when coming back to the project.
 
 ## Where we are
 
-- **Phase:** P0 · Recon is complete; P1 · All-in-one is next
+- **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
@@ -70,14 +70,57 @@ Start here when coming back to the project.
       the root, development tools in `tools/`
       ([ADR-0029](adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md));
     - 34 MB on disk, 35 MB RSS after 1,000 agent turns.
-- **Next:** M3b — memory, tools and policies, skills, and the 3.8
-  acceptance under the crash harness.
-  - Scope stays one operator, one agent, one bot (spec 14).
-  - Carried into M3b: a first-run "introduction" conversation that
-    writes the persona ([ADR-0024](adr/0024-persona-as-workspace-files.md));
-    the current time in the last user message (the model
-    does not know the date); tools for the claude CLI through MCP
-    config; the depth limit (R-AGT-4) and tool placement (R-RTR-3).
+- **Done:** M3b, the agent works with the world
+  ([plan](plans/p1-m3b-agent-world.md)), merged 2026-11-03. **M3b: acceptance scripted
+  (2026-11-03); the owner's first live run on the test bot (2026-11-03)
+  found seven issues, all fixed (rulings R38–R46): no second question
+  for a call already waiting, "Open this page?" for `web.fetch`, a toast
+  and a status line on every press before its action runs, task runs
+  told their answer is delivered, button actions noted in the history,
+  command hints in English, Russian and Ukrainian; JS-rendered pages and
+  the bot's language went to "Not now"; a `/tasks` command lists the
+  jobs. The owner merged it and checks these mechanics in detail at the
+  start of the next session.**
+  `make accept` runs
+  the acceptance (rates, memory, injection, expiry) against the real
+  core with real models and the real web, the fake Bot API playing the
+  owner, once with Haiku through the claude CLI and once with DeepSeek
+  V4.1 Flash on OpenRouter; both pass. The owner repeats it by hand on
+  the test bot with `make live-agent`. Measured (`make memory`): the
+  binary is 41.9 MB; the node idles at 32 MB RSS and is at 39 MB (peak
+  40 MB) after 1,000 turns that each call a tool; one hostile 1 MiB
+  page through `web.fetch` and `html2md` peaks the node at 99 MB,
+  under the 128 MB budget. The rest of M3 is split in two by
+  the [M3b and M3c design](plans/p1-m3b-m3c-design.md), recorded in the
+  [phase plan](plans/p1-all-in-one.md#m3--the-agent-spec-7274-76-77) and
+  the [spec](spec.md#102-p1--all-in-one--scope-and-acceptance):
+  - **M3b:**
+    - tools under policies and a security baseline
+      ([ADR-0031](adr/0031-agent-security-baseline.md), Proposed;
+      [research](research/2026-11-02-agent-security-baseline.md));
+    - confirmations and quick actions on buttons;
+    - the scheduler with reminders and scheduled agent tasks, moved up
+      from M4;
+    - memory with a clean-context check
+      ([ADR-0033](adr/0033-memory-in-the-workspace-git-with-the-git-binary.md),
+      [ADR-0034](adr/0034-clean-context-guard.md), Proposed);
+    - reading the web (`web.fetch` with an `html2md` WASM module in
+      Rust, `web.search` through Brave or DuckDuckGo;
+      [ADR-0035](adr/0035-web-reading.md), Proposed);
+    - the tool-call journal;
+    - the same tools for the claude CLI through an MCP bridge on a
+      per-run Unix socket
+      ([ADR-0036](adr/0036-mcp-bridge-over-a-per-run-unix-socket.md),
+      [ADR-0037](adr/0037-own-minimal-mcp-server.md), Proposed);
+    - carried from M3a: the first-run introduction that writes the persona
+      ([ADR-0024](adr/0024-persona-as-workspace-files.md)), the current
+      time in the last user message, the depth limit (R-AGT-4) and tool
+      placement (R-RTR-3).
+  - **M3c, next:** module update and rollback, skills, attachments, logs
+    on disk, `ganglion mcp` for diagnosis from outside, and the 3.8
+    acceptance under the crash harness.
+  - Scope stays one operator, one agent, one bot (spec 14). Voice
+    messages and PDF generation went to "Not now".
   - Deferred minors from the reviews:
     - M2: record a send's outcome with `context.WithoutCancel` on
       shutdown; keep the seeded admin's name and plan admin removal; do
@@ -85,6 +128,25 @@ Start here when coming back to the project.
     - M3a: move to goldmark v2 (`github.com/yuin/goldmark/v2`), where
       upstream now lands some fixes first; remove or document `provider.Fallback`; clean up the claude
       work dir; name people, not ids, in limit alerts.
+    - M3b: prune the `pending_calls`, `pending_buttons` and `cron_runs`
+      tables; scope `cells.set` grants per cell (M4); a URL becomes
+      known from any speaker's message, not only the owner's;
+      `message.send` reaches a known conversation on the calling
+      transport only; one poison `unput` row stops the scheduler's tick
+      for every job; `EnsureAudit` takes the first admin at start, not
+      when the first admin changes; episodes are a substring scan of the
+      newest 500 sessions, not full-text search; the M4 policy override
+      against the tainted-memory rule; the html2md worst case peaks at
+      99 MB of the 128 MB budget; transcript indentation covers only the
+      line breaks it lists; `web.WithResolver` and `web.WithConnect` are
+      exported test seams; no automated depth check of htmd's own
+      html5ever 0.38 tree; the nightly audit runs inside one event,
+      under the core's turn timeout (batch the guard calls); nothing
+      locks the workspace to one node (removing a stale `index.lock`
+      assumes it); a crash can leave a quarantined copy's deletion
+      uncommitted; a Telegram display name can read like the owner's in
+      the speaker prefix; an approved page is capped like a tool result
+      while an auto-allowed one is not.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

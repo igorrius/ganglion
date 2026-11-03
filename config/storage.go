@@ -3,12 +3,18 @@ package config
 import (
 	"database/sql"
 	"log/slog"
+	"time"
 
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
+	"github.com/igorrius/ganglion/cells"
+	"github.com/igorrius/ganglion/cells/sqlstore"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/tool/journal"
+	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
 	"github.com/samber/do/v2"
 )
@@ -68,5 +74,40 @@ func Turns() do.Provider[*turns.Log] {
 func Archive() do.Provider[agent.SessionStore] {
 	return func(i do.Injector) (agent.SessionStore, error) {
 		return agent.NewArchive(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
+	}
+}
+
+// Cells provides the state cells over the database; confirmations are
+// request cells.
+func Cells() do.Provider[*cells.Service] {
+	return func(i do.Injector) (*cells.Service, error) {
+		store, err := sqlstore.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
+		if err != nil {
+			return nil, err
+		}
+		return cells.NewService(store), nil
+	}
+}
+
+// Pending provides the calls awaiting confirmation and their buttons.
+func Pending() do.Provider[*pending.Store] {
+	return func(i do.Injector) (*pending.Store, error) {
+		return pending.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*cells.Service](i),
+			time.Now, pending.DefaultTTL)
+	}
+}
+
+// Jobs provides the scheduled jobs and their runs.
+func Jobs() do.Provider[*schedule.Store] {
+	return func(i do.Injector) (*schedule.Store, error) {
+		return schedule.NewStore(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
+	}
+}
+
+// Journal provides the tool-call journal.
+func Journal() do.Provider[*journal.Journal] {
+	return func(i do.Injector) (*journal.Journal, error) {
+		return journal.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, time.Now, journal.DefaultRetain,
+			journal.WithLogger(do.MustInvoke[*slog.Logger](i)))
 	}
 }

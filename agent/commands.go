@@ -2,10 +2,14 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/igorrius/ganglion/internal/transcript"
+	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/transport"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -13,7 +17,62 @@ import (
 // the command word.
 type command func(ctx context.Context, t *turn, arg string) error
 
+// commandEntry is one row of the command table: the command word, what
+// answers it, and its description per language for the transport's
+// command hints; an alias has none and is not listed (rulings R43, R45).
+type commandEntry struct {
+	word string
+	run  command
+	hint map[transport.Lang]string
+}
+
+// commandPrefix starts a user-role note of a command that showed the
+// owner something the model should know of: "[command] ...".
+const commandPrefix = "[command] "
+
+// listTool is the tool /tasks runs: the list the model gets, with the
+// same messages and buttons (ruling R47).
+const listTool = "schedule.list"
+
+// commandTable is the agent's commands, in the order they are listed: the
+// one source of what the agent answers and of the hints people see.
+func (a *Agent) commandTable() []commandEntry {
+	return []commandEntry{
+		{"/new", a.newSession, map[transport.Lang]string{
+			transport.LangDefault: "Start a new conversation", transport.LangRussian: "Начать новый разговор",
+			transport.LangUkrainian: "Почати нову розмову"}},
+		{"/reset", a.newSession, nil},
+		{"/sessions", a.listSessions, map[transport.Lang]string{
+			transport.LangDefault: "List earlier conversations", transport.LangRussian: "Показать прошлые разговоры",
+			transport.LangUkrainian: "Показати попередні розмови"}},
+		{"/resume", a.resumeSession, map[transport.Lang]string{
+			transport.LangDefault:   "Go back to an earlier conversation: /resume <number>",
+			transport.LangRussian:   "Вернуться к прошлому разговору: /resume <номер>",
+			transport.LangUkrainian: "Повернутися до попередньої розмови: /resume <номер>"}},
+		{"/tasks", a.listTasks, map[transport.Lang]string{
+			transport.LangDefault: "Reminders and scheduled tasks", transport.LangRussian: "Напоминания и задачи по расписанию",
+			transport.LangUkrainian: "Нагадування та завдання за розкладом"}},
+	}
+}
+
+// Commands are the commands a transport lists for people, from the
+// command table: name without the slash and description per language.
+func (a *Agent) Commands() []transport.Command {
+	var out []transport.Command
+	for _, c := range a.commandTable() {
+		if c.hint != nil {
+			out = append(out, transport.Command{Name: strings.TrimPrefix(c.word, "/"), Description: c.hint})
+		}
+	}
+	return out
+}
+
 const (
+	replyNoTasks           = "No reminders or scheduled tasks."
+	replyTasksNotAvailable = "This command is not available to you."
+	// tasksNote starts the history's note that /tasks showed the list
+	// (ruling R47, in the form of ruling R42's notes).
+	tasksNote         = commandPrefix + "the owner listed the reminders and tasks with /tasks: "
 	replyNewSession   = "New session started."
 	replyNoSessions   = "No earlier sessions."
 	replyNoSuchResume = "No such session; see /sessions."
@@ -33,8 +92,13 @@ func parseCommand(text string) (string, string) {
 }
 
 // command runs the message's command from the table; other messages go
-// on to the model, unknown commands included.
+// on to the model, unknown commands included. A scheduled task's
+// instruction and a forward are never commands: the sender did not write
+// them as one.
 func (a *Agent) command(ctx context.Context, t *turn) (bool, error) {
+	if t.grant != nil || t.msg.Forwarded {
+		return false, nil
+	}
 	name, arg := parseCommand(t.msg.Text)
 	run, ok := a.commands[name]
 	if !ok {
@@ -73,9 +137,10 @@ func (a *Agent) listSessions(ctx context.Context, t *turn, _ string) error {
 	return nil
 }
 
-// resume brings back session number arg of /sessions, archiving the
-// current one.
-func (a *Agent) resume(ctx context.Context, t *turn, arg string) error {
+// resumeSession brings back session number arg of /sessions, archiving
+// the current one. Calls it was waiting for that are answered or expired
+// since are dropped from its pending list.
+func (a *Agent) resumeSession(ctx context.Context, t *turn, arg string) error {
 	list, err := a.d.Archive.List(ctx, t.event.Conv, sessionsShown, t.state.Session)
 	if err != nil {
 		return err
@@ -93,6 +158,9 @@ func (a *Agent) resume(ctx context.Context, t *turn, arg string) error {
 		if err := a.archive(ctx, t.event.Conv, t.state, "resume"); err != nil {
 			return err
 		}
+	}
+	if chosen.Pending, err = a.d.Pending.Waiting(ctx, chosen.Pending); err != nil {
+		return err
 	}
 	chosen.Last = t.now
 	t.state = chosen
@@ -113,4 +181,30 @@ func (a *Agent) formatSpan(s SessionInfo) string {
 		return start.Format("2 Jan 15:04") + "–" + end.Format("15:04")
 	}
 	return start.Format("2 Jan 15:04") + "–" + end.Format("2 Jan 15:04")
+}
+
+// listTasks shows the owner's reminders and tasks, one message each with
+// its Details, Delete and Run now buttons, without a model turn: it runs
+// schedule.list, the model's own tool, as the turn's first call through
+// the same chain (tracing, the journal, the policy), so there is one code
+// path (ruling R47). Only an admin gets it. The history notes what was
+// shown, so the next turn knows.
+func (a *Agent) listTasks(ctx context.Context, t *turn, _ string) error {
+	if err := a.setAdmin(ctx, t); err != nil {
+		return err
+	}
+	if _, ok := a.d.Tools.Lookup(listTool); !ok || !t.admin {
+		t.reply(replyTasksNotAvailable)
+		return nil
+	}
+	shown := len(t.out)
+	text, err := a.useTool(ctx, t, provider.ToolCall{Name: listTool, Args: json.RawMessage(`{}`)}, false)
+	if err != nil {
+		return fmt.Errorf("agent: /tasks: %w", err)
+	}
+	if len(t.out) == shown {
+		t.reply(replyNoTasks)
+	}
+	t.note(tasksNote + transcript.Cap(text))
+	return nil
 }

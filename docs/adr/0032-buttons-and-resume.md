@@ -1,0 +1,245 @@
+# ADR-0032: Answer confirmations with one-time buttons and resume the conversation with a new event
+
+- **Status:** Proposed
+- **Date:** 2026-11-03
+- **Deciders:** Igor Artasevych
+- **Spec:** [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-2, R-POL-3, R-POL-4), [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-1, R-DLV-6); design section 5.2 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md#52-confirmations-and-quick-actions-on-buttons)); [ADR-0014](0014-state-cells.md), [ADR-0017](0017-extension-points.md), [ADR-0020](0020-neutral-history-as-conversation-state.md), [ADR-0031](0031-agent-security-baseline.md)
+
+## Context
+
+The policy (ADR-0031) sends side effects, sends to other chats and
+unknown `web.fetch` addresses for the owner's confirmation. Until now the
+node had no way to ask: every such call failed (`policy.NoAsk`). The
+owner answers in Telegram, with a button under a question.
+
+Facts that shape the design:
+
+- **A turn cannot wait.** The turn timeout is minutes and holds a lease
+  on the conversation; the answer can take longer (`ttl` 15 minutes by
+  default, R-POL-2), and the press itself is an update that queues
+  behind the waiting turn (one turn at a time per conversation, R-AGT-1).
+- **Delivery is at least once.** A turn can run twice after a crash
+  (R-DLV-3); Telegram can deliver an update twice; a person can press
+  twice, or press both buttons. The call must run once, and its side
+  effects keep the call's key (R-DLV-6).
+- **History must stay valid** for OpenAI-compatible APIs (ADR-0020): a
+  `tool` message only after the assistant message with its call, and
+  every call answered before the next user message.
+- **Callback data is public.** Telegram's `callback_data` is at most 64
+  bytes and travels through the client; a modified client can send any
+  data for any message of a chat it is in.
+- **Abuse cases** of design 5.2:
+  1. a forged or replayed button runs a call with other arguments;
+  2. someone else in a group, or a stranger, presses the owner's button;
+  3. a press long after the question still runs the call;
+  4. a double press (or Approve then Deny) runs the call twice;
+  5. "Run now" on a task with side effects skips the confirmation.
+
+## Options
+
+### A. Fire-and-forget
+
+The press runs the stored call and edits the message ("done"); the model
+never hears of it. The turn that asked ends with "awaiting confirmation".
+
+### B. Resume as a new event
+
+The turn ends with the call parked and a placeholder result. The press
+(or the expiry) is a new event in the same conversation: it runs or
+declines the stored call and starts a model turn whose new message is
+the call's outcome, so the model continues ("here is the page you asked
+me to read").
+
+### C. Blocking
+
+The turn waits for the press inside the tool call, with the turn timeout
+raised to the confirmation `ttl`.
+
+## Comparison
+
+| Criterion | A. Fire-and-forget | B. Resume as a new event | C. Blocking |
+|---|---|---|---|
+| The model sees the result (a page it asked to read) | no | yes | yes |
+| Fits one turn per conversation | yes | yes: the press queues behind nothing | no: the press waits behind the turn that waits for it, unless presses bypass the queue |
+| Survives a restart while waiting | yes | yes: all state is in SQLite | no: the waiting turn is lost and reruns, asking again |
+| Holds a lease and a worker for minutes | no | no | yes, per question |
+| Delivery and idempotency | inbox key per update | inbox key per update, press marked once per event | a second path outside the inbox |
+| Effort | small | medium: a resume stage, a pending store, an expirer | small code, large consequences |
+
+## Decision
+
+**B, resume as a new event.** It is the only option where the model
+gets the outcome without holding a turn open, and it reuses the inbox,
+the turn loop and the outbox, so every delivery guarantee already built
+applies to the press.
+
+How it works:
+
+- The policy's confirm branch calls `Asker.Ask` (the `tool/pending`
+  store) and returns the question in `Result.Out`; the agent sends it
+  with the turn's replies (IdemKey `<call key>:confirm`) and keeps the
+  pending id in `State.Pending`. The call's tool message is the
+  placeholder "awaiting confirmation". `Ask` is idempotent by the call
+  key, so a rerun turn parks the same call. A call identical to one
+  that already waits in the conversation (the same person, tool and
+  canonical arguments, `tool.CanonicalArgs`; not past its expiry; not
+  the call itself) is not asked again (ruling R38): it gets the waiting
+  call's pending id, so the answer resumes the current session, and a
+  fixed "already waiting for the owner's confirmation" result; the
+  journal keeps it as `confirm`. Once the first is answered or expired,
+  the same call asks again.
+- `tool/pending` stores the call (its turn id and number, tool,
+  arguments, the redacted question), a request cell
+  `request.call.<id>` (ADR-0014; lower case, like every cell id) and two
+  buttons. A button id is 26
+  characters of Crockford base32 from 16 random bytes; callback data is
+  `c:<id>`.
+- The Telegram transport asks for `callback_query` updates and turns a
+  press of `c:<id>` into an event `decision` with the update's key
+  `telegram:<bot>:<update_id>` and the callback query's id (`query`). The
+  access list drops a stranger's press like a stranger's message, with
+  `transport.ErrDropped`. The transport answers at once, without text
+  (`answerCallbackQuery`), only a press that becomes no event or whose
+  event is dropped; the handler answers the others, with a toast.
+- **Feedback on a press** (ruling R40). The live run showed that a press
+  had no visible effect until its action ended, and the buttons stayed
+  pressable meanwhile. A valid press is acknowledged before its action
+  runs: the agent stores in the outbox, at once and outside the turn's
+  final transaction (`Enqueue`), a toast ("Approved", "Declined",
+  "Accepted"; an `Outgoing` with `Ack`, the press's id) and, for a
+  question, an edit that replaces its buttons with a status line
+  ("⏳ Approved, running…"). The outbox sender is woken by the store and
+  delivers them while the action runs; the turn's own messages follow in
+  the same conversation's order: the call's messages, then the final
+  edit with the outcome ("Approved. Done.", "Approved, but it failed.",
+  "Declined."), then the model's answer. The keys are the press's
+  (`:ack`, `:status`, `:edit`), so a rerun of the press stores nothing
+  twice. A press that does not take keeps its handling and gets a toast
+  saying why ("This button is not yours.", "Expired.", "Already
+  handled.", "This button no longer works.", "Not allowed."). Two other
+  ways were weighed: the transport answering every press itself cannot
+  say whether the press took, which only the pending store knows; and
+  the agent calling the transport directly for the early edit would
+  bypass the outbox's order and retries, so the status line could land
+  after the final edit. Storing the early messages in the outbox keeps
+  one delivery path and its order per conversation.
+- The agent's first stage handles `decision`: `Press` marks the button
+  used in one immediate transaction, checks the presser and the chat,
+  moves the call from waiting to approved or denied and spends the other
+  button. Approve runs the stored call through the journal and the
+  registry, not the policy (it was decided), with the original key;
+  Deny records "the owner declined". The whole outcome (the result,
+  whether it is outside content, the messages the call produced) is
+  stored, so a rerun of the turn gives back the same; the question
+  edited ("Approved." / "Declined."), and the model runs on a new
+  user-role note `[confirmation] <tool>: <result>` (outside content
+  wrapped as data and the session tainted). No tool message appears
+  without its call.
+- A node component, the expirer, marks unanswered calls expired every
+  30 s and puts an event `tool.result` for each (key
+  `pending:<id>:expired`); the conversation resumes with "the owner did
+  not answer in time", if the call is still in its session, in a turn
+  without tools.
+- Quick-action buttons (Delete, Details; later tasks) are stored the same
+  way with an action name; a press runs the registered action, edits the
+  message and starts no model turn. An action that changed something
+  (Delete, an immediate Run now) adds a user-role note
+  `[button] <what the owner did>` to the conversation's history, capped
+  like the confirmation note, so the next turn knows (ruling R42);
+  Details changes nothing and adds none. The presser must still be an admin
+  at press time. A refused press on one removes only
+  its buttons (an `Edit` without text, `editMessageReplyMarkup`), so the
+  list entry keeps its text.
+
+The abuse cases:
+
+1. **Forged or replayed button:** the data is only a random one-time id;
+   the tool and its arguments are in SQLite, fixed when the button was
+   made. An unknown id does nothing.
+2. **Someone else presses:** the access list drops strangers (the
+   transport answers the press without text); `Press` accepts only the
+   principal the button was made for, in the chat it was sent to
+   (`ErrNotYours`: nothing happens, nothing is edited, the presser sees
+   "This button is not yours.").
+3. **Late press:** a button expires with its question; a late press
+   edits the message to "Expired.", shows the toast "Expired." and runs
+   nothing.
+4. **Double press:** the inbox drops a redelivered update by its key;
+   the first press replaces the buttons with a status line before its
+   call runs, so a second press is rare; two different updates race on
+   `Press`, which lets one through and, with the toast "Already handled.",
+   edits the question for the other to how it really ended ("Approved.
+   Done." or "Declined."; a quick-action button tapped twice leaves the first
+   tap's edit, and its new buttons, alone); a rerun of the same event gets
+   the same press back and finds the outcome stored, so the call runs
+   once. A crash between running the call and storing its outcome reruns
+   it with the same key, which the tool's own idempotency covers
+   (R-DLV-6).
+5. **"Run now" on a task with side effects:** the quick action asks
+   through the pending store (`Ask`, the button as the call's turn) and
+   shows the question in place of the job's message; the approved call
+   (`schedule.run_now`) runs like any confirmed call (task 6).
+
+## Consequences
+
+- The model continues after a confirmation; a page it asked to fetch is
+  read in the next turn, with the session tainted.
+- Every press and expiry is an inbox event: ordered within its
+  conversation, retried, given up with an apology like any message.
+- The question message can only be edited from a press, which carries
+  its message id; the expiry does not know it, so an expired question
+  keeps its buttons until someone presses one ("Expired.").
+- A press is honoured even after `/new`: the call runs and its question
+  is edited. The model hears of the outcome only while the call is in
+  the session's pending list, so an answer after `/new`, or to a
+  question a quick action asked, starts no model turn; an expiry of a
+  call whose session moved on is recorded the same way.
+- Pending ids that no longer wait are dropped from the state at the
+  start of every message turn and on `/resume`.
+- An `Ask` that half-fails (the call stored, its request cell not) fails
+  the call: the model gets the error and no question is sent. The stored
+  call waits unseen and expires silently, leaving a journal entry.
+- The confirmed call's arguments sit in SQLite until the call is done,
+  like the history that holds them anyway; the question shown is
+  redacted. What the owner approves is what runs (ruling R34):
+  `message.send`, `memory.write`, `memory.forget`, `cells.set`,
+  `persona.propose` and `web.fetch` word their own question and show the
+  whole action (the recipient by name and the full text; the title and
+  body; the slug and the fact; the cell and the value; "Open this
+  page?" and the normalised address that is fetched, ruling R39), and
+  refuse, with a fixed
+  error and no question, an action longer than a question shows (3,000
+  characters; a message's text at most 2,500) or text the redaction
+  would change. Another tool's question shows its arguments cut at 300
+  characters.
+- A resumed turn passes the daily limit as a message does (ruling R33):
+  over it the approved call still runs (the owner decided it), its
+  outcome joins the history, and no model turn follows. An expiry's
+  turn is offered no tools: the model only tells the owner the request
+  expired, so a tainted turn cannot park again every 15 minutes without
+  the owner. A call parked in a resumed turn stores its depth, one more
+  than the call that turn resumed, and the policy's depth limit
+  (R-AGT-4, 3 by default) ends a chain of approvals that keeps asking.
+
+- The early toast and status line are stored outside the turn's final
+  transaction: a turn that fails after them leaves the status line until
+  its retry or its give-up apology. A press that waits behind a long turn
+  of its conversation (one turn at a time) is acknowledged only when its
+  own turn starts; Telegram refuses a toast for a press that old, which
+  the transport counts as done, and the client's spinner stops by
+  itself.
+- A node without the agent (the echo handler) answers no decision
+  event, so a press of a button left from an earlier run with the agent
+  is not acknowledged: the event is stored and skipped, and the client's
+  spinner stops by itself after a few seconds. The echo bot sends no
+  buttons, so only such leftovers can be pressed; answering them in the
+  echo handler is not worth the code.
+
+## Revisit when
+
+- a transport without editable messages or buttons needs confirmations
+  (a text reply "yes <code>" instead);
+- the edge executes actions (P2): the pending store and the press move
+  to the node that acts (R-POL-1);
+- a call needs a confirmation by someone other than the person who asked
+  (family members, M7).

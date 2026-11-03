@@ -35,10 +35,15 @@ func (a *Agent) overLimit(ctx context.Context, now time.Time, principal, eventID
 }
 
 // GiveUp is the agent's core.GiveUp: an apology to the person and an
-// alert to the admins for a message that failed every attempt.
+// alert to the admins for a message that failed every attempt. A
+// scheduled job has nobody to apologise to in its conversation: only the
+// admins hear of it.
 func (a *Agent) GiveUp(e event.Event, attempts int) []event.Outgoing {
-	out := []event.Outgoing{{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv,
-		Text: "Sorry, something went wrong with that message."}}
+	var out []event.Outgoing
+	if e.Kind != event.KindSchedule {
+		out = append(out, event.Outgoing{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv,
+			Text: replyGiveUp})
+	}
 	alerts, err := a.d.Alerts.Messages(context.Background(), "alert:give-up:"+e.ID,
 		"Gave up on event "+e.ID+" in "+e.Conv+" after "+strconv.Itoa(attempts)+" attempts.")
 	if err != nil {

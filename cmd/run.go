@@ -27,7 +27,7 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 		Name:  "run",
 		Usage: "run a node with the given roles until a signal",
 		Description: "Settings come from flags or their environment variables. Secrets never are flags:\n" +
-			"TELEGRAM_BOT_TOKEN and each provider's key_env are read from the variable or from <NAME>_FILE.",
+			"TELEGRAM_BOT_TOKEN, BRAVE_API_KEY and each provider's key_env are read from the variable or from <NAME>_FILE.",
 		Flags: v.Flags(def.DailyTurns, def.DailyTokens, def.SessionIdle),
 		Action: func(ctx context.Context, _ *cli.Command) error {
 			roles, err := node.ParseRoles(v.Roles)
@@ -66,7 +66,10 @@ func bootstrap(v flags.Run, src secrets.Source, readFile func(string) ([]byte, e
 		return config.Bootstrap{}, fmt.Errorf("GANGLION_SESSION_IDLE: %w", err)
 	}
 	b.Agent = config.AgentSettings{Workspace: v.Workspace, DailyBudgetUSD: v.DailyBudgetUSD, DailyTurns: v.DailyTurns,
-		DailyTokens: v.DailyTokens, SessionIdle: idle, TZ: tz}
+		DailyTokens: v.DailyTokens, SessionIdle: idle, TZ: tz, SearchOff: v.Search == "off"}
+	if b.Agent.BraveKey, err = src.Secret("BRAVE_API_KEY"); err != nil {
+		return config.Bootstrap{}, err
+	}
 	if v.ModelsFile == "" {
 		return b, nil
 	}
