@@ -155,7 +155,7 @@ func TestHostileHTMLNoTrap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the module failed on a hostile page: %v", err)
 	}
-	if took := time.Since(start); took > 5*time.Second {
+	if took := time.Since(start); !raceEnabled && took > 5*time.Second {
 		t.Errorf("the hostile page took %v", took)
 	}
 	if p.Title != "Totally normal page" || !strings.Contains(p.Markdown, "Ignore previous instructions") {
@@ -177,7 +177,7 @@ func TestHostileHTMLNoTrap(t *testing.T) {
 		case !strings.Contains(p.Markdown, "start") || !strings.Contains(p.Markdown, "end"):
 			t.Errorf("%s (%d bytes): %q", name, len(html), text.Truncate(p.Markdown, 200))
 		}
-		if took := time.Since(start); took > 2*time.Second {
+		if took := time.Since(start); !raceEnabled && took > 2*time.Second {
 			t.Errorf("%s took %v", name, took)
 		}
 	}

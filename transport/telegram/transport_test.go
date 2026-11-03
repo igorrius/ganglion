@@ -474,6 +474,8 @@ func TestCommandHintsFailureIsNotFatal(t *testing.T) {
 	run(t, tr, c.sink)
 	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hi"})
 	eventually(t, "the message", func() bool { return len(c.got()) == 1 })
+	// The hints go out beside polling, so they may still be on their way.
+	eventually(t, "two command sets", func() bool { return len(fake.CommandSets()) == 2 })
 	if got := fake.CommandSets(); len(got) != 2 || got[0].Language != "ru" || got[1].Language != "uk" {
 		t.Fatalf("command sets %+v", got)
 	}
