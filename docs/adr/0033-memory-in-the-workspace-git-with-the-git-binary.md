@@ -114,6 +114,13 @@ The rules, in package `gitrepo`:
   container image needs `git`.
 - Writes are serialised by a lock in `gitrepo` and in `memory`; the guard
   runs inside the memory lock, so a slow check delays a second write.
+- A git that is killed half-way leaves `.git/index.lock`, and every later
+  write fails. So git runs apart from the turn's cancellation, each
+  command under a 10-second timeout; a git killed at that timeout has its
+  lock removed, and `Open` removes a stale one left before the start
+  (this process is the only writer). A crash between writing a fact's
+  file and its commit is repaired by the rerun of the same write, which
+  commits the file it finds uncommitted (ruling R37).
 - The persona files sit in the same repository; committing persona
   changes is task 9 (`persona.propose`).
 

@@ -194,3 +194,50 @@ func BenchmarkCommit(b *testing.B) {
 		}
 	}
 }
+
+// Ruling R37: a cancel does not kill git half-way (which would leave
+// .git/index.lock and break every later write): the commit finishes, and
+// the next one works.
+// The turn's context is cancelled here before the commit starts, the
+// worst case of a cancel at any step of it.
+func TestCancelDuringACommitLeavesTheRepositoryUsable(t *testing.T) {
+	r := open(t)
+	again := r
+	write(t, again, "memory/a.md", "one")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := again.Commit(ctx, []string{"memory/a.md"}, "one"); err != nil {
+		t.Fatalf("a cancelled commit: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(r.Dir(), ".git", "index.lock")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("index.lock left behind: %v", err)
+	}
+	write(t, again, "memory/b.md", "two")
+	if _, err := again.Commit(context.Background(), []string{"memory/b.md"}, "two"); err != nil {
+		t.Fatalf("the next commit: %v", err)
+	}
+	if got := gitOut(t, r.Dir(), "rev-list", "--count", "HEAD"); got != "2" {
+		t.Fatalf("%s commits, want 2", got)
+	}
+}
+
+// Ruling R37: a stale index.lock (a git killed before this start) is
+// removed at Open, so memory works again.
+func TestOpenRemovesAStaleIndexLock(t *testing.T) {
+	r := open(t)
+	lock := filepath.Join(r.Dir(), ".git", "index.lock")
+	if err := os.WriteFile(lock, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	again, err := gitrepo.Open(context.Background(), r.Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(lock); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the stale lock is still there: %v", err)
+	}
+	write(t, again, "memory/a.md", "one")
+	if _, err := again.Commit(context.Background(), []string{"memory/a.md"}, "one"); err != nil {
+		t.Fatal(err)
+	}
+}

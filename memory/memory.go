@@ -134,8 +134,9 @@ func New(repo *gitrepo.Repo, g Guard, now func() time.Time, opts ...Option) *Mem
 // memory/quarantine/ otherwise, where it is not indexed and not read
 // (R-POL-7). The slug comes from the title; the same title (in any case)
 // updates its entry. The same write again (a rerun turn) changes
-// nothing. Created is set here. An error from the guard (the turn is
-// ending) writes nothing.
+// nothing, unless its file was written and not committed (a crash
+// between the two): then it is committed (ruling R37). Created is set
+// here. An error from the guard (the turn is ending) writes nothing.
 func (m *Memory) Write(ctx context.Context, e Entry) (Entry, error) {
 	e.Title, e.Body = oneLine(e.Title), strings.TrimSpace(e.Body)
 	if err := validate(e); err != nil {
@@ -150,7 +151,7 @@ func (m *Memory) Write(ctx context.Context, e Entry) (Entry, error) {
 	slug, same := allocate(e.Title, all)
 	for _, prev := range same {
 		if prev.Body == e.Body && prev.SourceTurn == e.SourceTurn {
-			return prev, nil
+			return prev, m.commitLeftover(ctx, prev)
 		}
 	}
 	v, err := m.guard.CheckFact(ctx, e.Title+"\n\n"+e.Body)
@@ -204,15 +205,33 @@ func (m *Memory) store(ctx context.Context, e Entry) error {
 		}
 		paths = append(paths, removed...)
 	}
+	if _, err := m.repo.Commit(ctx, paths, commitMessage(e)); err != nil {
+		return fmt.Errorf("memory: commit %s: %w", e.Slug, err)
+	}
+	return nil
+}
+
+// commitLeftover commits the file of e, which is on disk already, when a
+// crash left it uncommitted, with the message store would have used.
+func (m *Memory) commitLeftover(ctx context.Context, e Entry) error {
+	rel := pathOf(e.Slug, e.Checked)
+	dirty, err := m.repo.Dirty(ctx, rel)
+	if err != nil || !dirty {
+		return err
+	}
+	if _, err := m.repo.Commit(ctx, []string{rel}, commitMessage(e)); err != nil {
+		return fmt.Errorf("memory: commit %s: %w", e.Slug, err)
+	}
+	return nil
+}
+
+// commitMessage is the message of the commit that stores e.
+func commitMessage(e Entry) string {
 	verb := "remember"
 	if e.Checked == CheckQuarantined {
 		verb = "quarantine"
 	}
-	msg := fmt.Sprintf("memory: %s %s\n\nTurn: %s\nTainted: %t\n", verb, e.Slug, e.SourceTurn, e.Tainted)
-	if _, err := m.repo.Commit(ctx, paths, msg); err != nil {
-		return fmt.Errorf("memory: commit %s: %w", e.Slug, err)
-	}
-	return nil
+	return fmt.Sprintf("memory: %s %s\n\nTurn: %s\nTainted: %t\n", verb, e.Slug, e.SourceTurn, e.Tainted)
 }
 
 // writeFile writes data to rel in the repository, creating its

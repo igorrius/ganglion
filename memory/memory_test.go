@@ -464,3 +464,26 @@ func TestUnreadableEntryLogsNoText(t *testing.T) {
 		t.Fatalf("log %s", logs)
 	}
 }
+
+// Ruling R37: a crash between writing a fact's file and its commit leaves
+// the file uncommitted; the rerun of the same write (same body, same
+// turn) commits it instead of returning early.
+func TestRerunCommitsADirtyIdenticalFile(t *testing.T) {
+	e := newEnv(t, okGuard())
+	e.write(t, "Boiler", "The boiler is in the basement.")
+	e.write(t, "Car", "The owner drives a blue car.")
+	git(t, e.repo.Dir(), "reset", "--quiet", "--mixed", "HEAD~1") // the crash: car.md written, not committed
+	if st := git(t, e.repo.Dir(), "status", "--porcelain"); st != "?? memory/car.md" {
+		t.Fatalf("status %q", st)
+	}
+	e.write(t, "Car", "The owner drives a blue car.")
+	if st := git(t, e.repo.Dir(), "status", "--porcelain"); st != "" {
+		t.Fatalf("still dirty after the rerun: %q", st)
+	}
+	if n := git(t, e.repo.Dir(), "rev-list", "--count", "HEAD"); n != "2" {
+		t.Fatalf("%s commits, want 2", n)
+	}
+	if msg := git(t, e.repo.Dir(), "log", "-1", "--format=%s"); msg != "memory: remember car" {
+		t.Fatalf("commit %q", msg)
+	}
+}

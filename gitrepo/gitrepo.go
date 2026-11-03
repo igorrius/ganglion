@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Errors; callers decide on them with errors.Is.
@@ -35,6 +36,14 @@ const (
 	authorEmail = "ganglion@localhost"
 )
 
+// gitTimeout bounds one git command. Git runs apart from the caller's
+// context (ruling R37): a cancel would SIGKILL it half-way and leave
+// .git/index.lock behind, which breaks every later write.
+const gitTimeout = 10 * time.Second
+
+// indexLock is git's lock on the index, relative to the repository.
+const indexLock = ".git/index.lock"
+
 // commitPattern is a full or abbreviated commit id.
 var commitPattern = regexp.MustCompile(`^[0-9a-f]{4,64}$`)
 
@@ -48,8 +57,10 @@ type Repo struct {
 
 // Open returns the repository in dir, creating the directory and running
 // git init when it is not a repository yet. Only dir itself counts: a
-// repository around it (a checkout the workspace sits in) does not.
-// ErrNoGit means the git binary is missing.
+// repository around it (a checkout the workspace sits in) does not. A
+// stale .git/index.lock, left by a git killed before this start, is
+// removed: this process is the repository's only writer and has not
+// started one yet (ruling R37). ErrNoGit means the git binary is missing.
 func Open(ctx context.Context, dir string) (*Repo, error) {
 	if strings.TrimSpace(dir) == "" {
 		return nil, errors.New("gitrepo: open: no directory given")
@@ -73,7 +84,19 @@ func Open(ctx context.Context, dir string) (*Repo, error) {
 	} else if err != nil {
 		return nil, fmt.Errorf("gitrepo: open %s: %w", abs, err)
 	}
+	if err := r.unlock(); err != nil {
+		return nil, err
+	}
 	return r, nil
+}
+
+// unlock removes .git/index.lock if it is there. Only a git this process
+// started holds it, so the caller makes sure none runs.
+func (r *Repo) unlock() error {
+	if err := os.Remove(filepath.Join(r.dir, filepath.FromSlash(indexLock))); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("gitrepo: remove a stale index lock: %w", err)
+	}
+	return nil
 }
 
 // Dir is the repository's absolute directory.
@@ -135,6 +158,21 @@ func (r *Repo) Commit(ctx context.Context, paths []string, msg string) (string, 
 	return r.head(ctx)
 }
 
+// Dirty reports whether rel differs from the last commit: changed,
+// added, removed or not tracked yet.
+func (r *Repo) Dirty(ctx context.Context, rel string) (bool, error) {
+	if err := checkPath(rel); err != nil {
+		return false, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out, err := r.run(ctx, "status", "--porcelain", "--untracked-files=all", "--", rel)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
 // staged reports whether paths hold a change for the next commit. They
 // were just added, so any status line is a staged change; this works in
 // a repository without commits too.
@@ -171,8 +209,13 @@ func (r *Repo) Revert(ctx context.Context, commit string) (string, error) {
 
 // run runs git in the repository with the fixed identity and without the
 // user's, the system's or the environment's git settings, and returns its
-// output.
+// output. It runs apart from ctx's cancellation, under gitTimeout: a
+// started command finishes (ruling R37). A git killed at the timeout
+// leaves no lock behind: the callers that write hold r.mu, so no other
+// git of this process runs.
 func (r *Repo) run(ctx context.Context, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gitTimeout)
+	defer cancel()
 	full := append([]string{
 		"-c", "user.name=" + authorName, "-c", "user.email=" + authorEmail,
 		"-c", "commit.gpgsign=false", "-c", "core.hooksPath=" + os.DevNull,
@@ -183,6 +226,9 @@ func (r *Repo) run(ctx context.Context, args ...string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			err = errors.Join(err, ctx.Err(), r.unlock())
+		}
 		return "", fmt.Errorf("gitrepo: git %s: %w: %s", args[0], err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
