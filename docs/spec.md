@@ -1158,6 +1158,21 @@ Reviewed at each gate.
   - per-group behaviour and limits in the node config.
 - Voice messages: understanding them, later, as a separate module or
   model (owner, 2026-11-02).
+- Hooks and pipelines: an internal n8n (owner, 2026-11-03).
+  - **Hooks** are module triggers on the node's own events, beside `cron`
+    and `tool` (7.10's module ABI). Examples: before or after a tool call,
+    after a turn, a file arrived.
+  - **Sandbox.** A hook is a WASM module with the rights its manifest
+    grants, never a shell script. A shell script would walk around the
+    policy (R-POL).
+  - **A hook that can refuse a call** is part of the security policy, so
+    it needs its own ADR.
+  - **Pipelines** are chains of modules and tools, where one step's output
+    is the next step's input. The flows we put off: "complex task flows"
+    (owner, 2026-11-03).
+  - **A visual editor** connects the blocks on a canvas. It is a web UI,
+    which 0.x excludes (above), so it comes after the public release.
+  - Natural places: M4 for module triggers, P3 for flows the model writes.
 - Reading pages that build their content with JavaScript: `web.fetch`
   reads the HTML the server sends, so a page rendered in the browser
   comes back empty. It needs a headless browser, too heavy for the core:
