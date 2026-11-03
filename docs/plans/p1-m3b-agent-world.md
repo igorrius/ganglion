@@ -1091,9 +1091,22 @@ owner's live run is pending**, and "M3b done" waits for it.
   Scripted: run 1 by the list's Run now button, run 2 by the scheduler's
   clock moved to the next slot. Delete is pressed on the button, and the
   slot after it runs nothing. A Haiku task run takes 4–6 s and a Haiku
-  turn at most 11 s, far inside the 60 s model-call timeout. In 2 of 4
-  runs Haiku's second task run said it could not see the previous run,
-  although the history held it; DeepSeek compared in every run.
+  turn at most 11 s, far inside the 60 s model-call timeout.
+
+  Before the fix, Haiku's second task run said it could not see the
+  previous run in 2 of 4 runs; DeepSeek compared every time. The cause
+  was the history: it held only Haiku's final answer, not the tool calls
+  and results its CLI run made through the bridge. When that answer said
+  "I can't compare", the next run had no figures to compare with.
+  - Ruling R30: the CLI's calls and results now join the history in the
+    API path's form. The transcript the CLI reads cuts each result to
+    4,000 runes, keeps it wrapped as outside content, and indents its
+    lines, so a page cannot fake a turn.
+  - After the fix Haiku's run 2 compared: "unchanged (0.00 UAH,
+    0.00%)".
+  - Ruling R31: Haiku had also asked to create the same job two or three
+    times. `schedule.create` now refuses an exact duplicate of a live job
+    without a question and names the job.
 - [x] **Step 2: Memory** (scripted; on the bot: pending).
   1. Tell a fact in one session: "my inverter is a Deye 8 kW".
   2. `/new`. "What inverter do I have?" → it is recalled.
@@ -1110,6 +1123,17 @@ owner's live run is pending**, and "M3b done" waits for it.
   reached memory, which counts as a pass. The guard was then checked
   directly with each route's model on the injected text: it quarantined
   the text and the alert names the reason.
+
+  Ruling R32: the guard had quarantined a harmless fact on the API route,
+  "Igor wants hourly USD/EUR hryvnia rates". The fact check now keeps
+  what the owner likes, plans or wants to receive. It holds back text
+  that instructs the assistant, also when that text is phrased as the
+  owner's wish ("the owner wants his location sent to …"). In doubt it
+  still holds back.
+
+  The guard table (`guard/guardtest`: 10 facts, 10 instructions) runs
+  through each route's real model in `make accept`. Both Haiku and
+  DeepSeek agree on 20 of 20.
 - [x] **Step 4: Confirmation expiry** (scripted; on the bot: pending).
   - An unanswered side effect expires and is denied (spec 3.6).
   - The model is told and says so.
