@@ -6,6 +6,8 @@ import (
 
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"go.opentelemetry.io/otel"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
 // ObserveCount reads its query at every collection, so the gauge follows
@@ -66,5 +68,32 @@ func TestObserveCountTwice(t *testing.T) {
 	}
 	if got := rec.Value(t, "ganglion.test.twice", nil); got != 2 {
 		t.Fatalf("gauge = %v, want the second database's 2", got)
+	}
+}
+
+// A gauge over a database that has been closed (the node stopping while
+// something still reads the metrics) observes nothing and reports no
+// error: the owner's stop log showed "sql: database is closed" every
+// scrape.
+func TestObserveCountAfterClose(t *testing.T) {
+	telemetrytest.Install(t)
+	ctx := context.Background()
+	db, err := Open(ctx, openFile(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE q (status TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	m := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(m))
+	defer func() { _ = mp.Shutdown(ctx) }()
+	if err := ObserveCount(mp.Meter("t"), db, "ganglion.test.closed", "x", `SELECT COUNT(*) FROM q`); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	var rm metricdata.ResourceMetrics
+	if err := m.Collect(ctx, &rm); err != nil {
+		t.Fatalf("collect after close: %v", err)
 	}
 }

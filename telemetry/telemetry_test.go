@@ -3,11 +3,13 @@ package telemetry
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/igorrius/ganglion/internal/buckets"
 	"go.opentelemetry.io/otel"
@@ -174,5 +176,45 @@ func TestRendererWithMetricsAddrOff(t *testing.T) {
 	}
 	if secs, err := tel.Renderer().Sections(context.Background()); err != nil || len(secs) == 0 {
 		t.Fatalf("sections %v, %v", secs, err)
+	}
+}
+
+// An open dashboard tab (its event stream) does not hold the node's stop:
+// the dashboard is closed first, which ends the stream, so the server
+// shuts down at once and nothing reads the metrics after it (the owner's
+// stop log, 2026-11-03).
+func TestShutdownWithAnOpenDashboardIsQuick(t *testing.T) {
+	tel, err := Setup(context.Background(), Config{Addr: "127.0.0.1:0", Service: "s", Getenv: func(string) string { return "" }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest(http.MethodGet, "http://"+tel.Addr()+"/webmetrics/api/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("event stream: %v %v", resp, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	_ = tel.Shutdown(ctx)
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("Shutdown took %s with a dashboard tab open", d)
+	}
+}
+
+// OpenTelemetry's own errors go to the node's logger: redacted and on
+// disk, never raw to stderr.
+func TestOTelErrorsGoToTheLogger(t *testing.T) {
+	var buf bytes.Buffer
+	tel, err := Setup(context.Background(), Config{Addr: "off", Service: "s", Getenv: func(string) string { return "" },
+		Logger: slog.New(slog.NewTextHandler(&buf, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tel.Shutdown(context.Background()) }()
+	otel.Handle(errors.New("export failed"))
+	if !strings.Contains(buf.String(), "export failed") || !strings.Contains(buf.String(), "telemetry") {
+		t.Fatalf("log %q", buf.String())
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -39,6 +40,10 @@ type Config struct {
 	Version string // service.version
 	Commit  string // vcs.ref.head.revision; empty for a build without VCS stamps
 	Getenv  func(string) string
+	// Logger gets OpenTelemetry's own errors (an export, a failed gauge),
+	// which would otherwise go raw to stderr past the redaction and the
+	// log files; nil discards them.
+	Logger *slog.Logger
 }
 
 // Telemetry owns the providers and the HTTP server.
@@ -61,6 +66,7 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 	if cfg.Commit != "" {
 		attrs = append(attrs, attribute.String("vcs.ref.head.revision", cfg.Commit))
 	}
+	handleErrors(cfg.Logger)
 	res := resource.NewSchemaless(attrs...)
 	reg := prometheus.NewRegistry()
 	// A fresh registry has none of the default registry's collectors; the
@@ -153,6 +159,15 @@ func (r *Renderer) Sections(ctx context.Context) ([]Section, error) {
 	return out, err
 }
 
+// handleErrors sends OpenTelemetry's own errors to logger (nil discards
+// them) instead of the standard log on stderr.
+func handleErrors(logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) { logger.Warn("telemetry: opentelemetry error", "err", err) }))
+}
+
 // Addr is the address metrics are served on, or "" when they are off.
 func (t *Telemetry) Addr() string {
 	if t.ln == nil {
@@ -161,17 +176,19 @@ func (t *Telemetry) Addr() string {
 	return t.ln.Addr().String()
 }
 
-// Shutdown stops the server and flushes the providers.
+// Shutdown stops the dashboard first, which ends the event streams of
+// open dashboard tabs and its reading of the metrics, then the server,
+// and flushes the providers.
 func (t *Telemetry) Shutdown(ctx context.Context) error {
 	var errs []error
+	if t.dash != nil {
+		errs = append(errs, t.dash.Close())
+	}
 	if t.srv != nil {
 		errs = append(errs, t.srv.Shutdown(ctx))
 	}
 	if t.tp != nil {
 		errs = append(errs, t.tp.Shutdown(ctx))
-	}
-	if t.dash != nil {
-		errs = append(errs, t.dash.Close())
 	}
 	errs = append(errs, t.mp.Shutdown(ctx))
 	return errors.Join(errs...)

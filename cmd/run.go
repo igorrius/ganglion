@@ -159,7 +159,7 @@ func announce(logger *slog.Logger, b config.Bootstrap) {
 // startTelemetry serves metrics and returns the stop. Watching the node
 // must never stop it: a busy port runs the node without metrics.
 func startTelemetry(ctx context.Context, addr string, in buildinfo.Info, logger *slog.Logger) (_ *telemetry.Telemetry, stop func()) {
-	cfg := telemetry.Config{Addr: addr, Service: "ganglion", Version: in.Version, Commit: in.Commit}
+	cfg := telemetry.Config{Addr: addr, Service: "ganglion", Version: in.Version, Commit: in.Commit, Logger: logger}
 	tel, err := telemetry.Setup(ctx, cfg)
 	if err != nil {
 		logger.Warn("telemetry: metrics are off", "addr", addr, "err", err)
