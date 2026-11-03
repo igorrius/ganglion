@@ -20,6 +20,18 @@ jobs:
       contents: write # create the release
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # to check the tag is on master
+      - name: The tag is on master and names this module
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master || {
+            echo "::error::a module is released only from a commit on master"
+            exit 1
+          }
+          grep -qx 'name: html2md' modules/html2md/html2md.yaml || {
+            echo "::error::modules/html2md/html2md.yaml does not name html2md"
+            exit 1
+          }
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod

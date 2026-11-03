@@ -96,8 +96,17 @@ tells the owner why:
 7. Swap: new calls go to the new version at once, and the old one is shut
    down after its calls in flight end.
 
-At start the node loads the active version. A missing or corrupt file
-falls back to the embedded build, and the owner is alerted once.
+At start the node loads the active version, held to the same checks as
+an install: both files against their sums and the manifest against
+this core's ceiling (a new core may lower it). A version that fails
+falls back to the embedded build, recorded with its reason. A rollback
+is held to the same checks. Files no row keeps (a crash between the
+write and the commit) are swept at start.
+
+The reasons the owner and the model see are the store's own words. What
+the module, its manifest or the release channel wrote (an error message,
+a field name) goes only to the log, so a hostile release cannot plant
+text in a reply or the conversation history.
 
 ## Security
 

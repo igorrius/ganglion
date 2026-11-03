@@ -16,13 +16,29 @@ import (
 )
 
 // refusal is a check a candidate failed: the update keeps the active
-// version and says why.
+// version and says why. reason is the store's own words, shown to the
+// owner and kept in the row; detail may quote the module, its manifest
+// or the release channel, and only goes to the log, never to a reply or
+// the model (review of task 7).
 type refusal struct {
 	result UpdateResult
 	reason string
+	detail string
 }
 
 func (r *refusal) Error() string { return r.reason }
+
+// reasonOf is the words of a refusal, or a fixed text for anything else.
+func reasonOf(err error) string {
+	if r, ok := errors.AsType[*refusal](err); ok {
+		return r.reason
+	}
+	return "the check failed"
+}
+
+// updateTimeout bounds finding and downloading a release; the self-test
+// is bounded by the module's own timeout per sample.
+const updateTimeout = 60 * time.Second
 
 func refuse(format string, a ...any) error {
 	return &refusal{result: ResultRefused, reason: fmt.Sprintf(format, a...)}
@@ -51,6 +67,8 @@ func (s *Store) Update(ctx context.Context, module string, src Source) (Outcome,
 		o.Result, o.Reason, o.To = r.result, r.reason, rel.Version
 		if r.result == ResultUpToDate {
 			o.To = cur.Version
+		} else {
+			s.log.Warn("modstore: update refused", "module", module, "release", rel.Tag, "reason", r.reason, "detail", r.detail)
 		}
 		s.count(ctx, module, o.Result)
 		return o, s.recordFailure(ctx, module, rel, r)
@@ -82,16 +100,18 @@ func (s *Store) current(ctx context.Context, module string) (Version, error) {
 // candidate finds, fetches and checks the newest release; it returns the
 // release and its compiled, self-tested tool, or a *refusal.
 func (s *Store) candidate(ctx context.Context, b Builtin, cur Version, src Source) (Release, *runner.LazyTool, error) {
-	rel, err := src.Latest(ctx, b.Name, b.Ceiling.ABI)
+	fetchCtx, cancel := context.WithTimeout(ctx, updateTimeout)
+	defer cancel()
+	rel, err := src.Latest(fetchCtx, b.Name, b.Ceiling.ABI)
 	if err != nil {
-		return rel, nil, refuse("no release found: %v", err)
+		return rel, nil, &refusal{result: ResultRefused, reason: "no release found", detail: err.Error()}
 	}
 	if rel.SHA256 == cur.SHA256 {
 		return rel, nil, &refusal{result: ResultUpToDate, reason: "the active version is the newest release"}
 	}
-	wasm, manifest, err := src.Fetch(ctx, rel)
+	wasm, manifest, err := src.Fetch(fetchCtx, rel)
 	if err != nil {
-		return rel, nil, refuse("download failed: %v", err)
+		return rel, nil, &refusal{result: ResultRefused, reason: "the download failed", detail: err.Error()}
 	}
 	if sum(wasm) != rel.SHA256 || sum(manifest) != rel.ManifestSHA256 {
 		return rel, nil, refuse("the files do not match the release's sums")
@@ -100,15 +120,18 @@ func (s *Store) candidate(ctx context.Context, b Builtin, cur Version, src Sourc
 		return rel, nil, err
 	}
 	tool, err := runner.NewLazyTool(wasm, manifest, s.deps)
-	if err != nil {
-		return rel, nil, refuse("manifest: %v", err) // a capability: ErrCapabilities
+	switch {
+	case errors.Is(err, runner.ErrCapabilities):
+		return rel, nil, refuse("the manifest asks for a capability; a tool module gets none")
+	case err != nil:
+		return rel, nil, &refusal{result: ResultRefused, reason: "the module could not be prepared", detail: err.Error()}
 	}
 	started := time.Now()
 	err = b.SelfTest(ctx, tool.Call)
 	s.selftest.Record(ctx, time.Since(started).Seconds(), metric.WithAttributes(attribute.String("module", b.Name)))
 	if err != nil {
 		_ = tool.Shutdown(ctx)
-		return rel, nil, &refusal{result: ResultFailedSelfTest, reason: fmt.Sprintf("the self-test failed: %v", err)}
+		return rel, nil, &refusal{result: ResultFailedSelfTest, reason: "the self-test failed", detail: err.Error()}
 	}
 	if err := writeFiles(filepath.Join(s.dir, b.Name), rel.SHA256, wasm, manifest); err != nil {
 		_ = tool.Shutdown(ctx)
@@ -124,7 +147,7 @@ func checkManifest(b Builtin, src []byte) error {
 	m, err := runner.ParseManifest(src)
 	switch {
 	case err != nil:
-		return refuse("manifest: %v", err)
+		return &refusal{result: ResultRefused, reason: "the manifest is not valid for this core", detail: err.Error()}
 	case m.Name != b.Name:
 		return refuse("the manifest's name is %q, not %q", m.Name, b.Name)
 	case m.ABI != b.Ceiling.ABI:
@@ -164,7 +187,7 @@ func (s *Store) recordFailure(ctx context.Context, module string, rel Release, r
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO module_versions (module, sha256, version, source, state, reason, installed_ms)
 		VALUES (?, ?, ?, ?, 'failed', ?, ?)
-		ON CONFLICT (module, sha256) DO UPDATE SET reason = excluded.reason
+		ON CONFLICT (module, sha256) DO UPDATE SET state = 'failed', reason = excluded.reason
 		WHERE module_versions.state IN ('failed', 'retired')`,
 		module, rel.SHA256, rel.Version, rel.Tag, r.reason, s.now().UnixMilli())
 	return err
@@ -177,17 +200,17 @@ func (s *Store) install(ctx context.Context, module string, rel Release, tool *r
 	var retired []string
 	err := sqlitedb.Immediate(ctx, s.db, func(c *sql.Conn) error {
 		var err error
-		if retired, err = retire(ctx, c, module, StatePrevious); err != nil {
+		if retired, err = retire(ctx, c, module, StatePrevious, rel.SHA256); err != nil {
 			return err
 		}
 		if _, err := c.ExecContext(ctx, `UPDATE module_versions SET state = 'previous' WHERE module = ? AND state = 'active'`, module); err != nil {
 			return err
 		}
-		_, err = c.ExecContext(ctx, `INSERT INTO module_versions (module, sha256, version, source, state, installed_ms)
-			VALUES (?, ?, ?, ?, 'active', ?)
-			ON CONFLICT (module, sha256) DO UPDATE SET state = 'active', version = excluded.version, source = excluded.source,
-				reason = '', installed_ms = excluded.installed_ms`,
-			module, rel.SHA256, rel.Version, rel.Tag, s.now().UnixMilli())
+		_, err = c.ExecContext(ctx, `INSERT INTO module_versions (module, sha256, manifest_sha256, version, source, state, installed_ms)
+			VALUES (?, ?, ?, ?, ?, 'active', ?)
+			ON CONFLICT (module, sha256) DO UPDATE SET state = 'active', manifest_sha256 = excluded.manifest_sha256,
+				version = excluded.version, source = excluded.source, reason = '', installed_ms = excluded.installed_ms`,
+			module, rel.SHA256, rel.ManifestSHA256, rel.Version, rel.Tag, s.now().UnixMilli())
 		return err
 	})
 	if err != nil {
@@ -198,10 +221,10 @@ func (s *Store) install(ctx context.Context, module string, rel Release, tool *r
 	return nil
 }
 
-// retire marks the module's rows in state st retired and returns their
-// sums.
-func retire(ctx context.Context, c *sql.Conn, module string, st State) ([]string, error) {
-	rows, err := c.QueryContext(ctx, `SELECT sha256 FROM module_versions WHERE module = ? AND state = ?`, module, st)
+// retire marks the module's rows in state st retired, but the one with
+// the sum keep (a version coming back), and returns their sums.
+func retire(ctx context.Context, c *sql.Conn, module string, st State, keep string) ([]string, error) {
+	rows, err := c.QueryContext(ctx, `SELECT sha256 FROM module_versions WHERE module = ? AND state = ? AND sha256 != ?`, module, st, keep)
 	if err != nil {
 		return nil, err
 	}
@@ -218,13 +241,16 @@ func retire(ctx context.Context, c *sql.Conn, module string, st State) ([]string
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	_, err = c.ExecContext(ctx, `UPDATE module_versions SET state = 'retired', reason = 'replaced' WHERE module = ? AND state = ?`, module, st)
+	_, err = c.ExecContext(ctx, `UPDATE module_versions SET state = 'retired', reason = 'replaced'
+		WHERE module = ? AND state = ? AND sha256 != ?`, module, st, keep)
 	return shas, err
 }
 
 func (s *Store) swap(module, source string, tool runner.Swappable) {
-	_ = s.tools[module].Swap(tool)
+	_ = s.tools[module].Swap(tool) // refused only after Shutdown, when nothing calls it
+	s.activeMu.Lock()
 	s.active[module] = source
+	s.activeMu.Unlock()
 }
 
 func (s *Store) removeFiles(module string, shas []string) {
@@ -258,21 +284,22 @@ func (s *Store) Rollback(ctx context.Context, module string) (Outcome, error) {
 			Reason: "no previous version is kept"}, nil
 	}
 	prev := prevs[0]
-	wasm, manifest := b.Wasm, b.Manifest
-	if prev.Source != SourceBuiltin {
-		if wasm, manifest, err = s.readFiles(module, prev.SHA256); err != nil {
-			return Outcome{Module: module, From: cur.Version, To: prev.Version, Result: ResultRefused,
-				Reason: fmt.Sprintf("the previous version cannot be read: %v", err)}, nil
-		}
+	var tool *runner.LazyTool
+	if prev.Source == SourceBuiltin {
+		tool, err = runner.NewLazyTool(b.Wasm, b.Manifest, s.deps)
+	} else {
+		tool, err = s.stored(b, prev)
 	}
-	tool, err := runner.NewLazyTool(wasm, manifest, s.deps)
 	if err != nil {
-		return Outcome{}, err
+		s.log.Warn("modstore: rollback refused", "module", module, "version", prev.Version, "err", err)
+		s.count(ctx, module, ResultRefused)
+		return Outcome{Module: module, From: cur.Version, To: prev.Version, Result: ResultRefused,
+			Reason: "the previous version fails its check: " + reasonOf(err)}, nil
 	}
 	var retired []string
 	err = sqlitedb.Immediate(ctx, s.db, func(c *sql.Conn) error {
 		var err error
-		if retired, err = retire(ctx, c, module, StateActive); err != nil {
+		if retired, err = retire(ctx, c, module, StateActive, prev.SHA256); err != nil {
 			return err
 		}
 		_, err = c.ExecContext(ctx, `UPDATE module_versions SET state = 'active', reason = '' WHERE module = ? AND sha256 = ?`,

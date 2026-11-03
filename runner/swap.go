@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 )
 
@@ -21,9 +22,13 @@ type Swappable interface {
 // (R-RUN-8): a call goes to the version current when it starts, and a
 // replaced version is shut down once its calls in flight have ended.
 type SwapTool struct {
-	mu  sync.Mutex
-	cur *version
+	mu     sync.Mutex
+	cur    *version
+	closed bool
 }
+
+// ErrClosed is a call or a swap after Shutdown.
+var ErrClosed = errors.New("runner: the tool module is shut down")
 
 type version struct {
 	tool     Swappable
@@ -38,6 +43,10 @@ func NewSwapTool(first Swappable) *SwapTool {
 // Call runs the call on the current version.
 func (s *SwapTool) Call(ctx context.Context, payload json.RawMessage) (json.RawMessage, error) {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil, ErrClosed
+	}
 	v := s.cur
 	v.inFlight.Add(1)
 	s.mu.Unlock()
@@ -50,6 +59,10 @@ func (s *SwapTool) Call(ctx context.Context, payload json.RawMessage) (json.RawM
 // module's own timeout, so that wait is too.
 func (s *SwapTool) Swap(next Swappable) error {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return ErrClosed
+	}
 	old := s.cur
 	s.cur = &version{tool: next}
 	s.mu.Unlock()
@@ -60,9 +73,15 @@ func (s *SwapTool) Swap(next Swappable) error {
 	return nil
 }
 
-// Shutdown frees the current version.
+// Shutdown refuses new calls, waits for those in flight and frees the
+// current version; a second Shutdown does nothing.
 func (s *SwapTool) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.closed = true
 	v := s.cur
 	s.mu.Unlock()
 	v.inFlight.Wait()

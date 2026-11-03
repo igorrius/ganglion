@@ -26,10 +26,9 @@ import (
 
 // Limits of a download.
 const (
-	MaxFileBytes = 8 << 20          // a .wasm, a manifest or SHA256SUMS
-	maxListBytes = 4 << 20          // the releases list
-	timeout      = 60 * time.Second // one update, all requests
-	maxRedirects = 5
+	MaxFileBytes = 8 << 20 // a .wasm, a manifest or SHA256SUMS
+	maxListBytes = 4 << 20 // the releases list
+	maxRedirects = 5       // the store bounds the time of a whole update
 )
 
 // ProjectRepo is where ganglion's own module releases are published.
@@ -45,6 +44,7 @@ type GitHub struct {
 	api   string
 	hosts []string
 	hc    *http.Client
+	plain bool // tests: an httptest server is plain http on a port
 }
 
 // Option configures a GitHub source.
@@ -57,8 +57,10 @@ func WithAPI(u string) Option { return func(g *GitHub) { g.api = strings.TrimSuf
 func WithHosts(hosts ...string) Option { return func(g *GitHub) { g.hosts = hosts } }
 
 // WithTransport replaces the transport, keeping the host and redirect
-// rules (tests).
-func WithTransport(rt http.RoundTripper) Option { return func(g *GitHub) { g.hc.Transport = rt } }
+// rules, and lets a test server's plain http through (tests).
+func WithTransport(rt http.RoundTripper) Option {
+	return func(g *GitHub) { g.hc.Transport, g.plain = rt, true }
+}
 
 // NewGitHub is the source for repo ("owner/name").
 func NewGitHub(repo string, opts ...Option) *GitHub {
@@ -81,8 +83,14 @@ func NewGitHub(repo string, opts ...Option) *GitHub {
 
 func (g *GitHub) allowed(host string) bool { return slices.Contains(g.hosts, strings.ToLower(host)) }
 
-// check refuses a URL on a host that is not GitHub's.
+// check refuses a URL that is not https on the default port of one of
+// GitHub's hosts.
 func (g *GitHub) check(u *url.URL) error {
+	if u.Scheme != "https" || (u.Port() != "" && u.Port() != "443") {
+		if !g.plain {
+			return fmt.Errorf("release: %s: only https on port 443 is fetched", u.Redacted())
+		}
+	}
 	if !g.allowed(u.Hostname()) {
 		return fmt.Errorf("release: %s is not one of GitHub's hosts", u.Hostname())
 	}
@@ -159,8 +167,6 @@ func semver(tag, module string) (v [3]int, s string, ok bool) {
 // Latest is the newest stable release of module whose manifest speaks
 // abi; newer releases for another ABI are passed over.
 func (g *GitHub) Latest(ctx context.Context, module string, abi int) (modstore.Release, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 	body, err := g.get(ctx, g.api+"/repos/"+g.repo+"/releases?per_page=100", maxListBytes)
 	if err != nil {
 		return modstore.Release{}, err
@@ -184,7 +190,7 @@ func (g *GitHub) Latest(ctx context.Context, module string, abi int) (modstore.R
 	for _, c := range cands {
 		rel, err := g.describe(ctx, module, c.s, c.rel)
 		if err != nil {
-			return modstore.Release{}, err
+			continue // an incomplete release is passed over, not the end of the search
 		}
 		manifest, err := g.get(ctx, rel.ManifestURL, MaxFileBytes)
 		if err != nil {
@@ -231,8 +237,6 @@ func (g *GitHub) describe(ctx context.Context, module, version string, r ghRelea
 // Fetch downloads the release's module and manifest; the store checks
 // them against the sums.
 func (g *GitHub) Fetch(ctx context.Context, r modstore.Release) (wasm, manifest []byte, err error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 	if wasm, err = g.get(ctx, r.WasmURL, MaxFileBytes); err != nil {
 		return nil, nil, err
 	}

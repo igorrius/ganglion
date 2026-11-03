@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/igorrius/ganglion/modstore"
 )
 
 func hexsum(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
@@ -141,5 +143,26 @@ func TestDefaultHostsAreGitHubs(t *testing.T) {
 	}
 	if g.allowed("evil.example") || g.allowed("github.com.evil.example") {
 		t.Error("another host allowed")
+	}
+}
+
+// Only https on the default port is fetched.
+func TestPlainHTTPRefused(t *testing.T) {
+	g := NewGitHub("igorrius/ganglion")
+	for _, u := range []string{"http://github.com/x", "https://github.com:8443/x"} {
+		if _, _, err := g.Fetch(context.Background(), modstore.Release{WasmURL: u, ManifestURL: u}); err == nil || !strings.Contains(err.Error(), "https") {
+			t.Errorf("%s: %v, want a refusal of anything but https on 443", u, err)
+		}
+	}
+}
+
+// A newer release that lacks an asset is passed over, not the end of the
+// search.
+func TestReleaseWithoutAssetsSkipped(t *testing.T) {
+	f := newFake(t)
+	f.add("html2md/v0.2.0", 1, false, false)
+	f.releases = append(f.releases, map[string]any{"tag_name": "html2md/v0.3.0", "assets": []map[string]string{}})
+	if r, err := f.client().Latest(context.Background(), "html2md", 1); err != nil || r.Version != "0.2.0" {
+		t.Fatalf("release %+v, %v", r, err)
 	}
 }

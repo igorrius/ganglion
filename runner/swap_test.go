@@ -92,3 +92,21 @@ func TestManifestABI(t *testing.T) {
 		t.Fatalf("ABIVersion %d", runner.ABIVersion)
 	}
 }
+
+// A call after Shutdown is refused, and a second Shutdown does nothing.
+func TestSwapToolAfterShutdown(t *testing.T) {
+	v1 := &fakeTool{name: "v1"}
+	s := runner.NewSwapTool(v1)
+	if err := s.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Call(context.Background(), nil); err == nil {
+		t.Fatal("a call after Shutdown ran")
+	}
+	if err := s.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Swap(&fakeTool{name: "v2"}); err == nil {
+		t.Fatal("a swap after Shutdown was accepted")
+	}
+}

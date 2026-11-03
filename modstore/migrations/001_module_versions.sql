@@ -4,6 +4,7 @@
 CREATE TABLE module_versions (
     module       TEXT    NOT NULL,
     sha256       TEXT    NOT NULL,              -- of the .wasm, lower-case hex
+    manifest_sha256 TEXT NOT NULL DEFAULT '',   -- of the manifest; '' for the built-in build
     version      TEXT    NOT NULL,              -- "builtin" or the release's semver
     source       TEXT    NOT NULL,              -- "builtin" or the release tag, e.g. html2md/v0.3.0
     state        TEXT    NOT NULL,              -- active | previous | failed | retired

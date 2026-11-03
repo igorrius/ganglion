@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -108,6 +109,7 @@ type Version struct {
 	State                           State
 	Reason                          string
 	Installed                       time.Time
+	manifestSHA256                  string
 }
 
 // Store holds the modules' versions.
@@ -120,8 +122,10 @@ type Store struct {
 	builtins map[string]Builtin
 	tools    map[string]*runner.SwapTool
 
-	mu     sync.Mutex        // one update or rollback at a time
-	active map[string]string // module → source of the active version, for the gauge
+	mu       sync.Mutex        // one update or rollback at a time
+	activeMu sync.Mutex        // the gauge reads active without waiting for an update
+	active   map[string]string // module → source of the active version, for the gauge
+	log      *slog.Logger
 
 	updates  metric.Int64Counter
 	selftest metric.Float64Histogram
@@ -139,7 +143,10 @@ func Open(ctx context.Context, db *sql.DB, dir string, now func() time.Time, dep
 		return nil, err
 	}
 	s := &Store{db: db, dir: dir, now: now, deps: deps, builtins: map[string]Builtin{}, tools: map[string]*runner.SwapTool{},
-		active: map[string]string{}}
+		active: map[string]string{}, log: deps.Logger}
+	if s.log == nil {
+		s.log = slog.New(slog.DiscardHandler)
+	}
 	if err := s.instruments(); err != nil {
 		return nil, err
 	}
@@ -150,6 +157,9 @@ func Open(ctx context.Context, db *sql.DB, dir string, now func() time.Time, dep
 			return nil, err
 		}
 		s.tools[b.Name], s.active[b.Name] = runner.NewSwapTool(tool), src
+		if err := s.sweep(ctx, b.Name); err != nil {
+			return nil, err
+		}
 	}
 	return s, nil
 }
@@ -161,8 +171,8 @@ func (s *Store) instruments() error {
 		metric.WithDescription("How long a candidate version's self-test took."))
 	_, err := m.Int64ObservableGauge("ganglion.module.active", metric.WithDescription("1 for each module's active version, by its source."),
 		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
-			s.mu.Lock()
-			defer s.mu.Unlock()
+			s.activeMu.Lock()
+			defer s.activeMu.Unlock()
 			for mod, src := range s.active {
 				o.Observe(1, metric.WithAttributes(attribute.String("module", mod), attribute.String("source", src)))
 			}
@@ -200,14 +210,12 @@ func (s *Store) load(ctx context.Context, b Builtin) (*runner.LazyTool, string, 
 	}
 	if len(rows) > 0 && rows[0].Source != SourceBuiltin {
 		v := rows[0]
-		wasm, manifest, err := s.readFiles(b.Name, v.SHA256)
+		tool, err := s.stored(b, v)
 		if err == nil {
-			tool, err := runner.NewLazyTool(wasm, manifest, s.deps)
-			if err == nil {
-				return tool, v.Source, nil
-			}
+			return tool, v.Source, nil
 		}
-		if err := s.setState(ctx, b.Name, v.SHA256, StateFailed, fmt.Sprintf("at start: %v", err)); err != nil {
+		s.log.Warn("modstore: the stored version fails its check; the built-in build runs", "module", b.Name, "version", v.Version, "err", err)
+		if err := s.setState(ctx, b.Name, v.SHA256, StateFailed, "at start: "+reasonOf(err)); err != nil {
 			return nil, "", err
 		}
 	}
@@ -234,24 +242,64 @@ func (s *Store) activateBuiltin(ctx context.Context, b Builtin) error {
 	})
 }
 
-// readFiles reads a stored version and checks the wasm against its sum.
-func (s *Store) readFiles(module, sha string) (wasm, manifest []byte, err error) {
-	base := filepath.Join(s.dir, module, sha)
-	if wasm, err = os.ReadFile(base + ".wasm"); err != nil {
-		return nil, nil, err
+// stored reads a stored version, checks both files against their sums
+// and its manifest against this core's ceiling, and prepares it.
+func (s *Store) stored(b Builtin, v Version) (*runner.LazyTool, error) {
+	base := filepath.Join(s.dir, b.Name, v.SHA256)
+	wasm, err := os.ReadFile(base + ".wasm")
+	if err != nil {
+		return nil, &refusal{result: ResultRefused, reason: "the stored files cannot be read", detail: err.Error()}
 	}
-	if sum(wasm) != sha {
-		return nil, nil, errors.New("the stored file does not match its sum")
+	manifest, err := os.ReadFile(base + ".yaml")
+	if err != nil {
+		return nil, &refusal{result: ResultRefused, reason: "the stored files cannot be read", detail: err.Error()}
 	}
-	if manifest, err = os.ReadFile(base + ".yaml"); err != nil {
-		return nil, nil, err
+	if sum(wasm) != v.SHA256 || sum(manifest) != v.manifestSHA256 {
+		return nil, refuse("the stored files do not match their sums")
 	}
-	return wasm, manifest, nil
+	if err := checkManifest(b, manifest); err != nil {
+		return nil, err
+	}
+	tool, err := runner.NewLazyTool(wasm, manifest, s.deps)
+	if err != nil {
+		return nil, &refusal{result: ResultRefused, reason: "the module could not be prepared", detail: err.Error()}
+	}
+	return tool, nil
+}
+
+// sweep removes from the module's directory every file that is not the
+// active or the previous version's: what a crash left (a .tmp, a version
+// written but never recorded, a retired one not yet removed).
+func (s *Store) sweep(ctx context.Context, module string) error {
+	keep := map[string]bool{}
+	for _, st := range []State{StateActive, StatePrevious} {
+		vs, err := s.versions(ctx, module, st)
+		if err != nil {
+			return err
+		}
+		for _, v := range vs {
+			keep[v.SHA256+".wasm"], keep[v.SHA256+".yaml"] = true, true
+		}
+	}
+	dir := filepath.Join(s.dir, module)
+	es, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("modstore: %w", err)
+	}
+	for _, e := range es {
+		if e.Type().IsRegular() && !keep[e.Name()] {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+	return nil
 }
 
 // versions are a module's rows in a state, newest first.
 func (s *Store) versions(ctx context.Context, module string, st State) ([]Version, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT module, version, source, sha256, state, reason, installed_ms FROM module_versions
+	rows, err := s.db.QueryContext(ctx, `SELECT module, version, source, sha256, manifest_sha256, state, reason, installed_ms FROM module_versions
 		WHERE module = ? AND state = ? ORDER BY installed_ms DESC, rowid DESC`, module, st)
 	if err != nil {
 		return nil, err
@@ -267,7 +315,7 @@ func scan(rows *sql.Rows) ([]Version, error) {
 			v  Version
 			ms int64
 		)
-		if err := rows.Scan(&v.Module, &v.Version, &v.Source, &v.SHA256, &v.State, &v.Reason, &ms); err != nil {
+		if err := rows.Scan(&v.Module, &v.Version, &v.Source, &v.SHA256, &v.manifestSHA256, &v.State, &v.Reason, &ms); err != nil {
 			return nil, err
 		}
 		v.Installed = time.UnixMilli(ms).UTC()
@@ -278,7 +326,7 @@ func scan(rows *sql.Rows) ([]Version, error) {
 
 // List is every module's versions that are not retired, active first.
 func (s *Store) List(ctx context.Context) ([]Version, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT module, version, source, sha256, state, reason, installed_ms FROM module_versions
+	rows, err := s.db.QueryContext(ctx, `SELECT module, version, source, sha256, manifest_sha256, state, reason, installed_ms FROM module_versions
 		WHERE state != 'retired'
 		ORDER BY module, CASE state WHEN 'active' THEN 0 WHEN 'previous' THEN 1 ELSE 2 END, installed_ms DESC`)
 	if err != nil {
