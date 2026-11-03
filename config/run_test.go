@@ -282,6 +282,26 @@ func TestAgentOverTelegram(t *testing.T) {
 	if got := strings.Join(offered, ","); got != want {
 		t.Fatalf("the admin was offered %q", got)
 	}
+	// The agent's commands are Telegram's command hints, in English and
+	// per language (rulings R43, R45).
+	sets := fake.CommandSets()
+	if len(sets) != 3 || sets[0].Language != "" || sets[1].Language != "ru" || sets[2].Language != "uk" ||
+		sets[0].Commands[0] != (telegramtest.BotCommand{Command: "new", Description: "Start a new conversation"}) {
+		t.Fatalf("command hints %+v", sets)
+	}
+}
+
+// The echo bot answers no commands and lists none.
+func TestEchoListsNoCommands(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	cfg := testConfig(t)
+	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
+	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hi"})
+	eventually(t, "the echo", func() bool { return len(fake.Sent()) == 1 })
+	if fake.Calls("setMyCommands") != 0 {
+		t.Fatal("the echo bot listed commands")
+	}
 }
 
 // A press over the real core and the fake Bot API (ruling R40): the toast

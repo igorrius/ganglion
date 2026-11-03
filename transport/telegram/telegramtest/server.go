@@ -80,6 +80,19 @@ type Toast struct {
 	Text string
 }
 
+// BotCommand is one command of a setMyCommands call.
+type BotCommand struct {
+	Command     string `json:"command"`
+	Description string `json:"description"`
+}
+
+// CommandSet is one successful setMyCommands call: the commands and the
+// language they are for ("" for every other language).
+type CommandSet struct {
+	Language string
+	Commands []BotCommand
+}
+
 // ChatAction is one sendChatAction call.
 type ChatAction struct {
 	ChatID   int64
@@ -117,6 +130,7 @@ type Server struct {
 	edits      []Edit
 	answered   []string // callback query ids answered
 	toasts     []Toast
+	commands   []CommandSet
 	methods    []string // every call with the right token, in order
 	nextQuery  int64
 }
@@ -239,6 +253,13 @@ func (s *Server) Toasts() []Toast {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]Toast(nil), s.toasts...)
+}
+
+// CommandSets returns the successful setMyCommands calls, in order.
+func (s *Server) CommandSets() []CommandSet {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]CommandSet(nil), s.commands...)
 }
 
 // Methods returns the Bot API methods called with the right token, in the
@@ -393,6 +414,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.answered = append(s.answered, id)
 		s.toasts = append(s.toasts, Toast{ID: id, Text: text})
+		s.mu.Unlock()
+		writeOK(w, true)
+	case "setMyCommands":
+		var cs CommandSet
+		_ = json.Unmarshal(params["commands"], &cs.Commands)
+		_ = json.Unmarshal(params["language_code"], &cs.Language)
+		if len(cs.Commands) == 0 {
+			writeErr(w, http.StatusBadRequest, "Bad Request: commands are empty", 0)
+			return
+		}
+		s.mu.Lock()
+		s.commands = append(s.commands, cs)
 		s.mu.Unlock()
 		writeOK(w, true)
 	case "sendChatAction":

@@ -49,6 +49,7 @@ type Transport struct {
 	retry       backoff.Policy // between failed polls and failed sinks
 	replyMode   ReplyMode
 	typingEvery time.Duration
+	commands    []transport.Command // listed in the command hints at start
 
 	mu     sync.Mutex
 	last   map[int64]int64 // chat → the newest incoming message id
@@ -67,6 +68,7 @@ type config struct {
 	pollTimeout time.Duration
 	log         *slog.Logger
 	replyMode   ReplyMode
+	commands    []transport.Command
 }
 
 // Option configures a Transport.
@@ -89,6 +91,11 @@ func WithPollTimeout(d time.Duration) Option { return func(c *config) { c.pollTi
 // WithReplyMode sets when answers are sent as replies; the default is
 // ReplyAuto.
 func WithReplyMode(m ReplyMode) Option { return func(c *config) { c.replyMode = m } }
+
+// WithCommands sets the commands listed in Telegram's command hints at
+// start (setMyCommands, rulings R43, R45); the default lists none and
+// leaves the hints alone.
+func WithCommands(cmds []transport.Command) Option { return func(c *config) { c.commands = cmds } }
 
 // WithLogger sets the logger; the default discards.
 func WithLogger(l *slog.Logger) Option { return func(c *config) { c.log = l } }
@@ -116,6 +123,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 		retry:       backoff.Policy{Min: time.Second, Max: time.Minute},
 		replyMode:   cfg.replyMode,
 		typingEvery: 4 * time.Second,
+		commands:    cfg.commands,
 		last:        map[int64]int64{},
 		groups:      map[int64]bool{},
 	}, nil
@@ -124,7 +132,8 @@ func New(token string, opts ...Option) (*Transport, error) {
 // Name implements transport.Transport.
 func (t *Transport) Name() string { return Name }
 
-// Run implements transport.Transport. It polls updates and hands each
+// Run implements transport.Transport. At start it lists its commands in
+// the command hints (registerCommands). It polls updates and hands each
 // message to sink in order. The offset moves past an update only after
 // sink returned nil for it, and Telegram learns the offset on the next
 // poll, so an update is confirmed only once it is in the inbox (R-DLV-2).
@@ -136,6 +145,7 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 	if err != nil {
 		return err
 	}
+	t.registerCommands(ctx)
 	t.log.Info("telegram: polling", "bot_id", me.ID, "username", me.Username)
 	sinkRetry := backoff.New(t.retry)
 	var offset int64

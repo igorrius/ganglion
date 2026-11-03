@@ -6,12 +6,52 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/igorrius/ganglion/transport"
 	"github.com/igorrius/ganglion/turns"
 )
 
 // command answers a chat command without a model; arg is the text after
 // the command word.
 type command func(ctx context.Context, t *turn, arg string) error
+
+// commandEntry is one row of the command table: the command word, what
+// answers it, and its description per language for the transport's
+// command hints; an alias has none and is not listed (rulings R43, R45).
+type commandEntry struct {
+	word string
+	run  command
+	hint map[transport.Lang]string
+}
+
+// commandTable is the agent's commands, in the order they are listed: the
+// one source of what the agent answers and of the hints people see.
+func (a *Agent) commandTable() []commandEntry {
+	return []commandEntry{
+		{"/new", a.newSession, map[transport.Lang]string{
+			transport.LangDefault: "Start a new conversation", transport.LangRussian: "Начать новый разговор",
+			transport.LangUkrainian: "Почати нову розмову"}},
+		{"/reset", a.newSession, nil},
+		{"/sessions", a.listSessions, map[transport.Lang]string{
+			transport.LangDefault: "List earlier conversations", transport.LangRussian: "Показать прошлые разговоры",
+			transport.LangUkrainian: "Показати попередні розмови"}},
+		{"/resume", a.resumeSession, map[transport.Lang]string{
+			transport.LangDefault:   "Go back to an earlier conversation: /resume <number>",
+			transport.LangRussian:   "Вернуться к прошлому разговору: /resume <номер>",
+			transport.LangUkrainian: "Повернутися до попередньої розмови: /resume <номер>"}},
+	}
+}
+
+// Commands are the commands a transport lists for people, from the
+// command table: name without the slash and description per language.
+func (a *Agent) Commands() []transport.Command {
+	var out []transport.Command
+	for _, c := range a.commandTable() {
+		if c.hint != nil {
+			out = append(out, transport.Command{Name: strings.TrimPrefix(c.word, "/"), Description: c.hint})
+		}
+	}
+	return out
+}
 
 const (
 	replyNewSession   = "New session started."

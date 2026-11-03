@@ -37,6 +37,7 @@ var Core = do.Package(
 	do.Lazy(Housekeepers()), do.LazyNamed(housekeepingAgent, AgentHousekeepers()), do.EagerNamed(housekeepingNone, Housekeeping(nil)),
 	do.Lazy(JobSchedulers()), do.LazyNamed(schedulersAgent, AgentSchedulers()), do.EagerNamed(schedulersNone, Schedulers(nil)),
 	do.Lazy(Receivers()), do.LazyNamed(inboundTelegram, TelegramReceivers()), do.EagerNamed(inboundNone, Inbound(nil)),
+	do.Lazy(CommandHints()), do.LazyNamed(commandsAgent, AgentCommandHints()), do.EagerNamed(commandsNone, []transport.Command(nil)),
 	// The search backends; Read picks one, or none.
 	do.LazyNamed(searchBrave, BraveSearch()), do.LazyNamed(searchDuckDuckGo, DuckDuckGoSearch()),
 )
@@ -86,6 +87,8 @@ const (
 	schedulersNone     = "schedulers.none"     // nothing runs on a schedule
 	inboundTelegram    = "inbound.telegram"    // Telegram polling
 	inboundNone        = "inbound.none"        // nothing brings messages in
+	commandsAgent      = "commands.agent"      // the agent's command table as command hints
+	commandsNone       = "commands.none"       // no command hints
 )
 
 // agentOn reports whether the settings turn the agent on: a model

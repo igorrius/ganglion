@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/access"
+	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/node"
@@ -34,7 +35,19 @@ func Telegram() do.Provider[*telegram.Transport] {
 	return func(i do.Injector) (*telegram.Transport, error) {
 		b := do.MustInvoke[Bootstrap](i)
 		return telegram.New(b.BotToken, telegram.WithBaseURL(b.BotAPIURL), telegram.WithLogger(do.MustInvoke[*slog.Logger](i)),
-			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)))
+			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)), telegram.WithCommands(do.MustInvoke[[]transport.Command](i)))
+	}
+}
+
+// CommandHints provides the commands the transports list for people.
+func CommandHints() do.Provider[[]transport.Command] {
+	return choose[[]transport.Command](agentOn, commandsAgent, commandsNone)
+}
+
+// AgentCommandHints provides the agent's command table as the hints.
+func AgentCommandHints() do.Provider[[]transport.Command] {
+	return func(i do.Injector) ([]transport.Command, error) {
+		return do.MustInvoke[*agent.Agent](i).Commands(), nil
 	}
 }
 

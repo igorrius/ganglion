@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/igorrius/ganglion/transport"
 )
 
 func (e *env) userTexts(t *testing.T, call int) []string {
@@ -188,5 +190,33 @@ func TestResumeRerunPicksTheSameSession(t *testing.T) {
 	st, _ := DecodeState(s2.Data)
 	if st.Messages[0].Content != "Igor: A1" {
 		t.Fatalf("rerun state %+v", st.Messages)
+	}
+}
+
+// The command hints come from the command table, the one source: every
+// listed command is one the agent answers, described in English (the
+// default), Russian and Ukrainian; an alias is not listed (rulings R43,
+// R45).
+func TestCommandHintsComeFromTheTable(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	cmds := e.a.Commands()
+	var names []string
+	for _, c := range cmds {
+		names = append(names, c.Name)
+		if _, ok := e.a.commands["/"+c.Name]; !ok {
+			t.Errorf("/%s is listed but not answered", c.Name)
+		}
+		for _, l := range []transport.Lang{transport.LangDefault, transport.LangRussian, transport.LangUkrainian} {
+			if d := c.Description[l]; d == "" || len([]rune(d)) > 256 {
+				t.Errorf("/%s in %q: description %q", c.Name, l, d)
+			}
+		}
+	}
+	if strings.Join(names, ",") != "new,sessions,resume" {
+		t.Fatalf("listed %q", names)
+	}
+	e.smart.push()
+	if out := e.turn(t, message(owner, "Igor", "/reset")); len(out) != 1 || out[0].Text != replyNewSession {
+		t.Fatalf("/reset: %+v", out)
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -429,5 +431,62 @@ func TestTypingHookOnlyForTelegramMessages(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	if n == 0 || len(fake.ChatActions()) != n {
 		t.Fatalf("typing: %d actions, then %d after stop", n, len(fake.ChatActions()))
+	}
+}
+
+var hints = []transport.Command{
+	{Name: "new", Description: map[transport.Lang]string{transport.LangDefault: "Start a new conversation", transport.LangRussian: "Новый разговор"}},
+	{Name: "sessions", Description: map[transport.Lang]string{transport.LangDefault: "Earlier conversations", transport.LangUkrainian: "Попередні розмови"}},
+}
+
+// At start the transport lists the commands for every language they are
+// described in: the default without language_code, then each language,
+// a command without a description in it falling back to the default
+// (rulings R43, R45).
+func TestCommandHintsAreRegisteredPerLanguage(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr, err := New(testToken, WithBaseURL(fake.URL()), WithPollTimeout(time.Second), WithCommands(hints))
+	if err != nil {
+		t.Fatal(err)
+	}
+	run(t, tr, (&collector{}).sink)
+	eventually(t, "three command sets", func() bool { return len(fake.CommandSets()) == 3 })
+	want := []telegramtest.CommandSet{
+		{Language: "", Commands: []telegramtest.BotCommand{{Command: "new", Description: "Start a new conversation"}, {Command: "sessions", Description: "Earlier conversations"}}},
+		{Language: "ru", Commands: []telegramtest.BotCommand{{Command: "new", Description: "Новый разговор"}, {Command: "sessions", Description: "Earlier conversations"}}},
+		{Language: "uk", Commands: []telegramtest.BotCommand{{Command: "new", Description: "Start a new conversation"}, {Command: "sessions", Description: "Попередні розмови"}}},
+	}
+	if got := fake.CommandSets(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("command sets %+v", got)
+	}
+}
+
+// A failed setMyCommands is logged and the transport goes on: the other
+// languages are still set and messages still arrive.
+func TestCommandHintsFailureIsNotFatal(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	fake.FailNext("setMyCommands", http.StatusInternalServerError, 0)
+	tr, err := New(testToken, WithBaseURL(fake.URL()), WithPollTimeout(time.Second), WithCommands(hints))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	run(t, tr, c.sink)
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hi"})
+	eventually(t, "the message", func() bool { return len(c.got()) == 1 })
+	if got := fake.CommandSets(); len(got) != 2 || got[0].Language != "ru" || got[1].Language != "uk" {
+		t.Fatalf("command sets %+v", got)
+	}
+}
+
+// Without commands nothing is registered.
+func TestNoCommandHintsWithoutCommands(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	c := &collector{}
+	run(t, newTransport(t, fake), c.sink)
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hi"})
+	eventually(t, "the message", func() bool { return len(c.got()) == 1 })
+	if fake.Calls("setMyCommands") != 0 {
+		t.Fatal("commands registered without any")
 	}
 }

@@ -247,3 +247,12 @@ func (c *client) answerCallbackQuery(ctx context.Context, id, text string) error
 		Text            string `json:"text,omitempty"`
 	}{id, text}, nil)
 }
+
+// setMyCommands sets the bot's command hints for clients in lang ("" for
+// every language without its own list).
+func (c *client) setMyCommands(ctx context.Context, cmds []botCommand, lang string) error {
+	return c.call(ctx, "setMyCommands", struct {
+		Commands     []botCommand `json:"commands"`
+		LanguageCode string       `json:"language_code,omitempty"`
+	}{cmds, lang}, nil)
+}

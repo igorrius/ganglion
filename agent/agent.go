@@ -110,9 +110,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
 	a.stages = []stage{a.resume, a.scheduled, a.dropStalePending, a.idle, a.command, a.limits, a.answer, a.compactHistory}
-	a.commands = map[string]command{
-		"/new": a.newSession, "/reset": a.newSession,
-		"/sessions": a.listSessions, "/resume": a.resumeSession,
+	a.commands = map[string]command{}
+	for _, c := range a.commandTable() {
+		a.commands[c.word] = c.run
 	}
 	a.tool = tool.Chain(d.Tools.Run, slices.Concat([]tool.Middleware{a.traced}, d.Middleware, []tool.Middleware{d.Policy})...)
 	return a

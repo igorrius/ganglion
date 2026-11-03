@@ -25,3 +25,23 @@ type Transport interface {
 	// Send should honour msg.IdemKey where the channel allows it.
 	Send(ctx context.Context, msg event.Outgoing) error
 }
+
+// Lang is a language a chat client may be in, as an IETF code; it picks
+// the text a transport shows that client. Languages are a closed set.
+type Lang string
+
+// Languages. LangDefault is for a client in any language not listed.
+const (
+	LangDefault   Lang = ""
+	LangRussian   Lang = "ru"
+	LangUkrainian Lang = "uk"
+)
+
+// Command is a chat command a transport lists for people, such as
+// Telegram's command hints (ruling R43): its name without the slash and
+// its description per language. LangDefault must be described; a language
+// a command does not describe shows the default (ruling R45).
+type Command struct {
+	Name        string
+	Description map[Lang]string
+}
