@@ -70,6 +70,7 @@ type Job struct {
 	System    bool // made by the node (the memory audit); cannot be deleted
 	Created   time.Time
 	Deleted   bool
+	DeletedBy string // the token of the press or call that deleted it; "" while live
 }
 
 // EventConv is the conversation of the job's events: a reminder's or a

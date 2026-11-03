@@ -266,7 +266,7 @@ func TestScheduleCreateRefusesALiveDuplicate(t *testing.T) {
 	if _, err := run(ctx, other); err != nil || len(ask.asked) != 1 {
 		t.Fatalf("another text = %v, asked %q", err, ask.asked)
 	}
-	if err := e.jobs.Delete(ctx, "e1-2", me); err != nil {
+	if err := e.jobs.Delete(ctx, "e1-2", me, "t"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := run(ctx, again); err != nil || len(ask.asked) != 2 {
@@ -522,5 +522,32 @@ func TestQuickActionsLeaveNotes(t *testing.T) {
 	res, _ = builtin.NewScheduleList(e.sc).Run(context.Background(), call("schedule.list", `{}`))
 	if edit := e.pressAs(t, res.Out[0].Buttons[1]); edit.Note != "the owner deleted task j2: "+strings.Repeat("я", 100)+"…" {
 		t.Fatalf("a long task noted %q", edit.Note)
+	}
+}
+
+// A crash rerun of the same Delete press finds the job deleted by that
+// press and gives back the same edit and note; another press of a button
+// for the same job finds it gone (polish of R42).
+func TestDeleteRerunKeepsItsNote(t *testing.T) {
+	e := newSchedEnv(t)
+	ctx := context.Background()
+	e.add(t, rates("j1"))
+	res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := res.Out[0].Buttons[1]
+	first := e.pressAs(t, b)
+	p, err := e.pending.Press(ctx, b.ID, pending.By{Principal: me, Conv: "telegram:42", Event: "PRESS-" + b.ID})
+	if err != nil {
+		t.Fatal(err) // the same event pressing again gets the same press
+	}
+	again, err := e.sc.QuickActions()[builtin.ActionDelete](ctx, pending.QuickPress{Button: p.Button, Transport: "telegram", Event: "PRESS-" + b.ID})
+	if err != nil || again.Note != first.Note || again.Text != first.Text || first.Note == "" {
+		t.Fatalf("rerun %+v, %v; first %+v", again, err, first)
+	}
+	other, err := e.sc.QuickActions()[builtin.ActionDelete](ctx, pending.QuickPress{Button: p.Button, Transport: "telegram", Event: "PRESS-OTHER"})
+	if err != nil || other.Note != "" || !strings.Contains(other.Text, "no longer") {
+		t.Fatalf("another press %+v, %v", other, err)
 	}
 }

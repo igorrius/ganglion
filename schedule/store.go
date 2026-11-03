@@ -34,7 +34,7 @@ func NewStore(ctx context.Context, db *sql.DB) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-const jobColumns = `id, owner, conv, transport, kind, cron, at_ms, text, grant_json, system, created_ms, deleted`
+const jobColumns = `id, owner, conv, transport, kind, cron, at_ms, text, grant_json, system, created_ms, deleted, deleted_by`
 
 // Create stores a new job. ErrInvalid for a job that is not complete or
 // whose cron does not parse, ErrExists for a taken id.
@@ -73,9 +73,9 @@ func (s *Store) EnsureSystem(ctx context.Context, j Job) error {
 	if !j.At.IsZero() {
 		at = j.At.UnixMilli()
 	}
-	res, err := s.db.ExecContext(ctx, `INSERT INTO schedule_jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 1, ?, 0)
+	res, err := s.db.ExecContext(ctx, `INSERT INTO schedule_jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 1, ?, 0, '')
 		ON CONFLICT (id) DO UPDATE SET owner = excluded.owner, conv = excluded.conv, transport = excluded.transport,
-		kind = excluded.kind, cron = excluded.cron, at_ms = excluded.at_ms, text = excluded.text, grant_json = '', deleted = 0
+		kind = excluded.kind, cron = excluded.cron, at_ms = excluded.at_ms, text = excluded.text, grant_json = '', deleted = 0, deleted_by = ''
 		WHERE schedule_jobs.system = 1`, j.ID, j.Owner, j.Conv, j.Transport, string(j.Kind), j.Cron, at, j.Text, j.Created.UnixMilli())
 	if err != nil {
 		return fmt.Errorf("schedule: ensure %s: %w", j.ID, err)
@@ -103,7 +103,7 @@ func (s *Store) insert(ctx context.Context, j Job) (bool, error) {
 	if !j.At.IsZero() {
 		at = j.At.UnixMilli()
 	}
-	res, err := s.db.ExecContext(ctx, `INSERT INTO schedule_jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+	res, err := s.db.ExecContext(ctx, `INSERT INTO schedule_jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')
 		ON CONFLICT (id) DO NOTHING`, j.ID, j.Owner, j.Conv, j.Transport, string(j.Kind), j.Cron, at, j.Text, grant, j.System,
 		j.Created.UnixMilli())
 	if err != nil {
@@ -151,10 +151,12 @@ func (s *Store) List(ctx context.Context, owner string) ([]Job, error) {
 	return out, nil
 }
 
-// Delete marks owner's job id deleted, so it never fires again; deleting
-// it twice is not an error. ErrNotFound for a job that is not owner's,
-// ErrSystem for a system job.
-func (s *Store) Delete(ctx context.Context, id, owner string) error {
+// Delete marks owner's job id deleted, so it never fires again, and
+// records by, the token of the press or call that deleted it
+// (Job.DeletedBy); deleting it twice is not an error and keeps the first
+// token. ErrNotFound for a job that is not owner's, ErrSystem for a
+// system job.
+func (s *Store) Delete(ctx context.Context, id, owner, by string) error {
 	err := sqlitedb.Immediate(ctx, s.db, func(c *sql.Conn) error {
 		var jobOwner string
 		var system, deleted bool
@@ -169,7 +171,7 @@ func (s *Store) Delete(ctx context.Context, id, owner string) error {
 		case deleted:
 			return nil
 		}
-		_, err = c.ExecContext(ctx, `UPDATE schedule_jobs SET deleted = 1 WHERE id = ?`, id)
+		_, err = c.ExecContext(ctx, `UPDATE schedule_jobs SET deleted = 1, deleted_by = ? WHERE id = ?`, by, id)
 		return err
 	})
 	if err != nil {
@@ -283,7 +285,7 @@ func scanJob(r scanner, extra ...any) (Job, error) {
 	var j Job
 	var kind, grant string
 	var at, created int64
-	dest := append([]any{&j.ID, &j.Owner, &j.Conv, &j.Transport, &kind, &j.Cron, &at, &j.Text, &grant, &j.System, &created, &j.Deleted}, extra...)
+	dest := append([]any{&j.ID, &j.Owner, &j.Conv, &j.Transport, &kind, &j.Cron, &at, &j.Text, &grant, &j.System, &created, &j.Deleted, &j.DeletedBy}, extra...)
 	if err := r.Scan(dest...); err != nil {
 		return Job{}, err
 	}

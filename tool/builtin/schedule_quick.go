@@ -102,10 +102,13 @@ func (s Scheduling) details(ctx context.Context, p pending.QuickPress) (pending.
 // decision, so there is no second question.
 func (s Scheduling) deleteByButton(ctx context.Context, p pending.QuickPress) (pending.QuickEdit, error) {
 	j, ok, err := s.pressedJob(ctx, p)
-	if err != nil || !ok {
+	if err == nil && !ok {
+		return s.deletedBy(ctx, p)
+	}
+	if err != nil {
 		return pending.QuickEdit{Text: textGone}, err
 	}
-	err = s.Jobs.Delete(ctx, j.ID, p.Button.Principal)
+	err = s.Jobs.Delete(ctx, j.ID, p.Button.Principal, p.Event)
 	switch {
 	case errors.Is(err, schedule.ErrSystem):
 		return pending.QuickEdit{Text: s.entry(j) + "\n\n" + textSystem}, nil
@@ -114,7 +117,33 @@ func (s Scheduling) deleteByButton(ctx context.Context, p pending.QuickPress) (p
 	case err != nil:
 		return pending.QuickEdit{}, err
 	}
-	return pending.QuickEdit{Text: s.entry(j) + "\n\n" + textDeleted, Note: fmt.Sprintf(noteDeleted, j.Kind, j.ID, head(j.Text))}, nil
+	return s.deletedEdit(j), nil
+}
+
+// deletedEdit is the job's message once deleted, with the note for the
+// history (ruling R42).
+func (s Scheduling) deletedEdit(j schedule.Job) pending.QuickEdit {
+	return pending.QuickEdit{Text: s.entry(j) + "\n\n" + textDeleted, Note: fmt.Sprintf(noteDeleted, j.Kind, j.ID, head(j.Text))}
+}
+
+// deletedBy answers a Delete press of a job that is not there: the same
+// edit and note again when this press deleted it (a rerun of its event
+// after a crash), "no longer exists" otherwise.
+func (s Scheduling) deletedBy(ctx context.Context, p pending.QuickPress) (pending.QuickEdit, error) {
+	var a idArgs
+	if err := json.Unmarshal(p.Button.Args, &a); err != nil {
+		return pending.QuickEdit{}, fmt.Errorf("schedule: button %s: arguments: %w", p.Button.ID, err)
+	}
+	j, err := s.Jobs.Get(ctx, a.ID)
+	switch {
+	case errors.Is(err, schedule.ErrNotFound):
+		return pending.QuickEdit{Text: textGone}, nil
+	case err != nil:
+		return pending.QuickEdit{}, err
+	case j.Deleted && j.DeletedBy == p.Event && j.Owner == p.Button.Principal:
+		return s.deletedEdit(j), nil
+	}
+	return pending.QuickEdit{Text: textGone}, nil
 }
 
 // head is the start of a job's text on one line, for a note.

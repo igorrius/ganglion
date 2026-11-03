@@ -53,7 +53,7 @@ type Jobs interface {
 	Create(ctx context.Context, j schedule.Job) error
 	Get(ctx context.Context, id string) (schedule.Job, error)
 	List(ctx context.Context, owner string) ([]schedule.Job, error)
-	Delete(ctx context.Context, id, owner string) error
+	Delete(ctx context.Context, id, owner, by string) error
 }
 
 // Runner runs a task outside its schedule (schedule.Scheduler); the same
@@ -442,7 +442,7 @@ func (t *ScheduleDelete) Run(ctx context.Context, c tool.Call) (tool.Result, err
 	if err := strictJSON(c.Args, &a); err != nil {
 		return tool.Result{}, fmt.Errorf("%s: arguments: %w", ActionDelete, err)
 	}
-	if err := t.s.Jobs.Delete(ctx, a.ID, c.Principal); err != nil {
+	if err := t.s.Jobs.Delete(ctx, a.ID, c.Principal, c.Key()); err != nil {
 		return tool.Result{}, fmt.Errorf("%s: %w", ActionDelete, err)
 	}
 	return tool.Result{Text: "deleted " + a.ID}, nil

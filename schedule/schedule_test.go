@@ -197,7 +197,7 @@ func TestDeletedJobDoesNotFire(t *testing.T) {
 	e.create(t, task("j1", "0 * * * *"))
 	e.create(t, reminder("r1", t0.Add(time.Hour)))
 	for _, id := range []string{"j1", "r1"} {
-		if err := e.store.Delete(ctx, id, owner); err != nil {
+		if err := e.store.Delete(ctx, id, owner, "press-"+id); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -209,14 +209,18 @@ func TestDeletedJobDoesNotFire(t *testing.T) {
 		t.Fatalf("run now of a deleted job: %v", err)
 	}
 	j, err := e.store.Get(ctx, "j1")
-	if err != nil || !j.Deleted {
+	if err != nil || !j.Deleted || j.DeletedBy != "press-j1" {
 		t.Fatalf("get %+v, %v", j, err)
 	}
 	if list, err := e.store.List(ctx, owner); err != nil || len(list) != 0 {
 		t.Fatalf("list %+v, %v", list, err)
 	}
-	if err := e.store.Delete(ctx, "j1", owner); err != nil {
+	if err := e.store.Delete(ctx, "j1", owner, "press-2"); err != nil {
 		t.Fatalf("deleting twice: %v", err)
+	}
+	// The first deletion's token stays: a rerun of that press knows it.
+	if j, _ := e.store.Get(ctx, "j1"); j.DeletedBy != "press-j1" {
+		t.Fatalf("deleted by %q after a second delete", j.DeletedBy)
 	}
 }
 
@@ -233,7 +237,7 @@ func TestSystemJobCannotBeDeleted(t *testing.T) {
 	if err := e.store.Ensure(ctx, changed); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.store.Delete(ctx, audit.ID, owner); !errors.Is(err, schedule.ErrSystem) {
+	if err := e.store.Delete(ctx, audit.ID, owner, "t"); !errors.Is(err, schedule.ErrSystem) {
 		t.Fatalf("delete: %v, want ErrSystem", err)
 	}
 	list, err := e.store.List(ctx, owner)
@@ -279,7 +283,7 @@ func TestRunNowKey(t *testing.T) {
 		t.Fatalf("a reminder: %v", err)
 	}
 	// A run now is not a scheduled run: the 09:00 slot still comes.
-	if err := e.store.Delete(ctx, "r1", owner); err != nil {
+	if err := e.store.Delete(ctx, "r1", owner, "t"); err != nil {
 		t.Fatal(err)
 	}
 	e.now = time.Date(2026, 11, 4, 7, 0, 0, 0, time.UTC)
@@ -362,7 +366,7 @@ func TestCreateValidates(t *testing.T) {
 	if _, err := e.store.Get(ctx, "nope"); !errors.Is(err, schedule.ErrNotFound) {
 		t.Fatalf("get unknown: %v", err)
 	}
-	if err := e.store.Delete(ctx, "j1", "telegram:user:7"); !errors.Is(err, schedule.ErrNotFound) {
+	if err := e.store.Delete(ctx, "j1", "telegram:user:7", "t"); !errors.Is(err, schedule.ErrNotFound) {
 		t.Fatalf("delete someone else's: %v", err)
 	}
 }
