@@ -227,15 +227,15 @@ func (s urlSet) has(raw string) bool {
 
 // knownURLs collects the set from a session's history: the person's
 // messages and the results of web.search calls, paired with their calls
-// by id. A confirmation or button note is not the person's words and
-// does not count, nor does outside text in a message (a forward, a quote).
+// by id. A note (confirmation, button, command) is not the person's
+// words and does not count, nor does outside text in a message (a forward, a quote).
 func knownURLs(msgs []provider.Message) urlSet {
 	set := urlSet{}
 	searches := map[string]bool{} // ids of web.search calls
 	for _, m := range msgs {
 		switch m.Role {
 		case provider.RoleUser:
-			if !strings.HasPrefix(m.Content, confirmationPrefix) && !strings.HasPrefix(m.Content, buttonPrefix) {
+			if !isNote(m.Content) {
 				set.add(tool.StripExternal(m.Content))
 			}
 		case provider.RoleAssistant:
@@ -250,4 +250,15 @@ func knownURLs(msgs []provider.Message) urlSet {
 		}
 	}
 	return set
+}
+
+// isNote reports whether a user-role message is a note the agent wrote
+// into the history, not the person's words.
+func isNote(content string) bool {
+	for _, p := range []string{confirmationPrefix, buttonPrefix, commandPrefix} {
+		if strings.HasPrefix(content, p) {
+			return true
+		}
+	}
+	return false
 }

@@ -6,6 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/transport"
 )
 
@@ -212,11 +216,73 @@ func TestCommandHintsComeFromTheTable(t *testing.T) {
 			}
 		}
 	}
-	if strings.Join(names, ",") != "new,sessions,resume" {
+	if strings.Join(names, ",") != "new,sessions,resume,tasks" {
 		t.Fatalf("listed %q", names)
 	}
 	e.smart.push()
 	if out := e.turn(t, message(owner, "Igor", "/reset")); len(out) != 1 || out[0].Text != replyNewSession {
 		t.Fatalf("/reset: %+v", out)
+	}
+}
+
+// fakeList is a stand-in schedule.list: one message with buttons per job.
+type fakeList struct {
+	fakeTool
+	jobs []string
+}
+
+func (l *fakeList) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
+	_, _ = l.fakeTool.Run(ctx, c)
+	if len(l.jobs) == 0 {
+		return tool.Result{Text: "no scheduled jobs"}, nil
+	}
+	var out []event.Outgoing
+	for _, j := range l.jobs {
+		out = append(out, event.Outgoing{IdemKey: c.Key() + ":list:" + j, Transport: c.Transport, Conv: c.Conv, Text: "Task: " + j,
+			Buttons: []event.Button{{ID: "D" + j, Label: "Details"}, {ID: "X" + j, Label: "Delete"}, {ID: "R" + j, Label: "Run now"}}})
+	}
+	return tool.Result{Text: "2 jobs, shown to the owner with buttons:\n- j1\n- j2", Out: out}, nil
+}
+
+// /tasks lists the jobs through schedule.list, the same code path, with
+// their buttons and without a model; the history notes it (ruling R47).
+func TestTasksCommandListsJobsWithoutAModel(t *testing.T) {
+	list := &fakeList{name: "schedule.list", jobs: []string{"j1", "j2"}}
+	e := newConfirmEnv(t, list)
+	ev := message(owner, "Igor", "/tasks")
+	out := e.turn(t, ev)
+	if len(e.smart.requests()) != 0 || len(list.calls) != 1 || list.calls[0].Key() != ev.ID+":1" || !list.calls[0].Admin {
+		t.Fatalf("model calls %d, list calls %+v", len(e.smart.requests()), list.calls)
+	}
+	if len(out) != 2 || out[0].Text != "Task: j1" || len(out[0].Buttons) != 3 || out[1].IdemKey != ev.ID+":1:list:j2" {
+		t.Fatalf("out %+v", out)
+	}
+	st := e.state(t)
+	last := st.Messages[len(st.Messages)-1]
+	if last.Role != provider.RoleUser || !strings.HasPrefix(last.Content, "[command] the owner listed the reminders and tasks with /tasks: 2 jobs") {
+		t.Fatalf("history %+v", st.Messages)
+	}
+	if d := e.decisions(t, ev.ID+":1"); len(d) != 1 || d[0] != journal.DecisionAllowed {
+		t.Fatalf("journal %v", d)
+	}
+}
+
+// With no jobs /tasks gives a short fixed reply.
+func TestTasksCommandWithNoJobs(t *testing.T) {
+	e := newConfirmEnv(t, &fakeList{name: "schedule.list"})
+	out := e.turn(t, message(owner, "Igor", "/tasks"))
+	if len(out) != 1 || out[0].Text != replyNoTasks || len(e.smart.requests()) != 0 {
+		t.Fatalf("out %+v", out)
+	}
+}
+
+// A family member gets a fixed refusal and the tool does not run.
+func TestTasksCommandIsForAdmins(t *testing.T) {
+	list := &fakeList{name: "schedule.list", jobs: []string{"j1"}}
+	e := newConfirmEnv(t, list)
+	e.admin = false
+	out := e.turn(t, message("telegram:user:7", "Olena", "/tasks"))
+	if len(out) != 1 || out[0].Text != replyTasksNotAvailable || len(list.calls) != 0 || len(e.smart.requests()) != 0 {
+		t.Fatalf("out %+v, list calls %d", out, len(list.calls))
 	}
 }

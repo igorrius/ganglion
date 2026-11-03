@@ -2,10 +2,13 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/igorrius/ganglion/internal/transcript"
+	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/transport"
 	"github.com/igorrius/ganglion/turns"
 )
@@ -23,6 +26,14 @@ type commandEntry struct {
 	hint map[transport.Lang]string
 }
 
+// commandPrefix starts a user-role note of a command that showed the
+// owner something the model should know of: "[command] ...".
+const commandPrefix = "[command] "
+
+// listTool is the tool /tasks runs: the list the model gets, with the
+// same messages and buttons (ruling R47).
+const listTool = "schedule.list"
+
 // commandTable is the agent's commands, in the order they are listed: the
 // one source of what the agent answers and of the hints people see.
 func (a *Agent) commandTable() []commandEntry {
@@ -38,6 +49,9 @@ func (a *Agent) commandTable() []commandEntry {
 			transport.LangDefault:   "Go back to an earlier conversation: /resume <number>",
 			transport.LangRussian:   "Вернуться к прошлому разговору: /resume <номер>",
 			transport.LangUkrainian: "Повернутися до попередньої розмови: /resume <номер>"}},
+		{"/tasks", a.listTasks, map[transport.Lang]string{
+			transport.LangDefault: "Reminders and scheduled tasks", transport.LangRussian: "Напоминания и задачи по расписанию",
+			transport.LangUkrainian: "Нагадування та завдання за розкладом"}},
 	}
 }
 
@@ -54,6 +68,11 @@ func (a *Agent) Commands() []transport.Command {
 }
 
 const (
+	replyNoTasks           = "No reminders or scheduled tasks."
+	replyTasksNotAvailable = "This command is not available to you."
+	// tasksNote starts the history's note that /tasks showed the list
+	// (ruling R47, in the form of ruling R42's notes).
+	tasksNote         = commandPrefix + "the owner listed the reminders and tasks with /tasks: "
 	replyNewSession   = "New session started."
 	replyNoSessions   = "No earlier sessions."
 	replyNoSuchResume = "No such session; see /sessions."
@@ -162,4 +181,30 @@ func (a *Agent) formatSpan(s SessionInfo) string {
 		return start.Format("2 Jan 15:04") + "–" + end.Format("15:04")
 	}
 	return start.Format("2 Jan 15:04") + "–" + end.Format("2 Jan 15:04")
+}
+
+// listTasks shows the owner's reminders and tasks, one message each with
+// its Details, Delete and Run now buttons, without a model turn: it runs
+// schedule.list, the model's own tool, as the turn's first call through
+// the same chain (tracing, the journal, the policy), so there is one code
+// path (ruling R47). Only an admin gets it. The history notes what was
+// shown, so the next turn knows.
+func (a *Agent) listTasks(ctx context.Context, t *turn, _ string) error {
+	if err := a.setAdmin(ctx, t); err != nil {
+		return err
+	}
+	if _, ok := a.d.Tools.Lookup(listTool); !ok || !t.admin {
+		t.reply(replyTasksNotAvailable)
+		return nil
+	}
+	shown := len(t.out)
+	text, err := a.useTool(ctx, t, provider.ToolCall{Name: listTool, Args: json.RawMessage(`{}`)}, false)
+	if err != nil {
+		return fmt.Errorf("agent: /tasks: %w", err)
+	}
+	if len(t.out) == shown {
+		t.reply(replyNoTasks)
+	}
+	t.note(tasksNote + transcript.Cap(text))
+	return nil
 }

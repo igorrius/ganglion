@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -288,6 +289,12 @@ func TestAgentOverTelegram(t *testing.T) {
 	if len(sets) != 3 || sets[0].Language != "" || sets[1].Language != "ru" || sets[2].Language != "uk" ||
 		sets[0].Commands[0] != (telegramtest.BotCommand{Command: "new", Description: "Start a new conversation"}) {
 		t.Fatalf("command hints %+v", sets)
+	}
+	// /tasks among them, in each language (ruling R47).
+	for i, want := range []string{"Reminders and scheduled tasks", "Напоминания и задачи по расписанию", "Нагадування та завдання за розкладом"} {
+		if !slices.Contains(sets[i].Commands, telegramtest.BotCommand{Command: "tasks", Description: want}) {
+			t.Errorf("set %q lacks /tasks: %+v", sets[i].Language, sets[i].Commands)
+		}
 	}
 }
 
