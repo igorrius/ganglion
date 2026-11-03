@@ -664,6 +664,42 @@ undone with `git revert`.
   command, locally or through `ssh`, `docker exec` or `kubectl exec`; it
   opens no port. The agent gets the same search tools, for admins only,
   with results marked as external data.
+- **R-OBS-8.** Everything significant about how the node works is a
+  metric, not only a log line or a journal row (owner, 2026-11-03). That
+  covers:
+  - speed and errors;
+  - model calls, context size and cost;
+  - tool calls, policy decisions and confirmations;
+  - module runs, the scheduler, the queues and delivery.
+
+  The dashboard shows only what `/metrics` has, so a missing metric is a
+  blind spot. A change that adds such behaviour adds its metric in the
+  same commit, beside the log line and journal row that R-OBS-4–7 ask for
+  diagnosis. The metric shows how the node is doing; the log line shows
+  why one case went wrong.
+- **R-OBS-9.** In a network (P2) the core collects the telemetry of every
+  node over the bus (owner, 2026-11-03). An edge dials out and opens no
+  port, so nothing can scrape its `/metrics`.
+  - **Metrics.** Every N seconds a node publishes a snapshot of its
+    metrics to `a.<network>.<node>.telemetry` over plain NATS, without
+    JetStream. Nothing is stored on the way, and the counters are
+    cumulative, so a lost snapshot costs nothing. The core adds a `node`
+    label and serves the whole network on its own `/metrics`, so one
+    dashboard shows every node.
+  - **Traces.** The trace context rides in the envelope's headers, so one
+    turn that calls a tool on an edge is one trace.
+  - **The error journal.** The edge's error log and its `tool_calls` rows
+    go through JetStream, with limits on size and age. They survive a
+    lost link, and `ganglion mcp` on the core can read them (R-OBS-7).
+  - **Trust.** The core takes `node` from the subject, never from the
+    payload; NATS permissions let a node publish only under its own
+    subject (9.3). The core caps series and snapshot size per node. On an
+    edge the R-OBS rules hold as on the core: no content, labels from
+    closed sets.
+  - **Outside collectors.** Forwarding to an outside collector (OTLP, a
+    Prometheus remote write) is a later feature of the core. It is not a
+    second path from each edge: the bus stays the only link an edge needs. Only what is safe to collect: no content, no identifiers
+  of people or conversations, and label values from closed sets.
 
 ### 7.10. Scheduler and reminders
 
@@ -884,6 +920,7 @@ Envelope:
 | `module.deploy` / `activate` / `rollback` | core → edge | Reference to a signed WASM, blue/green |
 | `policy.update` | core → edge | New action rules |
 | `cmd` | core → edge | Restart, config, drain |
+| `telemetry` | edge → core | A periodic snapshot of the node's metrics (R-OBS-9) over plain NATS, not JetStream; spans and the error journal of R-OBS-9 travel beside it |
 
 Rules: NATS as the transport (subjects `a.<network>.<node>.<type>`, queue
 groups for identical tools on several edges), MQTT and WebSocket adapters;
@@ -1091,6 +1128,7 @@ fallback until the gate is passed.
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
 | Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Proposed for host commands and skill scripts in [ADR-0039](adr/0039-command-sandbox.md): `no_new_privs`, a clean environment, Landlock and a PID namespace, fail closed | A spike in M3d on the owner's machine, Railway and a Pi |
 | How long ended sessions (episodes) are kept | Forever, searched by `memory.recall` (today: the newest 500 per chat) · a retention: sessions older than N days are dropped after consolidation has read them | A retention after consolidation (owner, 2026-11-03): nothing is dropped that consolidation has not read, so a fact the owner never confirmed is still turned into one or kept; what was said by chance fades | M7 task 7.2, with the nightly consolidation; N is chosen there |
+| Telemetry of edge nodes | Each edge to an OpenTelemetry collector over OTLP · Prometheus scrapes each edge · snapshots over the NATS bus, collected by the core | Decided by the owner (2026-11-03): over the bus, collected by the core, without JetStream for metrics (R-OBS-9). A collector needs one more link and one more service for every edge; the bus is already there. An outside collector can later be fed by the core | ADR at the start of P2, with the protocol |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
 
 Each question becomes an ADR (status Proposed) when work on it starts and is

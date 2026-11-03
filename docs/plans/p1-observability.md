@@ -99,3 +99,31 @@ As built:
   - binary 32.8 MB (18.3 before);
   - the agent 26.7 MB idle and 34.6 MB after 1,000 turns (17.6 and 25.6
     before).
+
+### Task 4: the gaps (R-OBS-8, owner, 2026-11-03)
+
+The rule is now that everything significant is a metric. These parts
+log or journal what they do, but `/metrics` does not show it yet:
+
+| Name | Type | Labels | What it answers |
+|---|---|---|---|
+| `ganglion_model_context_tokens` | histogram | `provider`, `model` | Input tokens per call: how big the context gets |
+| `ganglion_turn_steps` | histogram | `outcome` | Model calls per turn |
+| `ganglion_turn_fallbacks_total` | counter | `reason` (error kind) | Turns answered by a fallback model |
+| `ganglion_tool_calls_total` | counter | `tool`, `decision` (allowed, confirm, denied, forbidden, expired, error) | What tools run and what the policy says |
+| `ganglion_tool_call_duration_seconds` | histogram | `tool` | Slow tools |
+| `ganglion_confirmations_total` | counter | `tool`, `answer` (approved, declined, expired) | How the owner answers |
+| `ganglion_confirmations_pending` | gauge | — | Questions waiting now |
+| `ganglion_module_calls_total` | counter | `module`, `result` (ok, trap, timeout, out_of_memory) | WASM module health |
+| `ganglion_module_call_duration_seconds` | histogram | `module` | Module speed |
+| `ganglion_web_fetch_bytes` | histogram | `result` | Page sizes, refusals by size |
+| `ganglion_guard_verdicts_total` | counter | `verdict` (fact, instruction, error) | What the clean-context guard holds back |
+| `ganglion_schedule_runs_total` | counter | `kind`, `outcome` | Reminders, tasks and system jobs that ran |
+| `ganglion_schedule_lag_seconds` | histogram | `kind` | How late a job runs |
+| `ganglion_inbox_pending`, `ganglion_outbox_pending` | gauge | — | Queue depth |
+| `ganglion_sessions_total` | counter | `reason` (idle, new, resume, compacted) | Session churn and compaction |
+
+- [ ] Add these, each in its package's `telemetry.go`, with a test per
+  package. Names and labels may change while building; R-OBS-8 holds.
+- [ ] `make memory` after, to record what they cost.
+- [ ] The owner looks at the dashboard on a live run.

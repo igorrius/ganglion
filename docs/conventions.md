@@ -157,6 +157,38 @@ Instruments live in the package's `telemetry.go`. Labels are
 low-cardinality (provider, model, outcome, kind, transport); never a
 conversation, a principal or message text (ADR-0026).
 
+**Everything significant is observable both ways, in the same commit.**
+This means code that can fail, wait, retry, cost money or grow (a queue,
+a context, a cache). The two ways answer different questions:
+
+| Question | Answered by | Who reads it | Spec |
+|---|---|---|---|
+| How is the node doing: speed, errors, cost, load? | a **metric** | people, on the promtop dashboard, which reads only `/metrics` | R-OBS-1, R-OBS-8 |
+| Why did this one go wrong? | a **log line** with the turn's ids and the trace ids, and a **journal row** for a tool call | a model or a person diagnosing it, through the log files and `ganglion mcp` | R-OBS-4–7 |
+
+Neither replaces the other:
+- a journal row is not on the dashboard;
+- a counter does not say which turn failed.
+
+Logs follow section 5 (log an error or return it); a log line carries
+ids and kinds, never message text or secrets.
+
+**Metrics** (R-OBS-8):
+
+- **The kind follows the question:**
+  - a counter by outcome for anything that can fail or be refused;
+  - a histogram in base units (seconds, bytes, tokens) for anything whose
+    time or size matters;
+  - an observable gauge for a level (queue depth, pending
+    confirmations).
+- **Label values come from a closed set:**
+  - a named type's constants;
+  - tool names from the registry, models from the catalogue, modules from
+    the installed set.
+  - Never a host, a URL, an id, an error message or any text.
+- **Tests** read the new metric back through the Prometheus text, as the
+  existing telemetry tests do.
+
 ## 8. One source for each piece of knowledge
 
 Before writing a helper, look for it. These exist and are the only copies:
