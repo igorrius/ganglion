@@ -598,6 +598,9 @@ undone with `git revert`.
   - Facts reach the model as a "known facts" data block. Procedures go to
     skills, which the owner installs; directives and policies go to
     config and code.
+  - What was said in an earlier chat (episodic) is not a stored fact:
+    recall labels each hit as one or the other, with its date, and the
+    agent says which it reports.
   - Every entry records where it came from: the turn, whether the
     session was tainted, the date. Writes from a tainted session need
     confirmation (R-POL-6), every write passes the clean-context check

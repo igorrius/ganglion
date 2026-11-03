@@ -8,6 +8,7 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/text"
+	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/turns"
 )
@@ -16,6 +17,9 @@ import (
 type Jobs interface {
 	Get(ctx context.Context, id string) (schedule.Job, error)
 }
+
+// reminderPrefix starts the history note of a sent reminder.
+const reminderPrefix = "[reminder] sent to this chat as scheduled: "
 
 // taskSpeaker is who says a task's instruction in its history.
 const taskSpeaker = "Scheduled task"
@@ -30,9 +34,10 @@ const (
 
 // scheduled handles the time of a scheduled job (design section 5.3).
 // Only the scheduler's events count; a schedule event from any other
-// source does nothing. The job is read now, so one deleted after its event was put does nothing,
-// and an event that does not fit its job is dropped. A reminder is sent
-// as it is, with no model and no tools, and ends the turn. A task goes on
+// source does nothing. The job is read now, so one deleted after its
+// event was put does nothing, and an event that does not fit its job is
+// dropped. A reminder is sent as it is, with no model and no tools,
+// leaves a note in the chat's history and ends the turn. A task goes on
 // as a turn of its own conversation: the owner is the principal (an
 // admin check at run time decides the tools), the fixed instruction is
 // the message, the grant is on every call, and the answer goes to the
@@ -64,7 +69,7 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 	case schedule.KindReminder:
 		t.replyConv = j.Conv
 		t.reply(j.Text)
-		return true, nil
+		return true, a.noteReminder(ctx, t, j)
 	case schedule.KindTask:
 		g := j.Grant
 		t.grant, t.replyConv = &g, g.ReplyTo
@@ -77,6 +82,19 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 		a.log.Warn("agent: scheduled job of an unknown kind", "job", j.ID, "kind", j.Kind)
 		return true, nil
 	}
+}
+
+// noteReminder adds a "[reminder]" note of the sent reminder to the
+// chat's history, so the next turn knows it went out (ruling R50: the
+// live run of 2026-11-03 said a reminder "may not have fired" minutes
+// after it was sent). A session silent for longer than the idle time is
+// archived first, so a daily reminder does not keep an old session open.
+func (a *Agent) noteReminder(ctx context.Context, t *turn, j schedule.Job) error {
+	if _, err := a.idle(ctx, t); err != nil {
+		return err
+	}
+	t.note(reminderPrefix + transcript.Cap(j.Text))
+	return nil
 }
 
 // system runs a system job's code for its owner, if the owner is still

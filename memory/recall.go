@@ -31,8 +31,23 @@ type NoEpisodes struct{}
 // Search implements Episodes.
 func (NoEpisodes) Search(context.Context, string, []string, int) ([]Episode, error) { return nil, nil }
 
+// HitKind says which level of memory a hit comes from (spec 7.7).
+type HitKind string
+
+// Hit kinds.
+const (
+	// HitFact is a stored fact: the agent wrote it and the checks let it
+	// in.
+	HitFact HitKind = "fact"
+	// HitEpisode is a part of an earlier session: what was said then,
+	// which may never have become a fact (ruling R49).
+	HitEpisode HitKind = "episode"
+)
+
 // Hit is one result of a recall.
 type Hit struct {
+	Kind    HitKind
+	Slug    string // the fact's slug; "" for a session
 	Source  string // "memory/<slug>" or "session <conv> <session>"
 	Title   string // the fact's title; "" for a session
 	Text    string
@@ -57,7 +72,7 @@ func (m *Memory) Recall(ctx context.Context, q string, convs []string, limit int
 	var hits []Hit
 	for _, e := range es {
 		if strings.Contains(strings.ToLower(e.Title+"\n"+e.Body), needle) {
-			hits = append(hits, Hit{Source: dirFacts + "/" + e.Slug, Title: e.Title, Text: e.Body, When: e.Created, Tainted: e.Tainted})
+			hits = append(hits, Hit{Kind: HitFact, Slug: e.Slug, Source: dirFacts + "/" + e.Slug, Title: e.Title, Text: e.Body, When: e.Created, Tainted: e.Tainted})
 		}
 	}
 	eps, err := m.episodes.Search(ctx, q, convs, limit)
@@ -65,7 +80,7 @@ func (m *Memory) Recall(ctx context.Context, q string, convs []string, limit int
 		return nil, fmt.Errorf("memory: recall: %w", err)
 	}
 	for _, ep := range eps {
-		hits = append(hits, Hit{Source: "session " + ep.Conv + " " + ep.Session, Text: ep.Text, When: ep.Ended, Tainted: ep.Tainted})
+		hits = append(hits, Hit{Kind: HitEpisode, Source: "session " + ep.Conv + " " + ep.Session, Text: ep.Text, When: ep.Ended, Tainted: ep.Tainted})
 	}
 	slices.SortStableFunc(hits, func(a, b Hit) int { return cmp.Compare(b.When.UnixNano(), a.When.UnixNano()) })
 	return hits[:min(len(hits), limit)], nil

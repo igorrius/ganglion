@@ -192,7 +192,7 @@ func TestConfirmDoesNotRun(t *testing.T) {
 	if h.calls != 0 {
 		t.Fatalf("the handler ran %d times", h.calls)
 	}
-	if res.Pending != "pend-1" || !strings.Contains(res.Text, "awaiting confirmation") {
+	if res.Pending != "pend-1" || !strings.Contains(res.Text, "awaiting confirmation") || !strings.Contains(res.Text, "never that it is done") {
 		t.Fatalf("result %+v", res)
 	}
 	// The question with its buttons goes out with the turn's replies.

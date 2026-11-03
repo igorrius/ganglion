@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
@@ -64,12 +65,40 @@ func TestReminderNeedsNoModel(t *testing.T) {
 	if n := len(e.smart.requests()) + len(e.cheap.requests()); n != 0 {
 		t.Fatalf("%d model calls for a reminder", n)
 	}
-	if st := e.state(t); len(st.Messages) != 0 {
-		t.Fatalf("the reminder changed the chat's history: %+v", st.Messages)
+	// The history notes that it went out, so the next turn knows (ruling R50).
+	if st := e.state(t); len(st.Messages) != 1 || st.Messages[0].Role != provider.RoleUser ||
+		st.Messages[0].Content != "[reminder] sent to this chat as scheduled: call mum" || st.Session != ev.ID {
+		t.Fatalf("history %+v", st)
 	}
 	tr, err := e.turns.Get(context.Background(), ev.ID)
 	if err != nil || tr.Principal != owner || tr.Outcome != turns.OutcomeCommand {
 		t.Fatalf("turn %+v, %v", tr, err)
+	}
+}
+
+// The live run of 2026-11-03 said a reminder "may not have fired"
+// minutes after it went out: the next turn now reads its note. A
+// reminder after a long silence archives the old session first, so a
+// daily one does not keep it open (ruling R50).
+func TestReminderNoteReachesNextTurn(t *testing.T) {
+	e := newEnv(t, Config{}, registry(t, newClock()))
+	first := message(owner, "Igor", "remind me at nine to call mum")
+	e.turn(t, first)
+	r := schedule.Job{ID: "r1", Owner: owner, Conv: "telegram:42", Transport: "telegram", Kind: schedule.KindReminder,
+		Cron: "0 9 * * *", Text: "call mum", Created: t0}
+	e.jobs[r.ID] = r
+	e.now = t0.Add(7 * time.Hour)
+	ev := fired(r)
+	e.turn(t, ev)
+	list, _ := e.archive.List(context.Background(), "telegram:42", 5, "")
+	if len(list) != 1 || list[0].Session != first.ID {
+		t.Fatalf("the silent session was not archived: %+v", list)
+	}
+	e.now = e.now.Add(time.Minute)
+	e.turn(t, message(owner, "Igor", "did it fire?"))
+	got := e.userTexts(t, 1)
+	if len(got) != 2 || got[0] != "[reminder] sent to this chat as scheduled: call mum" {
+		t.Fatalf("the model saw %q", got)
 	}
 }
 

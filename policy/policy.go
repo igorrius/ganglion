@@ -34,7 +34,12 @@ const (
 )
 
 const (
-	confirmText = "awaiting confirmation from the owner; the conversation continues when they answer"
+	// confirmText is what the model reads for a parked call. It says the
+	// call has not run, so the model does not report it as done (ruling
+	// R48: the live run of 2026-11-03 said "I updated the record" while
+	// the memory write waited for the press).
+	confirmText = "not done yet: awaiting confirmation from the owner; tell them it waits for their answer, " +
+		"never that it is done. The conversation continues when they answer"
 	// questionArgsRunes caps the arguments shown in a confirmation
 	// question of a tool that does not word its own; a tool whose
 	// arguments must be shown whole is a tool.Questioner (ruling R34).

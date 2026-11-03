@@ -35,7 +35,7 @@ func (g wordGuard) CheckPersona(ctx context.Context, p string) (guard.Verdict, e
 
 var oneAdmin = alert.Admins{List: func(context.Context) ([]string, error) { return []string{"telegram:user:42"}, nil }, Private: private}
 
-func memoryTools(t *testing.T) map[string]tool.Handler {
+func memoryTools(t *testing.T, opts ...memory.Option) map[string]tool.Handler {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("the git binary is not installed; memory lives in a git repository (ADR-0033)")
@@ -44,7 +44,8 @@ func memoryTools(t *testing.T) map[string]tool.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := memory.New(repo, wordGuard{}, func() time.Time { return time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC) }, memory.WithAlerts(oneAdmin))
+	m := memory.New(repo, wordGuard{}, func() time.Time { return time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC) },
+		append([]memory.Option{memory.WithAlerts(oneAdmin)}, opts...)...)
 	out := map[string]tool.Handler{}
 	for _, h := range builtin.MemoryTools(m, private) {
 		out[h.Spec().Name] = h
@@ -116,8 +117,38 @@ func TestMemoryTaintedFactIsOutsideContent(t *testing.T) {
 		t.Fatalf("read %+v", res)
 	}
 	if res := run(t, tools["memory.recall"], call("memory.recall", `{"query":"PETRO"}`)); !res.External ||
-		!strings.Contains(res.Text, "[memory/plumber, 2026-11-03] Plumber:") {
+		!strings.Contains(res.Text, "[stored fact (plumber), saved 2026-11-03] Plumber:") {
 		t.Fatalf("recall %+v", res)
+	}
+}
+
+// oneEpisode is an archive holding one earlier session.
+type oneEpisode struct{ ep memory.Episode }
+
+func (o oneEpisode) Search(context.Context, string, []string, int) ([]memory.Episode, error) {
+	return []memory.Episode{o.ep}, nil
+}
+
+// What the owner once said in a chat is not a stored fact, and recall
+// says which is which (ruling R49). The live run of 2026-11-03: the
+// write of "Deye 5 kW" expired unconfirmed, recall found the owner's
+// words in the archive, and the model said memory still held them.
+func TestMemoryRecallTellsEpisodesFromFacts(t *testing.T) {
+	said := memory.Episode{Conv: "telegram:42", Session: "s1", Ended: time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC),
+		Text: "Igor: my inverter is a Deye 5 kW"}
+	tools := memoryTools(t, memory.WithEpisodes(oneEpisode{said}))
+	res := run(t, tools["memory.recall"], call("memory.recall", `{"query":"inverter"}`))
+	if res.Text != "[said in an earlier chat on 2026-11-02, not a stored fact] Igor: my inverter is a Deye 5 kW" {
+		t.Fatalf("episode only: %q", res.Text)
+	}
+	run(t, tools["memory.write"], call("memory.write", `{"title":"Inverter","body":"A Deye 8 kW inverter."}`))
+	res = run(t, tools["memory.recall"], call("memory.recall", `{"query":"inverter"}`))
+	if !strings.HasPrefix(res.Text, "[stored fact (inverter), saved 2026-11-03] Inverter: A Deye 8 kW inverter.") ||
+		!strings.Contains(res.Text, "[said in an earlier chat on 2026-11-02, not a stored fact]") {
+		t.Fatalf("fact and episode: %q", res.Text)
+	}
+	if d := tools["memory.recall"].Spec().Description; !strings.Contains(d, "not a stored fact") || !strings.Contains(d, "the newer one holds") {
+		t.Fatalf("description %q", d)
 	}
 }
 

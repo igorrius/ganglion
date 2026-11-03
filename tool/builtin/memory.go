@@ -266,7 +266,8 @@ func (*MemoryRecall) Spec() tool.Spec {
 		Name: toolMemoryRecall,
 		Description: "Search the stored facts, and the earlier sessions of this chat and of the sender's private chat, for a word or phrase " +
 			"(not case sensitive). " +
-			"Returns the newest matches first.",
+			"Returns the newest matches first. A match from an earlier chat is what was said then, not a stored fact: " +
+			"say so and give its date; when matches disagree, the newer one holds.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"query":{"type":"string","description":"the word or phrase to find"}},` +
 			`"required":["query"],"additionalProperties":false}`),
@@ -298,13 +299,30 @@ func (r *MemoryRecall) Run(ctx context.Context, c tool.Call) (tool.Result, error
 	external := false
 	for _, h := range hits {
 		external = external || h.Tainted
-		fmt.Fprintf(&b, "[%s, %s]", h.Source, h.When.Format(time.DateOnly))
+		b.WriteString(hitLabel(h))
 		if h.Title != "" {
 			b.WriteString(" " + h.Title + ":")
 		}
 		b.WriteString(" " + h.Text + "\n\n")
 	}
 	return tool.Result{Text: strings.TrimSpace(b.String()), External: external}, nil
+}
+
+// hitLabel opens a recall hit with its level of memory in plain words, so
+// the model does not report what was once said in a chat as a stored
+// fact (ruling R49: the live run of 2026-11-03 said "memory still holds
+// Deye 5 kW" while no fact was stored). A fact keeps its slug, which
+// memory.read and memory.forget take.
+func hitLabel(h memory.Hit) string {
+	day := h.When.Format(time.DateOnly)
+	switch h.Kind {
+	case memory.HitFact:
+		return "[stored fact (" + h.Slug + "), saved " + day + "]"
+	case memory.HitEpisode:
+		return "[said in an earlier chat on " + day + ", not a stored fact]"
+	default:
+		return "[" + day + "]"
+	}
 }
 
 // MemoryAudit is the memory.audit tool, which the scheduled audit runs.

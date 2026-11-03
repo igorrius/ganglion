@@ -1082,7 +1082,19 @@ OpenRouter. Only these parts are test-only:
 live-agent`, by the owner. Steps 1–5 are ticked as scripted. **The
 owner's first live run (2026-11-03) found seven issues, fixed under
  rulings R38–R47; the owner merged M3b and rechecks the mechanics in
- detail in the next session.**
+ detail in the next session.** The recheck (2026-11-03) found the
+ mechanics right and three things the model said wrong, fixed under
+ rulings R48–R50:
+ - R48: a call waiting for a press reads "not done yet … never that it is
+   done", and the directive says so too; the model had said "I updated
+   the record" while the memory write waited.
+ - R49: `memory.recall` labels a hit "stored fact" or "said in an earlier
+   chat on <date>, not a stored fact"; the model had said "memory still
+   holds Deye 5 kW" when that write had expired unconfirmed and only the
+   owner's words were in the archive.
+ - R50: a sent reminder leaves a `[reminder]` note in the chat's
+   history; the model had said a reminder "may not have fired" minutes
+   after it was sent.
 
 - [x] **Step 1: Rates, live on @ganglion_test_bot,** with Haiku through
   the CLI and with the API model (scripted 2026-11-03; on the bot:
