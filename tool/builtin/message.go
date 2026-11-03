@@ -28,6 +28,10 @@ type States interface {
 // (access.List.Listed).
 type ListedFunc func(ctx context.Context, principal string) (bool, error)
 
+// NameFunc returns the name a principal is listed under (access.List.Name);
+// "" when it has none.
+type NameFunc func(ctx context.Context, principal string) (string, error)
+
 // Convs tells which conversations a message may go to: the one the call
 // comes from, one the node has state for, or the private conversation of
 // a principal on the access list.
@@ -35,6 +39,7 @@ type Convs struct {
 	States  States
 	Listed  ListedFunc
 	Private alert.PrivateConvFunc // principal -> private conversation (telegram.PrivateConv)
+	Names   NameFunc              // who a principal is, for the owner's question
 }
 
 // resolve returns where a message to target goes. target is a
@@ -99,9 +104,70 @@ func (*MessageSend) Spec() tool.Spec {
 	}
 }
 
+// MaxMessageRunes bounds a message's text: the owner reads all of it in
+// the confirmation question, which the policy cuts at
+// tool.MaxQuestionRunes, so the bound leaves room for the words around it
+// (ruling R34).
+const MaxMessageRunes = 2500
+
 type messageArgs struct {
 	Conv string `json:"conv"`
 	Text string `json:"text"`
+}
+
+// args reads and checks a call's arguments: a text the question can show
+// whole (ruling R34).
+func (*MessageSend) args(c tool.Call) (messageArgs, error) {
+	var a messageArgs
+	if err := json.Unmarshal(c.Args, &a); err != nil {
+		return messageArgs{}, fmt.Errorf("message.send: arguments: %w", err)
+	}
+	if strings.TrimSpace(a.Text) == "" {
+		return messageArgs{}, errors.New("message.send: text is empty")
+	}
+	if err := showable("message.send", a.Text, MaxMessageRunes); err != nil {
+		return messageArgs{}, err
+	}
+	return a, nil
+}
+
+// Question implements tool.Questioner: the recipient, by name where the
+// access list has one, and the whole text, as it would go out (ruling
+// R34). An unknown recipient is refused without a question.
+func (m *MessageSend) Question(ctx context.Context, c tool.Call) (string, error) {
+	a, err := m.args(c)
+	if err != nil {
+		return "", err
+	}
+	_, conv, err := m.convs.resolve(ctx, c, a.Conv)
+	if err != nil {
+		return "", fmt.Errorf("message.send: %w", err)
+	}
+	to, err := m.recipient(ctx, c, a.Conv, conv)
+	if err != nil {
+		return "", err
+	}
+	return whole("message.send", "Send this message to "+to+"?\n\n"+a.Text)
+}
+
+// recipient names where a message to target goes (conv, resolved): this
+// chat, a person by their listed name and id, or another conversation by
+// its key.
+func (m *MessageSend) recipient(ctx context.Context, c tool.Call, target, conv string) (string, error) {
+	if target == c.Conv && conv == c.Conv {
+		return "this chat", nil
+	}
+	if _, _, ok := m.convs.Private(target); !ok {
+		return "the conversation " + oneLine(conv), nil
+	}
+	name, err := m.convs.Names(ctx, target)
+	if err != nil {
+		return "", fmt.Errorf("message.send: name of %s: %w", target, err)
+	}
+	if name = oneLine(name); name == "" {
+		return oneLine(target), nil
+	}
+	return name + " (" + oneLine(target) + ")", nil
 }
 
 // Run validates the arguments and the target, and only then builds the
@@ -109,12 +175,9 @@ type messageArgs struct {
 // even on an error). The message's idempotency key is the call's key plus
 // ":send", so a rerun turn sends it once (R-DLV-6).
 func (m *MessageSend) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
-	var a messageArgs
-	if err := json.Unmarshal(c.Args, &a); err != nil {
-		return tool.Result{}, fmt.Errorf("message.send: arguments: %w", err)
-	}
-	if strings.TrimSpace(a.Text) == "" {
-		return tool.Result{}, errors.New("message.send: text is empty")
+	a, err := m.args(c)
+	if err != nil {
+		return tool.Result{}, err
 	}
 	transport, conv, err := m.convs.resolve(ctx, c, a.Conv)
 	if err != nil {

@@ -87,15 +87,17 @@ func (*MemoryWrite) args(c tool.Call) (writeArgs, error) {
 	return a, nil
 }
 
-// Question implements tool.Questioner: the fact as it would be stored.
-// The policy asks only in a session that holds outside content.
+// Question implements tool.Questioner: the fact as it would be stored,
+// title and whole body; one the question cannot show whole is refused
+// (ruling R34). The policy asks only in a session that holds outside
+// content.
 func (w *MemoryWrite) Question(_ context.Context, c tool.Call) (string, error) {
 	a, err := w.args(c)
 	if err != nil {
 		return "", err
 	}
-	return "Remember this fact? This conversation holds content from outside, so check it is yours.\n" +
-		strings.TrimSpace(a.Title) + ": " + strings.TrimSpace(a.Body), nil
+	return whole(toolMemoryWrite, "Remember this fact? This conversation holds content from outside, so check it is yours.\n\n"+
+		strings.TrimSpace(a.Title)+": "+strings.TrimSpace(a.Body))
 }
 
 // Run stores the fact with where it came from: the turn and the
@@ -162,14 +164,20 @@ func (*MemoryForget) Spec() tool.Spec {
 	}
 }
 
-// Question implements tool.Questioner: the fact that would be forgotten.
+// Question implements tool.Questioner: the slug that is forgotten and,
+// when the fact is readable, what it holds (ruling R34). The slug is the
+// action, so a stored text the policy shows redacted does not stop the
+// owner forgetting it.
 func (f *MemoryForget) Question(_ context.Context, c tool.Call) (string, error) {
 	slug, err := slugOf(toolMemoryForget, c, false)
 	if err != nil {
 		return "", err
 	}
+	if err := showable(toolMemoryForget, slug, maxNameRunes); err != nil {
+		return "", err
+	}
 	if e, err := f.facts.Read(slug); err == nil {
-		return "Forget this fact?\n" + e.Title + ": " + e.Body, nil
+		return "Forget this fact (" + slug + ")?\n\n" + e.Title + ": " + e.Body, nil
 	}
 	return "Forget the fact " + slug + "?", nil
 }

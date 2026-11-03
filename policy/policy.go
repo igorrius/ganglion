@@ -35,11 +35,10 @@ const (
 
 const (
 	confirmText = "awaiting confirmation from the owner; the conversation continues when they answer"
-	// questionArgsRunes caps the arguments shown in a confirmation question.
+	// questionArgsRunes caps the arguments shown in a confirmation
+	// question of a tool that does not word its own; a tool whose
+	// arguments must be shown whole is a tool.Questioner (ruling R34).
 	questionArgsRunes = 300
-	// toolQuestionRunes caps a question a tool words itself
-	// (tool.Questioner); the tool keeps its own well below it.
-	toolQuestionRunes = 3000
 )
 
 // DefaultMaxDepth is the deepest chain of agent-started turns allowed
@@ -198,7 +197,7 @@ func question(ctx context.Context, h tool.Handler, c tool.Call) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("policy: %s: %w", c.Name, err)
 	}
-	return text.Truncate(journal.Redact(s), toolQuestionRunes), nil
+	return text.Truncate(journal.Redact(s), tool.MaxQuestionRunes), nil
 }
 
 // outOfGrant refuses a call outside a task's grant and alerts the admins,

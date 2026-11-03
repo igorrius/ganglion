@@ -154,6 +154,7 @@ func Convs() do.Provider[builtin.Convs] {
 			States:  do.MustInvoke[*sqlqueue.Queue](i),
 			Listed:  do.MustInvoke[*access.List](i).Listed,
 			Private: telegram.PrivateConv,
+			Names:   do.MustInvoke[*access.List](i).Name,
 		}, nil
 	}
 }

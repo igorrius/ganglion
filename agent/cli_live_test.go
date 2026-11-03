@@ -46,7 +46,8 @@ func TestLiveClaudeToolsThroughBridge(t *testing.T) {
 	list := builtin.NewScheduleList(builtin.Scheduling{Jobs: st, Runner: schedule.New(st, nopInbox{}, time.UTC, now),
 		Specs: func(string) (tool.Spec, bool) { return tool.Spec{}, false }, Buttons: base.pending,
 		Convs: builtin.Convs{States: convStates{}, Listed: func(context.Context, string) (bool, error) { return false, nil },
-			Private: func(string) (string, string, bool) { return "", "", false }},
+			Private: func(string) (string, string, bool) { return "", "", false },
+			Names:   func(context.Context, string) (string, error) { return "", nil }},
 		Loc: time.UTC, Now: now})
 	e := newConfirmEnvOn(t, base, list)
 	e.a.cfg.CallTimeout, e.a.cfg.TurnTimeout = 2*time.Minute, 3*time.Minute

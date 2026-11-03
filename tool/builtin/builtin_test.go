@@ -46,7 +46,16 @@ func convs() builtin.Convs {
 		States:  states{"telegram:42": json.RawMessage(`{"v":2}`), "telegram:empty": nil},
 		Listed:  listed("telegram:user:7"),
 		Private: private,
+		Names:   names,
 	}
+}
+
+// names knows one person on the list.
+func names(_ context.Context, p string) (string, error) {
+	if p == "telegram:user:7" {
+		return "Olena", nil
+	}
+	return "", nil
 }
 
 func call(name string, args string) tool.Call {

@@ -140,6 +140,11 @@ type Gated interface {
 	Offered() bool
 }
 
+// MaxQuestionRunes is the longest confirmation question the policy shows;
+// it cuts a longer one. A Questioner that must show its whole action
+// refuses a call whose question would be longer (ruling R34).
+const MaxQuestionRunes = 3000
+
 // Questioner is a tool that words the owner's confirmation question
 // itself, from the call's arguments, so the owner sees what they approve
 // in plain words (a scheduled task's grant, design section 5.3). The

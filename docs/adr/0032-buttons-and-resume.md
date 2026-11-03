@@ -158,7 +158,15 @@ The abuse cases:
   call waits unseen and expires silently, leaving a journal entry.
 - The confirmed call's arguments sit in SQLite until the call is done,
   like the history that holds them anyway; the question shown is
-  redacted.
+  redacted. What the owner approves is what runs (ruling R34):
+  `message.send`, `memory.write`, `memory.forget`, `cells.set` and
+  `persona.propose` word their own question and show the whole action
+  (the recipient by name and the full text; the title and body; the
+  slug and the fact; the cell and the value), and refuse, with a fixed
+  error and no question, an action longer than a question shows (3,000
+  characters; a message's text at most 2,500) or text the redaction
+  would change. Another tool's question shows its arguments cut at 300
+  characters.
 - A resumed turn passes the daily limit as a message does (ruling R33):
   over it the approved call still runs (the owner decided it), its
   outcome joins the history, and no model turn follows. An expiry's

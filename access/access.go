@@ -118,6 +118,20 @@ func (l *List) Role(ctx context.Context, principal string) (Role, bool, error) {
 	return Role(role), true, nil
 }
 
+// Name returns the name principal is listed under; "" when it is not
+// listed or has none.
+func (l *List) Name(ctx context.Context, principal string) (string, error) {
+	var name string
+	err := l.db.QueryRowContext(ctx, `SELECT name FROM allowed WHERE principal = ?`, principal).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("access: name of %s: %w", principal, err)
+	}
+	return name, nil
+}
+
 // Listed reports whether principal is on the list, in any role.
 func (l *List) Listed(ctx context.Context, principal string) (bool, error) {
 	_, ok, err := l.Role(ctx, principal)

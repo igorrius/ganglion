@@ -122,22 +122,44 @@ func (*CellsSet) Spec() tool.Spec {
 	}
 }
 
+// setArgs are the arguments of cells.set.
+type setArgs struct {
+	ID    string `json:"id"`
+	Value string `json:"value"`
+}
+
+// args reads and checks a call's arguments: a cell id and "on" or "off".
+func (*CellsSet) args(c tool.Call) (setArgs, error) {
+	var a setArgs
+	if err := json.Unmarshal(c.Args, &a); err != nil {
+		return setArgs{}, fmt.Errorf("cells.set: arguments: %w", err)
+	}
+	if a.ID == "" {
+		return setArgs{}, errors.New("cells.set: id is empty")
+	}
+	if a.Value != valueOn && a.Value != valueOff {
+		return setArgs{}, fmt.Errorf(`cells.set: value must be "on" or "off", got %q`, a.Value)
+	}
+	return a, nil
+}
+
+// Question implements tool.Questioner: the cell and the value it is set
+// to, both whole (ruling R34).
+func (s *CellsSet) Question(_ context.Context, c tool.Call) (string, error) {
+	a, err := s.args(c)
+	if err != nil {
+		return "", err
+	}
+	return whole("cells.set", "Switch "+a.ID+" "+a.Value+"?")
+}
+
 // Run sets the cell's desired value to "on" or "off", with the call's
 // key as the source of the change, and returns the cell as cells.get
 // does. Any other value is refused.
 func (s *CellsSet) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
-	var a struct {
-		ID    string `json:"id"`
-		Value string `json:"value"`
-	}
-	if err := json.Unmarshal(c.Args, &a); err != nil {
-		return tool.Result{}, fmt.Errorf("cells.set: arguments: %w", err)
-	}
-	if a.ID == "" {
-		return tool.Result{}, errors.New("cells.set: id is empty")
-	}
-	if a.Value != valueOn && a.Value != valueOff {
-		return tool.Result{}, fmt.Errorf(`cells.set: value must be "on" or "off", got %q`, a.Value)
+	a, err := s.args(c)
+	if err != nil {
+		return tool.Result{}, err
 	}
 	cell, err := s.cells.SetDesired(ctx, a.ID, json.RawMessage(`"`+a.Value+`"`), c.Key(), 0)
 	if err != nil {

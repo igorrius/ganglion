@@ -55,7 +55,8 @@ func newWebEnv(t *testing.T, hits ...web.Hit) *webEnv {
 	search := stubSearch{hits: hits}
 	send := builtin.NewMessageSend(builtin.Convs{States: convStates{},
 		Listed:  func(context.Context, string) (bool, error) { return true, nil },
-		Private: func(string) (string, string, bool) { return "", "", false }})
+		Private: func(string) (string, string, bool) { return "", "", false },
+		Names:   func(context.Context, string) (string, error) { return "", nil }})
 	remember := &sideTool{name: "memory.write", result: tool.Result{Text: "remembered"}, class: tool.ClassSideEffect}
 	e := newConfirmEnv(t, builtin.NewWebFetch(fetcher), builtin.NewWebSearch(search), send, remember)
 	return &webEnv{confirmEnv: e, net: n, remember: remember}

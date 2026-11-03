@@ -248,3 +248,18 @@ func TestListed(t *testing.T) {
 		}
 	}
 }
+
+// Name is who a listed principal is, for a confirmation question; ""
+// for one not listed or listed without a name.
+func TestName(t *testing.T) {
+	l := newList(t)
+	ctx := context.Background()
+	if err := l.Allow(ctx, "telegram:user:2", access.RoleFamily, "Anna"); err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]string{"telegram:user:2": "Anna", "telegram:user:9": ""} {
+		if got, err := l.Name(ctx, p); err != nil || got != want {
+			t.Errorf("Name(%s) = %q, %v; want %q", p, got, err, want)
+		}
+	}
+}
