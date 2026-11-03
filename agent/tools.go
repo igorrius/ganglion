@@ -46,10 +46,14 @@ func (a *Agent) traced(next tool.Func) tool.Func {
 
 // toolSpecs are the tools the model is offered in this turn, in the
 // provider's shape; a scheduled task is offered only its grant's tools
-// (the policy refuses the others anyway), and the persona tool is offered
+// (the policy refuses the others anyway), an expiry's turn none (ruling
+// R33), and the persona tool is offered
 // only where the introduction rules are (a session with outside content
 // is not asked for a persona; the tool refuses it anyway).
 func (a *Agent) toolSpecs(t *turn) []provider.Tool {
+	if t.noTools {
+		return nil
+	}
 	specs := a.d.Tools.Specs(t.admin)
 	out := make([]provider.Tool, 0, len(specs))
 	for _, s := range specs {
@@ -193,7 +197,7 @@ func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) 
 func (a *Agent) toolCall(t *turn, call provider.ToolCall) tool.Call {
 	return tool.Call{
 		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Transport: t.transport, Principal: t.msg.From,
-		Admin: t.admin, Tainted: t.state.Tainted, Grant: t.grant, KnownURL: t.known.has,
+		Admin: t.admin, Tainted: t.state.Tainted, Grant: t.grant, KnownURL: t.known.has, Depth: t.depth,
 		Name: call.Name, Args: call.Args,
 	}
 }

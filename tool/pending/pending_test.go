@@ -478,3 +478,19 @@ func TestFinishStoresTheOutcome(t *testing.T) {
 		t.Fatalf("Finish(unknown) = %v", err)
 	}
 }
+
+// A parked call keeps its depth, and the rebuilt call carries it
+// (R-AGT-4, ruling R33).
+func TestAskKeepsTheDepth(t *testing.T) {
+	f := newFixture(t)
+	c := call(3)
+	c.Depth = 2
+	id, err := f.s.Ask(context.Background(), c, "Run it?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	it, err := f.s.Get(context.Background(), id)
+	if err != nil || it.Depth != 2 || it.Call().Depth != 2 {
+		t.Fatalf("item %+v, %v", it, err)
+	}
+}

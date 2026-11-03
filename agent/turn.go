@@ -45,6 +45,13 @@ type turn struct {
 	// transport and the job's reply target.
 	transport, replyConv string
 	grant                *tool.Grant // a scheduled task's grant, on every call of its turn
+	// depth is the depth of the turn's calls (R-AGT-4): 0 in a turn a
+	// person or a job started, the resumed call's depth plus one in a
+	// turn a confirmation resumed (ruling R33).
+	depth int
+	// noTools offers the model no tools: an expiry only tells the owner
+	// (ruling R33).
+	noTools bool
 }
 
 // reply adds the answer to the person's message. A turn answers once, so

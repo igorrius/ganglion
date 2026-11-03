@@ -532,3 +532,81 @@ func TestStoredCallWithBadArgsIsRefusedOnResume(t *testing.T) {
 		}
 	}
 }
+
+// Ruling R33: an expiry continuation runs without tools; the model only
+// tells the owner the request expired, so a tainted turn cannot park
+// again every TTL without the owner.
+func TestExpiryTurnOffersNoTools(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	e.ask(t, "schedule.create")
+	e.now = e.now.Add(pending.DefaultTTL)
+	e.smart.push(say("The request expired."))
+	e.turn(t, expired(t, e))
+	reqs := e.smart.requests()
+	if last := reqs[len(reqs)-1]; len(last.Tools) != 0 || last.Exec != nil {
+		t.Fatalf("the expiry turn offered %d tools, exec set %v", len(last.Tools), last.Exec != nil)
+	}
+}
+
+// Ruling R33: a resumed turn passes the daily limit like a message: the
+// approved call runs (the owner decided it), but no model turn follows
+// over the limit, and the outcome still joins the history.
+func TestResumedTurnOverTheDailyLimitIsRefused(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	e.a = New(overDefaults(Config{DailyTurns: 1}), e.deps)
+	q, _ := e.ask(t, "schedule.create")
+	calls := len(e.smart.requests())
+	ev := press(owner, q.Buttons[0].ID, "77")
+	out := e.turn(t, ev)
+	if len(side.calls) != 1 {
+		t.Fatalf("the approved call ran %d times", len(side.calls))
+	}
+	if len(e.smart.requests()) != calls {
+		t.Fatal("the model was called over the daily limit")
+	}
+	if r, ok := findOut(out, isReply); !ok || r.Text != replyDailyLimit {
+		t.Fatalf("out %+v", out)
+	}
+	if tr, _ := e.turns.Get(context.Background(), ev.ID); tr.Outcome != "daily_limit" {
+		t.Fatalf("outcome %q", tr.Outcome)
+	}
+	st := e.state(t)
+	if last := st.Messages[len(st.Messages)-1]; last.Content != "[confirmation] schedule.create: created" || len(st.Pending) != 0 {
+		t.Fatalf("history ends %+v, pending %v", last, st.Pending)
+	}
+}
+
+// Ruling R33: a call parked in a resumed turn carries its parent's depth
+// plus one, so a chain of approvals that keeps asking again ends at
+// policy.DefaultMaxDepth: the call past it is forbidden, not asked.
+func TestResumeChainDeeperThanMaxDepthIsForbidden(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	q, ev := e.ask(t, "schedule.create")
+	for hop := 1; ; hop++ {
+		e.smart.push(callTool("schedule.create"), say("asked again"))
+		out := e.turn(t, press(owner, q.Buttons[0].ID, "77"))
+		next, asked := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 })
+		if hop <= policy.DefaultMaxDepth {
+			if !asked {
+				t.Fatalf("hop %d: no question; out %+v", hop, out)
+			}
+			q = next
+			continue
+		}
+		if asked {
+			t.Fatalf("hop %d: a call deeper than MaxDepth was asked: %+v", hop, next)
+		}
+		break
+	}
+	entries, err := e.journal.Entries(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := entries[len(entries)-1]
+	if last.Decision != journal.DecisionForbidden || last.Tool != "schedule.create" || strings.HasPrefix(last.Key, ev.ID) {
+		t.Fatalf("last journal entry %+v, want the deep call forbidden", last)
+	}
+}

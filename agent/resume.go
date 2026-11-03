@@ -276,6 +276,7 @@ func (a *Agent) expired(ctx context.Context, t *turn) error {
 	if !slices.Contains(t.state.Pending, it.ID) {
 		return nil
 	}
+	t.noTools = true // the model only tells the owner (ruling R33)
 	return a.continueWith(ctx, t, it, o)
 }
 
@@ -285,6 +286,10 @@ func (a *Agent) expired(ctx context.Context, t *turn) error {
 // model answers as it does a message. The outcome is capped like a tool
 // result in a transcript (transcript.Cap), on both paths: an approved
 // page is not the owner's words and must not fill the prompt.
+//
+// The resumed turn passes the daily limit as a message does; over it the
+// note joins the history without a model turn. Its calls run one level
+// deeper than the resumed call (R-AGT-4, ruling R33).
 func (a *Agent) continueWith(ctx context.Context, t *turn, it pending.Item, o pending.Outcome) error {
 	t.record.Outcome = turns.OutcomeOK
 	t.state.Pending = slices.DeleteFunc(slices.Clone(t.state.Pending), func(id string) bool { return id == it.ID })
@@ -294,6 +299,11 @@ func (a *Agent) continueWith(ctx context.Context, t *turn, it pending.Item, o pe
 		text = tool.WrapExternal(it.Tool, text)
 	}
 	note := provider.Message{Role: provider.RoleUser, Content: confirmationPrefix + it.Tool + ": " + transcript.Cap(text)}
+	if over, _ := a.limits(ctx, t); over {
+		t.state.Messages, t.state.Last = append(t.state.Messages, note), t.now
+		return nil
+	}
+	t.depth = it.Depth + 1
 	if done, err := a.converse(ctx, t, note); err != nil || done {
 		return err
 	}

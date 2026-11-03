@@ -107,7 +107,8 @@ How it works:
 - A node component, the expirer, marks unanswered calls expired every
   30 s and puts an event `tool.result` for each (key
   `pending:<id>:expired`); the conversation resumes with "the owner did
-  not answer in time", if the call is still in its session.
+  not answer in time", if the call is still in its session, in a turn
+  without tools.
 - Quick-action buttons (Delete, Details; later tasks) are stored the same
   way with an action name; a press runs the registered action, edits the
   message and starts no model turn. A refused press on one removes only
@@ -158,8 +159,14 @@ The abuse cases:
 - The confirmed call's arguments sit in SQLite until the call is done,
   like the history that holds them anyway; the question shown is
   redacted.
-- A resumed turn does not count against the daily turn limit stage; the
-  router's budget still applies.
+- A resumed turn passes the daily limit as a message does (ruling R33):
+  over it the approved call still runs (the owner decided it), its
+  outcome joins the history, and no model turn follows. An expiry's
+  turn is offered no tools: the model only tells the owner the request
+  expired, so a tainted turn cannot park again every 15 minutes without
+  the owner. A call parked in a resumed turn stores its depth, one more
+  than the call that turn resumed, and the policy's depth limit
+  (R-AGT-4, 3 by default) ends a chain of approvals that keeps asking.
 
 ## Revisit when
 

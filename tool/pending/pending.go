@@ -91,6 +91,7 @@ type Item struct {
 	Result                                 string
 	External                               bool             // Result is outside content
 	Tainted                                bool             // the session was tainted when the call was parked
+	Depth                                  int              // the call's depth (R-AGT-4); its resumed turn runs one deeper
 	Out                                    []event.Outgoing // messages the call produced
 }
 
@@ -104,12 +105,12 @@ type Outcome struct {
 
 // Call rebuilds the stored call with its original turn and number, so its
 // key, the idempotency key of its side effects, is the original one
-// (R-DLV-6). Tainted is the taint the call was parked with; the caller
-// sets the parts that are decided at run time (Admin, and a taint the
-// session gained since).
+// (R-DLV-6). Tainted and Depth are what the call was parked with; the
+// caller sets the parts that are decided at run time (Admin, and a taint
+// the session gained since).
 func (i Item) Call() tool.Call {
 	return tool.Call{TurnID: i.TurnID, N: i.N, Conv: i.Conv, Transport: i.Transport, Principal: i.Principal, Name: i.Tool, Args: i.Args,
-		Tainted: i.Tainted}
+		Tainted: i.Tainted, Depth: i.Depth}
 }
 
 // Button is a stored button. Only ID goes to the chat.
@@ -202,7 +203,7 @@ func (s *Store) Ask(ctx context.Context, c tool.Call, question string) (string, 
 	}
 	now := s.now().UTC()
 	it := Item{ID: event.NewID(now), Conv: c.Conv, Transport: c.Transport, Principal: c.Principal, TurnID: c.TurnID, N: c.N,
-		Tool: c.Name, Args: c.Args, Question: question, Status: StatusWaiting, Expires: now.Add(s.ttl), Tainted: c.Tainted}
+		Tool: c.Name, Args: c.Args, Question: question, Status: StatusWaiting, Expires: now.Add(s.ttl), Tainted: c.Tainted, Depth: c.Depth}
 	id, err := s.insert(ctx, it, now)
 	if err != nil {
 		return "", fmt.Errorf("pending: ask %s: %w", c.Key(), err)
@@ -227,9 +228,9 @@ func (s *Store) insert(ctx context.Context, it Item, now time.Time) (string, err
 	var id string
 	err := s.tx(ctx, func(tx *sql.Conn) error {
 		res, err := tx.ExecContext(ctx, `INSERT INTO pending_calls (id, turn_id, n, conv, transport, principal, tool, args, question,
-			status, created_ms, expires_ms, tainted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (turn_id, n) DO NOTHING`,
+			status, created_ms, expires_ms, tainted, depth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (turn_id, n) DO NOTHING`,
 			it.ID, it.TurnID, it.N, it.Conv, it.Transport, it.Principal, it.Tool, string(it.Args), it.Question,
-			string(it.Status), now.UnixMilli(), it.Expires.UnixMilli(), it.Tainted)
+			string(it.Status), now.UnixMilli(), it.Expires.UnixMilli(), it.Tainted, it.Depth)
 		if err != nil {
 			return err
 		}
@@ -420,7 +421,7 @@ func (s *Store) ExpireDue(ctx context.Context) ([]Item, error) {
 	return out, rows.Err()
 }
 
-const itemColumns = `id, conv, transport, principal, turn_id, n, tool, args, question, status, expires_ms, result, external, out, tainted`
+const itemColumns = `id, conv, transport, principal, turn_id, n, tool, args, question, status, expires_ms, result, external, out, tainted, depth`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -429,7 +430,7 @@ func scanItem(r scanner) (Item, error) {
 	var args, status, out string
 	var expires int64
 	if err := r.Scan(&it.ID, &it.Conv, &it.Transport, &it.Principal, &it.TurnID, &it.N, &it.Tool, &args, &it.Question,
-		&status, &expires, &it.Result, &it.External, &out, &it.Tainted); err != nil {
+		&status, &expires, &it.Result, &it.External, &out, &it.Tainted, &it.Depth); err != nil {
 		return Item{}, err
 	}
 	if out != "" {
