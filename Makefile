@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo live-agent accept compare memory modules modules-html2md modules-tinygo modules-rust modrun modbench bench bench-html2md
+.PHONY: build test lint check live-echo live-agent accept compare memory modules modules-html2md modules-tinygo modules-rust clean-modules modrun modbench bench bench-html2md
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
@@ -91,6 +91,14 @@ modules-tinygo:
 modules-rust:
 	cd modules/deye-rs && cargo build --quiet --release --target wasm32-wasip1
 	cp modules/deye-rs/target/wasm32-wasip1/release/deye_reader.wasm bin/deye-reader.rust.wasm
+
+# Cargo keeps every build of the Rust modules in their target/ folders:
+# host builds from `cargo test`, clippy and examples grow to gigabytes,
+# while `make modules` needs only target/wasm32-wasip1. This drops them all;
+# the next build fills them again. bin/ (the live database) is not touched.
+clean-modules:
+	cd modules/html2md && cargo clean --quiet
+	cd modules/deye-rs && cargo clean --quiet
 
 modrun:
 	go build -o bin/modrun ./tools/modrun

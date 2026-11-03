@@ -28,6 +28,13 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
+# Host builds (cargo test, clippy, examples) are a cache, not something we
+# debug in a debugger: without debug info and incremental state they take
+# a fraction of the disk (`make clean-modules` drops them all).
+[profile.dev]
+debug = 0
+incremental = false
+
 # Tests parse thousands of pages (tests/depth.rs): unoptimised, the
 # property tests take 144 s instead of 11 s.
 [profile.test]
