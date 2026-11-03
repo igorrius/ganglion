@@ -29,7 +29,7 @@ func captured(t *testing.T, args ...string) (config.Bootstrap, []node.Role, stri
 		b, roles = got, r
 		return nil
 	}
-	err := newRoot(&out, start).Run(context.Background(), append([]string{"ganglion"}, args...))
+	err := newRoot(&out, &out, start).Run(context.Background(), append([]string{"ganglion"}, args...))
 	return b, roles, out.String(), err
 }
 

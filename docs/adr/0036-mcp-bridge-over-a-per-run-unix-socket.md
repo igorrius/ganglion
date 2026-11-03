@@ -134,6 +134,23 @@ The details:
     group can start a line like a turn ("User: Igor: …"). A confirmed
     call's outcome, which comes back as a user note, is cut to 4,000
     runes like a tool result.
+12. No prompt text is in argv, which every local user reads in `/proc`:
+    the system prompt, which now holds the memory's index, goes to a
+    `0600` file in its own `0700` dir under the work dir
+    (`--system-prompt-file`, checked against 2.1.317), removed after the
+    run; the rest is on stdin. This narrows ADR-0021's
+    `--system-prompt`.
+13. `claude` runs with a minimal environment: `PATH`, `HOME`, the user
+    and locale, temporary and XDG directories, proxies and CA
+    certificates, and the CLI's own login and settings (`CLAUDE_*`,
+    `ANTHROPIC_*`, `DISABLE_*`), plus names the operator adds
+    (`claudecli.WithEnv`). The node's secrets (`TELEGRAM_BOT_TOKEN`,
+    `OPENROUTER_API_KEY`, `BRAVE_API_KEY` and their `*_FILE`) stay out;
+    the relay's token reaches only the relay, through `mcp.json`. A live
+    run of Haiku stays logged in with it.
+14. The relay's stdout is the MCP stream: a usage error of
+    `ganglion mcp-relay` prints nothing there, and the command line's
+    own errors go to stderr.
 
 ## Consequences
 

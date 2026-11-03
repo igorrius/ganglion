@@ -20,7 +20,7 @@ func TestRunStartsAllRolesByDefault(t *testing.T) {
 	var out syncBuffer
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // the node stops as soon as it has started
-	if err := Execute(ctx, []string{"ganglion", "run"}, &out); err != nil {
+	if err := Execute(ctx, []string{"ganglion", "run"}, &out, &out); err != nil {
 		t.Fatalf("run with defaults: %v", err)
 	}
 	if !strings.Contains(out.String(), "roles=core,edge,worker") {
@@ -35,7 +35,7 @@ func TestRunServesMetrics(t *testing.T) {
 	var out syncBuffer
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Execute(ctx, []string{"ganglion", "run", "--roles", "core"}, &out) }()
+	go func() { done <- Execute(ctx, []string{"ganglion", "run", "--roles", "core"}, &out, &out) }()
 	var addr string
 	for i := 0; i < 200 && addr == ""; i++ {
 		time.Sleep(10 * time.Millisecond)
@@ -70,7 +70,7 @@ func TestBusyMetricsPortDoesNotStopTheNode(t *testing.T) {
 	var out syncBuffer
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := Execute(ctx, []string{"ganglion", "run", "--roles", "core"}, &out); err != nil {
+	if err := Execute(ctx, []string{"ganglion", "run", "--roles", "core"}, &out, &out); err != nil {
 		t.Fatalf("a busy metrics port stopped the node: %v", err)
 	}
 	if !strings.Contains(out.String(), "metrics are off") {

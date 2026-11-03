@@ -20,6 +20,8 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -35,7 +37,8 @@ import (
 type Client struct {
 	name    string
 	command string
-	relay   string // the binary with `mcp-relay`; "" is this executable
+	relay   string   // the binary with `mcp-relay`; "" is this executable
+	pass    []string // more environment variables claude gets (WithEnv)
 	sem     chan struct{}
 	// reserve is one more slot, for runs without tools only: a run with
 	// tools may wait on one without (a guard check of memory.write), so
@@ -67,6 +70,13 @@ func WithCommand(path string) Option {
 // is this executable.
 func WithRelay(path string) Option {
 	return func(c *Client) { c.relay = path }
+}
+
+// WithEnv names more environment variables claude gets besides the ones
+// it needs to run and stay logged in (passedEnv), such as a proxy setting
+// of the operator's own.
+func WithEnv(names ...string) Option {
+	return func(c *Client) { c.pass = append(c.pass, names...) }
 }
 
 // WithMaxConcurrent caps the claude processes alive at once; default 2.
@@ -109,10 +119,11 @@ func (c *Client) workDir() (string, error) {
 const UsageLimitCooldown = 15 * time.Minute
 
 // prompt splits the history into the system prompt and the text sent on
-// stdin. Only the first system message (the operator's static prompt)
-// goes to --system-prompt, which is argv and shows in ps. Later system
-// messages, such as the conversation summary, hold family text and go to
-// stdin ahead of the transcript.
+// stdin. Only the first system message (the operator's prompt with the
+// memory's index) is the system prompt, which goes to a 0600 file
+// (--system-prompt-file): argv shows in ps. Later system messages, such
+// as the conversation summary, hold family text and go to stdin ahead of
+// the transcript.
 func prompt(msgs []provider.Message) (system, stdin string) {
 	var head []string
 	seenSystem := false
@@ -162,6 +173,11 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 	}
 
 	system, transcript := prompt(req.Messages)
+	systemFile, cleanup, err := writeSystem(dir, system)
+	if err != nil {
+		return provider.ChatResponse{}, c.fail(provider.KindUnavailable, "system prompt: "+err.Error())
+	}
+	defer cleanup()
 	args := []string{"-p", "--model", req.Model, "--output-format", "json", "--no-session-persistence",
 		"--tools", "", "--strict-mcp-config"}
 	if len(req.Tools) > 0 {
@@ -172,7 +188,7 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 		defer b.close()
 		args = append(args, b.args()...)
 	}
-	args = append(args, "--setting-sources", "", "--system-prompt", system)
+	args = append(args, "--setting-sources", "", "--system-prompt-file", systemFile)
 	stdout, stderr, runErr := c.run(ctx, dir, args, transcript)
 	return c.result(ctx, stdout, stderr, runErr)
 }
@@ -193,6 +209,59 @@ func (c *Client) acquire(ctx context.Context, tools bool) (func(), error) {
 	case <-ctx.Done():
 		return nil, c.ctxError(ctx)
 	}
+}
+
+// systemName is the system prompt's file in its own dir.
+const systemName = "system.md"
+
+// writeSystem writes the system prompt to a 0600 file in a new 0700 dir
+// under dir, and returns its path and a cleanup that removes the dir. The
+// prompt holds the memory's index, so it never goes to argv, which every
+// local user can read in /proc.
+func writeSystem(dir, system string) (string, func(), error) {
+	d, err := os.MkdirTemp(dir, "prompt-") // mode 0700
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func() { _ = os.RemoveAll(d) }
+	path := filepath.Join(d, systemName)
+	if err := os.WriteFile(path, []byte(system), privateMode); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	return path, cleanup, nil
+}
+
+// passedEnv are the variables claude gets from this process's
+// environment: what it needs to run (PATH, HOME, the locale, temporary
+// and XDG directories, proxies and CA certificates) and its own login and
+// settings (CLAUDE_*, ANTHROPIC_*, DISABLE_*). Nothing else: the node's
+// own secrets (TELEGRAM_BOT_TOKEN, OPENROUTER_API_KEY, BRAVE_API_KEY and
+// their *_FILE) stay out, and the relay's token reaches only the relay,
+// through mcp.json.
+var passedEnv = []string{"PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TZ", "TMPDIR", "TERM",
+	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+	"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS"}
+
+// passedPrefixes are the variable name prefixes claude gets (passedEnv).
+var passedPrefixes = []string{"LC_", "XDG_", "CLAUDE_", "ANTHROPIC_", "DISABLE_"}
+
+// env is claude's environment: the passed variables of this process's
+// environment, and the ones named with WithEnv.
+func (c *Client) env() []string {
+	var out []string
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		if slices.Contains(passedEnv, name) || slices.Contains(c.pass, name) || hasAnyPrefix(name, passedPrefixes) {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
+// hasAnyPrefix reports whether s starts with one of prefixes.
+func hasAnyPrefix(s string, prefixes []string) bool {
+	return slices.ContainsFunc(prefixes, func(p string) bool { return strings.HasPrefix(s, p) })
 }
 
 // bridge opens the MCP bridge that serves req's tools to one run.
@@ -218,6 +287,7 @@ func (c *Client) bridge(ctx context.Context, dir string, req provider.ChatReques
 func (c *Client) run(ctx context.Context, dir string, args []string, stdin string) (stdout, stderr bytes.Buffer, err error) {
 	cmd := exec.CommandContext(ctx, c.command, args...)
 	cmd.Dir = dir
+	cmd.Env = c.env()
 	cmd.Stdin = strings.NewReader(stdin) // never argv: argv shows in ps
 	cmd.Stdout, cmd.Stderr = &stdout, &limited{b: &stderr, n: 4096}
 	cmd.WaitDelay = 2 * time.Second

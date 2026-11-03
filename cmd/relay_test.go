@@ -75,3 +75,16 @@ func TestRelayCommandIsHidden(t *testing.T) {
 		t.Fatalf("mcp-relay --help: %v", err)
 	}
 }
+
+// The relay's stdout is the MCP stream the CLI reads: a usage error goes
+// to stderr only, never as a line the CLI would parse (M3b final review).
+func TestRelayUsageErrorsStayOffStdout(t *testing.T) {
+	t.Setenv(mcp.TokenEnv, "t")
+	for _, args := range [][]string{{"mcp-relay"}, {"mcp-relay", "--socket", "x", "--bogus"}} {
+		var stdout, stderr strings.Builder
+		err := newRoot(&stdout, &stderr, nil).Run(context.Background(), append([]string{"ganglion"}, args...))
+		if err == nil || stdout.Len() != 0 {
+			t.Errorf("%q: err %v, stdout %q", args, err, stdout.String())
+		}
+	}
+}

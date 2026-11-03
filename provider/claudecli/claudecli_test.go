@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,7 +42,15 @@ func fakeClaude(mode string) int {
 	stdin, _ := io.ReadAll(os.Stdin)
 	switch mode {
 	case "ok":
-		b, _ := json.Marshal(map[string]any{"args": os.Args[1:], "stdin": string(stdin)})
+		system, mode := "", ""
+		if i := slices.Index(os.Args, "--system-prompt-file"); i > 0 && i+1 < len(os.Args) {
+			raw, _ := os.ReadFile(os.Args[i+1])
+			system = string(raw)
+			if fi, err := os.Stat(os.Args[i+1]); err == nil {
+				mode = fi.Mode().Perm().String()
+			}
+		}
+		b, _ := json.Marshal(map[string]any{"args": os.Args[1:], "stdin": string(stdin), "system": system, "mode": mode, "env": os.Environ()})
 		record(string(b))
 		fmt.Print(`{"type":"result","subtype":"success","is_error":false,"result":"Привет!","usage":{"input_tokens":3,"cache_creation_input_tokens":20,"cache_read_input_tokens":100,"output_tokens":7}}`)
 		return 0
@@ -94,7 +103,9 @@ func fake(t *testing.T, mode string, opts ...Option) (*Client, string) {
 	rec := filepath.Join(t.TempDir(), "record")
 	t.Setenv("FAKE_CLAUDE", mode)
 	t.Setenv("FAKE_CLAUDE_RECORD", rec)
-	return New("claude", append([]Option{WithCommand(os.Args[0])}, opts...)...), rec
+	// The fake reads its mode from the environment, which claude gets
+	// only in part.
+	return New("claude", append([]Option{WithCommand(os.Args[0]), WithEnv("FAKE_CLAUDE", "FAKE_CLAUDE_RECORD", "FAKE_CLAUDE_TOOL")}, opts...)...), rec
 }
 
 var history = []provider.Message{
@@ -114,28 +125,84 @@ func TestArgsAndStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got struct {
-		Args  []string `json:"args"`
-		Stdin string   `json:"stdin"`
-	}
+	var got recorded
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
+	i := slices.Index(got.Args, "--system-prompt-file")
+	if i < 0 || i+1 >= len(got.Args) {
+		t.Fatalf("no --system-prompt-file in %q", got.Args)
+	}
 	wantArgs := []string{"-p", "--model", "haiku", "--output-format", "json", "--no-session-persistence",
 		"--tools", "", "--strict-mcp-config", "--setting-sources", "",
-		"--system-prompt", "You are the family assistant."}
+		"--system-prompt-file", got.Args[i+1]}
 	if !slices.Equal(got.Args, wantArgs) {
 		t.Fatalf("args\n got %q\nwant %q", got.Args, wantArgs)
 	}
+	// No prompt text is in argv, which shows in ps: the system prompt
+	// (it holds the facts index) is a 0600 file, removed after the run.
 	for _, a := range got.Args {
-		if strings.Contains(a, "секретный") || strings.Contains(a, "boiler") {
-			t.Fatal("family text (a message or the summary) is in argv, visible in ps")
+		if strings.Contains(a, "секретный") || strings.Contains(a, "boiler") || strings.Contains(a, "family assistant") {
+			t.Fatal("prompt text (the system prompt, a message or the summary) is in argv, visible in ps")
 		}
+	}
+	if got.System != "You are the family assistant." || got.Mode != "-rw-------" {
+		t.Fatalf("system prompt file %q, mode %s", got.System, got.Mode)
+	}
+	if _, err := os.Stat(got.Args[i+1]); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the system prompt file is left behind: %v", err)
 	}
 	wantStdin := "Summary of the conversation so far:\n  They talked about the boiler.\n\n" +
 		"Conversation so far, oldest first:\n\nUser: Igor: hi\n\nAssistant: Hello!\n\nUser: Igor: секретный вопрос про дом"
 	if got.Stdin != wantStdin {
 		t.Fatalf("stdin\n got %q\nwant %q", got.Stdin, wantStdin)
+	}
+}
+
+// recorded is what the fake claude saw.
+type recorded struct {
+	Args   []string `json:"args"`
+	Stdin  string   `json:"stdin"`
+	System string   `json:"system"`
+	Mode   string   `json:"mode"`
+	Env    []string `json:"env"`
+}
+
+// claude runs with a minimal environment: what it needs to run and stay
+// logged in, and nothing of the node's own secrets (M3b final review).
+func TestClaudeGetsAMinimalEnvironment(t *testing.T) {
+	for k, v := range map[string]string{"TELEGRAM_BOT_TOKEN": "7001:AAH-secret", "OPENROUTER_API_KEY": "sk-or-secret",
+		"BRAVE_API_KEY": "brave-secret", "GANGLION_MCP_TOKEN": "relay-secret", "TELEGRAM_BOT_TOKEN_FILE": "/run/secrets/t",
+		"CLAUDE_CONFIG_DIR": "/home/x/.claude", "ANTHROPIC_BASE_URL": "https://proxy.example", "HTTPS_PROXY": "http://p:3128",
+		"LANG": "C.UTF-8"} {
+		t.Setenv(k, v)
+	}
+	c, rec := fake(t, "ok")
+	if _, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got recorded
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{}
+	for _, kv := range got.Env {
+		k, v, _ := strings.Cut(kv, "=")
+		env[k] = v
+	}
+	for _, k := range []string{"TELEGRAM_BOT_TOKEN", "OPENROUTER_API_KEY", "BRAVE_API_KEY", "GANGLION_MCP_TOKEN", "TELEGRAM_BOT_TOKEN_FILE"} {
+		if _, ok := env[k]; ok {
+			t.Errorf("%s reached claude", k)
+		}
+	}
+	for _, k := range []string{"PATH", "HOME", "CLAUDE_CONFIG_DIR", "ANTHROPIC_BASE_URL", "HTTPS_PROXY", "LANG"} {
+		if env[k] != os.Getenv(k) {
+			t.Errorf("%s = %q, want %q", k, env[k], os.Getenv(k))
+		}
 	}
 }
 

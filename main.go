@@ -18,7 +18,7 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := cmd.Execute(ctx, os.Args, os.Stdout); err != nil {
+	if err := cmd.Execute(ctx, os.Args, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "ganglion:", err)
 		os.Exit(1)
 	}
