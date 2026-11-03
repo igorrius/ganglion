@@ -43,6 +43,9 @@ considered, how they compare, the decision and its consequences. See
 | [0035](0035-web-reading.md) | Read pages through an html2md WASM module in Rust; search with Brave or DuckDuckGo | Proposed | 2026-11-03 |
 | [0036](0036-mcp-bridge-over-a-per-run-unix-socket.md) | Give CLI providers the agent's tools over MCP on a per-run Unix socket with a token | Proposed | 2026-11-03 |
 | [0037](0037-own-minimal-mcp-server.md) | Write a minimal MCP server of our own instead of using the official Go SDK | Proposed | 2026-11-03 |
+| [0038](0038-host-commands-as-argv-with-classes-in-code.md) | Give the agent host commands as argv, classed by a table in code, in a milestone M3d | Proposed | 2026-11-03 |
+| [0039](0039-command-sandbox.md) | Run host commands and skill scripts in a sandbox that fails closed | Proposed | 2026-11-03 |
+| [0040](0040-plans-as-approvals.md) | Let one press on a plan approve exactly the commands it lists | Proposed | 2026-11-03 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

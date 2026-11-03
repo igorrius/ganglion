@@ -72,6 +72,7 @@ pinned by a test in the task that owns the code.
 | M3r | Refactoring before M3b — **done** ([plan](p1-refactor.md)) | Go conventions and lint guardrails, the agent as a stage pipeline, `config` with `samber/do`, `ganglion run` on urfave/cli; no behaviour change | 0.25 weekend |
 | M3b | **The agent works with the world** — **done** ([plan](p1-m3b-agent-world.md)) | Tools under policies and the security baseline, confirmations and quick actions on buttons, the scheduler with reminders and scheduled agent tasks, memory, web reading, the tool-call journal, tools for the claude CLI over MCP | over 1 weekend |
 | M3c | Modules, skills, diagnostics | Module update and rollback, skills, attachments, logs on disk, `ganglion mcp`, the 3.8 acceptance | about 1 weekend |
+| M3d | Host commands and plans ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
 | M4 | Reflexes: runner and Deye | Config, modules on cron writing sensor cells, exposed to the agent as tools (the scheduler and the first module-as-tool path come from M3b); deployed next to the current bot | 0.5 weekend |
 | M5 | Load-shedding flow | The 8.1 state machine on `virtual` load cells; Telegram notifier; shadow week | 0.5 weekend |
 | M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback | 0.25–0.5 weekend |
@@ -80,8 +81,10 @@ pinned by a test in the task that owns the code.
 Total 4.25–5.5 weekends against a 4-weekend budget, counted before the M3
 split. M3b (over one weekend) and M3c (about one) take more than the
 original M3 estimate left for memory, skills and policies
-([design](p1-m3b-m3c-design.md#8-size-and-order), section 8). The cut list
-is expected to be used.
+([design](p1-m3b-m3c-design.md#8-size-and-order), section 8). M3d (about
+one more) was added on 2026-11-03 at the owner's request
+([ADR-0038](../adr/0038-host-commands-as-argv-with-classes-in-code.md)).
+The cut list is expected to be used.
 
 ```mermaid
 flowchart LR
@@ -93,7 +96,8 @@ flowchart LR
     M3B --> M4
     M4 --> M5["M5 Load-shedding flow"]
     M2 --> M5
-    M3C --> M6["M6 Agent reconfigures"]
+    M3C --> M3D["M3d Host commands and plans"]
+    M3D --> M6["M6 Agent reconfigures"]
     M5 --> M6
     M6 --> M7["M7 Migration"]
 ```
@@ -197,7 +201,28 @@ Design section 6; the step-by-step plan is written after M3b.
 | 3.16 Attachments: `sendPhoto` and `sendDocument` through the outbox (R-DLV-9) | "Show me the agent's metrics" → a promtop picture in Telegram |
 | 3.17 Logs on disk: JSON lines in `<data>/logs/`, synchronous writes, rotation by size, count and age, secrets redacted (R-OBS-6) | The last lines before a `kill -9` are on disk; rotation keeps the limits |
 | 3.18 `ganglion mcp`: read-only diagnostics over stdio (R-OBS-7) | Claude Code diagnoses a seeded fault through `ganglion mcp`, locally and in a local container |
+| 3.19 A file or picture sent to the agent is noticed: the transport passes its name, type and size beside the caption, and the agent says it cannot open it yet (R-DLV-10) | A PDF with a caption reaches the model as the caption plus a "file came" note; nothing is dropped silently |
 | 3.8 End to end on the test bot: message → inbox → model → tools → outbox → reply, under the M2 crash harness | 10.2 acceptance for turns |
+
+#### M3d · Host commands and plans
+
+Design: [p1-m3d-host-commands-design.md](p1-m3d-host-commands-design.md)
+(owner's brainstorm of 2026-11-03); spec 7.12. Decisions:
+[ADR-0038](../adr/0038-host-commands-as-argv-with-classes-in-code.md),
+[ADR-0039](../adr/0039-command-sandbox.md),
+[ADR-0040](../adr/0040-plans-as-approvals.md) (Proposed). The
+step-by-step plan is written after M3c.
+
+| Task | Done when |
+|---|---|
+| 3.20 The command sandbox: `no_new_privs`, a clean environment, the node's process hidden, its data and secret files and the owner's secret stores unreadable; off with a reason where it cannot be set up or the node runs as root (R-CMD-3, ADR-0039); a spike on the owner's machine, Railway and a Pi first | From a command, the node's environment, database and `*_FILE` secrets cannot be read and `sudo` gains nothing; in a container without the kernel features the tool is not offered and the reason is reported |
+| 3.21 `host.stats` and the node's own files: memory, load, disk, the sizes of the node's folders; the claude CLI work directory cleaned by age (R-CMD-5, R-CMD-8) | Works in a 128 MB container with `host.exec` off; the work directory stops growing |
+| 3.22 `host.exec`: argv without a shell, the class table with consequence lines in English, Russian and Ukrainian, output capped, redacted and tainting, journal, kill switch (R-CMD-1, 2, 6) | Read runs by itself; content, change and script ask with the fixed line; forbidden never runs, press or not |
+| 3.23 Long commands: past a short wait a command continues in the background and its completion resumes the conversation; time limit, process group, parallel cap (R-CMD-4) | A `du` over a large tree answers in the same conversation after the turn has ended |
+| 3.24 Plans: `plan.show` and `plan.step`, the message edited in place and kept with the outcome; one press approves the listed commands exactly; a change outside the plan gets its own press (R-CMD-7, ADR-0040) | "Clean the Go cache and the Docker images" runs after one press; `docker rm` not in the plan does not run without its own press |
+| 3.25 Commands in task grants: exact argv with consequence lines in the creation confirmation; a run outside them is denied with one notice (R-POL-8) | A weekly `docker image prune -af` runs without a press; `docker rm` in the same task is denied |
+| 3.26 Skill scripts (3.7) move onto the sandbox | A skill script cannot read the node's secrets |
+| 3.27 M3d acceptance, scripted and live on the test bot (design section 10) | All ten checks pass; the node's RSS stays in the budget |
 
 ### M4 · Reflexes: runner and Deye (spec 7.5, 8)
 
@@ -248,7 +273,7 @@ starting point, not a decision.
 |---|---|---|---|
 | D-1 | SQLite migrations: own small migrator over embedded `.sql` files, or goose | Own: a few dozen lines, no dependency | M1 |
 | D-2 | Telegram client: own minimal Bot API client, or a library | Decided: own ([ADR-0018](../adr/0018-own-telegram-bot-api-client.md)) | M2 |
-| D-5 | Sandbox for level-2 scripts | P1: subprocess, environment allowlist, timeout; Landlock or bubblewrap later (spec 11) | M3c |
+| D-5 | Sandbox for level-2 scripts | M3c: subprocess, environment allowlist, timeout; M3d: the command sandbox of [ADR-0039](../adr/0039-command-sandbox.md) (Proposed), which skill scripts move onto (spec 11) | M3c, M3d |
 | D-6 | First cloud model for routine turns | Chosen on cost and quality of real turns (spec 11) | M3 |
 | D-7 | Git for memory and config: the `git` binary or go-git | The binary: smaller process (principle 8); measured in [ADR-0033](../adr/0033-memory-in-the-workspace-git-with-the-git-binary.md) (Proposed) | M3b |
 | D-3 | Node config and secrets | YAML, like manifests (ADR-0012), for the node config. Requirements: (1) three kinds of data — bootstrap (data directory, roles) from flags or environment; node config (chats, cells, modules, policies) as YAML in a git repo that the agent changes only with approval (M6); secrets never in the YAML; (2) secrets come through one secret-source interface: environment and `*_FILE` files (Docker and Kubernetes secrets) in P1, an encrypted store later; the runner's `secret.get` reads from it; (3) the same binary works on Railway, in Docker or Kubernetes and as a local install | M4 |

@@ -267,6 +267,10 @@ Guarantee: **at-least-once + idempotency.**
   channel-neutral form; they go through the outbox with the same delivery
   guarantee as text. The Telegram transport sends them with `sendPhoto`
   and `sendDocument` (M3c).
+- **R-DLV-10.** A file or a picture sent to the agent is never dropped
+  silently. Until the agent can read them, the transport tells it that a
+  file came (name, type, size) beside the caption, and the agent says it
+  cannot open it yet (M3c; reading files is in "Not now").
 
 ### 7.2. Conversations, history and the agent loop
 
@@ -547,8 +551,9 @@ human); module install — tests + reviewer + admin.
 - **R-POL-8.** A scheduled agent task carries a **grant**, fixed when the
   task is created.
   - The creation confirmation shows what the runs may do: the
-    instruction, the schedule, the tools, the hosts `web.fetch` may reach
-    and who receives the reply. The owner approves it once; the runs then
+    instruction, the schedule, the tools, the hosts `web.fetch` may reach,
+    the exact host commands the runs may execute with their consequence
+    lines (R-CMD-6, M3d) and who receives the reply. The owner approves it once; the runs then
     need no presses.
   - A run's own fetches taint its session (R-POL-6), but inside its grant
     the run still needs no confirmation: the grant approved at creation
@@ -607,6 +612,8 @@ undone with `git revert`.
 | Secret leakage | The model never sees secrets; modules get them via `secret.get` / env per manifest; secrets are redacted before the journal and logs, and the Bot API token is never logged | P1 |
 | A stranger messages the bot | `allowed` table with roles: the admin installs modules, others only ask; in M3b a `family` member gets conversation with no tools and no memory, and the family bot migration (M7) decides family access | P1 |
 | Diagnostics expose the node | `ganglion mcp` opens no port: it runs over stdio and relies on the platform's authentication; read access to the data directory is read access to all history | P1 |
+| A host command reads secrets or gains root | Commands run in a sandbox: no privilege gain, a clean environment, the node's process and secret files hidden; root and anything that starts a process outside the sandbox are forbidden; the tool is off where the sandbox cannot be set up (R-CMD-1–3, [ADR-0039](adr/0039-command-sandbox.md)) | P1 (M3d) |
+| The node's own files fill the disk | Everything the node creates is accounted for (what, size, age) and cleaned by age or size (R-CMD-8) | P1 (M3d) |
 | Infinite loop | R-AGT-4 | P1 |
 | Exhausted limits | Crons and consolidation on a cheap model; usage counter in `turns` | P1 |
 | Self-modification broke something | Regression scenarios (question → expected tool call) after every change | P3 |
@@ -688,6 +695,63 @@ The scheduler moves up from M4 to M3b; M4 reuses it for module triggers.
   default needs no key; keyed backends are enabled by setting a key. The
   backends are chosen in [ADR-0035](adr/0035-web-reading.md): Brave with
   a key, DuckDuckGo without one.
+
+### 7.12. Host commands and plans
+
+M3d, after M3c. Design: [M3d design](plans/p1-m3d-host-commands-design.md);
+decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
+[ADR-0039](adr/0039-command-sandbox.md),
+[ADR-0040](adr/0040-plans-as-approvals.md) (Proposed).
+
+- **R-CMD-1.** `host.exec` runs a program with a list of arguments, with
+  no shell, on the node that serves the conversation, as the node's Unix
+  user; for admins only. A kill switch cell turns it off. Its output is
+  capped, redacted, wrapped as external data and taints the session
+  (R-POL-6). Every call is journalled (R-OBS-5).
+- **R-CMD-2.** A table in code puts every command in a class by its
+  program, subcommand and flags; the model never chooses the class:
+  - **read** (sizes, names, state: `df`, `du`, `free`, `ls`, `ps`
+    without environment, `docker ps`, `docker system df`) runs by itself;
+  - **content** (`cat`, `grep`, logs, `docker inspect`, `ps e`), **change**
+    (`rm`, `go clean`, `docker image prune`, `docker rm`,
+    `systemctl --user stop`, `kill`, any program not in the table) and
+    **script** (`bash`, `python3`, `find -exec`) need the owner's press;
+  - **forbidden** never runs: `sudo`, `su`, `doas`, `pkexec`, `env` and
+    `printenv` without a program, and anything that starts a process
+    outside the sandbox or leaves one to run later (`docker run`,
+    `docker exec`, `systemd-run`, `systemctl --user start` and `enable`,
+    `crontab`, `at`).
+
+  Moving an entry towards read widens rights and is the owner's decision,
+  in configuration the agent cannot edit.
+- **R-CMD-3.** Every command runs in a sandbox: it cannot gain privileges
+  (`no_new_privs`), gets a clean environment, cannot see the node's
+  process, and cannot read the node's data directory, its secret files or
+  a default list of the owner's secret stores. If the node cannot set
+  this up, or runs as root, `host.exec` is not offered and the node says
+  why.
+- **R-CMD-4.** A command longer than a short wait continues in the
+  background; its completion resumes the conversation with the result.
+  Commands have a hard time limit, their own process group and a cap on
+  how many run at once.
+- **R-CMD-5.** `host.stats` reports, without a subprocess: memory (total,
+  available, the node's RSS), load, uptime, free and used disk for `/`
+  and the data directory, and the sizes of the node's own folders. It
+  works where `host.exec` is off.
+- **R-CMD-6.** Every table entry carries a fixed consequence line in
+  plain words, in English, Russian and Ukrainian, shown wherever a press
+  is asked for; the model's own reason is shown apart and marked as the
+  agent's words.
+- **R-CMD-7.** Before work with several steps the agent posts a plan
+  message and edits it as the steps run; it stays in the chat with the
+  outcome. A plan with no step that needs a press runs without one. A
+  plan with such steps has one "Run" button that approves exactly the
+  listed commands, argument for argument, in this conversation, until the
+  plan ends or expires. A command that needs a press and is not in the
+  approved plan does not run: it gets its own confirmation or a new plan.
+- **R-CMD-8.** The node accounts for everything it creates on disk (what,
+  size, age) and cleans it by age or size; `host.stats` reports it. The
+  claude CLI work directory is the first case.
 
 ## 8. First flow: Deye and load shedding (P1)
 
@@ -880,6 +944,14 @@ it then runs on its own.
    new version the same way. Permission expansions are shown separately in
    the summary.
 
+Build caches: each module has its own build cache (in Docker, a volume
+labelled with the module). Every build renews its TTL; after a while with
+no builds (7 days by default, set by the operator) the cache is dropped,
+while the module, its sources and its signed build stay. Shared caches
+(crates, Go modules, toolchain images) are trimmed by size, least recently
+used first. Dropping a cache needs no press and is reported in one line
+(owner, 2026-11-03, R-CMD-8).
+
 Threats and measures: module overreaches → only manifest host functions;
 tampering → signatures; rogue node → NKeys/mTLS and a trust level per node;
 hang → wazero limits; module written under prompt injection → install only
@@ -971,7 +1043,9 @@ milestone is split into M3a (talks), M3b (works with the world: tools,
 policies, memory, the scheduler, web reading, the MCP bridge) and M3c
 (module updates, skills, attachments, logs on disk, `ganglion mcp`), as
 the [M3b and M3c design](plans/p1-m3b-m3c-design.md) sets out; the
-scheduler moves from M4 to M3b.
+scheduler moves from M4 to M3b. M3d (host commands and plans, 7.12)
+follows M3c ([M3d design](plans/p1-m3d-host-commands-design.md),
+[ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md)).
 
 Acceptance:
 
@@ -1005,7 +1079,7 @@ fallback until the gate is passed.
 | Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles (conversation, writing tools, analysis) | Not chosen | When a task needs a stronger model than the cheap tier |
 | Where nodes live | Cloud hosting · Pi · home PC | Edge in the cloud or on a Pi, claude CLI worker on the owner's PC | The P1 monthly bill |
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
-| Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Not chosen | What works in a container and on a Pi |
+| Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Proposed for host commands and skill scripts in [ADR-0039](adr/0039-command-sandbox.md): `no_new_privs`, a clean environment, Landlock and a PID namespace, fail closed | A spike in M3d on the owner's machine, Railway and a Pi |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
 
 Each question becomes an ADR (status Proposed) when work on it starts and is
@@ -1117,3 +1191,13 @@ Reviewed at each gate.
     open), the Decision 3.0 family, Liquid AI's d1.
 
   Noted 2026-11-02.
+- Reading files and pictures sent to the agent: storage with accounting
+  and a TTL (R-CMD-8), models that read pictures and PDFs, files as
+  external data (a planted PDF is a classic injection path), and checks
+  with M3d's commands (`file`, an antivirus). Its own brainstorm after
+  M3d; until then R-DLV-10 (owner, 2026-11-03).
+- Plans that approve other tools' calls, not only host commands
+  (R-CMD-7) (2026-11-03).
+- Managing the cloud a node runs in (Railway services, volumes, deploys)
+  through that cloud's MCP server, with ganglion as an MCP client: P3 in
+  the M3b and M3c design; earlier if the owner asks (owner, 2026-11-03).

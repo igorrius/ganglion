@@ -117,8 +117,18 @@ Start here when coming back to the project.
       time in the last user message, the depth limit (R-AGT-4) and tool
       placement (R-RTR-3).
   - **M3c, next:** module update and rollback, skills, attachments, logs
-    on disk, `ganglion mcp` for diagnosis from outside, and the 3.8
-    acceptance under the crash harness.
+    on disk, `ganglion mcp` for diagnosis from outside, a notice when a
+    file is sent to the agent (R-DLV-10), and the 3.8 acceptance under the
+    crash harness.
+  - **M3d, after M3c (designed 2026-11-03):** host commands and plans
+    ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
+    `host.exec` as argv under a class table in code, in a sandbox that
+    fails closed; `host.stats`; a plan message whose one press approves
+    exactly its commands; commands in task grants; the node accounts for
+    its own files. [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
+    [ADR-0039](adr/0039-command-sandbox.md),
+    [ADR-0040](adr/0040-plans-as-approvals.md), Proposed. Reading files
+    and pictures sent to the agent is its own brainstorm after M3d.
   - Scope stays one operator, one agent, one bot (spec 14). Voice
     messages and PDF generation went to "Not now".
   - Deferred minors from the reviews:
