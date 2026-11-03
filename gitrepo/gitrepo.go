@@ -223,6 +223,7 @@ func (r *Repo) run(ctx context.Context, args ...string) (string, error) {
 	}, args...)
 	cmd := exec.CommandContext(ctx, r.git, full...)
 	cmd.Env = environ()
+	cmd.WaitDelay = time.Second // a child holding the pipes cannot outlast gitTimeout
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {

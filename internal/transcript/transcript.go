@@ -42,7 +42,7 @@ func Lines(msgs []provider.Message, calls ToolCalls) []string {
 			}
 			if calls {
 				for _, tc := range m.ToolCalls {
-					out = append(out, fmt.Sprintf("Assistant called tool %s with %s", tc.Name, tc.Args))
+					out = append(out, Indent(fmt.Sprintf("Assistant called tool %s with %s", tc.Name, tc.Args)))
 				}
 			}
 		case provider.RoleTool:

@@ -249,7 +249,7 @@ var passedPrefixes = []string{"LC_", "XDG_", "CLAUDE_", "ANTHROPIC_", "DISABLE_"
 // env is claude's environment: the passed variables of this process's
 // environment, and the ones named with WithEnv.
 func (c *Client) env() []string {
-	var out []string
+	out := []string{} // never nil: a nil Cmd.Env inherits everything
 	for _, kv := range os.Environ() {
 		name, _, _ := strings.Cut(kv, "=")
 		if slices.Contains(passedEnv, name) || slices.Contains(c.pass, name) || hasAnyPrefix(name, passedPrefixes) {

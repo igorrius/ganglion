@@ -153,6 +153,9 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 		msgs, added = append(msgs, ran...), append(added, ran...)
 		msg := resp.Message
 		msg.Role = provider.RoleAssistant
+		if t.noTools { // none were offered, so none run and none stay in the history (R33)
+			msg.ToolCalls = nil
+		}
 		msgs, added = append(msgs, msg), append(added, msg)
 		if len(msg.ToolCalls) == 0 {
 			return added, msg.Content, turns.OutcomeOK, nil

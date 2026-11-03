@@ -604,6 +604,30 @@ func TestExpiryTurnOffersNoTools(t *testing.T) {
 	}
 }
 
+// Ruling R33 on every path: a model that answers an expiry turn with a
+// tool call anyway gets none run, and the call does not stay in the
+// history unanswered.
+func TestExpiryTurnRunsNoToolTheModelCalls(t *testing.T) {
+	side := newSideTool()
+	e := newConfirmEnv(t, side)
+	e.ask(t, "schedule.create")
+	e.now = e.now.Add(pending.DefaultTTL)
+	e.smart.push(func(ctx context.Context, r provider.ChatRequest) (provider.ChatResponse, error) {
+		resp, err := callWith("schedule.create", `{}`)(ctx, r)
+		resp.Message.Content = "The request expired."
+		return resp, err
+	})
+	e.turn(t, expired(t, e))
+	if len(side.calls) != 0 {
+		t.Fatalf("a tool ran in the expiry turn: %d calls", len(side.calls))
+	}
+	for _, m := range e.state(t).Messages {
+		if len(m.ToolCalls) != 0 && m.Content == "The request expired." {
+			t.Fatalf("the unoffered call stayed in the history: %+v", m)
+		}
+	}
+}
+
 // Ruling R33: a resumed turn passes the daily limit like a message: the
 // approved call runs (the owner decided it), but no model turn follows
 // over the limit, and the outcome still joins the history.

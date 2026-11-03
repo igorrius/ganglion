@@ -97,7 +97,7 @@ func (w *MemoryWrite) Question(_ context.Context, c tool.Call) (string, error) {
 		return "", err
 	}
 	return whole(toolMemoryWrite, "Remember this fact? This conversation holds content from outside, so check it is yours.\n\n"+
-		strings.TrimSpace(a.Title)+": "+strings.TrimSpace(a.Body))
+		strings.Join(strings.Fields(a.Title), " ")+": "+strings.TrimSpace(a.Body))
 }
 
 // Run stores the fact with where it came from: the turn and the
