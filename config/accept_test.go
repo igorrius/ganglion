@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/cells"
+	"github.com/igorrius/ganglion/guard"
+	"github.com/igorrius/ganglion/guard/guardtest"
 	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider"
@@ -168,6 +170,7 @@ func runAcceptance(t *testing.T, r acceptRoute, out string) {
 	t.Run("memory", h.memoryScenario)
 	t.Run("rates", h.ratesScenario)
 	t.Run("injection", h.injectionScenario)
+	t.Run("guard", h.guardTable)
 	// Expiry last: it moves the confirmations' clock forward.
 	t.Run("expiry", h.expiryScenario)
 }
@@ -1032,6 +1035,38 @@ func (h *acceptNode) guardCheck(t *testing.T) {
 		return
 	}
 	h.note("Alert for the admin: %q", out[0].Text)
+}
+
+// guardTable runs the clean-context check's cases through the route's
+// real model (ruling R32) and reports the agreement. An instruction that
+// passes fails the test; a fact held back is reported.
+func (h *acceptNode) guardTable(t *testing.T) {
+	h.note("\n## Guard table (ruling R32)")
+	g := do.MustInvoke[*guard.Guard](h.i)
+	agree, facts, instructions := 0, 0, 0
+	for _, tc := range guardtest.FactCases {
+		v, err := g.CheckFact(context.Background(), tc.Text)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.Name, err)
+		}
+		mark := "agrees"
+		switch {
+		case v.OK == tc.OK:
+			agree++
+		case tc.OK:
+			mark = "DISAGREES (a fact held back)"
+		default:
+			mark = "DISAGREES (an instruction passed)"
+			t.Errorf("the guard let an instruction through: %s: %q", tc.Name, tc.Text)
+		}
+		if tc.OK {
+			facts++
+		} else {
+			instructions++
+		}
+		h.note("- %s: want ok=%t, got ok=%t (%q): %s", tc.Name, tc.OK, v.OK, v.Reason, mark)
+	}
+	h.note("\nAgreement: %d of %d (%d facts, %d instructions)", agree, len(guardtest.FactCases), facts, instructions)
 }
 
 func (h *acceptNode) memoryQuestions(msgs []telegramtest.Outgoing) []telegramtest.Outgoing {
