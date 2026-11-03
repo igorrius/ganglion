@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -281,7 +282,9 @@ func (a *Agent) expired(ctx context.Context, t *turn) error {
 // continueWith resumes the conversation: the call's outcome joins the
 // history as a user-role note after the placeholder result the call got
 // in its own turn, so no tool message appears without its call, and the
-// model answers as it does a message.
+// model answers as it does a message. The outcome is capped like a tool
+// result in a transcript (transcript.Cap), on both paths: an approved
+// page is not the owner's words and must not fill the prompt.
 func (a *Agent) continueWith(ctx context.Context, t *turn, it pending.Item, o pending.Outcome) error {
 	t.record.Outcome = turns.OutcomeOK
 	t.state.Pending = slices.DeleteFunc(slices.Clone(t.state.Pending), func(id string) bool { return id == it.ID })
@@ -290,7 +293,7 @@ func (a *Agent) continueWith(ctx context.Context, t *turn, it pending.Item, o pe
 		t.state.Tainted = true
 		text = tool.WrapExternal(it.Tool, text)
 	}
-	note := provider.Message{Role: provider.RoleUser, Content: confirmationPrefix + it.Tool + ": " + text}
+	note := provider.Message{Role: provider.RoleUser, Content: confirmationPrefix + it.Tool + ": " + transcript.Cap(text)}
 	if done, err := a.converse(ctx, t, note); err != nil || done {
 		return err
 	}

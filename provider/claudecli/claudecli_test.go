@@ -124,7 +124,7 @@ func TestArgsAndStdin(t *testing.T) {
 			t.Fatal("family text (a message or the summary) is in argv, visible in ps")
 		}
 	}
-	wantStdin := "Summary of the conversation so far:\nThey talked about the boiler.\n\n" +
+	wantStdin := "Summary of the conversation so far:\n  They talked about the boiler.\n\n" +
 		"Conversation so far, oldest first:\n\nUser: Igor: hi\n\nAssistant: Hello!\n\nUser: Igor: секретный вопрос про дом"
 	if got.Stdin != wantStdin {
 		t.Fatalf("stdin\n got %q\nwant %q", got.Stdin, wantStdin)

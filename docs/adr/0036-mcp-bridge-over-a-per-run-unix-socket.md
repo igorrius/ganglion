@@ -127,6 +127,13 @@ The details:
     fixed give-up reply ("Sorry, something went wrong with that
     message."), outcome `error` in the trace. An attempt that ran no
     tool falls back as before.
+11. The transcript on stdin indents every line of every message after
+    its first, in every role and the summary too, and treats CR, NEL
+    (U+0085), U+2028, U+2029, VT and FF as line breaks as well as LF:
+    neither an approved page nor a family member's message in a shared
+    group can start a line like a turn ("User: Igor: …"). A confirmed
+    call's outcome, which comes back as a user note, is cut to 4,000
+    runes like a tool result.
 
 ## Consequences
 

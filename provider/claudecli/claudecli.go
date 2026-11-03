@@ -116,7 +116,7 @@ func prompt(msgs []provider.Message) (system, stdin string) {
 		case !seenSystem:
 			system, seenSystem = m.Content, true
 		default:
-			head = append(head, m.Content)
+			head = append(head, transcript.Indent(m.Content)) // a summary is family text too
 		}
 	}
 	parts := transcript.Lines(msgs, transcript.WithToolCalls)
