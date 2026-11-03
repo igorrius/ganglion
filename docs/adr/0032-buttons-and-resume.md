@@ -118,7 +118,11 @@ How it works:
   without tools.
 - Quick-action buttons (Delete, Details; later tasks) are stored the same
   way with an action name; a press runs the registered action, edits the
-  message and starts no model turn. The presser must still be an admin
+  message and starts no model turn. An action that changed something
+  (Delete, an immediate Run now) adds a user-role note
+  `[button] <what the owner did>` to the conversation's history, capped
+  like the confirmation note, so the next turn knows (ruling R42);
+  Details changes nothing and adds none. The presser must still be an admin
   at press time. A refused press on one removes only
   its buttons (an `Edit` without text, `editMessageReplyMarkup`), so the
   list entry keeps its text.

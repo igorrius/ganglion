@@ -740,3 +740,46 @@ func TestSameCallWaitingIsNotAskedTwice(t *testing.T) {
 		t.Fatal("no new question after the expiry")
 	}
 }
+
+// The live run of 2026-11-03: after a task was deleted by its button, the
+// model thought it had vanished. A quick action that changes something
+// leaves a note in the conversation's history, which the next turn
+// reads; its addresses do not become known (ruling R42).
+func TestQuickActionNoteJoinsTheHistory(t *testing.T) {
+	e := newConfirmEnv(t)
+	e.deps.QuickActions = map[string]pending.QuickAction{"test.delete": func(context.Context, pending.QuickPress) (pending.QuickEdit, error) {
+		return pending.QuickEdit{Text: "Deleted.", Note: "the owner deleted task j1: get https://bank.example/x"}, nil
+	}, "test.details": func(context.Context, pending.QuickPress) (pending.QuickEdit, error) {
+		return pending.QuickEdit{Text: "Details"}, nil
+	}}
+	e.a = New(overDefaults(Config{}), e.deps)
+	var ids []string
+	for _, action := range []string{"test.details", "test.delete"} {
+		b := pending.Button{ID: pending.NewButtonID(), Action: action, Label: action, Principal: owner, Conv: "telegram:42",
+			Args: json.RawMessage(`{}`), Expires: e.now.Add(time.Hour)}
+		if err := e.pending.AddButtons(context.Background(), b); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, b.ID)
+	}
+	e.turn(t, press(owner, ids[0], "90"))
+	if st := e.state(t); len(st.Messages) != 0 {
+		t.Fatalf("details left a note: %+v", st.Messages)
+	}
+	e.turn(t, press(owner, ids[1], "91"))
+	e.turn(t, press(owner, ids[1], "91")) // a second tap adds nothing
+	e.smart.push(say("You have no tasks now."))
+	e.turn(t, message(owner, "Igor", "show my reminders"))
+	var notes []string
+	for _, m := range e.smart.requests()[0].Messages {
+		if m.Role == provider.RoleUser && strings.HasPrefix(m.Content, "[button] ") {
+			notes = append(notes, m.Content)
+		}
+	}
+	if len(notes) != 1 || notes[0] != "[button] the owner deleted task j1: get https://bank.example/x" {
+		t.Fatalf("notes %q", notes)
+	}
+	if knownURLs(e.state(t).Messages).has("https://bank.example/x") {
+		t.Fatal("an address in a button note became known")
+	}
+}

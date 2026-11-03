@@ -28,6 +28,10 @@ type Confirmations interface {
 // call's outcome into the history: "[confirmation] <tool>: <result>".
 const confirmationPrefix = "[confirmation] "
 
+// buttonPrefix starts the user-role note of a quick action that changed
+// something: "[button] <what the owner did>" (ruling R42).
+const buttonPrefix = "[button] "
+
 // What the model reads as the outcome of a call that did not run.
 const (
 	resultDeclined = "the owner declined"
@@ -130,9 +134,9 @@ func answered(question, line string) string {
 	return question + "\n\n" + line
 }
 
-// quick runs a quick action and edits its message. The presser must
-// still be an admin: the button was made for one, who may have lost the
-// role since.
+// quick runs a quick action and edits its message; what it changed joins
+// the history as a note (ruling R42). The presser must still be an
+// admin: the button was made for one, who may have lost the role since.
 func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 	if err := a.setAdmin(ctx, t); err != nil {
 		return err
@@ -152,7 +156,20 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 		return fmt.Errorf("agent: quick action %s: %w", b.Action, err)
 	}
 	t.editWith(e)
+	if e.Note != "" {
+		t.note(buttonPrefix + transcript.Cap(e.Note))
+	}
 	return nil
+}
+
+// note adds a user-role note to the session's history without a model
+// turn, opening a session when there is none; the next turn reads it.
+func (t *turn) note(text string) {
+	if t.state.Session == "" {
+		t.state.Session, t.state.Started = t.event.ID, t.now
+	}
+	t.state.Messages = append(t.state.Messages, provider.Message{Role: provider.RoleUser, Content: text})
+	t.state.Last = t.now
 }
 
 // confirmed runs an approved call or declines a denied one, stores the

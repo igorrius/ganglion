@@ -487,3 +487,40 @@ func TestScheduleCreateSaysHowToWriteATask(t *testing.T) {
 		}
 	}
 }
+
+// Delete and an immediate Run now leave a note for the conversation's
+// history; Details changes nothing and leaves none, nor does a Delete of
+// a task that is gone (ruling R42).
+func TestQuickActionsLeaveNotes(t *testing.T) {
+	e := newSchedEnv(t)
+	e.add(t, rates("j1"))
+	res, err := builtin.NewScheduleList(e.sc).Run(context.Background(), call("schedule.list", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := res.Out[0].Buttons // Details, Delete, Run now
+	if edit := e.pressAs(t, b[0]); edit.Note != "" {
+		t.Fatalf("details noted %q", edit.Note)
+	}
+	if edit := e.pressAs(t, b[2]); edit.Note != "the owner ran task j1 now: send me the exchange rates" {
+		t.Fatalf("run now noted %q", edit.Note)
+	}
+	if edit := e.pressAs(t, b[1]); edit.Note != "the owner deleted task j1: send me the exchange rates" {
+		t.Fatalf("delete noted %q", edit.Note)
+	}
+	again := pending.Button{ID: pending.NewButtonID(), Action: "schedule.delete", Label: "Delete", Principal: me, Conv: "telegram:42",
+		Args: json.RawMessage(`{"id":"j1"}`), Expires: t0.Add(time.Hour)}
+	if err := e.pending.AddButtons(context.Background(), again); err != nil {
+		t.Fatal(err)
+	}
+	if edit := e.pressAs(t, event.Button{ID: again.ID}); edit.Note != "" {
+		t.Fatalf("a gone task noted %q", edit.Note)
+	}
+	long := rates("j2")
+	long.Text = strings.Repeat("я", 300)
+	e.add(t, long)
+	res, _ = builtin.NewScheduleList(e.sc).Run(context.Background(), call("schedule.list", `{}`))
+	if edit := e.pressAs(t, res.Out[0].Buttons[1]); edit.Note != "the owner deleted task j2: "+strings.Repeat("я", 100)+"…" {
+		t.Fatalf("a long task noted %q", edit.Note)
+	}
+}

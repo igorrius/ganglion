@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -27,6 +28,9 @@ const (
 	labelDelete   = "Delete"
 	labelRunNow   = "Run now"
 	textStartedTo = "Started; the answer goes to "
+	noteDeleted   = "the owner deleted %s %s: %s"
+	noteRan       = "the owner ran %s %s now: %s"
+	noteHeadRunes = 100
 )
 
 // buttonLabels are the labels of the quick actions.
@@ -110,7 +114,12 @@ func (s Scheduling) deleteByButton(ctx context.Context, p pending.QuickPress) (p
 	case err != nil:
 		return pending.QuickEdit{}, err
 	}
-	return pending.QuickEdit{Text: s.entry(j) + "\n\n" + textDeleted}, nil
+	return pending.QuickEdit{Text: s.entry(j) + "\n\n" + textDeleted, Note: fmt.Sprintf(noteDeleted, j.Kind, j.ID, head(j.Text))}, nil
+}
+
+// head is the start of a job's text on one line, for a note.
+func head(s string) string {
+	return text.Truncate(strings.Join(strings.Fields(s), " "), noteHeadRunes)
 }
 
 // runByButton runs a task now. A task whose grant may act on the world
@@ -134,8 +143,8 @@ func (s Scheduling) runByButton(ctx context.Context, p pending.QuickPress) (pend
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}
-	text := s.entry(j) + "\n\n" + textStartedTo + replyTarget(j.Grant.ReplyTo, p.Button.Conv) + "."
-	return pending.QuickEdit{Text: text, Buttons: buttons}, nil
+	shown := s.entry(j) + "\n\n" + textStartedTo + replyTarget(j.Grant.ReplyTo, p.Button.Conv) + "."
+	return pending.QuickEdit{Text: shown, Buttons: buttons, Note: fmt.Sprintf(noteRan, j.Kind, j.ID, head(j.Text))}, nil
 }
 
 // mayAct reports whether a task's grant holds a tool with a side effect;

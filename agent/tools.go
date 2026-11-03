@@ -227,15 +227,15 @@ func (s urlSet) has(raw string) bool {
 
 // knownURLs collects the set from a session's history: the person's
 // messages and the results of web.search calls, paired with their calls
-// by id. A confirmation note is not the person's words and does not
-// count, nor does outside text in a message (a forward, a quote).
+// by id. A confirmation or button note is not the person's words and
+// does not count, nor does outside text in a message (a forward, a quote).
 func knownURLs(msgs []provider.Message) urlSet {
 	set := urlSet{}
 	searches := map[string]bool{} // ids of web.search calls
 	for _, m := range msgs {
 		switch m.Role {
 		case provider.RoleUser:
-			if !strings.HasPrefix(m.Content, confirmationPrefix) {
+			if !strings.HasPrefix(m.Content, confirmationPrefix) && !strings.HasPrefix(m.Content, buttonPrefix) {
 				set.add(tool.StripExternal(m.Content))
 			}
 		case provider.RoleAssistant:

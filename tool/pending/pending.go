@@ -135,10 +135,13 @@ type QuickPress struct {
 
 // QuickEdit is the new content of the message that holds a quick-action
 // button. Text "" keeps the text; Buttons replace the message's buttons,
-// none removes them.
+// none removes them. Note says what the press changed, for the
+// conversation's history, so the model knows what the owner did by
+// button (ruling R42); "" when it changed nothing.
 type QuickEdit struct {
 	Text    string
 	Buttons []event.Button
+	Note    string
 }
 
 // QuickAction runs a quick-action button, such as Delete on a list entry,
