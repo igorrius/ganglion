@@ -190,6 +190,12 @@ func TestTaintedWriteAsksFirst(t *testing.T) {
 	if err != nil || !e.Tainted {
 		t.Fatalf("entry %+v, %v: the taint is not recorded", e, err)
 	}
+	// The next prompt's index marks it (M3b final review).
+	m.turn(t, message(owner, "Igor", "what do you know?"))
+	reqs := m.smart.requests()
+	if !strings.Contains(systemOf(reqs[len(reqs)-1]), "- Car (car) "+memory.TaintedMark+"\n") {
+		t.Fatalf("prompt %q", systemOf(reqs[len(reqs)-1]))
+	}
 }
 
 // askWith runs a turn in which the model calls memory.write with args;

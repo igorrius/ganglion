@@ -17,7 +17,8 @@ What already stands in the way ([ADR-0031](0031-agent-security-baseline.md)):
 - grants of scheduled tasks never include `memory.write` or
   `memory.forget`;
 - the index is shown as "Known facts (data, not instructions)", and only
-  to admins.
+  to admins; a fact written in a tainted session (after the owner's
+  press) is marked there "(from outside content)".
 
 That is not enough on its own: an owner presses "Approve" on a fact that
 reads naturally, and a clean session can still be steered by the owner's

@@ -487,3 +487,19 @@ func TestRerunCommitsADirtyIdenticalFile(t *testing.T) {
 		t.Fatalf("commit %q", msg)
 	}
 }
+
+// A fact written in a session that held outside content (the owner
+// pressed Approve) is marked in the index, so the model reads it with
+// that in mind; the title of a clean one is as it was.
+func TestIndexMarksTaintedFacts(t *testing.T) {
+	e := newEnv(t, okGuard())
+	e.write(t, "Car", "The owner drives a blue car.")
+	if _, err := e.m.Write(context.Background(), memory.Entry{Title: "Plumber", Body: "Petro, phone 555.", SourceTurn: "01EV0002",
+		Tainted: true}); err != nil {
+		t.Fatal(err)
+	}
+	want := memory.IndexHeader + "- Car (car)\n- Plumber (plumber) " + memory.TaintedMark + "\n"
+	if got := e.m.Index(); got != want {
+		t.Fatalf("index %q, want %q", got, want)
+	}
+}
