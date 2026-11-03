@@ -163,13 +163,16 @@ func TestRendererWithMetricsAddrOff(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = tel.Shutdown(context.Background()) })
 	var png, sum bytes.Buffer
-	if err := tel.Renderer().Picture(context.Background(), &png, nil); err != nil {
+	if err := tel.Renderer().Picture(context.Background(), &png, Selection{Sections: []string{"go"}}); err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.HasPrefix(png.Bytes(), []byte("\x89PNG")) {
 		t.Fatal("not a PNG")
 	}
-	if err := tel.Renderer().Summary(context.Background(), &sum, []string{"go_*"}, true); err != nil || !bytes.Contains(sum.Bytes(), []byte("promtop.summary/v1")) {
+	if err := tel.Renderer().Summary(context.Background(), &sum, Selection{Globs: []string{"go_*"}, All: true}, true); err != nil || !bytes.Contains(sum.Bytes(), []byte("promtop.summary/v1")) {
 		t.Fatalf("summary %s, %v", sum.String(), err)
+	}
+	if secs, err := tel.Renderer().Sections(context.Background()); err != nil || len(secs) == 0 {
+		t.Fatalf("sections %v, %v", secs, err)
 	}
 }

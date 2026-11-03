@@ -51,6 +51,8 @@ github.com/igorrius/promtop v0.3.2 h1:+zjUbs4BRKUcDVQHv9lqv4bWSIT68RV6BxfrfrYtQS
 github.com/igorrius/promtop v0.3.2/go.mod h1:Q5WL6llHDfgLyNwHMuM7U2hLt1nGSfx52Wc8z78ZOYU=
 github.com/igorrius/promtop v0.4.0 h1:s//rR5AHa4WJ0ixNsgFXKlTiXOrjl3Jwd6zDFcBVAT8=
 github.com/igorrius/promtop v0.4.0/go.mod h1:Q5WL6llHDfgLyNwHMuM7U2hLt1nGSfx52Wc8z78ZOYU=
+github.com/igorrius/promtop v0.5.0 h1:yiRUhtErcXgjYBGgQUfJb9Aou7qDConp0+ehwd49q1I=
+github.com/igorrius/promtop v0.5.0/go.mod h1:Q5WL6llHDfgLyNwHMuM7U2hLt1nGSfx52Wc8z78ZOYU=
 github.com/klauspost/compress v1.20.1 h1:T7kKElXUMXrUJ2E9QhQhxFtcK5rPyLdsGZvdbLMPdiQ=
 github.com/klauspost/compress v1.20.1/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=

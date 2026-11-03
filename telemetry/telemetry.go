@@ -116,15 +116,41 @@ func (t *Telemetry) Renderer() *Renderer { return &Renderer{d: t.dash} }
 // process, never over the network.
 type Renderer struct{ d *dash.Dashboard }
 
-// Picture writes the dashboard, or the metrics the globs name, as a PNG.
-func (r *Renderer) Picture(ctx context.Context, w io.Writer, globs []string) error {
-	return r.d.Render(ctx, w, dash.RenderOptions{Format: dash.FormatPNG, Metrics: globs})
+// Selection is what to draw: none of it set is the default dashboard.
+type Selection struct {
+	Globs    []string // metric name globs
+	Sections []string // section keys, e.g. "go", "process", "ganglion"
+	All      bool     // what the dashboard hides by default too
 }
 
-// Summary writes the promtop.summary/v1 document; notable keeps only what
-// stands out.
-func (r *Renderer) Summary(ctx context.Context, w io.Writer, globs []string, notable bool) error {
-	return r.d.Render(ctx, w, dash.RenderOptions{Format: dash.FormatSummary, Metrics: globs, Notable: notable})
+// Section is one of the dashboard's sections.
+type Section struct{ Key, Title string }
+
+func (s Selection) options(f dash.Format) dash.RenderOptions {
+	return dash.RenderOptions{Format: f, Metrics: s.Globs, Sections: s.Sections, ShowAll: s.All}
+}
+
+// Picture writes the selection as a PNG.
+func (r *Renderer) Picture(ctx context.Context, w io.Writer, sel Selection) error {
+	return r.d.Render(ctx, w, sel.options(dash.FormatPNG))
+}
+
+// Summary writes the promtop.summary/v1 document of the selection;
+// notable keeps only what stands out.
+func (r *Renderer) Summary(ctx context.Context, w io.Writer, sel Selection, notable bool) error {
+	o := sel.options(dash.FormatSummary)
+	o.Notable = notable
+	return r.d.Render(ctx, w, o)
+}
+
+// Sections lists the dashboard's sections.
+func (r *Renderer) Sections(ctx context.Context) ([]Section, error) {
+	secs, err := r.d.Sections(ctx)
+	out := make([]Section, len(secs))
+	for i, s := range secs {
+		out[i] = Section{Key: s.Key, Title: s.Title}
+	}
+	return out, err
 }
 
 // Addr is the address metrics are served on, or "" when they are off.

@@ -730,7 +730,11 @@ undone with `git revert`.
   why one case went wrong. The owner sees the metrics in Telegram (M3c):
   `/metrics`, without a model, and the agent's `metrics.show` send a
   promtop picture rendered in process from the node's own registry, never
-  through `web.fetch`.
+  through `web.fetch`. Both take a choice (owner, 2026-11-03, after the
+  first live picture): `all` adds what the dashboard hides by default, a
+  group (`ganglion`, `runtime`, `process`) keeps that section, and any
+  other word is a filter over the metric names (a substring, or globs
+  with `*`).
 - **R-OBS-9.** In a network (P2) the core collects the telemetry of every
   node over the bus (owner, 2026-11-03). An edge dials out and opens no
   port, so nothing can scrape its `/metrics`.
@@ -1241,21 +1245,6 @@ Reviewed at each gate.
   admin (the same idea as node enrolment with a one-time token, 9.3).
 - An encrypted secret store on the node's key, behind the secret source of
   D-3; secrets set and rotated without a restart.
-- `/metrics` with a choice of what to draw (owner, 2026-11-03, after the
-  first live picture). Today it draws the default dashboard, and the
-  model's `metrics.show` takes name globs. The command should take:
-  - `/metrics all`: the metrics the dashboard hides by default (idle ones
-    and runtime noise), promtop's `-a`;
-  - a group: `/metrics ganglion`, `/metrics runtime`, `/metrics process`,
-    named after the dashboard's sections;
-  - a text filter: `/metrics outbox` or `/metrics turn*`, a substring or
-    globs over the metric names, the same rules as `metrics.show`
-    (lower-case letters, `_`, `:` and `*`, at most 8);
-  - hints listing the groups.
-
-  It needs `ShowAll` and a section filter in promtop's
-  `dash.RenderOptions` (a promtop release) and an argument parser in the
-  command; the picture keeps labels and values only.
 - Telegram, beyond formatting, typing and replies (ADR-0025). Each item
   is to be checked against the Bot API docs of the day:
   - a reaction on a message the agent has seen, useful in groups when

@@ -3,7 +3,7 @@ module github.com/igorrius/ganglion
 go 1.27.3
 
 require (
-	github.com/igorrius/promtop v0.4.0
+	github.com/igorrius/promtop v0.5.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/samber/do/v2 v2.1.0
 	github.com/tetratelabs/wazero v1.12.0

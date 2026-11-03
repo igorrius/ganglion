@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/tool/builtin"
@@ -16,7 +17,7 @@ const (
 
 // showMetrics is /metrics: metrics.show through the tool chain, as the
 // turn's call, for an admin, without a model (ruling M2).
-func (a *Agent) showMetrics(ctx context.Context, t *turn, _ string) error {
+func (a *Agent) showMetrics(ctx context.Context, t *turn, arg string) error {
 	if err := a.setAdmin(ctx, t); err != nil {
 		return err
 	}
@@ -25,7 +26,8 @@ func (a *Agent) showMetrics(ctx context.Context, t *turn, _ string) error {
 		return nil
 	}
 	shown := len(t.out)
-	_, err := a.useTool(ctx, t, provider.ToolCall{Name: builtin.MetricsTool, Args: json.RawMessage(`{}`)}, false)
+	args, _ := json.Marshal(map[string]string{"choice": strings.TrimSpace(arg)}) // a map of strings always marshals
+	_, err := a.useTool(ctx, t, provider.ToolCall{Name: builtin.MetricsTool, Args: args}, false)
 	if err != nil {
 		a.log.Warn("agent: /metrics failed", "err", err) // journalled too; the turn itself succeeds
 	}

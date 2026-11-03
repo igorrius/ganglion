@@ -10,12 +10,14 @@ import (
 
 type pictureOnly struct{}
 
-func (pictureOnly) Picture(_ context.Context, w io.Writer, _ []string) error {
+func (pictureOnly) Sections(context.Context) ([]builtin.MetricSection, error) { return nil, nil }
+
+func (pictureOnly) Picture(_ context.Context, w io.Writer, _ builtin.MetricSelection) error {
 	_, err := io.WriteString(w, "\x89PNG")
 	return err
 }
 
-func (pictureOnly) Summary(_ context.Context, w io.Writer, _ []string, _ bool) error {
+func (pictureOnly) Summary(_ context.Context, w io.Writer, _ builtin.MetricSelection, _ bool) error {
 	_, err := io.WriteString(w, `{"schema":"promtop.summary/v1","notable":[]}`)
 	return err
 }
@@ -40,7 +42,29 @@ func TestMetricsCommandFamilyRefused(t *testing.T) {
 
 type brokenRenderer struct{ pictureOnly }
 
-func (brokenRenderer) Picture(context.Context, io.Writer, []string) error { return io.ErrUnexpectedEOF }
+func (brokenRenderer) Picture(context.Context, io.Writer, builtin.MetricSelection) error {
+	return io.ErrUnexpectedEOF
+}
+
+// /metrics passes its argument to metrics.show as the choice.
+func TestMetricsCommandPassesTheChoice(t *testing.T) {
+	r := &recordingRenderer{}
+	e := newConfirmEnv(t, builtin.NewMetricsShow(r))
+	e.turn(t, message(owner, "Igor", "/metrics outbox"))
+	if len(r.sel.Globs) != 1 || r.sel.Globs[0] != "*outbox*" {
+		t.Fatalf("selection %+v", r.sel)
+	}
+}
+
+type recordingRenderer struct {
+	pictureOnly
+	sel builtin.MetricSelection
+}
+
+func (r *recordingRenderer) Picture(ctx context.Context, w io.Writer, sel builtin.MetricSelection) error {
+	r.sel = sel
+	return r.pictureOnly.Picture(ctx, w, sel)
+}
 
 func TestMetricsCommandSaysWhenItCannotDraw(t *testing.T) {
 	e := newConfirmEnv(t, builtin.NewMetricsShow(brokenRenderer{}))
