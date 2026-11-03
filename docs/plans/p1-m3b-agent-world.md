@@ -966,12 +966,12 @@ ADR-0035 (Proposed): web reading. It covers:
 - A `family` principal gets `Specs(false)`, which is empty in M3b, and no
   memory index.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `TestCoreContainerBuildsWithTools`.
   - `TestFamilyHasNoTools`.
   - `TestDirectivesInSystemPrompt`.
-- [ ] **Step 2–4: Run, implement, run** `go test -race ./...`; lint.
-- [ ] **Step 5: Commit** `config: tools, scheduler and pending expirer in the core role; directives`.
+- [x] **Step 2–4: Run, implement, run** `go test -race ./...`; lint.
+- [x] **Step 5: Commit** `config: tools, scheduler and pending expirer in the core role; directives`.
 
 ### Task 11: the MCP bridge for the claude CLI
 
