@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/guard"
 	"github.com/igorrius/ganglion/memory"
+	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 )
@@ -236,5 +238,26 @@ func TestParkedProposalRefusedWhenTheSessionTaintedBeforeApproval(t *testing.T) 
 	reqs := m.smart.requests()
 	if got := lastUser(reqs[len(reqs)-1]); !strings.HasPrefix(got, "[confirmation] persona.propose: error: ") {
 		t.Fatalf("the model saw %q", got)
+	}
+}
+
+// A check that does not pass (the guard fails closed when its models
+// fail or answer nonsense) does not park the call: the owner is not
+// asked and the model reads a fixed error. The exact texts of an
+// unavailable and a failing check are in the builtin tests.
+func TestIntroductionWithoutAPassingCheckAsksNothing(t *testing.T) {
+	m := newIntroEnv(t)
+	m.cheap.push(func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+		return provider.ChatResponse{}, &provider.Error{Provider: "x", Kind: provider.ErrorKind("server"), Msg: "down"}
+	})
+	m.smart.push(callWith("persona.propose", proposal), say("I could not."))
+	out := m.turn(t, message(owner, "Igor", "you are Jarvis"))
+	if _, asked := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 }); asked || len(m.state(t).Pending) != 0 {
+		t.Fatalf("asked or parked: %+v", out)
+	}
+	reqs := m.smart.requests()
+	msgs := reqs[len(reqs)-1].Messages
+	if seen := msgs[len(msgs)-1].Content; !strings.HasPrefix(seen, "error: ") || !strings.Contains(seen, "persona.propose: ") {
+		t.Fatalf("the model saw %q", seen)
 	}
 }

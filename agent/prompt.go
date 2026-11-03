@@ -15,7 +15,9 @@ const DefaultPersona = `You are a personal assistant. Your operator has not desc
 // IntroductionRules are added to the system prompt of an admin's clean
 // session while the agent has no persona and the persona.propose tool is
 // on offer (design section 5.8). They change the prompt once, when the
-// persona appears, so provider caches keep hitting after that.
+// persona appears, so provider caches keep hitting after that. They also
+// go away if the session becomes tainted: that is the safer behaviour and
+// costs one cache miss.
 const IntroductionRules = `You have not been introduced yet: the owner has not described who you are. Before anything else, get to know the owner in a short, friendly conversation.
 Find out the owner's name and how they want to be addressed, what they want to call you, the tone they like, and the language you should speak. Ask a few questions at a time, not all at once, and use what they have already told you.
 When you know enough, call persona.propose with a short description of you in the second person ("You are ..."): your name, your tone, your language and how you address the owner. Write plain facts about who you are, not rules about tools or permissions. The owner approves it with a button.

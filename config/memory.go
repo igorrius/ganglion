@@ -67,7 +67,7 @@ func Remember() do.Provider[Remembering] {
 		}
 		err = builtin.EnsureAudit(do.MustInvoke[Startup](i), do.MustInvoke[*schedule.Store](i), do.MustInvoke[alert.Admins](i),
 			time.Now(), do.MustInvoke[*slog.Logger](i))
-		tools := append(builtin.MemoryTools(m, telegram.PrivateConv), builtin.NewPersonaPropose(m))
+		tools := append(builtin.MemoryTools(m, telegram.PrivateConv), builtin.NewPersonaPropose(m, builtin.WithPersonaLogger(do.MustInvoke[*slog.Logger](i))))
 		return Remembering{Tools: tools, Facts: m.Index}, err
 	}
 }

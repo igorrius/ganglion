@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/igorrius/ganglion/guard"
 	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/journal"
 )
 
 const toolPersonaPropose = "persona.propose"
@@ -29,6 +31,7 @@ var (
 	errPersonaHeldBack = errors.New("persona.propose: the text did not pass the check for hidden instructions; " +
 		"describe yourself in plain terms and propose again")
 	errPersonaUnchecked = errors.New("persona.propose: the check for hidden instructions could not run; try again later")
+	errPersonaSecret    = errors.New("persona.propose: the text holds something that looks like a secret; leave it out and propose again")
 	errPersonaDone      = errors.New("persona.propose: you already have a persona; it changes only by hand")
 )
 
@@ -39,12 +42,28 @@ type Persona interface {
 	WriteIdentity(ctx context.Context, text, turn string) error
 }
 
+// PersonaOption configures a PersonaPropose.
+type PersonaOption func(*PersonaPropose)
+
+// WithPersonaLogger sets where a check that could not run is reported.
+// The default drops it.
+func WithPersonaLogger(l *slog.Logger) PersonaOption { return func(p *PersonaPropose) { p.log = l } }
+
 // PersonaPropose is the persona.propose tool of the first-run
 // introduction.
-type PersonaPropose struct{ persona Persona }
+type PersonaPropose struct {
+	persona Persona
+	log     *slog.Logger
+}
 
 // NewPersonaPropose returns the persona.propose tool over p.
-func NewPersonaPropose(p Persona) *PersonaPropose { return &PersonaPropose{persona: p} }
+func NewPersonaPropose(p Persona, opts ...PersonaOption) *PersonaPropose {
+	t := &PersonaPropose{persona: p, log: slog.New(slog.DiscardHandler)}
+	for _, o := range opts {
+		o(t)
+	}
+	return t
+}
 
 type proposeArgs struct {
 	Text string `json:"text"`
@@ -87,6 +106,10 @@ func (*PersonaPropose) args(c tool.Call) (string, error) {
 		return "", errors.New("persona.propose: the text is empty")
 	case utf8.RuneCountInString(text) > MaxPersonaRunes:
 		return "", fmt.Errorf("persona.propose: the text is longer than %d characters", MaxPersonaRunes)
+	case journal.Redact(text) != text:
+		// The question is redacted before the owner reads it: what is
+		// shown must be what is written.
+		return "", errPersonaSecret
 	case c.Tainted:
 		return "", errPersonaTainted
 	}
@@ -109,8 +132,12 @@ func (p *PersonaPropose) Question(ctx context.Context, c tool.Call) (string, err
 	v, err := p.persona.CheckPersona(ctx, text)
 	switch {
 	case err != nil:
-		return "", fmt.Errorf("persona.propose: check: %w", err)
+		// Whatever the cause, an unusable check is not a pass. It is
+		// logged here, without the text, and the model reads a fixed error.
+		p.log.Warn("persona.propose: the check did not run", "err", err)
+		return "", errPersonaUnchecked
 	case v.Reason == guard.ReasonUnavailable && !v.OK:
+		p.log.Warn("persona.propose: the check was unavailable")
 		return "", errPersonaUnchecked
 	case !v.OK:
 		return "", errPersonaHeldBack

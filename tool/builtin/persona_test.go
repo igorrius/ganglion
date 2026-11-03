@@ -1,7 +1,10 @@
 package builtin_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +13,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/gitrepo"
+	"github.com/igorrius/ganglion/guard"
 	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/router"
@@ -28,6 +32,23 @@ type introEnv struct {
 
 func newIntroEnv(t *testing.T) introEnv {
 	t.Helper()
+	return newIntroEnvWith(t, wordGuard{}, nil)
+}
+
+// stubGuard answers every check with one verdict and error.
+type stubGuard struct {
+	v   guard.Verdict
+	err error
+}
+
+func (g stubGuard) CheckFact(context.Context, string) (guard.Verdict, error) { return g.v, g.err }
+
+func (g stubGuard) CheckPersona(context.Context, string) (guard.Verdict, error) { return g.v, g.err }
+
+// newIntroEnvWith is newIntroEnv with the check g; the tool logs to log
+// when it is not nil.
+func newIntroEnvWith(t *testing.T, g memory.Guard, log *slog.Logger) introEnv {
+	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("the git binary is not installed; the persona is committed to the workspace repository")
 	}
@@ -35,8 +56,12 @@ func newIntroEnv(t *testing.T) introEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := memory.New(repo, wordGuard{}, func() time.Time { return time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC) })
-	return introEnv{repo: repo, tool: builtin.NewPersonaPropose(m)}
+	m := memory.New(repo, g, func() time.Time { return time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC) })
+	var opts []builtin.PersonaOption
+	if log != nil {
+		opts = append(opts, builtin.WithPersonaLogger(log))
+	}
+	return introEnv{repo: repo, tool: builtin.NewPersonaPropose(m, opts...)}
 }
 
 func (e introEnv) write(t *testing.T, rel, body string) {
@@ -201,5 +226,52 @@ func TestSecondApprovalRefused(t *testing.T) {
 	run(t, e.tool, propose(persona))
 	if got, _ := e.read("persona/10-identity.md"); got != persona+"\n" {
 		t.Fatalf("persona %q", got)
+	}
+}
+
+// An unusable check is never a pass: a verdict that says the check could
+// not run, and an error from it, both end in the same fixed error. The
+// cause is logged without the text; nothing is asked or written.
+func TestProposeUncheckedIsRefusedWithAFixedError(t *testing.T) {
+	boom := errors.New("provider exploded")
+	for name, g := range map[string]stubGuard{
+		"an unavailable verdict": {v: guard.Verdict{Reason: guard.ReasonUnavailable}},
+		"an error":               {err: boom},
+		"an error and a pass":    {v: guard.Verdict{OK: true}, err: boom},
+	} {
+		var logs bytes.Buffer
+		e := newIntroEnvWith(t, g, slog.New(slog.NewTextHandler(&logs, nil)))
+		q, err := e.tool.(tool.Questioner).Question(context.Background(), propose(persona))
+		if q != "" || err == nil || err.Error() != "persona.propose: the check for hidden instructions could not run; try again later" {
+			t.Errorf("%s: question %q, error %v", name, q, err)
+		}
+		if _, ok := e.read("persona/10-identity.md"); ok {
+			t.Errorf("%s: written", name)
+		}
+		if strings.Contains(logs.String(), "Jarvis") {
+			t.Errorf("%s: the log holds the text: %s", name, logs.String())
+		}
+		if name != "an unavailable verdict" && (!strings.Contains(logs.String(), "level=WARN") || !strings.Contains(logs.String(), "provider exploded")) {
+			t.Errorf("%s: the cause is not logged at warn: %q", name, logs.String())
+		}
+	}
+}
+
+// What the owner is shown is what is written: a text the question would
+// show redacted is refused, at the question and at the write.
+func TestProposeRefusesATextThatRedactionWouldChange(t *testing.T) {
+	e := newIntroEnv(t)
+	secret := propose("You are Jarvis. The wifi password: hunter2")
+	for name, f := range map[string]func() error{
+		"question": func() error { _, err := e.tool.(tool.Questioner).Question(context.Background(), secret); return err },
+		"run":      func() error { _, err := e.tool.Run(context.Background(), secret); return err },
+	} {
+		err := f()
+		if err == nil || err.Error() != "persona.propose: the text holds something that looks like a secret; leave it out and propose again" {
+			t.Errorf("%s: error %v", name, err)
+		}
+	}
+	if _, ok := e.read("persona/10-identity.md"); ok {
+		t.Fatal("written")
 	}
 }
