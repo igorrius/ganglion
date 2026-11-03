@@ -67,16 +67,18 @@ const (
 // <text>". Text the sender did not write is wrapped as outside content: a
 // forward whole, a quote after the sender's own words. outside reports
 // whether the message holds any, a reply to a message in another chat
-// included (ruling R35).
+// included (ruling R35). Files that came with it are noted after it, a
+// named one as outside content (R-DLV-10).
 func userContent(m event.Message) (content string, outside bool) {
+	notes, named := fileNotes(m.Files)
 	if m.Forwarded {
-		return speaker(m) + ": " + tool.WrapExternal(sourceForwarded, m.Text), true
+		return speaker(m) + ": " + tool.WrapExternal(sourceForwarded, m.Text) + notes, true
 	}
 	content = speaker(m) + ": " + m.Text
 	if m.Quote != "" {
 		content += "\n" + tool.WrapExternal(sourceQuoted, m.Quote)
 	}
-	return content, m.Quote != "" || m.ExternalReply
+	return content + notes, m.Quote != "" || m.ExternalReply || named
 }
 
 // setAdmin looks up whether the turn's principal may use tools.

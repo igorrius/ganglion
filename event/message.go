@@ -16,6 +16,34 @@ type Message struct {
 	Forwarded     bool   `json:"forwarded,omitempty"`
 	Quote         string `json:"quote,omitempty"`
 	ExternalReply bool   `json:"external_reply,omitempty"`
+	// Files are the files that came with the message. Nothing downloads
+	// them yet: the agent is told that they came (R-DLV-10).
+	Files []File `json:"files,omitempty"`
+}
+
+// FileKind is what kind of file a person sent.
+type FileKind string
+
+// File kinds a channel reports.
+const (
+	FilePhoto     FileKind = "photo"
+	FileDocument  FileKind = "document"
+	FileAudio     FileKind = "audio"
+	FileVoice     FileKind = "voice"
+	FileVideo     FileKind = "video"
+	FileVideoNote FileKind = "video_note"
+	FileAnimation FileKind = "animation"
+	FileSticker   FileKind = "sticker"
+)
+
+// File is a file that came with a message, as the channel describes it.
+// Name and Type are the sender's text, maybe someone else's: outside
+// content.
+type File struct {
+	Kind FileKind `json:"kind"`
+	Name string   `json:"name,omitempty"` // as the sender named it
+	Type string   `json:"type,omitempty"` // MIME type the channel reports
+	Size int64    `json:"size,omitempty"` // bytes
 }
 
 // Decision is the payload of an event of kind "decision": a person pressed

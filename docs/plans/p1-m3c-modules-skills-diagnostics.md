@@ -323,7 +323,7 @@ script:           # optional: a level-2 skill
   - The core rules gain one stable line: files cannot be opened yet,
     say so.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `TestPhotoWithoutCaptionIsAnEvent`: `Files[0].Kind == FilePhoto`,
     `Text == ""`, nothing skipped.
   - `TestDocumentCarriesNameTypeSize`.
@@ -336,12 +336,12 @@ script:           # optional: a level-2 skill
   - `TestFileNameTaintsAndIsSanitised`: newlines and a fake `[now: …]`
     in the name do not survive; the session is tainted.
   - Metric: `ganglion_files_received_total{kind}`.
-- [ ] **Step 2: Run** `go test ./event/... ./transport/... ./agent/...` —
+- [x] **Step 2: Run** `go test ./event/... ./transport/... ./agent/...` —
   FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `go test -race ./...` and `make lint` — PASS.
-- [ ] **Step 5: Code map** (`event`, `transport/telegram`, `agent`).
-- [ ] **Step 6: Commit** `telegram, agent: a file sent to the agent is noticed, never dropped (R-DLV-10)`.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `go test -race ./...` and `make lint` — PASS.
+- [x] **Step 5: Code map** (`event`, `transport/telegram`, `agent`).
+- [x] **Step 6: Commit** `telegram, agent: a file sent to the agent is noticed, never dropped (R-DLV-10)`.
 
 ### Task 3: attachments through the outbox (R-DLV-9)
 

@@ -41,6 +41,24 @@ type message struct {
 	IsAutomaticForward bool            `json:"is_automatic_forward,omitempty"`
 	ExternalReply      json.RawMessage `json:"external_reply,omitempty"`
 	Quote              *textQuote      `json:"quote,omitempty"`
+	// Files that came with the message (R-DLV-10); only what describes
+	// them is read, never the file id.
+	Photo     []fileInfo `json:"photo,omitempty"`
+	Document  *fileInfo  `json:"document,omitempty"`
+	Audio     *fileInfo  `json:"audio,omitempty"`
+	Voice     *fileInfo  `json:"voice,omitempty"`
+	Video     *fileInfo  `json:"video,omitempty"`
+	VideoNote *fileInfo  `json:"video_note,omitempty"`
+	Animation *fileInfo  `json:"animation,omitempty"`
+	Sticker   *fileInfo  `json:"sticker,omitempty"`
+}
+
+// fileInfo is what a Bot API PhotoSize, Document, Audio, Voice, Video,
+// VideoNote, Animation or Sticker says about its file.
+type fileInfo struct {
+	FileName string `json:"file_name,omitempty"`
+	MimeType string `json:"mime_type,omitempty"`
+	FileSize int64  `json:"file_size,omitempty"`
 }
 
 // textQuote is a Bot API TextQuote, reduced to its text.

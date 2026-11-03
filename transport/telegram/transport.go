@@ -50,6 +50,7 @@ type Transport struct {
 	replyMode   ReplyMode
 	typingEvery time.Duration
 	commands    []transport.Command // listed in the command hints at start
+	files       fileCounter
 
 	mu     sync.Mutex
 	last   map[int64]int64 // chat → the newest incoming message id
@@ -118,6 +119,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 	return &Transport{
 		c:           newClient(cfg.baseURL, token, cfg.hc),
 		log:         cfg.log,
+		files:       newFileCounter(),
 		now:         cfg.now,
 		pollTimeout: cfg.pollTimeout,
 		retry:       backoff.Policy{Min: time.Second, Max: time.Minute},
@@ -248,8 +250,9 @@ func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
 	return t.messageEvent(botID, u)
 }
 
-// messageEvent turns a message update into an event. Only text messages
-// (or captions) from people become events. Text the sender did not write
+// messageEvent turns a message update into an event. Messages from people
+// with text, a caption or files become events; a file is described,
+// never dropped (R-DLV-10). Text the sender did not write
 // is marked (ruling R35): Telegram puts a forward in a message of its
 // own, so a forward's whole text is someone else's.
 func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
@@ -262,10 +265,12 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	if text == "" {
 		text = m.Caption
 	}
-	if text == "" {
-		t.log.Debug("telegram: update skipped", "update_id", u.UpdateID, "reason", "no text")
+	fs := files(m)
+	if text == "" && len(fs) == 0 {
+		t.log.Debug("telegram: update skipped", "update_id", u.UpdateID, "reason", "no text and no file")
 		return event.Event{}, false
 	}
+	t.files.add(context.Background(), fs)
 	var thread int64
 	if m.IsTopicMessage {
 		thread = m.MessageThreadID
@@ -277,6 +282,7 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 		Ref:           strconv.FormatInt(m.MessageID, 10),
 		Forwarded:     present(m.ForwardOrigin) || m.IsAutomaticForward,
 		ExternalReply: present(m.ExternalReply),
+		Files:         fs,
 	}
 	if m.Quote != nil {
 		msg.Quote = m.Quote.Text

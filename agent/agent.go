@@ -137,7 +137,9 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 // into the turn; false means the event is not one to answer.
 var payloads = map[event.Kind]func(t *turn) bool{
 	event.KindMessage: func(t *turn) bool {
-		return json.Unmarshal(t.event.Payload, &t.msg) == nil && strings.TrimSpace(t.msg.Text) != ""
+		// A message with only files is answered too: nothing is dropped
+		// silently (R-DLV-10).
+		return json.Unmarshal(t.event.Payload, &t.msg) == nil && (strings.TrimSpace(t.msg.Text) != "" || len(t.msg.Files) > 0)
 	},
 	event.KindDecision: func(t *turn) bool {
 		d := &t.decision

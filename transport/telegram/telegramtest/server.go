@@ -9,6 +9,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -36,6 +37,9 @@ type Incoming struct {
 	Text     string // empty: a message without text, such as a sticker
 	Caption  string // caption of a photo or document
 	IsBot    bool   // the sender is a bot
+	// Extra are more Bot API message fields, set as they are: "photo",
+	// "document", "voice" and the like.
+	Extra map[string]any
 }
 
 // Outgoing is a message the bot sent.
@@ -194,6 +198,7 @@ func (s *Server) AddMessage(m Incoming) int64 {
 	if m.Caption != "" {
 		msg["caption"] = m.Caption
 	}
+	maps.Copy(msg, m.Extra)
 	if m.ThreadID != 0 {
 		msg["message_thread_id"] = m.ThreadID
 		msg["is_topic_message"] = true
