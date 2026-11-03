@@ -170,8 +170,9 @@ var fromPerson = map[event.Kind]bool{event.KindMessage: true, event.KindDecision
 // Filter wraps next so that messages and button presses from principals
 // not on the list never reach it. A dropped event returns
 // transport.ErrDropped, so the transport confirms it, answers a press at
-// once, and the stranger gets no reply; it is logged without its text. Other events pass through. An error reading the list
-// is returned, so the transport offers the update again later.
+// once, and the stranger gets no reply; it is logged without its text.
+// Other events pass through. An error reading the list is returned, so
+// the transport offers the update again later.
 func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
 	return func(ctx context.Context, e event.Event) error {
 		if !fromPerson[e.Kind] {
