@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/turns"
 )
@@ -17,6 +19,14 @@ type Jobs interface {
 
 // taskSpeaker is who says a task's instruction in its history.
 const taskSpeaker = "Scheduled task"
+
+// The line a task run's last user message gets (ruling R41): a task told
+// to "send" its findings must not look for a tool to send them with.
+const (
+	taskLine        = "[unattended scheduled run: your final answer is sent to %s automatically as the message; no tool is needed to send it]"
+	recipientAnyone = "the owner"
+	maxNameRunes    = 64
+)
 
 // scheduled handles the time of a scheduled job (design section 5.3).
 // Only the scheduler's events count; a schedule event from any other
@@ -59,7 +69,7 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 		g := j.Grant
 		t.grant, t.replyConv = &g, g.ReplyTo
 		t.record.Outcome = turns.OutcomeOK
-		return false, nil
+		return false, a.setRecipient(ctx, t, j.Owner)
 	case schedule.KindSystem:
 		t.replyConv = j.Conv
 		return true, a.system(ctx, t, j)
@@ -90,5 +100,19 @@ func (a *Agent) system(ctx context.Context, t *turn, j schedule.Job) error {
 		return fmt.Errorf("agent: system job %s: %w", j.ID, err)
 	}
 	t.reply(report)
+	return nil
+}
+
+// setRecipient names the owner who receives a task run's answer, on one
+// line and short, or "the owner" when the access list has no name.
+func (a *Agent) setRecipient(ctx context.Context, t *turn, owner string) error {
+	name, err := a.d.Names(ctx, owner)
+	if err != nil {
+		return fmt.Errorf("agent: name of %s: %w", owner, err)
+	}
+	t.recipient = text.Truncate(strings.Join(strings.Fields(name), " "), maxNameRunes)
+	if t.recipient == "" {
+		t.recipient = recipientAnyone
+	}
 	return nil
 }

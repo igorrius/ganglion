@@ -163,6 +163,7 @@ type env struct {
 	admin      bool // the sender is an admin (default true)
 	jobs       jobs
 	personaErr error
+	names      map[string]string // the access list's names by principal
 }
 
 func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
@@ -181,7 +182,8 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{db: db, logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0, admin: true, jobs: jobs{}}
+	e := &env{db: db, logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0, admin: true, jobs: jobs{},
+		names: map[string]string{"telegram:user:42": "Igor Artasevych"}}
 	e.router, err = rules.New([]router.Model{
 		{Provider: "p1", Name: "smart", Tier: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 2}},
 		{Provider: "p2", Name: "cheap", Tier: "cheap", Caps: router.ModelCaps{Tools: true}},
@@ -204,6 +206,7 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 			id, ok := strings.CutPrefix(p, "telegram:user:")
 			return "telegram", "telegram:" + id, ok
 		}},
+		Names:   func(_ context.Context, p string) (string, error) { return e.names[p], nil },
 		Now:     func() time.Time { return e.now },
 		Persona: func() (string, error) { return e.persona, e.personaErr },
 		Log:     slog.New(slog.NewTextHandler(e.logs, nil)),

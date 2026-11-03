@@ -192,3 +192,43 @@ func TestGiveUpOnAScheduledEventOnlyAlerts(t *testing.T) {
 		t.Fatalf("out %+v", out)
 	}
 }
+
+// The live run of 2026-11-03: a task told to "send Igor a message" said
+// it had no tool to send messages. A task run's last user message says
+// that the run is unattended and its final answer goes to the owner by
+// itself; a normal turn has no such line, and the history keeps the
+// instruction plain (ruling R41).
+func TestTaskRunIsToldItsAnswerIsDelivered(t *testing.T) {
+	e := newConfirmEnv(t, newClock())
+	j := rates()
+	e.jobs[j.ID] = j
+	e.smart.push(say("USD 41.2"))
+	e.turn(t, fired(j))
+	reqs := e.smart.requests()
+	want := "[unattended scheduled run: your final answer is sent to Igor Artasevych automatically as the message; no tool is needed to send it]"
+	if got := lastUserRaw(reqs[0]); !strings.Contains(got, "\n"+want) || !strings.HasPrefix(got, "Scheduled task: "+j.Text+"\n") {
+		t.Fatalf("the task run read %q", got)
+	}
+	if st := e.stateOf(t, "task:j1"); st.Messages[0].Content != "Scheduled task: "+j.Text {
+		t.Fatalf("history %q", st.Messages[0].Content)
+	}
+	e.smart.push(say("hi"))
+	e.turn(t, message(owner, "Igor", "hello"))
+	reqs = e.smart.requests()
+	if got := lastUserRaw(reqs[len(reqs)-1]); strings.Contains(got, "unattended") {
+		t.Fatalf("a normal turn read %q", got)
+	}
+}
+
+// An owner who is not listed by name is "the owner".
+func TestTaskRunLineWithoutAName(t *testing.T) {
+	e := newConfirmEnv(t, newClock())
+	e.names = map[string]string{}
+	j := rates()
+	e.jobs[j.ID] = j
+	e.smart.push(say("USD 41.2"))
+	e.turn(t, fired(j))
+	if got := lastUserRaw(e.smart.requests()[0]); !strings.Contains(got, "is sent to the owner automatically") {
+		t.Fatalf("the task run read %q", got)
+	}
+}

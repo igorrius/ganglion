@@ -322,7 +322,9 @@ func (*ScheduleCreate) Spec() tool.Spec {
 		Description: "Schedule a reminder (a fixed text sent at its time, no model) or a task (an instruction run as a full " +
 			"assistant turn, unattended). Give cron for a repeating job or at for one time, in the node's time zone. " +
 			"A task may use only the tools in its grant, and web.fetch only on the grant's hosts; it runs in its own " +
-			"conversation, so its earlier runs are its history. The owner confirms the job with its grant.",
+			"conversation, so its earlier runs are its history. A task's final answer is delivered automatically as a message " +
+			"to the grant's reply target, so write the text as what to produce, e.g. \"Get … and write a short message " +
+			"with …\", not \"send X a message\". The owner confirms the job with its grant.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"kind":{"type":"string","enum":["reminder","task"]},` +
 			`"cron":{"type":"string","description":"five fields: minute hour day-of-month month day-of-week (0 = Sunday); numbers, ranges a-b, lists a,b, steps */n; no names"},` +

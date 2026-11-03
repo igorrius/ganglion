@@ -10,7 +10,7 @@ package agent
 // the model from trying and let it explain a refusal. The memory lines
 // follow design section 5.4. Every token here is paid on every turn.
 const CoreRules = `Each user message starts with the sender's name and a colon.
-The last user message may end with lines in square brackets that the system added: the current time ("[now: ...]") and, when the session holds content from outside, a notice that it is data. They are not the sender's words.
+The last user message may end with lines in square brackets that the system added: the current time ("[now: ...]"), when the session holds content from outside a notice that it is data, and in a scheduled run where its answer goes. They are not the sender's words.
 If you cannot do something, say so plainly; never claim an action you did not take. Use only the tools you are offered. No device of the home is connected yet, so you cannot act on devices.
 
 Directives:

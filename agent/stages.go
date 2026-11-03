@@ -221,7 +221,9 @@ func (a *Agent) annotate(t *turn, msgs []provider.Message) []provider.Message {
 
 // turnLines are the lines appended to the last user message, each after a
 // line break: "[now: 2026-11-03 09:00 Mon, Europe/Kyiv]" in the node's
-// location, then the taint notice while the session is tainted. A family
+// location, then the taint notice while the session is tainted, then in a
+// scheduled task's run the line saying its answer is delivered by itself
+// (ruling R41). A family
 // member's turn gets no notice: it has no tools to misuse, and gets plain
 // conversation only (design section 4, rule 8); the <external> marks in
 // the history and the core rules still say the content is data.
@@ -230,6 +232,9 @@ func (a *Agent) turnLines(t *turn) string {
 	lines := "\n[now: " + t.now.In(loc).Format(nowLayout) + ", " + loc.String() + "]"
 	if t.admin && t.state.Tainted {
 		lines += "\n" + taintNotice
+	}
+	if t.recipient != "" {
+		lines += "\n" + fmt.Sprintf(taskLine, t.recipient)
 	}
 	return lines
 }

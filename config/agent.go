@@ -64,6 +64,7 @@ func Agent() do.Provider[*agent.Agent] {
 			QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
 			Jobs:         do.MustInvoke[*schedule.Store](i),
 			IsAdmin:      do.MustInvoke[agent.AdminFunc](i),
+			Names:        do.MustInvoke[*access.List](i).Name,
 			Turns:        do.MustInvoke[*turns.Log](i),
 			Archive:      do.MustInvoke[agent.SessionStore](i),
 			Alerts:       do.MustInvoke[alert.Admins](i),

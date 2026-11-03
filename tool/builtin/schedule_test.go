@@ -476,3 +476,14 @@ func TestScheduleDeleteAndRunNowTools(t *testing.T) {
 		t.Fatal("not deleted")
 	}
 }
+
+// schedule.create tells the model to write a task as what to produce:
+// the run's final answer is delivered by itself (ruling R41).
+func TestScheduleCreateSaysHowToWriteATask(t *testing.T) {
+	d := builtin.NewScheduleCreate(builtin.Scheduling{}).Spec().Description
+	for _, want := range []string{"write the text as what to produce", "not \"send X a message\"", "delivered automatically"} {
+		if !strings.Contains(d, want) {
+			t.Errorf("the description lacks %q: %s", want, d)
+		}
+	}
+}

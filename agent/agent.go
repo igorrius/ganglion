@@ -36,6 +36,10 @@ type FactsFunc func() string
 // NoFacts is the FactsFunc of an agent without memory.
 func NoFacts() string { return "" }
 
+// NameFunc returns the name a principal is listed under
+// (access.List.Name); "" when none.
+type NameFunc func(ctx context.Context, principal string) (string, error)
+
 // SystemJob is the code of a system job (schedule.KindSystem), such as
 // the memory audit: it runs without a model and returns the report sent
 // to the job's conversation (ruling R36). An error leaves the event to be
@@ -62,10 +66,13 @@ type Deps struct {
 	// SystemJobs are the system jobs' code by job id (builtin.AuditJobID).
 	SystemJobs map[string]SystemJob
 	IsAdmin    AdminFunc
-	Turns      *turns.Log
-	Archive    SessionStore
-	Alerts     alert.Admins // who hears about a reached daily limit
-	Persona    PersonaFunc
+	// Names are the access list's names, for the line that tells a task
+	// run who receives its answer (ruling R41).
+	Names   NameFunc
+	Turns   *turns.Log
+	Archive SessionStore
+	Alerts  alert.Admins // who hears about a reached daily limit
+	Persona PersonaFunc
 	// Facts is the memory's index, shown to admins only (design section
 	// 4, rule 8); NoFacts when unset.
 	Facts FactsFunc
