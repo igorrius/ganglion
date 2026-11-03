@@ -230,3 +230,36 @@ Before writing a helper, look for it. These exist and are the only copies:
 English. A doc comment states the contract: what the function does, what
 its errors mean, and the spec requirement (`R-*`) or ADR behind a rule that
 is not obvious. Comments say why; the code says how.
+
+## 11. Security
+
+Spec principle 9: every link is hostile, every input is untrusted. In
+code that means:
+
+- **Everything from outside the process is hostile.** That covers the
+  network, files, a model's output, a module's result and another node's
+  message.
+  - Read it with limits on size, depth and time.
+  - Turn it into typed values at the boundary.
+  - Refuse unknown fields where the contract is ours (`strictJSON`,
+    `tool.CheckArgs`).
+- **Every network call** has:
+  - a timeout and a cap on the body it reads;
+  - verified TLS: never `InsecureSkipVerify`;
+  - no credentials in a URL.
+- **Listeners.** A listener binds to loopback unless the spec says
+  otherwise. A peer proves who it is:
+  - NATS credentials between nodes;
+  - a token compared with `subtle.ConstantTimeCompare`;
+  - a Unix socket readable only by the node's user.
+- **Secrets** come from `secrets`. They are never written anywhere else:
+  - not into logs, spans or metric labels;
+  - not into the journal (`journal.Redact`);
+  - not into an error a model reads;
+  - not into a child process's argv.
+- **Randomness** that someone could guess or replay comes from
+  `crypto/rand` (`event.RandomID`); `math/rand` is for jitter only.
+- **Deny by default.** A change that widens a right is the owner's
+  decision and comes with a test.
+- **An abuse test** goes with every change that crosses a trust boundary.
+  It feeds the hostile input and asserts what must not happen.

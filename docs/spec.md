@@ -101,6 +101,23 @@ We build from scratch. Neighbours are a source of ideas, not a base.
    is measured (`tools/modbench`) and weighed in every decision about
    dependencies, runtimes and module languages; a Pi is one target among
    others, not the reference.
+9. **Secure by design, and every link is hostile** (owner, 2026-11-03).
+   - **Every network is open and watched.** That includes the home LAN and
+     a private cloud network.
+   - **Every input is untrusted data until checked.** That covers every
+     message, page, file, model output, module result and another node's
+     event.
+   - **What follows for links:**
+     - every link is encrypted and both ends authenticate;
+     - the receiver authorises each message by who sent it (principle 6);
+     - each message carries a `ttl` and an idempotency key and has a size
+       limit;
+     - nothing listens beyond loopback unless a requirement says so.
+   - **Rights** start at none and widen only by the owner's decision.
+   - **Every design records its trust boundaries and abuse cases before
+     code:** the ADR template's Security section,
+     [conventions](conventions.md) section 11. What stops an abuse is
+     code, not a prompt.
 
 ## 3. Deliberately NOT in 0.x
 

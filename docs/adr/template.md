@@ -33,6 +33,18 @@ security, effort, lock-in, fit with the phase plan.
 
 The chosen option and the one or two reasons that decided it.
 
+## Security
+
+Spec principle 9: every link is hostile, every input is untrusted.
+
+- **Trust boundaries** this decision creates or crosses.
+- **What an attacker controls** here. Examples: the network, a web page,
+  a model's output, a module, another node, a person in a group chat.
+- **Each abuse case and what stops it.** It must be stopped by code, not
+  by a prompt.
+
+"No new boundary" is a valid answer, given in one line with the reason.
+
 ## Consequences
 
 - What becomes easier.
