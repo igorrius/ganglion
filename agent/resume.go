@@ -338,11 +338,31 @@ func (a *Agent) expired(ctx context.Context, t *turn) error {
 			return fmt.Errorf("agent: store the outcome of %s: %w", it.ID, err)
 		}
 	}
+	if o.Result == resultExpired {
+		a.closeExpired(ctx, t, it)
+	}
 	if !slices.Contains(t.state.Pending, it.ID) {
 		return nil
 	}
 	t.noTools = true // the model only tells the owner (ruling R33)
 	return a.continueWith(ctx, t, it, o)
+}
+
+// closeExpired takes the buttons off the question of an expired call and
+// says it expired. A question that was not delivered has nothing to close,
+// and a failed look only leaves the buttons, which a late press still closes.
+// Its key is the expiry event's, so a rerun stores the edit once.
+func (a *Agent) closeExpired(ctx context.Context, t *turn, it pending.Item) {
+	ref, err := a.d.Sent.SentRef(ctx, it.Call().Key()+pending.QuestionKeySuffix)
+	if err != nil {
+		a.log.Warn("agent: the question of an expired call", "pending", it.ID, "err", err)
+		return
+	}
+	if ref == "" {
+		return
+	}
+	t.out = append(t.out, event.Outgoing{IdemKey: t.event.IdemKey + ":edit", Transport: it.Transport, Conv: it.Conv,
+		Text: answered(it.Question, lineExpired), Edit: ref})
 }
 
 // continueWith resumes the conversation: the call's outcome joins the

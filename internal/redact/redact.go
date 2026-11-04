@@ -1,9 +1,13 @@
-package journal
+// Package redact removes secrets from text before it is stored or shown:
+// the journal, the logs, the questions the owner is asked, and the
+// diagnostics (design section 4, rule 5).
+package redact
 
 import (
 	"bytes"
 	"encoding/json"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -28,13 +32,13 @@ var (
 	botToken = regexp.MustCompile(`(?:bot)?\d{6,}:[A-Za-z0-9_-]{30,}|bot\d+:[A-Za-z0-9_-]+`)
 )
 
-// Redact removes secrets from s: the values of keys named like *token*,
+// String removes secrets from s: the values of keys named like *token*,
 // *secret*, *password*, *passwd*, *key*, *authorization* or *cookie*,
 // whether s is JSON or plain text; the same pairs, bearer tokens and
 // passwords in addresses inside JSON strings; and Bot API tokens
 // anywhere. It is applied before anything is journalled
-// (design section 4, rule 5).
-func Redact(s string) string {
+// or logged (design section 4, rule 5).
+func String(s string) string {
 	if out, ok := redactJSON(s); ok {
 		return out
 	}
@@ -87,4 +91,31 @@ func redactValue(v any) any {
 		return redactText(t)
 	}
 	return v
+}
+
+// minValue is the shortest secret Values hides: a shorter value would
+// blank out ordinary words, and no real token or key is that short.
+const minValue = 6
+
+// Values returns a function that replaces every exact occurrence of the
+// given secret values with "[redacted]": the secrets the node read, which
+// no pattern may recognise (a provider key named by key_env). Empty and
+// very short values are skipped; a longer value wins over its prefix.
+func Values(vs ...string) func(string) string {
+	keep := make([]string, 0, len(vs))
+	for _, v := range vs {
+		if len(v) >= minValue {
+			keep = append(keep, v)
+		}
+	}
+	if len(keep) == 0 {
+		return func(s string) string { return s }
+	}
+	slices.SortFunc(keep, func(a, b string) int { return len(b) - len(a) })
+	pairs := make([]string, 0, 2*len(keep))
+	for _, v := range keep {
+		pairs = append(pairs, v, redacted)
+	}
+	r := strings.NewReplacer(pairs...)
+	return r.Replace
 }

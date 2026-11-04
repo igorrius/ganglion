@@ -1,12 +1,13 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo live-agent accept compare memory modules modules-html2md modules-tinygo modules-rust clean-modules modrun modbench bench bench-html2md
+.PHONY: build test lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-tinygo modules-rust clean-modules modrun modbench bench bench-html2md lab lab-all lab-skip-full lab-faults
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
 
 test:
 	go test -race ./...
+	go test -race -tags lab ./internal/chatlab/... ./tools/chatlab/...
 
 lint:
 	golangci-lint run
@@ -42,10 +43,11 @@ live-agent: build
 
 # The scripted acceptance of M3b (config/accept_test.go): the real core
 # with real models and the real web, the fake Bot API playing the owner.
-# ACCEPT_ROUTE picks a route: cli (Haiku through the claude CLI, logged
-# in), api (OPENROUTER_API_KEY from .env) or both (empty). Transcripts and
-# node logs go to bin/accept/. It spends a few cents and a few minutes.
-ACCEPT_ROUTE ?=
+# ACCEPT_ROUTE picks a route: cli, the main model through the claude CLI,
+# logged in (the default, ADR-0047); api (OPENROUTER_API_KEY from .env) or
+# both (ACCEPT_ROUTE=). Transcripts and node logs go to bin/accept/. It takes
+# a few minutes and spends subscription limits.
+ACCEPT_ROUTE ?= cli
 accept: build
 	@mkdir -p bin/accept
 	@set -a; [ -f .env ] && . ./.env; set +a; \
@@ -59,12 +61,42 @@ compare:
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	go run ./tools/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
 
+# Test the agent by talking to it (ADR-0048): real models over the fake Bot API,
+# a table of what passed. It runs what changed since it last passed; LAB picks
+# scenarios by name. It spends subscription limits, and does not read .env: that
+# file holds TELEGRAM_*.
+LAB ?=
+lab: build
+	go build -tags lab -o bin/chatlab ./tools/chatlab
+	bin/chatlab run $(LAB)
+
+# Everything, about 900,000 tokens: only when it is decided, never as a routine
+# step. make lab says when a change recommends it.
+lab-all: build
+	go build -tags lab -o bin/chatlab ./tools/chatlab
+	bin/chatlab run --all
+
+# Decide to do without a recommended full run.
+lab-skip-full:
+	go build -tags lab -o bin/chatlab ./tools/chatlab
+	bin/chatlab skip-full
+
+# Prove the scenarios can fail: seeded faults in a clean worktree must turn their
+# scenarios red. Commit first; it spends subscription limits.
+lab-faults:
+	scripts/lab-faults.sh
+
+# The agent under kill -9: 200 kills by default, GANGLION_CRASH_ITERS sets
+# more. A fake Bot API and a fake model; it spends a few minutes (3.8).
+crash-agent:
+	GANGLION_CRASH_AGENT=1 go test -count=1 -timeout 30m -run 'TestCrashHarnessAgent$$' -v ./cmd/
+
 # RSS of the echo bot and of the agent on a fake model API, idle and after
 # 1,000 messages through the fake Bot API; the agent also with a tool call
 # in every turn; and the node's peak after one hostile 1 MiB page through
 # web.fetch and html2md.
 memory:
-	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent|AgentTools)$$' -v ./cmd/
+	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent|AgentTools|Metrics)$$' -v ./cmd/
 	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemoryHostilePage' -v ./config/
 
 # The modules. html2md (ADR-0035) is a Rust crate whose build,

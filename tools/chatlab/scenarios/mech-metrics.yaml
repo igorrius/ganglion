@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-metrics
+why: The owner must get the metrics as a picture, by the command, which needs no model, and through the tool.
+covers:
+  - agent/metrics.go
+  - tool/builtin/metrics.go
+  - telemetry/**
+  - transport/telegram/upload.go
+model: scripted
+script:
+  - {tool: metrics.show, args: '{}'}
+  - {say: Here it is.}
+steps:
+  - say: /metrics
+  - facts:
+      files: 1
+  - say: "Show me the agent's metrics."
+  - facts:
+      journal:
+        - {tool: metrics.show, decision: allowed}
+      files: 2

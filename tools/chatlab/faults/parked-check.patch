@@ -1,0 +1,12 @@
+diff --git a/policy/policy.go b/policy/policy.go
+index 5b490e2..8ad94af 100644
+--- a/policy/policy.go
++++ b/policy/policy.go
+@@ -209,6 +209,7 @@ func (p *Policy) spec(s tool.Spec) tool.Spec {
+ // keeps it as confirm, the decision Decide made.
+ func (p *Policy) confirm(ctx context.Context, h tool.Handler, c tool.Call) (tool.Result, error) {
+ 	waiting, err := p.ask.Parked(ctx, c)
++	waiting = ""
+ 	if err != nil {
+ 		return tool.Result{}, fmt.Errorf("policy: ask about %s: %w", c.Name, err)
+ 	}

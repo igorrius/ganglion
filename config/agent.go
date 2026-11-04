@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/igorrius/ganglion/access"
@@ -10,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
+	"github.com/igorrius/ganglion/diag"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/claudecli"
@@ -18,6 +20,7 @@ import (
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -48,32 +51,41 @@ func AgentGiveUp() do.Provider[core.GiveUp] {
 // Agent provides the agent over the catalogue's models.
 func Agent() do.Provider[*agent.Agent] {
 	return func(i do.Injector) (*agent.Agent, error) {
-		b := do.MustInvoke[Bootstrap](i)
-		cfg := agent.DefaultConfig()
-		cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
-		return agent.New(cfg, agent.Deps{
-			States:    do.MustInvoke[*sqlqueue.Queue](i),
-			Router:    do.MustInvoke[router.Router](i),
-			Providers: do.MustInvoke[map[string]provider.Provider](i),
-			Tools:     do.MustInvoke[*tool.Registry](i),
-			// Around every tool call, outermost first: traced, journal, then
-			// the policy for the calls the model makes.
-			Middleware:   []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
-			Policy:       do.MustInvoke[*policy.Policy](i).Middleware(),
-			Pending:      do.MustInvoke[*pending.Store](i),
-			Outbox:       do.MustInvoke[*sqlqueue.Queue](i),
-			QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
-			Jobs:         do.MustInvoke[*schedule.Store](i),
-			IsAdmin:      do.MustInvoke[agent.AdminFunc](i),
-			Names:        do.MustInvoke[*access.List](i).Name,
-			Turns:        do.MustInvoke[*turns.Log](i),
-			Archive:      do.MustInvoke[agent.SessionStore](i),
-			Alerts:       do.MustInvoke[alert.Admins](i),
-			Persona:      agent.PersonaDir(b.Agent.Workspace),
-			Facts:        do.MustInvoke[Remembering](i).Facts,
-			SystemJobs:   do.MustInvoke[Remembering](i).Jobs,
-			Log:          do.MustInvoke[*slog.Logger](i),
-		}), nil
+		cfg, deps := agentParts(i)
+		return agent.New(cfg, deps), nil
+	}
+}
+
+// agentParts are the agent's settings and collaborators.
+func agentParts(i do.Injector) (agent.Config, agent.Deps) {
+	b := do.MustInvoke[Bootstrap](i)
+	cfg := agent.DefaultConfig()
+	cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
+	return cfg, agent.Deps{
+		States:    do.MustInvoke[*sqlqueue.Queue](i),
+		Router:    do.MustInvoke[router.Router](i),
+		Providers: do.MustInvoke[map[string]provider.Provider](i),
+		Tools:     do.MustInvoke[*tool.Registry](i),
+		// Around every tool call, outermost first: traced, journal, then
+		// the policy for the calls the model makes.
+		Middleware:   []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
+		Policy:       do.MustInvoke[*policy.Policy](i).Middleware(),
+		Pending:      do.MustInvoke[*pending.Store](i),
+		Outbox:       do.MustInvoke[*sqlqueue.Queue](i),
+		Sent:         do.MustInvoke[*sqlqueue.Queue](i),
+		QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
+		Jobs:         do.MustInvoke[*schedule.Store](i),
+		IsAdmin:      do.MustInvoke[agent.AdminFunc](i),
+		Names:        do.MustInvoke[*access.List](i).Name,
+		Turns:        do.MustInvoke[*turns.Log](i),
+		Archive:      do.MustInvoke[agent.SessionStore](i),
+		Alerts:       do.MustInvoke[alert.Admins](i),
+		Persona:      agent.PersonaDir(b.Agent.Workspace),
+		Facts:        do.MustInvoke[Remembering](i).Facts,
+		SystemJobs:   do.MustInvoke[Remembering](i).Jobs,
+		Modules:      do.MustInvoke[agent.Modules](i),
+		Skills:       do.MustInvoke[Skilled](i).Set,
+		Log:          do.MustInvoke[*slog.Logger](i),
 	}
 }
 
@@ -120,7 +132,58 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleList(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
-	}, append(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools...)...)
+	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
+		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
+		metricsTools(do.MustInvoke[Bootstrap](i)))...)
+}
+
+// metricsTools is metrics.show when the command line gave a renderer.
+func metricsTools(b Bootstrap) []tool.Handler {
+	if b.Metrics == nil {
+		return nil
+	}
+	return []tool.Handler{builtin.NewMetricsShow(b.Metrics)}
+}
+
+// Skilled is the loaded skills and their tools.
+type Skilled struct {
+	Set   skills.Set
+	Tools []tool.Handler
+}
+
+// Skills loads the built-in and the workspace skills; a script never
+// gets a provider's key (R-RTR-5, ADR-0042).
+func Skills() do.Provider[Skilled] {
+	return func(i do.Injector) (Skilled, error) {
+		b := do.MustInvoke[Bootstrap](i)
+		var deny []string
+		if cat := b.Agent.Catalog; cat != nil {
+			for _, p := range cat.Providers {
+				deny = append(deny, p.KeyEnv)
+			}
+		}
+		set, problems, err := skills.Load(skills.Builtin, b.Agent.Workspace, deny)
+		if err != nil {
+			return Skilled{}, err
+		}
+		skills.Report(do.MustInvoke[*slog.Logger](i), set, problems)
+		cfg := skills.DefaultRunConfig()
+		cfg.TZ = b.Agent.TZ.String()
+		runs, err := skills.OpenRuns(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, time.Now)
+		if err != nil {
+			return Skilled{}, err
+		}
+		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg), runs)}, nil
+	}
+}
+
+// Diagnostics provides the diagnostic searches over the node's own
+// database and log files (R-OBS-7); config.show and queues.state stay
+// with `ganglion mcp`, so no settings are passed.
+func Diagnostics() do.Provider[*diag.Diag] {
+	return func(i do.Injector) (*diag.Diag, error) {
+		return diag.New(do.MustInvoke[Database](i).DB, do.MustInvoke[Bootstrap](i).LogDir, nil, time.Now), nil
+	}
 }
 
 // Scheduler provides the scheduler of the jobs in the node's zone, which

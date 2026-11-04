@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/skills"
 )
 
 // StateVersion is the version of State this code writes. Version 2 added
@@ -31,6 +32,9 @@ type State struct {
 	// Tainted is set once external content entered the session; it lasts
 	// until the session ends (design section 4, rule 1).
 	Tainted bool
+	// LocalOnly is set once a local-only skill was read: its data is in the
+	// history, so the session stays on local models until it ends (ADR-0042).
+	LocalOnly bool
 	// Pending are the ids of calls awaiting the owner's confirmation.
 	Pending []string
 }
@@ -43,7 +47,16 @@ type wireState struct {
 	Summary  string             `json:"summary"`
 	Messages []provider.Message `json:"messages"`
 	Tainted  bool               `json:"tainted,omitempty"`
+	Local    bool               `json:"local_only,omitempty"`
 	Pending  []string           `json:"pending,omitempty"`
+}
+
+// privacy is the routing privacy the session's history demands.
+func (s State) privacy() string {
+	if s.LocalOnly {
+		return skills.PrivacyLocalOnly
+	}
+	return ""
 }
 
 func ms(t time.Time) int64 {
@@ -66,7 +79,7 @@ func (s State) MarshalJSON() ([]byte, error) {
 	if msgs == nil {
 		msgs = []provider.Message{}
 	}
-	return json.Marshal(wireState{V: StateVersion, Session: s.Session, Started: ms(s.Started), Last: ms(s.Last), Summary: s.Summary, Messages: msgs, Tainted: s.Tainted, Pending: s.Pending})
+	return json.Marshal(wireState{V: StateVersion, Session: s.Session, Started: ms(s.Started), Last: ms(s.Last), Summary: s.Summary, Messages: msgs, Tainted: s.Tainted, Local: s.LocalOnly, Pending: s.Pending})
 }
 
 // DecodeState reads a stored state; nil is an empty state.
@@ -81,7 +94,7 @@ func DecodeState(raw json.RawMessage) (State, error) {
 	if w.V < firstStateVersion || w.V > StateVersion {
 		return State{}, fmt.Errorf("agent: state version %d, this build reads %d to %d", w.V, firstStateVersion, StateVersion)
 	}
-	return State{V: StateVersion, Tainted: w.Tainted, Pending: w.Pending, Session: w.Session, Started: fromMS(w.Started), Last: fromMS(w.Last), Summary: w.Summary, Messages: w.Messages}, nil
+	return State{V: StateVersion, Tainted: w.Tainted, LocalOnly: w.Local, Pending: w.Pending, Session: w.Session, Started: fromMS(w.Started), Last: fromMS(w.Last), Summary: w.Summary, Messages: w.Messages}, nil
 }
 
 // tokens estimates the size of the state as runes/4.

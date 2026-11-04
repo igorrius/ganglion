@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: r38-identical-call-asks-once
+why: >-
+  Ruling R38. A second, identical call while the first waits must not ask a
+  second question. A real model cannot be made to repeat a call, so a scripted
+  one does: the live attempt tested nothing, as the model found its addresses
+  through search.
+covers:
+  - "policy/**"
+  - "tool/pending/**"
+model: scripted
+script:
+  - {tool: schedule.create, args: '{"kind":"reminder","at":"2099-01-01 09:00","text":"Call the plumber."}'}
+  - {say: I asked the owner.}
+  - {tool: schedule.create, args: '{"kind":"reminder","at":"2099-01-01 09:00","text":"Call the plumber."}'}
+  - {say: It still waits for the owner.}
+steps:
+  - say: Set a reminder for the plumber.
+  - say: Set that reminder again.
+  - facts:
+      questions: 1
+      journal:
+        - {tool: schedule.create, decision: confirm}

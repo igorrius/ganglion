@@ -27,7 +27,7 @@ const taskSpeaker = "Scheduled task"
 // The line a task run's last user message gets (ruling R41): a task told
 // to "send" its findings must not look for a tool to send them with.
 const (
-	taskLine        = "[unattended scheduled run: your final answer is sent to %s automatically as the message; no tool is needed to send it]"
+	taskLine        = "[unattended scheduled run: your final answer is sent to %s automatically as the message; no tool is needed to send it; write it in the language of the instruction and translate what you read, keeping no words of another language]"
 	recipientAnyone = "the owner"
 	maxNameRunes    = 64
 )

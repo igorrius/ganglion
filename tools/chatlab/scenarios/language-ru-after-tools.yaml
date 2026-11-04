@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: language-ru-after-tools
+why: >-
+  On the live bot, the reply after web results came in English although the owner
+  wrote in Russian: a tool's result must not decide the language.
+covers:
+  - "web/**"
+  - tool/builtin/web.go
+  - agent/tools.go
+repeat: 5
+pages:
+  - {url: "http://solar-notes.example.net/tips", file: pages/tips.html}
+steps:
+  - say: "Прочитай http://solar-notes.example.net/tips и скажи, какой первый совет."
+  - reach: {journal: {tool: web.fetch}, nudge: "Открой, пожалуйста, эту страницу."}
+  - language: ru

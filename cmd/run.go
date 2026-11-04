@@ -7,12 +7,15 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/buildinfo"
+	"github.com/igorrius/ganglion/internal/redact"
+	"github.com/igorrius/ganglion/logfile"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/secrets"
@@ -39,20 +42,59 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 				return err
 			}
 			in := buildinfo.Read()
-			logger := slog.New(telemetry.LogHandler(slog.NewTextHandler(out, &slog.HandlerOptions{Level: root.Level()}))).
-				With("version", in.Version, "commit", shortCommit(in))
-			stop := startTelemetry(ctx, b.MetricsAddr, in, logger)
+			logger, closeLogs, err := newLogger(out, root.Level(), b)
+			if err != nil {
+				return err
+			}
+			defer closeLogs()
+			logger = logger.With("version", in.Version, "commit", shortCommit(in))
+			if err := hardenProcess(); err != nil {
+				logger.Warn("node: a script can read this process's environment from /proc", "err", err)
+			}
+			tel, stop := startTelemetry(ctx, b.MetricsAddr, in, logger)
 			defer stop()
+			if tel != nil {
+				b.Metrics = tel.Renderer()
+			}
 			announce(logger, b)
 			return start(ctx, roles, b, logger)
 		},
 	}
 }
 
+// newLogger logs as text to out and, unless --log-dir is off, as JSON
+// lines to the rotated files on disk (R-OBS-6, ADR-0043). Both sides
+// carry trace ids and hide the secrets the node read and the patterns of
+// redact.String. The disk comes first, so a line on stdout is already in
+// the file when a kill -9 lands.
+func newLogger(out io.Writer, level slog.Level, b config.Bootstrap) (*slog.Logger, func(), error) {
+	secrets := []string{b.BotToken, b.Agent.BraveKey}
+	for _, k := range b.Agent.Keys {
+		secrets = append(secrets, k)
+	}
+	values := redact.Values(secrets...)
+	hide := func(s string) string { return values(redact.String(s)) }
+	opts := &slog.HandlerOptions{Level: level}
+	wrap := func(h slog.Handler) slog.Handler { return telemetry.LogHandler(telemetry.RedactHandler(h, hide)) }
+	stdout := wrap(slog.NewTextHandler(out, opts))
+	if b.LogDir == "" {
+		return slog.New(stdout), func() {}, nil
+	}
+	rot, err := logfile.Open(logfile.DefaultConfig(b.LogDir), time.Now)
+	if err != nil {
+		return nil, nil, fmt.Errorf("GANGLION_LOG_DIR: %w", err)
+	}
+	return slog.New(slog.NewMultiHandler(wrap(slog.NewJSONHandler(rot, opts)), stdout)), func() { _ = rot.Close() }, nil
+}
+
 // bootstrap turns the flags into the node's bootstrap settings, reading
 // the secrets and the model catalogue.
 func bootstrap(v flags.Run, src secrets.Source, readFile func(string) ([]byte, error)) (config.Bootstrap, error) {
 	b := config.Bootstrap{DB: v.DB, BotAPIURL: v.TelegramAPIURL, Admin: v.Admin, MetricsAddr: v.MetricsAddr, TelegramReply: v.TelegramReply}
+	b.ModulesDir = filepath.Join(filepath.Dir(v.DB), "modules")
+	if dir, on := flags.LogDir(v.DB, v.LogDir); on {
+		b.LogDir = dir
+	}
 	var err error
 	if b.BotToken, err = src.Secret("TELEGRAM_BOT_TOKEN"); err != nil {
 		return config.Bootstrap{}, err
@@ -119,19 +161,19 @@ func announce(logger *slog.Logger, b config.Bootstrap) {
 
 // startTelemetry serves metrics and returns the stop. Watching the node
 // must never stop it: a busy port runs the node without metrics.
-func startTelemetry(ctx context.Context, addr string, in buildinfo.Info, logger *slog.Logger) (stop func()) {
-	cfg := telemetry.Config{Addr: addr, Service: "ganglion", Version: in.Version, Commit: in.Commit}
+func startTelemetry(ctx context.Context, addr string, in buildinfo.Info, logger *slog.Logger) (_ *telemetry.Telemetry, stop func()) {
+	cfg := telemetry.Config{Addr: addr, Service: "ganglion", Version: in.Version, Commit: in.Commit, Logger: logger}
 	tel, err := telemetry.Setup(ctx, cfg)
 	if err != nil {
 		logger.Warn("telemetry: metrics are off", "addr", addr, "err", err)
 		cfg.Addr = "off"
 		if tel, err = telemetry.Setup(ctx, cfg); err != nil {
-			return func() {}
+			return nil, func() {}
 		}
 	} else if a := tel.Addr(); a != "" {
 		logger.Info("telemetry: serving", "metrics", "http://"+a+"/metrics", "dashboard", "http://"+a+"/webmetrics/")
 	}
-	return func() {
+	return tel, func() {
 		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		_ = tel.Shutdown(sctx)

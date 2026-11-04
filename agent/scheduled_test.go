@@ -234,7 +234,7 @@ func TestTaskRunIsToldItsAnswerIsDelivered(t *testing.T) {
 	e.smart.push(say("USD 41.2"))
 	e.turn(t, fired(j))
 	reqs := e.smart.requests()
-	want := "[unattended scheduled run: your final answer is sent to Igor Artasevych automatically as the message; no tool is needed to send it]"
+	want := "[unattended scheduled run: your final answer is sent to Igor Artasevych automatically as the message; no tool is needed to send it; write it in the language of the instruction and translate what you read, keeping no words of another language]"
 	if got := lastUserRaw(reqs[0]); !strings.Contains(got, "\n"+want) || !strings.HasPrefix(got, "Scheduled task: "+j.Text+"\n") {
 		t.Fatalf("the task run read %q", got)
 	}

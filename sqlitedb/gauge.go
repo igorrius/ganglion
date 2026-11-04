@@ -12,6 +12,12 @@ import (
 // a busy database for long.
 const countTimeout = time.Second
 
+// errClosedText is database/sql's error for a closed *sql.DB; the package
+// does not export it.
+const errClosedText = "sql: database is closed"
+
+func closed(err error) bool { return err != nil && err.Error() == errClosedText }
+
 // ObserveCount registers name as a gauge read by query, a SELECT COUNT(*)
 // of rows in one state (a queue's depth), each time the metrics are
 // collected (R-OBS-8). A failed query observes nothing, rather than a
@@ -28,6 +34,9 @@ func ObserveCount(m metric.Meter, db *sql.DB, name, description, query string) e
 		defer cancel()
 		var n int64
 		if err := db.QueryRowContext(ctx, query).Scan(&n); err != nil {
+			if closed(err) {
+				return nil // the node is stopping: the gauge just drops out
+			}
 			return err
 		}
 		o.ObserveInt64(g, n)

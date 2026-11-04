@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-recall-labels
+why: >-
+  Ruling R49: a recall hit from an old chat must read "not a stored fact", or the
+  model reports a write that expired as stored.
+covers:
+  - tool/builtin/memory.go
+  - agent/recall.go
+  - agent/sessions.go
+  - memory/**
+model: scripted
+pages:
+  - {url: "http://solar-notes.example.net/tips", file: pages/tips.html}
+script:
+  - {tool: web.fetch, args: '{"url":"http://solar-notes.example.net/tips"}'}
+  - {say: Keep the battery above 20%.}
+  - {tool: memory.write, args: '{"title":"Boiler","body":"My boiler holds 80 litres."}'}
+  - {say: It waits for your answer.}
+  - {say: It expired.}
+  - {tool: memory.recall, args: '{"query":"boiler"}'}
+  - {say: You mentioned it in an earlier chat.}
+steps:
+  - say: "Read http://solar-notes.example.net/tips"
+  - say: "Remember that my boiler holds 80 litres."
+  - advance: {confirmations: 16m}
+  - say: /new
+  - say: "What do you have about my boiler?"
+  - facts:
+      journal:
+        - {tool: memory.recall, result_contains: "not a stored fact"}
+      memory: {not_contains: "80 litres"}

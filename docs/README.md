@@ -123,10 +123,65 @@ Start here when coming back to the project.
       ([ADR-0024](adr/0024-persona-as-workspace-files.md)), the current
       time in the last user message, the depth limit (R-AGT-4) and tool
       placement (R-RTR-3).
-  - **M3c, next:** module update and rollback, skills, attachments, logs
-    on disk, `ganglion mcp` for diagnosis from outside, a notice when a
-    file is sent to the agent (R-DLV-10), and the 3.8 acceptance under the
-    crash harness.
+  - **M3c, built; the scripted acceptance passes, the owner's live run is
+    next** (branch `m3c`,
+    [plan](plans/p1-m3c-modules-skills-diagnostics.md)): module update
+    and rollback, skills, attachments and the metrics picture in
+    Telegram (`/metrics`), logs on disk, `ganglion mcp` for diagnosis
+    from outside, a notice when a file is sent to the agent (R-DLV-10),
+    and the 3.8 acceptance under the crash harness. Decisions:
+    [ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)–[ADR-0046](adr/0046-a-restart-is-not-a-failed-attempt.md),
+    Proposed. Still open: the first `html2md/v0.1.0` tag (the owner,
+    after the merge) and the live checks of the plan's task 9, step 5.
+    - **Acceptance (2026-11-04):** `make accept` passes on both routes.
+      `make crash-agent` passes with 200 and with 1,000 `kill -9`: every
+      message answered, in order, one commit per fact, every `/metrics`
+      with its photo. It found that three restarts in a row dropped a
+      healthy message; fixed in
+      [ADR-0046](adr/0046-a-restart-is-not-a-failed-attempt.md).
+    - **Measured (`make memory`):** the binary is 45.5 MB (M3b: 41.9); RSS
+      is 44 MB, peak 44, after 1,000 turns that each call a tool (M3b: 39,
+      peak 40). After 50 `/metrics` RSS is 108 MB, peak 114. RSS stays near
+      110 MB through 200 pictures in a row, so there is no leak, but the
+      peak then reaches 130 MB. Until M4 sets the soft limit (R-RUN-6, task
+      4.1), run a 128 MB container with `GOMEMLIMIT=80MiB`: the same 200
+      pictures peak at 112 MB (at `100MiB`, 126 MB).
+    - **A restart during a turn:** the turn runs again from its start,
+      under the same call keys, and the person is not told. Telling them
+      and keeping a turn's progress are in the spec's "Not now" list.
+    - **The main model (2026-11-04):** the example catalogue is now Sonnet for
+      turns and Haiku for compaction and checks
+      ([ADR-0047](adr/0047-sonnet-answers-during-development.md), Proposed).
+      `make accept` passes on it, and runs only the claude CLI route by default.
+    - **Chatlab (task 3.20, [ADR-0048](adr/0048-chatlab-over-the-fake-bot-api.md),
+      Proposed):** the developer runs the checks the owner could not run by hand:
+      a channel-neutral peer talks to a real core over the fake Bot API, facts and
+      a judge decide, and a table shows n of n. `bin/chatlab start`, `say`, `press`,
+      `advance`, `show` and `stop` hold a conversation from the shell.
+      - **What runs:** `make lab` runs by hand the scenarios whose files changed since
+        they last passed (`tools/chatlab/passed.json`, in git; `LAB=name` for one). A
+        change to the main model, the prompt, the persona or the way to the model
+        recommends a full run and never starts one: `make lab-all`, about 900,000
+        tokens, only when decided (owner, 2026-11-04), or `make lab-skip-full`.
+      - **What needs no model:** the mechanics run on a scripted model in every
+        `make test`, and `make lab-faults` proves them on seeded faults for nothing.
+        The language of a reply is checked by its letters: 178 of 180 of the judge's
+        verdicts agree, and the other two were the judge being too strict.
+      - **Seeded faults (2026-11-04):** the policy no longer asking, the notes of R48,
+        R49 and R50 removed, and R38's check removed each turned a scenario red; a
+        real judge failed wrong replies.
+      - **Language:** in chatlab's scenarios the agent lost the language only in
+        scheduled tasks, on Sonnet and on Haiku: Russian with a Ukrainian page went
+        from 2 of 5 to 10 of 10. The English reply the owner saw after web results
+        did not come back in 10 repeats, and stays unexplained
+        ([note](research/2026-11-04-language-of-replies.md)).
+      - **An expired question closes itself:** the outbox now keeps where a sent
+        message went. Review found that Run now's question never closed, and a
+        question too long for one message failed its edit: both fixed.
+      - **Binary:** nothing of the lab in it: `TestLabStaysOutOfTheBinary`, and
+        47,727,550 bytes against 47,735,838 before the lab's commits.
+      - **Left for the owner:** the look on a phone, then `/modules update` and
+        `rollback` after the first `html2md` tag.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
@@ -164,6 +219,19 @@ Start here when coming back to the project.
       uncommitted; a Telegram display name can read like the owner's in
       the speaker prefix; an approved page is capped like a tool result
       while an auto-allowed one is not.
+    - M3c: an admin alert at start when a stored module falls back or a
+      skill is not loaded (both are logged and visible otherwise); pin the
+      GitHub Actions by commit SHA in `modules-release.yml`; prune old
+      failed `module_versions` rows; `/modules update` blocks its turn up
+      to about 60 s plus the self-test; a script outlives a killed node, and
+      its temp dir stays; log files past their age stay until the next
+      rotation or start; a failed reopen stops disk logs until a restart;
+      "no release found" covers a channel that cannot be read and a release
+      for a newer core; `metrics.show` does not check the attachment cap
+      itself; a stored module shadows a newer built-in with no word of it;
+      an album costs one model turn per photo; a script's stdout is not
+      redacted as its stderr is; ADR-0041's host list omits
+      `release-assets.githubusercontent.com`.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.
@@ -198,6 +266,62 @@ is needed for tests: they run against a fake Bot API.
   2. Add `TELEGRAM_TEST_BOT_TOKEN` and `GANGLION_ADMIN` as secrets or
      environment variables. A new session picks them up. Never paste the
      token into the chat.
+
+## Installing a skill
+
+A skill is a procedure the agent reads before it follows it
+([ADR-0042](adr/0042-skills-and-scripts-before-the-sandbox.md)). Only you
+install one; the agent may propose the text.
+
+1. Make `workspace/skills/<name>/SKILL.md`: a frontmatter with `name`
+   (the directory's), `description`, optionally `model` and `script`,
+   then the steps in Markdown.
+2. A script sits beside it, executable, named by `script.run`, with
+   `effects: read` (runs by itself) or `effects: change` (asks with a
+   button). It gets only `PATH`, `HOME`, `LANG`, `TZ` and the names in
+   `script.env`; the node's secrets never.
+3. Restart the node; the log names a skill that was not loaded and why.
+
+Until the sandbox of M3d, a script can read whatever the node's user can
+read, the database and secret files included: install only scripts you
+trust with that.
+
+## Releasing a module
+
+A built-in module ships in the binary and is updated on a running node
+without a new core ([ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)):
+
+1. Change `modules/html2md`, run `make modules-html2md`, commit the
+   rebuilt `html2md.wasm` with its sources.
+2. Push a tag `html2md/vX.Y.Z`. The `Module release` workflow rebuilds
+   it, checks it matches the commit, runs the fixtures and the self-test,
+   and publishes the `.wasm`, the manifest and `SHA256SUMS`.
+3. On the node: `/modules update html2md`; `/modules rollback html2md`
+   goes back; `/modules` lists the versions and why one was refused.
+
+A release that asks for a capability, more memory or time than the
+core's ceiling, or another ABI, is refused until the core is upgraded.
+
+## Diagnosing the node from outside
+
+`ganglion mcp` serves read-only diagnostics (logs, the tool-call journal,
+failed turns, one turn whole, the queues, the settings) to Claude Code or
+any MCP client, with no running node and no model
+([ADR-0044](adr/0044-ganglion-mcp-diagnostics-over-stdio.md)). Add it to
+the client's MCP configuration (`.mcp.json` for Claude Code):
+
+```json
+{"mcpServers": {"ganglion": {"command": "ganglion", "args": ["mcp", "--db", "/path/to/ganglion.db"]}}}
+```
+
+- **Another machine:** `"command": "ssh", "args": ["host", "ganglion", "mcp", "--db", "/data/ganglion.db"]`.
+- **A container:** `"command": "docker", "args": ["exec", "-i", "<container>", "ganglion", "mcp", "--db", "/data/ganglion.db"]`;
+  `scripts/diag-container.sh <data dir>` starts a local one to try it.
+- Logs are read from `logs/` beside the database; `--log-dir` points
+  elsewhere.
+
+Whoever can run the command can read all conversation history in the
+data directory: give it to the people you would give the files to.
 
 ## Map
 

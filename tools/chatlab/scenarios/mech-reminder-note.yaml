@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-reminder-note
+why: >-
+  Ruling R50: a sent reminder must leave a note in the chat's history, or the model
+  says it may not have fired.
+covers:
+  - agent/scheduled.go
+  - schedule/**
+  - "tool/builtin/schedule*.go"
+model: scripted
+script:
+  - {tool: schedule.create, args: '{"kind":"reminder","cron":"0 * * * *","text":"Call the plumber."}'}
+  - {say: I asked.}
+  - {say: It is set.}
+steps:
+  - say: "Remind me every hour to call the plumber."
+  - press: Approve
+  - advance: {scheduler: 2h}
+  - facts:
+      history: {contains: "[reminder]"}
+      jobs: {kind: reminder, count: 1}

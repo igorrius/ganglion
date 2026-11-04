@@ -233,6 +233,7 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 		}},
 		Names:   func(_ context.Context, p string) (string, error) { return e.names[p], nil },
 		Outbox:  e.early,
+		Sent:    NoRefs{},
 		Now:     func() time.Time { return e.now },
 		Persona: func() (string, error) { return e.persona, e.personaErr },
 		Log:     slog.New(slog.NewTextHandler(e.logs, nil)),

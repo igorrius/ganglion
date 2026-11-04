@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
@@ -62,6 +63,9 @@ type Deps struct {
 	// Outbox takes a press's acknowledgement before the pressed action
 	// runs (ruling R40).
 	Outbox Enqueuer
+	// Sent says where a delivered message went, so an expired question can
+	// close itself.
+	Sent SentRefs
 	// QuickActions run quick-action buttons by their action name; tools
 	// register them (schedule.details, schedule.delete, schedule.run_now).
 	QuickActions map[string]pending.QuickAction
@@ -79,8 +83,14 @@ type Deps struct {
 	// Facts is the memory's index, shown to admins only (design section
 	// 4, rule 8); NoFacts when unset.
 	Facts FactsFunc
-	Now   func() time.Time
-	Log   *slog.Logger
+	// Modules updates and rolls back the node's modules for /modules
+	// (R-RUN-8); NoModules when unset.
+	Modules Modules
+	// Skills are listed in an admin's system prompt, and the one the
+	// model reads routes the rest of the turn (R-RTR-4); none when unset.
+	Skills Skills
+	Now    func() time.Time
+	Log    *slog.Logger
 }
 
 // Agent handles conversation turns; Handle is a core.Handler.
@@ -101,6 +111,12 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Facts == nil {
 		d.Facts = NoFacts
+	}
+	if d.Modules == nil {
+		d.Modules = NoModules{}
+	}
+	if d.Skills == nil {
+		d.Skills = skills.Set{}
 	}
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)
@@ -137,7 +153,9 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 // into the turn; false means the event is not one to answer.
 var payloads = map[event.Kind]func(t *turn) bool{
 	event.KindMessage: func(t *turn) bool {
-		return json.Unmarshal(t.event.Payload, &t.msg) == nil && strings.TrimSpace(t.msg.Text) != ""
+		// A message with only files is answered too: nothing is dropped
+		// silently (R-DLV-10).
+		return json.Unmarshal(t.event.Payload, &t.msg) == nil && (strings.TrimSpace(t.msg.Text) != "" || len(t.msg.Files) > 0)
 	},
 	event.KindDecision: func(t *turn) bool {
 		d := &t.decision

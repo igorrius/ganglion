@@ -190,7 +190,7 @@ func TestMeasureNode(t *testing.T) {
 	i := New(ctx, b, logger)
 	n := acceptNet{host: hostileHost, addr: netip.MustParseAddr(hostileAddr), local: c.Page}
 	do.Override(i, func(i do.Injector) (*web.Fetcher, error) {
-		return web.NewFetcher(web.DefaultFetchConfig(), web.NewModuleConverter(do.MustInvoke[*runner.LazyTool](i)),
+		return web.NewFetcher(web.DefaultFetchConfig(), web.NewModuleConverter(do.MustInvoke[*runner.SwapTool](i)),
 			web.WithResolver(n), web.WithConnect(n.connect)), nil
 	})
 	err = node.Run(ctx, []node.Role{node.Core}, func() ([]node.Component, error) { return do.Invoke[[]node.Component](i) }, logger)

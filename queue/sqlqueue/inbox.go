@@ -10,6 +10,7 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/queue"
+	"github.com/igorrius/ganglion/transport"
 )
 
 // Put implements queue.Queue. An empty ID gets a fresh ULID; a zero At is
@@ -55,7 +56,7 @@ func (q *Queue) Lease(ctx context.Context, d time.Duration) (queue.Lease, error)
 	err := q.immediate(ctx, func(c *sql.Conn) error {
 		now := q.now()
 		for {
-			e, seq, attempts, err := nextHead(ctx, c, now)
+			e, seq, runs, err := nextHead(ctx, c, now)
 			if err != nil {
 				return err
 			}
@@ -66,7 +67,7 @@ func (q *Queue) Lease(ctx context.Context, d time.Duration) (queue.Lease, error)
 				}
 				continue
 			}
-			l = queue.Lease{Event: e, Token: event.NewID(now), Until: now.Add(d), Attempts: attempts + 1}
+			l = queue.Lease{Event: e, Token: event.NewID(now), Until: now.Add(d), Attempts: runs.attempts + 1, Interrupted: runs.interrupted}
 			_, err = c.ExecContext(ctx,
 				`UPDATE inbox SET lease_token = ?, lease_until_ms = ?, attempts = attempts + 1 WHERE seq = ?`,
 				l.Token, l.Until.UnixMilli(), seq)
@@ -84,35 +85,39 @@ func (q *Queue) Lease(ctx context.Context, d time.Duration) (queue.Lease, error)
 
 // nextHead returns the oldest pending, unleased event that heads its
 // conversation, or queue.ErrEmpty.
-func nextHead(ctx context.Context, c *sql.Conn, now time.Time) (event.Event, int64, int, error) {
+func nextHead(ctx context.Context, c *sql.Conn, now time.Time) (event.Event, int64, runCounts, error) {
 	var (
 		e           event.Event
 		seq         int64
-		attempts    int
+		runs        runCounts
 		payload     sql.NullString
 		ttlMS, atMS int64
 	)
 	err := c.QueryRowContext(ctx,
-		`SELECT i.seq, i.id, i.idem_key, i.source, i.conv, i.kind, i.payload, i.ttl_ms, i.at_ms, i.attempts
+		`SELECT i.seq, i.id, i.idem_key, i.source, i.conv, i.kind, i.payload, i.ttl_ms, i.at_ms, i.attempts, i.interrupted
 		 FROM inbox i
 		 WHERE i.status = 'pending' AND i.lease_until_ms <= ?
 		   AND NOT EXISTS (SELECT 1 FROM inbox j
 		                   WHERE j.conv = i.conv AND j.status = 'pending' AND j.seq < i.seq)
 		 ORDER BY i.seq LIMIT 1`, now.UnixMilli(),
-	).Scan(&seq, &e.ID, &e.IdemKey, &e.Source, &e.Conv, &e.Kind, &payload, &ttlMS, &atMS, &attempts)
+	).Scan(&seq, &e.ID, &e.IdemKey, &e.Source, &e.Conv, &e.Kind, &payload, &ttlMS, &atMS, &runs.attempts, &runs.interrupted)
 	if errors.Is(err, sql.ErrNoRows) {
-		return event.Event{}, 0, 0, queue.ErrEmpty
+		return event.Event{}, 0, runCounts{}, queue.ErrEmpty
 	}
 	if err != nil {
-		return event.Event{}, 0, 0, err
+		return event.Event{}, 0, runCounts{}, err
 	}
 	if payload.Valid {
 		e.Payload = json.RawMessage(payload.String)
 	}
 	e.TTL = time.Duration(ttlMS) * time.Millisecond
 	e.At = fromMS(atMS)
-	return e, seq, attempts, nil
+	return e, seq, runs, nil
 }
+
+// runCounts is how an event's earlier runs ended: leased and not finished, or
+// cut short by a restart.
+type runCounts struct{ attempts, interrupted int }
 
 // Complete implements queue.Queue. In one transaction it marks the event
 // done, stores the replies (a reply whose IdemKey is already stored is
@@ -188,6 +193,10 @@ func insertOutgoing(ctx context.Context, c *sql.Conn, m event.Outgoing, now time
 	if m.IdemKey == "" || m.Transport == "" || m.Conv == "" {
 		return false, fmt.Errorf("outgoing message needs an IdemKey, a Transport and a Conv")
 	}
+	if a := m.Attach; a != nil && len(a.Data) > event.MaxAttachmentBytes {
+		return false, fmt.Errorf("outbox %s: attachment of %d bytes is over %d: %w",
+			m.IdemKey, len(a.Data), event.MaxAttachmentBytes, transport.ErrPermanent)
+	}
 	if m.ID == "" {
 		m.ID = event.NewID(now)
 	}
@@ -210,10 +219,13 @@ func insertOutgoing(ctx context.Context, c *sql.Conn, m event.Outgoing, now time
 // by a process that died are leasable at once. Call it when the one core
 // process that owns this database starts, before its loop runs
 // (ADR-0019). A cleared token makes a late Complete by the old holder
-// return queue.ErrLeaseLost. It returns how many leases it released.
+// return queue.ErrLeaseLost. A released run counts as interrupted, not as an
+// attempt: the event did not fail, its process went away (ADR-0046). It
+// returns how many leases it released.
 func (q *Queue) ReleaseLeases(ctx context.Context) (int, error) {
 	res, err := q.db.ExecContext(ctx,
-		`UPDATE inbox SET lease_token = '', lease_until_ms = 0
+		`UPDATE inbox SET lease_token = '', lease_until_ms = 0,
+		   attempts = MAX(attempts - 1, 0), interrupted = interrupted + 1
 		 WHERE status = 'pending' AND lease_token != ''`)
 	if err != nil {
 		return 0, fmt.Errorf("sqlqueue: release leases: %w", err)

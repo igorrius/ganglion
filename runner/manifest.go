@@ -23,6 +23,7 @@ const (
 type Manifest struct {
 	Name         string            `yaml:"name"`
 	Version      int               `yaml:"version"`
+	ABI          int               `yaml:"abi"` // the module ABI it speaks (ADR-0011); missing reads as 1
 	Triggers     []Trigger         `yaml:"triggers"`
 	Capabilities Capabilities      `yaml:"capabilities"`
 	Config       map[string]string `yaml:"config"`
@@ -71,6 +72,9 @@ func ParseManifest(src []byte) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("manifest: %w", err)
 	}
 	m := raw.Manifest
+	if m.ABI == 0 {
+		m.ABI = 1
+	}
 	if m.Name == "" {
 		return Manifest{}, errors.New("manifest: name is required")
 	}

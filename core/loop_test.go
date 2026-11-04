@@ -298,6 +298,69 @@ func TestGiveUpAfterMaxAttempts(t *testing.T) {
 	}
 }
 
+// interrupt leases the head event and releases it n times, as n restarts do.
+func interrupt(t *testing.T, q *sqlqueue.Queue, n int) {
+	t.Helper()
+	ctx := context.Background()
+	for range n {
+		if _, err := q.Lease(ctx, time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := q.ReleaseLeases(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// ADR-0046: restarts do not use up the attempts of a healthy message.
+func TestRestartsDoNotUseUpAttempts(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	q := memQueue(t)
+	if err := q.Put(context.Background(), msgEvent("k1", "telegram:a", "x")); err != nil {
+		t.Fatal(err)
+	}
+	interrupt(t, q, 5)
+	var giveUp GiveUp = func(e event.Event, _ int) []event.Outgoing {
+		return []event.Outgoing{{IdemKey: e.IdemKey + ":give-up", Transport: "telegram", Conv: e.Conv, Text: "gave up"}}
+	}
+	start(t, NewLoop(q, q.InboxReady(), EchoHandler, slog.New(slog.DiscardHandler), WithMaxAttempts(2, giveUp)))
+	eventually(t, "the reply", func() bool {
+		ps := outbox(t, q)
+		return len(ps) == 1 && ps[0].Msg.Text == "echo: x"
+	})
+	eventually(t, "the rerun metric", func() bool { return rec.Value(t, "ganglion.turns.interrupted", nil) == 1 })
+}
+
+// ADR-0046: an event that kills the process cannot do so forever.
+func TestGiveUpAfterTooManyInterruptions(t *testing.T) {
+	q := memQueue(t)
+	if err := q.Put(context.Background(), msgEvent("k1", "telegram:a", "x")); err != nil {
+		t.Fatal(err)
+	}
+	interrupt(t, q, 3)
+	var calls atomic.Int32
+	h := func(context.Context, event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		calls.Add(1)
+		return nil, queue.StateUpdate{}, nil
+	}
+	var gaveUpAfter atomic.Int32
+	var giveUp GiveUp = func(e event.Event, attempts int) []event.Outgoing {
+		gaveUpAfter.Store(int32(attempts))
+		return []event.Outgoing{{IdemKey: e.IdemKey + ":give-up", Transport: "telegram", Conv: e.Conv, Text: "gave up"}}
+	}
+	start(t, NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler), WithMaxAttempts(5, giveUp), WithMaxInterrupted(2)))
+	eventually(t, "the give-up reply", func() bool {
+		ps := outbox(t, q)
+		return len(ps) == 1 && ps[0].Msg.Text == "gave up"
+	})
+	if n := calls.Load(); n != 0 {
+		t.Fatalf("handler called %d times, want 0", n)
+	}
+	if n := gaveUpAfter.Load(); n != 3 {
+		t.Fatalf("give-up told %d runs, want 3", n)
+	}
+}
+
 func TestTurnHook(t *testing.T) {
 	q := memQueue(t)
 	var started, stopped atomic.Int32

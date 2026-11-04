@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"sync"
-	"testing"
 )
 
 // Request is one recorded call.
@@ -44,10 +43,17 @@ type Server struct {
 	tools   int // tool calls answered so far: ids are call_1, call_2, …
 }
 
+// T is what the fake needs from its owner: a test, or chatlab's program,
+// which cannot implement testing.TB (ADR-0048).
+type T interface {
+	Helper()
+	Cleanup(func())
+}
+
 // NewServer starts a fake API that accepts apiKey; it is closed by
 // t.Cleanup. Every answer reports 10 prompt tokens (4 of them cached) and 5
 // completion tokens.
-func NewServer(t testing.TB, apiKey string) *Server {
+func NewServer(t T, apiKey string) *Server {
 	t.Helper()
 	s := &Server{key: apiKey, closed: make(chan struct{})}
 	s.ts = httptest.NewServer(http.HandlerFunc(s.serve))

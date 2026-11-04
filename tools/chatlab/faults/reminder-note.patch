@@ -1,0 +1,13 @@
+diff --git a/agent/scheduled.go b/agent/scheduled.go
+index dba8dc4..e3fe575 100644
+--- a/agent/scheduled.go
++++ b/agent/scheduled.go
+@@ -93,7 +93,7 @@ func (a *Agent) noteReminder(ctx context.Context, t *turn, j schedule.Job) error
+ 	if _, err := a.idle(ctx, t); err != nil {
+ 		return err
+ 	}
+-	t.note(reminderPrefix + transcript.Cap(j.Text))
++	_ = transcript.Cap(j.Text)
+ 	return nil
+ }
+ 

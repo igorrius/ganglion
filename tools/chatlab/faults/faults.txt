@@ -1,0 +1,8 @@
+# Each seeded fault of the chatlab design, section 8.2, and the scenario it must
+# turn red: <patch> <scenario>. The scenarios run on a scripted model, so this
+# costs nothing.
+policy-no-ask mech-waiting-call
+waiting-note mech-waiting-call
+recall-labels mech-recall-labels
+reminder-note mech-reminder-note
+parked-check r38-identical-call-asks-once

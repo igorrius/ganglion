@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" driver; pure Go, no CGO
 )
@@ -25,7 +26,7 @@ import (
 // update is stored (R-DLV-2). The special path
 // ":memory:" gives a private in-memory database on a single connection.
 func Open(ctx context.Context, path string) (*sql.DB, error) {
-	dsn := "file:" + path +
+	dsn := "file:" + uriPath(path) +
 		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)" +
 		"&_pragma=foreign_keys(1)&_pragma=synchronous(FULL)"
 	if path == ":memory:" {
@@ -42,6 +43,29 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("sqlitedb: open %s: %w", path, err)
+	}
+	return db, nil
+}
+
+// uriPath escapes the characters that end or change the path of a SQLite
+// file: URI, so a path holding "?", "#" or "%" names that file and cannot
+// add parameters of its own.
+func uriPath(path string) string {
+	return strings.NewReplacer("%", "%25", "?", "%3f", "#", "%23").Replace(path)
+}
+
+// OpenReadOnly opens the existing database at path for reading only
+// (mode=ro and query_only): diagnostics read beside a running core
+// without taking its lock or changing anything, and never run migrations
+// (R-OBS-7, ADR-0044). A missing file is an error.
+func OpenReadOnly(ctx context.Context, path string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", "file:"+uriPath(path)+"?mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		return nil, err
+	}
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("sqlitedb: open %s read-only: %w", path, err)
 	}
 	return db, nil
 }

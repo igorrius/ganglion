@@ -145,6 +145,9 @@ type QuickEdit struct {
 	Text    string
 	Buttons []event.Button
 	Note    string
+	// Key is the IdemKey of the edit when it shows a call's question, so the
+	// outbox can tell where that question is; "" is the press's own.
+	Key string
 }
 
 // QuickAction runs a quick-action button, such as Delete on a list entry,
@@ -327,6 +330,9 @@ func insertButton(ctx context.Context, tx *sql.Conn, b Button) error {
 	return err
 }
 
+// QuestionKeySuffix ends the IdemKey of a call's question, after its call key.
+const QuestionKeySuffix = ":confirm"
+
 // Outgoing is the question of pending call id with its Approve and Deny
 // buttons, addressed to the call's conversation. Its IdemKey is
 // "<call key>:confirm", so a rerun turn sends it once.
@@ -351,7 +357,7 @@ func (s *Store) Outgoing(ctx context.Context, id string) (event.Outgoing, error)
 	if err := rows.Err(); err != nil {
 		return event.Outgoing{}, fmt.Errorf("pending: buttons of %s: %w", id, err)
 	}
-	return event.Outgoing{IdemKey: it.Call().Key() + ":confirm", Transport: it.Transport, Conv: it.Conv, Text: it.Question, Buttons: buttons}, nil
+	return event.Outgoing{IdemKey: it.Call().Key() + QuestionKeySuffix, Transport: it.Transport, Conv: it.Conv, Text: it.Question, Buttons: buttons}, nil
 }
 
 // Get returns pending call id; ErrNotFound when there is none.

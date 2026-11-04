@@ -34,26 +34,31 @@ const (
 	DefaultWorkers     = 4
 	DefaultTurnTimeout = 3 * time.Minute
 	DefaultMaxAttempts = 3
+	// DefaultMaxInterrupted bounds a crash loop: each restart reruns the turn
+	// from its start and pays for its model calls again.
+	DefaultMaxInterrupted = 10
 )
 
 // Loop is the turn loop.
 type Loop struct {
-	q           queue.Queue
-	ready       <-chan struct{}
-	h           Handler
-	log         *slog.Logger
-	lease       time.Duration
-	poll        time.Duration
-	workers     int
-	turnTimeout time.Duration
-	maxAttempts int
-	giveUp      GiveUp
-	hook        TurnHook
+	q              queue.Queue
+	ready          <-chan struct{}
+	h              Handler
+	log            *slog.Logger
+	lease          time.Duration
+	poll           time.Duration
+	workers        int
+	turnTimeout    time.Duration
+	maxAttempts    int
+	maxInterrupted int
+	giveUp         GiveUp
+	hook           TurnHook
 
 	wake chan struct{} // a worker that got an event wakes an idle one
 
 	tracer  trace.Tracer
 	givenUp metric.Int64Counter
+	reruns  metric.Int64Counter
 }
 
 // Option configures a Loop.
@@ -82,7 +87,14 @@ type GiveUp func(e event.Event, attempts int) []event.Outgoing
 // NoGiveUp gives up without replies.
 func NoGiveUp(event.Event, int) []event.Outgoing { return nil }
 
-// WithMaxAttempts stops retrying an event leased more than n times: it is
+// WithMaxInterrupted stops running an event that more than n restarts cut
+// short, so an event that kills the process cannot do so forever (ADR-0046).
+// The default is DefaultMaxInterrupted.
+func WithMaxInterrupted(n int) Option {
+	return func(l *Loop) { l.maxInterrupted = n }
+}
+
+// WithMaxAttempts stops retrying an event that failed more than n times: it is
 // completed with giveUp's replies instead of reaching the handler again.
 // The default is DefaultMaxAttempts with NoGiveUp.
 func WithMaxAttempts(n int, giveUp GiveUp) Option {
@@ -105,7 +117,7 @@ func WithTurnHook(h TurnHook) Option {
 // (sqlqueue.Queue.InboxReady).
 func NewLoop(q queue.Queue, ready <-chan struct{}, h Handler, logger *slog.Logger, opts ...Option) *Loop {
 	l := &Loop{q: q, ready: ready, h: h, log: logger, lease: DefaultLease, poll: DefaultPoll,
-		workers: DefaultWorkers, turnTimeout: DefaultTurnTimeout, maxAttempts: DefaultMaxAttempts, hook: NoTurnHook, giveUp: NoGiveUp}
+		workers: DefaultWorkers, turnTimeout: DefaultTurnTimeout, maxAttempts: DefaultMaxAttempts, maxInterrupted: DefaultMaxInterrupted, hook: NoTurnHook, giveUp: NoGiveUp}
 	for _, o := range opts {
 		o(l)
 	}
@@ -113,6 +125,8 @@ func NewLoop(q queue.Queue, ready <-chan struct{}, h Handler, logger *slog.Logge
 	l.tracer = otel.Tracer("ganglion/core")
 	l.givenUp, _ = otel.Meter("ganglion/core").Int64Counter("ganglion.turns.given_up",
 		metric.WithDescription("Events completed without a turn after failing every attempt."))
+	l.reruns, _ = otel.Meter("ganglion/core").Int64Counter("ganglion.turns.interrupted",
+		metric.WithDescription("Turns started over because a restart cut the last run short."))
 	return l
 }
 
@@ -164,13 +178,18 @@ func (l *Loop) turn(ctx context.Context, lease queue.Lease) {
 	ctx, span := l.tracer.Start(ctx, "turn", trace.WithAttributes(
 		attribute.String("event.id", e.ID), attribute.String("event.kind", string(e.Kind)), attribute.Int("attempt", lease.Attempts)))
 	defer span.End()
-	if l.maxAttempts > 0 && lease.Attempts > l.maxAttempts {
+	if l.spent(lease) {
 		l.givenUp.Add(ctx, 1)
 		span.SetAttributes(attribute.String("outcome", "given_up"))
-		out := l.giveUp(e, lease.Attempts-1)
-		log.Error("core: giving up on an event that failed every attempt", "attempts", lease.Attempts-1)
+		runs := lease.Attempts - 1 + lease.Interrupted
+		out := l.giveUp(e, runs)
+		log.Error("core: giving up on an event that failed every attempt", "attempts", lease.Attempts-1, "interrupted", lease.Interrupted)
 		l.complete(ctx, log, lease, out, queue.StateUpdate{})
 		return
+	}
+	if lease.Interrupted > 0 {
+		l.reruns.Add(ctx, 1)
+		log.Info("core: starting a turn over after a restart", "interrupted", lease.Interrupted)
 	}
 	turnCtx, cancel := context.WithTimeout(ctx, l.turnTimeout)
 	stop := l.hook(turnCtx, e)
@@ -185,6 +204,12 @@ func (l *Loop) turn(ctx context.Context, lease queue.Lease) {
 		return
 	}
 	l.complete(ctx, log, lease, out, st)
+}
+
+// spent reports whether the event has used up its failures or its restarts.
+func (l *Loop) spent(lease queue.Lease) bool {
+	return (l.maxAttempts > 0 && lease.Attempts > l.maxAttempts) ||
+		(l.maxInterrupted > 0 && lease.Interrupted > l.maxInterrupted)
 }
 
 func (l *Loop) complete(ctx context.Context, log *slog.Logger, lease queue.Lease, out []event.Outgoing, st queue.StateUpdate) {

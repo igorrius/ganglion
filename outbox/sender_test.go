@@ -103,6 +103,7 @@ type fakeTransport struct {
 	mu     sync.Mutex
 	sends  []sendRecord
 	tries  map[string]int
+	refs   map[string]string // what Send returns per IdemKey
 }
 
 func newFake(clock *vclock, script func(event.Outgoing, int) error) *fakeTransport {
@@ -112,7 +113,7 @@ func newFake(clock *vclock, script func(event.Outgoing, int) error) *fakeTranspo
 func (f *fakeTransport) Name() string                                    { return f.name }
 func (f *fakeTransport) Run(ctx context.Context, _ transport.Sink) error { <-ctx.Done(); return nil }
 
-func (f *fakeTransport) Send(_ context.Context, msg event.Outgoing) error {
+func (f *fakeTransport) Send(_ context.Context, msg event.Outgoing) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	n := f.tries[msg.IdemKey]
@@ -122,7 +123,7 @@ func (f *fakeTransport) Send(_ context.Context, msg event.Outgoing) error {
 		err = f.script(msg, n)
 	}
 	f.sends = append(f.sends, sendRecord{key: msg.IdemKey, at: f.clock.Now(), err: err})
-	return err
+	return f.refs[msg.IdemKey], err
 }
 
 func (f *fakeTransport) records() []sendRecord {
@@ -423,6 +424,23 @@ func TestSplitMessageResumesAfterCrash(t *testing.T) {
 	}
 }
 
+func TestSenderRecordsTheRefOfTheButtons(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "queue.db")
+	clock := newVClock()
+	e := openEnv(t, path, clock)
+	e.enqueue(t, out("telegram:a", "a1"))
+	f := newFake(clock, nil)
+	f.refs = map[string]string{"a1:p0": "1", "a1:p1": "2", "a1:p2": "3"}
+	e.start(t, partFake{f})
+	e.runUntil(t, t0.Add(time.Minute), func() bool {
+		ref, err := e.q.SentRef(context.Background(), "a1")
+		return err == nil && ref != ""
+	})
+	if ref, err := e.q.SentRef(context.Background(), "a1"); err != nil || ref != "3" {
+		t.Fatalf("ref %q, %v; want the last part's, which holds the buttons", ref, err)
+	}
+}
+
 func TestWakeTriggersImmediateSend(t *testing.T) {
 	e := newEnv(t)
 	tr := newFake(e.clock, nil)
@@ -486,5 +504,32 @@ func TestSenderTelemetry(t *testing.T) {
 		if got := rec.Value(t, c.name, c.attrs); got != c.want {
 			t.Errorf("%s %v = %v, want %v", c.name, c.attrs, got, c.want)
 		}
+	}
+}
+
+func TestAttachmentTelemetry(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	e := newEnv(t)
+	pic := out("telegram:a", "a1")
+	pic.Attach = &event.Attachment{Kind: event.AttachPhoto, Name: "m.png", Type: "image/png", Data: make([]byte, 3000)}
+	bad := out("telegram:b", "b1")
+	bad.Attach = &event.Attachment{Kind: event.AttachDocument, Name: "r.txt", Type: "text/plain", Data: []byte("x")}
+	e.enqueue(t, pic, bad)
+	tr := newFake(e.clock, func(m event.Outgoing, _ int) error {
+		if m.IdemKey == "b1" {
+			return fmt.Errorf("refused: %w", transport.ErrPermanent)
+		}
+		return nil
+	})
+	e.start(t, tr)
+	e.runUntil(t, t0.Add(time.Minute), func() bool { return len(tr.records()) == 2 })
+	if got := rec.Value(t, "ganglion.outbox.attachments", map[string]string{"kind": "photo", "result": "sent"}); got != 1 {
+		t.Errorf("photo sent = %v", got)
+	}
+	if got := rec.Value(t, "ganglion.outbox.attachments", map[string]string{"kind": "document", "result": "failed"}); got != 1 {
+		t.Errorf("document failed = %v", got)
+	}
+	if got := rec.Sum(t, "ganglion.outbox.attachment.bytes", map[string]string{"kind": "photo"}); got != 3000 {
+		t.Errorf("photo bytes = %v", got)
 	}
 }

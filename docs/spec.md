@@ -266,6 +266,10 @@ Guarantee: **at-least-once + idempotency.**
   releases the leases left in its database at start, and otherwise the
   lease expires. One core process owns a database file; a lock file stops
   a second one ([ADR-0019](adr/0019-release-leases-at-core-start.md)).
+  A run a restart cut short is not a failed attempt: only an event that
+  more than 10 restarts cut short is given up on, so one that kills the
+  process cannot do so forever
+  ([ADR-0046](adr/0046-a-restart-is-not-a-failed-attempt.md)).
   Commits are fsynced (`synchronous=FULL`), so an event confirmed to the
   channel survives a power loss.
 - **R-DLV-4.** The agent's reply, the new session state and the "incoming
@@ -283,7 +287,11 @@ Guarantee: **at-least-once + idempotency.**
 - **R-DLV-9.** A reply may carry attachments (a picture, a document) in a
   channel-neutral form; they go through the outbox with the same delivery
   guarantee as text. The Telegram transport sends them with `sendPhoto`
-  and `sendDocument` (M3c).
+  and `sendDocument` (M3c). A message carries at most one attachment of
+  at most 4 MiB, refused before the outbox; a text longer than the
+  channel's caption (1,024 characters on Telegram) follows the attachment
+  as its own parts. Bytes are kept in the outbox row
+  ([ADR-0045](adr/0045-metrics-in-the-chat-and-attachments-in-the-outbox.md)).
 - **R-DLV-10.** A file or a picture sent to the agent is never dropped
   silently. Until the agent can read them, the transport tells it that a
   file came (name, type, size) beside the caption, and the agent says it
@@ -333,7 +341,7 @@ model:
 | Layer | What it does | Phase |
 |---|---|---|
 | 1. Hard filters (tags) | Drops models without the required capabilities; `privacy: local-only` keeps local models only | P1 |
-| 2. Rules and weights | Daily budget, worker health and exhausted limits, event type (cron → cheap, human → smart); ranking by price, tier and latency with weights from config | P1 |
+| 2. Rules and weights | Daily budget, worker health and exhausted limits, task kind (a turn → smart; compaction and checks → cheap); ranking by price, tier and latency with weights from config. A scheduled agent turn is a turn: what must stay cheap is a regular task that needs no model at all, which becomes a reflex (section 1, core hypothesis) | P1 |
 | 3. Fallback chain | Error, 429, timeout or exhausted limit — take the next candidate | P1 |
 | 4. Classifier | A cheap model estimates task complexity when the skill sets no `tier` | P2 |
 | 5. Learning | Who succeeded, at what cost, how the human reacted — the rules adapt | P3 |
@@ -346,6 +354,27 @@ model:
   not dependencies.
 - **R-RTR-3.** The router also picks where a tool runs (from the node
   registry); P1 has one node, but the interface accounts for more.
+- **R-RTR-4.** Skills (M3c, levels 1 and 2 of 9.8) live in
+  `workspace/skills/<name>/SKILL.md`; built-in skills are embedded in the
+  binary and reserved by name, so a workspace skill of the same name is
+  not loaded and the owner is told. The system prompt lists each skill's
+  name and description; the model reads one with `skill.read`, and the
+  rest of the turn is routed by that skill's `model` block; `privacy:
+  local-only` lasts until the session ends, since the skill's data is then in
+  its history ([ADR-0042](adr/0042-skills-and-scripts-before-the-sandbox.md)).
+  Only the
+  owner installs a skill; the agent may propose one by showing its text.
+- **R-RTR-5.** A level-2 skill declares its script in the frontmatter:
+  `script: {run, effects, env, timeout}`. `effects: read` runs by
+  itself, `effects: change` asks with a button and runs at most once per
+  call key (R-DLV-6): after a crash it is not run again, and the owner is
+  told its outcome is unknown; the output is outside content. The script runs without a shell, in its own process group,
+  with an environment built from scratch plus the names it lists (the
+  node's secrets never pass), a timeout of at most 120 s, and capped
+  output. Until the sandbox of
+  [ADR-0039](adr/0039-command-sandbox.md) (M3d) it can read what the
+  node's user can read
+  ([ADR-0042](adr/0042-skills-and-scripts-before-the-sandbox.md)).
 
 ### 7.4. Providers and model access
 
@@ -492,7 +521,13 @@ escalate:                    # when to call the model
     any widening is a separately worded approval;
   - the core embeds, for each built-in module, the ABI version and a
     ceiling of rights; a release that asks for more is refused until the
-    core itself is upgraded.
+    core itself is upgraded. html2md's ceiling grants no capability, so
+    in M3c a widening is refused outright; the worded approval comes
+    with modules that have rights (M4).
+
+  The owner drives it with `/modules`, `/modules update <name>` and
+  `/modules rollback <name>`, without a model
+  ([ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)).
 
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation
@@ -525,7 +560,9 @@ Confirmation is layered:
 - **Reviewer model** (preferably another provider) checks the action against
   the policy. It can block, but cannot by itself allow something dangerous.
 - **Human** — yes/no in Telegram with a `ttl`; for critical actions, the
-  admin only or two people.
+  admin only or two people. A question nobody answers closes itself when its
+  `ttl` ends: its buttons go and it reads "Expired." The outbox keeps where a
+  delivered message went, which is how a later turn finds the question.
 
 Combinations: comfort — system only; gates — system + (second factor or
 human); module install — tests + reviewer + admin.
@@ -636,7 +673,7 @@ undone with `git revert`.
 | A host command reads secrets or gains root | Commands run in a sandbox: no privilege gain, a clean environment, the node's process and secret files hidden; root and anything that starts a process outside the sandbox are forbidden; the tool is off where the sandbox cannot be set up (R-CMD-1–3, [ADR-0039](adr/0039-command-sandbox.md)) | P1 (M3d) |
 | The node's own files fill the disk | Everything the node creates is accounted for (what, size, age) and cleaned by age or size (R-CMD-8) | P1 (M3d) |
 | Infinite loop | R-AGT-4 | P1 |
-| Exhausted limits | Crons and consolidation on a cheap model; usage counter in `turns` | P1 |
+| Exhausted limits | Regular work as reflexes with no model where it can be; a model out of limits cools down and the next tier takes over; usage counter in `turns` | P1 |
 | Self-modification broke something | Regression scenarios (question → expected tool call) after every change | P3 |
 | Lost volume or corrupted DB | Daily backup of SQLite (`VACUUM INTO`) and the memory git repo to S3 or a private remote | P1 |
 
@@ -673,6 +710,9 @@ undone with `git revert`.
   `<data>/logs/`, beside stdout (M3c). Writes are synchronous, so the last
   lines before a `kill -9` survive. Files rotate by size with limits on
   their count and age, so the disk never fills. Secrets are redacted.
+  `<data>` is the directory of the database; `--log-dir`
+  (`GANGLION_LOG_DIR`) moves the logs, and `off` keeps them on stdout
+  only ([ADR-0043](adr/0043-logs-on-disk-with-an-own-rotator.md)).
 - **R-OBS-7.** `ganglion mcp` is an MCP server over stdio for diagnosis
   from outside (M3c). It needs no running node and no model: it opens the
   database read-only and the log files, and offers read-only tools (search
@@ -680,7 +720,11 @@ undone with `git revert`.
   with secrets redacted, queue state). It is reached by running the
   command, locally or through `ssh`, `docker exec` or `kubectl exec`; it
   opens no port. The agent gets the same search tools, for admins only,
-  with results marked as external data.
+  with results marked as external data. `config.show` shows the
+  configuration this process reads (the flags and the environment), each
+  secret only as set or unset; `turn.show` gives one turn whole: the
+  event, the route, every call with its decision, and the replies
+  (R-OBS-5) ([ADR-0044](adr/0044-ganglion-mcp-diagnostics-over-stdio.md)).
 - **R-OBS-8.** Everything significant about how the node works is a
   metric, not only a log line or a journal row (owner, 2026-11-03). That
   covers:
@@ -693,7 +737,14 @@ undone with `git revert`.
   blind spot. A change that adds such behaviour adds its metric in the
   same commit, beside the log line and journal row that R-OBS-4–7 ask for
   diagnosis. The metric shows how the node is doing; the log line shows
-  why one case went wrong.
+  why one case went wrong. The owner sees the metrics in Telegram (M3c):
+  `/metrics`, without a model, and the agent's `metrics.show` send a
+  promtop picture rendered in process from the node's own registry, never
+  through `web.fetch`. Both take a choice (owner, 2026-11-03, after the
+  first live picture): `all` adds what the dashboard hides by default, a
+  group (`ganglion`, `runtime`, `process`) keeps that section, and any
+  other word is a filter over the metric names (a substring, or globs
+  with `*`).
 - **R-OBS-9.** In a network (P2) the core collects the telemetry of every
   node over the bus (owner, 2026-11-03). An edge dials out and opens no
   port, so nothing can scrape its `/metrics`.
@@ -1061,7 +1112,7 @@ replay on history → approval → shadow → rollout.
 |---|---|---|---|---|
 | 0. Configuration | Changes to bindings, thresholds, observers, cell backends — proposed, approved by the owner, validated, committed to git | no | validation + approval; rollback | Yes, P1 (ADR-0015) |
 | 1. Skills | Markdown instructions | no | not needed | Yes, P1 |
-| 2. Scripts | Python/sh next to a skill | no | filesystem and network sandbox | Yes, P1 |
+| 2. Scripts | Python/sh next to a skill | no | environment allowlist and timeout (M3c, R-RTR-5); the filesystem and network sandbox of ADR-0039 (M3d) | Yes, P1 |
 | 3. MCP modules | A separate process + manifest with permissions | no | process, limits, granted secrets | Yes, the main path, P3 |
 | 4. WASM | `.wasm` in wazero | no | capability list | Yes, P1 by hand, P3 by the model |
 | 5. Core rebuild | `go build`, binary swap | yes | none | **Never** |
@@ -1139,8 +1190,8 @@ fallback until the gate is passed.
 | Tuya access | Cloud · LAN | Cloud: the internet stays up during outages (0.7); LAN later with a home runner | P1, when the plugs are linked |
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
 | History and tool format | Own · Anthropic Messages · OpenAI | Decided: neutral own format + MCP tool schemas ([ADR-0020](adr/0020-neutral-history-as-conversation-state.md)) | — |
-| First API provider | Anthropic · Gemini · OpenAI-compatible | Decided for development: the operator's choice ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)); Haiku via the claude CLI first, DeepSeek via OpenRouter as fallback ([ADR-0022](adr/0022-haiku-first-during-development.md)) | Revisit with more users or stronger tasks |
-| Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles (conversation, writing tools, analysis) | Not chosen | When a task needs a stronger model than the cheap tier |
+| First API provider | Anthropic · Gemini · OpenAI-compatible | Decided for development: the operator's choice ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)); the claude CLI only, as chosen in [ADR-0047](adr/0047-sonnet-answers-during-development.md); OpenRouter fallbacks are a later topic | Revisit with more users or stronger tasks |
+| Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles (conversation, writing tools, analysis) | For development, tiers: Sonnet for turns, Haiku for compaction and checks ([ADR-0047](adr/0047-sonnet-answers-during-development.md)). Short decisions get a role of their own, in its own ADR after chatlab. Opus when the agent writes skills or modules | When the agent starts writing skills or modules |
 | Where nodes live | Cloud hosting · Pi · home PC | Edge in the cloud or on a Pi, claude CLI worker on the owner's PC | The P1 monthly bill |
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
 | Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Proposed for host commands and skill scripts in [ADR-0039](adr/0039-command-sandbox.md): `no_new_privs`, a clean environment, Landlock and a PID namespace, fail closed | A spike in M3d on the owner's machine, Railway and a Pi |
@@ -1249,6 +1300,13 @@ Reviewed at each gate.
   sub-agents and parallel agents. Until there is a public repository
   with install docs and settled processes, a node is one operator, one
   agent, one bot (owner, 2026-11-02).
+- A separate model role for short decisions (owner, 2026-11-04): questions
+  with a small context and a plain answer get their own entry in the model
+  catalogue, apart from the tiers, so that a model that can only decide never
+  lands in a fallback chain for a person's message. Haiku fills it first, so
+  another model can be compared against it. The memory check is its first
+  client; a model replaces Haiku there only after passing `guardtest`'s case
+  table, since that check is a security boundary. Own ADR, right after chatlab.
 - A decision model as a tool of the agent core: the owner's pick is
   **Jev** by TypeSafe ([typesafe.ai](https://typesafe.ai/),
   [docs](https://docs.typesafe.ai/)), a "System One" model.
@@ -1279,6 +1337,25 @@ Reviewed at each gate.
   M3d; until then R-DLV-10 (owner, 2026-11-03).
 - Plans that approve other tools' calls, not only host commands
   (R-CMD-7) (2026-11-03).
+- The agent creates and manages skills itself: it drafts one from real work,
+  a clean-context model checks it, and the owner accepts it; the owner still
+  sees what will run. This changes "only the owner installs a skill"
+  (R-RTR-4, ADR-0042). Its own brainstorm with a research note on current
+  practice (the Agent Skills format, neighbours' learning loops, malicious
+  skill campaigns). Markdown skills could come first; scripts need the M3d
+  sandbox (owner, 2026-11-04).
+- Fallback models on OpenRouter: while the base mechanisms are built,
+  development runs on the main model only; fallbacks are a separate topic
+  later (owner, 2026-11-04).
+- A turn cut short by a restart, seen and cheaper: today it reruns from its
+  start, silently (R-DLV-3, ADR-0046). Two separate ideas:
+  - tell the person "I'm continuing your interrupted request" when a turn
+    starts over (`Lease.Interrupted` already says so), at most once per
+    message; the OpenClaw gateway does this (owner, 2026-11-04);
+  - keep the turn's finished model calls and tool results between steps, so
+    a rerun goes on from where it stopped instead of paying for the whole
+    turn again. It needs its own ADR: the kept messages hold outside content,
+    and a tool that ran may have changed the world since.
 - Managing the cloud a node runs in (Railway services, volumes, deploys)
   through that cloud's MCP server, with ganglion as an MCP client: P3 in
   the M3b and M3c design; earlier if the owner asks (owner, 2026-11-03).

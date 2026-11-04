@@ -82,7 +82,11 @@ func (t *turn) editOut(suffix string, e pending.QuickEdit) (event.Outgoing, bool
 		return event.Outgoing{}, false
 	}
 	ev := t.event
-	return event.Outgoing{IdemKey: ev.IdemKey + suffix, Transport: ev.Source, Conv: ev.Conv, Text: e.Text,
+	key := ev.IdemKey + suffix
+	if e.Key != "" {
+		key = e.Key
+	}
+	return event.Outgoing{IdemKey: key, Transport: ev.Source, Conv: ev.Conv, Text: e.Text,
 		Buttons: e.Buttons, Edit: t.decision.Ref}, true
 }
 

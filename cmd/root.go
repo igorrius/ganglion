@@ -26,6 +26,12 @@ func Execute(ctx context.Context, args []string, out, errOut io.Writer) error {
 }
 
 func newRoot(out, errOut io.Writer, start startFunc) *cli.Command {
+	return newRootIO(os.Stdin, out, errOut, start)
+}
+
+// newRootIO is the command tree with in as the stdin of the commands
+// that speak over it (mcp, mcp-relay).
+func newRootIO(in io.Reader, out, errOut io.Writer, start startFunc) *cli.Command {
 	var root flags.Root
 	return &cli.Command{
 		Name:      "ganglion",
@@ -34,7 +40,7 @@ func newRoot(out, errOut io.Writer, start startFunc) *cli.Command {
 		Writer:    out,
 		ErrWriter: errOut,
 		Flags:     root.Flags(),
-		Commands:  []*cli.Command{runCommand(&root, out, start), versionCommand(out), relayCommand(os.Stdin, out)},
+		Commands:  []*cli.Command{runCommand(&root, out, start), versionCommand(out), relayCommand(in, out), mcpCommand(in, out)},
 		// Without a command: help, and a failure, so a supervisor still
 		// starting the command line from before `run` sees an error
 		// instead of a clean exit.

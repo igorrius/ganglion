@@ -69,6 +69,14 @@ func embedded(addr netip.Addr) netip.Addr {
 	return addr
 }
 
+// PublicDial is a DialContext that connects only to public addresses, as
+// web.fetch does: every address the name resolves to is checked, and the
+// connection goes to a checked address, never to the name again. Other
+// clients of the internet use it (module releases, ADR-0041).
+func PublicDial(timeout time.Duration) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return dialer{resolve: net.DefaultResolver, connect: directConnect, timeout: timeout}.dial
+}
+
 // Resolver looks up the addresses of a host name (net.DefaultResolver).
 type Resolver interface {
 	LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)

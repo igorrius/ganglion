@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/igorrius/ganglion/event"
@@ -51,7 +52,7 @@ func TestOutsideTextIsMarked(t *testing.T) {
 			t.Fatal(err)
 		}
 		tc.want.From, tc.want.Name, tc.want.Ref = "telegram:user:42", "Igor", "5"
-		if got != tc.want {
+		if !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: got %+v, want %+v", name, got, tc.want)
 		}
 	}

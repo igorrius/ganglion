@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-file-notice
+why: A file sent to the agent must never be dropped silently, and the model must be told of it (R-DLV-10).
+covers:
+  - agent/files.go
+  - transport/telegram/transport.go
+model: scripted
+script:
+  - {say: I cannot open it yet.}
+steps:
+  - send: {kind: document, name: invoice.pdf, type: application/pdf, size: 1200000, caption: "What does this invoice say?"}
+  - facts:
+      history: {contains: "invoice.pdf"}
+      reply: {contains: "I cannot open it yet."}
+      files: 0

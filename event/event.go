@@ -67,6 +67,32 @@ type Outgoing struct {
 	// Text as a short notice (a Telegram toast) and changes no message
 	// (ruling R40).
 	Ack string `json:",omitempty"`
+	// Attach is a picture or a document sent with the message, Text being
+	// its caption (R-DLV-9). A message with an attachment has no buttons
+	// and is never an edit or an acknowledgement.
+	Attach *Attachment `json:",omitempty"`
+}
+
+// AttachKind is how an attachment is shown.
+type AttachKind string
+
+// Attachment kinds.
+const (
+	AttachPhoto    AttachKind = "photo"    // shown as a picture
+	AttachDocument AttachKind = "document" // shown as a file to download
+)
+
+// MaxAttachmentBytes is the largest attachment a message carries; a
+// larger one is refused before it reaches the outbox (ADR-0045).
+const MaxAttachmentBytes = 4 << 20
+
+// Attachment is a file sent with an outgoing message, carried in the
+// outbox row with the message's delivery guarantee (ADR-0045).
+type Attachment struct {
+	Kind AttachKind `json:"kind"`
+	Name string     `json:"name"` // the file name shown for a document
+	Type string     `json:"type"` // MIME type
+	Data []byte     `json:"data"`
 }
 
 // Button is one button under a message. ID is opaque to the transport and

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/buildinfo"
 	"github.com/igorrius/ganglion/node"
@@ -42,6 +43,7 @@ func clearEnv(t *testing.T) {
 		"GANGLION_SEARCH", "BRAVE_API_KEY", "BRAVE_API_KEY_FILE"} {
 		t.Setenv(k, "")
 	}
+	t.Setenv("GANGLION_LOG_DIR", "off") // no logs/ beside the test's default ganglion.db
 }
 
 func TestRunDefaults(t *testing.T) {
@@ -219,5 +221,59 @@ func TestRunAnnouncesWhatIsOff(t *testing.T) {
 	_, _, out, err := captured(t, "run")
 	if err != nil || !strings.Contains(out, "the agent is off and the bot echoes") || !strings.Contains(out, "the Telegram transport is off") {
 		t.Fatalf("%v:\n%s", err, out)
+	}
+}
+
+func TestLogDirResolves(t *testing.T) {
+	for _, c := range []struct {
+		db, flag, dir string
+		on            bool
+	}{
+		{"/data/ganglion.db", "", "/data/logs", true},
+		{"ganglion.db", "", "logs", true},
+		{"/data/ganglion.db", "off", "", false},
+		{"/data/ganglion.db", "/var/log/ganglion", "/var/log/ganglion", true},
+	} {
+		if dir, on := flags.LogDir(c.db, c.flag); dir != c.dir || on != c.on {
+			t.Errorf("LogDir(%q, %q) = %q, %v; want %q, %v", c.db, c.flag, dir, on, c.dir, c.on)
+		}
+	}
+}
+
+// R-OBS-6: by default the logs go to <the database's directory>/logs as
+// JSON lines, beside stdout.
+func TestRunWritesLogsToDisk(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("GANGLION_LOG_DIR", "")
+	dir := t.TempDir()
+	b, _, out, err := captured(t, "run", "--db", filepath.Join(dir, "ganglion.db"), "--metrics-addr", "off")
+	if err != nil || !strings.Contains(out, "the bot echoes") {
+		t.Fatalf("%v:\n%s", err, out)
+	}
+	if b.Metrics == nil {
+		t.Fatal("no metrics renderer reached the node with --metrics-addr off")
+	}
+	logs, err := os.ReadFile(filepath.Join(dir, "logs", "ganglion.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec map[string]any
+	first, _, _ := strings.Cut(string(logs), "\n")
+	if err := json.Unmarshal([]byte(first), &rec); err != nil || rec["level"] == nil {
+		t.Fatalf("not a JSON line: %q (%v)", first, err)
+	}
+	if !strings.Contains(string(logs), "the bot echoes") {
+		t.Fatalf("log file lacks the announce line:\n%s", logs)
+	}
+}
+
+func TestLogDirOff(t *testing.T) {
+	clearEnv(t)
+	dir := t.TempDir()
+	if _, _, _, err := captured(t, "run", "--db", filepath.Join(dir, "ganglion.db"), "--log-dir", "off"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "logs")); !os.IsNotExist(err) {
+		t.Fatalf("logs/ exists with --log-dir off: %v", err)
 	}
 }

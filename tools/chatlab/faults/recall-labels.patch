@@ -1,0 +1,13 @@
+diff --git a/tool/builtin/memory.go b/tool/builtin/memory.go
+index e7b9260..93559f2 100644
+--- a/tool/builtin/memory.go
++++ b/tool/builtin/memory.go
+@@ -319,7 +319,7 @@ func hitLabel(h memory.Hit) string {
+ 	case memory.HitFact:
+ 		return "[stored fact (" + h.Slug + "), saved " + day + "]"
+ 	case memory.HitEpisode:
+-		return "[said in an earlier chat on " + day + ", not a stored fact]"
++		return "[" + day + "]"
+ 	default:
+ 		return "[" + day + "]"
+ 	}

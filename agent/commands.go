@@ -52,6 +52,14 @@ func (a *Agent) commandTable() []commandEntry {
 		{"/tasks", a.listTasks, map[transport.Lang]string{
 			transport.LangDefault: "Reminders and scheduled tasks", transport.LangRussian: "Напоминания и задачи по расписанию",
 			transport.LangUkrainian: "Нагадування та завдання за розкладом"}},
+		{"/metrics", a.showMetrics, map[transport.Lang]string{
+			transport.LangDefault:   "Agent metrics as a picture: /metrics [all | ganglion | runtime | process | filter]",
+			transport.LangRussian:   "Метрики агента картинкой: /metrics [all | ganglion | runtime | process | фильтр]",
+			transport.LangUkrainian: "Метрики агента картинкою: /metrics [all | ganglion | runtime | process | фільтр]"}},
+		{"/modules", a.modules, map[transport.Lang]string{
+			transport.LangDefault:   "Modules: /modules update or rollback <name>",
+			transport.LangRussian:   "Модули: /modules update или rollback <имя>",
+			transport.LangUkrainian: "Модулі: /modules update або rollback <назва>"}},
 	}
 }
 

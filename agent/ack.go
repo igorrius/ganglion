@@ -14,6 +14,18 @@ type Enqueuer interface {
 	Enqueue(ctx context.Context, msgs ...event.Outgoing) error
 }
 
+// SentRefs says where a delivered message went (queue.Outbox); "" when it
+// was not delivered.
+type SentRefs interface {
+	SentRef(ctx context.Context, idemKey string) (string, error)
+}
+
+// NoRefs knows of no delivered message: expired questions wait for a press.
+type NoRefs struct{}
+
+// SentRef implements SentRefs.
+func (NoRefs) SentRef(context.Context, string) (string, error) { return "", nil }
+
 // Toasts: the short notice that answers a press (ruling R40).
 const (
 	toastApproved   = "Approved"

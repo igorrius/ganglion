@@ -9,6 +9,7 @@
   "properties": {
     "name": { "type": "string", "minLength": 1 },
     "version": { "type": "integer", "minimum": 0 },
+    "abi": { "description": "The module ABI the module speaks (ADR-0011); missing means 1. A core refuses an ABI it does not support (ADR-0041).", "type": "integer", "minimum": 1 },
     "triggers": {
       "description": "When the module runs: on a cron schedule, or as a tool the agent calls.",
       "type": "array",

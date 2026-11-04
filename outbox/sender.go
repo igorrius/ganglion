@@ -12,6 +12,7 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/backoff"
+	"github.com/igorrius/ganglion/internal/buckets"
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/transport"
 	"go.opentelemetry.io/otel"
@@ -53,6 +54,8 @@ type Sender struct {
 	sent    metric.Int64Counter
 	retries metric.Int64Counter
 	failedN metric.Int64Counter
+	attachN metric.Int64Counter   // attachments by kind and result
+	attachB metric.Int64Histogram // bytes of attachments delivered, by kind
 }
 
 // Option configures a Sender.
@@ -98,6 +101,9 @@ func NewSender(ob queue.Outbox, wake <-chan struct{}, logger *slog.Logger, opts 
 	s.sent, _ = m.Int64Counter("ganglion.outbox.sent", metric.WithDescription("Messages delivered, by transport."))
 	s.retries, _ = m.Int64Counter("ganglion.outbox.retries", metric.WithDescription("Failed sends to retry, by transport and kind."))
 	s.failedN, _ = m.Int64Counter("ganglion.outbox.failed", metric.WithDescription("Messages given up for good, by transport."))
+	s.attachN, _ = m.Int64Counter("ganglion.outbox.attachments", metric.WithDescription("Attachments delivered or given up, by kind and result."))
+	s.attachB, _ = m.Int64Histogram("ganglion.outbox.attachment.bytes", metric.WithUnit("By"), buckets.Bytes,
+		metric.WithDescription("Size of the attachments delivered, by kind."))
 	return s
 }
 
@@ -195,12 +201,17 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	ctx, span := s.tracer.Start(ctx, "outbox.send", trace.WithAttributes(
 		attribute.String("message.id", msg.ID), attribute.String("transport", msg.Transport), attribute.Int("parts", len(parts))))
 	defer span.End()
+	ref := "" // of the last part with one, which holds a message's buttons
 	for i := p.PartsSent; i < len(parts); i++ {
-		if err := t.Send(ctx, parts[i]); err != nil {
+		r, err := t.Send(ctx, parts[i])
+		if err != nil {
 			if ctx.Err() != nil {
 				return false, nil // shutting down: the message stays as it is
 			}
 			return s.failed(ctx, log, p, err)
+		}
+		if r != "" {
+			ref = r
 		}
 		if len(parts) > 1 {
 			if err := s.ob.PartSent(ctx, msg.ID, i+1); err != nil {
@@ -208,12 +219,22 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 			}
 		}
 	}
-	if err := s.ob.Sent(ctx, msg.ID); err != nil {
+	if err := s.ob.Sent(ctx, msg.ID, ref); err != nil {
 		return true, err
 	}
-	s.sent.Add(ctx, 1, metric.WithAttributes(attribute.String("transport", msg.Transport)))
+	s.countSent(ctx, msg)
 	log.Info("outbox: sent", "parts", len(parts), "len", len(msg.Text))
 	return true, nil
+}
+
+// countSent counts a delivered message and its attachment.
+func (s *Sender) countSent(ctx context.Context, msg event.Outgoing) {
+	s.sent.Add(ctx, 1, metric.WithAttributes(attribute.String("transport", msg.Transport)))
+	if a := msg.Attach; a != nil {
+		kind := attribute.String("kind", string(a.Kind))
+		s.attachN.Add(ctx, 1, metric.WithAttributes(kind, attribute.String("result", "sent")))
+		s.attachB.Record(ctx, int64(len(a.Data)), metric.WithAttributes(kind))
+	}
 }
 
 // failed records a failed send according to the kind of error.
@@ -233,6 +254,9 @@ func (s *Sender) failed(ctx context.Context, log *slog.Logger, p queue.Pending, 
 		return false, nil
 	case errors.Is(sendErr, transport.ErrPermanent):
 		s.failedN.Add(ctx, 1, metric.WithAttributes(tr))
+		if a := p.Msg.Attach; a != nil {
+			s.attachN.Add(ctx, 1, metric.WithAttributes(attribute.String("kind", string(a.Kind)), attribute.String("result", "failed")))
+		}
 		log.Error("outbox: permanent failure, giving up", "err", sendErr)
 		return true, s.ob.Fail(ctx, p.Msg.ID, sendErr.Error())
 	default:

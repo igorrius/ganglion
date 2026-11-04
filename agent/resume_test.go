@@ -999,3 +999,103 @@ func TestFinalLineFollowsTheTypedOutcome(t *testing.T) {
 		}
 	}
 }
+
+// fakeRefs is where the outbox says messages went, by idempotency key.
+type fakeRefs map[string]string
+
+func (f fakeRefs) SentRef(_ context.Context, key string) (string, error) { return f[key], nil }
+
+// questionEdit is the edit of a message in out, if any.
+func questionEdit(out []event.Outgoing) (event.Outgoing, bool) {
+	for _, o := range out {
+		if o.Edit != "" {
+			return o, true
+		}
+	}
+	return event.Outgoing{}, false
+}
+
+// withRefs gives the agent the question's reference as the outbox would.
+func withRefs(e *confirmEnv, q event.Outgoing, ref string) {
+	e.deps.Sent = fakeRefs{q.IdemKey: ref}
+	e.a = New(overDefaults(Config{}), e.deps)
+}
+
+func TestExpiredQuestionClosesItself(t *testing.T) {
+	e := newConfirmEnv(t, newSideTool())
+	q, _ := e.ask(t, "schedule.create")
+	withRefs(e, q, "91")
+	e.now = e.now.Add(pending.DefaultTTL)
+	e.smart.push(say("The owner did not answer."))
+	edit, ok := questionEdit(e.turn(t, expired(t, e)))
+	if !ok || edit.Edit != "91" || len(edit.Buttons) != 0 || edit.Text != q.Text+"\n\nExpired." {
+		t.Fatalf("edit %+v, %v", edit, ok)
+	}
+}
+
+func TestExpiredQuestionClosesInAMovedOnSession(t *testing.T) {
+	e := newConfirmEnv(t, newSideTool())
+	q, _ := e.ask(t, "schedule.create")
+	withRefs(e, q, "91")
+	e.turn(t, message(owner, "Igor", "/new"))
+	before := len(e.smart.requests())
+	e.now = e.now.Add(pending.DefaultTTL)
+	edit, ok := questionEdit(e.turn(t, expired(t, e)))
+	if !ok || edit.Edit != "91" || edit.Text != q.Text+"\n\nExpired." {
+		t.Fatalf("edit %+v, %v", edit, ok)
+	}
+	if got := len(e.smart.requests()); got != before {
+		t.Fatalf("%d model calls for a session that moved on", got-before)
+	}
+}
+
+func TestExpiredQuestionNeverDelivered(t *testing.T) {
+	e := newConfirmEnv(t, newSideTool())
+	q, _ := e.ask(t, "schedule.create")
+	withRefs(e, q, "")
+	e.now = e.now.Add(pending.DefaultTTL)
+	e.smart.push(say("The owner did not answer."))
+	out := e.turn(t, expired(t, e))
+	if edit, ok := questionEdit(out); ok {
+		t.Fatalf("an edit of a message nobody saw: %+v", edit)
+	}
+	if reply, ok := findOut(out, isReply); !ok || reply.Text != "The owner did not answer." {
+		t.Fatalf("out %+v", out)
+	}
+}
+
+func TestAnsweredCallIsNotMarkedExpired(t *testing.T) {
+	e := newConfirmEnv(t, newSideTool())
+	q, _ := e.ask(t, "schedule.create")
+	withRefs(e, q, "91")
+	e.smart.push(say("Done."))
+	e.turn(t, press(owner, q.Buttons[0].ID, "91"))
+	it, err := e.pending.Get(context.Background(), e.pendingID(t, q))
+	if err != nil || it.Status != pending.StatusDone {
+		t.Fatalf("item %+v, %v", it, err)
+	}
+	p, _ := json.Marshal(event.ToolResult{Pending: it.ID})
+	out := e.turn(t, event.Event{ID: "01EXPDONE", IdemKey: "pending:" + it.ID + ":expired", Source: "telegram", Conv: "telegram:42",
+		Kind: event.KindToolResult, Payload: p, At: e.now})
+	if edit, ok := questionEdit(out); ok {
+		t.Fatalf("an approved question marked: %+v", edit)
+	}
+}
+
+// A quick action can show a question in the pressed message. The edit takes
+// the question's key, so the outbox can tell where the question is when its
+// call expires.
+func TestQuickEditKeepsTheQuestionsKey(t *testing.T) {
+	e := newConfirmEnv(t)
+	e.deps.QuickActions = map[string]pending.QuickAction{"ask": func(context.Context, pending.QuickPress) (pending.QuickEdit, error) {
+		return pending.QuickEdit{Text: "Run?", Buttons: []event.Button{{ID: "b", Label: "Approve"}}, Key: "call:1:confirm"}, nil
+	}}
+	e.a = New(overDefaults(Config{}), e.deps)
+	if err := e.pending.AddButtons(context.Background(), pending.Button{ID: "QB", Action: "ask", Label: "Run now", Principal: owner, Conv: "telegram:42", Expires: e.now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	edit, ok := questionEdit(e.turn(t, press(owner, "QB", "55")))
+	if !ok || edit.Edit != "55" || edit.IdemKey != "call:1:confirm" {
+		t.Fatalf("edit %+v, %v", edit, ok)
+	}
+}

@@ -551,3 +551,13 @@ func TestDeleteRerunKeepsItsNote(t *testing.T) {
 		t.Fatalf("another press %+v, %v", other, err)
 	}
 }
+
+// A task run has only its text to go by, and the page it reads can be in any
+// language: chatlab's baseline answered in the page's language or in English
+// whenever the model left the language out of the text.
+func TestScheduleCreateAsksForTheLanguage(t *testing.T) {
+	d := builtin.NewScheduleCreate(builtin.Scheduling{}).Spec().Description
+	if !strings.Contains(d, "in the language the person is using") || !strings.Contains(d, "which language the answer is to be in") {
+		t.Fatalf("description %q", d)
+	}
+}

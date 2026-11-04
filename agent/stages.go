@@ -10,6 +10,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/turns"
 )
@@ -67,16 +68,18 @@ const (
 // <text>". Text the sender did not write is wrapped as outside content: a
 // forward whole, a quote after the sender's own words. outside reports
 // whether the message holds any, a reply to a message in another chat
-// included (ruling R35).
+// included (ruling R35). Files that came with it are noted after it, a
+// named one as outside content (R-DLV-10).
 func userContent(m event.Message) (content string, outside bool) {
+	notes, named := fileNotes(m.Files)
 	if m.Forwarded {
-		return speaker(m) + ": " + tool.WrapExternal(sourceForwarded, m.Text), true
+		return speaker(m) + ": " + tool.WrapExternal(sourceForwarded, m.Text) + notes, true
 	}
 	content = speaker(m) + ": " + m.Text
 	if m.Quote != "" {
 		content += "\n" + tool.WrapExternal(sourceQuoted, m.Quote)
 	}
-	return content, m.Quote != "" || m.ExternalReply
+	return content + notes, m.Quote != "" || m.ExternalReply || named
 }
 
 // setAdmin looks up whether the turn's principal may use tools.
@@ -136,7 +139,7 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 // (shutdown) is an error, so the event is offered again.
 func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Message) (added []provider.Message, text string, end turns.Outcome, err error) {
 	tools := a.toolSpecs(t)
-	task := router.TaskReq{Kind: router.TaskMessage, Tools: len(tools) > 0}
+	task := router.TaskReq{Kind: router.TaskMessage, Tools: len(tools) > 0, Privacy: t.state.privacy()}
 	var exec provider.Exec // a CLI provider runs the calls itself; no tools, nothing to run
 	if len(tools) > 0 {
 		exec = a.exec(t)
@@ -164,6 +167,8 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 			return added, msg.Content, turns.OutcomeOK, nil
 		}
 		results := a.runTools(turnCtx, t, msg.ToolCalls)
+		task = a.skillRoute(task, msg.ToolCalls, t.admin)
+		t.state.LocalOnly = task.Privacy == skills.PrivacyLocalOnly // skillRoute never lifts it
 		msgs, added = append(msgs, results...), append(added, results...)
 	}
 	return added, "", turns.OutcomeOK, nil
@@ -262,6 +267,9 @@ func (a *Agent) systemPrompt(admin, introducing bool) string {
 	}
 	if introducing {
 		prompt += "\n\n" + IntroductionRules
+	}
+	if idx := a.d.Skills.Index(); idx != "" {
+		prompt += "\n\n" + skillsHeader + idx
 	}
 	if facts := a.d.Facts(); facts != "" {
 		prompt += "\n\n" + facts

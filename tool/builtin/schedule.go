@@ -324,7 +324,8 @@ func (*ScheduleCreate) Spec() tool.Spec {
 			"A task may use only the tools in its grant, and web.fetch only on the grant's hosts; it runs in its own " +
 			"conversation, so its earlier runs are its history. A task's final answer is delivered automatically as a message " +
 			"to the grant's reply target, so write the text as what to produce, e.g. \"Get … and write a short message " +
-			"with …\", not \"send X a message\". The owner confirms the job with its grant.",
+			"with …\", not \"send X a message\". Write a task's text in the language the person is using, and say in it " +
+			"which language the answer is to be in: a run has only this text to go by. The owner confirms the job with its grant.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"kind":{"type":"string","enum":["reminder","task"]},` +
 			`"cron":{"type":"string","description":"five fields: minute hour day-of-month month day-of-week (0 = Sunday); numbers, ranges a-b, lists a,b, steps */n; no names"},` +

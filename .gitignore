@@ -5,6 +5,8 @@
 !/modules/html2md/html2md.wasm
 *.db
 *.sqlite3
+# Logs beside a local database (R-OBS-6)
+/logs/
 .env
 docs/.obsidian/
 .ganglion/

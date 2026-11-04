@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/tool"
 )
@@ -138,13 +139,13 @@ func (j *Journal) Middleware() tool.Middleware {
 func entryOf(c tool.Call, res tool.Result, err error, d Decision, started, ended time.Time) Entry {
 	e := Entry{
 		Key: c.Key(), TurnID: c.TurnID, N: c.N, Tool: c.Name, Principal: c.Principal,
-		Args:       capBytes(Redact(string(c.Args)), maxArgsBytes),
-		ResultHead: capRunes(Redact(res.Text), maxHeadRunes),
+		Args:       capBytes(redact.String(string(c.Args)), maxArgsBytes),
+		ResultHead: capRunes(redact.String(res.Text), maxHeadRunes),
 		ResultLen:  utf8.RuneCountInString(res.Text),
 		Ms:         ended.Sub(started).Milliseconds(), Decision: d, Tainted: c.Tainted, At: started,
 	}
 	if err != nil {
-		e.Err = capRunes(Redact(err.Error()), maxErrRunes)
+		e.Err = capRunes(redact.String(err.Error()), maxErrRunes)
 	}
 	return e
 }

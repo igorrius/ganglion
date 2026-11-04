@@ -25,7 +25,10 @@ type Lease struct {
 	Event    event.Event
 	Token    string    // proves ownership when completing
 	Until    time.Time // lease expiry
-	Attempts int       // times the event was leased, this lease included
+	Attempts int       // times the event was leased, this lease included; a run cut short by a restart does not count
+	// Interrupted is how many runs of the event a process death or a restart
+	// cut short (ADR-0046).
+	Interrupted int
 }
 
 // StateUpdate is the conversation state written together with a turn's
@@ -70,8 +73,12 @@ type Outbox interface {
 	// PartSent records that the first parts parts of a split message are
 	// delivered, so a resumed sender does not send them again.
 	PartSent(ctx context.Context, id string, parts int) error
-	// Sent marks the message delivered.
-	Sent(ctx context.Context, id string) error
+	// Sent marks the message delivered; ref is what the transport calls it,
+	// "" when it names none.
+	Sent(ctx context.Context, id, ref string) error
+	// SentRef is the ref of the delivered message with idemKey, "" when it
+	// is unknown, not delivered yet or has no ref.
+	SentRef(ctx context.Context, idemKey string) (string, error)
 	// Retry counts a failed attempt and holds the message until notBefore.
 	Retry(ctx context.Context, id string, notBefore time.Time, reason string) error
 	// Fail gives up on the message for good; its conversation moves on.

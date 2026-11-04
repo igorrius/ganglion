@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: language-uk-first
+why: The bot must answer in the language it is addressed in, from the first reply.
+covers:
+  - agent/agent.go
+  - agent/turn.go
+repeat: 5
+steps:
+  - say: "Привіт! Порадь, що приготувати на вечерю з курки та картоплі."
+  - language: uk

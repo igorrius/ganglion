@@ -1,0 +1,60 @@
+name: Module release
+
+# A module is released on its own tag, html2md/vX.Y.Z (ADR-0041): the
+# module is rebuilt from the tagged sources, checked to match the
+# committed build, tested (fixtures and the self-test the node runs
+# before it installs an update), and published with SHA256SUMS. Core tags
+# never run this.
+on:
+  push:
+    tags:
+      - "html2md/v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  html2md:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # to check the tag is on master
+      - name: The tag is on master and names this module
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master || {
+            echo "::error::a module is released only from a commit on master"
+            exit 1
+          }
+          grep -qx 'name: html2md' modules/html2md/html2md.yaml || {
+            echo "::error::modules/html2md/html2md.yaml does not name html2md"
+            exit 1
+          }
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Rust toolchain (modules/html2md/rust-toolchain.toml)
+        working-directory: modules/html2md
+        run: rustup toolchain install
+      - name: Build the module
+        run: make modules-html2md
+      - name: The tag's committed build is this build
+        run: |
+          git diff --quiet -- modules/html2md/html2md.wasm || {
+            echo "::error::modules/html2md/html2md.wasm at this tag differs from a build of its sources"
+            exit 1
+          }
+      - name: Fixtures and self-test against the build
+        run: go test -count=1 ./modules/html2md/...
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          cp modules/html2md/html2md.wasm modules/html2md/html2md.yaml dist/
+          (cd dist && sha256sum html2md.wasm html2md.yaml > SHA256SUMS && cat SHA256SUMS)
+          gh release create "$TAG" dist/html2md.wasm dist/html2md.yaml dist/SHA256SUMS \
+            --title "$TAG" --notes "html2md module release. Install on a node with /modules update html2md (ADR-0041)."

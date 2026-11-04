@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-skill-read
+why: A read-only script skill must run without a question, and its output must reach the model.
+covers:
+  - skills/**
+  - tool/builtin/skill.go
+  - agent/skills.go
+model: scripted
+skills: [skills/disk-report]
+script:
+  - {tool: skill.disk_report, args: '{}'}
+  - {say: Done.}
+steps:
+  - say: "Run the disk report."
+  - facts:
+      journal:
+        - {tool: skill.disk_report, decision: allowed, result_contains: "disk report marker 7731"}
+      questions: 0

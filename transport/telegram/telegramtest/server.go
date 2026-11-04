@@ -9,13 +9,13 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 	"unicode/utf16"
 )
@@ -36,6 +36,9 @@ type Incoming struct {
 	Text     string // empty: a message without text, such as a sticker
 	Caption  string // caption of a photo or document
 	IsBot    bool   // the sender is a bot
+	// Extra are more Bot API message fields, set as they are: "photo",
+	// "document", "voice" and the like.
+	Extra map[string]any
 }
 
 // Outgoing is a message the bot sent.
@@ -118,6 +121,7 @@ type Server struct {
 	nextMsg    int64
 	confirmed  int64
 	sent       []Outgoing
+	uploads    []Upload
 	fail       map[string]failure
 	webhook    bool
 	kick       chan struct{}            // closed to end the getUpdates call in flight
@@ -136,9 +140,17 @@ type Server struct {
 	nextQuery  int64
 }
 
+// T is what the fake needs from its owner: a test, or chatlab's program,
+// which cannot implement testing.TB (ADR-0048).
+type T interface {
+	Helper()
+	Fatalf(format string, args ...any)
+	Cleanup(func())
+}
+
 // NewServer starts a fake Bot API for token (<bot_id>:<secret>). It is
 // closed by t.Cleanup.
-func NewServer(t testing.TB, token string) *Server {
+func NewServer(t T, token string) *Server {
 	t.Helper()
 	prefix, _, _ := strings.Cut(token, ":")
 	id, err := strconv.ParseInt(prefix, 10, 64)
@@ -194,6 +206,7 @@ func (s *Server) AddMessage(m Incoming) int64 {
 	if m.Caption != "" {
 		msg["caption"] = m.Caption
 	}
+	maps.Copy(msg, m.Extra)
 	if m.ThreadID != 0 {
 		msg["message_thread_id"] = m.ThreadID
 		msg["is_topic_message"] = true
@@ -388,7 +401,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := map[string]json.RawMessage{}
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil && err.Error() != "EOF" {
+	var file *formFile
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		var err error
+		if params, file, err = readForm(r); err != nil {
+			writeErr(w, http.StatusBadRequest, "Bad Request: can't parse the form", 0)
+			return
+		}
+	} else if err := json.NewDecoder(r.Body).Decode(&params); err != nil && err.Error() != "EOF" {
 		writeErr(w, http.StatusBadRequest, "Bad Request: can't parse JSON", 0)
 		return
 	}
@@ -430,6 +450,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.getUpdates(w, r, params)
 	case "sendMessage":
 		s.sendMessage(w, params)
+	case "sendPhoto", "sendDocument":
+		s.sendFile(w, method, params, file)
 	case "editMessageText":
 		s.editMessageText(w, params)
 	case "editMessageReplyMarkup":
@@ -671,6 +693,10 @@ func (s *Server) editMessageText(w http.ResponseWriter, params map[string]json.R
 	raw, _ := json.Marshal(params)
 	if err := json.Unmarshal(raw, &p); err != nil || p.Text == "" {
 		writeErr(w, http.StatusBadRequest, "Bad Request: message text is empty", 0)
+		return
+	}
+	if len(utf16.Encode([]rune(p.Text))) > MaxTextLen {
+		writeErr(w, http.StatusBadRequest, "Bad Request: MESSAGE_TOO_LONG", 0)
 		return
 	}
 	e := Edit{ChatID: p.ChatID, MessageID: p.MessageID, Text: p.Text, Keyboard: p.ReplyMarkup.keyboard()}

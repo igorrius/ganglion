@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-skill-change
+why: A script skill that changes something must ask first and run once when approved.
+covers:
+  - skills/**
+  - tool/builtin/skill.go
+  - agent/skills.go
+  - policy/**
+  - tool/pending/**
+model: scripted
+skills: [skills/stamp-log]
+script:
+  - {tool: skill.stamp_log, args: '{}'}
+  - {say: I asked.}
+  - {say: Done.}
+steps:
+  - say: "Stamp the boiler log."
+  - facts:
+      questions: 1
+      no_journal:
+        - {tool: skill.stamp_log, decision: approved}
+  - press: Approve
+  - facts:
+      journal:
+        - {tool: skill.stamp_log, decision: approved, result_contains: "log stamped marker 8842", count: 1}
+      questions: 0

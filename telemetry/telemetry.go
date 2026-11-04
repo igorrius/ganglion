@@ -9,6 +9,8 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -38,14 +40,19 @@ type Config struct {
 	Version string // service.version
 	Commit  string // vcs.ref.head.revision; empty for a build without VCS stamps
 	Getenv  func(string) string
+	// Logger gets OpenTelemetry's own errors (an export, a failed gauge),
+	// which would otherwise go raw to stderr past the redaction and the
+	// log files; nil discards them.
+	Logger *slog.Logger
 }
 
 // Telemetry owns the providers and the HTTP server.
 type Telemetry struct {
-	mp  *sdkmetric.MeterProvider
-	tp  *sdktrace.TracerProvider // nil when no OTLP endpoint is set
-	srv *http.Server
-	ln  net.Listener
+	mp   *sdkmetric.MeterProvider
+	tp   *sdktrace.TracerProvider // nil when no OTLP endpoint is set
+	srv  *http.Server
+	ln   net.Listener
+	dash *dash.Dashboard
 }
 
 // Setup installs the global meter provider (and tracer provider, when
@@ -59,6 +66,7 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 	if cfg.Commit != "" {
 		attrs = append(attrs, attribute.String("vcs.ref.head.revision", cfg.Commit))
 	}
+	handleErrors(cfg.Logger)
 	res := resource.NewSchemaless(attrs...)
 	reg := prometheus.NewRegistry()
 	// A fresh registry has none of the default registry's collectors; the
@@ -80,6 +88,13 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 		otel.SetTracerProvider(t.tp)
 	}
 
+	// HandlerFor without a Registry in the options does not count its own
+	// calls, so the dashboard's polling stays out of what scrapers see.
+	metrics := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
+	// The dashboard runs even with nothing listening: it reads the
+	// handler in process, and the picture in the chat is drawn from it
+	// (ADR-0045).
+	t.dash = dash.New(metrics, dash.Title(cfg.Service))
 	if cfg.Addr == "off" {
 		return t, nil
 	}
@@ -91,15 +106,66 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 	if err != nil {
 		return nil, errors.Join(err, t.Shutdown(ctx))
 	}
-	// HandlerFor without a Registry in the options does not count its own
-	// calls, so the dashboard's polling stays out of what scrapers see.
-	metrics := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", metrics)
-	mux.Handle("/webmetrics/", dash.New(metrics, dash.Title(cfg.Service)))
+	mux.Handle("/webmetrics/", t.dash)
 	t.ln, t.srv = ln, &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = t.srv.Serve(ln) }()
 	return t, nil
+}
+
+// Renderer draws the node's own metrics for the chat.
+func (t *Telemetry) Renderer() *Renderer { return &Renderer{d: t.dash} }
+
+// Renderer draws the dashboard's history: a PNG for the owner, the
+// promtop summary for the model (ADR-0045). It reads the registry in
+// process, never over the network.
+type Renderer struct{ d *dash.Dashboard }
+
+// Selection is what to draw: none of it set is the default dashboard.
+type Selection struct {
+	Globs    []string // metric name globs
+	Sections []string // section keys, e.g. "go", "process", "ganglion"
+	All      bool     // what the dashboard hides by default too
+}
+
+// Section is one of the dashboard's sections.
+type Section struct{ Key, Title string }
+
+func (s Selection) options(f dash.Format) dash.RenderOptions {
+	return dash.RenderOptions{Format: f, Metrics: s.Globs, Sections: s.Sections, ShowAll: s.All}
+}
+
+// Picture writes the selection as a PNG.
+func (r *Renderer) Picture(ctx context.Context, w io.Writer, sel Selection) error {
+	return r.d.Render(ctx, w, sel.options(dash.FormatPNG))
+}
+
+// Summary writes the promtop.summary/v1 document of the selection;
+// notable keeps only what stands out.
+func (r *Renderer) Summary(ctx context.Context, w io.Writer, sel Selection, notable bool) error {
+	o := sel.options(dash.FormatSummary)
+	o.Notable = notable
+	return r.d.Render(ctx, w, o)
+}
+
+// Sections lists the dashboard's sections.
+func (r *Renderer) Sections(ctx context.Context) ([]Section, error) {
+	secs, err := r.d.Sections(ctx)
+	out := make([]Section, len(secs))
+	for i, s := range secs {
+		out[i] = Section{Key: s.Key, Title: s.Title}
+	}
+	return out, err
+}
+
+// handleErrors sends OpenTelemetry's own errors to logger (nil discards
+// them) instead of the standard log on stderr.
+func handleErrors(logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) { logger.Warn("telemetry: opentelemetry error", "err", err) }))
 }
 
 // Addr is the address metrics are served on, or "" when they are off.
@@ -110,9 +176,14 @@ func (t *Telemetry) Addr() string {
 	return t.ln.Addr().String()
 }
 
-// Shutdown stops the server and flushes the providers.
+// Shutdown stops the dashboard first, which ends the event streams of
+// open dashboard tabs and its reading of the metrics, then the server,
+// and flushes the providers.
 func (t *Telemetry) Shutdown(ctx context.Context) error {
 	var errs []error
+	if t.dash != nil {
+		errs = append(errs, t.dash.Close())
+	}
 	if t.srv != nil {
 		errs = append(errs, t.srv.Shutdown(ctx))
 	}

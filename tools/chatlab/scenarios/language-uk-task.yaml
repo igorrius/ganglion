@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: language-uk-task
+why: >-
+  In make accept on Sonnet an English task answered in Ukrainian, the language of
+  the page it read. A task's answer must come in the language of the person who
+  asked for it, whatever the page's.
+covers:
+  - agent/scheduled.go
+  - "tool/builtin/schedule*.go"
+  - "schedule/**"
+repeat: 5
+pages:
+  - {url: "http://rates.example.net/today", file: pages/rates-en.html}
+steps:
+  - say: "Щогодини надсилай мені курс долара та євро зі сторінки http://rates.example.net/today, поки я не скасую."
+  - reach: {journal: {tool: schedule.create}, nudge: "Так, створи це завдання."}
+  - press: Approve
+  - advance: {scheduler: 2h}
+  - reach: {journal: {tool: web.fetch}}
+  - language: uk

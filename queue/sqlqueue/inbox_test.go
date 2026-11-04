@@ -511,6 +511,21 @@ func TestReleaseLeasesAfterCrash(t *testing.T) {
 	}
 }
 
+// ADR-0046: a restart is no failure of the event. A message at the head of
+// its conversation through five restarts keeps its attempts.
+func TestReleaseCountsAnInterruptionNotAnAttempt(t *testing.T) {
+	f := setup(t)
+	put(t, f, msg("telegram:1", "k1"))
+	for i := range 5 {
+		if l := lease(t, f); l.Attempts != 1 || l.Interrupted != i {
+			t.Fatalf("run %d: attempts %d, interrupted %d", i, l.Attempts, l.Interrupted)
+		}
+		if _, err := f.q.ReleaseLeases(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestLeaseAttempts(t *testing.T) {
 	f := setup(t)
 	put(t, f, msg("telegram:1", "k1"))
