@@ -365,3 +365,31 @@ func TestAdvanceSchedulerMovesTheModelsClock(t *testing.T) {
 		t.Fatalf("the model read %q, want about %s", content, moved.Format(time.DateTime))
 	}
 }
+
+// A checkout under umask 002 leaves a skill's script writable by the group, and
+// the node refuses such a script. The copy must not depend on how the repository
+// was checked out.
+func TestCopyDirIgnoresTheCheckoutsUmask(t *testing.T) {
+	src, dst := t.TempDir(), filepath.Join(t.TempDir(), "copy")
+	script, note := filepath.Join(src, "run.sh"), filepath.Join(src, "SKILL.md")
+	for path, mode := range map[string]os.FileMode{script: 0o775, note: 0o664} {
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := copyDir(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]os.FileMode{"run.sh": 0o755, "SKILL.md": 0o644} {
+		st, err := os.Stat(filepath.Join(dst, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Mode().Perm() != want {
+			t.Errorf("%s: mode %o, want %o", name, st.Mode().Perm(), want)
+		}
+	}
+}
