@@ -118,7 +118,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, cat rules.Catalog, keys m
 		return err
 	}
 	b := config.Bootstrap{DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
-		Admin: fmt.Sprintf("telegram:user:%d", labChat), MetricsAddr: "off", LogDir: n.logs,
+		Admin: fmt.Sprintf("telegram:user:%d", labChat), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
 		Agent: config.AgentSettings{Catalog: &cat, Keys: keys, Workspace: n.ws, DailyBudgetUSD: 1, DailyTurns: 300,
 			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}}
 	rot, err := logfile.Open(logfile.DefaultConfig(n.logs), time.Now)

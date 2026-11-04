@@ -60,8 +60,9 @@ Separately, where the code lives:
 ## Decision
 
 **A, in a separate program.** `tools/chatlab` is built with the tag `lab`; library
-code is in `internal/chatlab`; `config/lab.go` holds the overrides, the same as
-`make accept`'s. Scenarios are YAML. Facts from the journal and files decide
+code is in `internal/chatlab`; `config/lab.go` holds the overrides, those of
+`make accept` plus one: the agent reads the scheduler's moved clock, or a model
+would see a reminder fire early. Scenarios are YAML. Facts from the journal and files decide
 firmly, and a judge model decides what a reply means, counted over repeats.
 
 ## Security

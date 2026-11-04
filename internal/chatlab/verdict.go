@@ -73,10 +73,9 @@ func Decide(name, why string, rs []Repeat) Outcome {
 	}
 	n := len(counted)
 	if n == 0 {
+		o.Result, o.Facts = ResultNotRun, fmt.Sprintf("%s; 0 of %d counted", notRunWhy, len(rs))
 		if inconclusive > 0 {
-			o.Result, o.Facts = ResultInconclusive, inconclusiveWhy
-		} else {
-			o.Result, o.Facts = ResultNotRun, notRunWhy
+			o.Result, o.Facts = ResultInconclusive, fmt.Sprintf("%s; 0 of %d counted", inconclusiveWhy, len(rs))
 		}
 		return o
 	}
@@ -85,6 +84,15 @@ func Decide(name, why string, rs []Repeat) Outcome {
 	o.Result, o.Meaning = judge(counted)
 	if o.Meaning != "" {
 		o.Meaning += extra
+	}
+	// Passed means every repeat: a smaller sample must not read as one.
+	if o.Result == ResultPassed {
+		switch {
+		case inconclusive > 0:
+			o.Result = ResultInconclusive
+		case notRun > 0:
+			o.Result = ResultNotRun
+		}
 	}
 	return o
 }

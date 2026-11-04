@@ -31,12 +31,14 @@ func TestDecide(t *testing.T) {
 		{"judge in no repeat", []Repeat{judged(false), judged(false), judged(false)}, ResultFailed, "Russian 0 of 3"},
 		{"the worst of two", []Repeat{judged(true, true), judged(true, false), judged(true, false)}, ResultFlaky, "not saved 1 of 3"},
 		{"the worst fails", []Repeat{judged(true, false), judged(true, false)}, ResultFailed, "not saved 0 of 2"},
-		{"all inconclusive", []Repeat{inconclusive, inconclusive}, ResultInconclusive, "never called"},
-		{"some inconclusive", []Repeat{judged(true), judged(true), inconclusive}, ResultPassed, "2 of 2, 1 inconclusive"},
+		{"all inconclusive", []Repeat{inconclusive, inconclusive}, ResultInconclusive, "0 of 2"},
+		{"some inconclusive", []Repeat{judged(true), judged(true), inconclusive}, ResultInconclusive, "2 of 2, 1 inconclusive"},
+		{"some inconclusive and flaky", []Repeat{judged(true), judged(false), inconclusive}, ResultFlaky, "1 of 2, 1 inconclusive"},
 		{"a failure beats inconclusive", []Repeat{failed, inconclusive}, ResultFailed, "found 2"},
 		{"no repeats", nil, ResultNotRun, ""},
 		{"not run", []Repeat{{NotRun: "the token cap"}}, ResultNotRun, "token cap"},
-		{"some not run", []Repeat{passing(), {NotRun: "the token cap"}}, ResultPassed, "1 of 1, 1 not run"},
+		{"not run counts", []Repeat{{NotRun: "the token cap"}}, ResultNotRun, "0 of 1"},
+		{"some not run", []Repeat{passing(), {NotRun: "the token cap"}}, ResultNotRun, "1 of 1, 1 not run"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			o := Decide("s", "w", tc.repeats)

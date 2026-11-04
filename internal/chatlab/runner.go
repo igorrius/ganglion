@@ -188,10 +188,13 @@ func (r *repeatRun) reach(ctx context.Context, want Reach) error {
 	}
 	ok, err := found()
 	if err == nil && !ok && want.Nudge != "" {
-		step := Step{Say: want.Nudge}
-		if err := r.step(ctx, step); err != nil {
+		before := r.last
+		if err := r.step(ctx, Step{Say: want.Nudge}); err != nil {
 			return err
 		}
+		// What the model wrote before the nudge is still its answer: a judge
+		// must read that too.
+		r.last = slices.Concat(before, r.last)
 		ok, err = found()
 	}
 	if err != nil {
@@ -255,6 +258,14 @@ func (r *repeatRun) finish(ctx context.Context, s Scenario) {
 				r.rep.Inconclusive = fmt.Sprintf("%s answered in place of %s", a.Model, main)
 			}
 		}
+	}
+	// A failure under another model says nothing about the main one: it stays
+	// in the transcript, and the repeat does not count.
+	if r.rep.Inconclusive != "" {
+		for _, f := range r.rep.Failures {
+			fmt.Fprintf(&r.log, "\nSet aside, another model answered: %s\n", f)
+		}
+		r.rep.Failures = nil
 	}
 }
 

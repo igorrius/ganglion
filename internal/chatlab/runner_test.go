@@ -4,6 +4,8 @@ package chatlab
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -193,5 +195,119 @@ func TestMissingRelayIsNotRun(t *testing.T) {
 	o := runOne(t, RunOptions{Scenarios: []Scenario{s}, Catalog: cat, Relay: "/nonexistent/ganglion"})
 	if o.Result != ResultNotRun || !strings.Contains(o.Facts, "ganglion") {
 		t.Fatalf("outcome %+v", o)
+	}
+}
+
+// A fact that fails under another model says nothing about the main one.
+func TestAFactFailedUnderAnotherModelIsInconclusive(t *testing.T) {
+	smart := providertest.NewServer(t, "a")
+	cheap := providertest.NewServer(t, "b")
+	smart.Fail(429, 60)
+	cheap.Reply("Hello from the small model.")
+	cat, err := rules.LoadCatalog(strings.NewReader(`providers:
+  - {name: a, type: openai, base_url: "` + smart.URL() + `"}
+  - {name: b, type: openai, base_url: "` + cheap.URL() + `"}
+models:
+  - {provider: a, name: big, tier: smart, tools: true, context: 200000}
+  - {provider: b, name: small, tier: cheap, tools: true, context: 200000}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Scenario{Name: "x", Why: "w", Repeat: 1, Persona: PersonaDefault, Steps: []Step{{Say: "hi"}, {Facts: &Facts{Reply: &Text{Contains: "Goodbye"}}}}}
+	o := runOne(t, RunOptions{Scenarios: []Scenario{s}, Catalog: cat, Keys: map[string]string{"a": "a", "b": "b"}})
+	if o.Result != ResultInconclusive || !strings.Contains(o.Facts, "small") {
+		t.Fatalf("outcome %+v", o)
+	}
+	if !strings.Contains(o.Repeats[0].Transcript, "Goodbye") {
+		t.Fatalf("the failure left the transcript: %q", o.Repeats[0].Transcript)
+	}
+}
+
+// A first reply in the wrong language must not pass because the nudge's reply
+// was in the right one.
+func TestJudgeReadsTheReplyBeforeANudge(t *testing.T) {
+	m := &recordingModel{answer: `{"ok":true,"reason":""}`}
+	s := scripted("x", []ScriptStep{{Say: "First reply."}, {Tool: "memory.write", Args: `{"title":"Boiler","body":"80 litres."}`}, {Say: "Second reply."}},
+		Step{Say: "My boiler holds 80 litres"},
+		Step{Reach: &Reach{Journal: JournalFact{Tool: "memory.write"}, Nudge: "Please remember that."}},
+		Step{Judge: "claim"})
+	runOne(t, RunOptions{Scenarios: []Scenario{s}, Judge: NewJudge(m, "m")})
+	if len(m.got) != 1 {
+		t.Fatalf("%d judge calls", len(m.got))
+	}
+	read := m.got[0].Messages[1].Content
+	if !strings.Contains(read, "First reply.") || !strings.Contains(read, "Second reply.") {
+		t.Fatalf("the judge read %q", read)
+	}
+}
+
+// The module sweep must stay inside the node's directory: with no ModulesDir it
+// ran on ./html2md, and would delete the files of modules/html2md when run there.
+func TestNodeLeavesTheWorkingDirectoryAlone(t *testing.T) {
+	root, err := RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	persona := t.TempDir()
+	if err := copyDir(filepath.Join(root, "examples", "workspace", "persona"), filepath.Join(persona, "persona")); err != nil {
+		t.Fatal(err)
+	}
+	cwd := t.TempDir()
+	keep := filepath.Join(cwd, "html2md", "embed.go")
+	if err := os.MkdirAll(filepath.Dir(keep), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keep, []byte("package html2md"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(cwd)
+	s := Scenario{Name: "x", Why: "w", Repeat: 1, Dir: persona, Persona: "persona", Model: ModelScripted, Script: sayHello,
+		Steps: []Step{{Say: "hi"}, {Facts: &Facts{Reply: &Text{Contains: "Hello."}}}}}
+	if o := runOne(t, RunOptions{Scenarios: []Scenario{s}}); o.Result != ResultPassed {
+		t.Fatalf("outcome %+v", o)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("the node removed a file of its working directory: %v", err)
+	}
+}
+
+// ADR-0048: a key that a reply carries does not reach a report.
+func TestAKeyInAReplyDoesNotReachTheReport(t *testing.T) {
+	const key = "sk-or-v1-1234567890abcdef"
+	s := scripted("x", []ScriptStep{{Say: "The page said " + key}}, Step{Say: "hi"}, Step{Facts: &Facts{Questions: new(0)}})
+	r := RunAll(context.Background(), RunOptions{Scenarios: []Scenario{s}, Keys: map[string]string{"openrouter": key}})
+	path, err := WriteReport(t.TempDir(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "The page said") || strings.Contains(string(b), key) || strings.Contains(r.Table(), key) {
+		t.Fatalf("report %s", b)
+	}
+}
+
+// The scenarios on a scripted model spend nothing, so they run in every test run.
+func TestShippedScriptedScenariosPass(t *testing.T) {
+	all, err := LoadScenarios("../../tools/chatlab/scenarios", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mine []Scenario
+	for _, s := range all {
+		if s.Model == ModelScripted {
+			mine = append(mine, s)
+		}
+	}
+	if len(mine) == 0 {
+		t.Fatal("no scripted scenarios")
+	}
+	for _, o := range RunAll(context.Background(), RunOptions{Scenarios: mine}).Outcomes {
+		if o.Result != ResultPassed {
+			t.Errorf("%s: %+v", o.Scenario, o)
+		}
 	}
 }

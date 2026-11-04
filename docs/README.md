@@ -164,8 +164,10 @@ Start here when coming back to the project.
         of R48, R49 and R50 removed, each turned its scenario red; a real judge
         failed wrong replies. R38 on a scripted model went red with its check
         removed.
-      - **Language:** the problem is in scheduled tasks only, on Sonnet and Haiku:
-        Russian with a Ukrainian page went from 2 of 5 to 10 of 10
+      - **Language:** in chatlab's scenarios the agent lost the language only in
+        scheduled tasks, on Sonnet and on Haiku: Russian with a Ukrainian page went
+        from 2 of 5 to 10 of 10. The English reply the owner saw after web results
+        did not come back in 10 repeats, and stays unexplained
         ([note](research/2026-11-04-language-of-replies.md)).
       - **An expired question closes itself:** the outbox now keeps where a sent
         message went. Review found that Run now's question never closed, and a

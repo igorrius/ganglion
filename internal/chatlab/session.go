@@ -5,6 +5,7 @@ package chatlab
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -61,6 +62,12 @@ func RunSession(ctx context.Context, o SessionOptions) error {
 	return Serve(ctx, SocketIn(o.Dir), s.handle)
 }
 
+// clean removes what must not leave the session: patterns, and the keys the
+// node holds, which no pattern can recognise.
+func (s *session) clean(text string) string {
+	return redact.Values(slices.Collect(maps.Values(s.o.Node.Keys))...)(redact.String(text))
+}
+
 func (s *session) watchIdle(ctx context.Context) {
 	tick := time.NewTicker(min(s.o.Idle/2, time.Minute))
 	defer tick.Stop()
@@ -106,7 +113,7 @@ func (s *session) handle(r Request) Response {
 		if err != nil {
 			return Response{Error: err.Error()}
 		}
-		return Response{OK: true, Output: redact.String(out)}
+		return Response{OK: true, Output: s.clean(out)}
 	case OpSave:
 		if err := SaveScenario(s.o.Scenarios, r.Name, s.steps); err != nil {
 			return Response{Error: err.Error()}
@@ -120,10 +127,10 @@ func (s *session) handle(r Request) Response {
 	}
 	s.run.log.Reset()
 	if err := s.run.step(ctx, step); err != nil {
-		return Response{Output: redact.String(s.run.log.String()), Error: err.Error()}
+		return Response{Output: s.clean(s.run.log.String()), Error: err.Error()}
 	}
 	s.steps = append(s.steps, step)
-	return Response{OK: true, Output: redact.String(s.run.log.String())}
+	return Response{OK: true, Output: s.clean(s.run.log.String())}
 }
 
 // show prints one view of the node.

@@ -131,3 +131,26 @@ func TestIdleStops(t *testing.T) {
 		t.Fatalf("the directory stayed: %v", err)
 	}
 }
+
+func TestSessionOutputHidesKeys(t *testing.T) {
+	const key = "sk-or-v1-1234567890abcdef"
+	dir := sessionTempDir(t)
+	done := make(chan error, 1)
+	go func() {
+		done <- RunSession(context.Background(), SessionOptions{Dir: dir, Idle: time.Minute, Scenarios: t.TempDir(),
+			Node: NodeOptions{Tokens: &Counter{}, Keys: map[string]string{"openrouter": key},
+				Scenario: Scenario{Name: "session", Model: ModelScripted, Persona: PersonaDefault, Script: []ScriptStep{{Say: "It said " + key}}}}})
+	}()
+	waitFor(t, func() bool { _, err := Call(SocketIn(dir), Request{Op: OpPing}); return err == nil })
+	out := call(t, dir, Request{Op: OpSay, Text: "hi"})
+	if !strings.Contains(out, "It said") || strings.Contains(out, key) {
+		t.Fatalf("output %q", out)
+	}
+	if show := call(t, dir, Request{Op: OpShow, What: "history"}); strings.Contains(show, key) {
+		t.Fatalf("show %q", show)
+	}
+	call(t, dir, Request{Op: OpStop})
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
