@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/igorrius/ganglion/internal/testinputs"
 )
 
 func TestReplayServesRecordedBodiesWithCurrentTime(t *testing.T) {
@@ -63,6 +65,7 @@ func TestRedirectSendsEveryHostToTheReplayServer(t *testing.T) {
 
 func TestBenchDeyeModuleEndToEnd(t *testing.T) {
 	dir := t.TempDir()
+	testinputs.Build(t, "../../modules/deye/wasm", "GOOS=wasip1", "GOARCH=wasm")
 	wasm := filepath.Join(dir, "deye.wasm")
 	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", wasm, "../../modules/deye/wasm")
 	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm")

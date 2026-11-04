@@ -12,11 +12,18 @@ on:
     paths-ignore:
       - "**/*.md"
       - "docs/**"
+  # A run by hand (gh workflow run CI --ref <branch>) tests everything again; see
+  # the test job.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  # Only tests whose inputs changed run: go test reuses the rest from the cache
+  # (docs/conventions.md, Tests). GitHub scopes a cache to its branch, so a pull
+  # request reads master's results and its own, and master never reads a pull
+  # request's.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -24,6 +31,22 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          # Its key is shared with the other jobs and changes only with go.sum,
+          # so the job that ends first wins it, and this one ends last.
+          cache: false
+      - name: Restore the Go cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-test-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: go-test-${{ runner.os }}-
+      - name: File times follow file contents
+        run: scripts/pin-file-times.sh
+      - name: A run by hand reuses no result
+        if: github.event_name == 'workflow_dispatch'
+        run: go clean -testcache
       - name: Build
         run: go build ./...
       - name: Vet
@@ -32,6 +55,16 @@ jobs:
         run: |
           go test -race ./...
           go test -race -tags lab ./internal/chatlab/... ./tools/chatlab/...
+      # Also after a failure: go test keeps only passes, so the next push runs
+      # what failed and reuses the rest.
+      - name: Save the Go cache
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-test-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   lint:
     runs-on: ubuntu-latest

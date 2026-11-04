@@ -233,6 +233,14 @@ Before writing a helper, look for it. These exist and are the only copies:
 - No sleeping: inject clocks and `after` functions.
 - `config` has a test that builds every role's container with fakes, so a
   missing provider fails in CI, not at start.
+- **A cached pass must mean the code still passes.** CI reuses `go test`'s cached
+  results. They depend on the test's binary, the environment it reads and the files
+  it opens or stats; `scripts/pin-file-times.sh` makes those files' times follow
+  their contents. `go test` does not see what a child process reads, so a test that
+  starts `go build` or `go list` calls `testinputs.Build` first. A test that depends
+  on anything else outside its process (the network, the date) passes `-count=1` in
+  its own make target and stays out of `go test ./...`. `gh workflow run CI --ref
+  <branch>` tests everything with no cached result.
 
 ## 10. Comments
 

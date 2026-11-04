@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/igorrius/ganglion/internal/testinputs"
 )
 
 // changedRepo is a small repository: one source file, one shared file, and a
@@ -254,6 +256,7 @@ func TestShippedScenariosCoverRealFiles(t *testing.T) {
 // outside what chat scenarios check. So a new file cannot silently fall out of
 // `make lab`.
 func TestEveryProductionFileIsClaimed(t *testing.T) {
+	testinputs.Build(t, "../..")
 	root, err := filepath.Abs(repoRoot)
 	if err != nil {
 		t.Fatal(err)

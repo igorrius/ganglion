@@ -197,7 +197,9 @@ func RepoRoot() (string, error) {
 	}
 }
 
-// copyDir copies a directory tree, keeping the files' modes.
+// copyDir copies a directory tree. A file keeps only whether it is executable:
+// the other bits come from the umask of the checkout, and the node refuses a
+// script the group may write.
 func copyDir(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -219,7 +221,14 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(to, b, info.Mode().Perm())
+		mode := os.FileMode(0o644)
+		if info.Mode().Perm()&0o111 != 0 {
+			mode = 0o755
+		}
+		if err := os.WriteFile(to, b, mode); err != nil {
+			return err
+		}
+		return os.Chmod(to, mode) // WriteFile keeps the mode of a file already there
 	})
 }
 
