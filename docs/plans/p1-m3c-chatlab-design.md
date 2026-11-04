@@ -94,7 +94,7 @@ hosts, and the clocks of the confirmations and the scheduler.
 Built differently from this section: the scheduler's clock also moves the agent's,
 as the first run of R50 showed the model reading real time and rightly reporting a
 reminder as early. Page URLs are `http`, as the fetcher trusts no test certificate.
-The default cap of a run is 1,000,000 tokens, as measured.
+The default cap of a run is 1,500,000 tokens: the whole set took about 1,100,000.
 `make lab` does not read `.env`, as that file holds `TELEGRAM_*`; a provider key
 under `--models` comes from the shell's environment.
 
