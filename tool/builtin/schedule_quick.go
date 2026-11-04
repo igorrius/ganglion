@@ -205,7 +205,7 @@ func (s Scheduling) askRunNow(ctx context.Context, p pending.QuickPress, j sched
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}
-	return pending.QuickEdit{Text: q.Text, Buttons: q.Buttons}, nil
+	return pending.QuickEdit{Text: q.Text, Buttons: q.Buttons, Key: q.IdemKey}, nil
 }
 
 // title is "task" or "reminder", marked when it is a system job.

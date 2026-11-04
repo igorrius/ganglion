@@ -1081,3 +1081,21 @@ func TestAnsweredCallIsNotMarkedExpired(t *testing.T) {
 		t.Fatalf("an approved question marked: %+v", edit)
 	}
 }
+
+// A quick action can show a question in the pressed message. The edit takes
+// the question's key, so the outbox can tell where the question is when its
+// call expires.
+func TestQuickEditKeepsTheQuestionsKey(t *testing.T) {
+	e := newConfirmEnv(t)
+	e.deps.QuickActions = map[string]pending.QuickAction{"ask": func(context.Context, pending.QuickPress) (pending.QuickEdit, error) {
+		return pending.QuickEdit{Text: "Run?", Buttons: []event.Button{{ID: "b", Label: "Approve"}}, Key: "call:1:confirm"}, nil
+	}}
+	e.a = New(overDefaults(Config{}), e.deps)
+	if err := e.pending.AddButtons(context.Background(), pending.Button{ID: "QB", Action: "ask", Label: "Run now", Principal: owner, Conv: "telegram:42", Expires: e.now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	edit, ok := questionEdit(e.turn(t, press(owner, "QB", "55")))
+	if !ok || edit.Edit != "55" || edit.IdemKey != "call:1:confirm" {
+		t.Fatalf("edit %+v, %v", edit, ok)
+	}
+}

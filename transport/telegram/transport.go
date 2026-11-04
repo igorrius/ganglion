@@ -326,7 +326,10 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) (string, error
 	if msg.Ack != "" {
 		return "", sendError(t.ack(ctx, msg.Ack, msg.Text))
 	}
-	if msg.Edit != "" && msg.Text == "" {
+	// An edit is never split, so one too long for a message changes only the
+	// buttons: a long question was split when it went out, and this reference
+	// holds its last part.
+	if msg.Edit != "" && (msg.Text == "" || renderedUnits(msg.Text) > maxTextUnits) {
 		return msg.Edit, sendError(t.editButtons(ctx, chat, msg.Edit, msg.Buttons))
 	}
 	text, ents := render(msg.Text)

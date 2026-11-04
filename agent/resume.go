@@ -353,9 +353,6 @@ func (a *Agent) expired(ctx context.Context, t *turn) error {
 // and a failed look only leaves the buttons, which a late press still closes.
 // Its key is the expiry event's, so a rerun stores the edit once.
 func (a *Agent) closeExpired(ctx context.Context, t *turn, it pending.Item) {
-	if a.d.Sent == nil {
-		return
-	}
 	ref, err := a.d.Sent.SentRef(ctx, it.Call().Key()+pending.QuestionKeySuffix)
 	if err != nil {
 		a.log.Warn("agent: the question of an expired call", "pending", it.ID, "err", err)

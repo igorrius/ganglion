@@ -695,6 +695,10 @@ func (s *Server) editMessageText(w http.ResponseWriter, params map[string]json.R
 		writeErr(w, http.StatusBadRequest, "Bad Request: message text is empty", 0)
 		return
 	}
+	if len(utf16.Encode([]rune(p.Text))) > MaxTextLen {
+		writeErr(w, http.StatusBadRequest, "Bad Request: MESSAGE_TOO_LONG", 0)
+		return
+	}
 	e := Edit{ChatID: p.ChatID, MessageID: p.MessageID, Text: p.Text, Keyboard: p.ReplyMarkup.keyboard()}
 	if len(p.Entities) > 0 && string(p.Entities) != "null" {
 		e.Entities = string(p.Entities)

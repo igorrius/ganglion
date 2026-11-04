@@ -238,3 +238,19 @@ func TestSendReturnsTheRef(t *testing.T) {
 		t.Fatalf("a failed send: ref %q, %v", got, err)
 	}
 }
+
+// A question too long for one message was split, and its edit would not fit:
+// the buttons go, and what the person read stays.
+func TestEditTooLongOnlyTakesTheButtons(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	ref := sendOne(t, tr, fake)
+	long := strings.Repeat("😀", 3000) + "\n\nExpired."
+	if _, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42", Text: long, Edit: ref}); err != nil {
+		t.Fatal(err)
+	}
+	shown := fake.Showing()
+	if len(shown) != 1 || shown[0].Keyboard != "" || shown[0].Text != "Run?" {
+		t.Fatalf("showing %+v", shown)
+	}
+}

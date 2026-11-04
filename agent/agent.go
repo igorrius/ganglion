@@ -64,7 +64,7 @@ type Deps struct {
 	// runs (ruling R40).
 	Outbox Enqueuer
 	// Sent says where a delivered message went, so an expired question can
-	// close itself. Nil leaves the question to a late press.
+	// close itself.
 	Sent SentRefs
 	// QuickActions run quick-action buttons by their action name; tools
 	// register them (schedule.details, schedule.delete, schedule.run_now).

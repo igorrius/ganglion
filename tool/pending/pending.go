@@ -145,6 +145,9 @@ type QuickEdit struct {
 	Text    string
 	Buttons []event.Button
 	Note    string
+	// Key is the IdemKey of the edit when it shows a call's question, so the
+	// outbox can tell where that question is; "" is the press's own.
+	Key string
 }
 
 // QuickAction runs a quick-action button, such as Delete on a list entry,
