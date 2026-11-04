@@ -5,6 +5,7 @@ package chatlab
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -398,4 +399,74 @@ func (n *Node) Stop(ctx context.Context) error {
 		_ = os.RemoveAll(n.dir)
 	})
 	return n.stopErr
+}
+
+// ReadView reads what a facts step checks; last is the model's words since
+// the last action.
+func ReadView(ctx context.Context, n *Node, last []Message) (View, error) {
+	entries, err := n.lab.Journal.Entries(ctx)
+	if err != nil {
+		return View{}, fmt.Errorf("chatlab: journal: %w", err)
+	}
+	v := View{Journal: entries, Messages: n.peer.Messages(), Last: last, Memory: map[string]string{}, Jobs: map[string]int{}}
+	if v.History, err = n.history(ctx); err != nil {
+		return View{}, err
+	}
+	files, err := filepath.Glob(filepath.Join(n.ws, "memory", "*.md"))
+	if err != nil {
+		return View{}, fmt.Errorf("chatlab: memory: %w", err)
+	}
+	for _, f := range files {
+		body, err := os.ReadFile(f)
+		if err != nil {
+			return View{}, fmt.Errorf("chatlab: memory: %w", err)
+		}
+		v.Memory[filepath.Base(f)] = string(body)
+	}
+	rows, err := n.db.QueryContext(ctx, `SELECT kind, count(*) FROM schedule_jobs WHERE deleted = 0 AND system = 0 GROUP BY kind`)
+	if err != nil {
+		return View{}, fmt.Errorf("chatlab: jobs: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var kind string
+		var count int
+		if err := rows.Scan(&kind, &count); err != nil {
+			return View{}, fmt.Errorf("chatlab: jobs: %w", err)
+		}
+		v.Jobs[kind] = count
+	}
+	if err := rows.Err(); err != nil {
+		return View{}, fmt.Errorf("chatlab: jobs: %w", err)
+	}
+	return v, nil
+}
+
+// history is the owner's chat as stored: its summary, then one line per
+// message.
+func (n *Node) history(ctx context.Context) (string, error) {
+	var data string
+	err := n.db.QueryRowContext(ctx, `SELECT data FROM conv_state WHERE conv = ?`, fmt.Sprintf("telegram:%d", labChat)).Scan(&data)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("chatlab: history: %w", err)
+	}
+	var st struct {
+		Summary  string `json:"summary"`
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(data), &st); err != nil {
+		return "", fmt.Errorf("chatlab: history: %w", err)
+	}
+	var b strings.Builder
+	b.WriteString(st.Summary)
+	for _, m := range st.Messages {
+		fmt.Fprintf(&b, "\n%s: %s", m.Role, m.Content)
+	}
+	return b.String(), nil
 }

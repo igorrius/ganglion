@@ -59,7 +59,7 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 	scheduler := do.MustInvoke[*schedule.Scheduler](i)
 	return &LabNode{DB: do.MustInvoke[Database](i).DB, Journal: do.MustInvoke[*journal.Journal](i), Components: components,
 		Tick:     scheduler.Tick,
-		Shutdown: func(ctx context.Context) { i.ShutdownWithContext(ctx) },
+		Shutdown: func(ctx context.Context) { _ = i.ShutdownWithContext(ctx) },
 	}, nil
 }
 

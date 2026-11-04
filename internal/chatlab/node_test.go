@@ -307,3 +307,39 @@ func TestRunNowQuestionClosesItself(t *testing.T) {
 		t.Fatalf("no Expired: %q", texts(n.Peer().Messages()))
 	}
 }
+
+func TestReadView(t *testing.T) {
+	n := startScripted(t, Scenario{Name: "x", Script: []ScriptStep{
+		{Tool: "memory.write", Args: `{"title":"Boiler","body":"The boiler holds 80 litres."}`},
+		{Say: "Stored it."},
+		{Tool: "schedule.create", Args: reminderArgs(t, time.Now().Add(time.Hour))},
+		{Say: "I asked."},
+		{Say: "Set."},
+	}})
+	sayQuiet(t, n, "Remember my boiler")
+	sayQuiet(t, n, "Set a reminder")
+	ctx := context.Background()
+	if err := n.Peer().Press(ctx, "Approve"); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Quiet(ctx, quietLimit); err != nil {
+		t.Fatal(err)
+	}
+	last := n.Peer().Messages()[1:2]
+	v, err := ReadView(ctx, n, last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := Check(Facts{
+		Journal: []JournalFact{{Tool: "memory.write", Decision: "allowed"}, {Tool: "schedule.create", Decision: "approved"}},
+		History: &Text{Contains: "Remember my boiler"},
+		Memory:  &Text{Contains: "80 litres"},
+		Jobs:    &JobFact{Kind: "reminder", Count: 1},
+		Reply:   &Text{Contains: last[0].Text},
+	}, v); len(got) != 0 {
+		t.Fatalf("%v\nview %+v", got, v.Jobs)
+	}
+	if v.Jobs["system"] != 0 {
+		t.Fatalf("system jobs counted: %+v", v.Jobs)
+	}
+}
