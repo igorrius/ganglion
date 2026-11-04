@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 	"unicode/utf16"
 )
@@ -141,9 +140,17 @@ type Server struct {
 	nextQuery  int64
 }
 
+// T is what the fake needs from its owner: a test, or chatlab's program,
+// which cannot implement testing.TB (ADR-0048).
+type T interface {
+	Helper()
+	Fatalf(format string, args ...any)
+	Cleanup(func())
+}
+
 // NewServer starts a fake Bot API for token (<bot_id>:<secret>). It is
 // closed by t.Cleanup.
-func NewServer(t testing.TB, token string) *Server {
+func NewServer(t T, token string) *Server {
 	t.Helper()
 	prefix, _, _ := strings.Cut(token, ":")
 	id, err := strconv.ParseInt(prefix, 10, 64)

@@ -201,8 +201,11 @@ an own log rotator (M3); skill scripts declare `effects: read` or
 (Proposed), and [ADR-0046](../adr/0046-a-restart-is-not-a-failed-attempt.md)
 (Proposed), from the crash harness.
 
-The scripted acceptance and the crash harness pass (2026-11-04). M3c closes
-after the owner's live run on the test bot and the first `html2md` tag.
+The scripted acceptance and the crash harness pass (2026-11-04). The owner's
+manual live run gave way to chatlab, task 3.20 ([design](p1-m3c-chatlab-design.md),
+[plan](p1-m3c-chatlab.md), [ADR-0048](../adr/0048-chatlab-over-the-fake-bot-api.md),
+Proposed). M3c closes after it, the owner's short look on a phone and the first
+`html2md` tag.
 
 | Task | Done when |
 |---|---|
@@ -213,6 +216,7 @@ after the owner's live run on the test bot and the first `html2md` tag.
 | 3.18 `ganglion mcp`: read-only diagnostics over stdio (R-OBS-7) | Claude Code diagnoses a seeded fault through `ganglion mcp`, locally and in a local container |
 | 3.19 A file or picture sent to the agent is noticed: the transport passes its name, type and size beside the caption, and the agent says it cannot open it yet (R-DLV-10) | A PDF with a caption reaches the model as the caption plus a "file came" note; nothing is dropped silently |
 | 3.8 End to end on the test bot: message → inbox → model → tools → outbox → reply, under the M2 crash harness | 10.2 acceptance for turns |
+| 3.20 Chatlab: the agent tested by talking to it, over the fake Bot API | Section 8 of the [design](p1-m3c-chatlab-design.md) holds: the checks the owner could not run pass through `chatlab run` or report what is wrong; seeded faults turn their scenarios red; the language problem has a baseline, a fix and a result; `TestLabStaysOutOfTheBinary` passes |
 
 #### M3d · Host commands and plans
 
