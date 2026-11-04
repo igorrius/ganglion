@@ -15,14 +15,15 @@ const MaxCaptionLen = 1024
 // Upload is a picture or a document the bot sent (sendPhoto,
 // sendDocument).
 type Upload struct {
-	Method   string // sendPhoto or sendDocument
-	ChatID   int64
-	ThreadID int64
-	Caption  string
-	Entities string // caption_entities as sent, JSON; "" when none
-	Silent   bool
-	FileName string
-	Data     []byte
+	MessageID int64
+	Method    string // sendPhoto or sendDocument
+	ChatID    int64
+	ThreadID  int64
+	Caption   string
+	Entities  string // caption_entities as sent, JSON; "" when none
+	Silent    bool
+	FileName  string
+	Data      []byte
 }
 
 // formFile is the file of a multipart request.
@@ -99,7 +100,7 @@ func (s *Server) sendFile(w http.ResponseWriter, method string, params map[strin
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextMsg++
-	s.uploads = append(s.uploads, Upload{Method: method, ChatID: p.ChatID, ThreadID: p.ThreadID, Caption: p.Caption,
+	s.uploads = append(s.uploads, Upload{MessageID: s.nextMsg, Method: method, ChatID: p.ChatID, ThreadID: p.ThreadID, Caption: p.Caption,
 		Entities: string(p.Entities), Silent: p.Silent, FileName: file.name, Data: file.data})
 	writeOK(w, map[string]any{"message_id": s.nextMsg, "date": time.Now().Unix(),
 		"chat": map[string]any{"id": p.ChatID, "type": "private"}, "caption": p.Caption})

@@ -222,14 +222,19 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	if err := s.ob.Sent(ctx, msg.ID, ref); err != nil {
 		return true, err
 	}
+	s.countSent(ctx, msg)
+	log.Info("outbox: sent", "parts", len(parts), "len", len(msg.Text))
+	return true, nil
+}
+
+// countSent counts a delivered message and its attachment.
+func (s *Sender) countSent(ctx context.Context, msg event.Outgoing) {
 	s.sent.Add(ctx, 1, metric.WithAttributes(attribute.String("transport", msg.Transport)))
 	if a := msg.Attach; a != nil {
 		kind := attribute.String("kind", string(a.Kind))
 		s.attachN.Add(ctx, 1, metric.WithAttributes(kind, attribute.String("result", "sent")))
 		s.attachB.Record(ctx, int64(len(a.Data)), metric.WithAttributes(kind))
 	}
-	log.Info("outbox: sent", "parts", len(parts), "len", len(msg.Text))
-	return true, nil
 }
 
 // failed records a failed send according to the kind of error.

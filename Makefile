@@ -7,6 +7,7 @@ build:
 
 test:
 	go test -race ./...
+	go test -race -tags lab ./internal/chatlab/...
 
 lint:
 	golangci-lint run
