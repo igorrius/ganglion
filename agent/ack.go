@@ -14,6 +14,12 @@ type Enqueuer interface {
 	Enqueue(ctx context.Context, msgs ...event.Outgoing) error
 }
 
+// SentRefs says where a delivered message went (queue.Outbox); "" when it
+// was not delivered.
+type SentRefs interface {
+	SentRef(ctx context.Context, idemKey string) (string, error)
+}
+
 // Toasts: the short notice that answers a press (ruling R40).
 const (
 	toastApproved   = "Approved"

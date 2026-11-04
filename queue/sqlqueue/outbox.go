@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -96,10 +97,23 @@ func (q *Queue) PartSent(ctx context.Context, id string, parts int) error {
 }
 
 // Sent implements queue.Outbox.
-func (q *Queue) Sent(ctx context.Context, id string) error {
+func (q *Queue) Sent(ctx context.Context, id, ref string) error {
 	return q.updatePending(ctx, "sent", id,
-		`UPDATE outbox SET status = 'sent', done_ms = ? WHERE id = ? AND status = 'pending'`,
-		q.now().UnixMilli(), id)
+		`UPDATE outbox SET status = 'sent', done_ms = ?, ref = ? WHERE id = ? AND status = 'pending'`,
+		q.now().UnixMilli(), ref, id)
+}
+
+// SentRef implements queue.Outbox.
+func (q *Queue) SentRef(ctx context.Context, idemKey string) (string, error) {
+	var ref string
+	err := q.db.QueryRowContext(ctx, `SELECT ref FROM outbox WHERE idem_key = ? AND status = 'sent'`, idemKey).Scan(&ref)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("sqlqueue: ref of %s: %w", idemKey, err)
+	}
+	return ref, nil
 }
 
 // Retry implements queue.Outbox.

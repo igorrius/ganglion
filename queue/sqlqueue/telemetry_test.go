@@ -22,7 +22,7 @@ func TestQueueDepthGauges(t *testing.T) {
 	if err := f.q.Complete(context.Background(), lease(t, f), nil, queue.StateUpdate{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.q.Sent(context.Background(), idOf(t, f, "r1")); err != nil {
+	if err := f.q.Sent(context.Background(), idOf(t, f, "r1"), ""); err != nil {
 		t.Fatal(err)
 	}
 	if in, out := depth("ganglion.inbox.pending"), depth("ganglion.outbox.pending"); in != 1 || out != 0 {

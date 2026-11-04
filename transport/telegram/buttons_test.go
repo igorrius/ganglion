@@ -99,14 +99,14 @@ func TestSendAckShowsAToast(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	tr := newTransport(t, fake)
 	ack := event.Outgoing{IdemKey: "k:ack", Transport: "telegram", Conv: "telegram:42", Text: "Approved", Ack: "cq9"}
-	if err := tr.Send(context.Background(), ack); err != nil {
+	if _, err := tr.Send(context.Background(), ack); err != nil {
 		t.Fatal(err)
 	}
 	if got := fake.Toasts(); len(got) != 1 || got[0] != (telegramtest.Toast{ID: "cq9", Text: "Approved"}) || len(fake.Sent()) != 0 {
 		t.Fatalf("toasts %+v, sent %+v", got, fake.Sent())
 	}
 	fake.FailNext("answerCallbackQuery", http.StatusBadRequest, 0)
-	if err := tr.Send(context.Background(), ack); err != nil {
+	if _, err := tr.Send(context.Background(), ack); err != nil {
 		t.Fatalf("a press too old to answer: %v", err)
 	}
 	if parts := tr.Parts(event.Outgoing{Ack: "cq9", Text: strings.Repeat("a", 5000)}); len(parts) != 1 {
@@ -117,7 +117,7 @@ func TestSendAckShowsAToast(t *testing.T) {
 func TestSendWithButtons(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	tr := newTransport(t, fake)
-	err := tr.Send(context.Background(), event.Outgoing{IdemKey: "k", Transport: "telegram", Conv: "telegram:42", Text: "Run web.fetch?",
+	_, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "k", Transport: "telegram", Conv: "telegram:42", Text: "Run web.fetch?",
 		Buttons: []event.Button{{ID: "B1", Label: "Approve"}, {ID: "B2", Label: "Deny"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestSendWithButtons(t *testing.T) {
 // sendOne sends a message with a button and returns its ref.
 func sendOne(t *testing.T, tr *Transport, fake *telegramtest.Server) string {
 	t.Helper()
-	if err := tr.Send(context.Background(), event.Outgoing{IdemKey: "q", Transport: "telegram", Conv: "telegram:42", Text: "Run?",
+	if _, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "q", Transport: "telegram", Conv: "telegram:42", Text: "Run?",
 		Buttons: []event.Button{{ID: "B1", Label: "Approve"}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestEditMessage(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	tr := newTransport(t, fake)
 	ref := sendOne(t, tr, fake)
-	if err := tr.Send(context.Background(), event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42", Text: "Run?\n\n**Approved.**", Edit: ref}); err != nil {
+	if _, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42", Text: "Run?\n\n**Approved.**", Edit: ref}); err != nil {
 		t.Fatal(err)
 	}
 	edits := fake.Edits()
@@ -161,7 +161,7 @@ func TestEditNotModifiedIsSuccess(t *testing.T) {
 	ref := sendOne(t, tr, fake)
 	edit := event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42", Text: "Approved.", Edit: ref}
 	for i := range 2 {
-		if err := tr.Send(context.Background(), edit); err != nil {
+		if _, err := tr.Send(context.Background(), edit); err != nil {
 			t.Fatalf("edit %d: %v", i, err)
 		}
 	}
@@ -175,7 +175,7 @@ func TestEditOfMissingMessageIsPermanent(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	tr := newTransport(t, fake)
 	for _, ref := range []string{"999", "not-a-number"} {
-		err := tr.Send(context.Background(), event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42", Text: "x", Edit: ref})
+		_, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42", Text: "x", Edit: ref})
 		if !errors.Is(err, transport.ErrPermanent) {
 			t.Errorf("edit of %q: %v, want ErrPermanent", ref, err)
 		}
@@ -208,7 +208,7 @@ func TestEditButtonsOnly(t *testing.T) {
 	ref := sendOne(t, tr, fake)
 	edit := event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42", Edit: ref}
 	for i := range 2 { // the second changes nothing: still success
-		if err := tr.Send(context.Background(), edit); err != nil {
+		if _, err := tr.Send(context.Background(), edit); err != nil {
 			t.Fatalf("edit %d: %v", i, err)
 		}
 	}
@@ -216,7 +216,25 @@ func TestEditButtonsOnly(t *testing.T) {
 	if len(edits) != 1 || edits[0].Text != "Run?" || edits[0].Keyboard != "" || strconv.FormatInt(edits[0].MessageID, 10) != ref {
 		t.Fatalf("edits %+v", edits)
 	}
-	if err := tr.Send(context.Background(), event.Outgoing{IdemKey: "e2", Transport: "telegram", Conv: "telegram:42", Edit: "999"}); !errors.Is(err, transport.ErrPermanent) {
+	if _, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "e2", Transport: "telegram", Conv: "telegram:42", Edit: "999"}); !errors.Is(err, transport.ErrPermanent) {
 		t.Fatalf("buttons of a missing message: %v", err)
+	}
+}
+
+func TestSendReturnsTheRef(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	ctx := context.Background()
+	ref, err := tr.Send(ctx, event.Outgoing{IdemKey: "q", Transport: "telegram", Conv: "telegram:42", Text: "Run?",
+		Buttons: []event.Button{{ID: "B1", Label: "Approve"}}})
+	if err != nil || ref != strconv.FormatInt(fake.LastMessageID(), 10) {
+		t.Fatalf("a new message: ref %q, %v; last message %d", ref, err, fake.LastMessageID())
+	}
+	edited, err := tr.Send(ctx, event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42", Text: "Run?\n\nExpired.", Edit: ref})
+	if err != nil || edited != ref {
+		t.Fatalf("an edit: ref %q, %v", edited, err)
+	}
+	if got, err := tr.Send(ctx, event.Outgoing{IdemKey: "m", Transport: "telegram", Conv: "not-a-conv", Text: "x"}); err == nil || got != "" {
+		t.Fatalf("a failed send: ref %q, %v", got, err)
 	}
 }

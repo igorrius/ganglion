@@ -201,12 +201,17 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	ctx, span := s.tracer.Start(ctx, "outbox.send", trace.WithAttributes(
 		attribute.String("message.id", msg.ID), attribute.String("transport", msg.Transport), attribute.Int("parts", len(parts))))
 	defer span.End()
+	ref := "" // of the last part with one, which holds a message's buttons
 	for i := p.PartsSent; i < len(parts); i++ {
-		if err := t.Send(ctx, parts[i]); err != nil {
+		r, err := t.Send(ctx, parts[i])
+		if err != nil {
 			if ctx.Err() != nil {
 				return false, nil // shutting down: the message stays as it is
 			}
 			return s.failed(ctx, log, p, err)
+		}
+		if r != "" {
+			ref = r
 		}
 		if len(parts) > 1 {
 			if err := s.ob.PartSent(ctx, msg.ID, i+1); err != nil {
@@ -214,7 +219,7 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 			}
 		}
 	}
-	if err := s.ob.Sent(ctx, msg.ID); err != nil {
+	if err := s.ob.Sent(ctx, msg.ID, ref); err != nil {
 		return true, err
 	}
 	s.sent.Add(ctx, 1, metric.WithAttributes(attribute.String("transport", msg.Transport)))

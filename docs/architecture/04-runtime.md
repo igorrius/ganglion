@@ -84,7 +84,7 @@ sequenceDiagram
     A->>D: Decide(done, result)
     A->>A: model on "[confirmation] tool: result"
     A->>Q: Complete(the call's messages, edit "Approved. Done.", answer)
-    Note over D,Q: unanswered: the expirer puts tool.result every 30 s, same resume with "expired"
+    Note over D,Q: unanswered: the expirer puts tool.result every 30 s, same resume with "expired"; the question closes itself, found by its outbox ref
 ```
 
 ## Module tick and escalation (P0–P1)

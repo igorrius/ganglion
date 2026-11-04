@@ -128,7 +128,7 @@ func TestDueNextIsEarliestRetry(t *testing.T) {
 func TestSentMovesConversationOn(t *testing.T) {
 	f := setup(t)
 	enqueue(t, f, reply("telegram:a", "a1"), reply("telegram:a", "a2"))
-	if err := f.q.Sent(context.Background(), idOf(t, f, "a1")); err != nil {
+	if err := f.q.Sent(context.Background(), idOf(t, f, "a1"), ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := keys(first(due(t, f, 100))); !slices.Equal(got, []string{"a2"}) {
@@ -158,13 +158,13 @@ func TestMarkingAFinishedMessageFails(t *testing.T) {
 	ctx := context.Background()
 	enqueue(t, f, reply("telegram:a", "a1"))
 	id := idOf(t, f, "a1")
-	if err := f.q.Sent(ctx, id); err != nil {
+	if err := f.q.Sent(ctx, id, ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.q.Retry(ctx, id, t0, "x"); err == nil {
 		t.Error("Retry of a sent message succeeded")
 	}
-	if err := f.q.Sent(ctx, "no-such-id"); err == nil {
+	if err := f.q.Sent(ctx, "no-such-id", ""); err == nil {
 		t.Error("Sent of an unknown id succeeded")
 	}
 }
@@ -236,5 +236,23 @@ func TestOversizeAttachmentRefusedAtEnqueue(t *testing.T) {
 	ps, _ := due(t, f, 10)
 	if len(ps) != 1 || ps[0].Msg.Attach == nil || len(ps[0].Msg.Attach.Data) != event.MaxAttachmentBytes {
 		t.Fatalf("the largest allowed attachment did not round-trip: %+v", ps)
+	}
+}
+
+func TestSentKeepsTheRef(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	enqueue(t, f, reply("telegram:a", "k"))
+	if ref, err := f.q.SentRef(ctx, "k"); err != nil || ref != "" {
+		t.Fatalf("before sending: %q, %v", ref, err)
+	}
+	if err := f.q.Sent(ctx, idOf(t, f, "k"), "77"); err != nil {
+		t.Fatal(err)
+	}
+	if ref, err := f.q.SentRef(ctx, "k"); err != nil || ref != "77" {
+		t.Fatalf("after sending: %q, %v", ref, err)
+	}
+	if ref, err := f.q.SentRef(ctx, "nope"); err != nil || ref != "" {
+		t.Fatalf("an unknown key: %q, %v", ref, err)
 	}
 }

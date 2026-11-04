@@ -65,6 +65,7 @@ func Agent() do.Provider[*agent.Agent] {
 			Policy:       do.MustInvoke[*policy.Policy](i).Middleware(),
 			Pending:      do.MustInvoke[*pending.Store](i),
 			Outbox:       do.MustInvoke[*sqlqueue.Queue](i),
+			Sent:         do.MustInvoke[*sqlqueue.Queue](i),
 			QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
 			Jobs:         do.MustInvoke[*schedule.Store](i),
 			IsAdmin:      do.MustInvoke[agent.AdminFunc](i),

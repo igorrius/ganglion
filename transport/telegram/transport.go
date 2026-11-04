@@ -315,28 +315,28 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 // (a message to edit that is gone among them, and a conversation that is
 // not a Telegram one) wrap transport.ErrPermanent; anything else is
 // returned as is and retried by the sender.
-func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
+func (t *Transport) Send(ctx context.Context, msg event.Outgoing) (string, error) {
 	chat, thread, err := ParseConv(msg.Conv)
 	if err != nil {
-		return fmt.Errorf("%w: %w", err, transport.ErrPermanent)
+		return "", fmt.Errorf("%w: %w", err, transport.ErrPermanent)
 	}
 	if msg.Attach != nil {
-		return t.sendAttachment(ctx, chat, thread, msg)
+		return "", t.sendAttachment(ctx, chat, thread, msg)
 	}
 	if msg.Ack != "" {
-		return sendError(t.ack(ctx, msg.Ack, msg.Text))
+		return "", sendError(t.ack(ctx, msg.Ack, msg.Text))
 	}
 	if msg.Edit != "" && msg.Text == "" {
-		return sendError(t.editButtons(ctx, chat, msg.Edit, msg.Buttons))
+		return msg.Edit, sendError(t.editButtons(ctx, chat, msg.Edit, msg.Buttons))
 	}
 	text, ents := render(msg.Text)
 	if strings.TrimSpace(text) == "" {
 		text, ents = msg.Text, nil // nothing visible left: send the source rather than nothing
 	}
 	if msg.Edit != "" {
-		return sendError(t.edit(ctx, chat, msg.Edit, text, ents, msg.Buttons))
+		return msg.Edit, sendError(t.edit(ctx, chat, msg.Edit, text, ents, msg.Buttons))
 	}
-	_, err = t.c.sendMessage(ctx, sendParams{
+	m, err := t.c.sendMessage(ctx, sendParams{
 		ChatID:              chat,
 		MessageThreadID:     thread,
 		Text:                text,
@@ -345,7 +345,10 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) error {
 		ReplyParameters:     t.replyTo(chat, msg.ReplyTo),
 		ReplyMarkup:         keyboard(msg.Buttons),
 	})
-	return sendError(err)
+	if err != nil {
+		return "", sendError(err)
+	}
+	return strconv.FormatInt(m.MessageID, 10), nil
 }
 
 // sendError maps a Bot API error of a send to the sender's terms.

@@ -560,7 +560,9 @@ Confirmation is layered:
 - **Reviewer model** (preferably another provider) checks the action against
   the policy. It can block, but cannot by itself allow something dangerous.
 - **Human** — yes/no in Telegram with a `ttl`; for critical actions, the
-  admin only or two people.
+  admin only or two people. A question nobody answers closes itself when its
+  `ttl` ends: its buttons go and it reads "Expired." The outbox keeps where a
+  delivered message went, which is how a later turn finds the question.
 
 Combinations: comfort — system only; gates — system + (second factor or
 human); module install — tests + reviewer + admin.

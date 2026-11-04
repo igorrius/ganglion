@@ -1234,16 +1234,16 @@ func (h *acceptNode) expiryScenario(t *testing.T) {
 	if !saysExpired.MatchString(texts(got)) {
 		t.Errorf("the model's answer does not say the request expired: %q", texts(got))
 	}
-	// The question keeps its buttons until someone presses one: a late
-	// Approve is refused and closes the question.
-	h.note("\n_The owner presses Approve on the expired question._")
-	h.press(t, stale)
+	// The question closes by itself. Its old button data, pressed from a
+	// chat that has not refreshed, approves nothing.
 	closed := slices.ContainsFunc(h.fake.Showing(), func(m telegramtest.Shown) bool {
 		return m.MessageID == stale.msg.MessageID && m.Text == qs[0].Text+"\n\nExpired." && m.Keyboard == ""
 	})
 	if !closed {
-		t.Error("a late press did not mark the question Expired")
+		t.Error("the expired question did not close by itself")
 	}
+	h.note("\n_The owner presses the old Approve button of the expired question._")
+	h.press(t, stale)
 	if d := decisions(h.journalSince(t, start), "schedule.create"); slices.Contains(d, journal.DecisionApproved) {
 		t.Errorf("a late press approved the expired call: %v", d)
 	}

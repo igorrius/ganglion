@@ -23,7 +23,7 @@ func photo(text string) event.Outgoing {
 func TestSendPhotoWithCaption(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	tr := newTransport(t, fake)
-	if err := tr.Send(context.Background(), photo("**Notable:** ok")); err != nil {
+	if _, err := tr.Send(context.Background(), photo("**Notable:** ok")); err != nil {
 		t.Fatal(err)
 	}
 	ups := fake.Uploads()
@@ -60,14 +60,14 @@ func TestLongCaptionSplitsIntoParts(t *testing.T) {
 		t.Fatalf("keys %q %q", parts[0].IdemKey, parts[1].IdemKey)
 	}
 	ctx := context.Background()
-	if err := tr.Send(ctx, parts[0]); err != nil {
+	if _, err := tr.Send(ctx, parts[0]); err != nil {
 		t.Fatal(err)
 	}
 	fake.FailNext("sendMessage", http.StatusInternalServerError, 0)
-	if err := tr.Send(ctx, parts[1]); err == nil {
+	if _, err := tr.Send(ctx, parts[1]); err == nil {
 		t.Fatal("the failed text part did not fail")
 	}
-	if err := tr.Send(ctx, parts[1]); err != nil { // the sender resumes at part 1
+	if _, err := tr.Send(ctx, parts[1]); err != nil { // the sender resumes at part 1
 		t.Fatal(err)
 	}
 	if n := len(fake.Uploads()); n != 1 {
@@ -83,7 +83,7 @@ func TestSendDocumentName(t *testing.T) {
 	tr := newTransport(t, fake)
 	msg := event.Outgoing{Transport: Name, Conv: "telegram:-100/7",
 		Attach: &event.Attachment{Kind: event.AttachDocument, Name: "report.txt", Type: "text/plain", Data: []byte("hello")}}
-	if err := tr.Send(context.Background(), msg); err != nil {
+	if _, err := tr.Send(context.Background(), msg); err != nil {
 		t.Fatal(err)
 	}
 	u := fake.Uploads()[0]
@@ -100,7 +100,7 @@ func TestAttachmentWithButtonsIsPermanent(t *testing.T) {
 		"edit":    func() event.Outgoing { m := photo("x"); m.Edit = "5"; return m }(),
 		"kind":    func() event.Outgoing { m := photo("x"); m.Attach.Kind = "video"; return m }(),
 	} {
-		if err := tr.Send(context.Background(), m); !errors.Is(err, transport.ErrPermanent) {
+		if _, err := tr.Send(context.Background(), m); !errors.Is(err, transport.ErrPermanent) {
 			t.Errorf("%s: %v, want ErrPermanent", name, err)
 		}
 	}
@@ -114,7 +114,7 @@ func TestUploadErrorRedactsToken(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	tr := newTransport(t, fake)
 	fake.FailNext("sendPhoto", http.StatusBadRequest, 0)
-	err := tr.Send(context.Background(), photo("x"))
+	_, err := tr.Send(context.Background(), photo("x"))
 	if err == nil || strings.Contains(err.Error(), testToken) {
 		t.Fatalf("error %v", err)
 	}

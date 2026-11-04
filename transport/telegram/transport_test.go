@@ -254,7 +254,7 @@ func TestSendSilentToTopic(t *testing.T) {
 	if tr.Name() != "telegram" {
 		t.Fatalf("Name = %q", tr.Name())
 	}
-	err := tr.Send(context.Background(), event.Outgoing{IdemKey: "k", Transport: "telegram", Conv: "telegram:-100/45", Text: "hi", Silent: true})
+	_, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "k", Transport: "telegram", Conv: "telegram:-100/45", Text: "hi", Silent: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,23 +272,23 @@ func TestSendMapsErrors(t *testing.T) {
 
 	fake.FailNext("sendMessage", 429, 7)
 	var ra *transport.RetryAfterError
-	if err := tr.Send(ctx, msg); !errors.As(err, &ra) || ra.After != 7*time.Second {
+	if _, err := tr.Send(ctx, msg); !errors.As(err, &ra) || ra.After != 7*time.Second {
 		t.Errorf("429: %v, want RetryAfterError 7s", err)
 	}
 	for _, code := range []int{400, 403} {
 		fake.FailNext("sendMessage", code, 0)
-		if err := tr.Send(ctx, msg); !errors.Is(err, transport.ErrPermanent) {
+		if _, err := tr.Send(ctx, msg); !errors.Is(err, transport.ErrPermanent) {
 			t.Errorf("%d: %v, want ErrPermanent", code, err)
 		}
 	}
 	fake.FailNext("sendMessage", 500, 0)
-	err := tr.Send(ctx, msg)
+	_, err := tr.Send(ctx, msg)
 	if err == nil || errors.Is(err, transport.ErrPermanent) || errors.As(err, &ra) {
 		t.Errorf("500: %v, want a retryable error", err)
 	}
 	bad := msg
 	bad.Conv = "mqtt:1"
-	if err := tr.Send(ctx, bad); !errors.Is(err, transport.ErrPermanent) {
+	if _, err := tr.Send(ctx, bad); !errors.Is(err, transport.ErrPermanent) {
 		t.Errorf("bad conv: %v, want ErrPermanent", err)
 	}
 	if n := len(fake.Sent()); n != 0 {
@@ -320,7 +320,7 @@ func jsonNumber(v int64) string {
 func TestSendUsesEntities(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	tr := newTransport(t, fake)
-	if err := tr.Send(context.Background(), event.Outgoing{IdemKey: "k", Transport: "telegram", Conv: "telegram:42", Text: "**Привет**, мир"}); err != nil {
+	if _, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "k", Transport: "telegram", Conv: "telegram:42", Text: "**Привет**, мир"}); err != nil {
 		t.Fatal(err)
 	}
 	got := fake.Sent()[0]
@@ -370,7 +370,7 @@ func TestReplyModes(t *testing.T) {
 			}
 			eventually(t, "the messages", func() bool { return len(c.got()) == n })
 			ref := payload(t, c.got()[0]).Ref
-			if err := tr.Send(context.Background(), event.Outgoing{IdemKey: "r", Transport: "telegram", Conv: c.got()[0].Conv, Text: "answer", ReplyTo: ref}); err != nil {
+			if _, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "r", Transport: "telegram", Conv: c.got()[0].Conv, Text: "answer", ReplyTo: ref}); err != nil {
 				t.Fatal(err)
 			}
 			got := fake.Sent()[0].ReplyTo

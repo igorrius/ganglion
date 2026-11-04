@@ -21,9 +21,11 @@ type Transport interface {
 	Name() string
 	// Run receives events and hands them to sink until ctx is cancelled.
 	Run(ctx context.Context, sink Sink) error
-	// Send delivers one outgoing message. The outbox sender retries it, so
-	// Send should honour msg.IdemKey where the channel allows it.
-	Send(ctx context.Context, msg event.Outgoing) error
+	// Send delivers one outgoing message and returns a Message.Ref of it, ""
+	// when there is none (an acknowledgement, an attachment). The outbox
+	// sender retries it, so Send should honour msg.IdemKey where the channel
+	// allows it.
+	Send(ctx context.Context, msg event.Outgoing) (ref string, err error)
 }
 
 // Lang is a language a chat client may be in, as an IETF code; it picks

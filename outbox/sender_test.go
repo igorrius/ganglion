@@ -103,6 +103,7 @@ type fakeTransport struct {
 	mu     sync.Mutex
 	sends  []sendRecord
 	tries  map[string]int
+	refs   map[string]string // what Send returns per IdemKey
 }
 
 func newFake(clock *vclock, script func(event.Outgoing, int) error) *fakeTransport {
@@ -112,7 +113,7 @@ func newFake(clock *vclock, script func(event.Outgoing, int) error) *fakeTranspo
 func (f *fakeTransport) Name() string                                    { return f.name }
 func (f *fakeTransport) Run(ctx context.Context, _ transport.Sink) error { <-ctx.Done(); return nil }
 
-func (f *fakeTransport) Send(_ context.Context, msg event.Outgoing) error {
+func (f *fakeTransport) Send(_ context.Context, msg event.Outgoing) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	n := f.tries[msg.IdemKey]
@@ -122,7 +123,7 @@ func (f *fakeTransport) Send(_ context.Context, msg event.Outgoing) error {
 		err = f.script(msg, n)
 	}
 	f.sends = append(f.sends, sendRecord{key: msg.IdemKey, at: f.clock.Now(), err: err})
-	return err
+	return f.refs[msg.IdemKey], err
 }
 
 func (f *fakeTransport) records() []sendRecord {
@@ -420,6 +421,23 @@ func TestSplitMessageResumesAfterCrash(t *testing.T) {
 	}
 	if ps, _, err := e2.q.Due(context.Background(), 10); err != nil || len(ps) != 0 {
 		t.Fatalf("message still due after all parts: %+v, %v", ps, err)
+	}
+}
+
+func TestSenderRecordsTheRefOfTheButtons(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "queue.db")
+	clock := newVClock()
+	e := openEnv(t, path, clock)
+	e.enqueue(t, out("telegram:a", "a1"))
+	f := newFake(clock, nil)
+	f.refs = map[string]string{"a1:p0": "1", "a1:p1": "2", "a1:p2": "3"}
+	e.start(t, partFake{f})
+	e.runUntil(t, t0.Add(time.Minute), func() bool {
+		ref, err := e.q.SentRef(context.Background(), "a1")
+		return err == nil && ref != ""
+	})
+	if ref, err := e.q.SentRef(context.Background(), "a1"); err != nil || ref != "3" {
+		t.Fatalf("ref %q, %v; want the last part's, which holds the buttons", ref, err)
 	}
 }
 
