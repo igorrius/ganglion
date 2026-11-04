@@ -37,9 +37,12 @@ sequenceDiagram
     S->>Q: mark sent
 ```
 
-If the process dies before `Complete` commits, the lease expires and the event is
-processed again. If it dies between sending and marking, one duplicate
-reply is possible (R-DLV-5).
+If the process dies before `Complete` commits, the restarted core releases
+the lease and the turn runs again from its start, under the same call keys
+(R-DLV-6). That run does not count as a failed attempt; an event that more
+than 10 restarts cut short is given up on
+([ADR-0046](../adr/0046-a-restart-is-not-a-failed-attempt.md)). If it dies
+between sending and marking, one duplicate reply is possible (R-DLV-5).
 
 ## Confirmation on a button (P1)
 

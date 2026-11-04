@@ -198,7 +198,11 @@ rendered in process by promtop v0.4.0 (M1); a model-free `/metrics` (M2);
 an own log rotator (M3); skill scripts declare `effects: read` or
 `change` (M4). Decisions:
 [ADR-0041](../adr/0041-module-install-update-and-trust-boundary.md)–[ADR-0045](../adr/0045-metrics-in-the-chat-and-attachments-in-the-outbox.md)
-(Proposed).
+(Proposed), and [ADR-0046](../adr/0046-a-restart-is-not-a-failed-attempt.md)
+(Proposed), from the crash harness.
+
+The scripted acceptance and the crash harness pass (2026-11-04). M3c closes
+after the owner's live run on the test bot and the first `html2md` tag.
 
 | Task | Done when |
 |---|---|

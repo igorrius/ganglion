@@ -266,6 +266,10 @@ Guarantee: **at-least-once + idempotency.**
   releases the leases left in its database at start, and otherwise the
   lease expires. One core process owns a database file; a lock file stops
   a second one ([ADR-0019](adr/0019-release-leases-at-core-start.md)).
+  A run a restart cut short is not a failed attempt: only an event that
+  more than 10 restarts cut short is given up on, so one that kills the
+  process cannot do so forever
+  ([ADR-0046](adr/0046-a-restart-is-not-a-failed-attempt.md)).
   Commits are fsynced (`synchronous=FULL`), so an event confirmed to the
   channel survives a power loss.
 - **R-DLV-4.** The agent's reply, the new session state and the "incoming
@@ -1320,6 +1324,15 @@ Reviewed at each gate.
   M3d; until then R-DLV-10 (owner, 2026-11-03).
 - Plans that approve other tools' calls, not only host commands
   (R-CMD-7) (2026-11-03).
+- A turn cut short by a restart, seen and cheaper: today it reruns from its
+  start, silently (R-DLV-3, ADR-0046). Two separate ideas:
+  - tell the person "I'm continuing your interrupted request" when a turn
+    starts over (`Lease.Interrupted` already says so), at most once per
+    message; the OpenClaw gateway does this (owner, 2026-11-04);
+  - keep the turn's finished model calls and tool results between steps, so
+    a rerun goes on from where it stopped instead of paying for the whole
+    turn again. It needs its own ADR: the kept messages hold outside content,
+    and a tool that ran may have changed the world since.
 - Managing the cloud a node runs in (Railway services, volumes, deploys)
   through that cloud's MCP server, with ganglion as an MCP client: P3 in
   the M3b and M3c design; earlier if the owner asks (owner, 2026-11-03).

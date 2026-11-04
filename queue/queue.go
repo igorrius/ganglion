@@ -25,7 +25,10 @@ type Lease struct {
 	Event    event.Event
 	Token    string    // proves ownership when completing
 	Until    time.Time // lease expiry
-	Attempts int       // times the event was leased, this lease included
+	Attempts int       // times the event was leased, this lease included; a run cut short by a restart does not count
+	// Interrupted is how many runs of the event a process death or a restart
+	// cut short (ADR-0046).
+	Interrupted int
 }
 
 // StateUpdate is the conversation state written together with a turn's

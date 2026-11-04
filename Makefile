@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo live-agent accept compare memory modules modules-html2md modules-tinygo modules-rust clean-modules modrun modbench bench bench-html2md
+.PHONY: build test lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-tinygo modules-rust clean-modules modrun modbench bench bench-html2md
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
@@ -59,12 +59,17 @@ compare:
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	go run ./tools/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
 
+# The agent under kill -9: 200 kills by default, GANGLION_CRASH_ITERS sets
+# more. A fake Bot API and a fake model; it spends a few minutes (3.8).
+crash-agent:
+	GANGLION_CRASH_AGENT=1 go test -count=1 -timeout 30m -run 'TestCrashHarnessAgent$$' -v ./cmd/
+
 # RSS of the echo bot and of the agent on a fake model API, idle and after
 # 1,000 messages through the fake Bot API; the agent also with a tool call
 # in every turn; and the node's peak after one hostile 1 MiB page through
 # web.fetch and html2md.
 memory:
-	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent|AgentTools)$$' -v ./cmd/
+	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent|AgentTools|Metrics)$$' -v ./cmd/
 	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemoryHostilePage' -v ./config/
 
 # The modules. html2md (ADR-0035) is a Rust crate whose build,

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 )
@@ -36,14 +38,7 @@ func TestCrashHarness(t *testing.T) {
 	if testing.Short() {
 		t.Skip("crash harness skipped with -short")
 	}
-	iters := 40
-	if v := os.Getenv("GANGLION_CRASH_ITERS"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			t.Fatalf("GANGLION_CRASH_ITERS=%q", v)
-		}
-		iters = n
-	}
+	iters := crashIters(t, 40)
 
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "ganglion")
@@ -151,6 +146,20 @@ func TestCrashHarness(t *testing.T) {
 		iters, beforeFinal, dups, fake.Confirmed())
 }
 
+// crashIters is the number of kills: def, or GANGLION_CRASH_ITERS.
+func crashIters(t *testing.T, def int) int {
+	t.Helper()
+	v := os.Getenv("GANGLION_CRASH_ITERS")
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		t.Fatalf("GANGLION_CRASH_ITERS=%q", v)
+	}
+	return n
+}
+
 // logStuckLeases reports pending inbox events still under a lease: a
 // conversation waits behind them until the lease runs out.
 func logStuckLeases(t *testing.T, path string) {
@@ -176,6 +185,280 @@ func logStuckLeases(t *testing.T, path string) {
 				time.UnixMilli(until).Format(time.TimeOnly))
 		}
 	}
+}
+
+// crashMarker finds a harness message in a text.
+var crashMarker = regexp.MustCompile(`\bm\d{3,}\b`)
+
+// crashMetricsEvery makes every n-th message of the agent harness a
+// /metrics.
+const crashMetricsEvery = 10
+
+// crashModel is a fake model whose every turn has one real side effect: it
+// writes a fact named after the person's message (a file and a git commit),
+// reads the result and answers with the same marker.
+func crashModel(t *testing.T) *providertest.Server {
+	t.Helper()
+	model := providertest.NewServer(t, "sk-crash")
+	model.Respond(func(r providertest.Request) providertest.Answer {
+		// A model takes time: most kills should land inside a turn.
+		time.Sleep(time.Duration(rand.IntN(60)) * time.Millisecond)
+		if len(r.Tools) == 0 { // the memory's clean-context check
+			return providertest.Answer{Text: `{"ok":true}`}
+		}
+		var marker string
+		if users := userMarkers(r); len(users) > 0 {
+			marker = users[len(users)-1]
+		}
+		if r.Messages[len(r.Messages)-1]["role"] == "tool" {
+			return providertest.Answer{Text: "answer " + marker}
+		}
+		return providertest.Answer{Tool: "memory.write",
+			Args: fmt.Sprintf(`{"title":"fact %s","body":"The owner's number is %s."}`, marker, marker)}
+	})
+	return model
+}
+
+// userMarkers lists the harness messages among the person's messages of a
+// request, oldest first.
+func userMarkers(r providertest.Request) []string {
+	var out []string
+	for _, m := range r.Messages {
+		if m["role"] == "user" {
+			out = append(out, crashMarker.FindAllString(fmt.Sprint(m["content"]), -1)...)
+		}
+	}
+	return out
+}
+
+// crashAgentNode runs the agent's binary on a fake Bot API and a fake model.
+type crashAgentNode struct {
+	bin, dir string
+	env      []string
+	fake     *telegramtest.Server
+	model    *providertest.Server
+	log      *lockedBuffer // of the last run
+}
+
+func newCrashAgentNode(t *testing.T) *crashAgentNode {
+	t.Helper()
+	dir := t.TempDir()
+	n := &crashAgentNode{bin: filepath.Join(dir, "ganglion"), dir: dir,
+		fake: telegramtest.NewServer(t, crashToken), model: crashModel(t)}
+	if out, err := exec.Command("go", "build", "-o", n.bin, "..").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	catalog := filepath.Join(dir, "models.yaml")
+	yaml := "providers:\n  - {name: fake, type: openai, base_url: " + n.model.URL() + ", key_env: FAKE_KEY}\n" +
+		"models:\n  - {provider: fake, name: m, tier: smart, tools: true, context: 64000}\n"
+	if err := os.WriteFile(catalog, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	n.env = append(os.Environ(),
+		"GANGLION_DB="+filepath.Join(dir, "crash.db"),
+		"GANGLION_WORKSPACE="+n.workspace(),
+		"GANGLION_MODELS_FILE="+catalog, "FAKE_KEY=sk-crash",
+		"GANGLION_DAILY_TURNS=0", "GANGLION_DAILY_TOKENS=0", "GANGLION_SEARCH=off",
+		"TELEGRAM_BOT_TOKEN="+crashToken, "TELEGRAM_BOT_TOKEN_FILE=", "TELEGRAM_API_URL="+n.fake.URL(),
+		"GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID), "GANGLION_METRICS_ADDR=127.0.0.1:0",
+	)
+	return n
+}
+
+func (n *crashAgentNode) workspace() string { return filepath.Join(n.dir, "workspace") }
+
+func (n *crashAgentNode) start(t *testing.T) *exec.Cmd {
+	t.Helper()
+	n.log = &lockedBuffer{}
+	cmd := exec.Command(n.bin, "run", "--roles", "core")
+	cmd.Env = n.env
+	cmd.Stdout, cmd.Stderr = n.log, n.log
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	return cmd
+}
+
+// answers lists the markers of the model's answers as sent, and any other
+// text the node sent.
+func (n *crashAgentNode) answers() (markers, other []string) {
+	for _, s := range n.fake.Sent() {
+		if m, ok := strings.CutPrefix(s.Text, "answer "); ok {
+			markers = append(markers, m)
+		} else {
+			other = append(other, s.Text)
+		}
+	}
+	return markers, other
+}
+
+// TestCrashHarnessAgent kills the agent with SIGKILL at random moments while
+// messages arrive (3.8, R-DLV-3 to R-DLV-6). In the end every message has its
+// answer, in order, at most one duplicate per kill; every fact was stored by
+// exactly one commit; the journal holds one call per message, so a rerun kept
+// the call's key; and every /metrics sent its photo. Run it with
+// `make crash-agent`; it spends a few minutes.
+func TestCrashHarnessAgent(t *testing.T) {
+	if os.Getenv("GANGLION_CRASH_AGENT") == "" {
+		t.Skip("set GANGLION_CRASH_AGENT=1 (make crash-agent)")
+	}
+	iters := crashIters(t, 200)
+	n := newCrashAgentNode(t)
+
+	var want []string
+	var metrics int
+	var lastUpdate int64
+	for i := range iters {
+		cmd := n.start(t)
+		text := fmt.Sprintf("m%03d", i)
+		if i%crashMetricsEvery == crashMetricsEvery-1 {
+			text = "/metrics"
+			metrics++
+		} else {
+			want = append(want, text)
+		}
+		lastUpdate = n.fake.AddMessage(telegramtest.Incoming{ChatID: adminID, UserID: adminID, Name: "Admin", Text: text})
+		time.Sleep(time.Duration(rand.IntN(600)) * time.Millisecond)
+		_ = cmd.Process.Signal(syscall.SIGKILL)
+		_ = cmd.Wait()
+	}
+
+	cmd := n.start(t)
+	stopped := false
+	stop := func() {
+		if !stopped {
+			stopped = true
+			_ = cmd.Process.Signal(syscall.SIGTERM)
+			_ = cmd.Wait()
+		}
+	}
+	defer func() {
+		stop()
+		if t.Failed() {
+			t.Logf("last process output:\n%s", n.log.String())
+			logStuckLeases(t, filepath.Join(n.dir, "crash.db"))
+		}
+	}()
+	deadline := time.Now().Add(3 * time.Minute)
+	for {
+		got, _ := n.answers()
+		if len(slices.Compact(got)) >= len(want) && len(n.fake.Uploads()) >= metrics && n.fake.Confirmed() >= lastUpdate {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("after 3 min: %d of %d answers, %d of %d photos, confirmed %d of %d",
+				len(slices.Compact(got)), len(want), len(n.fake.Uploads()), metrics, n.fake.Confirmed(), lastUpdate)
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	stop()
+
+	n.checkAnswers(t, want, iters)
+	n.checkPhotos(t, metrics, iters)
+	n.checkFacts(t, want)
+	n.checkJournal(t, len(want), metrics)
+	n.checkHistory(t)
+	turns := 0
+	for _, r := range n.model.Requests() {
+		if len(r.Tools) > 0 && r.Messages[len(r.Messages)-1]["role"] != "tool" {
+			turns++
+		}
+	}
+	t.Logf("%d messages for the model took %d turns: %d reruns", len(want), turns, turns-len(want))
+	if iters >= 100 && turns == len(want) {
+		t.Error("no kill landed inside a turn: the harness tested nothing")
+	}
+}
+
+func (n *crashAgentNode) checkAnswers(t *testing.T, want []string, kills int) {
+	t.Helper()
+	got, other := n.answers()
+	compact := slices.Compact(slices.Clone(got))
+	if !slices.Equal(compact, want) {
+		t.Errorf("answers out of order or missing:\n got %v\nwant %v", compact, want)
+	}
+	if dups := len(got) - len(compact); dups > kills {
+		t.Errorf("%d duplicate answers after %d kills", dups, kills)
+	} else {
+		t.Logf("%d kills, %d answers, %d duplicates", kills, len(got), dups)
+	}
+	if len(other) > 0 {
+		t.Errorf("%d messages that are no answer, first: %q", len(other), other[0])
+	}
+}
+
+func (n *crashAgentNode) checkPhotos(t *testing.T, metrics, kills int) {
+	t.Helper()
+	ups := n.fake.Uploads()
+	if len(ups) < metrics || len(ups) > metrics+kills {
+		t.Errorf("%d photos for %d /metrics after %d kills", len(ups), metrics, kills)
+	}
+	for _, u := range ups {
+		if u.Method != "sendPhoto" || len(u.Data) == 0 {
+			t.Errorf("upload %s with %d bytes", u.Method, len(u.Data))
+		}
+	}
+}
+
+// checkFacts reads the side effect itself: the memory's git history has one
+// commit for each fact.
+func (n *crashAgentNode) checkFacts(t *testing.T, want []string) {
+	t.Helper()
+	out, err := exec.Command("git", "-C", n.workspace(), "log", "--format=%s").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git log: %v\n%s", err, out)
+	}
+	commits := map[string]int{}
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if strings.HasPrefix(line, "memory: remember ") {
+			commits[crashMarker.FindString(line)]++
+		}
+	}
+	for _, m := range want {
+		if commits[m] != 1 {
+			t.Errorf("fact %s stored by %d commits", m, commits[m])
+		}
+	}
+}
+
+// checkJournal counts the calls: a rerun replaces its own row, so a key that
+// changed on a rerun shows as a second row.
+func (n *crashAgentNode) checkJournal(t *testing.T, facts, metrics int) {
+	t.Helper()
+	db, err := sqlitedb.Open(context.Background(), filepath.Join(n.dir, "crash.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	for tool, want := range map[string]int{"memory.write": facts, "metrics.show": metrics} {
+		var rows, failed int
+		err := db.QueryRow(`SELECT COUNT(*), COUNT(NULLIF(err, '')) FROM tool_calls WHERE tool = ?`, tool).Scan(&rows, &failed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rows != want || failed != 0 {
+			t.Errorf("journal: %d calls of %s (%d failed), want %d", rows, tool, failed, want)
+		}
+	}
+}
+
+// checkHistory reads the last conversation the model saw: a rerun must not
+// add a person's message twice.
+func (n *crashAgentNode) checkHistory(t *testing.T) {
+	t.Helper()
+	for _, r := range slices.Backward(n.model.Requests()) {
+		if len(r.Tools) == 0 {
+			continue
+		}
+		users := userMarkers(r)
+		slices.Sort(users)
+		if len(slices.Compact(slices.Clone(users))) != len(users) {
+			t.Errorf("a message twice in the history: %v", users)
+		}
+		return
+	}
+	t.Error("the model saw no turn")
 }
 
 // R-OBS-6: the last line the node logged before a kill -9 is on disk.

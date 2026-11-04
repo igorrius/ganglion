@@ -123,14 +123,32 @@ Start here when coming back to the project.
       ([ADR-0024](adr/0024-persona-as-workspace-files.md)), the current
       time in the last user message, the depth limit (R-AGT-4) and tool
       placement (R-RTR-3).
-  - **M3c, in progress** (branch `m3c`,
+  - **M3c, built; the scripted acceptance passes, the owner's live run is
+    next** (branch `m3c`,
     [plan](plans/p1-m3c-modules-skills-diagnostics.md)): module update
     and rollback, skills, attachments and the metrics picture in
     Telegram (`/metrics`), logs on disk, `ganglion mcp` for diagnosis
     from outside, a notice when a file is sent to the agent (R-DLV-10),
     and the 3.8 acceptance under the crash harness. Decisions:
-    [ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)–[ADR-0045](adr/0045-metrics-in-the-chat-and-attachments-in-the-outbox.md),
-    Proposed.
+    [ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)–[ADR-0046](adr/0046-a-restart-is-not-a-failed-attempt.md),
+    Proposed. Still open: the first `html2md/v0.1.0` tag (the owner,
+    after the merge) and the live checks of the plan's task 9, step 5.
+    - **Acceptance (2026-11-04):** `make accept` passes on both routes.
+      `make crash-agent` passes with 200 and with 1,000 `kill -9`: every
+      message answered, in order, one commit per fact, every `/metrics`
+      with its photo. It found that three restarts in a row dropped a
+      healthy message; fixed in
+      [ADR-0046](adr/0046-a-restart-is-not-a-failed-attempt.md).
+    - **Measured (`make memory`):** the binary is 45.5 MB (M3b: 41.9); RSS
+      is 44 MB, peak 44, after 1,000 turns that each call a tool (M3b: 39,
+      peak 40). After 50 `/metrics` RSS is 108 MB, peak 114. RSS stays near
+      110 MB through 200 pictures in a row, so there is no leak, but the
+      peak then reaches 130 MB. Until M4 sets the soft limit (R-RUN-6, task
+      4.1), run a 128 MB container with `GOMEMLIMIT=80MiB`: the same 200
+      pictures peak at 112 MB (at `100MiB`, 126 MB).
+    - **A restart during a turn:** the turn runs again from its start,
+      under the same call keys, and the person is not told. Telling them
+      and keeping a turn's progress are in the spec's "Not now" list.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
@@ -168,6 +186,11 @@ Start here when coming back to the project.
       uncommitted; a Telegram display name can read like the owner's in
       the speaker prefix; an approved page is capped like a tool result
       while an auto-allowed one is not.
+    - M3c: an admin alert at start when a stored module falls back or a
+      skill is not loaded (both are logged and visible otherwise); pin the
+      GitHub Actions by commit SHA in `modules-release.yml`; prune old
+      failed `module_versions` rows; `/modules update` blocks its turn up
+      to about 60 s plus the self-test.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

@@ -91,6 +91,41 @@ func TestMemoryAgentTools(t *testing.T) {
 		"GANGLION_DAILY_TOKENS=0", "GANGLION_SEARCH=off"}, answers)
 }
 
+// TestMemoryMetrics measures the picture: RSS and peak after 50 /metrics
+// calls, each rendering the dashboard's history to a PNG (M3c, task 9).
+func TestMemoryMetrics(t *testing.T) {
+	if os.Getenv("GANGLION_MEASURE") == "" {
+		t.Skip("set GANGLION_MEASURE=1 (make memory)")
+	}
+	model := providertest.NewServer(t, "sk-measure")
+	catalog := filepath.Join(t.TempDir(), "models.yaml")
+	yaml := "providers:\n  - {name: fake, type: openai, base_url: " + model.URL() + ", key_env: FAKE_KEY}\n" +
+		"models:\n  - {provider: fake, name: m, tier: smart, tools: true, context: 64000}\n"
+	if err := os.WriteFile(catalog, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd, fake, size := startMeasured(t, []string{"GANGLION_MODELS_FILE=" + catalog, "FAKE_KEY=sk-measure", "GANGLION_DAILY_TURNS=0", "GANGLION_DAILY_TOKENS=0"})
+	defer stopMeasured(cmd)
+	time.Sleep(2 * time.Second)
+	const n = 50
+	for range n {
+		fake.AddMessage(telegramtest.Incoming{ChatID: adminID, UserID: adminID, Text: "/metrics"})
+	}
+	deadline := time.Now().Add(5 * time.Minute)
+	for len(fake.Uploads()) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("only %d of %d pictures", len(fake.Uploads()), n)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	time.Sleep(time.Second)
+	after, peak := procKB(t, cmd.Process.Pid, "VmRSS"), procKB(t, cmd.Process.Pid, "VmHWM")
+	t.Logf("metrics: binary %.1f MB; after %d pictures RSS %.1f MB, peak %.1f MB", float64(size)/(1<<20), n, float64(after)/1024, float64(peak)/1024)
+	if peak > 128*1024 {
+		t.Errorf("peak RSS %d kB is above 128 MB", peak)
+	}
+}
+
 // everyMessage counts every message sent as one reply.
 func everyMessage(sent []telegramtest.Outgoing) int { return len(sent) }
 
@@ -100,6 +135,37 @@ func measure(t *testing.T, label string, extraEnv []string, replies func([]teleg
 	if os.Getenv("GANGLION_MEASURE") == "" {
 		t.Skip("set GANGLION_MEASURE=1 (make memory)")
 	}
+	cmd, fake, size := startMeasured(t, extraEnv)
+	defer stopMeasured(cmd)
+
+	time.Sleep(2 * time.Second)
+	idle := procKB(t, cmd.Process.Pid, "VmRSS")
+
+	const n = 1000
+	for i := range n {
+		fake.AddMessage(telegramtest.Incoming{ChatID: adminID, UserID: adminID, Text: fmt.Sprintf("message %04d with some text in it", i)})
+	}
+	deadline := time.Now().Add(5 * time.Minute)
+	for replies(fake.Sent()) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("only %d of %d replies", replies(fake.Sent()), n)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	time.Sleep(time.Second)
+	after := procKB(t, cmd.Process.Pid, "VmRSS")
+	peak := procKB(t, cmd.Process.Pid, "VmHWM")
+	t.Logf("%s: binary %.1f MB; RSS idle %.1f MB; after %d messages %.1f MB, peak %.1f MB",
+		label, float64(size)/(1<<20), float64(idle)/1024, n, float64(after)/1024, float64(peak)/1024)
+	if peak > 128*1024 {
+		t.Errorf("peak RSS %d kB is above 128 MB", peak)
+	}
+}
+
+// startMeasured builds and starts the binary on a fake Bot API; it returns
+// the binary's size.
+func startMeasured(t *testing.T, extraEnv []string) (*exec.Cmd, *telegramtest.Server, int64) {
+	t.Helper()
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "ganglion")
 	if out, err := exec.Command("go", "build", "-o", bin, "..").CombinedOutput(); err != nil {
@@ -123,33 +189,12 @@ func measure(t *testing.T, label string, extraEnv []string, replies func([]teleg
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		_ = cmd.Process.Signal(syscall.SIGTERM)
-		_ = cmd.Wait()
-	}()
+	return cmd, fake, fi.Size()
+}
 
-	time.Sleep(2 * time.Second)
-	idle := procKB(t, cmd.Process.Pid, "VmRSS")
-
-	const n = 1000
-	for i := range n {
-		fake.AddMessage(telegramtest.Incoming{ChatID: adminID, UserID: adminID, Text: fmt.Sprintf("message %04d with some text in it", i)})
-	}
-	deadline := time.Now().Add(5 * time.Minute)
-	for replies(fake.Sent()) < n {
-		if time.Now().After(deadline) {
-			t.Fatalf("only %d of %d replies", replies(fake.Sent()), n)
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	time.Sleep(time.Second)
-	after := procKB(t, cmd.Process.Pid, "VmRSS")
-	peak := procKB(t, cmd.Process.Pid, "VmHWM")
-	t.Logf("%s: binary %.1f MB; RSS idle %.1f MB; after %d messages %.1f MB, peak %.1f MB",
-		label, float64(fi.Size())/(1<<20), float64(idle)/1024, n, float64(after)/1024, float64(peak)/1024)
-	if peak > 128*1024 {
-		t.Errorf("peak RSS %d kB is above 128 MB", peak)
-	}
+func stopMeasured(cmd *exec.Cmd) {
+	_ = cmd.Process.Signal(syscall.SIGTERM)
+	_ = cmd.Wait()
 }
 
 // procKB reads a "kB" field such as VmRSS from /proc/<pid>/status.

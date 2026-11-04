@@ -28,6 +28,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/guard"
 	"github.com/igorrius/ganglion/guard/guardtest"
+	"github.com/igorrius/ganglion/logfile"
 	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider"
@@ -36,6 +37,7 @@ import (
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/telemetry"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
@@ -171,8 +173,29 @@ func runAcceptance(t *testing.T, r acceptRoute, out string) {
 	t.Run("rates", h.ratesScenario)
 	t.Run("injection", h.injectionScenario)
 	t.Run("guard", h.guardTable)
+	t.Run("m3c", h.m3cScenario)
 	// Expiry last: it moves the confirmations' clock forward.
 	t.Run("expiry", h.expiryScenario)
+}
+
+// acceptScriptMarker is what the acceptance's script skill prints.
+const acceptScriptMarker = "disk report marker 7731"
+
+// writeAcceptSkill installs a read-only script skill in the workspace.
+func writeAcceptSkill(t *testing.T, ws string) {
+	t.Helper()
+	dir := filepath.Join(ws, "skills", "disk-report")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doc := "---\nname: disk-report\ndescription: Sizes of the biggest folders under the home directory\n" +
+		"script:\n  run: report.sh\n  effects: read\n---\nRun the script and tell the owner what it printed.\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "report.sh"), []byte("#!/bin/sh\necho '"+acceptScriptMarker+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // acceptNode is a running node and the owner's side of the chat.
@@ -209,10 +232,11 @@ func startAcceptNode(t *testing.T, r acceptRoute, out string) *acceptNode {
 	dir := t.TempDir()
 	ws := filepath.Join(dir, "workspace")
 	copyPersona(t, ws)
+	writeAcceptSkill(t, ws)
 	fake := telegramtest.NewServer(t, acceptToken)
 	h := &acceptNode{t: t, route: r.name, fake: fake, ws: ws, loc: loc}
 	b := Bootstrap{DB: filepath.Join(dir, "node.db"), BotToken: acceptToken, BotAPIURL: fake.URL(),
-		Admin: fmt.Sprintf("telegram:user:%d", ownerChat), MetricsAddr: "off",
+		Admin: fmt.Sprintf("telegram:user:%d", ownerChat), MetricsAddr: "off", LogDir: filepath.Join(dir, "logs"),
 		Agent: AgentSettings{Catalog: &cat, Keys: r.keys, Workspace: ws, DailyBudgetUSD: 1, DailyTurns: 300,
 			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}}
 
@@ -221,9 +245,25 @@ func startAcceptNode(t *testing.T, r acceptRoute, out string) *acceptNode {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = logFile.Close() })
-	logger := slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	rot, err := logfile.Open(logfile.DefaultConfig(b.LogDir), time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = rot.Close() })
+	logOpts := &slog.HandlerOptions{Level: slog.LevelDebug}
+	logger := slog.New(slog.NewMultiHandler(slog.NewJSONHandler(rot, logOpts), slog.NewTextHandler(logFile, logOpts)))
 
 	ctx, cancel := context.WithCancel(context.Background())
+	tel, err := telemetry.Setup(ctx, telemetry.Config{Addr: "127.0.0.1:0", Service: "ganglion", Logger: logger})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		sctx, scancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer scancel()
+		_ = tel.Shutdown(sctx)
+	})
+	b.Metrics = tel.Renderer()
 	i := New(ctx, b, logger)
 	h.i = i
 	h.override(t, cat, r)
@@ -680,6 +720,52 @@ func (h *acceptNode) memoryFiles(t *testing.T) map[string]string {
 }
 
 // --- step 2: memory ---
+
+// m3cScenario is M3c's acceptance (plan, task 9, step 3): the picture, a
+// file the agent cannot open yet, a script skill and a search of its logs.
+func (h *acceptNode) m3cScenario(t *testing.T) {
+	h.note("\n## M3c")
+	h.say(t, "/new") // the scenarios before left the session tainted
+
+	start, photos := time.Now(), len(h.fake.Uploads())
+	h.say(t, "Show me the agent's metrics")
+	if d := decisions(h.noteJournal(t, start), "metrics.show"); !slices.Contains(d, journal.DecisionAllowed) {
+		t.Errorf("metrics.show decisions %v, want allowed", d)
+	}
+	ups := h.fake.Uploads()
+	if len(ups) != photos+1 || ups[len(ups)-1].Method != "sendPhoto" || len(ups[len(ups)-1].Data) == 0 {
+		t.Errorf("%d uploads after the request, want one photo more than %d", len(ups), photos)
+	}
+
+	h.note("\n**owner:** (a PDF, invoice.pdf) What does this invoice say?")
+	mark := len(h.fake.Sent())
+	up := h.fake.AddMessage(telegramtest.Incoming{ChatID: ownerChat, UserID: ownerChat, Name: ownerName,
+		Caption: "What does this invoice say?", Extra: map[string]any{"document": map[string]any{
+			"file_id": "d", "file_unique_id": "d", "file_name": "invoice.pdf", "mime_type": "application/pdf", "file_size": 1200000}}})
+	h.settle(t, up)
+	cannot := regexp.MustCompile(`(?i)cannot|can't|can not|unable|not able|не могу|не можу`)
+	if got := texts(h.sent(mark)); !cannot.MatchString(got) {
+		t.Errorf("the reply to a PDF does not say the file cannot be opened: %q", got)
+	}
+
+	start = time.Now()
+	h.say(t, "Run the disk-report skill and tell me what it printed.")
+	es := h.noteJournal(t, start)
+	if !slices.ContainsFunc(es, func(e journal.Entry) bool {
+		return e.Tool == "skill.disk_report" && e.Decision == journal.DecisionAllowed && strings.Contains(e.ResultHead, acceptScriptMarker)
+	}) {
+		t.Errorf("the script skill did not run: %+v", es)
+	}
+
+	start = time.Now()
+	h.say(t, `Use logs.search with the query "outbox: sent" and tell me how many lines it found.`)
+	es = h.noteJournal(t, start)
+	if !slices.ContainsFunc(es, func(e journal.Entry) bool {
+		return e.Tool == "logs.search" && e.Decision == journal.DecisionAllowed && strings.Contains(e.ResultHead, "outbox: sent")
+	}) {
+		t.Errorf("logs.search did not find the turn's line: %+v", es)
+	}
+}
 
 func (h *acceptNode) memoryScenario(t *testing.T) {
 	h.note("\n## Memory (step 2)")

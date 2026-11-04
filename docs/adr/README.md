@@ -51,6 +51,7 @@ considered, how they compare, the decision and its consequences. See
 | [0043](0043-logs-on-disk-with-an-own-rotator.md) | Write logs to disk through a small own rotator, synchronously | Proposed | 2026-11-03 |
 | [0044](0044-ganglion-mcp-diagnostics-over-stdio.md) | Serve read-only diagnostics as `ganglion mcp` over stdio, with the own MCP server | Proposed | 2026-11-03 |
 | [0045](0045-metrics-in-the-chat-and-attachments-in-the-outbox.md) | Render the metrics picture in process with promtop, and keep attachments in the outbox row | Proposed | 2026-11-03 |
+| [0046](0046-a-restart-is-not-a-failed-attempt.md) | Count a run a restart cut short apart from a failed attempt | Proposed | 2026-11-04 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

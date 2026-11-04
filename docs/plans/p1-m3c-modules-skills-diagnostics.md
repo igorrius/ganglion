@@ -879,7 +879,7 @@ Two repositories: promtop first, then ganglion.
 **Interfaces:**
 - Consumes everything above; adds nothing.
 
-- [ ] **Step 1: Failing test `TestCrashHarnessAgent`.**
+- [x] **Step 1: Failing test `TestCrashHarnessAgent`.**
   - 200 iterations by default; `GANGLION_CRASH_ITERS` sets more.
   - Each iteration sends messages and kills the node with `SIGKILL` at a
     random point.
@@ -889,16 +889,16 @@ Two repositories: promtop first, then ganglion.
     - at most one reply is duplicated per kill;
     - no tool's side effect ran twice for one call key (the journal);
     - each `/metrics` sent its photo.
-- [ ] **Step 2: Run** `make crash-agent` — FAIL until the harness and
+- [x] **Step 2: Run** `make crash-agent` — FAIL until the harness and
   any bug it finds are fixed; then PASS.
-- [ ] **Step 3: Scripted acceptance** (`make accept`, both models), new
+- [x] **Step 3: Scripted acceptance** (`make accept`, both models), new
   checks:
   - "show me the agent's metrics" → a photo in the fake Bot API;
   - a sent PDF with a caption → the reply says the file cannot be
     opened yet;
   - a script skill runs;
   - `logs.search` finds the turn's log line.
-- [ ] **Step 4: Measure** (`make memory`): the binary size and the RSS
+- [x] **Step 4: Measure** (`make memory`): the binary size and the RSS
   after 1,000 turns and after 50 `/metrics` calls, against M3b's
   numbers. Write them into `docs/README.md`.
 - [ ] **Step 5: Live on the test bot** (`make live-agent`, the owner).
@@ -911,9 +911,9 @@ Two repositories: promtop first, then ganglion.
   - `ganglion mcp` from Claude Code on the live data;
   - the M3b leftovers: R38 (no duplicate question for a URL the model
     builds), the expiry of a waiting call, R48–R50.
-- [ ] **Step 6: Docs.**
+- [x] **Step 6: Docs.**
   - "Where we are": M3c done, with the measurements; the deferred
     minors from the reviews.
   - The phase plan's M3c table ticked.
   - The containers and components pages.
-- [ ] **Step 7: Commit** `M3c: acceptance under the crash harness; docs`.
+- [x] **Step 7: Commit** `M3c: acceptance under the crash harness; docs`.
