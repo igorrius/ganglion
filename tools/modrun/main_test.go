@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/internal/testinputs"
 	"github.com/igorrius/ganglion/pdk"
 )
 
@@ -38,6 +39,7 @@ func TestParseEnvRejectsLinesWithoutEquals(t *testing.T) {
 
 func TestRunModuleEndToEnd(t *testing.T) {
 	dir := t.TempDir()
+	testinputs.Build(t, "../../runner/runnertest/probe/wasm", "GOOS=wasip1", "GOARCH=wasm")
 	wasm := filepath.Join(dir, "probe.wasm")
 	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", wasm, "../../runner/runnertest/probe/wasm")
 	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm")

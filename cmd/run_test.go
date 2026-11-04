@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/igorrius/ganglion/internal/testinputs"
 )
 
 func TestRunStartsAllRolesByDefault(t *testing.T) {
@@ -83,6 +85,7 @@ func TestBinaryVersion(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the binary")
 	}
+	testinputs.Build(t, "..")
 	dir := t.TempDir()
 	for _, tc := range []struct {
 		ldflags, want string

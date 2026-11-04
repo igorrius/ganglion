@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/igorrius/ganglion/internal/testinputs"
 )
 
 // TestLabStaysOutOfTheBinary holds chatlab's boundary (ADR-0048): no fake, no
@@ -21,6 +23,8 @@ func TestLabStaysOutOfTheBinary(t *testing.T) {
 		}
 		return string(out)
 	}
+
+	testinputs.Build(t, "..")
 
 	const module = "github.com/igorrius/ganglion/"
 	deps := strings.Fields(output("go", "list", "-deps", "."))

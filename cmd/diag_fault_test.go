@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/internal/testinputs"
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 )
@@ -27,6 +28,7 @@ func TestMCPDiagnosesAWrongKey(t *testing.T) {
 	}
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "ganglion")
+	testinputs.Build(t, "..")
 	if out, err := exec.Command("go", "build", "-o", bin, "..").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
