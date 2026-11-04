@@ -3,6 +3,15 @@ name: expiry-closes-the-question
 why: >-
   A question nobody answered kept its dead buttons until someone pressed one, and
   the call must never run after it expires.
+covers:
+  - agent/resume.go
+  - agent/turn.go
+  - "tool/pending/**"
+  - "outbox/**"
+  - queue/sqlqueue/outbox.go
+  - transport/telegram/transport.go
+  - transport/telegram/buttons.go
+  - transport/telegram/split.go
 steps:
   - say: "Create a one-time reminder for tomorrow at 09:00 that says: call the plumber."
   - reach: {journal: {tool: schedule.create}, nudge: "Yes, please create it."}

@@ -69,7 +69,7 @@ func TestExitCode(t *testing.T) {
 		for i, r := range tc.results {
 			os[i].Result = r
 		}
-		if got := ExitCode(os); got != tc.want {
+		if got := ExitCode(os, nil); got != tc.want {
 			t.Errorf("%v: exit %d, want %d", tc.results, got, tc.want)
 		}
 	}

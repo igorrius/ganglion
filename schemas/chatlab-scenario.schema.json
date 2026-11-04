@@ -9,6 +9,7 @@
   "properties": {
     "name": { "description": "The file's name without .yaml.", "type": "string", "pattern": "^[a-z0-9-]+$" },
     "why": { "description": "The bug this scenario guards against.", "type": "string", "minLength": 1 },
+    "covers": { "description": "Files it depends on, relative to the repository; dir/** is a tree. It runs again when one changes.", "type": "array", "items": { "type": "string" } },
     "repeat": { "description": "How many times it runs; 3 by default, 5 for language.", "type": "integer", "minimum": 1 },
     "persona": { "description": "default, the example persona, or a directory under the scenario's.", "type": "string" },
     "skills": { "description": "Directories under the scenario's, copied to workspace/skills.", "type": "array", "items": { "type": "string" } },

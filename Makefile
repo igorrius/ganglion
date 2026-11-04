@@ -1,6 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-tinygo modules-rust clean-modules modrun modbench bench bench-html2md
+.PHONY: build test lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-tinygo modules-rust clean-modules modrun modbench bench bench-html2md lab lab-all lab-skip-full lab-faults
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
@@ -62,12 +62,24 @@ compare:
 	go run ./tools/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
 
 # Test the agent by talking to it (ADR-0048): real models over the fake Bot API,
-# a table of what passed. LAB picks scenarios by name; empty = all. It spends
-# subscription limits, and does not read .env: that file holds TELEGRAM_*.
+# a table of what passed. It runs what changed since it last passed; LAB picks
+# scenarios by name. It spends subscription limits, and does not read .env: that
+# file holds TELEGRAM_*.
 LAB ?=
 lab: build
 	go build -tags lab -o bin/chatlab ./tools/chatlab
 	bin/chatlab run $(LAB)
+
+# Everything, about 1,100,000 tokens: only when it is decided, never as a routine
+# step. make lab says when a change recommends it.
+lab-all: build
+	go build -tags lab -o bin/chatlab ./tools/chatlab
+	bin/chatlab run --all
+
+# Decide to do without a recommended full run.
+lab-skip-full:
+	go build -tags lab -o bin/chatlab ./tools/chatlab
+	bin/chatlab skip-full
 
 # Prove the scenarios can fail: seeded faults in a clean worktree must turn their
 # scenarios red. Commit first; it spends subscription limits.

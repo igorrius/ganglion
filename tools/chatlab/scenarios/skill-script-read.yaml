@@ -1,6 +1,10 @@
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
 name: skill-script-read
 why: A read-only script skill must run without a question and its output must reach the owner.
+covers:
+  - "skills/**"
+  - tool/builtin/skill.go
+  - agent/skills.go
 skills: [skills/disk-report]
 steps:
   - say: "Run the disk-report skill and tell me exactly what it printed."

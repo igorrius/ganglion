@@ -1,6 +1,9 @@
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
 name: file-pdf
 why: The agent cannot read a file yet. It must say so, and must not invent what the file holds (R-DLV-10).
+covers:
+  - agent/files.go
+  - transport/telegram/transport.go
 steps:
   - send: {kind: document, name: invoice.pdf, type: application/pdf, size: 1200000, caption: "What does this invoice say?"}
   - facts:

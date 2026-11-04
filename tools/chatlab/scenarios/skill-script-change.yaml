@@ -1,6 +1,12 @@
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
 name: skill-script-change
 why: A script skill that changes something must ask first, run once when approved, and its output must reach the owner.
+covers:
+  - "skills/**"
+  - tool/builtin/skill.go
+  - agent/skills.go
+  - "policy/**"
+  - "tool/pending/**"
 skills: [skills/stamp-log]
 steps:
   - say: "Run the stamp-log skill and tell me exactly what it printed."

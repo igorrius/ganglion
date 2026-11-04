@@ -3,6 +3,11 @@ name: r49-recall-labels-the-archive
 why: >-
   Ruling R49. The model said "memory still holds" a fact whose write had expired
   unconfirmed, when only the owner's words were in the archive of an old chat.
+covers:
+  - tool/builtin/memory.go
+  - agent/recall.go
+  - agent/sessions.go
+  - "memory/**"
 pages:
   - {url: "http://solar-notes.example.net/tips", file: pages/tips.html}
 steps:

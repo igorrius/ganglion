@@ -25,7 +25,9 @@ import (
 )
 
 const usage = `usage:
-  chatlab run [names...] [--max-tokens 1500000] [--judge sonnet] [--models <file>] [--repeat n] [--dir <scenarios>]
+  chatlab run [names...] [--all] [--max-tokens 1500000] [--judge sonnet] [--models <file>] [--repeat n] [--dir <scenarios>]
+  chatlab skip-full
+  chatlab mark <names...>
   chatlab start [--persona <dir>] [--models <file>]
   chatlab say "..."
   chatlab send <name> [--type <mime>] [--size <bytes>] [--caption "..."]
@@ -53,6 +55,10 @@ func run(ctx context.Context, args []string) int {
 	switch args[0] {
 	case "run":
 		code, err = runScenarios(ctx, args[1:])
+	case "skip-full":
+		err = skipFull()
+	case "mark":
+		err = mark(args[1:])
 	case "start":
 		err = startSession(args[1:])
 	case "serve":
@@ -85,15 +91,61 @@ func flagsLast(fs *flag.FlagSet, args []string) ([]string, error) {
 	return names, nil
 }
 
+func recordFile(root string) string { return filepath.Join(root, "tools", "chatlab", "passed.json") }
+
+// skipFull records the decision to do without a recommended full run.
+func skipFull() error {
+	root, err := chatlab.RepoRoot()
+	if err != nil {
+		return err
+	}
+	rec, err := chatlab.LoadRecord(recordFile(root))
+	if err != nil {
+		return err
+	}
+	if err := rec.FullRunDone(root, chatlab.SharedFiles); err != nil {
+		return err
+	}
+	return rec.Save(recordFile(root))
+}
+
+// mark records scenarios as green without running them: for what a run has just
+// shown, when only their own files changed since, such as a covers list.
+func mark(names []string) error {
+	root, err := chatlab.RepoRoot()
+	if err != nil {
+		return err
+	}
+	if len(names) == 0 {
+		return errors.New("mark takes names")
+	}
+	scenarios, err := chatlab.LoadScenarios(filepath.Join(root, "tools", "chatlab", "scenarios"), names)
+	if err != nil {
+		return err
+	}
+	rec, err := chatlab.LoadRecord(recordFile(root))
+	if err != nil {
+		return err
+	}
+	for _, s := range scenarios {
+		if err := rec.Passed(root, s); err != nil {
+			return err
+		}
+	}
+	return rec.Save(recordFile(root))
+}
+
 func runScenarios(ctx context.Context, args []string) (int, error) {
 	root, err := chatlab.RepoRoot()
 	if err != nil {
 		return 0, err
 	}
+	defaultModels := filepath.Join(root, "models.example.yaml")
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	all := fs.Bool("all", false, "run everything, not only what changed: about 1,100,000 tokens")
 	maxTokens := fs.Int("max-tokens", 1_500_000, "stop starting repeats past this many tokens")
 	judge := fs.String("judge", chatlab.DefaultJudgeModel, "the judge's model, through the claude CLI")
-	models := fs.String("models", filepath.Join(root, "models.example.yaml"), "the catalogue under test")
+	models := fs.String("models", defaultModels, "the catalogue under test")
 	repeat := fs.Int("repeat", 0, "repeats of each scenario instead of its own number")
 	dir := fs.String("dir", filepath.Join(root, "tools", "chatlab", "scenarios"), "where the scenarios are")
 	names, err := flagsLast(fs, args)
@@ -108,16 +160,63 @@ func runScenarios(ctx context.Context, args []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	rec, err := chatlab.LoadRecord(recordFile(root))
+	if err != nil {
+		return 0, err
+	}
+	// A run on another catalogue or sample compares; it says nothing of the
+	// main model as the scenarios stand, so it leaves the record alone.
+	keep := *models == defaultModels && *repeat == 0
+	var untouched []string
+	if len(names) == 0 && !*all {
+		if rec.Empty() {
+			return 0, fmt.Errorf("no record of what passed, so everything would run, about 1,100,000 tokens: name scenarios, or make lab-all if that is decided")
+		}
+		if scenarios, untouched, err = chatlab.Select(root, scenarios, rec); err != nil {
+			return 0, err
+		}
+	}
 	tokens := &chatlab.Counter{}
 	r := chatlab.RunAll(ctx, chatlab.RunOptions{Scenarios: scenarios, Catalog: cat, Keys: keys, Relay: filepath.Join(root, "bin", "ganglion"),
 		Judge: chatlab.NewJudge(tokens.Wrap(claudecli.New("judge")), *judge), MaxTokens: *maxTokens, Repeat: *repeat, Tokens: tokens})
+	r.Untouched = untouched
+	if keep {
+		if err := remember(root, &rec, scenarios, r, *all); err != nil {
+			return 0, err
+		}
+	}
+	if r.FullRun, err = rec.FullRunReasons(root, chatlab.SharedFiles); err != nil {
+		return 0, err
+	}
 	path, err := chatlab.WriteReport(filepath.Join(root, "bin", "lab"), r)
 	if err != nil {
 		return 0, err
 	}
 	fmt.Print(r.Table())
 	fmt.Println("Report:", path)
-	return chatlab.ExitCode(r.Outcomes), nil
+	return chatlab.ExitCode(r.Outcomes, untouched), nil
+}
+
+// remember keeps what passed and forgets what did not. Only a full run where
+// everything passed clears the recommendation for one.
+func remember(root string, rec *chatlab.Record, scenarios []chatlab.Scenario, r chatlab.Run, all bool) error {
+	whole := all
+	for i, s := range scenarios {
+		if r.Outcomes[i].Result != chatlab.ResultPassed {
+			rec.Failed(s)
+			whole = false
+			continue
+		}
+		if err := rec.Passed(root, s); err != nil {
+			return err
+		}
+	}
+	if whole {
+		if err := rec.FullRunDone(root, chatlab.SharedFiles); err != nil {
+			return err
+		}
+	}
+	return rec.Save(recordFile(root))
 }
 
 func loadCatalog(path string) (rules.Catalog, map[string]string, error) {

@@ -5,6 +5,9 @@ why: >-
   second question. A real model cannot be made to repeat a call, so a scripted
   one does: the live attempt tested nothing, as the model found its addresses
   through search.
+covers:
+  - "policy/**"
+  - "tool/pending/**"
 model: scripted
 script:
   - {tool: schedule.create, args: '{"kind":"reminder","at":"2099-01-01 09:00","text":"Call the plumber."}'}

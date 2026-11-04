@@ -152,9 +152,9 @@ func judge(counted []Repeat) (Result, string) {
 
 // ExitCode is chatlab run's exit code: 0 only if every scenario passed, 1 on
 // a failure, 2 when the worst is flaky, inconclusive or not run.
-func ExitCode(os []Outcome) int {
+func ExitCode(os []Outcome, untouched []string) int {
 	code := 0
-	if len(os) == 0 {
+	if len(os) == 0 && len(untouched) == 0 {
 		code = 2
 	}
 	for _, o := range os {

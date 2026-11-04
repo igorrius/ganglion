@@ -28,7 +28,8 @@ const ModelScripted = "scripted"
 // Scenario is one check, as data (schemas/chatlab-scenario.schema.json).
 type Scenario struct {
 	Name    string       `yaml:"name"`
-	Why     string       `yaml:"why"` // the bug it guards against
+	Why     string       `yaml:"why"`    // the bug it guards against
+	Covers  []string     `yaml:"covers"` // files it depends on, relative to the repository; dir/** is a tree
 	Repeat  int          `yaml:"repeat"`
 	Persona string       `yaml:"persona"` // PersonaDefault or a directory under the scenario's
 	Skills  []string     `yaml:"skills"`  // directories copied to workspace/skills

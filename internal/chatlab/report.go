@@ -16,6 +16,10 @@ type Run struct {
 	Outcomes []Outcome
 	Tokens   int
 	Secrets  []string // provider keys, which no pattern can recognise
+	// Untouched are scenarios left out, as nothing of theirs changed.
+	Untouched []string
+	// FullRun is why a full run is recommended; it is never started by itself.
+	FullRun []string
 }
 
 var marks = map[Result]string{
@@ -50,6 +54,10 @@ func (r Run) Table() string {
 	}
 	fmt.Fprintf(&b, "\n%d passed, %d flaky, %d failed, %d inconclusive, %d not run. Spent %d tokens, $%.4f.\n",
 		counts[ResultPassed], counts[ResultFlaky], counts[ResultFailed], counts[ResultInconclusive], counts[ResultNotRun], r.Tokens, cost)
+	fmt.Fprintf(&b, "%d ran, %d untouched.\n", len(r.Outcomes), len(r.Untouched))
+	if len(r.FullRun) > 0 {
+		fmt.Fprintf(&b, "Full run recommended, about 1,100,000 tokens, make lab-all, or make lab-skip-full to do without: %s.\n", strings.Join(r.FullRun, ", "))
+	}
 	return r.clean(b.String())
 }
 

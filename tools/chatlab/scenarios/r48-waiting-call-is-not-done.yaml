@@ -3,6 +3,11 @@ name: r48-waiting-call-is-not-done
 why: >-
   Ruling R48. The model said "I updated the record" while a memory write waited
   for the owner's press. A web page taints the session, so the write has to ask.
+covers:
+  - "policy/**"
+  - "tool/pending/**"
+  - tool/builtin/memory.go
+  - agent/resume.go
 pages:
   - {url: "http://solar-notes.example.net/tips", file: pages/tips.html}
 steps:
