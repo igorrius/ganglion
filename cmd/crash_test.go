@@ -461,6 +461,47 @@ func (n *crashAgentNode) checkHistory(t *testing.T) {
 	t.Error("the model saw no turn")
 }
 
+// Final review: a script runs as the node's user, so without this it could
+// read the node's token from /proc/<node>/environ, whatever its own
+// environment holds.
+func TestNodeEnvironmentIsNotReadable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the binary")
+	}
+	if _, err := os.Stat("/proc/self/environ"); err != nil {
+		t.Skip("no /proc")
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ganglion")
+	if out, err := exec.Command("go", "build", "-o", bin, "..").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	fake := telegramtest.NewServer(t, crashToken)
+	cmd := exec.Command(bin, "run", "--roles", "core")
+	cmd.Env = append(os.Environ(), "GANGLION_DB="+filepath.Join(dir, "env.db"), "TELEGRAM_BOT_TOKEN="+crashToken, "TELEGRAM_BOT_TOKEN_FILE=",
+		"TELEGRAM_API_URL="+fake.URL(), "GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID), "GANGLION_METRICS_ADDR=off", "GANGLION_MODELS_FILE=")
+	var stdout lockedBuffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stdout
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = cmd.Process.Signal(syscall.SIGTERM)
+		_ = cmd.Wait()
+	}()
+	deadline := time.Now().Add(20 * time.Second)
+	for !strings.Contains(stdout.String(), "node started") {
+		if time.Now().After(deadline) {
+			t.Fatalf("the node did not start:\n%s", stdout.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", cmd.Process.Pid))
+	if err == nil {
+		t.Fatalf("another process of the same user read the node's environment (%d bytes)", len(b))
+	}
+}
+
 // R-OBS-6: the last line the node logged before a kill -9 is on disk.
 // The disk handler runs before stdout's, so a line seen on stdout is
 // already in the file.

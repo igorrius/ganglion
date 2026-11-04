@@ -48,6 +48,9 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 			}
 			defer closeLogs()
 			logger = logger.With("version", in.Version, "commit", shortCommit(in))
+			if err := hardenProcess(); err != nil {
+				logger.Warn("node: a script can read this process's environment from /proc", "err", err)
+			}
 			tel, stop := startTelemetry(ctx, b.MetricsAddr, in, logger)
 			defer stop()
 			if tel != nil {

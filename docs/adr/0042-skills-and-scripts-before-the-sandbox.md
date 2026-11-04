@@ -93,7 +93,9 @@ What holds for every run, enforced by code:
     handling is the owner's code; the input is size-capped, and no
     shell parses it.
   - *A script exfiltrates the node's secrets from its environment.* They
-    are never in it.
+    are never in it. Nor can it read them from the node's own environment
+    in `/proc/<node>/environ`: on Linux the node marks itself not dumpable
+    at start (`PR_SET_DUMPABLE`), which also turns off its core dumps.
   - *A script reads the node's database or `*_FILE` secrets from disk.*
     **Not stopped until M3d.** A script can read what the node's user can
     read. Installing a script is trusting it with that, and the owner
@@ -106,8 +108,19 @@ What holds for every run, enforced by code:
     a result marked as outside content, not an error in the node's
     words.
   - *A typo in the model block fails open* (`privacy: local` would send
-    a local-only skill to the cloud). Values are checked at load; a
-    `local-only` turn stays local whatever skill is read next.
+    a local-only skill to the cloud). Values are checked at load.
+  - *A local-only skill's data reaches the cloud on a later turn.* Its text
+    and output join the session's history, so `local-only` lasts until the
+    session ends, not the turn: later turns and compaction stay on local
+    models, whatever skill is read next, and recall does not return such a
+    session. **Not stopped:** the model's own tool calls. `memory.write`
+    sends its text to the guard's model and keeps it for later sessions, and
+    the web tools send what the model puts in them.
+  - *A change script runs twice after a crash.* A run is recorded under its
+    call's key before it starts, in a committed row. If that key comes back,
+    the script is not run again: the model hears that the outcome is unknown
+    and tells the owner, who can ask again. The cost: a crash can leave a
+    change undone until the owner asks. A read script just runs again.
   - *A file is swapped after the start, or another local user can write
     it.* A script or skill directory writable by group or others is
     refused, and the checks run again before each run.

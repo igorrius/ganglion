@@ -190,7 +190,15 @@ Start here when coming back to the project.
       skill is not loaded (both are logged and visible otherwise); pin the
       GitHub Actions by commit SHA in `modules-release.yml`; prune old
       failed `module_versions` rows; `/modules update` blocks its turn up
-      to about 60 s plus the self-test.
+      to about 60 s plus the self-test; a script outlives a killed node, and
+      its temp dir stays; log files past their age stay until the next
+      rotation or start; a failed reopen stops disk logs until a restart;
+      "no release found" covers a channel that cannot be read and a release
+      for a newer core; `metrics.show` does not check the attachment cap
+      itself; a stored module shadows a newer built-in with no word of it;
+      an album costs one model turn per photo; a script's stdout is not
+      redacted as its stderr is; ADR-0041's host list omits
+      `release-assets.githubusercontent.com`.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

@@ -359,12 +359,16 @@ model:
   binary and reserved by name, so a workspace skill of the same name is
   not loaded and the owner is told. The system prompt lists each skill's
   name and description; the model reads one with `skill.read`, and the
-  rest of the turn is routed by that skill's `model` block. Only the
+  rest of the turn is routed by that skill's `model` block; `privacy:
+  local-only` lasts until the session ends, since the skill's data is then in
+  its history ([ADR-0042](adr/0042-skills-and-scripts-before-the-sandbox.md)).
+  Only the
   owner installs a skill; the agent may propose one by showing its text.
 - **R-RTR-5.** A level-2 skill declares its script in the frontmatter:
   `script: {run, effects, env, timeout}`. `effects: read` runs by
-  itself, `effects: change` asks with a button; the output is outside
-  content. The script runs without a shell, in its own process group,
+  itself, `effects: change` asks with a button and runs at most once per
+  call key (R-DLV-6): after a crash it is not run again, and the owner is
+  told its outcome is unknown; the output is outside content. The script runs without a shell, in its own process group,
   with an environment built from scratch plus the names it lists (the
   node's secrets never pass), a timeout of at most 120 s, and capped
   output. Until the sandbox of

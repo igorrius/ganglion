@@ -158,6 +158,39 @@ func TestPlainHTTPRefused(t *testing.T) {
 
 // A newer release that lacks an asset is passed over, not the end of the
 // search.
+// Final review: a read that fails is no incomplete release. It must not
+// select an older one, which would then install as an update.
+func TestFailedReadOfTheNewestSumsEndsTheSearch(t *testing.T) {
+	for name, path := range map[string]func(f *fakeGitHub){
+		"not found": func(f *fakeGitHub) { delete(f.files, "/dl/html2md/v0.4.0/SHA256SUMS") },
+		"redirect off GitHub": func(f *fakeGitHub) {
+			assets := f.releases[1]["assets"].([]map[string]string)
+			assets[2]["browser_download_url"] = f.srv.URL + "/redirect"
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFake(t)
+			f.add("html2md/v0.3.0", 1, false, false)
+			f.add("html2md/v0.4.0", 1, false, false)
+			path(f)
+			if r, err := f.client().Latest(context.Background(), "html2md", 1); err == nil {
+				t.Fatalf("selected %s although the newest release could not be read", r.Version)
+			}
+		})
+	}
+}
+
+// A sums file that does not name both files is an incomplete release.
+func TestReleaseWithIncompleteSumsSkipped(t *testing.T) {
+	f := newFake(t)
+	f.add("html2md/v0.3.0", 1, false, false)
+	f.add("html2md/v0.4.0", 1, false, false)
+	f.files["/dl/html2md/v0.4.0/SHA256SUMS"] = []byte("abc  html2md.wasm\n")
+	if r, err := f.client().Latest(context.Background(), "html2md", 1); err != nil || r.Version != "0.3.0" {
+		t.Fatalf("release %+v, %v", r, err)
+	}
+}
+
 func TestReleaseWithoutAssetsSkipped(t *testing.T) {
 	f := newFake(t)
 	f.add("html2md/v0.2.0", 1, false, false)

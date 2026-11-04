@@ -24,7 +24,7 @@ const SkillReadTool = "skill.read"
 
 // NewSkillTools gives the agent skill.read and one tool per script skill
 // (R-RTR-5, ADR-0042), all for admins only.
-func NewSkillTools(set skills.Set, run *skills.Runner) []tool.Handler {
+func NewSkillTools(set skills.Set, run *skills.Runner, begun ScriptRuns) []tool.Handler {
 	m := otel.Meter("ganglion/skills")
 	runs, _ := m.Int64Counter("ganglion.skill.runs", metric.WithDescription("Skill script runs, by skill and result."))
 	dur, _ := m.Float64Histogram("ganglion.skill.run.duration", metric.WithUnit("s"), buckets.Seconds,
@@ -32,7 +32,7 @@ func NewSkillTools(set skills.Set, run *skills.Runner) []tool.Handler {
 	out := []tool.Handler{&skillRead{set: set}}
 	for _, name := range set.Names() {
 		if sk, _ := set.Get(name); sk.Script != nil {
-			out = append(out, &skillScript{sk: sk, run: run, runs: runs, dur: dur})
+			out = append(out, &skillScript{sk: sk, run: run, begun: begun, runs: runs, dur: dur})
 		}
 	}
 	return out
@@ -66,11 +66,18 @@ func (r *skillRead) Run(_ context.Context, c tool.Call) (tool.Result, error) {
 	return tool.Result{Text: body}, nil
 }
 
+// ScriptRuns records that a change script is about to run for a call's key
+// (skills.Runs). Begin is false when that key has begun before.
+type ScriptRuns interface {
+	Begin(ctx context.Context, key, skill string) (bool, error)
+}
+
 type skillScript struct {
-	sk   skills.Skill
-	run  *skills.Runner
-	runs metric.Int64Counter
-	dur  metric.Float64Histogram
+	sk    skills.Skill
+	run   *skills.Runner
+	begun ScriptRuns
+	runs  metric.Int64Counter
+	dur   metric.Float64Histogram
 }
 
 func (s *skillScript) Spec() tool.Spec {
@@ -119,11 +126,22 @@ func quote(s string) string {
 const errHead = 500
 
 // Run runs the script. Its output is outside content whatever its class:
-// it may print what it read from anywhere.
+// it may print what it read from anywhere. A change script runs at most once
+// per call key (R-DLV-6).
 func (s *skillScript) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	in, err := s.input(c)
 	if err != nil {
 		return tool.Result{}, err
+	}
+	if s.sk.Script.Effects == skills.EffectsChange {
+		first, err := s.begun.Begin(ctx, c.Key(), s.sk.Name)
+		if err != nil {
+			return tool.Result{}, fmt.Errorf("%s: %w", s.sk.ToolName(), err)
+		}
+		if !first {
+			s.runs.Add(ctx, 1, metric.WithAttributes(attribute.String("skill", s.sk.Name), attribute.String("result", "cut_short")))
+			return tool.Result{}, fmt.Errorf("%s: this call started once and a restart or a failure cut its turn short; it may have done its work, so it is not run again. Tell the owner the outcome is unknown; they can ask for it again", s.sk.ToolName())
+		}
 	}
 	started := time.Now()
 	out, err := s.run.Run(ctx, s.sk, []byte(in))

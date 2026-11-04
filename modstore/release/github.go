@@ -189,8 +189,11 @@ func (g *GitHub) Latest(ctx context.Context, module string, abi int) (modstore.R
 	slices.SortFunc(cands, func(a, b cand) int { return slices.Compare(b.v[:], a.v[:]) })
 	for _, c := range cands {
 		rel, err := g.describe(ctx, module, c.s, c.rel)
-		if err != nil {
+		if errors.Is(err, errIncomplete) {
 			continue // an incomplete release is passed over, not the end of the search
+		}
+		if err != nil {
+			return modstore.Release{}, err // a failed read must not select an older release
 		}
 		manifest, err := g.get(ctx, rel.ManifestURL, MaxFileBytes)
 		if err != nil {
@@ -203,13 +206,17 @@ func (g *GitHub) Latest(ctx context.Context, module string, abi int) (modstore.R
 	return modstore.Release{}, fmt.Errorf("release: no release of %s for ABI %d", module, abi)
 }
 
-// describe reads a release's sums.
+// errIncomplete is a release published without all its files.
+var errIncomplete = errors.New("release: incomplete")
+
+// describe reads a release's sums. Only errIncomplete says the release itself
+// is short of something; any other error is a read that failed.
 func (g *GitHub) describe(ctx context.Context, module, version string, r ghRelease) (modstore.Release, error) {
 	rel := modstore.Release{Module: module, Version: version, Tag: r.Tag,
 		WasmURL: r.asset(module + ".wasm"), ManifestURL: r.asset(module + ".yaml")}
 	sumsURL := r.asset("SHA256SUMS")
 	if rel.WasmURL == "" || rel.ManifestURL == "" || sumsURL == "" {
-		return modstore.Release{}, fmt.Errorf("release: %s lacks %s.wasm, %s.yaml or SHA256SUMS", r.Tag, module, module)
+		return modstore.Release{}, fmt.Errorf("%w: %s lacks %s.wasm, %s.yaml or SHA256SUMS", errIncomplete, r.Tag, module, module)
 	}
 	sums, err := g.get(ctx, sumsURL, MaxFileBytes)
 	if err != nil {
@@ -229,7 +236,7 @@ func (g *GitHub) describe(ctx context.Context, module, version string, r ghRelea
 		}
 	}
 	if rel.SHA256 == "" || rel.ManifestSHA256 == "" {
-		return modstore.Release{}, fmt.Errorf("release: %s's SHA256SUMS lacks a file", r.Tag)
+		return modstore.Release{}, fmt.Errorf("%w: %s's SHA256SUMS lacks a file", errIncomplete, r.Tag)
 	}
 	return rel, nil
 }

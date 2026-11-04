@@ -162,7 +162,11 @@ func Skills() do.Provider[Skilled] {
 		skills.Report(do.MustInvoke[*slog.Logger](i), set, problems)
 		cfg := skills.DefaultRunConfig()
 		cfg.TZ = b.Agent.TZ.String()
-		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg))}, nil
+		runs, err := skills.OpenRuns(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, time.Now)
+		if err != nil {
+			return Skilled{}, err
+		}
+		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg), runs)}, nil
 	}
 }
 

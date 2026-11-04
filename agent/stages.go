@@ -10,6 +10,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/turns"
 )
@@ -138,7 +139,7 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 // (shutdown) is an error, so the event is offered again.
 func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Message) (added []provider.Message, text string, end turns.Outcome, err error) {
 	tools := a.toolSpecs(t)
-	task := router.TaskReq{Kind: router.TaskMessage, Tools: len(tools) > 0}
+	task := router.TaskReq{Kind: router.TaskMessage, Tools: len(tools) > 0, Privacy: t.state.privacy()}
 	var exec provider.Exec // a CLI provider runs the calls itself; no tools, nothing to run
 	if len(tools) > 0 {
 		exec = a.exec(t)
@@ -167,6 +168,7 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 		}
 		results := a.runTools(turnCtx, t, msg.ToolCalls)
 		task = a.skillRoute(task, msg.ToolCalls, t.admin)
+		t.state.LocalOnly = task.Privacy == skills.PrivacyLocalOnly // skillRoute never lifts it
 		msgs, added = append(msgs, results...), append(added, results...)
 	}
 	return added, "", turns.OutcomeOK, nil

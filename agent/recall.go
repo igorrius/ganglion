@@ -23,7 +23,8 @@ var _ memory.Episodes = (*Archive)(nil)
 
 // Search returns at most limit archived sessions of the conversations
 // convs whose summary or messages hold q, case insensitive, newest first,
-// each with the text around its first match (memory.Episodes). Only the
+// each with the text around its first match (memory.Episodes). A local-only
+// session is left out. Only the
 // newest searchSessions sessions of those conversations are read; no
 // convs finds nothing.
 func (a *Archive) Search(ctx context.Context, q string, convs []string, limit int) ([]memory.Episode, error) {
@@ -51,6 +52,9 @@ func (a *Archive) Search(ctx context.Context, q string, convs []string, limit in
 		st, err := DecodeState([]byte(data))
 		if err != nil {
 			continue // an unreadable session has nothing to find
+		}
+		if st.LocalOnly {
+			continue // what it holds stays off the cloud (ADR-0042); a recall may feed a cloud model
 		}
 		if text, ok := match(st, needle); ok {
 			out = append(out, memory.Episode{Conv: conv, Session: st.Session, Ended: st.Last, Tainted: st.Tainted, Text: text})

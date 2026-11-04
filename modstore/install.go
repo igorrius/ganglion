@@ -149,7 +149,7 @@ func checkManifest(b Builtin, src []byte) error {
 	case err != nil:
 		return &refusal{result: ResultRefused, reason: "the manifest is not valid for this core", detail: err.Error()}
 	case m.Name != b.Name:
-		return refuse("the manifest's name is %q, not %q", m.Name, b.Name)
+		return &refusal{result: ResultRefused, reason: "the manifest names another module", detail: m.Name}
 	case m.ABI != b.Ceiling.ABI:
 		return refuse("the module speaks ABI %d; this core speaks %d (a new core is needed)", m.ABI, b.Ceiling.ABI)
 	case m.Limits.Memory > b.Ceiling.MaxMemory:
