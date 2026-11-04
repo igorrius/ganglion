@@ -66,7 +66,8 @@ compare:
 # subscription limits, and does not read .env: that file holds TELEGRAM_*.
 LAB ?=
 lab: build
-	go run -tags lab ./tools/chatlab run $(LAB)
+	go build -tags lab -o bin/chatlab ./tools/chatlab
+	bin/chatlab run $(LAB)
 
 # The agent under kill -9: 200 kills by default, GANGLION_CRASH_ITERS sets
 # more. A fake Bot API and a fake model; it spends a few minutes (3.8).

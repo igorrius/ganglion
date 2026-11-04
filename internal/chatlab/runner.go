@@ -241,36 +241,56 @@ func (r *repeatRun) finish(ctx context.Context, s Scenario) {
 		main = MainModel(r.o.Catalog)
 	}
 	if v, err := ReadView(ctx, r.n, nil); err == nil {
-		r.log.WriteString("\nJournal:\n")
-		for _, e := range v.Journal {
-			fmt.Fprintf(&r.log, "- `%s` %s %s tainted=%t args=%s result=%q err=%q\n", e.Key, e.Tool, e.Decision, e.Tainted, e.Args, e.ResultHead, e.Err)
-		}
+		r.log.WriteString("\nJournal:\n" + journalLines(v))
 	}
-	rows, err := r.n.DB().QueryContext(ctx, `SELECT conv, outcome, steps, route, tools, cost_usd FROM turns WHERE outcome != 'command' ORDER BY started_ms`)
-	if err != nil {
-		fmt.Fprintf(&r.log, "\nTurns: %v\n", err)
-		return
-	}
-	defer func() { _ = rows.Close() }()
 	r.log.WriteString("\nTurns:\n")
-	for rows.Next() {
-		var conv, outcome, route, tools string
-		var steps int
-		var cost float64
-		if err := rows.Scan(&conv, &outcome, &steps, &route, &tools, &cost); err != nil {
-			fmt.Fprintf(&r.log, "- %v\n", err)
-			return
-		}
-		r.rep.CostUSD += cost
-		fmt.Fprintf(&r.log, "- %s: %s, %d steps, route %s, tools %s\n", conv, outcome, steps, route, tools)
-		var attempts []turns.Attempt
-		if json.Unmarshal([]byte(route), &attempts) != nil {
-			continue
-		}
-		for _, a := range attempts {
+	rows, err := turnLines(ctx, r.n, &r.log)
+	if err != nil {
+		fmt.Fprintf(&r.log, "- %v\n", err)
+	}
+	for _, t := range rows {
+		r.rep.CostUSD += t.cost
+		for _, a := range t.attempts {
 			if a.Error == "" && a.Model != main && r.rep.Inconclusive == "" {
 				r.rep.Inconclusive = fmt.Sprintf("%s answered in place of %s", a.Model, main)
 			}
 		}
 	}
+}
+
+// journalLines prints the journal of a view.
+func journalLines(v View) string {
+	var b strings.Builder
+	for _, e := range v.Journal {
+		fmt.Fprintf(&b, "- `%s` %s %s tainted=%t args=%s result=%q err=%q\n", e.Key, e.Tool, e.Decision, e.Tainted, e.Args, e.ResultHead, e.Err)
+	}
+	return b.String()
+}
+
+// turnRow is what a repeat keeps of a turn.
+type turnRow struct {
+	cost     float64
+	attempts []turns.Attempt
+}
+
+// turnLines prints the node's model turns to w and returns them.
+func turnLines(ctx context.Context, n *Node, w *strings.Builder) ([]turnRow, error) {
+	rows, err := n.DB().QueryContext(ctx, `SELECT conv, outcome, steps, route, tools, cost_usd FROM turns WHERE outcome != 'command' ORDER BY started_ms`)
+	if err != nil {
+		return nil, fmt.Errorf("chatlab: turns: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []turnRow
+	for rows.Next() {
+		var conv, outcome, route, tools string
+		var steps int
+		var t turnRow
+		if err := rows.Scan(&conv, &outcome, &steps, &route, &tools, &t.cost); err != nil {
+			return out, fmt.Errorf("chatlab: turns: %w", err)
+		}
+		fmt.Fprintf(w, "- %s: %s, %d steps, route %s, tools %s\n", conv, outcome, steps, route, tools)
+		_ = json.Unmarshal([]byte(route), &t.attempts) // a route that does not parse names no model
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }
