@@ -47,6 +47,7 @@
         "say": { "type": "string" },
         "press": { "description": "A button's label. Not showing is a failure.", "type": "string" },
         "judge": { "description": "A claim about the model's last words.", "type": "string" },
+        "language": { "description": "Checks the model's last words by their letters, with no model.", "enum": ["ru", "uk"] },
         "send": { "$ref": "#/$defs/file" },
         "advance": { "$ref": "#/$defs/advance" },
         "reach": { "$ref": "#/$defs/reach" },

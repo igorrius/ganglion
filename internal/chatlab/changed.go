@@ -15,7 +15,7 @@ import (
 
 // SharedFiles touch every reply: the main model, the rules and the way to the
 // model. A change here recommends a full run; it never starts one, as that takes
-// about 1,100,000 tokens and is decided, not automatic (owner, 2026-11-04).
+// about 900,000 tokens and is decided, not automatic (owner, 2026-11-04).
 var SharedFiles = []string{
 	"models.example.yaml",
 	"agent/prompt.go",

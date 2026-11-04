@@ -17,4 +17,4 @@ steps:
   - press: Approve
   - advance: {scheduler: 2h}
   - reach: {journal: {tool: web.fetch}}
-  - judge: "The reply is written in Ukrainian. Numbers, currency codes, symbols and a phrase quoted from a page do not count."
+  - language: uk

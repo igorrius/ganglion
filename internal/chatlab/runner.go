@@ -137,6 +137,9 @@ func (r *repeatRun) step(ctx context.Context, st Step) error {
 		return r.reach(ctx, *st.Reach)
 	case st.Facts != nil:
 		return r.facts(ctx, *st.Facts)
+	case st.Language != "":
+		r.language(st.Language)
+		return nil
 	}
 	return r.judge(ctx, st.Judge)
 }
@@ -214,6 +217,12 @@ func (r *repeatRun) facts(ctx context.Context, f Facts) error {
 	}
 	r.rep.Failures = append(r.rep.Failures, Check(f, v)...)
 	return nil
+}
+
+// language counts like a judgment, k of n, and needs no model.
+func (r *repeatRun) language(want string) {
+	ok, why := CheckLanguage(want, words(r.last))
+	r.rep.Judgments = append(r.rep.Judgments, Judgment{Claim: "Written in " + want, OK: ok, Reason: why})
 }
 
 func (r *repeatRun) judge(ctx context.Context, claim string) error {

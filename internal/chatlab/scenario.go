@@ -55,13 +55,16 @@ type Page struct {
 
 // Step is one action; exactly one field is set.
 type Step struct {
-	Say     string   `yaml:"say"`
-	Press   string   `yaml:"press"`
-	Judge   string   `yaml:"judge"` // a claim about the model's last words
-	Send    *File    `yaml:"send"`
-	Advance *Advance `yaml:"advance"`
-	Reach   *Reach   `yaml:"reach"`
-	Facts   *Facts   `yaml:"facts"`
+	Say   string `yaml:"say"`
+	Press string `yaml:"press"`
+	Judge string `yaml:"judge"` // a claim about the model's last words, for a model to weigh
+	// Language checks the model's last words by their letters, with no model:
+	// LangRussian or LangUkrainian.
+	Language string   `yaml:"language"`
+	Send     *File    `yaml:"send"`
+	Advance  *Advance `yaml:"advance"`
+	Reach    *Reach   `yaml:"reach"`
+	Facts    *Facts   `yaml:"facts"`
 }
 
 // Advance moves one of the node's clocks forward.
@@ -261,7 +264,7 @@ func (s Scenario) checkSteps() error {
 		if st.Judge != "" && s.Model == ModelScripted {
 			return fmt.Errorf("step %d: judge has nothing to read on a scripted model", i+1)
 		}
-		canFail = canFail || st.Judge != "" || st.Facts != nil
+		canFail = canFail || st.Judge != "" || st.Language != "" || st.Facts != nil
 	}
 	if !canFail {
 		return errors.New("no facts or judge step: this scenario cannot fail")
@@ -271,7 +274,7 @@ func (s Scenario) checkSteps() error {
 
 func (st Step) check() error {
 	set := 0
-	for _, on := range []bool{st.Say != "", st.Press != "", st.Judge != "", st.Send != nil, st.Advance != nil, st.Reach != nil,
+	for _, on := range []bool{st.Say != "", st.Press != "", st.Judge != "", st.Language != "", st.Send != nil, st.Advance != nil, st.Reach != nil,
 		st.Facts != nil && !st.Facts.empty()} {
 		if on {
 			set++
@@ -281,6 +284,8 @@ func (st Step) check() error {
 		return fmt.Errorf("a step has one action, this one %d", set)
 	}
 	switch {
+	case st.Language != "" && st.Language != LangRussian && st.Language != LangUkrainian:
+		return fmt.Errorf("language %q", st.Language)
 	case st.Advance != nil && (st.Advance.Confirmations > 0) == (st.Advance.Scheduler > 0):
 		return errors.New("advance moves one clock forward")
 	case st.Reach != nil && st.Reach.Journal.Tool == "":

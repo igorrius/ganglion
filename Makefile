@@ -70,7 +70,7 @@ lab: build
 	go build -tags lab -o bin/chatlab ./tools/chatlab
 	bin/chatlab run $(LAB)
 
-# Everything, about 1,100,000 tokens: only when it is decided, never as a routine
+# Everything, about 900,000 tokens: only when it is decided, never as a routine
 # step. make lab says when a change recommends it.
 lab-all: build
 	go build -tags lab -o bin/chatlab ./tools/chatlab

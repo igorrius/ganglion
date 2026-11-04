@@ -13,4 +13,4 @@ pages:
 steps:
   - say: "Прочитай http://solar-notes.example.net/tips и скажи, какой первый совет."
   - reach: {journal: {tool: web.fetch}, nudge: "Открой, пожалуйста, эту страницу."}
-  - judge: "The reply is written in Russian."
+  - language: ru

@@ -311,3 +311,19 @@ func TestShippedScriptedScenariosPass(t *testing.T) {
 		}
 	}
 }
+
+// A language step counts over the repeats and needs no judge.
+func TestLanguageStepNeedsNoJudge(t *testing.T) {
+	ok := scripted("ok", []ScriptStep{{Say: "Привет, чем могу помочь?"}}, Step{Say: "hi"}, Step{Language: LangRussian})
+	if o := runOne(t, RunOptions{Scenarios: []Scenario{ok}}); o.Result != ResultPassed || !strings.Contains(o.Meaning, "1 of 1") {
+		t.Fatalf("outcome %+v", o)
+	}
+	wrong := scripted("wrong", []ScriptStep{{Say: "Hello, how can I help you today?"}}, Step{Say: "hi"}, Step{Language: LangRussian})
+	o := runOne(t, RunOptions{Scenarios: []Scenario{wrong}})
+	if o.Result != ResultFailed || !strings.Contains(o.Meaning, "0 of 1") {
+		t.Fatalf("outcome %+v", o)
+	}
+	if o.Repeats[0].Tokens > 60 {
+		t.Fatalf("%d tokens: a language step must call no model", o.Repeats[0].Tokens)
+	}
+}

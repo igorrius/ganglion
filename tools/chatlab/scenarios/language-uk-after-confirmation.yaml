@@ -10,4 +10,4 @@ steps:
   - say: "Постав нагадування на завтра о 09:00: зателефонувати сантехніку."
   - reach: {journal: {tool: schedule.create}, nudge: "Так, створи це нагадування."}
   - press: Approve
-  - judge: "The reply is written in Ukrainian."
+  - language: uk

@@ -7,4 +7,4 @@ covers:
 repeat: 5
 steps:
   - say: "Привет! Посоветуй, что приготовить на ужин из курицы и картошки."
-  - judge: "The reply is written in Russian."
+  - language: ru

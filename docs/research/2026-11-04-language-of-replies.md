@@ -85,3 +85,13 @@ now also says: translate what you read, and keep no words of another language.
   no longer counts numbers, currency codes, symbols or a quoted phrase. That
   explains one miss above, and a reply of bare numbers in the baseline; it is not
   why the rest got better.
+
+## The check after this note
+
+The scenarios now check a reply by its letters and common words, with no judge
+(`internal/chatlab/language.go`). Compared on the 180 replies the judge had read in
+these runs: 178 agree, including every real miss. The two that differ are a reply of
+bare numbers and a phrase quoted from the page with its translation, where the judge
+said no and the letters say yes; the claim was changed for the same reason above. A
+word of another language with no telling letter, outside the list of common words,
+would pass.

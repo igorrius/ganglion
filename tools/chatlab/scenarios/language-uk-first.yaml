@@ -7,4 +7,4 @@ covers:
 repeat: 5
 steps:
   - say: "Привіт! Порадь, що приготувати на вечерю з курки та картоплі."
-  - judge: "The reply is written in Ukrainian."
+  - language: uk

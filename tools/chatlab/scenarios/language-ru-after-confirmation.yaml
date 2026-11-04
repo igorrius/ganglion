@@ -10,4 +10,4 @@ steps:
   - say: "Поставь напоминание на завтра в 09:00: позвонить сантехнику."
   - reach: {journal: {tool: schedule.create}, nudge: "Да, создай это напоминание."}
   - press: Approve
-  - judge: "The reply is written in Russian."
+  - language: ru

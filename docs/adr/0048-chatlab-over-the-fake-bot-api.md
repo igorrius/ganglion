@@ -95,6 +95,14 @@ firmly, and a judge model decides what a reply means, counted over repeats.
   covers it.
 - Real-model runs take from the owner's subscription; they run by hand, never in
   CI. Scripted scenarios spend nothing and do run in CI.
+- What repeats and needs no judgement needs no model here either, as in the rest of
+  the project: mechanics run on a scripted model, the language of a reply is
+  checked by its letters, and a judge stays for what a reply means.
+- `make lab` runs only what changed since it last passed. A full run, about 900,000
+  tokens, is decided and never automatic, not even before a merge (owner,
+  2026-11-04); a change to what every reply depends on recommends it.
+- A scenario's `covers` is written by hand and can miss a file, so a green `make lab`
+  says less than a full run; the table says how many were left out.
 
 ## Revisit when
 

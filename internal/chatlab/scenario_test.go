@@ -205,3 +205,13 @@ func TestShippedScenariosLoad(t *testing.T) {
 		t.Fatal("no scenarios")
 	}
 }
+
+func TestLoadScenarioLanguage(t *testing.T) {
+	s, err := LoadScenario(writeScenario(t, t.TempDir(), "x", "name: x\nwhy: y\nsteps:\n  - say: hi\n  - language: ru\n"))
+	if err != nil || s.Steps[1].Language != LangRussian {
+		t.Fatalf("scenario %+v, %v", s, err)
+	}
+	if _, err := LoadScenario(writeScenario(t, t.TempDir(), "x", "name: x\nwhy: y\nsteps:\n  - language: de\n")); err == nil || !strings.Contains(err.Error(), "language") {
+		t.Fatalf("err %v", err)
+	}
+}

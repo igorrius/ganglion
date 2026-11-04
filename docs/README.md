@@ -156,14 +156,20 @@ Start here when coming back to the project.
     - **Chatlab (task 3.20, [ADR-0048](adr/0048-chatlab-over-the-fake-bot-api.md),
       Proposed):** the developer runs the checks the owner could not run by hand:
       a channel-neutral peer talks to a real core over the fake Bot API, facts and
-      a judge decide, and a table shows n of n. `make lab` runs everything by hand
-      and spends subscription limits (`LAB=name` for one); `make lab-faults` proves
-      the scenarios can fail. `bin/chatlab start`, `say`, `press`, `advance`, `show`
-      and `stop` hold a conversation from the shell.
-      - **Seeded faults (2026-11-04):** the policy no longer asking, and the notes
-        of R48, R49 and R50 removed, each turned its scenario red; a real judge
-        failed wrong replies. R38 on a scripted model went red with its check
-        removed.
+      a judge decide, and a table shows n of n. `bin/chatlab start`, `say`, `press`,
+      `advance`, `show` and `stop` hold a conversation from the shell.
+      - **What runs:** `make lab` runs by hand the scenarios whose files changed since
+        they last passed (`tools/chatlab/passed.json`, in git; `LAB=name` for one). A
+        change to the main model, the prompt, the persona or the way to the model
+        recommends a full run and never starts one: `make lab-all`, about 900,000
+        tokens, only when decided (owner, 2026-11-04), or `make lab-skip-full`.
+      - **What needs no model:** the mechanics run on a scripted model in every
+        `make test`, and `make lab-faults` proves them on seeded faults for nothing.
+        The language of a reply is checked by its letters: 178 of 180 of the judge's
+        verdicts agree, and the other two were the judge being too strict.
+      - **Seeded faults (2026-11-04):** the policy no longer asking, the notes of R48,
+        R49 and R50 removed, and R38's check removed each turned a scenario red; a
+        real judge failed wrong replies.
       - **Language:** in chatlab's scenarios the agent lost the language only in
         scheduled tasks, on Sonnet and on Haiku: Russian with a Ukrainian page went
         from 2 of 5 to 10 of 10. The English reply the owner saw after web results

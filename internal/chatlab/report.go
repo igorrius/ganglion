@@ -56,7 +56,7 @@ func (r Run) Table() string {
 		counts[ResultPassed], counts[ResultFlaky], counts[ResultFailed], counts[ResultInconclusive], counts[ResultNotRun], r.Tokens, cost)
 	fmt.Fprintf(&b, "%d ran, %d untouched.\n", len(r.Outcomes), len(r.Untouched))
 	if len(r.FullRun) > 0 {
-		fmt.Fprintf(&b, "Full run recommended, about 1,100,000 tokens, make lab-all, or make lab-skip-full to do without: %s.\n", strings.Join(r.FullRun, ", "))
+		fmt.Fprintf(&b, "Full run recommended, about 900,000 tokens, make lab-all, or make lab-skip-full to do without: %s.\n", strings.Join(r.FullRun, ", "))
 	}
 	return r.clean(b.String())
 }

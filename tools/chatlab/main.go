@@ -142,7 +142,7 @@ func runScenarios(ctx context.Context, args []string) (int, error) {
 	}
 	defaultModels := filepath.Join(root, "models.example.yaml")
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	all := fs.Bool("all", false, "run everything, not only what changed: about 1,100,000 tokens")
+	all := fs.Bool("all", false, "run everything, not only what changed: about 900,000 tokens")
 	maxTokens := fs.Int("max-tokens", 1_500_000, "stop starting repeats past this many tokens")
 	judge := fs.String("judge", chatlab.DefaultJudgeModel, "the judge's model, through the claude CLI")
 	models := fs.String("models", defaultModels, "the catalogue under test")
@@ -170,7 +170,7 @@ func runScenarios(ctx context.Context, args []string) (int, error) {
 	var untouched []string
 	if len(names) == 0 && !*all {
 		if rec.Empty() {
-			return 0, fmt.Errorf("no record of what passed, so everything would run, about 1,100,000 tokens: name scenarios, or make lab-all if that is decided")
+			return 0, fmt.Errorf("no record of what passed, so everything would run, about 900,000 tokens: name scenarios, or make lab-all if that is decided")
 		}
 		if scenarios, untouched, err = chatlab.Select(root, scenarios, rec); err != nil {
 			return 0, err
