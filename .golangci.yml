@@ -1,5 +1,9 @@
 version: "2"
 
+run:
+  build-tags:
+    - lab
+
 # The guardrails of the Go conventions (docs/conventions.md, ADR-0027).
 linters:
   default: standard

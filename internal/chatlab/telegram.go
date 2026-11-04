@@ -12,6 +12,9 @@ import (
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 )
 
+// labFile is the Bot API id of every file a lab peer sends.
+const labFile = "lab-file"
+
 // Telegram is the Peer of a chat with the fake Bot API: the node's real
 // Telegram adapter talks to the same fake.
 type Telegram struct {
@@ -36,11 +39,11 @@ func (p *Telegram) Say(_ context.Context, text string) error {
 func (p *Telegram) SendFile(_ context.Context, f File) error {
 	var extra map[string]any
 	switch f.Kind {
-	case "document":
-		extra = map[string]any{"document": map[string]any{"file_id": "lab-file", "file_unique_id": "lab-file",
+	case KindDocument:
+		extra = map[string]any{KindDocument: map[string]any{"file_id": labFile, "file_unique_id": labFile,
 			"file_name": f.Name, "mime_type": f.Type, "file_size": f.Size}}
-	case "photo":
-		extra = map[string]any{"photo": []map[string]any{{"file_id": "lab-file", "file_unique_id": "lab-file",
+	case KindPhoto:
+		extra = map[string]any{KindPhoto: []map[string]any{{"file_id": labFile, "file_unique_id": labFile,
 			"width": 800, "height": 600, "file_size": f.Size}}}
 	default:
 		return fmt.Errorf("chatlab: file kind %q", f.Kind)
@@ -82,9 +85,9 @@ func (p *Telegram) Messages() []Message {
 		all = append(all, numbered{s.MessageID, m})
 	}
 	for _, u := range p.fake.Uploads() {
-		kind := "document"
+		kind := KindDocument
 		if u.Method == "sendPhoto" {
-			kind = "photo"
+			kind = KindPhoto
 		}
 		all = append(all, numbered{u.MessageID, Message{Text: u.Caption, Files: []Attachment{{Kind: kind, Name: u.FileName, Size: len(u.Data)}}}})
 	}

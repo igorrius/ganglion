@@ -33,9 +33,9 @@ why: the model once said "I updated the record" while the write waited
 repeat: 3
 persona: default
 pages:
-  - {url: "https://solar-notes.example.net/tips", file: pages/tips.html}
+  - {url: "http://solar-notes.example.net/tips", file: pages/tips.html}
 steps:
-  - say: "Read https://solar-notes.example.net/tips"
+  - say: "Read http://solar-notes.example.net/tips"
   - say: "Remember that my boiler holds 80 litres"
   - facts:
       journal: [{tool: memory.write, decision: confirm}]
@@ -56,7 +56,7 @@ func TestLoadScenario(t *testing.T) {
 	if s.Name != "r48-waiting-call-is-not-done" || s.Repeat != 3 || s.Persona != "default" || s.Dir != dir || len(s.Steps) != 6 {
 		t.Fatalf("scenario %+v", s)
 	}
-	if s.Pages[0].URL != "https://solar-notes.example.net/tips" || s.Pages[0].File != "pages/tips.html" {
+	if s.Pages[0].URL != "http://solar-notes.example.net/tips" || s.Pages[0].File != "pages/tips.html" {
 		t.Fatalf("pages %+v", s.Pages)
 	}
 	f := s.Steps[2].Facts
@@ -114,11 +114,11 @@ func TestLoadScenarioRefuses(t *testing.T) {
 		{"script without scripted", "name: x\nwhy: y\nscript: [{say: a}]\n" + ok, "script"},
 		{"script step with both", "name: x\nwhy: y\nmodel: scripted\nscript: [{say: a, tool: b}]\nsteps:\n  - facts: {questions: 1}\n", "script"},
 		{"unknown model", "name: x\nwhy: y\nmodel: gpt\n" + ok, "model"},
-		{"page over http", "name: x\nwhy: y\npages: [{url: 'http://a.example.net/', file: pages/tips.html}]\n" + ok, "https"},
-		{"page on loopback", "name: x\nwhy: y\npages: [{url: 'https://localhost/', file: pages/tips.html}]\n" + ok, "loopback"},
-		{"page on an address", "name: x\nwhy: y\npages: [{url: 'https://127.0.0.1/', file: pages/tips.html}]\n" + ok, "loopback"},
-		{"page escapes", "name: x\nwhy: y\npages: [{url: 'https://a.example.net/', file: ../secret}]\n" + ok, "outside"},
-		{"page missing", "name: x\nwhy: y\npages: [{url: 'https://a.example.net/', file: pages/none.html}]\n" + ok, "none.html"},
+		{"page over https", "name: x\nwhy: y\npages: [{url: 'https://a.example.net/', file: pages/tips.html}]\n" + ok, "must be http"},
+		{"page on loopback", "name: x\nwhy: y\npages: [{url: 'http://localhost/', file: pages/tips.html}]\n" + ok, "loopback"},
+		{"page on an address", "name: x\nwhy: y\npages: [{url: 'http://127.0.0.1/', file: pages/tips.html}]\n" + ok, "loopback"},
+		{"page escapes", "name: x\nwhy: y\npages: [{url: 'http://a.example.net/', file: ../secret}]\n" + ok, "outside"},
+		{"page missing", "name: x\nwhy: y\npages: [{url: 'http://a.example.net/', file: pages/none.html}]\n" + ok, "none.html"},
 		{"persona escapes", "name: x\nwhy: y\npersona: ../../workspace\n" + ok, "outside"},
 		{"skill escapes", "name: x\nwhy: y\nskills: [../x]\n" + ok, "outside"},
 		{"negative repeat", "name: x\nwhy: y\nrepeat: -1\n" + ok, "repeat"},

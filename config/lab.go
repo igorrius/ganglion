@@ -3,10 +3,13 @@
 package config
 
 import (
+	"context"
+	"database/sql"
 	"log/slog"
 	"time"
 
 	"github.com/igorrius/ganglion/cells"
+	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/claudecli"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
@@ -34,11 +37,37 @@ type LabOptions struct {
 	Wrap func(provider.Provider) provider.Provider
 }
 
-// ApplyLab replaces in i what differs from a node started by `ganglion run`,
+// LabNode is a built container: what chatlab runs and looks at, so only this
+// package wires the node (ADR-0028).
+type LabNode struct {
+	DB         *sql.DB
+	Journal    *journal.Journal
+	Components []node.Component
+	Tick       func(context.Context) error // one tick of the scheduler
+	Shutdown   func(context.Context)
+}
+
+// NewLab builds the core container of b with o's differences. The tables
+// exist when it returns.
+func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions) (*LabNode, error) {
+	i := New(ctx, b, logger)
+	applyLab(i, o)
+	components, err := do.Invoke[[]node.Component](i)
+	if err != nil {
+		return nil, err
+	}
+	scheduler := do.MustInvoke[*schedule.Scheduler](i)
+	return &LabNode{DB: do.MustInvoke[Database](i).DB, Journal: do.MustInvoke[*journal.Journal](i), Components: components,
+		Tick:     scheduler.Tick,
+		Shutdown: func(ctx context.Context) { i.ShutdownWithContext(ctx) },
+	}, nil
+}
+
+// applyLab replaces in i what differs from a node started by `ganglion run`,
 // and nothing else: the providers, the fetcher's way to the test pages, the
 // confirmations' clock with an expirer that looks every 250 ms, and a
 // scheduler that ticks only when told to.
-func ApplyLab(i do.Injector, o LabOptions) {
+func applyLab(i do.Injector, o LabOptions) {
 	do.Override(i, func(do.Injector) (map[string]provider.Provider, error) {
 		out := map[string]provider.Provider{}
 		for _, p := range o.Catalog.Providers {

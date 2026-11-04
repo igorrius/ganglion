@@ -43,7 +43,7 @@ func TestLabStaysOutOfTheBinary(t *testing.T) {
 
 	bin := filepath.Join(t.TempDir(), "ganglion")
 	output("go", "build", "-o", bin, ".")
-	if nm := output("go", "tool", "nm", bin); strings.Contains(nm, "ApplyLab") {
-		t.Error("the binary holds ApplyLab")
+	if nm := output("go", "tool", "nm", bin); strings.Contains(nm, "NewLab") {
+		t.Error("the binary holds NewLab")
 	}
 }

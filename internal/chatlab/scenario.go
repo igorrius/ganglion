@@ -238,8 +238,8 @@ func checkPageURL(raw string) error {
 	if err != nil {
 		return fmt.Errorf("page URL: %w", err)
 	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("page URL %q must be https", raw)
+	if u.Scheme != "http" {
+		return fmt.Errorf("page URL %q must be http: the fetcher trusts no test certificate", raw)
 	}
 	host := u.Hostname()
 	if strings.EqualFold(host, "localhost") {
@@ -284,7 +284,7 @@ func (st Step) check() error {
 		return errors.New("advance moves one clock forward")
 	case st.Reach != nil && st.Reach.Journal.Tool == "":
 		return errors.New("reach needs journal.tool")
-	case st.Send != nil && st.Send.Kind != "document" && st.Send.Kind != "photo":
+	case st.Send != nil && st.Send.Kind != KindDocument && st.Send.Kind != KindPhoto:
 		return fmt.Errorf("file kind %q", st.Send.Kind)
 	}
 	return nil

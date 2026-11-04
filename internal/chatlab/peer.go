@@ -21,10 +21,16 @@ type Peer interface {
 	Messages() []Message
 }
 
+// Kinds of file.
+const (
+	KindDocument = "document"
+	KindPhoto    = "photo"
+)
+
 // File is a file the person sends; its content does not matter to a node
 // that cannot open files yet.
 type File struct {
-	Kind    string `yaml:"kind"` // "document" or "photo"
+	Kind    string `yaml:"kind"` // KindDocument or KindPhoto
 	Name    string `yaml:"name"`
 	Type    string `yaml:"type"` // MIME type
 	Size    int64  `yaml:"size"`
@@ -33,7 +39,7 @@ type File struct {
 
 // Attachment is a file shown with a message.
 type Attachment struct {
-	Kind string // "photo" or "document"
+	Kind string // KindPhoto or KindDocument
 	Name string
 	Size int
 }

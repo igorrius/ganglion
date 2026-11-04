@@ -32,7 +32,7 @@
       "additionalProperties": false,
       "required": ["url", "file"],
       "properties": {
-        "url": { "description": "https, at a host name.", "type": "string" },
+        "url": { "description": "http, at a host name: the fetcher trusts no test certificate.", "type": "string" },
         "file": { "description": "Under the scenario's directory.", "type": "string" }
       }
     },
