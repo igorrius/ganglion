@@ -202,7 +202,7 @@ an own log rotator (M3); skill scripts declare `effects: read` or
 (Proposed), from the crash harness.
 
 The scripted acceptance and the crash harness pass (2026-11-04). The owner's
-manual live run gave way to chatlab, task 3.20 ([design](p1-m3c-chatlab-design.md),
+manual live run gave way to chatlab, task 3.20, built ([design](p1-m3c-chatlab-design.md),
 [plan](p1-m3c-chatlab.md), [ADR-0048](../adr/0048-chatlab-over-the-fake-bot-api.md),
 Proposed). M3c closes after it, the owner's short look on a phone and the first
 `html2md` tag.

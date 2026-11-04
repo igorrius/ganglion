@@ -91,6 +91,11 @@ The differences from production are exactly those of `make accept`: the Bot
 API URL, the claude CLI relay, a resolver that knows the scenario's test
 hosts, and the clocks of the confirmations and the scheduler.
 
+Built differently from this section: the scheduler's clock also moves the agent's,
+as the first run of R50 showed the model reading real time and rightly reporting a
+reminder as early. Page URLs are `http`, as the fetcher trusts no test certificate.
+The default cap of a run is 1,000,000 tokens, as measured.
+
 **The boundary is enforced, not promised.**
 
 - The code that needs `config` internals sits behind the build tag `lab`.

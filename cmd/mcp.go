@@ -3,8 +3,10 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"time"
 
@@ -33,6 +35,9 @@ func mcpCommand(in io.Reader, out io.Writer) *cli.Command {
 		OnUsageError: func(_ context.Context, _ *cli.Command, err error, _ bool) error { return err },
 		Flags:        []cli.Flag{flags.DBFlag(&db), flags.LogDirFlag(&logDir)},
 		Action: func(ctx context.Context, _ *cli.Command) error {
+			if _, err := os.Stat(db); errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("no database at %s; set GANGLION_DB to the node's database", db)
+			}
 			ro, err := sqlitedb.OpenReadOnly(ctx, db)
 			if err != nil {
 				return err

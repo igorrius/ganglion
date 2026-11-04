@@ -902,7 +902,10 @@ Two repositories: promtop first, then ganglion.
   after 1,000 turns and after 50 `/metrics` calls, against M3b's
   numbers. Write them into `docs/README.md`.
 - [ ] **Step 5: Live on the test bot** (`make live-agent`, the owner).
-  Done when the owner has seen each of these:
+  Replaced on 2026-11-04 by chatlab ([plan](p1-m3c-chatlab.md), task 3.20), which
+  runs these checks over the fake Bot API. What stays for the owner: the look on a
+  phone, and `/modules update` and `rollback` after the first tag.
+  The list as first written:
   - `/metrics`;
   - "Show me the agent's metrics";
   - a photo and a PDF sent to the bot;

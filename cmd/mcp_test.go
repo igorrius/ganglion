@@ -118,3 +118,14 @@ func TestMCPMissingDatabase(t *testing.T) {
 		t.Fatalf("err %v, stdout %q", err, out.String())
 	}
 }
+
+// A database that is not there is the usual slip: say what to do, not
+// SQLite's "unable to open database file (14)".
+func TestMCPNamesTheMissingDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "none.db")
+	var out bytes.Buffer
+	err := mcpCommand(strings.NewReader(""), &out).Run(context.Background(), []string{"mcp", "--db", path})
+	if err == nil || !strings.Contains(err.Error(), "no database at "+path) || !strings.Contains(err.Error(), "GANGLION_DB") || strings.Contains(err.Error(), "(14)") {
+		t.Fatalf("err %v", err)
+	}
+}

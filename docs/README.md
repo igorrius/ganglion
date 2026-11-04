@@ -153,9 +153,27 @@ Start here when coming back to the project.
       turns and Haiku for compaction and checks
       ([ADR-0047](adr/0047-sonnet-answers-during-development.md), Proposed).
       `make accept` passes on it, and runs only the claude CLI route by default.
-    - **Chatlab, next:** the [design](plans/p1-m3c-chatlab-design.md) of a test
-      lab that replaces the manual live checks, approved by the owner on
-      2026-11-04.
+    - **Chatlab (task 3.20, [ADR-0048](adr/0048-chatlab-over-the-fake-bot-api.md),
+      Proposed):** the developer runs the checks the owner could not run by hand:
+      a channel-neutral peer talks to a real core over the fake Bot API, facts and
+      a judge decide, and a table shows n of n. `make lab` runs everything by hand
+      and spends subscription limits (`LAB=name` for one); `make lab-faults` proves
+      the scenarios can fail. `bin/chatlab start`, `say`, `press`, `advance`, `show`
+      and `stop` hold a conversation from the shell.
+      - **Seeded faults (2026-11-04):** the policy no longer asking, and the notes
+        of R48, R49 and R50 removed, each turned its scenario red; a real judge
+        failed wrong replies. R38 on a scripted model went red with its check
+        removed.
+      - **Language:** the problem is in scheduled tasks only, on Sonnet and Haiku:
+        Russian with a Ukrainian page went from 2 of 5 to 10 of 10
+        ([note](research/2026-11-04-language-of-replies.md)).
+      - **An expired question closes itself:** the outbox now keeps where a sent
+        message went. Review found that Run now's question never closed, and a
+        question too long for one message failed its edit: both fixed.
+      - **Binary:** nothing of the lab in it: `TestLabStaysOutOfTheBinary`, and
+        47,727,550 bytes against 47,735,838 before the lab's commits.
+      - **Left for the owner:** the look on a phone, then `/modules update` and
+        `rollback` after the first `html2md` tag.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
