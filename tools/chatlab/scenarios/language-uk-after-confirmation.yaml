@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: language-uk-after-confirmation
+why: The reply after a press has no words of the owner's next to it, and fixed texts in English come just before it.
+repeat: 5
+steps:
+  - say: "Постав нагадування на завтра о 09:00: зателефонувати сантехніку."
+  - reach: {journal: {tool: schedule.create}, nudge: "Так, створи це нагадування."}
+  - press: Approve
+  - judge: "The reply is written in Ukrainian."

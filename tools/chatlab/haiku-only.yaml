@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../../schemas/models.schema.json
+# The language baseline's second catalogue (chatlab design, section 8.3): the same
+# scenarios on Haiku alone tell a weak rule from a weak model.
+providers:
+  - {name: claude, type: claude-cli}
+models:
+  - {provider: claude, name: haiku, tier: cheap, tools: true, context: 200000}
