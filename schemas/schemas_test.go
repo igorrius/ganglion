@@ -7,7 +7,7 @@ import (
 )
 
 func TestSchemasAreValidJSON(t *testing.T) {
-	for _, name := range []string{"models.schema.json", "module-manifest.schema.json"} {
+	for _, name := range []string{"models.schema.json", "module-manifest.schema.json", "chatlab-scenario.schema.json"} {
 		b, err := Get(name)
 		if err != nil {
 			t.Fatal(err)

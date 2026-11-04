@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/igorrius/ganglion/master/schemas/chatlab-scenario.schema.json",
+  "title": "chatlab scenario",
+  "description": "One check of the agent, run by tools/chatlab (ADR-0048). The Go loader internal/chatlab.LoadScenario is the validator; this schema is for editors, docs and the agent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "why", "steps"],
+  "properties": {
+    "name": { "description": "The file's name without .yaml.", "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "why": { "description": "The bug this scenario guards against.", "type": "string", "minLength": 1 },
+    "repeat": { "description": "How many times it runs; 3 by default, 5 for language.", "type": "integer", "minimum": 1 },
+    "persona": { "description": "default, the example persona, or a directory under the scenario's.", "type": "string" },
+    "skills": { "description": "Directories under the scenario's, copied to workspace/skills.", "type": "array", "items": { "type": "string" } },
+    "model": { "description": "scripted runs a fake model that plays script; for a mechanic a real model cannot be made to repeat.", "enum": ["scripted"] },
+    "script": { "description": "The scripted model's answers, in order.", "type": "array", "items": { "$ref": "#/$defs/scriptStep" } },
+    "pages": { "description": "Web pages the node reaches.", "type": "array", "items": { "$ref": "#/$defs/page" } },
+    "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } }
+  },
+  "$defs": {
+    "scriptStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "say": { "type": "string" },
+        "tool": { "type": "string" },
+        "args": { "description": "The tool's arguments, as JSON text.", "type": "string" }
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "file"],
+      "properties": {
+        "url": { "description": "https, at a host name.", "type": "string" },
+        "file": { "description": "Under the scenario's directory.", "type": "string" }
+      }
+    },
+    "step": {
+      "description": "One action.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "say": { "type": "string" },
+        "press": { "description": "A button's label. Not showing is a failure.", "type": "string" },
+        "judge": { "description": "A claim about the model's last words.", "type": "string" },
+        "send": { "$ref": "#/$defs/file" },
+        "advance": { "$ref": "#/$defs/advance" },
+        "reach": { "$ref": "#/$defs/reach" },
+        "facts": { "$ref": "#/$defs/facts" }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["document", "photo"] },
+        "name": { "type": "string" },
+        "type": { "description": "MIME type.", "type": "string" },
+        "size": { "type": "integer", "minimum": 0 },
+        "caption": { "type": "string" }
+      }
+    },
+    "advance": {
+      "description": "Moves one clock forward.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "confirmations": { "description": "A Go duration, such as 16m.", "type": "string" },
+        "scheduler": { "description": "A Go duration, such as 2h.", "type": "string" }
+      }
+    },
+    "reach": {
+      "description": "A state the scenario needs; without it the repeat is inconclusive.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["journal"],
+      "properties": {
+        "journal": { "$ref": "#/$defs/journalFact" },
+        "nudge": { "description": "Said once when the state is missing.", "type": "string" }
+      }
+    },
+    "journalFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool"],
+      "properties": {
+        "tool": { "type": "string" },
+        "decision": { "description": "allowed, confirm, approved, denied, expired…", "type": "string" },
+        "result_contains": { "type": "string" },
+        "count": { "description": "Exactly this many rows; at least one when unset.", "type": "integer", "minimum": 0 }
+      }
+    },
+    "text": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contains": { "type": "string" },
+        "not_contains": { "type": "string" }
+      }
+    },
+    "jobFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "count"],
+      "properties": {
+        "kind": { "description": "reminder or task.", "type": "string" },
+        "count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "facts": {
+      "description": "A closed list of checks; any failure in any repeat fails the scenario.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "journal": { "type": "array", "items": { "$ref": "#/$defs/journalFact" } },
+        "no_journal": { "type": "array", "items": { "$ref": "#/$defs/journalFact" } },
+        "questions": { "description": "Messages showing an Approve button now.", "type": "integer", "minimum": 0 },
+        "message_replaced": { "description": "A message edited, with no buttons, holds this text.", "type": "string" },
+        "reply": { "$ref": "#/$defs/text" },
+        "history": { "$ref": "#/$defs/text" },
+        "memory": { "$ref": "#/$defs/text" },
+        "files": { "description": "Attachments shown so far.", "type": "integer", "minimum": 0 },
+        "jobs": { "$ref": "#/$defs/jobFact" }
+      }
+    }
+  }
+}
