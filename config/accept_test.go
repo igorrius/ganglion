@@ -48,10 +48,10 @@ import (
 // The scripted acceptance of M3b (docs/plans/p1-m3b-agent-world.md, Task
 // 12, steps 1–4; design section 5.9): the real core container with real
 // models and the real web, and the fake Bot API playing the owner, who
-// writes and presses buttons. It runs once per model route: Haiku through
-// the claude CLI with the MCP bridge, and an API model on OpenRouter.
+// writes and presses buttons. It runs once per model route: the main model
+// through the claude CLI with the MCP bridge, and an API model on OpenRouter.
 //
-//	make accept                  # both routes; ACCEPT_ROUTE=cli or api for one
+//	make accept                  # the CLI route; ACCEPT_ROUTE=api or ACCEPT_ROUTE= for both
 //
 // Only these parts differ from a node started by `ganglion run`, and only
 // in this test binary:
@@ -143,8 +143,8 @@ func TestAcceptance(t *testing.T) {
 	})
 }
 
-// cliCatalog is models.example.yaml as it is: Haiku through the claude CLI
-// with tools.
+// cliCatalog is models.example.yaml as it is: the claude CLI's models with
+// tools (ADR-0047).
 func cliCatalog(example string) string { return example }
 
 // apiCatalog is models.example.yaml with the OpenRouter lines uncommented
@@ -813,13 +813,38 @@ func (h *acceptNode) memoryScenario(t *testing.T) {
 
 // --- step 1: the rates ---
 
-// compares matches an answer that compares with an earlier run; noAccess
-// one that says it cannot.
+// compares matches an answer that compares with an earlier run, in English,
+// Ukrainian or Russian; noAccess one that says it cannot.
 var (
 	compares = regexp.MustCompile(`(?i)unchanged|no change|not changed|did not change|didn't change|same as|the same|stable|steady|` +
-		`[+−-]\s?\d+[.,]\d+|±|↑|↓|0[.,]00|up from|down from|rose|fell|increased|decreased`)
+		`[+−-]\s?\d+[.,]\d+|±|↑|↓|0[.,]00|up from|down from|rose|fell|increased|decreased|` +
+		`не змін|без змін|не измен|без измен|зріс|зросл|впав|впал|виріс|вирос|снизил|знизи`)
 	noAccess = regexp.MustCompile(`(?i)can't compare|cannot compare|no access|unable to compare|can't state|don't have (the )?(previous|earlier)`)
 )
+
+// TestComparesReadsTheAnswerLanguage holds the check to answers real models
+// wrote: a task may answer in the language of the page it read.
+func TestComparesReadsTheAnswerLanguage(t *testing.T) {
+	for _, answer := range []string{
+		"• Dollar: 45.6660 ₴ — unchanged vs previous run (0.00 ₴, 0 kopiykas)",
+		"Курс не змінився з минулого запуску (04.11.2026): USD 45,666, EUR 51,0582. Раніших запусків немає.",
+		"Курс не изменился с прошлого запуска.",
+		"Без змін порівняно з минулим запуском.",
+		"Без изменений по сравнению с прошлым запуском.",
+	} {
+		if !compares.MatchString(answer) {
+			t.Errorf("not read as a comparison: %q", answer)
+		}
+	}
+	for _, answer := range []string{
+		"Це перший запуск завдання, тому порівнювати нема з чим.",
+		"USD 45,666, EUR 51,0582.",
+	} {
+		if compares.MatchString(answer) {
+			t.Errorf("read as a comparison: %q", answer)
+		}
+	}
+}
 
 type acceptJob struct {
 	id, text, cron, grant string

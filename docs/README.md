@@ -149,6 +149,13 @@ Start here when coming back to the project.
     - **A restart during a turn:** the turn runs again from its start,
       under the same call keys, and the person is not told. Telling them
       and keeping a turn's progress are in the spec's "Not now" list.
+    - **The main model (2026-11-04):** the example catalogue is now Sonnet for
+      turns and Haiku for compaction and checks
+      ([ADR-0047](adr/0047-sonnet-answers-during-development.md), Proposed).
+      `make accept` passes on it, and runs only the claude CLI route by default.
+    - **Chatlab, next:** the [design](plans/p1-m3c-chatlab-design.md) of a test
+      lab that replaces the manual live checks, approved by the owner on
+      2026-11-04.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that

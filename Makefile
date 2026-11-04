@@ -42,10 +42,11 @@ live-agent: build
 
 # The scripted acceptance of M3b (config/accept_test.go): the real core
 # with real models and the real web, the fake Bot API playing the owner.
-# ACCEPT_ROUTE picks a route: cli (Haiku through the claude CLI, logged
-# in), api (OPENROUTER_API_KEY from .env) or both (empty). Transcripts and
-# node logs go to bin/accept/. It spends a few cents and a few minutes.
-ACCEPT_ROUTE ?=
+# ACCEPT_ROUTE picks a route: cli, the main model through the claude CLI,
+# logged in (the default, ADR-0047); api (OPENROUTER_API_KEY from .env) or
+# both (ACCEPT_ROUTE=). Transcripts and node logs go to bin/accept/. It takes
+# a few minutes and spends subscription limits.
+ACCEPT_ROUTE ?= cli
 accept: build
 	@mkdir -p bin/accept
 	@set -a; [ -f .env ] && . ./.env; set +a; \
