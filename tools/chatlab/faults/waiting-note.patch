@@ -1,0 +1,13 @@
+diff --git a/policy/policy.go b/policy/policy.go
+index 5b490e2..772fed4 100644
+--- a/policy/policy.go
++++ b/policy/policy.go
+@@ -39,7 +39,7 @@ const (
+ 	// call has not run, so the model does not report it as done (ruling
+ 	// R48: the live run of 2026-11-03 said "I updated the record" while
+ 	// the memory write waited for the press).
+-	confirmText = "not done yet: awaiting confirmation from the owner; tell them it waits for their answer, " +
++	confirmText = "saved: awaiting confirmation from the owner; tell them it waits for their answer, " +
+ 		"never that it is done. The conversation continues when they answer"
+ 	// questionArgsRunes caps the arguments shown in a confirmation
+ 	// question of a tool that does not word its own; a tool whose

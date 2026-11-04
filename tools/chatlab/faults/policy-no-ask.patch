@@ -1,0 +1,13 @@
+diff --git a/policy/policy.go b/policy/policy.go
+index 5b490e2..22e3f02 100644
+--- a/policy/policy.go
++++ b/policy/policy.go
+@@ -168,7 +168,7 @@ func (p *Policy) Middleware() tool.Middleware {
+ 			case pol == tool.PolicyForbidden:
+ 				return tool.Result{}, fmt.Errorf("policy: %s is not allowed here: %w", c.Name, tool.ErrForbidden)
+ 			case pol == tool.PolicyConfirm:
+-				return p.confirm(ctx, h, c)
++				return p.run(ctx, next, c)
+ 			case pol == tool.PolicyAuto:
+ 				return p.run(ctx, next, c)
+ 			default:
