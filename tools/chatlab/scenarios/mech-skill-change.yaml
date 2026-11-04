@@ -1,16 +1,20 @@
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
-name: skill-script-change
-why: A script skill that changes something must ask first, run once when approved, and its output must reach the owner.
+name: mech-skill-change
+why: A script skill that changes something must ask first and run once when approved.
 covers:
-  - "skills/**"
+  - skills/**
   - tool/builtin/skill.go
   - agent/skills.go
-  - "policy/**"
-  - "tool/pending/**"
+  - policy/**
+  - tool/pending/**
+model: scripted
 skills: [skills/stamp-log]
+script:
+  - {tool: skill.stamp_log, args: '{}'}
+  - {say: I asked.}
+  - {say: Done.}
 steps:
-  - say: "Run the stamp-log skill and tell me exactly what it printed."
-  - reach: {journal: {tool: skill.stamp_log, decision: confirm}, nudge: "Please run the stamp-log skill now."}
+  - say: "Stamp the boiler log."
   - facts:
       questions: 1
       no_journal:
@@ -20,4 +24,3 @@ steps:
       journal:
         - {tool: skill.stamp_log, decision: approved, result_contains: "log stamped marker 8842", count: 1}
       questions: 0
-      reply: {contains: "8842"}

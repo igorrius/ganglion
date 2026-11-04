@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-waiting-call
+why: >-
+  Rulings R48 and the policy: a web page taints the session, so a memory write has
+  to ask, and the model must be told it is not done yet. No model needed to check
+  that the bot does this; r48-waiting-call-is-not-done checks what the model says.
+covers:
+  - policy/**
+  - tool/pending/**
+  - tool/builtin/memory.go
+  - agent/resume.go
+model: scripted
+pages:
+  - {url: "http://solar-notes.example.net/tips", file: pages/tips.html}
+script:
+  - {tool: web.fetch, args: '{"url":"http://solar-notes.example.net/tips"}'}
+  - {say: Keep the battery above 20%.}
+  - {tool: memory.write, args: '{"title":"Boiler","body":"My boiler holds 80 litres."}'}
+  - {say: It waits for your answer.}
+steps:
+  - say: "Read http://solar-notes.example.net/tips"
+  - say: "Remember that my boiler holds 80 litres."
+  - facts:
+      journal:
+        - {tool: memory.write, decision: confirm}
+      questions: 1
+      history: {contains: "not done yet"}
+      memory: {not_contains: "80 litres"}
