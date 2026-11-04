@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: metrics-picture
+why: The owner must get the metrics as a picture, by the command with no model and by asking in words.
+steps:
+  - say: /metrics
+  - facts:
+      files: 1
+  - say: "Show me the agent's metrics."
+  - reach: {journal: {tool: metrics.show}, nudge: "Please use the metrics tool."}
+  - facts:
+      journal:
+        - {tool: metrics.show, decision: allowed}
+      files: 2

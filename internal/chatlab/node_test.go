@@ -343,3 +343,25 @@ func TestReadView(t *testing.T) {
 		t.Fatalf("system jobs counted: %+v", v.Jobs)
 	}
 }
+
+// The model must read the same time as the scheduler, or it reports a
+// reminder as fired early: the first run of R50 found that.
+func TestAdvanceSchedulerMovesTheModelsClock(t *testing.T) {
+	n := startScripted(t, Scenario{Name: "x", Script: []ScriptStep{{Say: "one"}, {Say: "two"}}})
+	sayQuiet(t, n, "first")
+	if err := n.Advance("scheduler", 3*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	sayQuiet(t, n, "second")
+	reqs := n.scripted.Requests()
+	last := reqs[len(reqs)-1].Messages
+	content, _ := last[len(last)-1]["content"].(string)
+	kyiv, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved := time.Now().Add(3 * time.Hour).In(kyiv)
+	if !strings.Contains(content, moved.Format("2006-01-02 15:04")) && !strings.Contains(content, moved.Add(-time.Minute).Format("2006-01-02 15:04")) {
+		t.Fatalf("the model read %q, want about %s", content, moved.Format(time.DateTime))
+	}
+}

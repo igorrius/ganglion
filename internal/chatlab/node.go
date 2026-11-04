@@ -62,6 +62,7 @@ type Node struct {
 	peer     *Telegram
 	db       *sql.DB
 	lab      *config.LabNode
+	scripted *providertest.Server // the fake model of a scripted scenario
 	cancel   context.CancelFunc
 	done     chan error
 	closers  *program
@@ -95,7 +96,7 @@ func Start(ctx context.Context, o NodeOptions) (n *Node, err error) {
 	}
 	cat, keys := o.Catalog, o.Keys
 	if o.Scenario.Model == ModelScripted {
-		if cat, keys, err = scriptedModel(closers, o.Scenario.Script); err != nil {
+		if cat, keys, n.scripted, err = scriptedModel(closers, o.Scenario.Script); err != nil {
 			return nil, err
 		}
 	}
@@ -225,7 +226,7 @@ func copyDir(src, dst string) error {
 // scriptedModel starts a fake model that plays script, one step per request,
 // and then says "ok". The memory check goes to a model of its own, so it
 // never takes a step.
-func scriptedModel(owner *program, script []ScriptStep) (rules.Catalog, map[string]string, error) {
+func scriptedModel(owner *program, script []ScriptStep) (rules.Catalog, map[string]string, *providertest.Server, error) {
 	const key = "scripted"
 	fake := providertest.NewServer(owner, key)
 	var mu sync.Mutex
@@ -250,9 +251,9 @@ models:
   - {provider: script, name: guard, tier: cheap, context: 200000}
 `))
 	if err != nil {
-		return rules.Catalog{}, nil, fmt.Errorf("chatlab: scripted catalogue: %w", err)
+		return rules.Catalog{}, nil, nil, fmt.Errorf("chatlab: scripted catalogue: %w", err)
 	}
-	return cat, map[string]string{"script": key}, nil
+	return cat, map[string]string{"script": key}, fake, nil
 }
 
 // pageNet serves a scenario's pages from a local server at a public-looking

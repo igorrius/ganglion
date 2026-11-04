@@ -51,35 +51,41 @@ func AgentGiveUp() do.Provider[core.GiveUp] {
 // Agent provides the agent over the catalogue's models.
 func Agent() do.Provider[*agent.Agent] {
 	return func(i do.Injector) (*agent.Agent, error) {
-		b := do.MustInvoke[Bootstrap](i)
-		cfg := agent.DefaultConfig()
-		cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
-		return agent.New(cfg, agent.Deps{
-			States:    do.MustInvoke[*sqlqueue.Queue](i),
-			Router:    do.MustInvoke[router.Router](i),
-			Providers: do.MustInvoke[map[string]provider.Provider](i),
-			Tools:     do.MustInvoke[*tool.Registry](i),
-			// Around every tool call, outermost first: traced, journal, then
-			// the policy for the calls the model makes.
-			Middleware:   []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
-			Policy:       do.MustInvoke[*policy.Policy](i).Middleware(),
-			Pending:      do.MustInvoke[*pending.Store](i),
-			Outbox:       do.MustInvoke[*sqlqueue.Queue](i),
-			Sent:         do.MustInvoke[*sqlqueue.Queue](i),
-			QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
-			Jobs:         do.MustInvoke[*schedule.Store](i),
-			IsAdmin:      do.MustInvoke[agent.AdminFunc](i),
-			Names:        do.MustInvoke[*access.List](i).Name,
-			Turns:        do.MustInvoke[*turns.Log](i),
-			Archive:      do.MustInvoke[agent.SessionStore](i),
-			Alerts:       do.MustInvoke[alert.Admins](i),
-			Persona:      agent.PersonaDir(b.Agent.Workspace),
-			Facts:        do.MustInvoke[Remembering](i).Facts,
-			SystemJobs:   do.MustInvoke[Remembering](i).Jobs,
-			Modules:      do.MustInvoke[agent.Modules](i),
-			Skills:       do.MustInvoke[Skilled](i).Set,
-			Log:          do.MustInvoke[*slog.Logger](i),
-		}), nil
+		cfg, deps := agentParts(i)
+		return agent.New(cfg, deps), nil
+	}
+}
+
+// agentParts are the agent's settings and collaborators.
+func agentParts(i do.Injector) (agent.Config, agent.Deps) {
+	b := do.MustInvoke[Bootstrap](i)
+	cfg := agent.DefaultConfig()
+	cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
+	return cfg, agent.Deps{
+		States:    do.MustInvoke[*sqlqueue.Queue](i),
+		Router:    do.MustInvoke[router.Router](i),
+		Providers: do.MustInvoke[map[string]provider.Provider](i),
+		Tools:     do.MustInvoke[*tool.Registry](i),
+		// Around every tool call, outermost first: traced, journal, then
+		// the policy for the calls the model makes.
+		Middleware:   []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
+		Policy:       do.MustInvoke[*policy.Policy](i).Middleware(),
+		Pending:      do.MustInvoke[*pending.Store](i),
+		Outbox:       do.MustInvoke[*sqlqueue.Queue](i),
+		Sent:         do.MustInvoke[*sqlqueue.Queue](i),
+		QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
+		Jobs:         do.MustInvoke[*schedule.Store](i),
+		IsAdmin:      do.MustInvoke[agent.AdminFunc](i),
+		Names:        do.MustInvoke[*access.List](i).Name,
+		Turns:        do.MustInvoke[*turns.Log](i),
+		Archive:      do.MustInvoke[agent.SessionStore](i),
+		Alerts:       do.MustInvoke[alert.Admins](i),
+		Persona:      agent.PersonaDir(b.Agent.Workspace),
+		Facts:        do.MustInvoke[Remembering](i).Facts,
+		SystemJobs:   do.MustInvoke[Remembering](i).Jobs,
+		Modules:      do.MustInvoke[agent.Modules](i),
+		Skills:       do.MustInvoke[Skilled](i).Set,
+		Log:          do.MustInvoke[*slog.Logger](i),
 	}
 }
 

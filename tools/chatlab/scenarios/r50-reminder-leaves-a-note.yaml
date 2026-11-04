@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: r50-reminder-leaves-a-note
+why: >-
+  Ruling R50. The model said a reminder "may not have fired" minutes after it was
+  sent, because a sent reminder left nothing in the chat's history.
+steps:
+  - say: "Remind me in one hour to call the plumber."
+  - reach: {journal: {tool: schedule.create}, nudge: "Yes, please create that reminder now."}
+  - press: Approve
+  - advance: {scheduler: 2h}
+  - facts:
+      history: {contains: "[reminder]"}
+  - say: "Did the plumber reminder go out?"
+  - judge: "The reply says the reminder was sent. It does not say it may not have been."

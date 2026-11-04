@@ -195,3 +195,13 @@ func TestSchemaMatchesTheLoader(t *testing.T) {
 		}
 	}
 }
+
+func TestShippedScenariosLoad(t *testing.T) {
+	all, err := LoadScenarios("../../tools/chatlab/scenarios", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) == 0 {
+		t.Fatal("no scenarios")
+	}
+}

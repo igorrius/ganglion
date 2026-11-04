@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: file-photo
+why: The agent cannot see a picture yet. It must say so, and must not invent what the picture shows (R-DLV-10).
+steps:
+  - send: {kind: photo, name: meter.jpg, size: 900000, caption: "What does this meter show?"}
+  - facts:
+      files: 0
+  - judge: "The reply says the picture cannot be seen or opened yet. It does not describe what the meter shows."

@@ -25,7 +25,7 @@ import (
 )
 
 const usage = `usage:
-  chatlab run [names...] [--max-tokens 200000] [--judge sonnet] [--models <file>] [--repeat n] [--dir <scenarios>]
+  chatlab run [names...] [--max-tokens 1000000] [--judge sonnet] [--models <file>] [--repeat n] [--dir <scenarios>]
   chatlab start [--persona <dir>] [--models <file>]
   chatlab say "..."
   chatlab send <name> [--type <mime>] [--size <bytes>] [--caption "..."]
@@ -91,7 +91,7 @@ func runScenarios(ctx context.Context, args []string) (int, error) {
 		return 0, err
 	}
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	maxTokens := fs.Int("max-tokens", 200_000, "stop starting repeats past this many tokens")
+	maxTokens := fs.Int("max-tokens", 1_000_000, "stop starting repeats past this many tokens")
 	judge := fs.String("judge", chatlab.DefaultJudgeModel, "the judge's model, through the claude CLI")
 	models := fs.String("models", filepath.Join(root, "models.example.yaml"), "the catalogue under test")
 	repeat := fs.Int("repeat", 0, "repeats of each scenario instead of its own number")

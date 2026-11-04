@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider"
@@ -31,7 +32,7 @@ type LabOptions struct {
 	Resolver   web.Resolver
 	Connect    web.ConnectFunc
 	PendingNow func() time.Time // the confirmations' clock
-	SchedNow   func() time.Time // the scheduler's clock
+	SchedNow   func() time.Time // the scheduler's clock, which the agent reads too
 	// Wrap goes around every provider, to count tokens; nil leaves them as
 	// they are.
 	Wrap func(provider.Provider) provider.Provider
@@ -66,7 +67,7 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 // applyLab replaces in i what differs from a node started by `ganglion run`,
 // and nothing else: the providers, the fetcher's way to the test pages, the
 // confirmations' clock with an expirer that looks every 250 ms, and a
-// scheduler that ticks only when told to.
+// scheduler, with the agent's clock, that ticks only when told to.
 func applyLab(i do.Injector, o LabOptions) {
 	do.Override(i, func(do.Injector) (map[string]provider.Provider, error) {
 		out := map[string]provider.Provider{}
@@ -98,6 +99,13 @@ func applyLab(i do.Injector, o LabOptions) {
 			journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: logger},
 			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger, pending.WithAfter(fast)),
 		}, nil
+	})
+	// The model reads the time the scheduler goes by, or a reminder looks as
+	// if it fired early.
+	do.Override(i, func(i do.Injector) (*agent.Agent, error) {
+		cfg, deps := agentParts(i)
+		deps.Now = o.SchedNow
+		return agent.New(cfg, deps), nil
 	})
 	do.Override(i, func(i do.Injector) (*schedule.Scheduler, error) {
 		never := func(time.Duration) <-chan time.Time { return nil }

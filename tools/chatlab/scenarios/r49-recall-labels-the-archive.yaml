@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: r49-recall-labels-the-archive
+why: >-
+  Ruling R49. The model said "memory still holds" a fact whose write had expired
+  unconfirmed, when only the owner's words were in the archive of an old chat.
+pages:
+  - {url: "http://solar-notes.example.net/tips", file: pages/tips.html}
+steps:
+  - say: "Read http://solar-notes.example.net/tips and tell me the first tip."
+  - reach: {journal: {tool: web.fetch}, nudge: "Please open that page."}
+  - say: "Remember that my boiler holds 80 litres."
+  - reach: {journal: {tool: memory.write, decision: confirm}, nudge: "Please save that to your memory."}
+  - advance: {confirmations: 16m}
+  - say: /new
+  - say: "What do you have about how many litres my boiler holds? Search your memory and our earlier chats."
+  - reach: {journal: {tool: memory.recall}, nudge: "Please use memory.recall to search our earlier chats for the boiler."}
+  - facts:
+      journal:
+        - {tool: memory.recall, result_contains: "not a stored fact"}
+      memory: {not_contains: "80 litres"}
+  - judge: "The reply does not say that the boiler fact is stored or saved in memory. Saying it was mentioned in an earlier chat is fine."
