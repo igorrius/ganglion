@@ -1,0 +1,276 @@
+//go:build lab
+
+package chatlab
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
+	"os"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/turns"
+)
+
+// DefaultTurnLimit is how long a step waits for the node to go quiet.
+const DefaultTurnLimit = 6 * time.Minute
+
+// RunOptions say what a run does.
+type RunOptions struct {
+	Scenarios []Scenario
+	Catalog   rules.Catalog
+	Keys      map[string]string
+	Relay     string
+	Judge     *Judge        // nil: judge steps are not run
+	MaxTokens int           // 0: no cap
+	Repeat    int           // >0 overrides Scenario.Repeat, for the fault runs
+	TurnLimit time.Duration // 0: DefaultTurnLimit
+	Tokens    *Counter      // counts the node's models and, by its Wrap, the judge's; nil: a new one
+}
+
+// RunAll runs every scenario. Nothing in one scenario stops the next.
+func RunAll(ctx context.Context, o RunOptions) Run {
+	if o.TurnLimit == 0 {
+		o.TurnLimit = DefaultTurnLimit
+	}
+	if o.Tokens == nil {
+		o.Tokens = &Counter{}
+	}
+	r := Run{Started: time.Now(), Secrets: slices.Collect(maps.Values(o.Keys))}
+	for _, s := range o.Scenarios {
+		repeats := s.Repeat
+		if o.Repeat > 0 {
+			repeats = o.Repeat
+		}
+		rs := make([]Repeat, 0, repeats)
+		for range repeats {
+			if o.MaxTokens > 0 && o.Tokens.Total() >= o.MaxTokens {
+				rs = append(rs, Repeat{NotRun: fmt.Sprintf("the cap of %d tokens was reached", o.MaxTokens)})
+				continue
+			}
+			rs = append(rs, runRepeat(ctx, o, s))
+		}
+		r.Outcomes = append(r.Outcomes, Decide(s.Name, s.Why, rs))
+	}
+	r.Tokens = o.Tokens.Total()
+	return r
+}
+
+// repeatRun is one repeat under way.
+type repeatRun struct {
+	o     RunOptions
+	n     *Node
+	rep   Repeat
+	log   strings.Builder
+	shown []Message // what the person saw after the last step
+	last  []Message // the model's words since the last action
+}
+
+// errStopRepeat ends a repeat early; its reason is already in rep.
+var errStopRepeat = errors.New("chatlab: repeat stopped")
+
+func runRepeat(ctx context.Context, o RunOptions, s Scenario) Repeat {
+	if why := missingTool(o, s); why != "" {
+		return Repeat{NotRun: why}
+	}
+	before := o.Tokens.Total()
+	n, err := Start(ctx, NodeOptions{Catalog: o.Catalog, Keys: o.Keys, Relay: o.Relay, Scenario: s, Tokens: o.Tokens})
+	if err != nil {
+		return Repeat{NotRun: "the node did not start: " + err.Error()}
+	}
+	run := &repeatRun{o: o, n: n}
+	defer func() { _ = n.Stop(context.WithoutCancel(ctx)) }()
+	for _, st := range s.Steps {
+		if err := run.step(ctx, st); err != nil {
+			if !errors.Is(err, errStopRepeat) {
+				run.rep.Failures = append(run.rep.Failures, err.Error())
+			}
+			break
+		}
+	}
+	run.finish(ctx, s)
+	run.rep.Tokens = o.Tokens.Total() - before
+	run.rep.Transcript = run.log.String()
+	return run.rep
+}
+
+// missingTool says what a scenario needs that this machine lacks.
+func missingTool(o RunOptions, s Scenario) string {
+	if s.Model == ModelScripted {
+		return ""
+	}
+	for _, p := range o.Catalog.Providers {
+		if p.Type != rules.TypeClaudeCLI {
+			continue
+		}
+		if _, err := os.Stat(o.Relay); err != nil {
+			return fmt.Sprintf("the relay %s is missing: run make build", o.Relay)
+		}
+	}
+	return ""
+}
+
+func (r *repeatRun) step(ctx context.Context, st Step) error {
+	switch {
+	case st.Say != "", st.Press != "", st.Send != nil:
+		r.note(st)
+		if err := Do(ctx, r.n.Peer(), st); err != nil {
+			return err
+		}
+		return r.settle(ctx)
+	case st.Advance != nil:
+		clock, d := clockConfirmations, st.Advance.Confirmations
+		if st.Advance.Scheduler > 0 {
+			clock, d = clockScheduler, st.Advance.Scheduler
+		}
+		fmt.Fprintf(&r.log, "\n_The %s clock moves %v forward._\n", clock, d)
+		if err := r.n.Advance(clock, d); err != nil {
+			return err
+		}
+		return r.settle(ctx)
+	case st.Reach != nil:
+		return r.reach(ctx, *st.Reach)
+	case st.Facts != nil:
+		return r.facts(ctx, *st.Facts)
+	}
+	return r.judge(ctx, st.Judge)
+}
+
+func (r *repeatRun) note(st Step) {
+	switch {
+	case st.Say != "":
+		fmt.Fprintf(&r.log, "\n**owner:** %s\n", st.Say)
+	case st.Press != "":
+		fmt.Fprintf(&r.log, "\n**owner presses** [%s]\n", st.Press)
+	default:
+		fmt.Fprintf(&r.log, "\n**owner sends** a %s, %s: %s\n", st.Send.Kind, st.Send.Name, st.Send.Caption)
+	}
+}
+
+// settle waits until the node is quiet and takes in what appeared: the
+// transcript gets everything, and last only the model's words, without
+// fixed questions, list entries or edits of older messages.
+func (r *repeatRun) settle(ctx context.Context) error {
+	err := r.n.Quiet(ctx, r.o.TurnLimit)
+	now := r.n.Peer().Messages()
+	r.last = nil
+	for i, m := range now {
+		labels := ""
+		if len(m.Buttons) > 0 {
+			labels = " `[" + strings.Join(m.Buttons, " | ") + "]`"
+		}
+		switch {
+		case i >= len(r.shown):
+			fmt.Fprintf(&r.log, "**bot:** %s%s\n", m.Text, labels)
+			if len(m.Buttons) == 0 && !m.Replaced {
+				r.last = append(r.last, m)
+			}
+		case m.Text != r.shown[i].Text || !slices.Equal(m.Buttons, r.shown[i].Buttons):
+			fmt.Fprintf(&r.log, "**bot edits:** %s%s\n", m.Text, labels)
+		}
+	}
+	r.shown = now
+	return err
+}
+
+func (r *repeatRun) reach(ctx context.Context, want Reach) error {
+	found := func() (bool, error) {
+		v, err := ReadView(ctx, r.n, nil)
+		if err != nil {
+			return false, err
+		}
+		return len(matching(want.Journal, v.Journal)) > 0, nil
+	}
+	ok, err := found()
+	if err == nil && !ok && want.Nudge != "" {
+		step := Step{Say: want.Nudge}
+		if err := r.step(ctx, step); err != nil {
+			return err
+		}
+		ok, err = found()
+	}
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.rep.Inconclusive = "the state under test was not reached: no " + describe(want.Journal)
+		return errStopRepeat
+	}
+	return nil
+}
+
+func (r *repeatRun) facts(ctx context.Context, f Facts) error {
+	v, err := ReadView(ctx, r.n, r.last)
+	if err != nil {
+		return err
+	}
+	r.rep.Failures = append(r.rep.Failures, Check(f, v)...)
+	return nil
+}
+
+func (r *repeatRun) judge(ctx context.Context, claim string) error {
+	if r.o.Judge == nil {
+		r.rep.NotRun = "no judge in this run"
+		return errStopRepeat
+	}
+	if len(r.last) == 0 {
+		r.rep.Judgments = append(r.rep.Judgments, Judgment{Claim: claim, Reason: "the model wrote nothing since the last action"})
+		return nil
+	}
+	v, err := r.o.Judge.Check(ctx, claim, words(r.last))
+	if err != nil {
+		r.rep.NotRun = err.Error()
+		return errStopRepeat
+	}
+	r.rep.Judgments = append(r.rep.Judgments, Judgment{Claim: claim, OK: v.OK, Reason: v.Reason})
+	return nil
+}
+
+// finish reads what the repeat did for the transcript, and sets aside a
+// repeat another model answered: the result would not be about the main
+// model. Compaction writes to a turn's route too, but a scenario's few turns
+// never reach it.
+func (r *repeatRun) finish(ctx context.Context, s Scenario) {
+	main := ModelScripted
+	if s.Model != ModelScripted {
+		main = MainModel(r.o.Catalog)
+	}
+	if v, err := ReadView(ctx, r.n, nil); err == nil {
+		r.log.WriteString("\nJournal:\n")
+		for _, e := range v.Journal {
+			fmt.Fprintf(&r.log, "- `%s` %s %s tainted=%t args=%s result=%q err=%q\n", e.Key, e.Tool, e.Decision, e.Tainted, e.Args, e.ResultHead, e.Err)
+		}
+	}
+	rows, err := r.n.DB().QueryContext(ctx, `SELECT conv, outcome, steps, route, tools, cost_usd FROM turns WHERE outcome != 'command' ORDER BY started_ms`)
+	if err != nil {
+		fmt.Fprintf(&r.log, "\nTurns: %v\n", err)
+		return
+	}
+	defer func() { _ = rows.Close() }()
+	r.log.WriteString("\nTurns:\n")
+	for rows.Next() {
+		var conv, outcome, route, tools string
+		var steps int
+		var cost float64
+		if err := rows.Scan(&conv, &outcome, &steps, &route, &tools, &cost); err != nil {
+			fmt.Fprintf(&r.log, "- %v\n", err)
+			return
+		}
+		r.rep.CostUSD += cost
+		fmt.Fprintf(&r.log, "- %s: %s, %d steps, route %s, tools %s\n", conv, outcome, steps, route, tools)
+		var attempts []turns.Attempt
+		if json.Unmarshal([]byte(route), &attempts) != nil {
+			continue
+		}
+		for _, a := range attempts {
+			if a.Error == "" && a.Model != main && r.rep.Inconclusive == "" {
+				r.rep.Inconclusive = fmt.Sprintf("%s answered in place of %s", a.Model, main)
+			}
+		}
+	}
+}

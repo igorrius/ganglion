@@ -1,6 +1,7 @@
 package chatlab
 
 import (
+	"context"
 	"go/parser"
 	"go/token"
 	"os"
@@ -35,5 +36,44 @@ func TestOnlyTheConnectorKnowsTelegram(t *testing.T) {
 				t.Errorf("%s imports %s", f, imp.Path.Value)
 			}
 		}
+	}
+}
+
+// memoryPeer is a channel with no Telegram in it.
+type memoryPeer struct {
+	said, pressed []string
+	sent          []File
+}
+
+func (p *memoryPeer) Say(_ context.Context, text string) error {
+	p.said = append(p.said, text)
+	return nil
+}
+
+func (p *memoryPeer) SendFile(_ context.Context, f File) error {
+	p.sent = append(p.sent, f)
+	return nil
+}
+
+func (p *memoryPeer) Press(_ context.Context, label string) error {
+	p.pressed = append(p.pressed, label)
+	return nil
+}
+
+func (*memoryPeer) Messages() []Message { return nil }
+
+func TestScenarioStepsNeedNoTelegram(t *testing.T) {
+	p := &memoryPeer{}
+	ctx := context.Background()
+	for _, s := range []Step{{Say: "hi"}, {Press: "Approve"}, {Send: &File{Kind: KindPhoto, Name: "a.jpg"}}} {
+		if err := Do(ctx, p, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(p.said) != 1 || len(p.pressed) != 1 || len(p.sent) != 1 {
+		t.Fatalf("peer %+v", p)
+	}
+	if err := Do(ctx, p, Step{Judge: "x"}); err == nil {
+		t.Fatal("a judge step is not the peer's")
 	}
 }

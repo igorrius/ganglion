@@ -352,11 +352,12 @@ func (n *Node) Quiet(ctx context.Context, limit time.Duration) error {
 	defer cancel()
 	tick := time.NewTicker(200 * time.Millisecond)
 	defer tick.Stop()
+	notQuiet := fmt.Errorf("chatlab: the node was not quiet after %v", limit)
 	quiet := 0
 	for quiet < 3 {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("chatlab: the node was not quiet after %v", limit)
+			return notQuiet
 		case err := <-n.done:
 			n.done <- err
 			return fmt.Errorf("chatlab: the node stopped: %w", err)
@@ -369,6 +370,9 @@ func (n *Node) Quiet(ctx context.Context, limit time.Duration) error {
 		var left int
 		if err := n.db.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM inbox WHERE status = 'pending') +
 			(SELECT count(*) FROM outbox WHERE status = 'pending')`).Scan(&left); err != nil {
+			if ctx.Err() != nil {
+				return notQuiet
+			}
 			return fmt.Errorf("chatlab: quiet: %w", err)
 		}
 		if left > 0 {

@@ -7,7 +7,7 @@ build:
 
 test:
 	go test -race ./...
-	go test -race -tags lab ./internal/chatlab/...
+	go test -race -tags lab ./internal/chatlab/... ./tools/chatlab/...
 
 lint:
 	golangci-lint run
@@ -60,6 +60,13 @@ COMPARE ?=
 compare:
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	go run ./tools/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
+
+# Test the agent by talking to it (ADR-0048): real models over the fake Bot API,
+# a table of what passed. LAB picks scenarios by name; empty = all. It spends
+# subscription limits, and does not read .env: that file holds TELEGRAM_*.
+LAB ?=
+lab: build
+	go run -tags lab ./tools/chatlab run $(LAB)
 
 # The agent under kill -9: 200 kills by default, GANGLION_CRASH_ITERS sets
 # more. A fake Bot API and a fake model; it spends a few minutes (3.8).

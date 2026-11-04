@@ -54,3 +54,16 @@ type Message struct {
 
 // ErrNoButton is returned by Press when no button with the label shows.
 var ErrNoButton = errors.New("chatlab: no such button is showing")
+
+// Do makes the peer do what a say, send or press step says.
+func Do(ctx context.Context, p Peer, s Step) error {
+	switch {
+	case s.Say != "":
+		return p.Say(ctx, s.Say)
+	case s.Press != "":
+		return p.Press(ctx, s.Press)
+	case s.Send != nil:
+		return p.SendFile(ctx, *s.Send)
+	}
+	return errors.New("chatlab: this step is not the peer's")
+}
