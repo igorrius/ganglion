@@ -155,7 +155,7 @@ flowchart BT
     agentp --> skillsp
     builtinp --> skillsp
     diagp --> sqlitedb
-    diagp --> tool
+    diagp --> toolp
     builtinp --> provider
     corep["core"] --> queue
     corep --> event
