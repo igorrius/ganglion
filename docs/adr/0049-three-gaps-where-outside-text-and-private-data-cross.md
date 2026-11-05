@@ -1,10 +1,10 @@
 # ADR-0049: Ask before a read script takes a tainted session's input, keep a local-only session's tools on the node, and mark `ganglion mcp`'s results as data
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-05
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.3](../spec.md#73-model-router) (R-RTR-4, R-RTR-5), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-6), [7.9](../spec.md#79-observability) (R-OBS-7)
-- **Supersedes, once accepted:** the rule of [ADR-0042](0042-skills-and-scripts-before-the-sandbox.md) that a read script always runs by itself, and its "not stopped" on a local-only session's tool calls; the line of [ADR-0044](0044-ganglion-mcp-diagnostics-over-stdio.md) that leaves a client's copy of the results unmarked
+- **Supersedes:** the rule of [ADR-0042](0042-skills-and-scripts-before-the-sandbox.md) that a read script always runs by itself, and its "not stopped" on a local-only session's tool calls; the line of [ADR-0044](0044-ganglion-mcp-diagnostics-over-stdio.md) that leaves a client's copy of the results unmarked
 
 ## Context
 
