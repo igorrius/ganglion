@@ -108,7 +108,9 @@ How it works:
   final transaction (`Enqueue`), a toast ("Approved", "Declined",
   "Accepted"; an `Outgoing` with `Ack`, the press's id) and, for a
   question, an edit that replaces its buttons with a status line
-  ("⏳ Approved, running…"). The outbox sender is woken by the store and
+  ("⏳ Approved, running…"; since R-POL-9 the question folds under this line
+  in a collapsed quote, and the final lines carry the time of the decision,
+  "Approved, 21:09", in place of those below). The outbox sender is woken by the store and
   delivers them while the action runs; the turn's own messages follow in
   the same conversation's order: the call's messages, then the final
   edit with the outcome ("Approved. Done.", "Approved, but it failed.",

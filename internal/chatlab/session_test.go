@@ -70,7 +70,7 @@ func TestSessionAdvanceClosesAQuestion(t *testing.T) {
 		t.Fatalf("output %q", out)
 	}
 	out := call(t, dir, Request{Op: OpAdvance, Clock: "confirmations", For: 16 * time.Minute})
-	if !strings.Contains(out, "Expired.") {
+	if !strings.Contains(out, "Expired, ") {
 		t.Fatalf("output %q", out)
 	}
 }

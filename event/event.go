@@ -80,6 +80,10 @@ type Outgoing struct {
 	// (R-LIVE-5): the next message is the one to read. The transport shows it
 	// as it can, and always shows it whole.
 	Superseded bool `json:",omitempty"`
+	// Folded is the text of a closed question, kept under Text, which says how
+	// it ended (R-POL-9). The transport shows it collapsed if it can, and never
+	// as part of Text. It counts toward an edit's length.
+	Folded string `json:",omitempty"`
 }
 
 // Stage is where the work on a person's message stands (R-LIVE-7). The agent

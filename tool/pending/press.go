@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/igorrius/ganglion/cells"
 )
@@ -67,7 +68,7 @@ func (s *Store) press(ctx context.Context, buttonID string, by By) (Press, error
 		if p.Button.Pending == "" {
 			return nil
 		}
-		p.Item, err = decideByPress(ctx, c, p.Button)
+		p.Item, err = decideByPress(ctx, c, p.Button, s.now())
 		return err
 	})
 	if err != nil && !errors.Is(err, errRefused) {
@@ -77,14 +78,14 @@ func (s *Store) press(ctx context.Context, buttonID string, by By) (Press, error
 }
 
 // decideByPress moves the button's call from waiting to the button's
-// decision and spends its other buttons; errRefused when the call no
-// longer waits.
-func decideByPress(ctx context.Context, c *sql.Conn, b Button) (Item, error) {
+// decision, as of at, and spends its other buttons; errRefused when the call
+// no longer waits.
+func decideByPress(ctx context.Context, c *sql.Conn, b Button, at time.Time) (Item, error) {
 	st, ok := statusOf[b.Action]
 	if !ok {
 		return Item{}, fmt.Errorf("button %s of call %s has action %q", b.ID, b.Pending, b.Action)
 	}
-	res, err := c.ExecContext(ctx, `UPDATE pending_calls SET status = ? WHERE id = ? AND status = ?`, string(st), b.Pending, string(StatusWaiting))
+	res, err := c.ExecContext(ctx, `UPDATE pending_calls SET status = ?, answered_ms = ? WHERE id = ? AND status = ?`, string(st), at.UnixMilli(), b.Pending, string(StatusWaiting))
 	if err != nil {
 		return Item{}, err
 	}

@@ -329,7 +329,7 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) (string, error
 	// An edit is never split, so one too long for a message changes only the
 	// buttons: a long question was split when it went out, and this reference
 	// holds its last part.
-	if msg.Edit != "" && (msg.Text == "" || renderedUnits(msg.Text) > maxTextUnits) {
+	if msg.Edit != "" && (msg.Text == "" || editUnits(msg) > maxTextUnits) {
 		return msg.Edit, sendError(t.editButtons(ctx, chat, msg.Edit, msg.Buttons))
 	}
 	text, ents := render(msg.Text)
@@ -338,6 +338,9 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) (string, error
 	}
 	if msg.Superseded {
 		ents = collapsed(text, ents)
+	}
+	if msg.Folded != "" {
+		text, ents = withFolded(text, ents, msg.Folded)
 	}
 	if msg.Edit != "" {
 		return msg.Edit, sendError(t.edit(ctx, chat, msg.Edit, text, ents, msg.Buttons))

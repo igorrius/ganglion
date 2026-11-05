@@ -77,6 +77,16 @@ func textParts(msg event.Outgoing, chunks []string, first int) []event.Outgoing 
 	return parts
 }
 
+// editUnits is the length of an edit as Telegram counts it: the text, and a
+// folded question on its own line.
+func editUnits(msg event.Outgoing) int {
+	n := renderedUnits(msg.Text)
+	if msg.Folded != "" {
+		n += 1 + renderedUnits(msg.Folded)
+	}
+	return n
+}
+
 func renderedUnits(md string) int {
 	text, _ := render(md)
 	return textUnits([]rune(text))

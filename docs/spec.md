@@ -618,7 +618,7 @@ Confirmation is layered:
   the policy. It can block, but cannot by itself allow something dangerous.
 - **Human** — yes/no in Telegram with a `ttl`; for critical actions, the
   admin only or two people. A question nobody answers closes itself when its
-  `ttl` ends: its buttons go and it reads "Expired." The outbox keeps where a
+  `ttl` ends and folds like an answered one (R-POL-9). The outbox keeps where a
   delivered message went, which is how a later turn finds the question.
 
 Combinations: comfort — system only; gates — system + (second factor or
@@ -674,6 +674,21 @@ human); module install — tests + reviewer + admin.
     gets one notice with the reason, not a button on every run.
   - A task runs as its creator, with the creator's rights. Its
     instruction and grant cannot be changed by what a run reads.
+- **R-POL-9.** A question stays open, whole, until it is answered. Once answered
+  or expired it **folds**, so the chat keeps the record of what was decided and
+  stops being in the way:
+  - one short line in place of its buttons, with the decision and its time in the
+    node's time zone: "Approved, 21:09", "Approved, but it failed, 21:09",
+    "Declined, 21:09", "Expired, 21:09"; while the call runs, "⏳ Approved,
+    running…";
+  - the question's text under the line in a collapsed quote, so nothing in it can
+    pass for the line;
+  - a second press shows the same line and the same time. The time of a press is
+    stored with the call;
+  - a question split into several messages only loses its buttons, since an edit is
+    never split; the journal keeps the decision.
+
+  A plan (R-LIVE-8) and a message with quick actions do not fold (owner, 2026-11-05).
 
 The rest of the baseline is in
 [ADR-0031](adr/0031-agent-security-baseline.md) (Proposed): no data out
@@ -1349,11 +1364,6 @@ Reviewed at each gate.
   - Where the person lives, as a setting of the node: a region for the search backend, and
     hosts it never offers. The owner's live try got Russian sites that are blocked for them,
     since the request was in Russian; a fact in memory is the first thing to try (2026-11-05).
-  - An answered question folded in the chat (owner's live try, 2026-11-05): one short line
-    with the decision and its time, such as "Approved, 21:09", and the question's text under
-    it in a collapsed quote. The chat stays tidy and keeps the record of what was approved;
-    deleting it was considered and dropped for that reason. An expired question folds the
-    same way. A plan stays open: the owner wants to see which plan ran.
   - Fixed texts in the person's language: stable keys, an English default and language files
     anyone can add to, checked by a test, since a model cannot word them. Replaces ruling
     R46's "fixed texts stay in English", so it needs its own ADR, and it should cover the

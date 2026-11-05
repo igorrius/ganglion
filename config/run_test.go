@@ -365,8 +365,8 @@ func TestPressFeedbackOrderOverTelegram(t *testing.T) {
 	if toasts := fake.Toasts(); len(toasts) != 1 || toasts[0].Text != "Approved" {
 		t.Fatalf("toasts %+v", toasts)
 	}
-	if !strings.HasSuffix(edits[0].Text, "⏳ Approved, running…") || edits[0].Keyboard != "" ||
-		!strings.HasSuffix(edits[1].Text, "Approved. Done.") || sent[2].Text != "the effect" || sent[3].Text != "Sent." {
+	if !strings.HasPrefix(edits[0].Text, "⏳ Approved, running…") || edits[0].Keyboard != "" ||
+		!strings.HasPrefix(edits[1].Text, "Approved, ") || sent[2].Text != "the effect" || sent[3].Text != "Sent." {
 		t.Fatalf("edits %+v, sent %+v", edits, sent)
 	}
 	// A double press: a toast, nothing runs again.

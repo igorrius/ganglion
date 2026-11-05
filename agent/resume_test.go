@@ -158,7 +158,7 @@ func TestConfirmThenApproveResumes(t *testing.T) {
 		t.Fatalf("calls %+v", side.calls)
 	}
 	edit, ok := findOut(out, isEdit)
-	if !ok || edit.Edit != "77" || !strings.HasPrefix(edit.Text, q.Text) || !strings.HasSuffix(edit.Text, "Approved. Done.") || len(edit.Buttons) != 0 {
+	if !ok || edit.Edit != "77" || edit.Folded != q.Text || edit.Text != closing("Approved", e.now) || len(edit.Buttons) != 0 {
 		t.Fatalf("edit %+v in %+v", edit, out)
 	}
 	reply, ok := findOut(out, isReply)
@@ -196,7 +196,7 @@ func TestDenyResumesWithDecline(t *testing.T) {
 	if len(side.calls) != 0 {
 		t.Fatal("a denied call ran")
 	}
-	if edit, ok := findOut(out, isEdit); !ok || !strings.HasSuffix(edit.Text, "Declined.") {
+	if edit, ok := findOut(out, isEdit); !ok || edit.Text != closing("Declined", e.now) {
 		t.Fatalf("edit in %+v", out)
 	}
 	reqs := e.smart.requests()
@@ -264,10 +264,10 @@ func TestSecondPressShowsTheRealOutcome(t *testing.T) {
 		first, second int
 		want          string
 	}{
-		"approve, then deny": {0, 1, "Approved. Done."},
-		"approve twice":      {0, 0, "Approved. Done."},
-		"deny, then approve": {1, 0, "Declined."},
-		"deny twice":         {1, 1, "Declined."},
+		"approve, then deny": {0, 1, "Approved"},
+		"approve twice":      {0, 0, "Approved"},
+		"deny, then approve": {1, 0, "Declined"},
+		"deny twice":         {1, 1, "Declined"},
 	} {
 		side := newSideTool()
 		e := newConfirmEnv(t, side)
@@ -275,7 +275,7 @@ func TestSecondPressShowsTheRealOutcome(t *testing.T) {
 		e.turn(t, press(owner, q.Buttons[tc.first].ID, "77"))
 		calls, ran := len(e.smart.requests()), len(side.calls)
 		out := noAcks(e.turn(t, press(owner, q.Buttons[tc.second].ID, "77")))
-		if len(out) != 1 || out[0].Edit != "77" || out[0].Text != q.Text+"\n\n"+tc.want || len(out[0].Buttons) != 0 {
+		if len(out) != 1 || out[0].Edit != "77" || out[0].Text != closing(tc.want, e.now) || out[0].Folded != q.Text || len(out[0].Buttons) != 0 {
 			t.Errorf("%s: out %+v", name, out)
 		}
 		if len(side.calls) != ran || len(e.smart.requests()) != calls {
@@ -332,7 +332,7 @@ func TestLatePressSaysExpired(t *testing.T) {
 	q, _ := e.ask(t, "schedule.create")
 	e.now = e.now.Add(pending.DefaultTTL)
 	out := noAcks(e.turn(t, press(owner, q.Buttons[0].ID, "77")))
-	if len(out) != 1 || !strings.HasSuffix(out[0].Text, "Expired.") || len(side.calls) != 0 {
+	if len(out) != 1 || !strings.HasPrefix(out[0].Text, "Expired, ") || out[0].Folded != q.Text || len(side.calls) != 0 {
 		t.Fatalf("out %+v, calls %d", out, len(side.calls))
 	}
 }
@@ -564,7 +564,7 @@ func TestApprovedQuickQuestionDoesNotResumeTheModel(t *testing.T) {
 	if len(side.calls) != 1 || side.calls[0].Key() != "BUTTON1:1" || !side.calls[0].Admin {
 		t.Fatalf("calls %+v", side.calls)
 	}
-	if len(out) != 1 || out[0].Edit != "91" || out[0].Text != "Run the task now?\n\nApproved. Done." || len(e.smart.requests()) != 0 {
+	if len(out) != 1 || out[0].Edit != "91" || out[0].Text != closing("Approved", e.now) || out[0].Folded != "Run the task now?" || len(e.smart.requests()) != 0 {
 		t.Fatalf("out %+v", out)
 	}
 }
@@ -847,7 +847,7 @@ func TestPressIsAcknowledgedBeforeTheCallRuns(t *testing.T) {
 	out := e.turn(t, ev)
 	ack := event.Outgoing{IdemKey: ev.IdemKey + ":ack", Transport: "telegram", Conv: "telegram:42", Text: "Approved", Ack: queryOf(t, ev)}
 	status := event.Outgoing{IdemKey: ev.IdemKey + ":status", Transport: "telegram", Conv: "telegram:42", Edit: "77",
-		Text: q.Text + "\n\n⏳ Approved, running…"}
+		Text: "⏳ Approved, running…", Folded: q.Text}
 	if len(w.calls) != 1 || len(w.seen) != 2 || !reflect.DeepEqual(w.seen[0], ack) || !reflect.DeepEqual(w.seen[1], status) {
 		t.Fatalf("the outbox held %+v when the call ran", w.seen)
 	}
@@ -855,7 +855,7 @@ func TestPressIsAcknowledgedBeforeTheCallRuns(t *testing.T) {
 	for _, o := range out {
 		kinds = append(kinds, o.Text)
 	}
-	if len(out) != 3 || out[0].Text != "the effect" || out[1].Edit != "77" || out[1].Text != q.Text+"\n\nApproved. Done." ||
+	if len(out) != 3 || out[0].Text != "the effect" || out[1].Edit != "77" || out[1].Text != closing("Approved", e.now) || out[1].Folded != q.Text ||
 		out[1].IdemKey != ev.IdemKey+":edit" || out[2].Text != "Done." {
 		t.Fatalf("turn out %q", kinds)
 	}
@@ -877,7 +877,7 @@ func TestDenyAndFailureAreShown(t *testing.T) {
 	ev := press(owner, q.Buttons[1].ID, "77")
 	e.turn(t, ev)
 	early := e.early.got()
-	if len(early) != 2 || early[0].Text != "Declined" || early[0].Ack == "" || early[1].Text != q.Text+"\n\nDeclined." {
+	if len(early) != 2 || early[0].Text != "Declined" || early[0].Ack == "" || early[1].Text != closing("Declined", e.now) || early[1].Folded != q.Text {
 		t.Fatalf("early %+v", early)
 	}
 }
@@ -980,8 +980,8 @@ func TestFinalLineFollowsTheTypedOutcome(t *testing.T) {
 		err  error
 		want string
 	}{
-		"failed":                 {"", errors.New("boom"), "Approved, but it failed."},
-		"ok, text like an error": {"error: none found", nil, "Approved. Done."},
+		"failed":                 {"", errors.New("boom"), "Approved, but it failed"},
+		"ok, text like an error": {"error: none found", nil, "Approved"},
 	} {
 		tl := &failTool{sideTool: *newSideTool(), err: tc.err}
 		tl.result = tool.Result{Text: tc.text}
@@ -990,13 +990,40 @@ func TestFinalLineFollowsTheTypedOutcome(t *testing.T) {
 		e.smart.push(say("ok"))
 		out := noAcks(e.turn(t, press(owner, q.Buttons[0].ID, "77")))
 		edit, _ := findOut(out, isEdit)
-		if edit.Text != q.Text+"\n\n"+tc.want {
+		if edit.Text != closing(tc.want, e.now) || edit.Folded != q.Text {
 			t.Errorf("%s: final edit %q", name, edit.Text)
 		}
 		again, _ := findOut(noAcks(e.turn(t, press(owner, q.Buttons[0].ID, "77"))), isEdit)
-		if again.Text != q.Text+"\n\n"+tc.want {
+		if again.Text != closing(tc.want, e.now) || again.Folded != q.Text {
 			t.Errorf("%s: second press edit %q", name, again.Text)
 		}
+	}
+}
+
+// closing is the line of a folded question decided at at, in the test agent's
+// zone (R-POL-9).
+func closing(line string, at time.Time) string { return line + ", " + at.UTC().Format("15:04") }
+
+// The time on the line is the press's, in the node's zone, and a later press of
+// the same question does not move it (R-POL-9).
+func TestFoldedLineKeepsTheTimeOfThePress(t *testing.T) {
+	kyiv, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := newConfirmEnv(t, newSideTool())
+	e.a = New(overDefaults(Config{Location: kyiv}), e.deps)
+	q, _ := e.ask(t, "schedule.create")
+	want := "Approved, " + e.now.In(kyiv).Format("15:04")
+	e.smart.push(say("ok"))
+	first, _ := findOut(noAcks(e.turn(t, press(owner, q.Buttons[0].ID, "77"))), isEdit)
+	if first.Text != want {
+		t.Fatalf("first press: %q, want %q", first.Text, want)
+	}
+	e.now = e.now.Add(3 * time.Minute)
+	again, _ := findOut(noAcks(e.turn(t, press(owner, q.Buttons[0].ID, "77"))), isEdit)
+	if again.Text != want {
+		t.Fatalf("second press three minutes later: %q, want %q", again.Text, want)
 	}
 }
 
@@ -1028,7 +1055,7 @@ func TestExpiredQuestionClosesItself(t *testing.T) {
 	e.now = e.now.Add(pending.DefaultTTL)
 	e.smart.push(say("The owner did not answer."))
 	edit, ok := questionEdit(e.turn(t, expired(t, e)))
-	if !ok || edit.Edit != "91" || len(edit.Buttons) != 0 || edit.Text != q.Text+"\n\nExpired." {
+	if !ok || edit.Edit != "91" || len(edit.Buttons) != 0 || edit.Text != closing("Expired", e.now) || edit.Folded != q.Text {
 		t.Fatalf("edit %+v, %v", edit, ok)
 	}
 }
@@ -1041,7 +1068,7 @@ func TestExpiredQuestionClosesInAMovedOnSession(t *testing.T) {
 	before := len(e.smart.requests())
 	e.now = e.now.Add(pending.DefaultTTL)
 	edit, ok := questionEdit(e.turn(t, expired(t, e)))
-	if !ok || edit.Edit != "91" || edit.Text != q.Text+"\n\nExpired." {
+	if !ok || edit.Edit != "91" || edit.Text != closing("Expired", e.now) || edit.Folded != q.Text {
 		t.Fatalf("edit %+v, %v", edit, ok)
 	}
 	if got := len(e.smart.requests()); got != before {

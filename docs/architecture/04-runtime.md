@@ -111,7 +111,7 @@ sequenceDiagram
     end
     A->>D: Decide(done, result)
     A->>A: model on "[confirmation] tool: result"
-    A->>Q: Complete(the call's messages, edit "Approved. Done.", answer)
+    A->>Q: Complete(the call's messages, edit "Approved, 21:09" with the question folded, answer)
     Note over D,Q: unanswered: the expirer puts tool.result every 30 s, same resume with "expired"; the question closes itself, found by its outbox ref
 ```
 

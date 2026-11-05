@@ -198,6 +198,28 @@ func TestPressOnce(t *testing.T) {
 	}
 }
 
+// A press stores its time, so a later look at the call shows when it was answered,
+// not when it was looked at (R-POL-9). A call nobody answered has none.
+func TestPressKeepsItsTime(t *testing.T) {
+	f := newFixture(t)
+	id, q := f.ask(t, 1)
+	ctx := context.Background()
+	if it, err := f.s.Get(ctx, id); err != nil || !it.Answered.IsZero() {
+		t.Fatalf("before a press: %v, %v", it.Answered, err)
+	}
+	at := f.clk.now.Add(time.Minute)
+	f.clk.now = at
+	first, err := f.s.Press(ctx, q.Buttons[0].ID, by("ev1"))
+	if err != nil || !first.Item.Answered.Equal(at) {
+		t.Fatalf("press: %v, %v; want %v", first.Item.Answered, err, at)
+	}
+	f.clk.now = at.Add(time.Hour)
+	used, err := f.s.Press(ctx, q.Buttons[1].ID, by("ev2"))
+	if !errors.Is(err, pending.ErrUsed) || !used.Item.Answered.Equal(at) {
+		t.Fatalf("second press: %v, %v; want %v", used.Item.Answered, err, at)
+	}
+}
+
 // The same event pressing again (its turn reruns after a crash) gets the
 // same press back, so the rerun can finish what the first run started.
 func TestPressRerunOfTheSameEvent(t *testing.T) {

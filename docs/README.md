@@ -196,6 +196,10 @@ Start here when coming back to the project.
     - the owner checked it live on the test bot: reactions, additions and the plan.
     - The full chatlab run after the prompt's change is deferred by the owner until after
       the next feature; `task-report` and `task-selection` have their first verdict then.
+  - **A closed question folds (2026-11-05, R-POL-9):** one line with the decision and its
+    time, and the question under it in a collapsed quote; the owner's look on the test bot
+    is still to come. Next in the owner's order: a command for the last turn, in the spec's
+    "Not now".
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that

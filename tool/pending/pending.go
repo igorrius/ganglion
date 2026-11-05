@@ -94,6 +94,7 @@ type Item struct {
 	Failed                                 bool             // the call ran and failed; Result is its error
 	Tainted                                bool             // the session was tainted when the call was parked
 	Depth                                  int              // the call's depth (R-AGT-4); its resumed turn runs one deeper
+	Answered                               time.Time        // when a press answered it; zero when none did, or before this was stored
 	Out                                    []event.Outgoing // messages the call produced
 }
 
@@ -148,6 +149,8 @@ type QuickEdit struct {
 	// Key is the IdemKey of the edit when it shows a call's question, so the
 	// outbox can tell where that question is; "" is the press's own.
 	Key string
+	// Folded is a closed question's text, kept under Text (event.Outgoing.Folded).
+	Folded string
 }
 
 // QuickAction runs a quick-action button, such as Delete on a list entry,
@@ -473,16 +476,16 @@ func (s *Store) ExpireDue(ctx context.Context) ([]Item, error) {
 	return out, rows.Err()
 }
 
-const itemColumns = `id, conv, transport, principal, turn_id, n, tool, args, question, status, expires_ms, result, external, failed, out, tainted, depth`
+const itemColumns = `id, conv, transport, principal, turn_id, n, tool, args, question, status, expires_ms, result, external, failed, out, tainted, depth, answered_ms`
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanItem(r scanner) (Item, error) {
 	var it Item
 	var args, status, out string
-	var expires int64
+	var expires, answered int64
 	if err := r.Scan(&it.ID, &it.Conv, &it.Transport, &it.Principal, &it.TurnID, &it.N, &it.Tool, &args, &it.Question,
-		&status, &expires, &it.Result, &it.External, &it.Failed, &out, &it.Tainted, &it.Depth); err != nil {
+		&status, &expires, &it.Result, &it.External, &it.Failed, &out, &it.Tainted, &it.Depth, &answered); err != nil {
 		return Item{}, err
 	}
 	if out != "" {
@@ -491,6 +494,9 @@ func scanItem(r scanner) (Item, error) {
 		}
 	}
 	it.Args, it.Status, it.Expires = json.RawMessage(args), Status(status), time.UnixMilli(expires).UTC()
+	if answered != 0 {
+		it.Answered = time.UnixMilli(answered).UTC()
+	}
 	return it, nil
 }
 

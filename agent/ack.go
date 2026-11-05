@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"time"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/tool/pending"
@@ -41,8 +42,8 @@ const (
 // Lines of an approved question: while its call runs, and when it ended.
 const (
 	lineRunning        = "⏳ Approved, running…"
-	lineApprovedDone   = "Approved. Done."
-	lineApprovedFailed = "Approved, but it failed."
+	lineApproved       = "Approved"
+	lineApprovedFailed = "Approved, but it failed"
 )
 
 // errorPrefix starts the outcome of a call that failed, as the model
@@ -55,7 +56,16 @@ func approvedLine(failed bool) string {
 	if failed {
 		return lineApprovedFailed
 	}
-	return lineApprovedDone
+	return lineApproved
+}
+
+// stamped is a closed question's line with the time it was decided, in the
+// node's zone (R-POL-9); a call answered before times were stored has none.
+func (a *Agent) stamped(line string, at time.Time) string {
+	if at.IsZero() {
+		return line
+	}
+	return line + ", " + at.In(a.cfg.Location).Format("15:04")
 }
 
 // ack is the message that answers the press with text as a toast; false
@@ -77,7 +87,7 @@ func (t *turn) toast(text string) {
 }
 
 // acknowledge stores, before the pressed action runs, the toast and, for
-// a question, the question with status in place of its buttons, so the
+// a question, the question folded under status in place of its buttons, so the
 // owner sees the press taken and cannot press again while it runs
 // (ruling R40). They go to the outbox now, not with the turn's replies;
 // their keys are the press's, so a rerun stores them once. A failure
@@ -87,7 +97,7 @@ func (a *Agent) acknowledge(ctx context.Context, t *turn, toast, question, statu
 	if o, ok := t.ack(toast); ok {
 		msgs = append(msgs, o)
 	}
-	if o, ok := t.editOut(":status", pending.QuickEdit{Text: answered(question, status)}); ok && question != "" {
+	if o, ok := t.editOut(":status", pending.QuickEdit{Text: status, Folded: question}); ok && question != "" {
 		msgs = append(msgs, o)
 	}
 	if len(msgs) == 0 {

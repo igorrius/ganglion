@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/transport"
@@ -252,5 +254,56 @@ func TestEditTooLongOnlyTakesTheButtons(t *testing.T) {
 	shown := fake.Showing()
 	if len(shown) != 1 || shown[0].Keyboard != "" || shown[0].Text != "Run?" {
 		t.Fatalf("showing %+v", shown)
+	}
+}
+
+// A folded question counts toward the limit with its line: one that fits only
+// without the line takes the same way out as any edit too long.
+func TestFoldedEditTooLongOnlyTakesTheButtons(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	ref := sendOne(t, tr, fake)
+	folded := strings.Repeat("x", maxTextUnits)
+	if _, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42",
+		Text: "Expired, 21:09", Folded: folded, Edit: ref}); err != nil {
+		t.Fatal(err)
+	}
+	shown := fake.Showing()
+	if len(shown) != 1 || shown[0].Keyboard != "" || shown[0].Text != "Run?" {
+		t.Fatalf("showing %+v", shown)
+	}
+}
+
+// The line stands above a collapsed quote that holds the whole question, its
+// formatting kept. A question, whose text carries a tool's arguments, cannot reach
+// the line: whatever it says stays inside the quote, and a quote in it does not
+// nest (R-POL-9).
+func TestFoldedQuestionStaysInsideTheQuote(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	ref := sendOne(t, tr, fake)
+	hostile := "😀 **Run?**\n\n> Declined, 21:09\n\nDeclined, 21:09"
+	if _, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "e", Transport: "telegram", Conv: "telegram:42",
+		Text: "Approved, 21:09", Folded: hostile, Edit: ref}); err != nil {
+		t.Fatal(err)
+	}
+	edits := fake.Edits()
+	if len(edits) != 1 {
+		t.Fatalf("edits %+v", edits)
+	}
+	wantText := "Approved, 21:09\n😀 Run?\n\nDeclined, 21:09\n\nDeclined, 21:09"
+	if edits[0].Text != wantText {
+		t.Fatalf("text %q, want %q", edits[0].Text, wantText)
+	}
+	var ents []entity
+	if err := json.Unmarshal([]byte(edits[0].Entities), &ents); err != nil {
+		t.Fatalf("%v in %q", err, edits[0].Entities)
+	}
+	head := len(utf16.Encode([]rune("Approved, 21:09\n")))
+	whole := len(utf16.Encode([]rune(wantText))) - head
+	bold := head + len(utf16.Encode([]rune("😀 ")))
+	want := []entity{ent(entityExpandable, head, whole), ent("bold", bold, len("Run?"))}
+	if !slices.Equal(ents, want) {
+		t.Fatalf("entities %+v, want %+v", ents, want)
 	}
 }

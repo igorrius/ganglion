@@ -1237,7 +1237,7 @@ func (h *acceptNode) expiryScenario(t *testing.T) {
 	// The question closes by itself. Its old button data, pressed from a
 	// chat that has not refreshed, approves nothing.
 	closed := slices.ContainsFunc(h.fake.Showing(), func(m telegramtest.Shown) bool {
-		return m.MessageID == stale.msg.MessageID && m.Text == qs[0].Text+"\n\nExpired." && m.Keyboard == ""
+		return m.MessageID == stale.msg.MessageID && strings.HasPrefix(m.Text, "Expired, ") && strings.HasSuffix(m.Text, "\n"+qs[0].Text) && m.Keyboard == ""
 	})
 	if !closed {
 		t.Error("the expired question did not close by itself")

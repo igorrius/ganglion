@@ -107,7 +107,7 @@ func (t *turn) editOut(suffix string, e pending.QuickEdit) (event.Outgoing, bool
 		key = e.Key
 	}
 	return event.Outgoing{IdemKey: key, Transport: ev.Source, Conv: ev.Conv, Text: e.Text,
-		Buttons: e.Buttons, Edit: t.decision.Ref}, true
+		Folded: e.Folded, Buttons: e.Buttons, Edit: t.decision.Ref}, true
 }
 
 // stage does one step of a turn; done ends the turn early. An error

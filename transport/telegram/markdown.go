@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -151,6 +152,24 @@ func collapsed(text string, ents []entity) []entity {
 		}
 	}
 	return out
+}
+
+// withFolded puts the Markdown question on the lines under text, whole, inside
+// one expandable quote (R-POL-9). Nothing in it can reach text: all of it sits
+// after text, and its entities move with it.
+func withFolded(text string, ents []entity, question string) (string, []entity) {
+	q, qents := render(question)
+	if strings.TrimSpace(q) == "" {
+		q, qents = question, nil // nothing visible left: the source rather than nothing
+	}
+	head := text + "\n"
+	at := len(utf16.Encode([]rune(head)))
+	out := slices.Clone(ents)
+	for _, e := range collapsed(q, qents) {
+		e.Offset += at
+		out = append(out, e)
+	}
+	return head + q, out
 }
 
 // quote renders a blockquote; a long one is expandable.

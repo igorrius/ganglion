@@ -38,12 +38,11 @@ const (
 	resultExpired  = "the owner did not answer in time; the call did not run"
 )
 
-// Lines added to the question when it is answered (or not).
+// Lines that say how a question ended, above its folded text (R-POL-9).
 const (
-	lineApproved = "Approved."
-	lineDeclined = "Declined."
+	lineDeclined = "Declined"
 	lineUsed     = "Already handled."
-	lineExpired  = "Expired."
+	lineExpired  = "Expired"
 )
 
 // resume handles a press of a button and the expiry of a pending call,
@@ -94,11 +93,11 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 		return nil // a quick button tapped twice: the first tap's edit stands
 	case errors.Is(err, pending.ErrUsed):
 		t.toast(toastUsed)
-		t.closeButtons(p.Item.Question, usedLine(p))
+		t.closeButtons(p.Item.Question, a.usedLine(p))
 		return nil
 	case errors.Is(err, pending.ErrExpired):
 		t.toast(toastExpired)
-		t.closeButtons(p.Item.Question, lineExpired)
+		t.closeButtons(p.Item.Question, a.stamped(lineExpired, p.Item.Expires))
 		return nil
 	case err != nil:
 		return err
@@ -110,39 +109,30 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 }
 
 // usedLine is how an answered question ended, for a second press of it:
-// the answer a press gave, or that it expired.
-func usedLine(p pending.Press) string {
+// the answer a press gave, or that it expired. The time is the decision's,
+// not this press's.
+func (a *Agent) usedLine(p pending.Press) string {
 	switch {
-	case p.Answer == pending.ActionApprove && p.Item.Status == pending.StatusDone:
-		return approvedLine(p.Item.Failed)
 	case p.Answer == pending.ActionApprove:
-		return lineApproved
+		return a.stamped(approvedLine(p.Item.Failed), p.Item.Answered)
 	case p.Answer == pending.ActionDeny:
-		return lineDeclined
+		return a.stamped(lineDeclined, p.Item.Answered)
 	case p.Item.Status == pending.StatusExpired || p.Item.Status == pending.StatusDone:
-		return lineExpired
+		return a.stamped(lineExpired, p.Item.Expires)
 	default:
 		return lineUsed
 	}
 }
 
 // closeButtons removes the buttons of a message whose press did not take.
-// A question gets a line saying why; any other message (a quick action's
-// list entry, whose text the agent cannot write again) keeps its text.
+// A question folds under a line saying why; any other message (a quick
+// action's list entry, whose text the agent cannot write again) keeps its text.
 func (t *turn) closeButtons(question, line string) {
 	if question == "" {
 		t.edit("")
 		return
 	}
-	t.edit(answered(question, line))
-}
-
-// answered is the question with a line saying how it ended.
-func answered(question, line string) string {
-	if question == "" {
-		return line
-	}
-	return question + "\n\n" + line
+	t.editWith(pending.QuickEdit{Text: line, Folded: question})
 }
 
 // quick runs a quick action and edits its message; what it changed joins
@@ -187,7 +177,7 @@ func (t *turn) note(text string) {
 }
 
 // confirmed acknowledges the press, runs an approved call or declines a
-// denied one, stores the outcome, edits the question and resumes the
+// denied one, stores the outcome, folds the question and resumes the
 // conversation with it. A
 // rerun (the outcome is stored) does not run the call again. A call the
 // conversation does not wait for (a quick action asked it, or the
@@ -199,7 +189,7 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 	if action == pending.ActionApprove {
 		a.acknowledge(ctx, t, toastApproved, it.Question, lineRunning)
 	} else {
-		a.acknowledge(ctx, t, toastDeclined, it.Question, lineDeclined)
+		a.acknowledge(ctx, t, toastDeclined, it.Question, a.stamped(lineDeclined, it.Answered))
 	}
 	o, err := a.decide(ctx, t, it, action)
 	if err != nil {
@@ -212,7 +202,7 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 	// The call's messages, then the question with how it ended (ruling
 	// R40); again on a rerun: the outbox keeps one per key.
 	t.out = append(t.out, o.Out...)
-	t.edit(answered(it.Question, line))
+	t.editWith(pending.QuickEdit{Text: a.stamped(line, it.Answered), Folded: it.Question})
 	if !slices.Contains(t.state.Pending, it.ID) {
 		return nil
 	}
@@ -349,7 +339,7 @@ func (a *Agent) expired(ctx context.Context, t *turn) error {
 }
 
 // closeExpired takes the buttons off the question of an expired call and
-// says it expired. A question that was not delivered has nothing to close,
+// folds it under a line saying so. A question that was not delivered has nothing to close,
 // and a failed look only leaves the buttons, which a late press still closes.
 // Its key is the expiry event's, so a rerun stores the edit once.
 func (a *Agent) closeExpired(ctx context.Context, t *turn, it pending.Item) {
@@ -362,7 +352,7 @@ func (a *Agent) closeExpired(ctx context.Context, t *turn, it pending.Item) {
 		return
 	}
 	t.out = append(t.out, event.Outgoing{IdemKey: t.event.IdemKey + ":edit", Transport: it.Transport, Conv: it.Conv,
-		Text: answered(it.Question, lineExpired), Edit: ref})
+		Text: a.stamped(lineExpired, it.Expires), Folded: it.Question, Edit: ref})
 }
 
 // continueWith resumes the conversation: the call's outcome joins the

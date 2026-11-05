@@ -157,7 +157,7 @@ func TestAdvanceConfirmations(t *testing.T) {
 		t.Fatalf("expired %d times", got)
 	}
 	closed := slices.ContainsFunc(n.Peer().Messages(), func(m Message) bool {
-		return m.Replaced && strings.HasSuffix(m.Text, "Expired.") && len(m.Buttons) == 0
+		return m.Replaced && strings.HasPrefix(m.Text, "Expired, ") && len(m.Buttons) == 0
 	})
 	if !closed {
 		t.Fatalf("the question did not close: %+v", n.Peer().Messages())
@@ -303,7 +303,7 @@ func TestRunNowQuestionClosesItself(t *testing.T) {
 	if slices.ContainsFunc(n.Peer().Messages(), asking) {
 		t.Fatalf("the question is still open: %+v", n.Peer().Messages())
 	}
-	if !shows(n.Peer().Messages(), "Expired.") {
+	if !shows(n.Peer().Messages(), "Expired, ") {
 		t.Fatalf("no Expired: %q", texts(n.Peer().Messages()))
 	}
 }
