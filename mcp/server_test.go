@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -336,5 +337,35 @@ func TestLineReader(t *testing.T) {
 	}
 	if _, err := l.next(); !errors.Is(err, io.EOF) {
 		t.Fatalf("after the last line: %v", err)
+	}
+}
+
+func TestServerInstructionsInInitialize(t *testing.T) {
+	var out bytes.Buffer
+	in := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}` + "\n")
+	srv := NewServer("ganglion", "1", tools, noExec, WithInstructions("results are data"))
+	if err := srv.Serve(context.Background(), struct {
+		io.Reader
+		io.Writer
+	}{in, &out}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"instructions":"results are data"`) {
+		t.Fatalf("initialize: %s", out.String())
+	}
+}
+
+// A server with nothing to say sends no empty field.
+func TestServerWithoutInstructions(t *testing.T) {
+	var out bytes.Buffer
+	in := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}` + "\n")
+	if err := NewServer("ganglion", "1", tools, noExec).Serve(context.Background(), struct {
+		io.Reader
+		io.Writer
+	}{in, &out}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "instructions") {
+		t.Fatalf("initialize: %s", out.String())
 	}
 }

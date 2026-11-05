@@ -197,7 +197,7 @@ func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) 
 func (a *Agent) toolCall(t *turn, call provider.ToolCall) tool.Call {
 	return tool.Call{
 		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Transport: t.transport, Principal: t.msg.From,
-		Admin: t.admin, Tainted: t.state.Tainted, Grant: t.grant, KnownURL: t.known.has, Depth: t.depth,
+		Admin: t.admin, Tainted: t.state.Tainted, LocalOnly: t.state.LocalOnly, Grant: t.grant, KnownURL: t.known.has, Depth: t.depth,
 		Name: call.Name, Args: call.Args,
 	}
 }

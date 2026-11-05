@@ -165,6 +165,8 @@ func (p *Policy) Middleware() tool.Middleware {
 			switch {
 			case d == journal.DecisionOutOfGrant:
 				return p.outOfGrant(ctx, c)
+			case localRefused(s, c):
+				return tool.Result{}, fmt.Errorf("policy: %s may send data off this node and this session is local-only; tell the owner, who can start a new session with /new: %w", c.Name, tool.ErrForbidden)
 			case pol == tool.PolicyForbidden:
 				return tool.Result{}, fmt.Errorf("policy: %s is not allowed here: %w", c.Name, tool.ErrForbidden)
 			case pol == tool.PolicyConfirm:
@@ -270,18 +272,22 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 //
 //  1. deeper than maxDepth: forbidden (R-AGT-4);
 //  2. an admin-only tool for a non-admin: forbidden;
-//  3. a forbidden tool: forbidden, whatever a grant says;
-//  4. a scheduled task's call: outside its grant is out_of_grant, inside
+//  3. in a local-only session, a tool not declared LocalSafe: forbidden,
+//     whatever a grant says (ADR-0049);
+//  4. a forbidden tool: forbidden, whatever a grant says;
+//  5. a scheduled task's call: outside its grant is out_of_grant, inside
 //     it is auto, even in a tainted session (R-POL-8); web.fetch is
 //     inside only on a granted host, message.send only to the task's own
 //     conversation or its reply target;
-//  5. memory.write and memory.forget: confirm in a tainted session, auto
+//  6. memory.write and memory.forget: confirm in a tainted session, auto
 //     otherwise (the memory guard still checks the entry), though they
 //     are side effects;
-//  6. any other side effect: confirm;
-//  7. message.send to another conversation: confirm;
-//  8. web.fetch of an address the owner or a search did not bring: confirm;
-//  9. the tool's own policy.
+//  7. any other side effect: confirm;
+//  8. in a tainted session, a call with input to a tool that asks for it:
+//     confirm (ADR-0049);
+//  9. message.send to another conversation: confirm;
+//  10. web.fetch of an address the owner or a search did not bring: confirm;
+//  11. the tool's own policy.
 //
 // An argument a rule needs that does not parse makes the call confirm,
 // never auto.
@@ -298,7 +304,7 @@ func Decide(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisi
 type rule func(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool)
 
 // rules are the rules of Decide, in order.
-var rules = []rule{ruleDepth, ruleAdminOnly, ruleForbidden, ruleGrant, ruleMemoryWrite, ruleSideEffect, ruleMessageSend, ruleWebFetch}
+var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleGrant, ruleMemoryWrite, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -335,6 +341,36 @@ func ruleAdminOnly(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisi
 		return forbidden()
 	}
 	return "", "", false
+}
+
+// localRefused reports a call a local-only session must not make: deny by
+// default, so a tool added later stays off until it says it is safe.
+func localRefused(s tool.Spec, c tool.Call) bool { return c.LocalOnly && !s.LocalSafe }
+
+func ruleLocalOnly(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if localRefused(s, c) {
+		return forbidden()
+	}
+	return "", "", false
+}
+
+func ruleTaintedInput(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if s.AskTaintedInput && c.Tainted && hasInput(c) {
+		return confirm()
+	}
+	return "", "", false
+}
+
+// hasInput reports whether the call gives an input. Only an absent or empty
+// string counts as none: anything else, and arguments that do not parse, may
+// carry the session's data.
+func hasInput(c tool.Call) bool {
+	var args map[string]json.RawMessage
+	if err := json.Unmarshal(c.Args, &args); err != nil {
+		return true
+	}
+	raw, given := args["input"]
+	return given && string(raw) != `""`
 }
 
 func ruleGrant(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {

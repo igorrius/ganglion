@@ -164,3 +164,47 @@ func TestReadScriptRunsAgainForTheSameKey(t *testing.T) {
 		}
 	}
 }
+
+// ADR-0049: a read script asks for input in a tainted session; a change script
+// always asks, so the flag has nothing to add there.
+func TestReadScriptAsksForTaintedInput(t *testing.T) {
+	hs := byName(builtin.NewSkillTools(skillSet(t), skills.NewRunner(skills.DefaultRunConfig()), fakeRuns{}))
+	if !hs["skill.disk_report"].Spec().AskTaintedInput {
+		t.Error("the read script does not ask")
+	}
+	if hs["skill.clean_cache"].Spec().AskTaintedInput {
+		t.Error("the change script carries the flag")
+	}
+	if !hs["skill.read"].Spec().LocalSafe {
+		t.Error("skill.read is refused in a local-only session")
+	}
+}
+
+// ADR-0049: only a local-only skill's own script runs in a local-only session.
+func TestOnlyALocalSkillsScriptIsLocalSafe(t *testing.T) {
+	ws := t.TempDir()
+	for name, model := range map[string]string{"private": "model:\n  privacy: local-only\n", "public": ""} {
+		dir := filepath.Join(ws, "skills", name)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		front := "---\nname: " + name + "\ndescription: Does it\n" + model + "script:\n  run: run.sh\n  effects: read\n---\nSteps.\n"
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(front), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "run.sh"), []byte("#!/bin/sh\ncat\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	set, problems, err := skills.Load(skills.Builtin, ws, nil)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("%v %v", err, problems)
+	}
+	hs := byName(builtin.NewSkillTools(set, skills.NewRunner(skills.DefaultRunConfig()), fakeRuns{}))
+	if !hs["skill.private"].Spec().LocalSafe {
+		t.Error("a local-only skill's script is refused in its own session")
+	}
+	if hs["skill.public"].Spec().LocalSafe {
+		t.Error("another skill's script is safe in a local-only session")
+	}
+}

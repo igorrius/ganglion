@@ -362,11 +362,18 @@ model:
   rest of the turn is routed by that skill's `model` block; `privacy:
   local-only` lasts until the session ends, since the skill's data is then in
   its history ([ADR-0042](adr/0042-skills-and-scripts-before-the-sandbox.md)).
+  In such a session the policy refuses every tool not declared to keep its
+  data on the node, whatever a grant says
+  ([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md),
+  Proposed).
   Only the
   owner installs a skill; the agent may propose one by showing its text.
 - **R-RTR-5.** A level-2 skill declares its script in the frontmatter:
   `script: {run, effects, env, timeout}`. `effects: read` runs by
-  itself, `effects: change` asks with a button and runs at most once per
+  itself, except that in a tainted session a call with input asks, since the
+  script may reach the network
+  ([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md),
+  Proposed); `effects: change` asks with a button and runs at most once per
   call key (R-DLV-6): after a crash it is not run again, and the owner is
   told its outcome is unknown; the output is outside content. The script runs without a shell, in its own process group,
   with an environment built from scratch plus the names it lists (the
@@ -589,7 +596,8 @@ human); module install — tests + reviewer + admin.
     marked as data, so an injection cannot come back as the agent's own
     words.
   - In a tainted session these need the owner's confirmation: any side
-    effect, any send to anyone but the requester, and any memory write.
+    effect, any send to anyone but the requester, any memory write, and a
+    read script given input.
 - **R-POL-7.** A **clean-context check** guards what the agent keeps. It
   uses a cheap model with no history, no tools and no tainted context (the
   "dual LLM" pattern; a first, narrow form of the reviewer model above).
@@ -719,7 +727,10 @@ undone with `git revert`.
   logs and the journal, recent failed turns, the effective configuration
   with secrets redacted, queue state). It is reached by running the
   command, locally or through `ssh`, `docker exec` or `kubectl exec`; it
-  opens no port. The agent gets the same search tools, for admins only,
+  opens no port. Its results are marked as outside text, and its
+  instructions say so
+  ([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md),
+  Proposed). The agent gets the same search tools, for admins only,
   with results marked as external data. `config.show` shows the
   configuration this process reads (the flags and the environment), each
   secret only as set or unset; `turn.show` gives one turn whole: the

@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"testing"
 
 	"github.com/igorrius/ganglion/tool"
@@ -69,5 +70,32 @@ func TestEveryToolDeclaresItsParameters(t *testing.T) {
 		if _, err := tool.Properties(s); err != nil {
 			t.Errorf("%s declares no properties: %s", s.Name, s.InputSchema)
 		}
+	}
+}
+
+// ADR-0049: what may run in a local-only session is a deliberate list. A new
+// tool is refused there until it is added here on purpose.
+func TestLocalSafeToolsAreTheListed(t *testing.T) {
+	i := New(context.Background(), agentConfig(t), slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	reg, err := do.Invoke[*tool.Registry](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range reg.Specs(true) {
+		if s.LocalSafe {
+			got = append(got, s.Name)
+		}
+		if s.Name == "web.fetch" || s.Name == "web.search" || s.Name == "memory.write" || s.Name == "message.send" || s.Name == "schedule.create" {
+			if s.LocalSafe {
+				t.Errorf("%s leaves the node", s.Name)
+			}
+		}
+	}
+	slices.Sort(got)
+	want := []string{"cells.get", "journal.search", "logs.search", "memory.read", "memory.recall", "schedule.list", "skill.read", "turns.failed"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("local-safe tools %v, want %v", got, want)
 	}
 }

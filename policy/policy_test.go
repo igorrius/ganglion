@@ -453,3 +453,80 @@ func TestWaitingCallIsNotAskedAgain(t *testing.T) {
 		t.Fatalf("another url: result %+v, err %v, asked %d", res, err, len(ask.asked))
 	}
 }
+
+// ADR-0049: a read script may reach the network, so in a tainted session
+// the session's data must not reach its input unasked.
+func TestTaintedInputAsks(t *testing.T) {
+	script := spec("skill.report", tool.ClassExternal, tool.PolicyAuto)
+	script.AskTaintedInput = true
+	tainted := func(a string) tool.Call {
+		return with(base(), func(c *tool.Call) { c.Tainted, c.Args = true, json.RawMessage(a) })
+	}
+	grant := tainted(`{"input":"data"}`)
+	grant.Grant = &tool.Grant{Tools: []string{"skill.report"}}
+	plain := spec("web.search", tool.ClassExternal, tool.PolicyAuto)
+	for _, tc := range []struct {
+		name string
+		s    tool.Spec
+		c    tool.Call
+		pol  tool.Policy
+	}{
+		{"input in a tainted session", script, tainted(`{"input":"data"}`), tool.PolicyConfirm},
+		{"no input", script, tainted(`{}`), tool.PolicyAuto},
+		{"empty input", script, tainted(`{"input":""}`), tool.PolicyAuto},
+		{"input that is not a string", script, tainted(`{"input":5}`), tool.PolicyConfirm},
+		{"null input", script, tainted(`{"input":null}`), tool.PolicyConfirm},
+		{"arguments that do not parse", script, tainted(`{"input"`), tool.PolicyConfirm},
+		{"clean session", script, with(base(), func(c *tool.Call) { c.Args = json.RawMessage(`{"input":"data"}`) }), tool.PolicyAuto},
+		{"inside a grant", script, grant, tool.PolicyAuto},
+		{"a tool that does not ask", plain, tainted(`{"input":"data"}`), tool.PolicyAuto},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if pol, _ := policy.Decide(policy.DefaultMaxDepth, tc.s, tc.c); pol != tc.pol {
+				t.Fatalf("Decide = %s, want %s", pol, tc.pol)
+			}
+		})
+	}
+}
+
+// ADR-0049: a local-only session keeps its tools on the node; a grant does
+// not change that, and a tool that does not say it is safe is refused.
+func TestLocalOnlyRefusesATool(t *testing.T) {
+	leaves := spec("web.search", tool.ClassExternal, tool.PolicyAuto)
+	safe := spec("cells.get", tool.ClassRead, tool.PolicyAuto)
+	safe.LocalSafe = true
+	local := with(base(), func(c *tool.Call) { c.LocalOnly = true })
+	granted := with(local, func(c *tool.Call) { c.Grant = &tool.Grant{Tools: []string{"web.search"}} })
+	for _, tc := range []struct {
+		name string
+		s    tool.Spec
+		c    tool.Call
+		pol  tool.Policy
+		dec  journal.Decision
+	}{
+		{"a tool that leaves", leaves, local, tool.PolicyForbidden, journal.DecisionForbidden},
+		{"inside a grant", leaves, granted, tool.PolicyForbidden, journal.DecisionForbidden},
+		{"a safe tool", safe, local, tool.PolicyAuto, journal.DecisionAllowed},
+		{"another session", leaves, base(), tool.PolicyAuto, journal.DecisionAllowed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if pol, dec := policy.Decide(policy.DefaultMaxDepth, tc.s, tc.c); pol != tc.pol || dec != tc.dec {
+				t.Fatalf("Decide = %s, %s; want %s, %s", pol, dec, tc.pol, tc.dec)
+			}
+		})
+	}
+}
+
+// The model reads why, so it can tell the owner instead of trying again.
+func TestLocalOnlyRefusalSaysWhy(t *testing.T) {
+	h := &counter{s: spec("web.search", tool.ClassExternal, tool.PolicyAuto)}
+	_, err := chain(t, h, policy.NoAsk{})(context.Background(), with(base(), func(c *tool.Call) {
+		c.LocalOnly, c.Name = true, "web.search"
+	}))
+	if !errors.Is(err, tool.ErrForbidden) || !strings.Contains(err.Error(), "local-only") {
+		t.Fatalf("err %v", err)
+	}
+	if h.calls != 0 {
+		t.Fatal("the tool ran")
+	}
+}

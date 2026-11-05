@@ -47,7 +47,7 @@ type diagTool struct {
 
 func (t *diagTool) Spec() tool.Spec {
 	return tool.Spec{Name: t.spec.Name, Description: t.spec.Description, InputSchema: t.spec.InputSchema,
-		Class: tool.ClassExternal, Policy: tool.PolicyAuto, AdminOnly: true}
+		Class: tool.ClassExternal, Policy: tool.PolicyAuto, AdminOnly: true, LocalSafe: true}
 }
 
 func (t *diagTool) Run(ctx context.Context, c tool.Call) (tool.Result, error) {

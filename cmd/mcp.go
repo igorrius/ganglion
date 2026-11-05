@@ -48,7 +48,7 @@ func mcpCommand(in io.Reader, out io.Writer) *cli.Command {
 				dir = ""
 			}
 			d := diag.New(ro, dir, runSettings(ctx, secrets.OSEnv(), os.ReadFile), time.Now)
-			srv := mcp.NewServer("ganglion-diag", buildinfo.Read().Short(), d.Tools(), d.Exec)
+			srv := mcp.NewServer(diag.ClientSource, buildinfo.Read().Short(), d.Tools(), d.ExecForClient, mcp.WithInstructions(diag.ClientInstructions))
 			return srv.Serve(ctx, stdio{in, out})
 		},
 	}

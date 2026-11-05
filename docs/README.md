@@ -235,6 +235,11 @@ Start here when coming back to the project.
       read without zooming, on a phone or on a desktop, so a short summary could
       come first; a file sent with no text is answered in English, since the
       message gives no language to follow.
+  - **Three gaps closed before the repository opens (2026-11-05,
+    [ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md),
+    Proposed):** a read script given input asks in a tainted session; a local-only
+    session refuses every tool not declared to keep its data on the node; `ganglion
+    mcp` marks its results as data.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.
@@ -281,8 +286,10 @@ install one; the agent may propose the text.
    then the steps in Markdown.
 2. A script sits beside it, executable, named by `script.run`, with
    `effects: read` (runs by itself) or `effects: change` (asks with a
-   button). It gets only `PATH`, `HOME`, `LANG`, `TZ` and the names in
-   `script.env`; the node's secrets never.
+   button). In a session that has read outside content, such as a web page, a
+   read script given input asks too, since it may reach the network. It gets
+   only `PATH`, `HOME`, `LANG`, `TZ` and the names in `script.env`; the node's
+   secrets never.
 3. Restart the node; the log names a skill that was not loaded and why.
 
 Until the sandbox of M3d, a script can read whatever the node's user can
@@ -325,6 +332,11 @@ the client's MCP configuration (`.mcp.json` for Claude Code):
 
 Whoever can run the command can read all conversation history in the
 data directory: give it to the people you would give the files to.
+
+Logs and the journal quote web pages. Results come marked as data and the server
+tells its client so, but that is a convention the client's model follows, not a
+boundary. Do not run diagnostics in a session that approves commands by itself
+([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md)).
 
 ## Map
 
