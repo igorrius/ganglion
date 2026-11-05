@@ -1,6 +1,6 @@
 # ADR-0041: Install module updates from the project's GitHub Releases, checked, self-tested and switched without a restart
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-7, R-RUN-8); design section 6.1 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md)); [ADR-0005](0005-wasm-on-wazero-for-modules.md), [ADR-0011](0011-module-abi.md), [ADR-0035](0035-web-reading.md); plan task 7 ([M3c plan](../plans/p1-m3c-modules-skills-diagnostics.md))

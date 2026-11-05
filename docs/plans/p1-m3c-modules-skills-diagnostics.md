@@ -753,7 +753,9 @@ Two repositories: promtop first, then ganglion.
 - [x] **Step 2: Run** — FAIL.
 - [x] **Step 3: Implement.**
 - [x] **Step 4: Run** `go test -race ./...`, `make lint` — PASS.
-- [ ] **Step 5: First release.** (waits for the owner's tag)
+- [x] **Step 5: First release.** The tag is out. The two live checks below are
+  deferred until the repository opens: a node reads releases anonymously, and a
+  private repository answers 404.
   - The owner pushes `html2md/v0.1.0`; CI publishes it.
   - `/modules update html2md` on the test node reports `up_to_date`
     (same sum as the embedded build) or `installed`.
@@ -901,10 +903,11 @@ Two repositories: promtop first, then ganglion.
 - [x] **Step 4: Measure** (`make memory`): the binary size and the RSS
   after 1,000 turns and after 50 `/metrics` calls, against M3b's
   numbers. Write them into `docs/README.md`.
-- [ ] **Step 5: Live on the test bot** (`make live-agent`, the owner).
+- [x] **Step 5: Live on the test bot** (`make live-agent`, the owner).
   Replaced on 2026-11-04 by chatlab ([plan](p1-m3c-chatlab.md), task 3.20), which
-  runs these checks over the fake Bot API. What stays for the owner: the look on a
-  phone, and `/modules update` and `rollback` after the first tag.
+  runs these checks over the fake Bot API. The owner looked at the messages in
+  Telegram on 2026-11-05. `/modules update` and `rollback` are deferred until the
+  repository opens (task 7, step 5).
   The list as first written:
   - `/metrics`;
   - "Show me the agent's metrics";

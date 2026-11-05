@@ -1,6 +1,6 @@
 # ADR-0048: Test the agent by talking to it, through a separate program over the fake Bot API
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-04
 - **Deciders:** Igor Artasevych
 - **Spec:** [2](../spec.md#2-principles) (principle 9), [9.8](../spec.md#98-self-modification-levels); [chatlab design](../plans/p1-m3c-chatlab-design.md); [plan](../plans/p1-m3c-chatlab.md)

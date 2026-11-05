@@ -1,10 +1,10 @@
 # ADR-0047: During development, Sonnet answers and Haiku does compaction and checks
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-04
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.3](../spec.md#73-model-router), [7.4](../spec.md#74-providers-and-model-access), [11](../spec.md#11-open-decisions) ("First API provider", "Choosing models by purpose")
-- **Supersedes, once accepted:** [ADR-0022](0022-haiku-first-during-development.md)
+- **Supersedes:** [ADR-0022](0022-haiku-first-during-development.md)
 
 ## Context
 

@@ -1,6 +1,6 @@
 # ADR-0045: Render the metrics picture in process with promtop, and keep attachments in the outbox row
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-9), [7.9](../spec.md#79-observability) (R-OBS-8); design section 6.3 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md)); [ADR-0026](0026-opentelemetry-prometheus-and-promtop.md), [ADR-0031](0031-agent-security-baseline.md); plan tasks 3 and 4 ([M3c plan](../plans/p1-m3c-modules-skills-diagnostics.md))
