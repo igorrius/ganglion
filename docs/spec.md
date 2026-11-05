@@ -364,16 +364,14 @@ model:
   its history ([ADR-0042](adr/0042-skills-and-scripts-before-the-sandbox.md)).
   In such a session the policy refuses every tool not declared to keep its
   data on the node, whatever a grant says
-  ([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md),
-  Proposed).
+  ([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md)).
   Only the
   owner installs a skill; the agent may propose one by showing its text.
 - **R-RTR-5.** A level-2 skill declares its script in the frontmatter:
   `script: {run, effects, env, timeout}`. `effects: read` runs by
   itself, except that in a tainted session a call with input asks, since the
   script may reach the network
-  ([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md),
-  Proposed); `effects: change` asks with a button and runs at most once per
+  ([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md)); `effects: change` asks with a button and runs at most once per
   call key (R-DLV-6): after a crash it is not run again, and the owner is
   told its outcome is unknown; the output is outside content. The script runs without a shell, in its own process group,
   with an environment built from scratch plus the names it lists (the
@@ -729,8 +727,7 @@ undone with `git revert`.
   command, locally or through `ssh`, `docker exec` or `kubectl exec`; it
   opens no port. Its results are marked as outside text, and its
   instructions say so
-  ([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md),
-  Proposed). The agent gets the same search tools, for admins only,
+  ([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md)). The agent gets the same search tools, for admins only,
   with results marked as external data. `config.show` shows the
   configuration this process reads (the flags and the environment), each
   secret only as set or unset; `turn.show` gives one turn whole: the

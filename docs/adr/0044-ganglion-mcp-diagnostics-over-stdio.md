@@ -1,6 +1,6 @@
 # ADR-0044: Serve read-only diagnostics as `ganglion mcp` over stdio, with the own MCP server
 
-- **Status:** Accepted
+- **Status:** Accepted; leaving a client's copy of the results unmarked superseded by [ADR-0049](0049-three-gaps-where-outside-text-and-private-data-cross.md)
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.9](../spec.md#79-observability) (R-OBS-5, R-OBS-6, R-OBS-7); design section 6.5 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md)); [ADR-0019](0019-release-leases-at-core-start.md), [ADR-0037](0037-own-minimal-mcp-server.md), [ADR-0043](0043-logs-on-disk-with-an-own-rotator.md); plan task 6 ([M3c plan](../plans/p1-m3c-modules-skills-diagnostics.md))

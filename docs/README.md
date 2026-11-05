@@ -236,8 +236,7 @@ Start here when coming back to the project.
       come first; a file sent with no text is answered in English, since the
       message gives no language to follow.
   - **Three gaps closed before the repository opens (2026-11-05,
-    [ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md),
-    Proposed):** a read script given input asks in a tainted session; a local-only
+    [ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md)):** a read script given input asks in a tainted session; a local-only
     session refuses every tool not declared to keep its data on the node; `ganglion
     mcp` marks its results as data.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)

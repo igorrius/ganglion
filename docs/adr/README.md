@@ -47,14 +47,14 @@ considered, how they compare, the decision and its consequences. See
 | [0039](0039-command-sandbox.md) | Run host commands and skill scripts in a sandbox that fails closed | Proposed | 2026-11-03 |
 | [0040](0040-plans-as-approvals.md) | Let one press on a plan approve exactly the commands it lists | Proposed | 2026-11-03 |
 | [0041](0041-module-install-update-and-trust-boundary.md) | Install module updates from the project's GitHub Releases, checked, self-tested and switched without a restart | Accepted | 2026-11-03 |
-| [0042](0042-skills-and-scripts-before-the-sandbox.md) | Run skill scripts with a declared effect class, an environment allowlist and a timeout until the sandbox lands | Accepted | 2026-11-03 |
+| [0042](0042-skills-and-scripts-before-the-sandbox.md) | Run skill scripts with a declared effect class, an environment allowlist and a timeout until the sandbox lands | Accepted; two rules superseded by 0049 | 2026-11-03 |
 | [0043](0043-logs-on-disk-with-an-own-rotator.md) | Write logs to disk through a small own rotator, synchronously | Accepted | 2026-11-03 |
-| [0044](0044-ganglion-mcp-diagnostics-over-stdio.md) | Serve read-only diagnostics as `ganglion mcp` over stdio, with the own MCP server | Accepted | 2026-11-03 |
+| [0044](0044-ganglion-mcp-diagnostics-over-stdio.md) | Serve read-only diagnostics as `ganglion mcp` over stdio, with the own MCP server | Accepted; one line superseded by 0049 | 2026-11-03 |
 | [0045](0045-metrics-in-the-chat-and-attachments-in-the-outbox.md) | Render the metrics picture in process with promtop, and keep attachments in the outbox row | Accepted | 2026-11-03 |
 | [0046](0046-a-restart-is-not-a-failed-attempt.md) | Count a run a restart cut short apart from a failed attempt | Accepted | 2026-11-04 |
 | [0047](0047-sonnet-answers-during-development.md) | During development, Sonnet answers and Haiku does compaction and checks (supersedes 0022) | Accepted | 2026-11-04 |
 | [0048](0048-chatlab-over-the-fake-bot-api.md) | Test the agent by talking to it, through a separate program over the fake Bot API | Accepted | 2026-11-04 |
-| [0049](0049-three-gaps-where-outside-text-and-private-data-cross.md) | Ask before a read script takes a tainted session's input, keep a local-only session's tools on the node, and mark `ganglion mcp`'s results as data | Proposed | 2026-11-05 |
+| [0049](0049-three-gaps-where-outside-text-and-private-data-cross.md) | Ask before a read script takes a tainted session's input, keep a local-only session's tools on the node, and mark `ganglion mcp`'s results as data | Accepted | 2026-11-05 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).
