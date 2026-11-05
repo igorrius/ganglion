@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf16"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/transport"
@@ -518,5 +521,53 @@ func TestCommandHintsDoNotDelayPolling(t *testing.T) {
 	}
 	if d := time.Since(started); d > 2*time.Second {
 		t.Fatalf("Run took %v to stop", d)
+	}
+}
+
+// Review focus 5: every part of a long earlier answer collapses, none loses
+// text, and a quote inside does not reach Telegram as a nested entity.
+func TestSupersededLongAnswerCollapsesEveryPart(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	var paragraphs []string
+	for i := range 90 {
+		paragraphs = append(paragraphs, fmt.Sprintf("Paragraph %d: ", i)+strings.Repeat("x", 90))
+	}
+	src := strings.Join(paragraphs, "\n\n")
+	msg := event.Outgoing{IdemKey: "k", Transport: "telegram", Conv: "telegram:42", Text: "> quoted first\n\n" + src, Superseded: true}
+	parts := tr.Parts(msg)
+	if len(parts) < 2 {
+		t.Fatalf("%d parts of %d units", len(parts), len(msg.Text))
+	}
+	for _, p := range parts {
+		if _, err := tr.Send(context.Background(), p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var texts []string
+	for i, sent := range fake.Sent() {
+		var ents []entity
+		if err := json.Unmarshal([]byte(sent.Entities), &ents); err != nil {
+			t.Fatalf("part %d: %v in %q", i, err, sent.Entities)
+		}
+		want := []entity{ent(entityExpandable, 0, len(utf16.Encode([]rune(sent.Text))))}
+		if !slices.Equal(ents, want) {
+			t.Fatalf("part %d: entities %+v, want %+v", i, ents, want)
+		}
+		texts = append(texts, sent.Text)
+	}
+	if got, want := strings.Join(texts, "\n\n"), "quoted first\n\n"+src; got != want {
+		t.Fatalf("the parts do not join to the source:\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestPlainMessageIsNotCollapsed(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	if _, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "k", Transport: "telegram", Conv: "telegram:42", Text: "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.Sent()[0].Entities; got != "" {
+		t.Fatalf("entities %s", got)
 	}
 }

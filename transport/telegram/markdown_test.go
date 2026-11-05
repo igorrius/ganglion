@@ -115,3 +115,43 @@ func TestPartsSplitLongCodeBlock(t *testing.T) {
 		t.Fatal("the code lines do not rejoin")
 	}
 }
+
+func TestCollapsedWrapsAllTextInOneExpandableQuote(t *testing.T) {
+	text, ents := render("short")
+	got := collapsed(text, ents)
+	if want := []entity{ent(entityExpandable, 0, 5)}; !slices.Equal(got, want) {
+		t.Fatalf("entities %+v, want %+v", got, want)
+	}
+}
+
+// Offsets count UTF-16 units, so an emoji counts twice.
+func TestCollapsedCountsUTF16Units(t *testing.T) {
+	if got, want := collapsed("😀 x", nil), []entity{ent(entityExpandable, 0, 4)}; !slices.Equal(got, want) {
+		t.Fatalf("entities %+v, want %+v", got, want)
+	}
+}
+
+// Telegram does not nest quotes, so one inside the answer must go, short or
+// long, while other formatting stays.
+func TestCollapsedRemovesQuotesInside(t *testing.T) {
+	long := strings.Repeat("слово ", 100)
+	for name, src := range map[string]string{
+		"short quote": "**bold** text\n\n> quoted",
+		"long quote":  "**bold** text\n\n> " + long,
+	} {
+		t.Run(name, func(t *testing.T) {
+			text, ents := render(src)
+			got := collapsed(text, ents)
+			want := []entity{ent(entityExpandable, 0, len([]rune(text))), ent("bold", 0, 4)}
+			if !slices.Equal(sortEnts(got), sortEnts(want)) {
+				t.Fatalf("entities %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
+func TestCollapsedOfNothingIsNothing(t *testing.T) {
+	if got := collapsed("", nil); len(got) != 0 {
+		t.Fatalf("entities %+v", got)
+	}
+}

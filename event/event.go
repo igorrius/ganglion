@@ -71,6 +71,10 @@ type Outgoing struct {
 	// its caption (R-DLV-9). A message with an attachment has no buttons
 	// and is never an edit or an acknowledgement.
 	Attach *Attachment `json:",omitempty"`
+	// Superseded marks an answer overtaken by a later message of the person
+	// (R-LIVE-5): the next message is the one to read. The transport shows it
+	// as it can, and always shows it whole.
+	Superseded bool `json:",omitempty"`
 }
 
 // AttachKind is how an attachment is shown.

@@ -178,7 +178,7 @@ func TestCompleteIgnoresTakenFromAnotherConversation(t *testing.T)
 - Produces: `event.Outgoing.Superseded bool` (`json:",omitempty"`): an answer overtaken by a later message; the transport shows it as it can.
 - Produces: `collapsed(text string, ents []entity) []entity` in `markdown.go`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 func TestCollapsedWrapsAllTextInOneExpandableQuote(t *testing.T)
@@ -193,13 +193,13 @@ func TestSupersededLongAnswerCollapsesEveryPart(t *testing.T) // Review Focus 5
 // over its whole text, and the parts join to the source
 ```
 
-- [ ] **Step 2: Run:** `go test -race ./transport/telegram/` Expected: FAIL.
+- [x] **Step 2: Run:** `go test -race ./transport/telegram/` Expected: FAIL.
 
-- [ ] **Step 3: Implement.** In `Send`, after `render`, apply `collapsed` when `msg.Superseded`. A superseded message has no reply parameters of its own beyond `ReplyTo`, no buttons. Check where a long text is split (`split.go`) and apply it per part.
+- [x] **Step 3: Implement.** In `Send`, after `render`, apply `collapsed` when `msg.Superseded`. A superseded message has no reply parameters of its own beyond `ReplyTo`, no buttons. Check where a long text is split (`split.go`) and apply it per part.
 
-- [ ] **Step 4: Run** the same command. Expected: PASS.
+- [x] **Step 4: Run** the same command. Expected: PASS.
 
-- [ ] **Step 5: Commit**, message `telegram: a superseded answer goes out as a collapsed quote`.
+- [x] **Step 5: Commit**, message `telegram: a superseded answer goes out as a collapsed quote`.
 
 ---
 

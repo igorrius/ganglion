@@ -336,6 +336,9 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) (string, error
 	if strings.TrimSpace(text) == "" {
 		text, ents = msg.Text, nil // nothing visible left: send the source rather than nothing
 	}
+	if msg.Superseded {
+		ents = collapsed(text, ents)
+	}
 	if msg.Edit != "" {
 		return msg.Edit, sendError(t.edit(ctx, chat, msg.Edit, text, ents, msg.Buttons))
 	}

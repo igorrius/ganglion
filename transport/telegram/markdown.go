@@ -130,13 +130,36 @@ func (w *writer) block(n ast.Node, indent string) {
 // entityPre is Telegram's preformatted block: code and tables.
 const entityPre = "pre"
 
+// The two kinds of quote Telegram has. It does not nest them.
+const (
+	entityQuote      = "blockquote"
+	entityExpandable = "expandable_blockquote"
+)
+
+// collapsed returns ents for text shown whole inside one expandable quote
+// (R-LIVE-5), whatever its length. A quote inside the text is dropped, since
+// quotes do not nest; other formatting stays.
+func collapsed(text string, ents []entity) []entity {
+	n := len(utf16.Encode([]rune(text)))
+	if n == 0 {
+		return nil
+	}
+	out := []entity{{Type: entityExpandable, Offset: 0, Length: n}}
+	for _, e := range ents {
+		if e.Type != entityQuote && e.Type != entityExpandable {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // quote renders a blockquote; a long one is expandable.
 func (w *writer) quote(n *ast.Blockquote, indent string) {
 	start, ents := w.n, len(w.ents)
 	w.blocks(n, indent, "\n")
-	typ := "blockquote"
+	typ := entityQuote
 	if w.n-start > expandableQuote {
-		typ = "expandable_blockquote"
+		typ = entityExpandable
 	}
 	if w.n > start {
 		q := entity{Type: typ, Offset: start, Length: w.n - start}
