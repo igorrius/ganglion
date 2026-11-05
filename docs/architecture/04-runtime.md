@@ -46,6 +46,30 @@ between sending and marking, one duplicate reply is possible (R-DLV-5).
 
 ## Confirmation on a button (P1)
 
+A message written during a turn joins it at the next boundary
+([ADR-0050](../adr/0050-additions-join-a-running-turn.md)): before each model call and each
+tool call the agent reads what waits behind the turn's event. No tool call starts while one
+waits. An answer it overtook goes out at once, marked as superseded, and `Complete` marks
+what the turn took as done in its one transaction.
+
+```mermaid
+sequenceDiagram
+    participant P as Person
+    participant Q as Inbox and outbox
+    participant A as Agent
+    participant M as Model
+    P->>Q: first message
+    Q->>A: lease
+    A->>M: call
+    P->>Q: addition
+    M-->>A: answer
+    A->>Q: Behind: the addition qualifies
+    A->>Q: Enqueue the answer, superseded
+    A->>M: call with the answer and the addition
+    M-->>A: final answer
+    A->>Q: Complete: reply, state, both events done
+```
+
 A call that needs the owner's confirmation does not hold its turn open:
 the turn ends with the call parked, and the press is a new event that
 resumes the conversation ([ADR-0032](../adr/0032-buttons-and-resume.md)).

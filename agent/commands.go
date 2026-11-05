@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/transport"
@@ -104,16 +105,26 @@ func parseCommand(text string) (string, string) {
 // instruction and a forward are never commands: the sender did not write
 // them as one.
 func (a *Agent) command(ctx context.Context, t *turn) (bool, error) {
-	if t.grant != nil || t.msg.Forwarded {
+	if t.grant != nil {
 		return false, nil
 	}
-	name, arg := parseCommand(t.msg.Text)
-	run, ok := a.commands[name]
+	run, arg, ok := a.commandIn(t.msg)
 	if !ok {
 		return false, nil
 	}
 	t.record.Outcome = turns.OutcomeCommand
 	return true, run(ctx, t, arg)
+}
+
+// commandIn finds the command a person's message runs: a forward is never
+// one, as the sender did not write it as one.
+func (a *Agent) commandIn(m event.Message) (run command, arg string, ok bool) {
+	if m.Forwarded {
+		return nil, "", false
+	}
+	name, arg := parseCommand(m.Text)
+	run, ok = a.commands[name]
+	return run, arg, ok
 }
 
 // newSession archives the session; the next real message opens a new one

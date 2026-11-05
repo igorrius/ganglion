@@ -19,18 +19,21 @@ import (
 // instruments are the agent's metrics and tracer (R-OBS-1). Labels stay
 // low-cardinality: never a conversation or a principal.
 type instruments struct {
-	tracer      trace.Tracer
-	turns       metric.Int64Counter
-	turnDur     metric.Float64Histogram
-	steps       metric.Int64Histogram
-	calls       metric.Int64Counter
-	callDur     metric.Float64Histogram
-	context     metric.Int64Histogram
-	fallbacks   metric.Int64Counter
-	tokens      metric.Int64Counter
-	cost        metric.Float64Counter
-	ended       metric.Int64Counter
-	compactions metric.Int64Counter
+	tracer       trace.Tracer
+	turns        metric.Int64Counter
+	turnDur      metric.Float64Histogram
+	steps        metric.Int64Histogram
+	calls        metric.Int64Counter
+	callDur      metric.Float64Histogram
+	context      metric.Int64Histogram
+	fallbacks    metric.Int64Counter
+	tokens       metric.Int64Counter
+	cost         metric.Float64Counter
+	ended        metric.Int64Counter
+	compactions  metric.Int64Counter
+	additions    metric.Int64Counter
+	skippedCalls metric.Int64Counter
+	quotes       metric.Int64Counter
 }
 
 func newInstruments() instruments {
@@ -51,6 +54,9 @@ func newInstruments() instruments {
 	in.cost, _ = m.Float64Counter("ganglion.model.cost_usd", metric.WithDescription("Model cost in USD at catalogue prices."))
 	in.ended, _ = m.Int64Counter("ganglion.sessions.ended", metric.WithDescription("Sessions archived, by what ended them: idle, new, resume."))
 	in.compactions, _ = m.Int64Counter("ganglion.compactions", metric.WithDescription("History compactions, by result: ok, failed."))
+	in.additions, _ = m.Int64Counter("ganglion.additions.taken", metric.WithDescription("Messages that joined a running turn."))
+	in.skippedCalls, _ = m.Int64Counter("ganglion.additions.skipped_calls", metric.WithDescription("Tool calls not run because an addition waited."))
+	in.quotes, _ = m.Int64Counter("ganglion.additions.quotes", metric.WithDescription("Answers sent as overtaken by a later message, by result: stored, with_turn."))
 	return in
 }
 
@@ -79,7 +85,7 @@ func (a *Agent) observeCall(ctx context.Context, span trace.Span, c router.Candi
 
 // logTurn writes one info line per turn: what an operator watches in the
 // console. Never message text.
-func (a *Agent) logTurn(ctx context.Context, r *turns.Turn) {
+func (a *Agent) logTurn(ctx context.Context, r *turns.Turn, additions int) {
 	model := ""
 	for _, at := range r.Route {
 		if at.Error == "" {
@@ -93,7 +99,7 @@ func (a *Agent) logTurn(ctx context.Context, r *turns.Turn) {
 	a.in.steps.Record(ctx, int64(r.Steps), metric.WithAttributes(outcome))
 	trace.SpanFromContext(ctx).SetAttributes(outcome, attribute.Int("steps", r.Steps))
 	a.log.InfoContext(ctx, "agent: turn", "id", r.EventID, "conv", r.Conv, "principal", r.Principal, "outcome", r.Outcome,
-		"steps", r.Steps, "model", model, "attempts", len(r.Route), "tools", len(r.Tools),
+		"steps", r.Steps, "additions", additions, "model", model, "attempts", len(r.Route), "tools", len(r.Tools),
 		"in_tokens", r.InputTokens, "cached_tokens", r.CacheReadTokens, "out_tokens", r.OutputTokens,
 		"cost_usd", fmt.Sprintf("%.6f", r.CostUSD), "ms", dur.Milliseconds())
 }
@@ -108,6 +114,15 @@ func (a *Agent) observeFallback(ctx context.Context, reason string) {
 // resume).
 func (a *Agent) observeEnded(ctx context.Context, by string) {
 	a.in.ended.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", by)))
+}
+
+// observeQuote counts an answer sent as overtaken by a later message.
+func (a *Agent) observeQuote(ctx context.Context, stored bool) {
+	result := "stored"
+	if !stored {
+		result = "with_turn"
+	}
+	a.in.quotes.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
 }
 
 // observeCompaction counts a compaction by its result.

@@ -55,6 +55,17 @@ type turn struct {
 	// noTools offers the model no tools: an expiry only tells the owner
 	// (ruling R33).
 	noTools bool
+	// deadline is when the turn's clock runs out (R-LIVE-6).
+	deadline time.Time
+	// taken are the events the turn took from behind it; Complete marks them
+	// done with it (R-LIVE-1).
+	taken []string
+	// kept is what stays in the history if a model call fails later: the
+	// additions and the earlier answers the person read, in order (R-LIVE-5,
+	// R-LIVE-6).
+	kept []provider.Message
+	// quotes are the earlier answers sent so far (R-LIVE-5).
+	quotes int
 }
 
 // reply adds the answer to the person's message. A turn answers once, so

@@ -108,13 +108,14 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 	t.known = knownURLs(append(slices.Clone(t.state.Messages), user))
 	turnCtx, cancel := context.WithTimeout(ctx, a.cfg.TurnTimeout)
 	defer cancel()
+	t.deadline, _ = turnCtx.Deadline()
 	added, text, end, err := a.steps(ctx, turnCtx, t, append(a.prompt(t), user))
 	if err != nil {
 		return false, err
 	}
 	if end != turns.OutcomeOK {
 		t.record.Outcome = end
-		t.state.Messages, t.state.Last = append(t.state.Messages, user), t.now
+		t.state.Messages, t.state.Last = append(append(t.state.Messages, user), t.kept...), t.now
 		t.reply(endReplies[end])
 		return true, nil
 	}
@@ -132,7 +133,8 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 }
 
 // steps runs model calls and tools until the model answers without tool
-// calls or MaxSteps run out. It returns the messages the turn added after
+// calls or MaxSteps run out. Before each call it takes the messages waiting
+// behind the turn (R-LIVE-2). It returns the messages the turn added after
 // the user's and the answer, "" at the step limit. end is the outcome of
 // a step no model answered (OutcomeNoModel, or OutcomeError after a CLI
 // run that ran tools failed), OutcomeOK otherwise. A cancelled ctx
@@ -145,6 +147,7 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 		exec = a.exec(t)
 	}
 	for t.record.Steps < a.cfg.MaxSteps {
+		msgs, added = a.join(turnCtx, t, msgs, added, a.waiting(turnCtx, t))
 		t.record.Steps++
 		resp, got := a.call(turnCtx, task, provider.ChatRequest{Messages: a.annotate(t, msgs), Tools: tools, Exec: exec}, &t.record, t.toolCalls)
 		if ctx.Err() != nil {
@@ -164,10 +167,19 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 		}
 		msgs, added = append(msgs, msg), append(added, msg)
 		if len(msg.ToolCalls) == 0 {
-			return added, msg.Content, turns.OutcomeOK, nil
+			adds := a.waiting(turnCtx, t)
+			if len(adds) == 0 {
+				return added, msg.Content, turns.OutcomeOK, nil
+			}
+			a.quote(turnCtx, t, msg.Content)
+			msgs, added = a.join(turnCtx, t, msgs, added, adds)
+			continue
 		}
-		results := a.runTools(turnCtx, t, msg.ToolCalls)
-		task = a.skillRoute(task, msg.ToolCalls, t.admin)
+		results, run := a.runTools(turnCtx, t, msg.ToolCalls)
+		if run < len(msg.ToolCalls) && msg.Content != "" {
+			a.quote(turnCtx, t, msg.Content)
+		}
+		task = a.skillRoute(task, msg.ToolCalls[:run], t.admin)     // a call that was skipped read nothing
 		t.state.LocalOnly = task.Privacy == skills.PrivacyLocalOnly // skillRoute never lifts it
 		msgs, added = append(msgs, results...), append(added, results...)
 	}

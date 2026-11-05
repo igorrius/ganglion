@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/igorrius/ganglion/alert"
@@ -48,7 +47,7 @@ type NameFunc func(ctx context.Context, principal string) (string, error)
 type SystemJob func(ctx context.Context) (string, error)
 
 // Deps are the agent's collaborators. All are required except Middleware,
-// QuickActions, SystemJobs, Facts, Now and Log; the composition root
+// QuickActions, SystemJobs, Facts, Inbox, Now and Log; the composition root
 // passes no-op implementations where a part is off (ADR-0028).
 type Deps struct {
 	States     StateReader
@@ -63,6 +62,9 @@ type Deps struct {
 	// Outbox takes a press's acknowledgement before the pressed action
 	// runs (ruling R40).
 	Outbox Enqueuer
+	// Inbox shows what waits behind a turn, so a message can join it
+	// (R-LIVE-1); NoInbox when unset.
+	Inbox Inbox
 	// Sent says where a delivered message went, so an expired question can
 	// close itself.
 	Sent SentRefs
@@ -115,6 +117,9 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Modules == nil {
 		d.Modules = NoModules{}
 	}
+	if d.Inbox == nil {
+		d.Inbox = NoInbox{}
+	}
 	if d.Skills == nil {
 		d.Skills = skills.Set{}
 	}
@@ -153,9 +158,9 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 // into the turn; false means the event is not one to answer.
 var payloads = map[event.Kind]func(t *turn) bool{
 	event.KindMessage: func(t *turn) bool {
-		// A message with only files is answered too: nothing is dropped
-		// silently (R-DLV-10).
-		return json.Unmarshal(t.event.Payload, &t.msg) == nil && (strings.TrimSpace(t.msg.Text) != "" || len(t.msg.Files) > 0)
+		m, ok := decodeMessage(t.event.Payload)
+		t.msg = m
+		return ok
 	},
 	event.KindDecision: func(t *turn) bool {
 		d := &t.decision
@@ -199,7 +204,7 @@ func (a *Agent) begin(ctx context.Context, e event.Event) (*turn, bool, error) {
 // finish logs and records the turn and encodes the new state.
 func (a *Agent) finish(ctx context.Context, t *turn) ([]event.Outgoing, queue.StateUpdate, error) {
 	t.record.Finished = a.d.Now()
-	a.logTurn(ctx, &t.record)
+	a.logTurn(ctx, &t.record, len(t.taken))
 	// The turn's context may have run out during compaction; the trace
 	// still counts for the budget and the limits.
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -211,5 +216,5 @@ func (a *Agent) finish(ctx context.Context, t *turn) ([]event.Outgoing, queue.St
 	if err != nil {
 		return nil, queue.StateUpdate{}, err
 	}
-	return t.out, queue.StateUpdate{Conv: t.event.Conv, Data: data}, nil
+	return t.out, queue.StateUpdate{Conv: t.event.Conv, Data: data, Taken: t.taken}, nil
 }

@@ -218,7 +218,7 @@ func TestSupersededLongAnswerCollapsesEveryPart(t *testing.T) // Review Focus 5
   - `func (a *Agent) waiting(ctx context.Context, t *turn) []additionMsg`: the qualifying run.
   - `const maxAdditionsAtOnce = 8`, `const minAdditionTime = 30 * time.Second`.
 
-- [ ] **Step 1: Write the failing tests**, using `newEnv`, `fakeProvider` and the real `sqlqueue`.
+- [x] **Step 1: Write the failing tests**, using `newEnv`, `fakeProvider` and the real `sqlqueue`.
 
 ```go
 func TestAdditionJoinsBeforeTheNextModelCall(t *testing.T)
@@ -276,13 +276,13 @@ func TestFailedTurnKeepsTakenMessages(t *testing.T)
 func TestInboxReadFailureDoesNotFailTheTurn(t *testing.T)
 ```
 
-- [ ] **Step 2: Run:** `go test -race ./agent/ -run 'Addition|Earlier|Rerun|Taking|Budget|ShortTime|FailedTurn|WaitingAddition|FileOnly|Inbox'` Expected: FAIL.
+- [x] **Step 2: Run:** `go test -race ./agent/ -run 'Addition|Earlier|Rerun|Taking|Budget|ShortTime|FailedTurn|WaitingAddition|FileOnly|Inbox'` Expected: FAIL.
 
-- [ ] **Step 3: Implement `waiting`**
+- [x] **Step 3: Implement `waiting`**
 
 An event qualifies when: `t.event.Kind == KindMessage`, `t.grant == nil`, `!t.noTools`, and for the event: `KindMessage`, same `Conv`, decodes as `payloads` does, `msg.From == t.msg.From`, not `e.Expired(now)`, not a command (mirror `command`: not forwarded and `parseCommand` names one in `a.commands`), and within limits. Split `overLimit` so that the check has no alert: `func (a *Agent) over(ctx, now, principal, eventID) bool`. Stop at the first that fails. Return nothing when `t.record.Steps >= MaxSteps` or less than `minAdditionTime` is left on the context. A read error is logged and means nothing waits.
 
-- [ ] **Step 4: Rewrite the loop in `steps`**
+- [x] **Step 4: Rewrite the loop in `steps`**
 
 ```text
 for Steps < MaxSteps:
@@ -309,11 +309,11 @@ The quote: `event.Outgoing{IdemKey: t.event.IdemKey + ":earlier:" + strconv.Itoa
 
 Add to the system prompt: a later message from the same person during work belongs to the same request. Ask the owner about the full-lab recommendation this triggers, per Global Constraints.
 
-- [ ] **Step 5: Add metrics in `agent/telemetry.go`:** additions taken, tool calls skipped, answers sent as quotes; the count of additions on the "agent: turn" log line.
+- [x] **Step 5: Add metrics in `agent/telemetry.go`:** additions taken, tool calls skipped, answers sent as quotes; the count of additions on the "agent: turn" log line.
 
-- [ ] **Step 6: Wire `Deps.Inbox` in `config/agent.go`.** Run: `go test -race ./agent/ ./config/` Expected: PASS.
+- [x] **Step 6: Wire `Deps.Inbox` in `config/agent.go`.** Run: `go test -race ./agent/ ./config/` Expected: PASS.
 
-- [ ] **Step 7: Commit**, message `agent: a message written during a turn joins it`, with the code map and level page.
+- [x] **Step 7: Commit**, message `agent: a message written during a turn joins it`, with the code map and level page.
 
 ---
 

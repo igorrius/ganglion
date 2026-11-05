@@ -72,6 +72,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Policy:       do.MustInvoke[*policy.Policy](i).Middleware(),
 		Pending:      do.MustInvoke[*pending.Store](i),
 		Outbox:       do.MustInvoke[*sqlqueue.Queue](i),
+		Inbox:        do.MustInvoke[*sqlqueue.Queue](i),
 		Sent:         do.MustInvoke[*sqlqueue.Queue](i),
 		QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
 		Jobs:         do.MustInvoke[*schedule.Store](i),

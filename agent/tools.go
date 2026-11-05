@@ -76,13 +76,23 @@ func (a *Agent) introducing(t *turn) bool {
 }
 
 // runTools runs the model's tool calls in order and returns their results
-// as tool messages; a failed call's result is its error text.
-func (a *Agent) runTools(ctx context.Context, t *turn, calls []provider.ToolCall) []provider.Message {
-	out := make([]provider.Message, 0, len(calls))
-	for _, call := range calls {
+// as tool messages; a failed call's result is its error text. No call starts
+// while an addition waits (R-LIVE-2): this one and the rest get a result
+// saying so, are not numbered and are not journalled. run is how many ran,
+// from the first.
+func (a *Agent) runTools(ctx context.Context, t *turn, calls []provider.ToolCall) (out []provider.Message, run int) {
+	out = make([]provider.Message, 0, len(calls))
+	for i, call := range calls {
+		if len(a.waiting(ctx, t)) > 0 {
+			for _, skipped := range calls[i:] {
+				out = append(out, provider.Message{Role: provider.RoleTool, ToolCallID: skipped.ID, Content: skippedResult})
+			}
+			a.in.skippedCalls.Add(ctx, int64(len(calls)-i))
+			return out, i
+		}
 		out = append(out, a.runTool(ctx, t, call))
 	}
-	return out
+	return out, len(calls)
 }
 
 // runTool runs one call of an API model's tool_calls and returns its
