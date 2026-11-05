@@ -3,6 +3,8 @@
 # that is neither here, nor in a scenario's covers, nor shared. When a scenario comes
 # to depend on a file, move it to that scenario's covers.
 main.go
+plan/**
+tool/builtin/plan.go
 access/**
 agent/commands.go
 agent/config.go

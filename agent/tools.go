@@ -12,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/internal/urlnorm"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/turns"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -21,6 +22,10 @@ import (
 // tools (design section 4, rule 8). An error leaves the turn to be
 // handled again; it never counts as "not an admin".
 type AdminFunc func(ctx context.Context, principal string) (bool, error)
+
+// maxPlanCalls is the ceiling of plan calls in a turn: they do not spend
+// MaxSteps, since ticks would use it all (ADR-0052), but they are not free.
+const maxPlanCalls = 32
 
 // errCallLimit refuses a CLI provider's tool call once the turn's
 // budget, MaxSteps calls, is spent (ADR-0036); the model reads it.
@@ -171,10 +176,9 @@ func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall, ca
 		if err := a.heldBack(ctx, t); err != nil {
 			return "", err
 		}
-		if t.execCalls >= a.cfg.MaxSteps {
-			return "", errCallLimit
-		}
-		t.execCalls++
+	}
+	if err := t.spend(call, capped, a.cfg.MaxSteps); err != nil {
+		return "", err
 	}
 	t.calls++
 	text, err := a.applyTool(ctx, t, call)
@@ -185,11 +189,36 @@ func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall, ca
 	return text, err
 }
 
+// spend counts the call against the turn's budget, or refuses it with
+// errCallLimit: a plan call against its own ceiling, on both routes; a CLI
+// provider's other calls against MaxSteps. The caller holds t.mu.
+func (t *turn) spend(call provider.ToolCall, capped bool, maxSteps int) error {
+	switch {
+	case isPlanCall(call):
+		if t.planCalls >= maxPlanCalls {
+			return errCallLimit
+		}
+		t.planCalls++
+	case capped:
+		if t.execCalls >= maxSteps {
+			return errCallLimit
+		}
+		t.execCalls++
+	}
+	return nil
+}
+
+func isPlanCall(call provider.ToolCall) bool {
+	return call.Name == builtin.PlanShowTool || call.Name == builtin.PlanStepTool
+}
+
 // applyTool runs the turn's numbered call through the chain and applies
 // its result to the turn (useTool). The caller holds t.mu.
 func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) (string, error) {
 	started := time.Now()
-	a.report(t, t.refs[0], event.StageTool)
+	if !isPlanCall(call) {
+		a.report(t, t.refs[0], event.StageTool)
+	}
 	result, err := a.tool(ctx, a.toolCall(t, call))
 	// A failed call can still carry messages, such as the alert about
 	// a call outside a task's grant.

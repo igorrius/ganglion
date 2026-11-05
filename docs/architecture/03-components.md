@@ -62,6 +62,7 @@ flowchart TB
 | Transports | Turn channel input into `Event`s; send `Outgoing` | R-DLV-2, R-DLV-8 |
 | Inbox / outbox | Durable at-least-once delivery, deduplication by `idemKey`, transactional replies | R-DLV-1…7 |
 | Conversation actors | One turn at a time per conversation, leases, timeouts | R-AGT-1, R-DLV-3 |
+| Plan | The steps of the work as one message edited in place, shown during the turn; approves nothing | R-LIVE-8 |
 | Status reactions | Work that takes long shows on the person's message; a hint, outside the outbox | R-LIVE-7 |
 | Agent loop | Model call → tool calls → next step, step limit, depth limit; a message written during the turn joins it between calls | R-AGT-3, R-AGT-4, R-LIVE-1..6 |
 | History | Provider-neutral transcript, compaction | R-AGT-2 |

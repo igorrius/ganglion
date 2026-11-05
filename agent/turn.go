@@ -30,6 +30,8 @@ type turn struct {
 	// execCalls are the calls a CLI provider ran through Exec; at most
 	// MaxSteps a turn.
 	execCalls int
+	// planCalls are the plan calls of the turn; they have their own ceiling.
+	planCalls int
 	// execLog are the CLI provider's calls and results for the history,
 	// in the API path's form (logExec).
 	execLog []provider.Message

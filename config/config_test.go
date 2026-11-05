@@ -98,7 +98,7 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"cells.get", "cells.set", "message.send", "schedule.create", "schedule.delete", "schedule.list",
+	want := []string{"cells.get", "cells.set", "message.send", "plan.show", "plan.step", "schedule.create", "schedule.delete", "schedule.list",
 		"schedule.run_now", "web.fetch", "web.search", "logs.search", "journal.search", "turns.failed", "skill.read"}
 	if _, err := exec.LookPath("git"); err == nil {
 		want = append(want, "memory.audit", "memory.forget", "memory.read", "memory.recall", "memory.write", "persona.propose")

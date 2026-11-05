@@ -1144,3 +1144,128 @@ func TestPressReportsNoStage(t *testing.T) {
 		t.Fatalf("stages %+v", *got)
 	}
 }
+
+// runAndAnswer is a CLI run that makes the calls in order and then answers.
+func runAndAnswer(answer string, names ...string) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		for _, n := range names {
+			_, _ = req.Exec(ctx, provider.ToolCall{Name: n, Args: json.RawMessage(`{}`)})
+		}
+		return answerText(answer), nil
+	}
+}
+
+// R-LIVE-8: ticks do not eat the turn's real calls.
+func TestPlanCallsDoNotSpendTheCap(t *testing.T) {
+	clock := newClock()
+	step := &fakeTool{name: "plan.step", result: tool.Result{Text: "marked"}}
+	e := newAddEnv(t, Config{}, clock, step)
+	var names []string
+	for range DefaultConfig().MaxSteps {
+		names = append(names, "plan.step", "clock", "plan.step")
+	}
+	e.smart.push(runAndAnswer("answer", names...))
+	e.put(t, from("first"))
+	e.next(t)
+	if len(clock.calls) != DefaultConfig().MaxSteps || len(step.calls) != 2*DefaultConfig().MaxSteps {
+		t.Fatalf("clock %d, plan %d", len(clock.calls), len(step.calls))
+	}
+}
+
+func TestPlanCallsHaveTheirOwnCeiling(t *testing.T) {
+	step := &fakeTool{name: "plan.step", result: tool.Result{Text: "marked"}}
+	e := newAddEnv(t, Config{}, step)
+	var last error
+	e.smart.push(func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		for range maxPlanCalls + 1 {
+			_, last = req.Exec(ctx, provider.ToolCall{Name: "plan.step", Args: json.RawMessage(`{}`)})
+		}
+		return answerText("answer"), nil
+	})
+	e.put(t, from("first"))
+	e.next(t)
+	if !errors.Is(last, errCallLimit) || len(step.calls) != maxPlanCalls {
+		t.Fatalf("last %v, %d ran", last, len(step.calls))
+	}
+}
+
+// On the API route one model message may hold many calls: the ceiling holds there.
+func TestPlanCeilingHoldsOnTheAPIRoute(t *testing.T) {
+	step := &fakeTool{name: "plan.step", result: tool.Result{Text: "marked"}}
+	e := newAddEnv(t, Config{}, step)
+	var names []string
+	for range maxPlanCalls + 1 {
+		names = append(names, "plan.step")
+	}
+	e.smart.push(callsAfter(func() {}, "", names...), say("answer"))
+	e.put(t, from("first"))
+	e.next(t)
+	if len(step.calls) != maxPlanCalls {
+		t.Fatalf("%d ran", len(step.calls))
+	}
+}
+
+// A plan call is no work of its own, so it does not show as a tool at work.
+func TestPlanCallReportsNoToolStage(t *testing.T) {
+	step := &fakeTool{name: "plan.step", result: tool.Result{Text: "marked"}}
+	e := newAddEnv(t, Config{}, step)
+	got := recordStatus(t, e, Config{})
+	e.smart.push(callTool("plan.step"), say("answer"))
+	e.put(t, withRef(from("first"), "5"))
+	e.next(t)
+	for _, st := range *got {
+		if st.Stage == event.StageTool {
+			t.Fatalf("stages %+v", *got)
+		}
+	}
+}
+
+type planFinish struct {
+	conv string
+	kept []bool
+	err  error
+}
+
+func (p *planFinish) Finish(_ context.Context, conv string, kept bool) error {
+	p.conv, p.kept = conv, append(p.kept, kept)
+	return p.err
+}
+
+func TestTurnEndFinishesThePlan(t *testing.T) {
+	e := newAddEnv(t, Config{})
+	f := &planFinish{}
+	e.deps.Plans = f
+	e.a = New(overDefaults(Config{}), e.deps)
+	e.put(t, from("first"))
+	e.next(t)
+	if f.conv != "telegram:42" || !slices.Equal(f.kept, []bool{false}) {
+		t.Fatalf("%+v", f)
+	}
+}
+
+func TestParkedCallKeepsThePlan(t *testing.T) {
+	side := newSideTool()
+	c := newConfirmEnv(t, side)
+	f := &planFinish{}
+	c.deps.Plans = f
+	c.a = New(overDefaults(Config{}), c.deps)
+	c.ask(t, "schedule.create")
+	if !slices.Equal(f.kept, []bool{true}) {
+		t.Fatalf("kept %v", f.kept)
+	}
+}
+
+// A plan is progress: failing to close one costs the turn nothing.
+func TestPlanFinishFailureDoesNotFailTheTurn(t *testing.T) {
+	e := newAddEnv(t, Config{})
+	e.deps.Plans = &planFinish{err: errors.New("disk on fire")}
+	e.a = New(overDefaults(Config{}), e.deps)
+	e.smart.push(say("answer"))
+	e.put(t, from("first"))
+	if out, _ := e.next(t); len(out) != 1 || out[0].Text != "answer" {
+		t.Fatalf("out %+v", out)
+	}
+	if !strings.Contains(e.logs.String(), "agent: plan not finished") {
+		t.Fatalf("logs %s", e.logs)
+	}
+}

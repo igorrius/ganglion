@@ -47,7 +47,7 @@ type NameFunc func(ctx context.Context, principal string) (string, error)
 type SystemJob func(ctx context.Context) (string, error)
 
 // Deps are the agent's collaborators. All are required except Middleware,
-// QuickActions, SystemJobs, Facts, Inbox, Status, Now and Log; the composition root
+// QuickActions, SystemJobs, Facts, Inbox, Plans, Status, Now and Log; the composition root
 // passes no-op implementations where a part is off (ADR-0028).
 type Deps struct {
 	States     StateReader
@@ -91,12 +91,26 @@ type Deps struct {
 	// Skills are listed in an admin's system prompt, and the one the
 	// model reads routes the rest of the turn (R-RTR-4); none when unset.
 	Skills Skills
+	// Plans closes or keeps a conversation's plan at the end of a turn
+	// (R-LIVE-8); NoPlans when unset.
+	Plans Plans
 	// Status hears the stages of a person's message (R-LIVE-7); NoStatus when
 	// unset. It must not block.
 	Status StatusFunc
 	Now    func() time.Time
 	Log    *slog.Logger
 }
+
+// Plans is the end of a turn for a conversation's plan (plan.Store).
+type Plans interface {
+	Finish(ctx context.Context, conv string, kept bool) error
+}
+
+// NoPlans is the Plans of an agent with no plan tools.
+type NoPlans struct{}
+
+// Finish implements Plans.
+func (NoPlans) Finish(context.Context, string, bool) error { return nil }
 
 // StatusFunc hears where the work on a person's message stands.
 type StatusFunc func(event.Status)
@@ -128,6 +142,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Inbox == nil {
 		d.Inbox = NoInbox{}
+	}
+	if d.Plans == nil {
+		d.Plans = NoPlans{}
 	}
 	if d.Status == nil {
 		d.Status = NoStatus
@@ -226,6 +243,11 @@ func (a *Agent) finish(ctx context.Context, t *turn) ([]event.Outgoing, queue.St
 	defer cancel()
 	if err := a.d.Turns.Record(rctx, t.record); err != nil {
 		a.log.Warn("agent: trace not recorded", "id", t.event.ID, "err", err)
+	}
+	// A parked call goes on after its press, and the plan with it. A plan is
+	// progress, so a failure here costs the turn nothing.
+	if err := a.d.Plans.Finish(rctx, t.event.Conv, len(t.state.Pending) > 0); err != nil {
+		a.log.Warn("agent: plan not finished", "conv", t.event.Conv, "err", err)
 	}
 	data, err := json.Marshal(t.state)
 	if err != nil {

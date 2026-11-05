@@ -476,7 +476,7 @@ Table `plans`: `conv` primary key, `idem_key`, `steps` (JSON), `version`, `activ
 
 Limits: 1 to 20 steps; each on one line, at most 200 runes; a step's note at most 200; the whole rendered text at most 3,500 UTF-16 units. A call past these returns an error for the model. An active plan untouched for 1 hour counts as closed (the M3d design's TTL).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 func TestShowEnqueuesOneMessageAtOnce(t *testing.T)
@@ -516,13 +516,13 @@ func TestPlanInjectedTextIsNotMarkup(t *testing.T)
 // a step with Markdown is rendered as the model's other text is, and no button appears
 ```
 
-- [ ] **Step 2: Run:** `go test -race ./plan/ ./tool/builtin/ ./agent/` Expected: FAIL.
+- [x] **Step 2: Run:** `go test -race ./plan/ ./tool/builtin/ ./agent/` Expected: FAIL.
 
-- [ ] **Step 3: Implement.** The edit is `event.Outgoing{Edit: ref, Text: Render(p), IdemKey: "plan:" + idem + ":v" + version}` through `Outbox.Enqueue`; `SentRef(idem)` finds `ref`. Edits at most once per 2 s; otherwise `dirty` stays for the next step or `Finish`. In `useTool`, plan tools skip the `MaxSteps` cap and count in `t.planCalls`, with a ceiling of 32. `finish` calls `Plans.Finish(rctx, conv, len(t.state.Pending) > 0)`, bounded by its 5 s context, and a failure is logged only.
+- [x] **Step 3: Implement.** The edit is `event.Outgoing{Edit: ref, Text: Render(p), IdemKey: "plan:" + idem + ":v" + version}` through `Outbox.Enqueue`; `SentRef(idem)` finds `ref`. Edits at most once per 2 s; otherwise `dirty` stays for the next step or `Finish`. In `useTool`, plan tools skip the `MaxSteps` cap and count in `t.planCalls`, with a ceiling of 32. `finish` calls `Plans.Finish(rctx, conv, len(t.state.Pending) > 0)`, bounded by its 5 s context, and a failure is logged only.
 
-- [ ] **Step 4: Add metrics:** plans shown, edits sent, edits coalesced. Run: `go test -race ./plan/ ./tool/builtin/ ./agent/ ./config/` Expected: PASS.
+- [x] **Step 4: Add metrics:** plans shown, edits sent, edits coalesced. Run: `go test -race ./plan/ ./tool/builtin/ ./agent/ ./config/` Expected: PASS.
 
-- [ ] **Step 5: Commit**, message `plan: a plan shown during the turn and edited as it goes`, with the code map.
+- [x] **Step 5: Commit**, message `plan: a plan shown during the turn and edited as it goes`, with the code map.
 
 ---
 

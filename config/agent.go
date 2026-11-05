@@ -12,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/diag"
+	"github.com/igorrius/ganglion/plan"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/claudecli"
@@ -74,6 +75,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Outbox:       do.MustInvoke[*sqlqueue.Queue](i),
 		Inbox:        do.MustInvoke[*sqlqueue.Queue](i),
 		Status:       do.MustInvoke[agent.StatusFunc](i),
+		Plans:        do.MustInvoke[*plan.Store](i),
 		Sent:         do.MustInvoke[*sqlqueue.Queue](i),
 		QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
 		Jobs:         do.MustInvoke[*schedule.Store](i),
@@ -115,6 +117,13 @@ func IsAdmin() do.Provider[agent.AdminFunc] {
 	}
 }
 
+// Plans provides the conversations' plans.
+func Plans() do.Provider[*plan.Store] {
+	return func(i do.Injector) (*plan.Store, error) {
+		return plan.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sqlqueue.Queue](i))
+	}
+}
+
 // Tools provides the tool registry. Each tool joins by one line in
 // toolHandlers.
 func Tools() do.Provider[*tool.Registry] {
@@ -135,6 +144,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
+		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
 		metricsTools(do.MustInvoke[Bootstrap](i)))...)
 }
