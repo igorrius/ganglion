@@ -1,6 +1,6 @@
 # Live turns design: additions, status reactions, a visible plan
 
-Status: draft for the owner's approval, 2026-11-05. It feeds the spec changes,
+Status: approved by the owner on 2026-11-05 and built. It feeds the spec changes,
 the ADRs and the step-by-step plan (`p1-live-turns.md`). It is not itself a plan.
 
 Marks, as in the [M3d design](p1-m3d-host-commands-design.md): **(owner)** the

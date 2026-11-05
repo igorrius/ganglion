@@ -72,6 +72,7 @@ pinned by a test in the task that owns the code.
 | M3r | Refactoring before M3b — **done** ([plan](p1-refactor.md)) | Go conventions and lint guardrails, the agent as a stage pipeline, `config` with `samber/do`, `ganglion run` on urfave/cli; no behaviour change | 0.25 weekend |
 | M3b | **The agent works with the world** — **done** ([plan](p1-m3b-agent-world.md)) | Tools under policies and the security baseline, confirmations and quick actions on buttons, the scheduler with reminders and scheduled agent tasks, memory, web reading, the tool-call journal, tools for the claude CLI over MCP | over 1 weekend |
 | M3c | Modules, skills, diagnostics — **done** ([plan](p1-m3c-modules-skills-diagnostics.md)) | Module update and rollback, skills, attachments, logs on disk, `ganglion mcp`, the 3.8 acceptance | about 1 weekend |
+| M3 live | Live turns — **done** ([plan](p1-live-turns.md)) | Additions join a running turn, status reactions, a plan shown during the turn | |
 | M3d | Host commands and plans ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
 | M4 | Reflexes: runner and Deye | Config, modules on cron writing sensor cells, exposed to the agent as tools (the scheduler and the first module-as-tool path come from M3b); deployed next to the current bot | 0.5 weekend |
 | M5 | Load-shedding flow | The 8.1 state machine on `virtual` load cells; Telegram notifier; shadow week | 0.5 weekend |
@@ -221,9 +222,9 @@ answers 404.
 | 3.8 End to end on the test bot: message → inbox → model → tools → outbox → reply, under the M2 crash harness | 10.2 acceptance for turns |
 | 3.20 Chatlab: the agent tested by talking to it, over the fake Bot API | Section 8 of the [design](p1-m3c-chatlab-design.md) holds: the checks the owner could not run pass through `chatlab run` or report what is wrong; seeded faults turn their scenarios red; the language problem has a baseline, a fix and a result; `TestLabStaysOutOfTheBinary` passes |
 
-#### M3 · Live turns
+#### M3 · Live turns — done
 
-Before M3d. Design: [p1-live-turns-design.md](p1-live-turns-design.md); plan:
+Closed on 2026-11-05. Before M3d. Design: [p1-live-turns-design.md](p1-live-turns-design.md); plan:
 [p1-live-turns.md](p1-live-turns.md); spec R-LIVE-1..8. Decisions:
 [ADR-0050](../adr/0050-additions-join-a-running-turn.md),
 [ADR-0051](../adr/0051-status-reactions-outside-the-outbox.md),

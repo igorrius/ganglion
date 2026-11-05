@@ -182,6 +182,20 @@ Start here when coming back to the project.
         47,727,550 bytes against 47,735,838 before the lab's commits.
     - **The owner's look in Telegram (2026-11-05):** the `/metrics` picture reads
       once zoomed, the buttons respond, and the notice of a file arrives.
+  - **Live turns, done (closed 2026-11-05)** ([plan](plans/p1-live-turns.md),
+    [ADR-0050](adr/0050-additions-join-a-running-turn.md),
+    [ADR-0051](adr/0051-status-reactions-outside-the-outbox.md),
+    [ADR-0052](adr/0052-a-plan-is-delivered-during-its-turn.md)):
+    - a message written during a turn joins it at the next boundary; an answer it
+      overtook goes out as a collapsed quote; on the CLI route this ends the run, at
+      [1.06 times](research/2026-11-05-cost-of-an-addition.md) the cost of two turns;
+    - reactions show work that takes long, and 👌 an addition taken;
+    - a plan for a result to put together, edited in place
+      ([when it shows](research/2026-11-05-when-a-plan-shows.md));
+    - 1,000 `kill -9` with no message lost, 43.9 MB RSS after 1,000 turns, a 48.0 MB binary;
+    - the owner checked it live on the test bot: reactions, additions and the plan.
+    - The full chatlab run after the prompt's change is deferred by the owner until after
+      the next feature; `task-report` and `task-selection` have their first verdict then.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that

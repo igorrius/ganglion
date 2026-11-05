@@ -539,14 +539,55 @@ func TestPlanInjectedTextIsNotMarkup(t *testing.T)
 
 - [x] **Step 3: Run the checks:** `make lint`, `go test -race ./...`, `make accept`, `make memory`. Expected: all pass; record RSS and binary size against M3c's (44 MB RSS after 1,000 turns, 47.7 MB binary).
 
-- [ ] **Step 4: The owner's live check on @ganglion_test_bot** (`make live-agent`), since chatlab cannot see real Telegram. Say in advance why it is manual. To try:
+- [x] **Step 4: The owner's live check on @ganglion_test_bot** (`make live-agent`), since chatlab cannot see real Telegram. Say in advance why it is manual. To try:
 - a question, then an addition while a web search runs: 👌, one final answer;
 - an addition while the model writes: a collapsed quote, then the answer;
 - short questions: no reaction and no buzz; is 8 s right? Tune it through `GANGLION_REACTION_AFTER`;
 - a task with several steps: does the plan read well, does it flicker?
 
-- [ ] **Step 5: Record the owner's numbers.** Update the reaction defaults if changed, and the ADRs' text if a decision changed.
+- [x] **Step 5: Record the owner's numbers.** Update the reaction defaults if changed, and the ADRs' text if a decision changed.
 
-- [ ] **Step 6: Close the documents.** "Where we are" in `docs/README.md`, ticks in the phase plan and here.
+- [x] **Step 6: Close the documents.** "Where we are" in `docs/README.md`, ticks in the phase plan and here.
 
-- [ ] **Step 7: Commit**, message `docs: live turns done`.
+- [x] **Step 7: Commit**, message `docs: live turns done`.
+
+---
+
+## Closing notes
+
+The owner's live check, 2026-11-05: reactions, additions and the plan read well, and the
+defaults of 8 s and 3 s stay. Their remarks went to the spec's "Not now": an answered question
+folded in the chat, a command for the last turn, fixed texts in the person's language, a file
+made by the agent, tables on a phone, a region for the search. The full chatlab run is deferred
+by the owner until after the next feature.
+
+Deferred minors from the two reviews:
+
+- A rerun's quote under the same key is dropped if the model wrote other text; the history
+  then holds text the person did not read.
+- A quote overtakes the tool messages of its turn, which wait for `Complete`, so a question can
+  arrive after the text about it.
+- "Waits" and "taken" are two reads of the inbox, so rarely a "not run" note names a message
+  that does not join.
+- Daily limits do not count the running turn, so additions can run a little past a limit,
+  bounded by `MaxSteps`.
+- Text beside a call that ran is not sent, though the prompt says the person read what was
+  answered.
+- `ganglion.additions.taken` counts again on a rerun.
+- A rerun after the plan closed reuses its edit keys, so its ticks are dropped and the plan
+  stays closed.
+- [ADR-0051](../adr/0051-status-reactions-outside-the-outbox.md)'s "a rerun clears its own" does
+  not hold for a quick rerun: a stale reaction can stay after a kill.
+- `Noting` reports a duplicate `Put`, so a message redelivered after a kill shows 👀 for up to
+  15 minutes.
+- A question parked by an earlier turn keeps a new, unrelated plan open until its press or expiry.
+- A local-only session is offered the plan tools, which the policy then refuses;
+  [ADR-0052](../adr/0052-a-plan-is-delivered-during-its-turn.md) says they are not offered.
+- `TestPlanInjectedTextIsNotMarkup` claims more than it checks: plan text renders as Markdown, as
+  a reply does.
+- A memory write approved in a tainted session is described by the model as coming from outside
+  content, though the owner wrote it (the owner's live check).
+
+To look at next, read in code and not run: `skillRoute` sees only `msg.ToolCalls`, so a
+`skill.read` through the CLI's `Exec` never routes the turn or sets local-only. It predates this
+work.
