@@ -1331,8 +1331,10 @@ Reviewed at each gate.
   - Parallel tool calls in the API route. A plan's lines must not stand in the way.
   - The text a CLI run wrote before it was ended, which needs `stream-json` on the main
     route (ADR-0050).
-  - Keeping the history in the prompt cache across CLI runs. Today only the system prompt
-    is reused and each run writes the whole transcript to the cache again, on every turn
+  - Keeping the history in the prompt cache across CLI runs. Each run writes the whole
+    transcript to the cache again, as [ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)
+    accepted; `--resume` would keep it, at the price of a second copy of the history.
+    Worth another look with real turns' numbers
     ([measurement](research/2026-11-05-cost-of-an-addition.md)).
 - Hooks and pipelines: an internal n8n (owner, 2026-11-03).
   - **Hooks** are module triggers on the node's own events, beside `cron`

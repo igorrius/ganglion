@@ -76,8 +76,10 @@ system prompt and wrote the whole transcript to the cache again, about 2,500 tok
 the transcript is one block of text on stdin, and a block that changes is not a prefix of
 the old one.
 
-This holds for every turn on the CLI route today, not only for additions, and it is why
-ending the run costs about what a separate turn costs: neither reuses the history.
+This holds for every turn on the CLI route, not only for additions, as
+[ADR-0021](../adr/0021-providers-chosen-by-the-operator-claude-cli-included.md) already
+recorded, and it is why ending the run costs about what a separate turn costs: neither
+reuses the history.
 
 ## Stdin (case C)
 
