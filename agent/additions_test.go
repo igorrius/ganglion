@@ -1072,3 +1072,75 @@ func TestRefusedAndFailedReadsAreCounted(t *testing.T) {
 		t.Fatal("a failed read was not counted")
 	}
 }
+
+// recordStatus makes the agent report its stages to a list.
+func recordStatus(t *testing.T, e *addEnv, cfg Config) *[]event.Status {
+	t.Helper()
+	var got []event.Status
+	e.deps.Status = func(st event.Status) { got = append(got, st) }
+	e.a = New(overDefaults(cfg), e.deps)
+	return &got
+}
+
+// R-LIVE-7: the first message shows the work; each taken one its mark; all end
+// on every path.
+func TestStagesAreReported(t *testing.T) {
+	var e *addEnv
+	clock := newHookTool(func() { e.put(t, withRef(from("more"), "77")) })
+	e = newAddEnv(t, Config{}, clock)
+	got := recordStatus(t, e, Config{})
+	e.smart.push(callTool("clock"), say("answer"))
+	e.put(t, withRef(from("first"), "76"))
+	e.next(t)
+	want := []event.Status{
+		{Transport: "telegram", Conv: "telegram:42", Ref: "76", Stage: event.StageThinking},
+		{Transport: "telegram", Conv: "telegram:42", Ref: "76", Stage: event.StageTool},
+		{Transport: "telegram", Conv: "telegram:42", Ref: "77", Stage: event.StageAdded},
+		{Transport: "telegram", Conv: "telegram:42", Ref: "76", Stage: event.StageDone},
+		{Transport: "telegram", Conv: "telegram:42", Ref: "77", Stage: event.StageDone},
+	}
+	if !slices.Equal(*got, want) {
+		t.Fatalf("stages %+v", *got)
+	}
+}
+
+func TestCommandAndFailureEndTheReaction(t *testing.T) {
+	e := newAddEnv(t, Config{})
+	got := recordStatus(t, e, Config{})
+	e.put(t, withRef(from("/sessions"), "5"))
+	e.next(t)
+	e.smart.push(fail(provider.KindUnavailable))
+	e.cheap.push(fail(provider.KindUnavailable))
+	e.put(t, withRef(from("x"), "6"))
+	e.next(t)
+	var done []string
+	for _, st := range *got {
+		if st.Stage == event.StageDone {
+			done = append(done, st.Ref)
+		}
+	}
+	if !slices.Equal(done, []string{"5", "6"}) {
+		t.Fatalf("done %v", done)
+	}
+}
+
+// A message with nothing to answer has no turn, and its reaction still ends.
+func TestUnanswerableMessageEndsItsReaction(t *testing.T) {
+	e := newAddEnv(t, Config{})
+	got := recordStatus(t, e, Config{})
+	e.put(t, withRef(from("   "), "5"))
+	e.next(t)
+	if len(*got) != 1 || (*got)[0].Stage != event.StageDone || (*got)[0].Ref != "5" {
+		t.Fatalf("stages %+v", *got)
+	}
+}
+
+func TestPressReportsNoStage(t *testing.T) {
+	e := newAddEnv(t, Config{})
+	got := recordStatus(t, e, Config{})
+	e.put(t, press(owner, "nope", "5"))
+	e.next(t)
+	if len(*got) != 0 {
+		t.Fatalf("stages %+v", *got)
+	}
+}

@@ -66,6 +66,9 @@ type turn struct {
 	kept []provider.Message
 	// quotes are the earlier answers sent so far (R-LIVE-5).
 	quotes int
+	// refs are the person's messages this turn answers, its own first, as each
+	// came: the reply's ReplyTo moves on, but their reactions must end (R-LIVE-7).
+	refs []string
 	// endRun ends the running model call for an addition, and runEnded says
 	// it was; both are guarded by mu (R-LIVE-3).
 	endRun   context.CancelCauseFunc

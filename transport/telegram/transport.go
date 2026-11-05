@@ -405,9 +405,10 @@ func (t *Transport) replyTo(chat int64, ref string) *replyParameters {
 }
 
 // TypingHook is a core.TurnHook: "typing…" for the length of a turn that
-// answers a Telegram message, nothing for other events.
+// answers a Telegram message or goes on after a press, nothing for other
+// events.
 func (t *Transport) TypingHook(ctx context.Context, e event.Event) (stop func()) {
-	if e.Source != Name || e.Kind != event.KindMessage {
+	if e.Source != Name || (e.Kind != event.KindMessage && e.Kind != event.KindDecision) {
 		return func() {}
 	}
 	ctx, stop = context.WithCancel(ctx)

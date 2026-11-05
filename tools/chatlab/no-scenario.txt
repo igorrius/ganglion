@@ -88,5 +88,6 @@ transport/telegram/commands.go
 transport/telegram/conv.go
 transport/telegram/files.go
 transport/telegram/markdown.go
+transport/telegram/reactions.go
 transport/telegram/types.go
 turns/**

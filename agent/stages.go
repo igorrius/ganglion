@@ -50,6 +50,7 @@ func (a *Agent) answer(ctx context.Context, t *turn) (bool, error) {
 	if err := a.setAdmin(ctx, t); err != nil {
 		return false, err
 	}
+	a.report(t, t.refs[0], event.StageThinking)
 	content, outside := userContent(t.msg)
 	if outside {
 		t.state.Tainted = true // before the model runs: its calls in this turn see it

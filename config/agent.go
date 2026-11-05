@@ -73,6 +73,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Pending:      do.MustInvoke[*pending.Store](i),
 		Outbox:       do.MustInvoke[*sqlqueue.Queue](i),
 		Inbox:        do.MustInvoke[*sqlqueue.Queue](i),
+		Status:       do.MustInvoke[agent.StatusFunc](i),
 		Sent:         do.MustInvoke[*sqlqueue.Queue](i),
 		QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
 		Jobs:         do.MustInvoke[*schedule.Store](i),

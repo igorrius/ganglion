@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/transport"
@@ -28,11 +29,13 @@ type ProcessStart time.Time
 var Core = do.Package(
 	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Admins()),
 	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(Modules()), do.Lazy(ModuleAdmin()), do.Lazy(HTML2MD()), do.Lazy(Fetcher()), do.Lazy(Read()), do.Lazy(Diagnostics()), do.Lazy(Skills()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Agent()),
-	do.Lazy(Telegram()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
+	do.Lazy(Telegram()), do.Lazy(Reactor()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
 	// Extension points: the interface, then each implementation under its name.
 	do.Lazy(Handler()), do.LazyNamed(handlerAgent, AgentHandler()), do.EagerNamed(handlerEcho, core.Handler(core.EchoHandler)),
 	do.Lazy(GiveUp()), do.LazyNamed(giveUpAgent, AgentGiveUp()), do.EagerNamed(giveUpNone, core.GiveUp(core.NoGiveUp)),
 	do.Lazy(TurnHook()), do.LazyNamed(turnHookTyping, TypingHook()), do.EagerNamed(turnHookNone, core.TurnHook(core.NoTurnHook)),
+	do.Lazy(Status()), do.LazyNamed(statusTelegram, TelegramStatus()), do.EagerNamed(statusNone, agent.StatusFunc(agent.NoStatus)),
+	do.Lazy(ReactionComponents()), do.LazyNamed(reactionsTelegram, TelegramReactions()), do.EagerNamed(reactionsNone, Reactions(nil)),
 	do.Lazy(Transports()), do.LazyNamed(transportsTelegram, TelegramTransports()), do.EagerNamed(transportsNone, []transport.Transport(nil)),
 	do.Lazy(Housekeepers()), do.LazyNamed(housekeepingAgent, AgentHousekeepers()), do.EagerNamed(housekeepingNone, Housekeeping(nil)),
 	do.Lazy(JobSchedulers()), do.LazyNamed(schedulersAgent, AgentSchedulers()), do.EagerNamed(schedulersNone, Schedulers(nil)),
@@ -77,6 +80,10 @@ const (
 	giveUpNone         = "giveup.none"         // give up silently
 	turnHookTyping     = "turnhook.typing"     // "typing…" in Telegram
 	turnHookNone       = "turnhook.none"       // nothing around a turn
+	statusTelegram     = "status.telegram"     // Telegram's reactions show the stages
+	statusNone         = "status.none"         // nothing shows them
+	reactionsTelegram  = "reactions.telegram"  // the Reactor runs
+	reactionsNone      = "reactions.none"      // nothing to run
 	transportsTelegram = "transports.telegram" // Telegram
 	transportsNone     = "transports.none"     // no transport
 	housekeepingAgent  = "housekeeping.agent"  // prune the tool-call journal, expire confirmations

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/urlnorm"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/tool"
@@ -188,6 +189,7 @@ func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall, ca
 // its result to the turn (useTool). The caller holds t.mu.
 func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) (string, error) {
 	started := time.Now()
+	a.report(t, t.refs[0], event.StageTool)
 	result, err := a.tool(ctx, a.toolCall(t, call))
 	// A failed call can still carry messages, such as the alert about
 	// a call outside a task's grant.

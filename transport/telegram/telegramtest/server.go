@@ -129,6 +129,7 @@ type Server struct {
 	threads    map[int64]map[int64]bool // chat → known forum topics
 	calls      map[string]int
 	actions    []ChatAction
+	reactions  []Reaction
 	allowed    []string                  // allowed_updates of the last getUpdates that gave them
 	messages   map[int64]map[int64]shown // chat → message id → what the bot's message shows
 	edits      []Edit
@@ -346,6 +347,19 @@ func (s *Server) LastMessageID() int64 {
 	return s.nextMsg
 }
 
+// Reaction is a reaction the bot set; Emoji "" took one off.
+type Reaction struct {
+	ChatID, MessageID int64
+	Emoji             string
+}
+
+// Reactions returns the reactions the bot set, oldest first.
+func (s *Server) Reactions() []Reaction {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.reactions)
+}
+
 // ChatActions returns the sendChatAction calls received.
 func (s *Server) ChatActions() []ChatAction {
 	s.mu.Lock()
@@ -475,6 +489,24 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		s.mu.Lock()
 		s.commands = append(s.commands, cs)
+		s.mu.Unlock()
+		writeOK(w, true)
+	case "setMessageReaction":
+		var p struct {
+			ChatID    int64 `json:"chat_id"`
+			MessageID int64 `json:"message_id"`
+			Reaction  []struct {
+				Emoji string `json:"emoji"`
+			} `json:"reaction"`
+		}
+		raw, _ := json.Marshal(params)
+		_ = json.Unmarshal(raw, &p)
+		r := Reaction{ChatID: p.ChatID, MessageID: p.MessageID}
+		if len(p.Reaction) > 0 {
+			r.Emoji = p.Reaction[0].Emoji
+		}
+		s.mu.Lock()
+		s.reactions = append(s.reactions, r)
 		s.mu.Unlock()
 		writeOK(w, true)
 	case "sendChatAction":

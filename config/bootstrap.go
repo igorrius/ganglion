@@ -22,6 +22,10 @@ type Bootstrap struct {
 	// TelegramReply is GANGLION_TELEGRAM_REPLY: when answers quote the
 	// person's message — auto (default), always or off (ADR-0025).
 	TelegramReply string
+	// ReactionAfter and ReactionDwell are GANGLION_REACTION_AFTER and
+	// GANGLION_REACTION_DWELL: how long work takes before a reaction shows, and
+	// how long one stays before the next (ADR-0051). A threshold of 0 is off.
+	ReactionAfter, ReactionDwell time.Duration
 	// LogDir is where the log files are, from GANGLION_LOG_DIR; "" when
 	// logs are not on disk (R-OBS-6). The diagnostic tools search it.
 	LogDir string

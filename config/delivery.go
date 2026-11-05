@@ -75,6 +75,51 @@ func Sender() do.Provider[*outbox.Sender] {
 	}
 }
 
+// Status provides who hears the stages of a person's message.
+func Status() do.Provider[agent.StatusFunc] {
+	return choose[agent.StatusFunc](telegramOn, statusTelegram, statusNone)
+}
+
+// TelegramStatus provides Telegram's reactions as what hears the stages.
+func TelegramStatus() do.Provider[agent.StatusFunc] {
+	return func(i do.Injector) (agent.StatusFunc, error) {
+		return do.MustInvoke[*telegram.Reactor](i).Report, nil
+	}
+}
+
+// Reactor provides Telegram's status reactions; a threshold of 0 keeps it idle.
+func Reactor() do.Provider[*telegram.Reactor] {
+	return func(i do.Injector) (*telegram.Reactor, error) {
+		b := do.MustInvoke[Bootstrap](i)
+		cfg := telegram.DefaultReactorConfig()
+		cfg.After, cfg.Dwell = b.ReactionAfter, b.ReactionDwell
+		if !reactionsOn(b) {
+			cfg.After = 0
+		}
+		return telegram.NewReactor(b.BotToken, b.BotAPIURL, cfg, do.MustInvoke[*slog.Logger](i)), nil
+	}
+}
+
+// reactionsOn reports whether a Reactor runs: only the agent reports when a turn
+// ends, so the echo bot would leave its messages marked.
+func reactionsOn(b Bootstrap) bool { return telegramOn(b) && agentOn(b) }
+
+// Reactions are the components that show status, when Telegram and the agent
+// are on.
+type Reactions []node.Component
+
+// ReactionComponents provides the reaction component that is on.
+func ReactionComponents() do.Provider[Reactions] {
+	return choose[Reactions](reactionsOn, reactionsTelegram, reactionsNone)
+}
+
+// TelegramReactions provides the Reactor as a component.
+func TelegramReactions() do.Provider[Reactions] {
+	return func(i do.Injector) (Reactions, error) {
+		return Reactions{node.Named("reactions", do.MustInvoke[*telegram.Reactor](i).Run)}, nil
+	}
+}
+
 // TurnHook provides what runs around a turn.
 func TurnHook() do.Provider[core.TurnHook] {
 	return choose[core.TurnHook](telegramOn, turnHookTyping, turnHookNone)
@@ -111,7 +156,7 @@ func TelegramReceivers() do.Provider[Inbound] {
 		q, logger := do.MustInvoke[*sqlqueue.Queue](i), do.MustInvoke[*slog.Logger](i)
 		return Inbound{node.Poller{
 			Transport: do.MustInvoke[*telegram.Transport](i),
-			Sink:      do.MustInvoke[*access.List](i).Filter(q.Put, logger),
+			Sink:      do.MustInvoke[*access.List](i).Filter(do.MustInvoke[*telegram.Reactor](i).Noting(q.Put), logger),
 			Admins:    do.MustInvoke[alert.Admins](i),
 			Enqueue:   q.Enqueue,
 			Started:   time.Time(do.MustInvoke[ProcessStart](i)),
@@ -169,6 +214,7 @@ func CoreComponents() do.Provider[[]node.Component] {
 		}
 		comps = append(comps, do.MustInvoke[Housekeeping](i)...)
 		comps = append(comps, do.MustInvoke[Schedulers](i)...)
+		comps = append(comps, do.MustInvoke[Reactions](i)...)
 		return append(comps, do.MustInvoke[Inbound](i)...), nil
 	}
 }

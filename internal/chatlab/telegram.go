@@ -15,6 +15,12 @@ import (
 // labFile is the Bot API id of every file a lab peer sends.
 const labFile = "lab-file"
 
+// The other listed person of a scenario's Writing.
+const (
+	labOther     = 43
+	labOtherName = "Ann"
+)
+
 // Telegram is the Peer of a chat with the fake Bot API: the node's real
 // Telegram adapter talks to the same fake.
 type Telegram struct {

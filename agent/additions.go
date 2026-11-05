@@ -159,6 +159,8 @@ func (a *Agent) join(ctx context.Context, t *turn, msgs, added []provider.Messag
 		t.kept = append(t.kept, user)
 		t.taken = append(t.taken, add.id)
 		t.msg.Ref = add.msg.Ref
+		t.refs = append(t.refs, add.msg.Ref)
+		a.report(t, add.msg.Ref, event.StageAdded)
 		a.in.additions.Add(ctx, 1)
 	}
 	return msgs, added
@@ -201,6 +203,34 @@ func (a *Agent) runCall(ctx context.Context, t *turn, task router.TaskReq, req p
 	t.endRun, t.runEnded = end, false
 	t.mu.Unlock()
 	return a.call(callCtx, task, req, &t.record, t.toolCalls)
+}
+
+// report tells who listens the stage of the message ref, for a person's message
+// only (R-LIVE-7).
+func (a *Agent) report(t *turn, ref string, st event.Stage) {
+	if t.event.Kind == event.KindMessage && ref != "" {
+		a.d.Status(event.Status{Transport: t.event.Source, Conv: t.event.Conv, Ref: ref, Stage: st})
+	}
+}
+
+// reportDone ends the reaction of every message the turn answered, on every
+// path out of it.
+func (a *Agent) reportDone(t *turn) {
+	for _, ref := range t.refs {
+		a.report(t, ref, event.StageDone)
+	}
+}
+
+// endWithoutTurn ends the reaction of a person's message that gets no turn or
+// whose turn could not start, so it does not stay "seen".
+func (a *Agent) endWithoutTurn(e event.Event) {
+	if e.Kind != event.KindMessage {
+		return
+	}
+	var m event.Message
+	if json.Unmarshal(e.Payload, &m) == nil && m.Ref != "" {
+		a.d.Status(event.Status{Transport: e.Source, Conv: e.Conv, Ref: m.Ref, Stage: event.StageDone})
+	}
 }
 
 // quote sends text at once, marked as overtaken by a later message

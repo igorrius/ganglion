@@ -77,6 +77,27 @@ type Outgoing struct {
 	Superseded bool `json:",omitempty"`
 }
 
+// Stage is where the work on a person's message stands (R-LIVE-7). The agent
+// reports it; a transport shows it as it can, or not at all.
+type Stage string
+
+// Stages.
+const (
+	StageQueued   Stage = "queued"   // stored, and may wait behind a running turn
+	StageThinking Stage = "thinking" // a model works on it
+	StageTool     Stage = "tool"     // a tool ran for it
+	StageAdded    Stage = "added"    // it joined a running turn
+	StageDone     Stage = "done"     // the turn ended
+)
+
+// Status is a stage of a person's message: a hint, never a reply. Reporting it
+// must not block, and nothing may depend on its being shown (ADR-0051).
+type Status struct {
+	Transport, Conv string
+	Ref             string // the message, as in Message.Ref
+	Stage           Stage
+}
+
 // AttachKind is how an attachment is shown.
 type AttachKind string
 

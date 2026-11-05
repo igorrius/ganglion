@@ -58,6 +58,8 @@ type Run struct {
 	ModelsFile     string
 	Workspace      string
 	DailyBudgetUSD float64
+	ReactionAfter  time.Duration
+	ReactionDwell  time.Duration
 	DailyTurns     int
 	DailyTokens    int
 	SessionIdle    string
@@ -79,6 +81,10 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 		&cli.StringFlag{Name: "telegram-reply", Usage: "when answers quote the person's message: auto, always or off (ADR-0025)",
 			Value: "auto", Category: catTelegram, Local: true, Sources: env("GANGLION_TELEGRAM_REPLY"), Destination: &r.TelegramReply,
 			Validator: in("GANGLION_TELEGRAM_REPLY", oneOf("auto", "always", "off"))},
+		&cli.DurationFlag{Name: "reaction-after", Usage: "work takes this long before a reaction shows it; 0 = off (ADR-0051)", Value: 8 * time.Second,
+			Category: catTelegram, Local: true, Sources: env("GANGLION_REACTION_AFTER"), Destination: &r.ReactionAfter},
+		&cli.DurationFlag{Name: "reaction-dwell", Usage: "a reaction stays at least this long before the next", Value: 3 * time.Second,
+			Category: catTelegram, Local: true, Sources: env("GANGLION_REACTION_DWELL"), Destination: &r.ReactionDwell},
 		&cli.StringFlag{Name: "metrics-addr", Usage: "where /metrics and the dashboard are served, or off (ADR-0026)",
 			Value: "127.0.0.1:9464", Category: catTelemetry, Local: true, Sources: env("GANGLION_METRICS_ADDR"), Destination: &r.MetricsAddr},
 		LogDirFlag(&r.LogDir),

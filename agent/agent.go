@@ -47,7 +47,7 @@ type NameFunc func(ctx context.Context, principal string) (string, error)
 type SystemJob func(ctx context.Context) (string, error)
 
 // Deps are the agent's collaborators. All are required except Middleware,
-// QuickActions, SystemJobs, Facts, Inbox, Now and Log; the composition root
+// QuickActions, SystemJobs, Facts, Inbox, Status, Now and Log; the composition root
 // passes no-op implementations where a part is off (ADR-0028).
 type Deps struct {
 	States     StateReader
@@ -91,9 +91,18 @@ type Deps struct {
 	// Skills are listed in an admin's system prompt, and the one the
 	// model reads routes the rest of the turn (R-RTR-4); none when unset.
 	Skills Skills
+	// Status hears the stages of a person's message (R-LIVE-7); NoStatus when
+	// unset. It must not block.
+	Status StatusFunc
 	Now    func() time.Time
 	Log    *slog.Logger
 }
+
+// StatusFunc hears where the work on a person's message stands.
+type StatusFunc func(event.Status)
+
+// NoStatus is the StatusFunc of a node that shows no status.
+func NoStatus(event.Status) {}
 
 // Agent handles conversation turns; Handle is a core.Handler.
 type Agent struct {
@@ -119,6 +128,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Inbox == nil {
 		d.Inbox = NoInbox{}
+	}
+	if d.Status == nil {
+		d.Status = NoStatus
 	}
 	if d.Skills == nil {
 		d.Skills = skills.Set{}
@@ -146,8 +158,10 @@ func New(cfg Config, d Deps) *Agent {
 func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
 	t, ok, err := a.begin(ctx, e)
 	if err != nil || !ok {
+		a.endWithoutTurn(e)
 		return nil, queue.StateUpdate{}, err
 	}
+	defer a.reportDone(t)
 	if err := runStages(ctx, t, a.stages); err != nil {
 		return nil, queue.StateUpdate{}, err
 	}
@@ -197,6 +211,7 @@ func (a *Agent) begin(ctx context.Context, e event.Event) (*turn, bool, error) {
 	}
 	t.state, t.now = st, a.d.Now()
 	t.transport, t.replyConv = e.Source, e.Conv
+	t.refs = []string{t.msg.Ref}
 	t.record = turns.Turn{EventID: e.ID, Conv: e.Conv, Principal: t.msg.From, Started: t.now, Outcome: turns.OutcomeOK}
 	return t, true, nil
 }

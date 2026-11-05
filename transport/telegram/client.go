@@ -245,6 +245,24 @@ func (c *client) editMessageReplyMarkup(ctx context.Context, p markupParams) err
 	return c.call(ctx, "editMessageReplyMarkup", p, nil)
 }
 
+// setMessageReaction sets the bot's reaction on a message, replacing the one it
+// had; "" takes it off.
+func (c *client) setMessageReaction(ctx context.Context, chat, msg int64, emoji string) error {
+	type reaction struct {
+		Type  string `json:"type"`
+		Emoji string `json:"emoji"`
+	}
+	list := []reaction{}
+	if emoji != "" {
+		list = append(list, reaction{Type: "emoji", Emoji: emoji})
+	}
+	return c.call(ctx, "setMessageReaction", struct {
+		ChatID    int64      `json:"chat_id"`
+		MessageID int64      `json:"message_id"`
+		Reaction  []reaction `json:"reaction"`
+	}{chat, msg, list}, nil)
+}
+
 // answerCallbackQuery tells Telegram a button press was received, so the
 // client stops its spinner, and shows text as a toast ("" shows none).
 func (c *client) answerCallbackQuery(ctx context.Context, id, text string) error {

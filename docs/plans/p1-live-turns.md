@@ -407,7 +407,7 @@ In `call`, right after `try` fails and before `logFailure` and the fallback: if 
 
 The emoji: queued 👀, thinking 🤔, tool `"\U0001F468‍\U0001F4BB"` (👨‍💻), added 👌. The list is in `ReactionTypeEmoji` of the Bot API, so each is valid.
 
-- [ ] **Step 1: Write the failing tests**, with `Report` and a test-only `step(now)` over a fake clock:
+- [x] **Step 1: Write the failing tests**, with `Report` and a test-only `step(now)` over a fake clock:
 
 ```go
 func TestQuickAnswerShowsNothing(t *testing.T)
@@ -444,17 +444,17 @@ func TestResumedTurnShowsTyping(t *testing.T)
 // TypingHook on KindDecision sends "typing"; on a "sensor" event it does not
 ```
 
-- [ ] **Step 2: Run:** `go test -race ./transport/telegram/` Expected: FAIL.
+- [x] **Step 2: Run:** `go test -race ./transport/telegram/` Expected: FAIL.
 
-- [ ] **Step 3: Implement `Reactor`.** One goroutine, `Run`, ticking every 200 ms into `step(now)`. Per message: wanted, shown, not-before, done-at. Bound the map: an entry goes when it is cleared, and an entry older than 15 minutes is dropped, so a crash in a turn leaks nothing. Rules are design 4.2. A failed set is logged at debug and counted in `ganglion_telegram_reactions_total{outcome}`. `Noting` reports `StageQueued` after the access filter, by wrapping `q.Put` in `TelegramReceivers`.
+- [x] **Step 3: Implement `Reactor`.** One goroutine, `Run`, ticking every 200 ms into `step(now)`. Per message: wanted, shown, not-before, done-at. Bound the map: an entry goes when it is cleared, and an entry older than 15 minutes is dropped, so a crash in a turn leaks nothing. Rules are design 4.2. A failed set is logged at debug and counted in `ganglion_telegram_reactions_total{outcome}`. `Noting` reports `StageQueued` after the access filter, by wrapping `q.Put` in `TelegramReceivers`.
 
-- [ ] **Step 4: Report from the agent.** `StageThinking` when `answer` starts; `StageTool` in `applyTool`; `StageAdded` for each taken addition; `StageDone` for `t.msg`'s first Ref and every taken Ref in a defer in `Handle`, on every path, using the Ref each message had. Only for a person's message.
+- [x] **Step 4: Report from the agent.** `StageThinking` when `answer` starts; `StageTool` in `applyTool`; `StageAdded` for each taken addition; `StageDone` for `t.msg`'s first Ref and every taken Ref in a defer in `Handle`, on every path, using the Ref each message had. Only for a person's message.
 
-- [ ] **Step 5: Wire and configure.** `Reactor` as a core component in `config/`, settings `GANGLION_REACTION_AFTER` and `GANGLION_REACTION_DWELL` beside the node's other settings. `TypingHook` also runs for `KindDecision`. Add `setMessageReaction` to the fake server.
+- [x] **Step 5: Wire and configure.** `Reactor` as a core component in `config/`, settings `GANGLION_REACTION_AFTER` and `GANGLION_REACTION_DWELL` beside the node's other settings. `TypingHook` also runs for `KindDecision`. Add `setMessageReaction` to the fake server.
 
-- [ ] **Step 6: Run:** `go test -race ./transport/telegram/ ./agent/ ./config/` Expected: PASS.
+- [x] **Step 6: Run:** `go test -race ./transport/telegram/ ./agent/ ./config/` Expected: PASS.
 
-- [ ] **Step 7: Commit**, message `telegram: reactions show work that takes long`, with the code map and level page.
+- [x] **Step 7: Commit**, message `telegram: reactions show work that takes long`, with the code map and level page.
 
 ---
 

@@ -103,10 +103,7 @@ func Start(ctx context.Context, o NodeOptions) (n *Node, err error) {
 	return n, n.run(ctx, o, cat, keys)
 }
 
-// labOther is the other listed person of a scenario's Writing.
 const (
-	labOther     = 43
-	labOtherName = "Ann"
 	// labWriteWait bounds the wait for a Writing to reach the inbox; past it
 	// the scenario's facts say what happened.
 	labWriteWait = 10 * time.Second
