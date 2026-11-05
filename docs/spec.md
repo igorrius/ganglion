@@ -330,7 +330,7 @@ Guarantee: **at-least-once + idempotency.**
 Live turns ([design](plans/p1-live-turns-design.md);
 [ADR-0050](adr/0050-additions-join-a-running-turn.md),
 [ADR-0051](adr/0051-status-reactions-outside-the-outbox.md),
-[ADR-0052](adr/0052-a-plan-is-delivered-during-its-turn.md), Proposed):
+[ADR-0052](adr/0052-a-plan-is-delivered-during-its-turn.md)):
 
 - **R-LIVE-1.** A turn started by a person's message takes the unbroken run of
   pending events directly behind it, oldest first, stopping at the first that does

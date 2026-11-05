@@ -1,6 +1,6 @@
 # ADR-0052: Deliver a plan during its turn through the outbox, with its own table
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-05
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-4, R-DLV-5), [7.2](../spec.md#72-conversations-history-and-the-agent-loop) (R-LIVE-8), [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-7); [live turns design](../plans/p1-live-turns-design.md), section 5; [ADR-0040](0040-plans-as-approvals.md)

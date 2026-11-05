@@ -227,7 +227,7 @@ Before M3d. Design: [p1-live-turns-design.md](p1-live-turns-design.md); plan:
 [p1-live-turns.md](p1-live-turns.md); spec R-LIVE-1..8. Decisions:
 [ADR-0050](../adr/0050-additions-join-a-running-turn.md),
 [ADR-0051](../adr/0051-status-reactions-outside-the-outbox.md),
-[ADR-0052](../adr/0052-a-plan-is-delivered-during-its-turn.md) (Proposed).
+[ADR-0052](../adr/0052-a-plan-is-delivered-during-its-turn.md).
 
 | Task | Done when |
 |---|---|
