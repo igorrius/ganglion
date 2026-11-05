@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/igorrius/ganglion/plan"
@@ -111,5 +112,14 @@ func TestPlanToolsRefuseBadInput(t *testing.T) {
 	f.result = errors.New("nope")
 	if _, err := step.Run(ctx, tool.Call{Args: json.RawMessage(`{"n":1}`)}); err == nil {
 		t.Error("the store's error did not reach the model")
+	}
+}
+
+// The owner's live try: the last tick said the report was sent, and it came ten
+// seconds later. The model writes its answer after this call.
+func TestPlanOutcomeIsNotAboutDelivery(t *testing.T) {
+	_, step := planTools(&fakePlans{})
+	if s := string(step.Spec().InputSchema); !strings.Contains(s, "Never say that an answer or a report was sent") {
+		t.Fatalf("schema %s", s)
 	}
 }

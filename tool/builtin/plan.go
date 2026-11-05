@@ -69,7 +69,7 @@ func (*planStep) Spec() tool.Spec {
 		`{"type":"object","properties":{"n":{"type":"integer","minimum":1,"description":"The step's number, from 1."},`+
 			`"status":{"type":"string","enum":["running","done","failed","skipped"],"description":"done by default."},`+
 			`"note":{"type":"string","description":"One line, such as why it failed."},`+
-			`"outcome":{"type":"string","description":"One line with the result of the whole work; it stays in the chat."}},"required":["n"]}`)
+			`"outcome":{"type":"string","description":"One line with what the work found or changed, true before your answer goes out: you write the answer after this call. Never say that an answer or a report was sent. It stays in the chat."}},"required":["n"]}`)
 }
 
 func (t *planStep) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
