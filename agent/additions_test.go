@@ -952,3 +952,123 @@ func TestEndedRunMetrics(t *testing.T) {
 		t.Fatalf("calls ended = %v", got)
 	}
 }
+
+// Review: an answer that went out as a quote is not the reply to what came
+// after it.
+func TestStepLimitDoesNotRepeatAQuote(t *testing.T) {
+	clock := newClock()
+	e := newAddEnv(t, Config{MaxSteps: 2}, clock)
+	e.smart.push(sayAfter(func() { e.put(t, from("more")) }, "earlier"), callTool("clock"))
+	e.put(t, from("first"))
+	out, _ := e.next(t)
+	if len(out) != 1 || out[0].Text != replyStepLimit {
+		t.Fatalf("out %+v", out)
+	}
+}
+
+// Review: R-LIVE-2 holds when the addition cannot be taken too. It may say
+// "don't", and the model would not read this call's result anyway.
+func TestLastStepHoldsBackAToolCall(t *testing.T) {
+	clock := newClock()
+	e := newAddEnv(t, Config{MaxSteps: 1}, clock)
+	add := from("STOP, do not do it")
+	e.smart.push(callsAfter(func() { e.put(t, add) }, "", "clock"))
+	e.put(t, from("first"))
+	_, st := e.next(t)
+	if len(clock.calls) != 0 {
+		t.Fatalf("the tool ran with a message waiting: %+v", clock.calls)
+	}
+	if id := e.leased(t); id != add.ID || len(st.Taken) != 0 {
+		t.Fatalf("next %q, Taken %v", id, st.Taken)
+	}
+}
+
+func TestShortTimeHoldsBackAToolCall(t *testing.T) {
+	clock := newClock()
+	cfg := Config{TurnTimeout: minAdditionTime - time.Second}
+	e := newAddEnv(t, cfg, clock)
+	add := from("STOP")
+	e.smart.push(callsAfter(func() { e.put(t, add) }, "", "clock"), say("answer"))
+	e.put(t, from("first"))
+	out, st := e.next(t)
+	if len(clock.calls) != 0 || len(st.Taken) != 0 || len(out) != 1 || out[0].Text != "answer" {
+		t.Fatalf("calls %d, Taken %v, out %+v", len(clock.calls), st.Taken, out)
+	}
+	if id := e.leased(t); id != add.ID {
+		t.Fatalf("next %q", id)
+	}
+}
+
+// With no step for a new run, a later call of the run is refused and the run
+// goes on, so its answer survives.
+func TestLastStepRefusesALaterCallOfTheRun(t *testing.T) {
+	var e *addEnv
+	clock := newHookTool(func() { e.put(t, from("more")) })
+	e = newAddEnv(t, Config{MaxSteps: 1}, clock)
+	var second, alive error
+	e.smart.push(func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		_, _ = req.Exec(ctx, provider.ToolCall{Name: "clock", Args: json.RawMessage(`{}`)})
+		_, second = req.Exec(ctx, provider.ToolCall{Name: "clock", Args: json.RawMessage(`{}`)})
+		alive = ctx.Err()
+		return answerText("answer"), nil
+	})
+	e.put(t, from("first"))
+	out, _ := e.next(t)
+	if !errors.Is(second, errNoRoomForAddition) || alive != nil || len(clock.calls) != 1 {
+		t.Fatalf("second %v, ctx %v, %d calls", second, alive, len(clock.calls))
+	}
+	if len(out) != 1 || out[0].Text != "answer" {
+		t.Fatalf("out %+v", out)
+	}
+}
+
+// Review: the calls an ended run ran stay on record when the next run fails, so
+// the model knows of them when the person asks again.
+func TestFailedTurnKeepsWhatAnEndedRunRan(t *testing.T) {
+	var e *addEnv
+	clock := newHookTool(func() { e.put(t, from("more")) })
+	e = newAddEnv(t, Config{}, clock)
+	e.smart.push(execThenBlock(nil, "clock"), fail(provider.KindUnavailable))
+	e.cheap.push(fail(provider.KindUnavailable))
+	e.put(t, from("first"))
+	e.next(t)
+	got := e.state(t).Messages
+	if len(got) != 4 || got[1].ToolCalls[0].Name != "clock" || got[2].Content != "12:00" || got[3].Content != "Igor: more" {
+		t.Fatalf("history %+v", got)
+	}
+}
+
+func TestBlankTextBesideSkippedCallsIsNotAQuote(t *testing.T) {
+	clock := newClock()
+	e := newAddEnv(t, Config{}, clock)
+	e.smart.push(callsAfter(func() { e.put(t, from("more")) }, "\n\n", "clock"), say("done"))
+	e.put(t, from("first"))
+	e.next(t)
+	if box := e.outbox(t); len(box) != 1 || box[0].Text != "done" {
+		t.Fatalf("outbox %+v", box)
+	}
+}
+
+func TestRefusedAndFailedReadsAreCounted(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	clock := newClock()
+	e := newAddEnv(t, Config{}, clock)
+	e.smart.push(func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		e.put(t, from("more"))
+		_, _ = req.Exec(ctx, provider.ToolCall{Name: "clock", Args: json.RawMessage(`{}`)})
+		_, _ = req.Exec(ctx, provider.ToolCall{Name: "clock", Args: json.RawMessage(`{}`)})
+		return provider.ChatResponse{}, ctx.Err()
+	}, say("answer"))
+	e.put(t, from("first"))
+	e.next(t)
+	if got := rec.Value(t, "ganglion.additions.skipped_calls", nil); got != 2 {
+		t.Fatalf("skipped = %v", got)
+	}
+	b := newEnv(t, Config{}, nil)
+	b.deps.Inbox = brokenInbox{}
+	b.a = New(overDefaults(Config{}), b.deps)
+	b.turn(t, from("x"))
+	if got := rec.Value(t, "ganglion.additions.inbox_errors", nil); got == 0 {
+		t.Fatal("a failed read was not counted")
+	}
+}

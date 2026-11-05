@@ -35,6 +35,7 @@ type instruments struct {
 	skippedCalls metric.Int64Counter
 	quotes       metric.Int64Counter
 	runsEnded    metric.Int64Counter
+	inboxErrors  metric.Int64Counter
 }
 
 func newInstruments() instruments {
@@ -58,6 +59,7 @@ func newInstruments() instruments {
 	in.additions, _ = m.Int64Counter("ganglion.additions.taken", metric.WithDescription("Messages that joined a running turn."))
 	in.skippedCalls, _ = m.Int64Counter("ganglion.additions.skipped_calls", metric.WithDescription("Tool calls not run because an addition waited."))
 	in.quotes, _ = m.Int64Counter("ganglion.additions.quotes", metric.WithDescription("Answers sent as overtaken by a later message, by result: stored, with_turn."))
+	in.inboxErrors, _ = m.Int64Counter("ganglion.additions.inbox_errors", metric.WithDescription("Reads of what waits behind a turn that failed; the messages keep their own turns."))
 	in.runsEnded, _ = m.Int64Counter("ganglion.additions.runs_ended", metric.WithDescription("CLI runs ended at a tool boundary for an addition."))
 	return in
 }
@@ -68,7 +70,9 @@ func (a *Agent) observeCall(ctx context.Context, span trace.Span, c router.Candi
 	result := "ok"
 	if err != nil {
 		result = errorKind(err)
-		span.SetStatus(codes.Error, result)
+		if result != addedKind { // a run ended for an addition did not fail (R-LIVE-3)
+			span.SetStatus(codes.Error, result)
+		}
 	}
 	model := []attribute.KeyValue{attribute.String("provider", c.Provider), attribute.String("model", c.Model)}
 	a.in.calls.Add(ctx, 1, metric.WithAttributes(append(model, attribute.String("result", result))...))

@@ -7,17 +7,19 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/clock"
+	"github.com/igorrius/ganglion/turns"
 )
 
 // overLimit checks the principal's daily turns and tokens. Over a limit it
 // returns one alert per admin; their keys repeat for the day, so the outbox
 // sends each alert once.
 func (a *Agent) overLimit(ctx context.Context, now time.Time, principal, eventID string) ([]event.Outgoing, bool) {
-	if !a.over(ctx, now, principal, eventID) {
+	tot, over := a.totals(ctx, now, principal, eventID)
+	if !over {
 		return nil, false
 	}
 	day := clock.DayStart(now, a.cfg.Location)
-	a.log.Warn("agent: daily limit reached", "principal", principal)
+	a.log.Warn("agent: daily limit reached", "principal", principal, "turns", tot.Turns, "tokens", tot.Tokens)
 	alerts, err := a.d.Alerts.Messages(ctx, "alert:daily-limit:"+day.Format("2006-01-02")+":"+principal,
 		"Daily limit reached for "+principal+" (turns or tokens); the bot refuses them until tomorrow.")
 	if err != nil {
@@ -31,15 +33,21 @@ func (a *Agent) overLimit(ctx context.Context, now time.Time, principal, eventID
 // alert belongs to that message's own turn. Totals that cannot be read leave
 // the limit unchecked.
 func (a *Agent) over(ctx context.Context, now time.Time, principal, eventID string) bool {
+	_, over := a.totals(ctx, now, principal, eventID)
+	return over
+}
+
+// totals reads the principal's day and whether it is past a limit.
+func (a *Agent) totals(ctx context.Context, now time.Time, principal, eventID string) (turns.Totals, bool) {
 	if a.cfg.DailyTurns <= 0 && a.cfg.DailyTokens <= 0 {
-		return false
+		return turns.Totals{}, false
 	}
 	tot, err := a.d.Turns.Totals(ctx, clock.DayStart(now, a.cfg.Location), principal, eventID)
 	if err != nil {
 		a.log.Warn("agent: daily totals unavailable; limit not checked", "err", err)
-		return false
+		return turns.Totals{}, false
 	}
-	return !under(tot.Turns, a.cfg.DailyTurns) || !under(tot.Tokens, a.cfg.DailyTokens)
+	return tot, !under(tot.Turns, a.cfg.DailyTurns) || !under(tot.Tokens, a.cfg.DailyTokens)
 }
 
 // GiveUp is the agent's core.GiveUp: an apology to the person and an

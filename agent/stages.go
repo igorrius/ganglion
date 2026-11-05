@@ -124,7 +124,7 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 		text = replyExpired
 	case text == "":
 		t.record.Outcome = turns.OutcomeStepLimit
-		text = lastText(added)
+		text = lastText(added, t.kept)
 	}
 	t.state.Messages = append(append(t.state.Messages, user), added...)
 	t.state.Last = t.now
@@ -161,7 +161,8 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 		ran := t.takeExecLog()
 		msgs, added = append(msgs, ran...), append(added, ran...)
 		if got == outcomeEnded {
-			continue // what the run wrote is lost; the next run has every result (R-LIVE-3)
+			t.kept = append(t.kept, ran...) // they ran, whatever becomes of the next run
+			continue                        // what the run wrote is lost; the next run has every result (R-LIVE-3)
 		}
 		msg := resp.Message
 		msg.Role = provider.RoleAssistant
@@ -179,7 +180,7 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 			continue
 		}
 		results, run := a.runTools(turnCtx, t, msg.ToolCalls)
-		if run < len(msg.ToolCalls) && msg.Content != "" {
+		if run < len(msg.ToolCalls) && strings.TrimSpace(msg.Content) != "" {
 			a.quote(turnCtx, t, msg.Content)
 		}
 		task = a.skillRoute(task, msg.ToolCalls[:run], t.admin)     // a call that was skipped read nothing
@@ -190,10 +191,14 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 }
 
 // lastText is the newest text the model wrote, for a turn cut by the step
-// limit; replyStepLimit when it wrote none.
-func lastText(added []provider.Message) string {
+// limit; replyStepLimit when it wrote none. A text already sent as an earlier
+// answer (kept) is not the reply: the person has it, and it does not answer what
+// came after it.
+func lastText(added, kept []provider.Message) string {
 	for _, m := range slices.Backward(added) {
-		if m.Role == provider.RoleAssistant && m.Content != "" {
+		if m.Role == provider.RoleAssistant && m.Content != "" && !slices.ContainsFunc(kept, func(k provider.Message) bool {
+			return k.Role == provider.RoleAssistant && k.Content == m.Content
+		}) {
 			return m.Content
 		}
 	}

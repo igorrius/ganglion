@@ -83,7 +83,7 @@ func (a *Agent) introducing(t *turn) bool {
 func (a *Agent) runTools(ctx context.Context, t *turn, calls []provider.ToolCall) (out []provider.Message, run int) {
 	out = make([]provider.Message, 0, len(calls))
 	for i, call := range calls {
-		if len(a.waiting(ctx, t)) > 0 {
+		if len(a.behind(ctx, t)) > 0 {
 			for _, skipped := range calls[i:] {
 				out = append(out, provider.Message{Role: provider.RoleTool, ToolCallID: skipped.ID, Content: skippedResult})
 			}
@@ -167,8 +167,8 @@ func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall, ca
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if capped {
-		if t.runEnded || a.endRunIfWaiting(ctx, t) {
-			return "", errAdditionWaiting
+		if err := a.heldBack(ctx, t); err != nil {
+			return "", err
 		}
 		if t.execCalls >= a.cfg.MaxSteps {
 			return "", errCallLimit

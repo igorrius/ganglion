@@ -337,11 +337,13 @@ Live turns ([design](plans/p1-live-turns-design.md);
   not qualify, so a later message never overtakes an earlier one. An event qualifies
   when it is a message in the same conversation from the same person, is not a
   command, has not expired, and the sender is within the daily limits. A schedule's,
-  a press's or an expiry's turn takes nothing, and neither does a turn with no tools.
+  a press's or an expiry's turn takes nothing.
 - **R-LIVE-2.** Additions enter at boundaries, before a model call. A running tool is
   never interrupted. No tool call starts while an addition waits, the first one
-  included: on the API route the remaining calls get a paired result saying they did
-  not run, and on the CLI route the call is refused and the run ends.
+  included, and also when the turn has no step or time left to take the addition: on the
+  API route the remaining calls get a paired result saying they did not run, and on the
+  CLI route the call is refused and the run ends, or goes on to its answer when no new
+  run fits.
 - **R-LIVE-3.** A CLI run ended for an addition is not a failure, a fallback or a
   retry. The core starts a new run with the whole history. It adds an estimate of what
   it sent to the turn's tokens, since such a run reports none. What the ended run wrote
