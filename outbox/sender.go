@@ -181,17 +181,8 @@ func (s *Sender) pass(ctx context.Context) (progress bool, next time.Time, err e
 func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	msg := p.Msg
 	log := s.log.With("id", msg.ID, "transport", msg.Transport, "conv", msg.Conv, "attempts", p.Attempts)
-	t, ok := s.transports[msg.Transport]
+	t, ok := s.ready(log, msg.Transport)
 	if !ok {
-		// The transport may be off for now (no token after a config slip):
-		// keep the message for when it is back, never fail it.
-		if !s.missing[msg.Transport] {
-			s.missing[msg.Transport] = true
-			log.Warn("outbox: transport not registered; its messages wait")
-		}
-		return false, nil
-	}
-	if until, ok := s.paused[msg.Transport]; ok && s.now().Before(until) {
 		return false, nil
 	}
 
@@ -202,10 +193,7 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	if msg.EditOf != "" && msg.Edit == "" { // given up on, or it never had a reference
 		return s.failed(ctx, log, p, fmt.Errorf("outbox: no message to edit: %w", transport.ErrPermanent))
 	}
-	parts := []event.Outgoing{msg}
-	if pt, ok := t.(transport.Parter); ok {
-		parts = pt.Parts(msg)
-	}
+	parts := partsOf(t, msg)
 	ctx, span := s.tracer.Start(ctx, "outbox.send", trace.WithAttributes(
 		attribute.String("message.id", msg.ID), attribute.String("transport", msg.Transport), attribute.Int("parts", len(parts))))
 	defer span.End()
@@ -233,6 +221,32 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	s.countSent(ctx, msg)
 	log.Info("outbox: sent", "parts", len(parts), "len", len(msg.Text))
 	return true, nil
+}
+
+// ready returns the named transport when a message can go through it now.
+func (s *Sender) ready(log *slog.Logger, name string) (transport.Transport, bool) {
+	t, ok := s.transports[name]
+	if !ok {
+		// The transport may be off for now (no token after a config slip):
+		// keep the message for when it is back, never fail it.
+		if !s.missing[name] {
+			s.missing[name] = true
+			log.Warn("outbox: transport not registered; its messages wait")
+		}
+		return nil, false
+	}
+	if until, paused := s.paused[name]; paused && s.now().Before(until) {
+		return nil, false
+	}
+	return t, true
+}
+
+// partsOf is msg as the transport sends it.
+func partsOf(t transport.Transport, msg event.Outgoing) []event.Outgoing {
+	if pt, ok := t.(transport.Parter); ok {
+		return pt.Parts(msg)
+	}
+	return []event.Outgoing{msg}
 }
 
 // withEditTarget fills in the reference of the message EditOf names, "" when that
