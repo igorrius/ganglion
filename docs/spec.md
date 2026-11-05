@@ -1354,6 +1354,10 @@ Reviewed at each gate.
     it in a collapsed quote. The chat stays tidy and keeps the record of what was approved;
     deleting it was considered and dropped for that reason. An expired question folds the
     same way. A plan stays open: the owner wants to see which plan ran.
+  - Fixed texts in the person's language: stable keys, an English default and language files
+    anyone can add to, checked by a test, since a model cannot word them. Replaces ruling
+    R46's "fixed texts stay in English", so it needs its own ADR, and it should cover the
+    plural forms and how a person's language is chosen (owner, 2026-11-05).
   - Tables in a phone's width: a wide table goes out as a monospace block that wraps badly.
   - A command that shows an admin what the last turn did, in plain words and with no model:
     steps, tools, model, tokens, time, messages that joined it. The data is already stored
