@@ -1191,7 +1191,7 @@ fallback until the gate is passed.
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
 | History and tool format | Own · Anthropic Messages · OpenAI | Decided: neutral own format + MCP tool schemas ([ADR-0020](adr/0020-neutral-history-as-conversation-state.md)) | — |
 | First API provider | Anthropic · Gemini · OpenAI-compatible | Decided for development: the operator's choice ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)); the claude CLI only, as chosen in [ADR-0047](adr/0047-sonnet-answers-during-development.md); OpenRouter fallbacks are a later topic | Revisit with more users or stronger tasks |
-| Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles (conversation, writing tools, analysis) | For development, tiers: Sonnet for turns, Haiku for compaction and checks ([ADR-0047](adr/0047-sonnet-answers-during-development.md)). Short decisions get a role of their own, in its own ADR after chatlab. Opus when the agent writes skills or modules | When the agent starts writing skills or modules |
+| Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles (conversation, writing tools, analysis) | For development, tiers: Sonnet for turns, Haiku for compaction and checks ([ADR-0047](adr/0047-sonnet-answers-during-development.md)). Short decisions and embeddings wait for a concrete task ("Models by purpose" in the "Not now" list). Opus when the agent writes skills or modules | When the agent starts writing skills or modules |
 | Where nodes live | Cloud hosting · Pi · home PC | Edge in the cloud or on a Pi, claude CLI worker on the owner's PC | The P1 monthly bill |
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
 | Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Proposed for host commands and skill scripts in [ADR-0039](adr/0039-command-sandbox.md): `no_new_privs`, a clean environment, Landlock and a PID namespace, fail closed | A spike in M3d on the owner's machine, Railway and a Pi |
@@ -1300,13 +1300,20 @@ Reviewed at each gate.
   sub-agents and parallel agents. Until there is a public repository
   with install docs and settled processes, a node is one operator, one
   agent, one bot (owner, 2026-11-02).
-- A separate model role for short decisions (owner, 2026-11-04): questions
-  with a small context and a plain answer get their own entry in the model
-  catalogue, apart from the tiers, so that a model that can only decide never
-  lands in a fallback chain for a person's message. Haiku fills it first, so
-  another model can be compared against it. The memory check is its first
-  client; a model replaces Haiku there only after passing `guardtest`'s case
-  table, since that check is a security boundary. Own ADR, right after chatlab.
+- Models by purpose (owner, 2026-11-05): a role for short decisions, embedding
+  models for memory and search, models that read pictures. Whoever sets up an
+  agent picks its models, and may have only an OpenAI-compatible API, so ganglion
+  does not rank them against one model. Each is taken up when a concrete task
+  works badly without it:
+  - **A role for short decisions:** when something other than the memory check
+    needs it; that check runs on any `cheap` model today. It stays apart from the
+    tiers, so that a model that can only decide never lands in a fallback chain
+    for a person's message. A model check of commands can only add to M3d's class
+    table, never replace it, because a model can be injected.
+  - **Embeddings:** when memory search starts to miss (today a substring scan of
+    the newest 500 sessions), with a research note first.
+  - **`guardtest`'s case table** may become a command with which an operator
+    checks the model they chose for the memory check, a security boundary.
 - A decision model as a tool of the agent core: the owner's pick is
   **Jev** by TypeSafe ([typesafe.ai](https://typesafe.ai/),
   [docs](https://docs.typesafe.ai/)), a "System One" model.
