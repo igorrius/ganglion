@@ -54,6 +54,7 @@ considered, how they compare, the decision and its consequences. See
 | [0046](0046-a-restart-is-not-a-failed-attempt.md) | Count a run a restart cut short apart from a failed attempt | Accepted | 2026-11-04 |
 | [0047](0047-sonnet-answers-during-development.md) | During development, Sonnet answers and Haiku does compaction and checks (supersedes 0022) | Accepted | 2026-11-04 |
 | [0048](0048-chatlab-over-the-fake-bot-api.md) | Test the agent by talking to it, through a separate program over the fake Bot API | Accepted | 2026-11-04 |
+| [0049](0049-three-gaps-where-outside-text-and-private-data-cross.md) | Ask before a read script takes a tainted session's input, keep a local-only session's tools on the node, and mark `ganglion mcp`'s results as data | Proposed | 2026-11-05 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

@@ -62,7 +62,7 @@ func (*MetricsShow) Spec() tool.Spec {
 			"over the names; or metrics: name globs such as ganglion_turns*. Nothing set draws the default dashboard.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"choice":{"type":"string","description":"all, a group or a text filter"},` +
 			`"metrics":{"type":"array","items":{"type":"string"},"description":"name globs, at most 8"}},"additionalProperties":false}`),
-		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true}
+		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true, LocalSafe: true}
 }
 
 // Run draws the picture and the summary.

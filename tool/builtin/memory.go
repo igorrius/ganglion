@@ -209,6 +209,7 @@ func (*MemoryRead) Spec() tool.Spec {
 		Class:     tool.ClassRead,
 		Policy:    tool.PolicyAuto,
 		AdminOnly: true,
+		LocalSafe: true,
 	}
 }
 
@@ -274,6 +275,7 @@ func (*MemoryRecall) Spec() tool.Spec {
 		Class:     tool.ClassRead,
 		Policy:    tool.PolicyAuto,
 		AdminOnly: true,
+		LocalSafe: true,
 	}
 }
 

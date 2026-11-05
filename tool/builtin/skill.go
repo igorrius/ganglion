@@ -45,7 +45,7 @@ func (r *skillRead) Spec() tool.Spec {
 		Description: "Read a skill from the list in your instructions before you follow it: its steps, and the tool of its script if it has one.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"the skill's name"}},` +
 			`"required":["name"],"additionalProperties":false}`),
-		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true}
+		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true, LocalSafe: true}
 }
 
 func (r *skillRead) Run(_ context.Context, c tool.Call) (tool.Result, error) {
@@ -85,11 +85,17 @@ func (s *skillScript) Spec() tool.Spec {
 	if s.sk.Script.Effects == skills.EffectsChange {
 		class, policy = tool.ClassSideEffect, tool.PolicyConfirm
 	}
+	readOnly := s.sk.Script.Effects != skills.EffectsChange
 	return tool.Spec{Name: s.sk.ToolName(),
 		Description: s.sk.Description + fmt.Sprintf(" (the script of skill %s; it reads input on its stdin; effects: %s)", s.sk.Name, s.sk.Script.Effects),
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"input":{"type":"string","description":"text the script reads on its stdin"}},` +
 			`"additionalProperties":false}`),
-		Class: class, Policy: policy, AdminOnly: true}
+		Class: class, Policy: policy, AdminOnly: true,
+		// Only the local-only skill's own script: its owner asked for this, and
+		// another skill's script may reach the network (ADR-0049).
+		LocalSafe:       s.sk.Model.Privacy == skills.PrivacyLocalOnly,
+		AskTaintedInput: readOnly,
+	}
 }
 
 func (s *skillScript) input(c tool.Call) (string, error) {
@@ -102,7 +108,7 @@ func (s *skillScript) input(c tool.Call) (string, error) {
 	return a.Input, nil
 }
 
-// Question is a change script's confirmation: the skill, what it does,
+// Question is a script's confirmation: the skill, what it does,
 // and the whole input it gets.
 func (s *skillScript) Question(_ context.Context, c tool.Call) (string, error) {
 	in, err := s.input(c)

@@ -40,9 +40,16 @@ const maxInFlight = 4
 // names a model may call, so "schedule.create" is "schedule_create".
 func ToolName(name string) string { return strings.ReplaceAll(name, ".", "_") }
 
+// Option configures a Server.
+type Option func(*Server)
+
+// WithInstructions sets what the server tells its client in initialize.
+func WithInstructions(text string) Option { return func(s *Server) { s.instructions = text } }
+
 // Server serves tools over MCP.
 type Server struct {
 	name, version string
+	instructions  string            // "" sends none
 	tools         []provider.Tool   // in MCP names
 	byMCP         map[string]string // MCP name → the agent's name
 	exec          provider.Exec
@@ -51,8 +58,11 @@ type Server struct {
 // NewServer returns a server named name that offers tools and runs their
 // calls with exec. Tool names are offered with "." mapped to "_"; of two
 // tools whose MCP names collide, the first is offered.
-func NewServer(name, version string, tools []provider.Tool, exec provider.Exec) *Server {
+func NewServer(name, version string, tools []provider.Tool, exec provider.Exec, opts ...Option) *Server {
 	s := &Server{name: name, version: version, byMCP: make(map[string]string, len(tools)), exec: exec}
+	for _, o := range opts {
+		o(s)
+	}
 	for _, t := range tools {
 		mcpName := ToolName(t.Name)
 		if _, dup := s.byMCP[mcpName]; dup {
@@ -180,11 +190,15 @@ func (s *Server) initialize(_ context.Context, params json.RawMessage) (any, *rp
 	if slices.Contains(protocolVersions, p.ProtocolVersion) {
 		version = p.ProtocolVersion
 	}
-	return map[string]any{
+	result := map[string]any{
 		"protocolVersion": version,
 		"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 		"serverInfo":      map[string]string{"name": s.name, "version": s.version},
-	}, nil
+	}
+	if s.instructions != "" {
+		result["instructions"] = s.instructions
+	}
+	return result, nil
 }
 
 func (s *Server) list(context.Context, json.RawMessage) (any, *rpcError) {

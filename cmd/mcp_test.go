@@ -91,6 +91,13 @@ func TestMCPInitializeAndList(t *testing.T) {
 	if call, _ := json.Marshal(answers[2]); !strings.Contains(string(call), `inbox`) || strings.Contains(string(call), `"isError":true`) {
 		t.Fatalf("queues_state: %s", call)
 	}
+	// ADR-0049: what the client's model reads is marked as data, and it is told.
+	if init, _ := json.Marshal(answers[0]); !strings.Contains(string(init), `"instructions"`) {
+		t.Fatalf("initialize: %s", init)
+	}
+	if call, _ := json.Marshal(answers[2]); !strings.Contains(string(call), `\u003cexternal source`) && !strings.Contains(string(call), `<external source`) {
+		t.Fatalf("queues_state not marked as data: %s", call)
+	}
 }
 
 // stdout carries JSON-RPC lines only: no log line, no banner.

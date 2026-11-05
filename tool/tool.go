@@ -57,6 +57,13 @@ type Spec struct {
 	Class       Class
 	Policy      Policy // the default for this tool; side_effect tools confirm unless stated
 	AdminOnly   bool   // true for every M3b tool
+	// LocalSafe says the tool sends nothing off the node, so it may run in a
+	// local-only session; every other tool is refused there (ADR-0049).
+	LocalSafe bool
+	// AskTaintedInput makes a call with input confirm in a tainted session:
+	// the tool may reach the network, where the input would leave unseen
+	// (ADR-0049).
+	AskTaintedInput bool
 }
 
 // TaskConvPrefix starts the conversation of a scheduled task's turns,
@@ -85,6 +92,7 @@ type Call struct {
 	Principal string
 	Admin     bool
 	Tainted   bool   // the session's taint before this call
+	LocalOnly bool   // the session holds a local-only skill's data (R-RTR-4)
 	Grant     *Grant // non-nil only in a scheduled task's turn
 	Depth     int    // R-AGT-4
 	KnownURL  URLFunc
