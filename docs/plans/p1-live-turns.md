@@ -533,11 +533,11 @@ func TestPlanInjectedTextIsNotMarkup(t *testing.T)
 - Modify: `agent/prompt.go`, `agent/prompt_test.go`, `docs/README.md`, `docs/plans/p1-all-in-one.md`, `docs/architecture/05-code-map.md`, the matching level page
 - Create: `tools/chatlab/scenarios/plan-shown.yaml`
 
-- [ ] **Step 1: Add the prompt's directive** (layer 2): before work with several steps, call `plan.show`; send `plan.step` beside the next real call in the same message; write the outcome in the last one; no plan for one quick step. Test its presence in `prompt_test.go`. Ask the owner about the full-lab recommendation.
+- [x] **Step 1: Add the prompt's directive** (layer 2): before work with several steps, call `plan.show`; send `plan.step` beside the next real call in the same message; write the outcome in the last one; no plan for one quick step. Test its presence in `prompt_test.go`. Ask the owner about the full-lab recommendation.
 
-- [ ] **Step 2: Write `plan-shown`** with the real model: a task with three steps shows one plan message with edits before the final reply. Run: `make lab LAB=plan-shown`. Expected: pass; the edits arrive before the reply.
+- [x] **Step 2: Write `plan-shown`** with the real model: a task with three steps shows one plan message with edits before the final reply. Run: `make lab LAB=plan-shown`. Expected: pass; the edits arrive before the reply.
 
-- [ ] **Step 3: Run the checks:** `make lint`, `go test -race ./...`, `make accept`, `make memory`. Expected: all pass; record RSS and binary size against M3c's (44 MB RSS after 1,000 turns, 47.7 MB binary).
+- [x] **Step 3: Run the checks:** `make lint`, `go test -race ./...`, `make accept`, `make memory`. Expected: all pass; record RSS and binary size against M3c's (44 MB RSS after 1,000 turns, 47.7 MB binary).
 
 - [ ] **Step 4: The owner's live check on @ganglion_test_bot** (`make live-agent`), since chatlab cannot see real Telegram. Say in advance why it is manual. To try:
 - a question, then an addition while a web search runs: 👌, one final answer;
