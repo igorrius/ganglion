@@ -1,0 +1,12 @@
+diff --git a/agent/additions.go b/agent/additions.go
+--- a/agent/additions.go
++++ b/agent/additions.go
+@@ -119,7 +119,7 @@
+ 		return event.Message{}, false
+ 	}
+ 	m, ok := decodeMessage(e.Payload)
+-	if !ok || m.From != t.msg.From {
++	if !ok {
+ 		return event.Message{}, false
+ 	}
+ 	if _, _, isCommand := a.commandIn(m); isCommand || a.over(ctx, now, m.From, e.ID) {

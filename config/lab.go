@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/node"
@@ -45,7 +46,10 @@ type LabNode struct {
 	Journal    *journal.Journal
 	Components []node.Component
 	Tick       func(context.Context) error // one tick of the scheduler
-	Shutdown   func(context.Context)
+	// Allow lists a family member by principal and name, so a scenario can have
+	// another person in the owner's chat.
+	Allow    func(ctx context.Context, principal, name string) error
+	Shutdown func(context.Context)
 }
 
 // NewLab builds the core container of b with o's differences. The tables
@@ -59,7 +63,10 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 	}
 	scheduler := do.MustInvoke[*schedule.Scheduler](i)
 	return &LabNode{DB: do.MustInvoke[Database](i).DB, Journal: do.MustInvoke[*journal.Journal](i), Components: components,
-		Tick:     scheduler.Tick,
+		Tick: scheduler.Tick,
+		Allow: func(ctx context.Context, principal, name string) error {
+			return do.MustInvoke[*access.List](i).Allow(ctx, principal, access.RoleFamily, name)
+		},
 		Shutdown: func(ctx context.Context) { _ = i.ShutdownWithContext(ctx) },
 	}, nil
 }

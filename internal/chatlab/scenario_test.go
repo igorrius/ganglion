@@ -215,3 +215,18 @@ func TestLoadScenarioLanguage(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+func TestWritesAndAddsAreChecked(t *testing.T) {
+	base := Scenario{Name: "x", Why: "w", Repeat: 1, Persona: PersonaDefault}
+	empty := base
+	empty.Model, empty.Script = ModelScripted, []ScriptStep{{Say: "a", Writes: &Writing{}}}
+	empty.Steps = []Step{{Facts: &Facts{Replies: new(int)}}}
+	if err := empty.check("x"); err == nil {
+		t.Error("a script step writing nothing passed")
+	}
+	half := base
+	half.Steps = []Step{{Adds: &Adds{Say: "only one"}}, {Judge: "holds"}}
+	if err := half.check("x"); err == nil {
+		t.Error("an adds step without its second message passed")
+	}
+}

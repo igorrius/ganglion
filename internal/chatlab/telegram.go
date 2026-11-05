@@ -35,6 +35,18 @@ func (p *Telegram) Say(_ context.Context, text string) error {
 	return nil
 }
 
+// Write adds a message that a script step says someone wrote (Writing).
+func (p *Telegram) Write(w Writing) {
+	in := telegramtest.Incoming{ChatID: p.chat, UserID: p.chat, Name: p.name, Text: w.Text}
+	if w.Forwarded {
+		in.Extra = map[string]any{"forward_origin": map[string]any{"type": "hidden_user", "date": 1, "sender_user_name": "Eve"}}
+	}
+	if w.Other {
+		in.UserID, in.Name = labOther, labOtherName
+	}
+	p.last.Store(p.fake.AddMessage(in))
+}
+
 // SendFile implements Peer.
 func (p *Telegram) SendFile(_ context.Context, f File) error {
 	var extra map[string]any

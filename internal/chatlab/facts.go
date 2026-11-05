@@ -19,6 +19,7 @@ type View struct {
 	History  string
 	Memory   map[string]string // stored files by path
 	Jobs     map[string]int    // live jobs by kind, without system jobs
+	Taken    int               // messages that joined a running turn
 }
 
 // Check returns one line per failed check, saying what was wanted and what
@@ -50,6 +51,12 @@ func Check(f Facts, v View) []string {
 	out = append(out, checkText("memory", f.Memory, strings.Join(memory, "\n"))...)
 	if n := filesShown(v.Messages); f.Files != nil && n != *f.Files {
 		out = append(out, fmt.Sprintf("files: wanted %d shown, found %d", *f.Files, n))
+	}
+	if f.Taken != nil && v.Taken != *f.Taken {
+		out = append(out, fmt.Sprintf("taken: wanted %d messages joining a turn, found %d", *f.Taken, v.Taken))
+	}
+	if f.Replies != nil && len(v.Last) != *f.Replies {
+		out = append(out, fmt.Sprintf("replies: wanted %d from the model, found %d", *f.Replies, len(v.Last)))
 	}
 	if f.Jobs != nil && v.Jobs[f.Jobs.Kind] != f.Jobs.Count {
 		out = append(out, fmt.Sprintf("jobs: wanted %d of kind %s, found %d", f.Jobs.Count, f.Jobs.Kind, v.Jobs[f.Jobs.Kind]))

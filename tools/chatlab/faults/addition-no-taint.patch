@@ -1,0 +1,14 @@
+diff --git a/agent/additions.go b/agent/additions.go
+--- a/agent/additions.go
++++ b/agent/additions.go
+@@ -148,9 +148,7 @@
+ 	defer t.mu.Unlock()
+ 	for _, add := range adds {
+ 		content, outside := userContent(add.msg)
+-		if outside {
+-			t.state.Tainted = true
+-		}
++		_ = outside
+ 		user := provider.Message{Role: provider.RoleUser, Content: content}
+ 		for u := range knownURLs([]provider.Message{user}) {
+ 			t.known[u] = struct{}{}

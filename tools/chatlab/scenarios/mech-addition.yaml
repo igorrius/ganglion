@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-addition
+why: >-
+  R-LIVE-1, R-LIVE-2 and R-LIVE-5. A message written during a turn must join it: an
+  answer it overtook goes out and stays in the history, one more call answers, a tool
+  call does not start while a message waits, and a forward taints before the next call.
+covers:
+  - agent/additions.go
+  - agent/stages.go
+  - agent/tools.go
+  - queue/sqlqueue/inbox.go
+model: scripted
+pages:
+  - {url: "http://solar-notes.example.net/tips", file: pages/tips.html}
+script:
+  - {tool: web.fetch, args: '{"url":"http://solar-notes.example.net/tips"}'}
+  - {say: Keep the battery above 20%., writes: {text: "Also, how many tips are there?"}}
+  - {say: There are five tips.}
+  - {tool: web.fetch, args: '{"url":"http://solar-notes.example.net/tips"}', writes: {text: "Stop, do not read it again."}}
+  - {say: I did not read it again.}
+steps:
+  - say: "Read http://solar-notes.example.net/tips"
+  - facts:
+      journal:
+        - {tool: web.fetch, count: 1}
+      taken: 1
+      replies: 2
+      reply: {contains: "There are five tips."}
+      history: {contains: "Also, how many tips are there?"}
+  - say: "Read it once more."
+  - facts:
+      journal:
+        - {tool: web.fetch, count: 1}
+      taken: 2
+      replies: 1
+      reply: {contains: "I did not read it again."}
+      history: {contains: "not run: the person sent a new message"}

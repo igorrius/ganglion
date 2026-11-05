@@ -196,6 +196,10 @@ var crashMarker = regexp.MustCompile(`\bm\d{3,}\b`)
 // /metrics.
 const crashMetricsEvery = 10
 
+// crashAddEvery makes every n-th message of the agent harness come with a
+// second one soon after, so it may join the running turn (R-LIVE-1).
+const crashAddEvery = 3
+
 // crashModel is a fake model whose every turn has one real side effect: it
 // writes a fact named after the person's message (a file and a git commit),
 // reads the result and answers with the same marker.
@@ -299,8 +303,11 @@ func (n *crashAgentNode) answers() (markers, other []string) {
 // messages arrive (3.8, R-DLV-3 to R-DLV-6). In the end every message has its
 // answer, in order, at most one duplicate per kill; every fact was stored by
 // exactly one commit; the journal holds one call per message, so a rerun kept
-// the call's key; and every /metrics sent its photo. Run it with
-// `make crash-agent`; it spends a few minutes.
+// the call's key; and every /metrics sent its photo. Some messages arrive
+// during a turn and join it: such a message counts as answered when the turn
+// that took it answered, and its fact is stored at most once, since a rerun may
+// take it at another moment and give the call number to another call (ADR-0050).
+// Run it with `make crash-agent`; it spends a few minutes.
 func TestCrashHarnessAgent(t *testing.T) {
 	if os.Getenv("GANGLION_CRASH_AGENT") == "" {
 		t.Skip("set GANGLION_CRASH_AGENT=1 (make crash-agent)")
@@ -311,16 +318,25 @@ func TestCrashHarnessAgent(t *testing.T) {
 	var want []string
 	var metrics int
 	var lastUpdate int64
+	send := func(text string) {
+		lastUpdate = n.fake.AddMessage(telegramtest.Incoming{ChatID: adminID, UserID: adminID, Name: "Admin", Text: text})
+	}
 	for i := range iters {
 		cmd := n.start(t)
-		text := fmt.Sprintf("m%03d", i)
+		text := fmt.Sprintf("m%03d", i*2)
 		if i%crashMetricsEvery == crashMetricsEvery-1 {
 			text = "/metrics"
 			metrics++
 		} else {
 			want = append(want, text)
 		}
-		lastUpdate = n.fake.AddMessage(telegramtest.Incoming{ChatID: adminID, UserID: adminID, Name: "Admin", Text: text})
+		send(text)
+		if i%crashAddEvery == crashAddEvery-1 {
+			time.Sleep(time.Duration(rand.IntN(200)) * time.Millisecond)
+			added := fmt.Sprintf("m%03d", i*2+1)
+			want = append(want, added)
+			send(added)
+		}
 		time.Sleep(time.Duration(rand.IntN(600)) * time.Millisecond)
 		_ = cmd.Process.Signal(syscall.SIGKILL)
 		_ = cmd.Wait()
@@ -345,11 +361,12 @@ func TestCrashHarnessAgent(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Minute)
 	for {
 		got, _ := n.answers()
-		if len(slices.Compact(got)) >= len(want) && len(n.fake.Uploads()) >= metrics && n.fake.Confirmed() >= lastUpdate {
+		// The newest message is the last to be answered, whichever turn took it.
+		if slices.Contains(got, want[len(want)-1]) && len(n.fake.Uploads()) >= metrics && n.fake.Confirmed() >= lastUpdate {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Errorf("after 3 min: %d of %d answers, %d of %d photos, confirmed %d of %d",
+			t.Errorf("after 3 min: %d answers for %d messages, %d of %d photos, confirmed %d of %d",
 				len(slices.Compact(got)), len(want), len(n.fake.Uploads()), metrics, n.fake.Confirmed(), lastUpdate)
 			break
 		}
@@ -357,29 +374,90 @@ func TestCrashHarnessAgent(t *testing.T) {
 	}
 	stop()
 
-	n.checkAnswers(t, want, iters)
+	groups, taken := n.turnGroups(t)
+	n.checkAnswers(t, want, groups, iters)
 	n.checkPhotos(t, metrics, iters)
-	n.checkFacts(t, want)
-	n.checkJournal(t, len(want), metrics)
+	n.checkFacts(t, groups)
+	n.checkJournal(t, len(groups), len(want), metrics)
 	n.checkHistory(t)
+	if iters >= 100 && taken == 0 {
+		t.Error("no message joined a running turn: the harness tested nothing")
+	}
 	turns := 0
 	for _, r := range n.model.Requests() {
 		if len(r.Tools) > 0 && r.Messages[len(r.Messages)-1]["role"] != "tool" {
 			turns++
 		}
 	}
-	t.Logf("%d messages for the model took %d turns: %d reruns", len(want), turns, turns-len(want))
-	if iters >= 100 && turns == len(want) {
+	t.Logf("%d messages for the model took %d groups, %d joined a turn; %d calls began from a person's message", len(want), len(groups), taken, turns)
+	if iters >= 100 && turns == len(groups) {
 		t.Error("no kill landed inside a turn: the harness tested nothing")
 	}
 }
 
-func (n *crashAgentNode) checkAnswers(t *testing.T, want []string, kills int) {
+// turnGroups reads which messages each turn answered: a turn's own message
+// and those it took (inbox.taken_by), by the marker of each, oldest first. Every
+// message of the harness must be finished. taken counts the ones that joined.
+func (n *crashAgentNode) turnGroups(t *testing.T) (groups [][]string, taken int) {
+	t.Helper()
+	db, err := sqlitedb.Open(context.Background(), filepath.Join(n.dir, "crash.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	rows, err := db.Query(`SELECT id, payload, status, COALESCE(taken_by, '') FROM inbox ORDER BY seq`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	at := map[string]int{}
+	for rows.Next() {
+		var id, payload, status, by string
+		if err := rows.Scan(&id, &payload, &status, &by); err != nil {
+			t.Fatal(err)
+		}
+		marker := crashMarker.FindString(payload)
+		if marker == "" {
+			continue // a command
+		}
+		if status != "done" {
+			t.Errorf("message %s is %s", marker, status)
+		}
+		if by == "" {
+			at[id] = len(groups)
+			groups = append(groups, []string{marker})
+			continue
+		}
+		i, ok := at[by]
+		if !ok {
+			t.Errorf("message %s taken by %s, which has no turn", marker, by)
+			continue
+		}
+		groups[i] = append(groups[i], marker)
+		taken++
+	}
+	return groups, taken
+}
+
+// checkAnswers wants the answers in order, and an answer for every turn: the
+// turn's reply names the newest message it took, an earlier answer an older one.
+func (n *crashAgentNode) checkAnswers(t *testing.T, want []string, groups [][]string, kills int) {
 	t.Helper()
 	got, other := n.answers()
 	compact := slices.Compact(slices.Clone(got))
-	if !slices.Equal(compact, want) {
-		t.Errorf("answers out of order or missing:\n got %v\nwant %v", compact, want)
+	pos := -1
+	for _, m := range compact {
+		i := slices.Index(want, m)
+		if i <= pos {
+			t.Errorf("answer %s out of order:\n got %v\nwant %v", m, compact, want)
+			break
+		}
+		pos = i
+	}
+	for _, g := range groups {
+		if !slices.ContainsFunc(g, func(m string) bool { return slices.Contains(compact, m) }) {
+			t.Errorf("no answer for the turn of %v", g)
+		}
 	}
 	if dups := len(got) - len(compact); dups > kills {
 		t.Errorf("%d duplicate answers after %d kills", dups, kills)
@@ -405,8 +483,8 @@ func (n *crashAgentNode) checkPhotos(t *testing.T, metrics, kills int) {
 }
 
 // checkFacts reads the side effect itself: the memory's git history has one
-// commit for each fact.
-func (n *crashAgentNode) checkFacts(t *testing.T, want []string) {
+// commit for each fact of a message alone in its turn, and at most one for any.
+func (n *crashAgentNode) checkFacts(t *testing.T, groups [][]string) {
 	t.Helper()
 	out, err := exec.Command("git", "-C", n.workspace(), "log", "--format=%s").CombinedOutput()
 	if err != nil {
@@ -418,30 +496,32 @@ func (n *crashAgentNode) checkFacts(t *testing.T, want []string) {
 			commits[crashMarker.FindString(line)]++
 		}
 	}
-	for _, m := range want {
-		if commits[m] != 1 {
-			t.Errorf("fact %s stored by %d commits", m, commits[m])
+	for _, g := range groups {
+		for _, m := range g {
+			if commits[m] > 1 || (len(g) == 1 && commits[m] != 1) {
+				t.Errorf("fact %s, in a turn of %d, stored by %d commits", m, len(g), commits[m])
+			}
 		}
 	}
 }
 
 // checkJournal counts the calls: a rerun replaces its own row, so a key that
 // changed on a rerun shows as a second row.
-func (n *crashAgentNode) checkJournal(t *testing.T, facts, metrics int) {
+func (n *crashAgentNode) checkJournal(t *testing.T, minFacts, maxFacts, metrics int) {
 	t.Helper()
 	db, err := sqlitedb.Open(context.Background(), filepath.Join(n.dir, "crash.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
-	for tool, want := range map[string]int{"memory.write": facts, "metrics.show": metrics} {
+	for tool, want := range map[string][2]int{"memory.write": {minFacts, maxFacts}, "metrics.show": {metrics, metrics}} {
 		var rows, failed int
 		err := db.QueryRow(`SELECT COUNT(*), COUNT(NULLIF(err, '')) FROM tool_calls WHERE tool = ?`, tool).Scan(&rows, &failed)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if rows != want || failed != 0 {
-			t.Errorf("journal: %d calls of %s (%d failed), want %d", rows, tool, failed, want)
+		if rows < want[0] || rows > want[1] || failed != 0 {
+			t.Errorf("journal: %d calls of %s (%d failed), want %d to %d", rows, tool, failed, want[0], want[1])
 		}
 	}
 }

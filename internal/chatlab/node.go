@@ -96,11 +96,40 @@ func Start(ctx context.Context, o NodeOptions) (n *Node, err error) {
 	}
 	cat, keys := o.Catalog, o.Keys
 	if o.Scenario.Model == ModelScripted {
-		if cat, keys, n.scripted, err = scriptedModel(closers, o.Scenario.Script); err != nil {
+		if cat, keys, n.scripted, err = scriptedModel(closers, o.Scenario.Script, n.write); err != nil {
 			return nil, err
 		}
 	}
 	return n, n.run(ctx, o, cat, keys)
+}
+
+// labOther is the other listed person of a scenario's Writing.
+const (
+	labOther     = 43
+	labOtherName = "Ann"
+	// labWriteWait bounds the wait for a Writing to reach the inbox; past it
+	// the scenario's facts say what happened.
+	labWriteWait = 10 * time.Second
+)
+
+// write puts w in the bot's chat and waits until the node has taken it into
+// the inbox, so the model's answer that follows is overtaken by it.
+func (n *Node) write(w Writing) {
+	ctx, cancel := context.WithTimeout(context.Background(), labWriteWait)
+	defer cancel()
+	if w.Other {
+		if err := n.lab.Allow(ctx, fmt.Sprintf("telegram:user:%d", labOther), labOtherName); err != nil {
+			return
+		}
+	}
+	n.peer.Write(w)
+	for !n.peer.Taken() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
 }
 
 // run builds the container and starts the node.
@@ -235,7 +264,7 @@ func copyDir(src, dst string) error {
 // scriptedModel starts a fake model that plays script, one step per request,
 // and then says "ok". The memory check goes to a model of its own, so it
 // never takes a step.
-func scriptedModel(owner *program, script []ScriptStep) (rules.Catalog, map[string]string, *providertest.Server, error) {
+func scriptedModel(owner *program, script []ScriptStep, write func(Writing)) (rules.Catalog, map[string]string, *providertest.Server, error) {
 	const key = "scripted"
 	fake := providertest.NewServer(owner, key)
 	var mu sync.Mutex
@@ -245,12 +274,16 @@ func scriptedModel(owner *program, script []ScriptStep) (rules.Catalog, map[stri
 			return providertest.Answer{Text: `{"ok":true,"reason":""}`}
 		}
 		mu.Lock()
-		defer mu.Unlock()
 		if next >= len(script) {
+			mu.Unlock()
 			return providertest.Answer{Text: "ok"}
 		}
 		st := script[next]
 		next++
+		mu.Unlock()
+		if st.Writes != nil {
+			write(*st.Writes)
+		}
 		return providertest.Answer{Text: st.Say, Tool: st.Tool, Args: st.Args}
 	})
 	cat, err := rules.LoadCatalog(strings.NewReader(`providers:
@@ -423,6 +456,9 @@ func ReadView(ctx context.Context, n *Node, last []Message) (View, error) {
 		return View{}, fmt.Errorf("chatlab: journal: %w", err)
 	}
 	v := View{Journal: entries, Messages: n.peer.Messages(), Last: last, Memory: map[string]string{}, Jobs: map[string]int{}}
+	if err := n.db.QueryRowContext(ctx, `SELECT count(*) FROM inbox WHERE taken_by IS NOT NULL`).Scan(&v.Taken); err != nil {
+		return View{}, fmt.Errorf("chatlab: inbox: %w", err)
+	}
 	if v.History, err = n.history(ctx); err != nil {
 		return View{}, err
 	}

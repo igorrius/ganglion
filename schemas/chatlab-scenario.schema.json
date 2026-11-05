@@ -25,7 +25,29 @@
       "properties": {
         "say": { "type": "string" },
         "tool": { "type": "string" },
-        "args": { "description": "The tool's arguments, as JSON text.", "type": "string" }
+        "args": { "description": "The tool's arguments, as JSON text.", "type": "string" },
+        "writes": { "description": "A message that reaches the inbox before this answer returns, so that it is overtaken.", "$ref": "#/$defs/writing" }
+      }
+    },
+    "writing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "forwarded": { "description": "The owner forwards it: outside text.", "type": "boolean" },
+        "other": { "description": "Another listed person writes it in the owner's chat.", "type": "boolean" }
+      }
+    },
+    "adds": {
+      "description": "A message and, after a pause, a second one while the first is being answered. For a real model.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["say", "then"],
+      "properties": {
+        "say": { "type": "string", "minLength": 1 },
+        "after": { "description": "A Go duration, such as 2s.", "type": "string" },
+        "then": { "type": "string", "minLength": 1 }
       }
     },
     "page": {
@@ -49,6 +71,7 @@
         "judge": { "description": "A claim about the model's last words.", "type": "string" },
         "language": { "description": "Checks the model's last words by their letters, with no model.", "enum": ["ru", "uk"] },
         "send": { "$ref": "#/$defs/file" },
+        "adds": { "$ref": "#/$defs/adds" },
         "advance": { "$ref": "#/$defs/advance" },
         "reach": { "$ref": "#/$defs/reach" },
         "facts": { "$ref": "#/$defs/facts" }
@@ -129,6 +152,8 @@
         "history": { "$ref": "#/$defs/text" },
         "memory": { "$ref": "#/$defs/text" },
         "files": { "description": "Attachments shown so far.", "type": "integer", "minimum": 0 },
+        "taken": { "description": "Messages that joined a running turn so far.", "type": "integer", "minimum": 0 },
+        "replies": { "description": "The model's messages since the last action.", "type": "integer", "minimum": 0 },
         "jobs": { "$ref": "#/$defs/jobFact" }
       }
     }

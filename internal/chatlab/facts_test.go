@@ -83,3 +83,14 @@ func TestCheckReportsEveryFailure(t *testing.T) {
 		t.Fatalf("got %v", got)
 	}
 }
+
+func TestTakenAndReplies(t *testing.T) {
+	one, two := 1, 2
+	v := View{Taken: 1, Last: []Message{{Text: "a"}, {Text: "b"}}}
+	if got := Check(Facts{Taken: &one, Replies: &two}, v); len(got) != 0 {
+		t.Fatalf("failures %v", got)
+	}
+	if got := Check(Facts{Taken: &two, Replies: &one}, v); len(got) != 2 {
+		t.Fatalf("failures %v", got)
+	}
+}

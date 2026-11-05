@@ -123,6 +123,20 @@ func (r *repeatRun) step(ctx context.Context, st Step) error {
 			return err
 		}
 		return r.settle(ctx)
+	case st.Adds != nil:
+		fmt.Fprintf(&r.log, "\n**owner:** %s\n\n_%v later:_\n\n**owner:** %s\n", st.Adds.Say, st.Adds.After, st.Adds.Then)
+		if err := Do(ctx, r.n.Peer(), Step{Say: st.Adds.Say}); err != nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(st.Adds.After):
+		}
+		if err := Do(ctx, r.n.Peer(), Step{Say: st.Adds.Then}); err != nil {
+			return err
+		}
+		return r.settle(ctx)
 	case st.Advance != nil:
 		clock, d := clockConfirmations, st.Advance.Confirmations
 		if st.Advance.Scheduler > 0 {

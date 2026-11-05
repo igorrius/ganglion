@@ -327,3 +327,39 @@ func TestLanguageStepNeedsNoJudge(t *testing.T) {
 		t.Fatalf("%d tokens: a language step must call no model", o.Repeats[0].Tokens)
 	}
 }
+
+// The owner writes while the scripted model works: the message is in the inbox
+// before the model's answer returns, so the answer is overtaken.
+func TestScriptWritesWhileTheModelWorks(t *testing.T) {
+	taken, replies := 1, 2
+	s := scripted("x", []ScriptStep{{Say: "first", Writes: &Writing{Text: "also this"}}, {Say: "second"}},
+		Step{Say: "question"},
+		Step{Facts: &Facts{Taken: &taken, Replies: &replies, Reply: &Text{Contains: "second"}, History: &Text{Contains: "also this"}}})
+	o := runOne(t, RunOptions{Scenarios: []Scenario{s}})
+	if o.Result != ResultPassed {
+		t.Fatalf("outcome %+v\n%+v", o, o.Repeats)
+	}
+}
+
+// Another listed person writes in the owner's chat: the message waits for its
+// own turn.
+func TestScriptOtherPersonIsNotTaken(t *testing.T) {
+	taken := 0
+	s := scripted("x", []ScriptStep{{Say: "first", Writes: &Writing{Text: "from Ann", Other: true}}, {Say: "second"}},
+		Step{Say: "question"},
+		Step{Facts: &Facts{Taken: &taken, Reply: &Text{Contains: "second"}}})
+	if o := runOne(t, RunOptions{Scenarios: []Scenario{s}}); o.Result != ResultPassed {
+		t.Fatalf("outcome %+v\n%+v", o, o.Repeats)
+	}
+}
+
+// A step can send a second message while the first is being answered.
+func TestAddsStepSendsWithoutWaitingForTheTurn(t *testing.T) {
+	taken := 1
+	s := scripted("x", []ScriptStep{{Say: "answer"}},
+		Step{Adds: &Adds{Say: "question", Then: "addition"}},
+		Step{Facts: &Facts{Taken: &taken, History: &Text{Contains: "addition"}}})
+	if o := runOne(t, RunOptions{Scenarios: []Scenario{s}}); o.Result != ResultPassed {
+		t.Fatalf("outcome %+v\n%+v", o, o.Repeats)
+	}
+}

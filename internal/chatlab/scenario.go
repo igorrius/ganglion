@@ -42,9 +42,27 @@ type Scenario struct {
 
 // ScriptStep is one answer of the scripted model: words or a tool call.
 type ScriptStep struct {
-	Say  string `yaml:"say"`
-	Tool string `yaml:"tool"`
-	Args string `yaml:"args"` // JSON
+	Say    string   `yaml:"say"`
+	Tool   string   `yaml:"tool"`
+	Args   string   `yaml:"args"`   // JSON
+	Writes *Writing `yaml:"writes"` // someone writes while the model works on this answer
+}
+
+// Writing is a message that reaches the inbox before the scripted model's
+// answer returns, so that the answer is overtaken by it.
+type Writing struct {
+	Text      string `yaml:"text"`
+	Forwarded bool   `yaml:"forwarded"` // the owner forwards it: outside text
+	Other     bool   `yaml:"other"`     // another listed person writes it in the owner's chat
+}
+
+// Adds says a message and, after a pause, a second one while the first is
+// being answered, and then waits for the node to settle. It serves a real
+// model; a scripted one uses Writes, which needs no pause.
+type Adds struct {
+	Say   string        `yaml:"say"`
+	After time.Duration `yaml:"after"`
+	Then  string        `yaml:"then"`
 }
 
 // Page is a web page the node reaches at URL, served from File.
@@ -62,6 +80,7 @@ type Step struct {
 	// LangRussian or LangUkrainian.
 	Language string   `yaml:"language"`
 	Send     *File    `yaml:"send"`
+	Adds     *Adds    `yaml:"adds"`
 	Advance  *Advance `yaml:"advance"`
 	Reach    *Reach   `yaml:"reach"`
 	Facts    *Facts   `yaml:"facts"`
@@ -110,6 +129,8 @@ type Facts struct {
 	History         *Text         `yaml:"history"`          // the chat's stored history
 	Memory          *Text         `yaml:"memory"`           // files under memory/, not quarantine
 	Files           *int          `yaml:"files"`            // attachments shown so far
+	Taken           *int          `yaml:"taken"`            // messages that joined a running turn so far
+	Replies         *int          `yaml:"replies"`          // the model's messages since the last action
 	Jobs            *JobFact      `yaml:"jobs"`
 }
 
@@ -196,6 +217,9 @@ func (s Scenario) checkModel() error {
 			if (st.Say == "") == (st.Tool == "") {
 				return fmt.Errorf("script step %d must have say or tool", i+1)
 			}
+			if st.Writes != nil && st.Writes.Text == "" {
+				return fmt.Errorf("script step %d writes nothing", i+1)
+			}
 		}
 	default:
 		return fmt.Errorf("model %q", s.Model)
@@ -274,7 +298,7 @@ func (s Scenario) checkSteps() error {
 
 func (st Step) check() error {
 	set := 0
-	for _, on := range []bool{st.Say != "", st.Press != "", st.Judge != "", st.Language != "", st.Send != nil, st.Advance != nil, st.Reach != nil,
+	for _, on := range []bool{st.Say != "", st.Press != "", st.Judge != "", st.Language != "", st.Send != nil, st.Adds != nil, st.Advance != nil, st.Reach != nil,
 		st.Facts != nil && !st.Facts.empty()} {
 		if on {
 			set++
@@ -288,6 +312,8 @@ func (st Step) check() error {
 		return fmt.Errorf("language %q", st.Language)
 	case st.Advance != nil && (st.Advance.Confirmations > 0) == (st.Advance.Scheduler > 0):
 		return errors.New("advance moves one clock forward")
+	case st.Adds != nil && (st.Adds.Say == "" || st.Adds.Then == ""):
+		return errors.New("adds needs say and then")
 	case st.Reach != nil && st.Reach.Journal.Tool == "":
 		return errors.New("reach needs journal.tool")
 	case st.Send != nil && st.Send.Kind != KindDocument && st.Send.Kind != KindPhoto:
@@ -298,5 +324,5 @@ func (st Step) check() error {
 
 func (f *Facts) empty() bool {
 	return len(f.Journal) == 0 && len(f.NoJournal) == 0 && f.Questions == nil && f.MessageReplaced == "" &&
-		f.Reply == nil && f.History == nil && f.Memory == nil && f.Files == nil && f.Jobs == nil
+		f.Reply == nil && f.History == nil && f.Memory == nil && f.Files == nil && f.Jobs == nil && f.Taken == nil && f.Replies == nil
 }

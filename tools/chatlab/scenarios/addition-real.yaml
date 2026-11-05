@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: addition-real
+why: >-
+  R-LIVE-5 and ADR-0050. With a real model, the person adds to a request while the
+  agent works; the answers together must take both messages into account.
+covers:
+  - agent/additions.go
+pages:
+  - {url: "http://solar-notes.example.net/tips", file: pages/tips.html}
+steps:
+  - adds:
+      say: "Read http://solar-notes.example.net/tips and tell me the first tip."
+      after: 2s
+      then: "Also tell me how many tips the page has."
+  - reach: {journal: {tool: web.fetch}, nudge: "Please open that page."}
+  - facts:
+      taken: 1
+  - judge: "The replies, taken together, give the first tip (keeping the battery above 20% at night) and say that the page has five tips."
