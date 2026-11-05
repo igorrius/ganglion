@@ -66,7 +66,7 @@ before task 1.**
 - Create: `docs/research/2026-11-05-cost-of-an-addition.md`
 - Scratch only, not committed: a shell script in the session's scratchpad
 
-- [ ] **Step 1: Run the three cases on the CLI route, 3 repeats each, with Sonnet**
+- [x] **Step 1: Run the three cases on the CLI route, 3 repeats each, with Sonnet**
 
 Use the node's real system prompt size and flags (`-p --model sonnet --output-format json
 --no-session-persistence --tools "" --setting-sources ""`), with a history of about 2,000 tokens.
@@ -81,14 +81,14 @@ Runs are left to finish, so usage is reported.
 Record `input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `output_tokens`,
 `total_cost_usd` and wall time.
 
-- [ ] **Step 2: Write the note and state the verdict**
+- [x] **Step 2: Write the note and state the verdict**
 
 Follow the shape of `docs/research/2026-11-04-language-of-replies.md`. State B ÷ A against the bar,
 whether the cache held across runs, and what C showed.
 
 Expected: one line "ending the run: within the bar" or "over the bar: stop".
 
-- [ ] **Step 3: Commit**, message `docs: what an addition costs on the CLI route`.
+- [x] **Step 3: Commit**, message `docs: what an addition costs on the CLI route`.
 
 ---
 
