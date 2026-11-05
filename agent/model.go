@@ -80,7 +80,7 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.Chat
 
 // addedKind is the error kind of a run ended for an addition, in the trace
 // and on the calls metric. It is not a failure.
-const addedKind = "addition"
+const addedKind = turns.EndedForAddition
 
 // logFailure logs a failed model call.
 func (a *Agent) logFailure(rec *turns.Turn, c router.Candidate, err error) {

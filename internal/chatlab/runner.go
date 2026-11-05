@@ -257,10 +257,32 @@ func (r *repeatRun) judge(ctx context.Context, claim string) error {
 	return nil
 }
 
+// otherModel is a model other than main that answered a step of the turn, "" when
+// none did. A turn's steps each end in one attempt that answered; one past those
+// is compaction, on the cheap model, and answered nobody.
+func otherModel(attempts []turns.Attempt, steps int, main string) string {
+	answered := 0
+	for _, a := range attempts {
+		if a.Error == turns.EndedForAddition {
+			answered++
+			continue
+		}
+		if a.Error != "" {
+			continue
+		}
+		if answered++; answered > steps {
+			return ""
+		}
+		if a.Model != main {
+			return a.Model
+		}
+	}
+	return ""
+}
+
 // finish reads what the repeat did for the transcript, and sets aside a
 // repeat another model answered: the result would not be about the main
-// model. Compaction writes to a turn's route too, but a scenario's few turns
-// never reach it.
+// model.
 func (r *repeatRun) finish(ctx context.Context, s Scenario) {
 	main := ModelScripted
 	if s.Model != ModelScripted {
@@ -276,10 +298,8 @@ func (r *repeatRun) finish(ctx context.Context, s Scenario) {
 	}
 	for _, t := range rows {
 		r.rep.CostUSD += t.cost
-		for _, a := range t.attempts {
-			if a.Error == "" && a.Model != main && r.rep.Inconclusive == "" {
-				r.rep.Inconclusive = fmt.Sprintf("%s answered in place of %s", a.Model, main)
-			}
+		if other := otherModel(t.attempts, t.steps, main); other != "" && r.rep.Inconclusive == "" {
+			r.rep.Inconclusive = fmt.Sprintf("%s answered in place of %s", other, main)
 		}
 	}
 	// A failure under another model says nothing about the main one: it stays
@@ -304,6 +324,7 @@ func journalLines(v View) string {
 // turnRow is what a repeat keeps of a turn.
 type turnRow struct {
 	cost     float64
+	steps    int
 	attempts []turns.Attempt
 }
 
@@ -317,12 +338,11 @@ func turnLines(ctx context.Context, n *Node, w *strings.Builder) ([]turnRow, err
 	var out []turnRow
 	for rows.Next() {
 		var conv, outcome, route, tools string
-		var steps int
 		var t turnRow
-		if err := rows.Scan(&conv, &outcome, &steps, &route, &tools, &t.cost); err != nil {
+		if err := rows.Scan(&conv, &outcome, &t.steps, &route, &tools, &t.cost); err != nil {
 			return out, fmt.Errorf("chatlab: turns: %w", err)
 		}
-		fmt.Fprintf(w, "- %s: %s, %d steps, route %s, tools %s\n", conv, outcome, steps, route, tools)
+		fmt.Fprintf(w, "- %s: %s, %d steps, route %s, tools %s\n", conv, outcome, t.steps, route, tools)
 		_ = json.Unmarshal([]byte(route), &t.attempts) // a route that does not parse names no model
 		out = append(out, t)
 	}

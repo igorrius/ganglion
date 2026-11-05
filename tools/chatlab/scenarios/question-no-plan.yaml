@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: question-no-plan
+why: >-
+  The owner does not want to be pestered: a question that wants a fact gets an answer,
+  with no plan.
+repeat: 2
+covers:
+  - plan/**
+  - tool/builtin/plan.go
+steps:
+  - say: "Сколько ватт-часов в повербанке на 20000 мАч?"
+  - facts:
+      no_journal:
+        - {tool: plan.show}

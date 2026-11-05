@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: task-report
+why: >-
+  The owner's live try of 2026-11-05: asked for a report, the model searched twice, read
+  only the results' titles, showed no plan and said so. A result to put together is work
+  with several steps: a plan, and sources opened.
+repeat: 2
+covers:
+  - plan/**
+  - tool/builtin/plan.go
+steps:
+  - say: "срани повербанки для телефоно-ноутов и пришли мне отчет"
+  - facts:
+      journal:
+        - {tool: plan.show}
+        - {tool: web.fetch}

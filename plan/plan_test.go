@@ -379,3 +379,44 @@ func TestPlanInjectedTextIsNotMarkup(t *testing.T) {
 		t.Fatalf("stored %q, %v", raw, err)
 	}
 }
+
+// A live measurement: the model did the work, ticked the first step and the last,
+// and the lines between read as skipped. A later step that ended means the
+// earlier ones are behind it, unless the model said otherwise.
+func TestLaterStepEndingClosesTheEarlierOnes(t *testing.T) {
+	e := newEnv(t)
+	e.show(t, "a", "b", "c", "d")
+	ctx := context.Background()
+	if err := e.s.Step(ctx, conv, 2, Failed, "no page", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Step(ctx, conv, 3, Skipped, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	e.now = t0.Add(3 * time.Second)
+	if err := e.s.Step(ctx, conv, 4, Done, "", "all done"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Finish(ctx, conv, false); err != nil {
+		t.Fatal(err)
+	}
+	ed := e.edits()
+	want := "✅ 1. a\n❌ 2. b: no page\n⏭ 3. c\n✅ 4. d\n\nall done"
+	if got := ed[len(ed)-1].Text; got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+}
+
+// A line never reached when the turn ends is what ⏭ is for.
+func TestLinesNeverReachedStaySkipped(t *testing.T) {
+	e := newEnv(t)
+	e.show(t, "a", "b", "c")
+	e.step(t, 1, Done)
+	if err := e.s.Finish(context.Background(), conv, false); err != nil {
+		t.Fatal(err)
+	}
+	ed := e.edits()
+	if got := ed[len(ed)-1].Text; got != "✅ 1. a\n⏭ 2. b\n⏭ 3. c" {
+		t.Fatalf("got %q", got)
+	}
+}

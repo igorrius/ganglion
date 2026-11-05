@@ -368,10 +368,13 @@ Live turns ([design](plans/p1-live-turns-design.md);
   👨‍💻 a tool ran, 👀 the message waits behind a turn. 👌 says at once that an addition was
   taken. The reaction comes off at the end. A quick answer shows none. Reactions are
   hints: no outbox, no retries, and a refusal or a `429` never delays a message.
-- **R-LIVE-8.** Before work with several steps the agent may show a plan: `plan.show` and
-  `plan.step`, one message per conversation, sent during the turn and edited in place with
-  ⏳ ✅ ❌ ⏭ and an outcome line, and kept in the chat. It displays and approves nothing:
-  policies decide. M3d adds its one press (R-CMD-7).
+- **R-LIVE-8.** For a result it has to put together (a report, a comparison, a selection)
+  the agent shows a plan: `plan.show` and `plan.step`, one message per conversation, sent
+  during the turn and edited in place with ⏳ ✅ ❌ ⏭ and an outcome line, and kept in the
+  chat. A question that wants a fact gets an answer with no plan. A later step that ended
+  closes the earlier ones nobody closed, and ⏭ means a line nobody reached or the model
+  skipped. It displays and approves nothing: policies decide. M3d adds its one press
+  (R-CMD-7).
 
 ### 7.3. Model router
 

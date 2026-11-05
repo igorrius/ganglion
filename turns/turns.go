@@ -18,6 +18,10 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
+// EndedForAddition is the Error of an attempt whose run the core ended because
+// a message joined the turn (R-LIVE-3). It spent a step, and it is no failure.
+const EndedForAddition = "addition"
+
 // Attempt is one model tried in a turn; Error is the error kind, empty on
 // success.
 type Attempt struct {

@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: task-selection
+why: >-
+  A second result to put together, worded otherwise than the owner's report, so the
+  rule on plans is not fitted to one sentence.
+repeat: 1
+covers:
+  - plan/**
+  - tool/builtin/plan.go
+steps:
+  - say: "Подбери мне ИБП для газового котла и сравни три варианта"
+  - facts:
+      journal:
+        - {tool: plan.show}
+        - {tool: web.fetch}

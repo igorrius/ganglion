@@ -204,6 +204,20 @@ func newPlan(transport string, steps []string) (Plan, error) {
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
+// closeUpTo marks what the end of step n means for the others: the lines before
+// it that nobody closed are behind it, and the next one starts. A model often
+// ticks only some steps, and work it did must not read as skipped.
+func (p *Plan) closeUpTo(n int) {
+	for i := range n - 1 {
+		if p.Steps[i].Status == Waiting || p.Steps[i].Status == Running {
+			p.Steps[i].Status = Done
+		}
+	}
+	if n < len(p.Steps) && p.Steps[n].Status == Waiting {
+		p.Steps[n].Status = Running
+	}
+}
+
 // Step marks step n, from 1; a step that ended starts the next one waiting.
 // outcome, when given, is the plan's last line.
 func (s *Store) Step(ctx context.Context, conv string, n int, st Status, note, outcome string) error {
@@ -223,8 +237,8 @@ func (s *Store) Step(ctx context.Context, conv string, n int, st Status, note, o
 		return fmt.Errorf("%w: step %d of %d", ErrLimit, n, len(r.plan.Steps))
 	}
 	r.plan.Steps[n-1].Status, r.plan.Steps[n-1].Note = st, note
-	if st != Waiting && st != Running && n < len(r.plan.Steps) && r.plan.Steps[n].Status == Waiting {
-		r.plan.Steps[n].Status = Running
+	if st != Waiting && st != Running {
+		r.plan.closeUpTo(n)
 	}
 	if outcome != "" {
 		r.plan.Outcome = outcome

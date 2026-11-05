@@ -12,6 +12,7 @@ import (
 
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/turns"
 )
 
 func scripted(name string, script []ScriptStep, steps ...Step) Scenario {
@@ -361,5 +362,29 @@ func TestAddsStepSendsWithoutWaitingForTheTurn(t *testing.T) {
 		Step{Facts: &Facts{Taken: &taken, History: &Text{Contains: "addition"}}})
 	if o := runOne(t, RunOptions{Scenarios: []Scenario{s}}); o.Result != ResultPassed {
 		t.Fatalf("outcome %+v\n%+v", o, o.Repeats)
+	}
+}
+
+// A long page makes the history compact, on another model, and that attempt
+// joins the turn's route: it answered nothing. Attempts past the turn's steps
+// are not answers; a fallback within them still is.
+func TestOtherModelSeesCompactionIsNoAnswer(t *testing.T) {
+	sonnet, haiku := turns.Attempt{Model: "sonnet"}, turns.Attempt{Model: "haiku"}
+	failed := turns.Attempt{Model: "sonnet", Error: "timeout"}
+	for name, tc := range map[string]struct {
+		attempts []turns.Attempt
+		steps    int
+		want     string
+	}{
+		"only the main model":       {[]turns.Attempt{sonnet}, 1, ""},
+		"compaction after a step":   {[]turns.Attempt{sonnet, haiku}, 1, ""},
+		"a fallback answered":       {[]turns.Attempt{failed, haiku}, 1, "haiku"},
+		"a fallback and compaction": {[]turns.Attempt{failed, haiku, haiku}, 1, "haiku"},
+		"a run ended, then answer":  {[]turns.Attempt{{Model: "sonnet", Error: "addition"}, sonnet, haiku}, 2, ""},
+		"no steps":                  {[]turns.Attempt{haiku}, 0, ""},
+	} {
+		if got := otherModel(tc.attempts, tc.steps, "sonnet"); got != tc.want {
+			t.Errorf("%s: %q, want %q", name, got, tc.want)
+		}
 	}
 }
