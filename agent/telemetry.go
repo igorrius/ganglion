@@ -34,6 +34,7 @@ type instruments struct {
 	additions    metric.Int64Counter
 	skippedCalls metric.Int64Counter
 	quotes       metric.Int64Counter
+	runsEnded    metric.Int64Counter
 }
 
 func newInstruments() instruments {
@@ -57,6 +58,7 @@ func newInstruments() instruments {
 	in.additions, _ = m.Int64Counter("ganglion.additions.taken", metric.WithDescription("Messages that joined a running turn."))
 	in.skippedCalls, _ = m.Int64Counter("ganglion.additions.skipped_calls", metric.WithDescription("Tool calls not run because an addition waited."))
 	in.quotes, _ = m.Int64Counter("ganglion.additions.quotes", metric.WithDescription("Answers sent as overtaken by a later message, by result: stored, with_turn."))
+	in.runsEnded, _ = m.Int64Counter("ganglion.additions.runs_ended", metric.WithDescription("CLI runs ended at a tool boundary for an addition."))
 	return in
 }
 
@@ -114,6 +116,15 @@ func (a *Agent) observeFallback(ctx context.Context, reason string) {
 // resume).
 func (a *Agent) observeEnded(ctx context.Context, by string) {
 	a.in.ended.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", by)))
+}
+
+// observeRunEnded counts a run ended for an addition and what it is estimated
+// to have spent: it reports no usage itself (R-LIVE-3).
+func (a *Agent) observeRunEnded(ctx context.Context, c router.Candidate, est provider.Usage) {
+	model := []attribute.KeyValue{attribute.String("provider", c.Provider), attribute.String("model", c.Model)}
+	a.in.runsEnded.Add(ctx, 1, metric.WithAttributes(model...))
+	a.in.tokens.Add(ctx, int64(est.InputTokens), metric.WithAttributes(append(model, attribute.String("kind", "input"))...))
+	a.in.cost.Add(ctx, c.Cost(est.InputTokens, 0), metric.WithAttributes(model...))
 }
 
 // observeQuote counts an answer sent as overtaken by a later message.

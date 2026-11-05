@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/turns"
 )
 
 const (
@@ -25,6 +28,15 @@ const (
 	// stays valid, and the model decides again with the addition in view.
 	skippedResult = "not run: the person sent a new message; decide again"
 )
+
+// errAdditionWaiting is the cause a CLI run is ended with when an addition
+// waits (R-LIVE-3), and the error Exec returns for a call it refuses for that
+// reason. It is not a failure: no fallback, no retry.
+var errAdditionWaiting = errors.New("the person sent a new message; this run ends")
+
+// outcomeEnded is call's result for a run ended for an addition. It is never
+// recorded: the turn goes on.
+const outcomeEnded turns.Outcome = "ended_for_addition"
 
 // Inbox shows what waits behind a turn's event (queue.Queue.Behind).
 type Inbox interface {
@@ -134,6 +146,28 @@ func (a *Agent) join(ctx context.Context, t *turn, msgs, added []provider.Messag
 		a.in.additions.Add(ctx, 1)
 	}
 	return msgs, added
+}
+
+// endRunIfWaiting ends the turn's CLI run if an addition waits, and reports
+// whether it did. The caller holds t.mu.
+func (a *Agent) endRunIfWaiting(ctx context.Context, t *turn) bool {
+	if len(a.waiting(ctx, t)) == 0 {
+		return false
+	}
+	t.runEnded = true
+	t.endRun(errAdditionWaiting)
+	return true
+}
+
+// runCall makes the step's model call under a context the core can end at a
+// tool boundary (R-LIVE-3).
+func (a *Agent) runCall(ctx context.Context, t *turn, task router.TaskReq, req provider.ChatRequest) (provider.ChatResponse, turns.Outcome) {
+	callCtx, end := context.WithCancelCause(ctx)
+	defer end(nil)
+	t.mu.Lock()
+	t.endRun, t.runEnded = end, false
+	t.mu.Unlock()
+	return a.call(callCtx, task, req, &t.record, t.toolCalls)
 }
 
 // quote sends text at once, marked as overtaken by a later message

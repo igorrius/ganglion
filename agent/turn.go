@@ -66,6 +66,10 @@ type turn struct {
 	kept []provider.Message
 	// quotes are the earlier answers sent so far (R-LIVE-5).
 	quotes int
+	// endRun ends the running model call for an addition, and runEnded says
+	// it was; both are guarded by mu (R-LIVE-3).
+	endRun   context.CancelCauseFunc
+	runEnded bool
 }
 
 // reply adds the answer to the person's message. A turn answers once, so

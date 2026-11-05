@@ -55,3 +55,53 @@ func TestCancelKillsTheProcessGroup(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// Ending a run for an addition cancels with a cause: the process group ends
+// as on any cancel, without waiting for the sleeper to finish.
+func TestRealRunExitsWhenEnded(t *testing.T) {
+	c, rec := fake(t, "spawn")
+	ctx, end := context.WithCancelCause(context.Background())
+	defer end(nil)
+	ended := errors.New("an addition waits")
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		for {
+			if _, err := os.Stat(rec); err == nil {
+				end(ended)
+				return
+			}
+			select {
+			case <-stop:
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}()
+	started := time.Now()
+	if _, err := c.Chat(ctx, provider.ChatRequest{Model: "haiku", Messages: history}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Chat: %v", err)
+	}
+	if took := time.Since(started); took > 5*time.Second {
+		t.Fatalf("took %v", took)
+	}
+	if !errors.Is(context.Cause(ctx), ended) {
+		t.Fatalf("cause %v", context.Cause(ctx))
+	}
+	raw, err := os.ReadFile(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(string(raw)), "child "))
+	if err != nil {
+		t.Fatalf("record %q", raw)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	deadline := time.Now().Add(3 * time.Second)
+	for !gone(pid) {
+		if time.Now().After(deadline) {
+			t.Fatalf("child %d outlived the run", pid)
+		}
+		<-time.After(10 * time.Millisecond)
+	}
+}

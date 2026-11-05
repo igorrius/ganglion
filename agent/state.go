@@ -99,12 +99,20 @@ func DecodeState(raw json.RawMessage) (State, error) {
 
 // tokens estimates the size of the state as runes/4.
 func (s State) tokens() int {
-	n := len([]rune(s.Summary))
-	for _, m := range s.Messages {
+	return (len([]rune(s.Summary)) + runesOf(s.Messages)) / 4
+}
+
+// estimateTokens is the size of messages as runes/4.
+func estimateTokens(msgs []provider.Message) int { return runesOf(msgs) / 4 }
+
+// runesOf counts the runes of messages, their tool calls included.
+func runesOf(msgs []provider.Message) int {
+	n := 0
+	for _, m := range msgs {
 		n += len([]rune(m.Content))
 		for _, tc := range m.ToolCalls {
 			n += len([]rune(tc.Name)) + len(tc.Args)
 		}
 	}
-	return n / 4
+	return n
 }

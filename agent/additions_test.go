@@ -740,3 +740,215 @@ func TestAdditionMetrics(t *testing.T) {
 		t.Errorf("the turn's log line has no count: %s", e.logs)
 	}
 }
+
+// execThenBlock is a model step that behaves like a CLI run: it runs the
+// calls through Exec and then keeps working until its context ends, reporting
+// the cause it saw.
+func execThenBlock(cause *error, names ...string) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		for _, n := range names {
+			_, _ = req.Exec(ctx, provider.ToolCall{Name: n, Args: json.RawMessage(`{}`)})
+		}
+		<-ctx.Done()
+		if cause != nil {
+			*cause = context.Cause(ctx)
+		}
+		return provider.ChatResponse{}, fmt.Errorf("provider x: %w", context.Canceled)
+	}
+}
+
+func TestCLIRunEndsAfterAToolWhenAnAdditionWaits(t *testing.T) {
+	var e *addEnv
+	add := from("also this")
+	clock := newHookTool(func() { e.put(t, add) })
+	e = newAddEnv(t, Config{}, clock)
+	var cause error
+	e.smart.push(execThenBlock(&cause, "clock"), say("answer"))
+	first := from("first")
+	e.put(t, first)
+
+	out, st := e.next(t)
+
+	if !errors.Is(cause, errAdditionWaiting) {
+		t.Fatalf("the run ended with cause %v", cause)
+	}
+	if len(out) != 1 || out[0].Text != "answer" || !slices.Equal(st.Taken, []string{add.ID}) {
+		t.Fatalf("out %+v, Taken %v", out, st.Taken)
+	}
+	msgs := e.smart.requests()[1].Messages
+	n := len(msgs)
+	if n < 3 || len(msgs[n-3].ToolCalls) != 1 || msgs[n-3].ToolCalls[0].Name != "clock" || msgs[n-2].Content != "12:00" ||
+		!strings.HasPrefix(msgs[n-1].Content, "Igor: also this") {
+		t.Fatalf("second request %q", contents(msgs))
+	}
+	if tr, err := e.turns.Get(context.Background(), first.ID); err != nil || tr.Outcome != turns.OutcomeOK {
+		t.Fatalf("turn %+v, %v", tr, err)
+	}
+}
+
+func TestCLICallIsRefusedWhenAnAdditionAlreadyWaits(t *testing.T) {
+	clock := newClock()
+	e := newAddEnv(t, Config{}, clock)
+	var refused error
+	e.smart.push(func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		e.put(t, from("don't"))
+		_, refused = req.Exec(ctx, provider.ToolCall{Name: "clock", Args: json.RawMessage(`{}`)})
+		<-ctx.Done()
+		return provider.ChatResponse{}, ctx.Err()
+	}, execAndAnswer("clock", "answer"))
+	first := from("first")
+	e.put(t, first)
+
+	e.next(t)
+
+	if !errors.Is(refused, errAdditionWaiting) {
+		t.Fatalf("Exec returned %v", refused)
+	}
+	if len(clock.calls) != 1 || clock.calls[0].N != 1 {
+		t.Fatalf("the refused call was numbered: %+v", clock.calls)
+	}
+	tr, err := e.turns.Get(context.Background(), first.ID)
+	if err != nil || len(tr.Tools) != 1 {
+		t.Fatalf("the refused call was traced: %+v, %v", tr.Tools, err)
+	}
+	for _, m := range e.state(t).Messages {
+		if strings.Contains(m.Content, errAdditionWaiting.Error()) {
+			t.Fatalf("the refusal is in the history: %q", m.Content)
+		}
+	}
+}
+
+// execAndAnswer is a CLI run that runs a tool and then answers.
+func execAndAnswer(name, answer string) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		if _, err := req.Exec(ctx, provider.ToolCall{Name: name, Args: json.RawMessage(`{}`)}); err != nil {
+			return provider.ChatResponse{}, err
+		}
+		return answerText(answer), nil
+	}
+}
+
+// Calls of one run may come in parallel: one the run's end overtook does not
+// start, whatever a read of the inbox would say.
+func TestCLICallAfterTheRunEndedIsRefused(t *testing.T) {
+	var e *addEnv
+	clock := newHookTool(func() { e.put(t, from("more")) })
+	e = newAddEnv(t, Config{}, clock)
+	var second error
+	e.smart.push(func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		_, _ = req.Exec(ctx, provider.ToolCall{Name: "clock", Args: json.RawMessage(`{}`)})
+		_, second = req.Exec(ctx, provider.ToolCall{Name: "clock", Args: json.RawMessage(`{}`)})
+		return provider.ChatResponse{}, ctx.Err()
+	}, say("answer"))
+	e.put(t, from("first"))
+	e.next(t)
+	if !errors.Is(second, errAdditionWaiting) || len(clock.calls) != 1 {
+		t.Fatalf("second call: %v, %d ran", second, len(clock.calls))
+	}
+}
+
+func TestEndedRunIsNotAFailure(t *testing.T) {
+	var e *addEnv
+	clock := newHookTool(func() { e.put(t, from("more")) })
+	e = newAddEnv(t, Config{}, clock)
+	e.smart.push(execThenBlock(nil, "clock"), say("answer"))
+	first := from("first")
+	e.put(t, first)
+
+	out, _ := e.next(t)
+
+	if n := len(e.cheap.requests()); n != 0 {
+		t.Fatalf("a fallback model was tried %d times", n)
+	}
+	if len(out) != 1 || out[0].Text != "answer" {
+		t.Fatalf("out %+v", out)
+	}
+	tr, err := e.turns.Get(context.Background(), first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Error != "" || tr.Outcome != turns.OutcomeOK || len(tr.Route) != 2 || tr.Route[0].Error != "addition" || tr.Route[1].Error != "" {
+		t.Fatalf("turn %+v", tr)
+	}
+	if strings.Contains(e.logs.String(), "model call failed") || strings.Contains(e.logs.String(), "no fallback") {
+		t.Fatalf("logged as a failure: %s", e.logs)
+	}
+}
+
+// An ended run reports no usage, so the daily limit counts what was sent, once
+// for each model call the run made.
+func TestEndedRunTokensAreEstimatedIntoTheTurn(t *testing.T) {
+	var e *addEnv
+	clock := newHookTool(func() { e.put(t, from("more")) })
+	e = newAddEnv(t, Config{}, clock)
+	e.smart.push(execThenBlock(nil, "clock"), say("answer"))
+	first := from("first")
+	e.put(t, first)
+
+	e.next(t)
+
+	est := estimateTokens(e.smart.requests()[0].Messages)
+	if est == 0 {
+		t.Fatal("no estimate")
+	}
+	tr, err := e.turns.Get(context.Background(), first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The second run's answer reports 100; two model calls in the ended one:
+	// the one that asked for the tool and the one the end cut.
+	if want := 100 + 2*est; tr.InputTokens != want {
+		t.Fatalf("input tokens %d, want %d", tr.InputTokens, want)
+	}
+}
+
+func TestAnswerRacingTheEndIsKept(t *testing.T) {
+	var e *addEnv
+	clock := newHookTool(func() { e.put(t, from("more")) })
+	e = newAddEnv(t, Config{}, clock)
+	e.smart.push(func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		_, _ = req.Exec(ctx, provider.ToolCall{Name: "clock", Args: json.RawMessage(`{}`)})
+		return answerText("racing"), nil
+	}, say("second"))
+	e.put(t, from("first"))
+
+	out, _ := e.next(t)
+
+	box := e.outbox(t)
+	if len(out) != 1 || out[0].Text != "second" || len(box) != 2 || box[0].Text != "racing" || !box[0].Superseded {
+		t.Fatalf("out %+v, outbox %+v", out, box)
+	}
+}
+
+// With no step left for a new run, ending this one would lose its answer.
+func TestLastStepDoesNotEndTheRun(t *testing.T) {
+	var e *addEnv
+	clock := newHookTool(func() { e.put(t, from("more")) })
+	cfg := Config{MaxSteps: 1}
+	e = newAddEnv(t, cfg, clock)
+	e.smart.push(execAndAnswer("clock", "answer"))
+	e.put(t, from("first"))
+	out, st := e.next(t)
+	if len(out) != 1 || out[0].Text != "answer" || len(st.Taken) != 0 {
+		t.Fatalf("out %+v, Taken %v", out, st.Taken)
+	}
+}
+
+func TestEndedRunMetrics(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	var e *addEnv
+	clock := newHookTool(func() { e.put(t, from("more")) })
+	e = newAddEnv(t, Config{}, clock)
+	e.smart.push(execThenBlock(nil, "clock"), say("answer"))
+	e.put(t, from("first"))
+	e.next(t)
+	if got := rec.Value(t, "ganglion.additions.runs_ended", nil); got != 1 {
+		t.Fatalf("runs ended = %v", got)
+	}
+	if got := rec.Value(t, "ganglion.model.tokens", map[string]string{"kind": "input"}); got <= 100 {
+		t.Fatalf("input tokens = %v: the estimate is missing", got)
+	}
+	if got := rec.Value(t, "ganglion.model.calls", map[string]string{"result": "addition"}); got != 1 {
+		t.Fatalf("calls ended = %v", got)
+	}
+}

@@ -330,7 +330,7 @@ Add to the system prompt: a later message from the same person during work belon
   - `const outcomeEnded turns.Outcome`, unexported, never recorded: `call`'s result for a run ended for an addition.
   - On `turn`: `endRun context.CancelCauseFunc`, guarded by `t.mu`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 func TestCLIRunEndsAfterAToolWhenAnAdditionWaits(t *testing.T)
@@ -354,17 +354,17 @@ func TestRealRunExitsWhenEnded(t *testing.T) // provider/claudecli
 // a fake claude that sleeps; cancelling with a cause ends its process group inside WaitDelay
 ```
 
-- [ ] **Step 2: Run:** `go test -race ./agent/ ./provider/claudecli/` Expected: FAIL.
+- [x] **Step 2: Run:** `go test -race ./agent/ ./provider/claudecli/` Expected: FAIL.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `steps`, each call runs under `callCtx, end := context.WithCancelCause(turnCtx)`, with `t.endRun = end` under `t.mu`, and `end(nil)` after. In `useTool`, when `capped`: before running, if `waiting()` is not empty, call `t.endRun(errAdditionWaiting)` and return that error, before anything is numbered. After running and logging, check again, and end the run the same way while returning the real result.
 
 In `call`, right after `try` fails and before `logFailure` and the fallback: if `errors.Is(context.Cause(ctx), errAdditionWaiting)`, append an `Attempt` with `Error: "addition"`, add the estimate of what was sent (compaction's estimator) to the usage, and return `outcomeEnded`. In `steps`, `takeExecLog` as today and `continue` on `outcomeEnded`.
 
-- [ ] **Step 4: Add the metric:** runs ended for an addition. Run: `go test -race ./agent/ ./provider/claudecli/ ./config/` Expected: PASS.
+- [x] **Step 4: Add the metric:** runs ended for an addition. Run: `go test -race ./agent/ ./provider/claudecli/ ./config/` Expected: PASS.
 
-- [ ] **Step 5: Commit**, message `agent: a CLI run ends at a tool boundary when an addition waits`.
+- [x] **Step 5: Commit**, message `agent: a CLI run ends at a tool boundary when an addition waits`.
 
 ---
 

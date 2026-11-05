@@ -149,17 +149,20 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 	for t.record.Steps < a.cfg.MaxSteps {
 		msgs, added = a.join(turnCtx, t, msgs, added, a.waiting(turnCtx, t))
 		t.record.Steps++
-		resp, got := a.call(turnCtx, task, provider.ChatRequest{Messages: a.annotate(t, msgs), Tools: tools, Exec: exec}, &t.record, t.toolCalls)
+		resp, got := a.runCall(turnCtx, t, task, provider.ChatRequest{Messages: a.annotate(t, msgs), Tools: tools, Exec: exec})
 		if ctx.Err() != nil {
 			return nil, "", got, ctx.Err()
 		}
-		if got != turns.OutcomeOK {
+		if got != turns.OutcomeOK && got != outcomeEnded {
 			return nil, "", got, nil
 		}
 		// The calls a CLI provider ran go into the history before its
 		// answer, as an API model's would, so later turns see them.
 		ran := t.takeExecLog()
 		msgs, added = append(msgs, ran...), append(added, ran...)
+		if got == outcomeEnded {
+			continue // what the run wrote is lost; the next run has every result (R-LIVE-3)
+		}
 		msg := resp.Message
 		msg.Role = provider.RoleAssistant
 		if t.noTools { // none were offered, so none run and none stay in the history (R33)

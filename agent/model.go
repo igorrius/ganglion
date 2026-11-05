@@ -27,7 +27,9 @@ func noCalls() int { return 0 }
 // trace rec. The outcome is OutcomeOK when a candidate answered,
 // OutcomeNoModel when none did, and OutcomeError when an attempt failed
 // after it ran tools (ran counts them): the next model would not know
-// those calls ran, so there is no fallback then (ADR-0036).
+// those calls ran, so there is no fallback then (ADR-0036). A run ended for an
+// addition is outcomeEnded (R-LIVE-3): the core sent what it estimates, since
+// such a run reports no usage, and made one model call per tool call plus one.
 func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.ChatRequest, rec *turns.Turn, ran callCount) (provider.ChatResponse, turns.Outcome) {
 	cands, err := a.d.Router.Route(ctx, task)
 	if err != nil {
@@ -48,6 +50,13 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.Chat
 		req.Model = c.Model
 		before := ran()
 		resp, err := a.try(ctx, p, c, task, req)
+		if errors.Is(err, errAdditionWaiting) {
+			rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model, Error: addedKind})
+			est := provider.Usage{InputTokens: estimateTokens(req.Messages) * (ran() - before + 1)}
+			addUsage(rec, c, est)
+			a.observeRunEnded(ctx, c, est)
+			return provider.ChatResponse{}, outcomeEnded
+		}
 		if err == nil {
 			rec.Route = append(rec.Route, turns.Attempt{Provider: c.Provider, Model: c.Model})
 			addUsage(rec, c, resp.Usage)
@@ -69,6 +78,10 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.Chat
 	return provider.ChatResponse{}, turns.OutcomeNoModel
 }
 
+// addedKind is the error kind of a run ended for an addition, in the trace
+// and on the calls metric. It is not a failure.
+const addedKind = "addition"
+
 // logFailure logs a failed model call.
 func (a *Agent) logFailure(rec *turns.Turn, c router.Candidate, err error) {
 	attrs := []any{"conv", rec.Conv, "provider", c.Provider, "model", c.Model, "kind", errorKind(err)}
@@ -88,6 +101,9 @@ func (a *Agent) try(ctx context.Context, p provider.Provider, c router.Candidate
 	started := time.Now()
 	resp, err := p.Chat(callCtx, req)
 	cancel()
+	if err != nil && errors.Is(context.Cause(ctx), errAdditionWaiting) {
+		err = errAdditionWaiting
+	}
 	if err == nil && strings.TrimSpace(resp.Message.Content) == "" && len(resp.Message.ToolCalls) == 0 {
 		err = &provider.Error{Provider: c.Provider, Kind: provider.KindUnavailable, Msg: "empty answer"}
 	}
@@ -97,6 +113,9 @@ func (a *Agent) try(ctx context.Context, p provider.Provider, c router.Candidate
 }
 
 func errorKind(err error) string {
+	if errors.Is(err, errAdditionWaiting) {
+		return addedKind
+	}
 	if e, ok := errors.AsType[*provider.Error](err); ok {
 		return string(e.Kind)
 	}

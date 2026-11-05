@@ -159,11 +159,17 @@ func (t *turn) toolCalls() int {
 // in parallel, and a later call must see the taint an earlier external
 // result set (ADR-0036), with the call numbers continuing the
 // turn's count. A capped call (a CLI provider's) past the turn's budget
-// is refused with errCallLimit before it is numbered, run or journalled.
+// is refused with errCallLimit before it is numbered, run or journalled, and
+// so is one that an addition overtook, which also ends the run with
+// errAdditionWaiting (R-LIVE-2). A call that finished with an addition waiting
+// returns its real result and ends the run (R-LIVE-3).
 func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall, capped bool) (string, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if capped {
+		if t.runEnded || a.endRunIfWaiting(ctx, t) {
+			return "", errAdditionWaiting
+		}
 		if t.execCalls >= a.cfg.MaxSteps {
 			return "", errCallLimit
 		}
@@ -173,6 +179,7 @@ func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall, ca
 	text, err := a.applyTool(ctx, t, call)
 	if capped {
 		t.logExec(call, text, err)
+		a.endRunIfWaiting(ctx, t)
 	}
 	return text, err
 }

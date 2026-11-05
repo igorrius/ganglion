@@ -52,6 +52,10 @@ tool call the agent reads what waits behind the turn's event. No tool call start
 waits. An answer it overtook goes out at once, marked as superseded, and `Complete` marks
 what the turn took as done in its one transaction.
 
+On the CLI route a call that returns with an addition waiting ends the run: the core cancels it
+with a cause of its own and starts a new one with the whole history. That is not a failure,
+a fallback or a retry.
+
 ```mermaid
 sequenceDiagram
     participant P as Person
