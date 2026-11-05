@@ -1344,6 +1344,14 @@ Reviewed at each gate.
     2026-11-05): the transport can send documents, but no tool makes one. It said it had
     none and offered text to copy.
   - Tables in a phone's width: a wide table goes out as a monospace block that wraps badly.
+  - A command that shows an admin what the last turn did, in plain words and with no model:
+    steps, tools, model, tokens, time, messages that joined it. The data is already stored
+    (`turns`, the journal; `turn.show` in `ganglion mcp`), but only an MCP client or the
+    database can read a whole turn. It matters more once others run the node (owner,
+    2026-11-05).
+  - A classifier that tells a question from a task, as a candidate first client of "Models
+    by purpose": only if the main model's own judgement, given a clearer rule, is measured
+    and falls short (owner, 2026-11-05).
 - Hooks and pipelines: an internal n8n (owner, 2026-11-03).
   - **Hooks** are module triggers on the node's own events, beside `cron`
     and `tool` (7.10's module ABI). Examples: before or after a tool call,
