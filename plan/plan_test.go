@@ -25,7 +25,6 @@ var t0 = time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 type box struct {
 	mu   sync.Mutex
 	msgs []event.Outgoing
-	refs map[string]string
 	err  error
 }
 
@@ -47,19 +46,11 @@ func (b *box) Enqueue(_ context.Context, msgs ...event.Outgoing) error {
 	return nil
 }
 
-func (b *box) SentRef(_ context.Context, key string) (string, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.refs[key], nil
-}
-
 type env struct {
-	s     *Store
-	db    *sql.DB
-	box   *box
-	now   time.Time
-	waits []time.Duration
-	onW   func()
+	s   *Store
+	db  *sql.DB
+	box *box
+	now time.Time
 }
 
 func newEnv(t *testing.T) *env {
@@ -70,14 +61,8 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	e := &env{db: db, box: &box{refs: map[string]string{}}, now: t0}
-	e.s, err = New(ctx, db, e.box, WithClock(func() time.Time { return e.now }), WithWait(func(_ context.Context, d time.Duration) error {
-		e.waits = append(e.waits, d)
-		if e.onW != nil {
-			e.onW()
-		}
-		return nil
-	}))
+	e := &env{db: db, box: &box{}, now: t0}
+	e.s, err = New(ctx, db, e.box, WithClock(func() time.Time { return e.now }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,9 +82,6 @@ func (e *env) show(t *testing.T, steps ...string) {
 	}
 }
 
-// delivered says the first message went out, as message 77.
-func (e *env) delivered() { e.box.refs[firstKey] = "77" }
-
 func (e *env) step(t *testing.T, n int, st Status) {
 	t.Helper()
 	if err := e.s.Step(context.Background(), conv, n, st, "", ""); err != nil {
@@ -110,7 +92,7 @@ func (e *env) step(t *testing.T, n int, st Status) {
 func (e *env) edits() []event.Outgoing {
 	var out []event.Outgoing
 	for _, m := range e.box.msgs {
-		if m.Edit != "" {
+		if m.EditOf != "" {
 			out = append(out, m)
 		}
 	}
@@ -133,7 +115,7 @@ func TestShowEnqueuesOneMessageAtOnce(t *testing.T) {
 		t.Fatalf("outbox %+v", e.box.msgs)
 	}
 	m := e.box.msgs[0]
-	if m.IdemKey != firstKey || m.Transport != "telegram" || m.Conv != conv || len(m.Buttons) != 0 || m.Edit != "" {
+	if m.IdemKey != firstKey || m.Transport != "telegram" || m.Conv != conv || len(m.Buttons) != 0 || m.EditOf != "" {
 		t.Fatalf("message %+v", m)
 	}
 	if m.Text != "⏳ 1. one\n· 2. two" {
@@ -144,14 +126,13 @@ func TestShowEnqueuesOneMessageAtOnce(t *testing.T) {
 func TestSecondShowEditsTheSameMessage(t *testing.T) {
 	e := newEnv(t)
 	e.show(t, "one")
-	e.delivered()
 	e.now = e.now.Add(3 * time.Second)
 	e.show(t, "new one", "new two")
 	if len(e.box.msgs) != 2 {
 		t.Fatalf("outbox %+v", e.box.msgs)
 	}
 	ed := e.edits()
-	if len(ed) != 1 || ed[0].Edit != "77" || !strings.Contains(ed[0].Text, "new two") {
+	if len(ed) != 1 || ed[0].EditOf != firstKey || !strings.Contains(ed[0].Text, "new two") {
 		t.Fatalf("edits %+v", ed)
 	}
 }
@@ -164,7 +145,7 @@ func TestRerunFindsTheActivePlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, m := range e.box.msgs {
-		if m.Edit == "" && m.IdemKey != firstKey {
+		if m.EditOf == "" && m.IdemKey != firstKey {
 			t.Fatalf("a second plan message: %+v", m)
 		}
 	}
@@ -174,7 +155,6 @@ func TestStepEditsThrottledAndCoalesced(t *testing.T) {
 	rec := telemetrytest.Install(t)
 	e := newEnv(t)
 	e.show(t, "a", "b", "c", "d")
-	e.delivered()
 	for i, at := range []time.Duration{500, 1000, 1500} {
 		e.now = t0.Add(at * time.Millisecond)
 		e.step(t, i+1, Done)
@@ -203,7 +183,6 @@ func TestStepEditsThrottledAndCoalesced(t *testing.T) {
 func TestEditPastTheThrottleGoesAtOnce(t *testing.T) {
 	e := newEnv(t)
 	e.show(t, "a", "b")
-	e.delivered()
 	e.now = t0.Add(3 * time.Second)
 	e.step(t, 1, Done)
 	if ed := e.edits(); len(ed) != 1 {
@@ -214,7 +193,6 @@ func TestEditPastTheThrottleGoesAtOnce(t *testing.T) {
 func TestStepMarksTheNextRunning(t *testing.T) {
 	e := newEnv(t)
 	e.show(t, "a", "b", "c")
-	e.delivered()
 	e.now = t0.Add(3 * time.Second)
 	e.step(t, 1, Done)
 	if got := e.edits()[0].Text; got != "✅ 1. a\n⏳ 2. b\n· 3. c" {
@@ -225,7 +203,6 @@ func TestStepMarksTheNextRunning(t *testing.T) {
 func TestStepCarriesNoteAndOutcome(t *testing.T) {
 	e := newEnv(t)
 	e.show(t, "a")
-	e.delivered()
 	e.now = t0.Add(3 * time.Second)
 	if err := e.s.Step(context.Background(), conv, 1, Failed, "no\nspace", "nothing freed"); err != nil {
 		t.Fatal(err)
@@ -238,7 +215,6 @@ func TestStepCarriesNoteAndOutcome(t *testing.T) {
 func TestFinishFlushesAndClosesUnfinishedLines(t *testing.T) {
 	e := newEnv(t)
 	e.show(t, "a", "b", "c")
-	e.delivered()
 	if err := e.s.Finish(context.Background(), conv, false); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +230,6 @@ func TestFinishFlushesAndClosesUnfinishedLines(t *testing.T) {
 func TestFinishKeepsAParkedPlan(t *testing.T) {
 	e := newEnv(t)
 	e.show(t, "a", "b")
-	e.delivered()
 	if err := e.s.Finish(context.Background(), conv, true); err != nil {
 		t.Fatal(err)
 	}
@@ -275,38 +250,22 @@ func TestFinishWithNoPlanDoesNothing(t *testing.T) {
 	}
 }
 
-func TestEditWaitsForTheMessageRef(t *testing.T) {
+// Review: the end of a turn does not wait for the first message: the sender
+// finds it when the edit's turn comes, so the plan closes under the answer even
+// when delivery is held up.
+func TestFinishClosesAPlanNotDeliveredYet(t *testing.T) {
 	e := newEnv(t)
-	e.show(t, "a")
-	e.onW = func() {
-		if len(e.waits) == 3 {
-			e.delivered()
-		}
-	}
+	e.show(t, "a", "b")
 	if err := e.s.Finish(context.Background(), conv, false); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.edits()) != 1 {
-		t.Fatalf("edits %+v", e.box.msgs)
+	ed := e.edits()
+	if len(ed) != 1 || ed[0].EditOf != firstKey || ed[0].Text != "⏭ 1. a\n⏭ 2. b" {
+		t.Fatalf("edits %+v", ed)
 	}
-}
-
-func TestEditGivesUpWaitingForTheMessageRef(t *testing.T) {
-	e := newEnv(t)
-	e.show(t, "a")
-	if err := e.s.Finish(context.Background(), conv, false); err != nil {
-		t.Fatal(err)
-	}
-	var total time.Duration
-	for _, d := range e.waits {
-		total += d
-	}
-	if total > refWait || total == 0 || len(e.edits()) != 0 {
-		t.Fatalf("waited %v, edits %+v", total, e.edits())
-	}
-	var dirty int
-	if err := e.db.QueryRow(`SELECT dirty FROM plans WHERE conv = ?`, conv).Scan(&dirty); err != nil || dirty != 1 {
-		t.Fatalf("dirty %d, %v", dirty, err)
+	var active, dirty int
+	if err := e.db.QueryRow(`SELECT active, dirty FROM plans WHERE conv = ?`, conv).Scan(&active, &dirty); err != nil || active != 0 || dirty != 0 {
+		t.Fatalf("active %d, dirty %d, %v", active, dirty, err)
 	}
 }
 

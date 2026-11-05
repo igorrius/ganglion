@@ -7,6 +7,7 @@ package outbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -194,6 +195,13 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 		return false, nil
 	}
 
+	msg, err := s.withEditTarget(ctx, msg)
+	if err != nil {
+		return false, err
+	}
+	if msg.EditOf != "" && msg.Edit == "" { // given up on, or it never had a reference
+		return s.failed(ctx, log, p, fmt.Errorf("outbox: no message to edit: %w", transport.ErrPermanent))
+	}
 	parts := []event.Outgoing{msg}
 	if pt, ok := t.(transport.Parter); ok {
 		parts = pt.Parts(msg)
@@ -225,6 +233,17 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	s.countSent(ctx, msg)
 	log.Info("outbox: sent", "parts", len(parts), "len", len(msg.Text))
 	return true, nil
+}
+
+// withEditTarget fills in the reference of the message EditOf names, "" when that
+// one has none. A conversation is delivered in order, so its turn has passed.
+func (s *Sender) withEditTarget(ctx context.Context, msg event.Outgoing) (event.Outgoing, error) {
+	if msg.EditOf == "" {
+		return msg, nil
+	}
+	ref, err := s.ob.SentRef(ctx, msg.EditOf)
+	msg.Edit = ref
+	return msg, err
 }
 
 // countSent counts a delivered message and its attachment.

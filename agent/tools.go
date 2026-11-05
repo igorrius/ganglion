@@ -27,6 +27,10 @@ type AdminFunc func(ctx context.Context, principal string) (bool, error)
 // MaxSteps, since ticks would use it all (ADR-0052), but they are not free.
 const maxPlanCalls = 32
 
+// errPlanLimit refuses a plan call past maxPlanCalls. The real work may have
+// budget left, so it does not tell the model to stop, as errCallLimit does.
+var errPlanLimit = errors.New("no more plan updates in this turn; go on with the work")
+
 // errCallLimit refuses a CLI provider's tool call once the turn's
 // budget, MaxSteps calls, is spent (ADR-0036); the model reads it.
 var errCallLimit = errors.New("tool call limit for this turn reached; answer with what you have")
@@ -189,14 +193,14 @@ func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall, ca
 	return text, err
 }
 
-// spend counts the call against the turn's budget, or refuses it with
-// errCallLimit: a plan call against its own ceiling, on both routes; a CLI
-// provider's other calls against MaxSteps. The caller holds t.mu.
+// spend counts the call against the turn's budget, or refuses it: a plan call
+// against its own ceiling, on both routes (errPlanLimit); a CLI provider's other
+// calls against MaxSteps (errCallLimit). The caller holds t.mu.
 func (t *turn) spend(call provider.ToolCall, capped bool, maxSteps int) error {
 	switch {
 	case isPlanCall(call):
 		if t.planCalls >= maxPlanCalls {
-			return errCallLimit
+			return errPlanLimit
 		}
 		t.planCalls++
 	case capped:

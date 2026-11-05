@@ -375,7 +375,9 @@ func TestCrashHarnessAgent(t *testing.T) {
 	stop()
 
 	groups, taken := n.turnGroups(t)
+	n.checkInbox(t, want, groups)
 	n.checkAnswers(t, want, groups, iters)
+	n.checkModelSaw(t, groups)
 	n.checkPhotos(t, metrics, iters)
 	n.checkFacts(t, groups)
 	n.checkJournal(t, len(groups), len(want), metrics)
@@ -439,8 +441,36 @@ func (n *crashAgentNode) turnGroups(t *testing.T) (groups [][]string, taken int)
 	return groups, taken
 }
 
-// checkAnswers wants the answers in order, and an answer for every turn: the
-// turn's reply names the newest message it took, an earlier answer an older one.
+// checkInbox wants every message of the harness in the inbox, once: one that
+// never got there would have no turn to answer it.
+func (n *crashAgentNode) checkInbox(t *testing.T, want []string, groups [][]string) {
+	t.Helper()
+	got := slices.Concat(groups...)
+	slices.Sort(got)
+	sorted := slices.Clone(want)
+	slices.Sort(sorted)
+	if !slices.Equal(got, sorted) {
+		t.Errorf("the inbox and the messages sent differ:\n got %v\nwant %v", got, sorted)
+	}
+}
+
+// checkModelSaw wants every message of a turn in one request to the model: a
+// message marked as taken that the model never read is a lost message.
+func (n *crashAgentNode) checkModelSaw(t *testing.T, groups [][]string) {
+	t.Helper()
+	requests := n.model.Requests()
+	for _, g := range groups {
+		if !slices.ContainsFunc(requests, func(r providertest.Request) bool {
+			users := userMarkers(r)
+			return !slices.ContainsFunc(g, func(m string) bool { return !slices.Contains(users, m) })
+		}) {
+			t.Errorf("no request to the model holds all of the turn %v", g)
+		}
+	}
+}
+
+// checkAnswers wants the answers in order, and for every turn its reply: it names
+// the newest message the turn took, as an earlier answer names an older one.
 func (n *crashAgentNode) checkAnswers(t *testing.T, want []string, groups [][]string, kills int) {
 	t.Helper()
 	got, other := n.answers()
@@ -455,8 +485,8 @@ func (n *crashAgentNode) checkAnswers(t *testing.T, want []string, groups [][]st
 		pos = i
 	}
 	for _, g := range groups {
-		if !slices.ContainsFunc(g, func(m string) bool { return slices.Contains(compact, m) }) {
-			t.Errorf("no answer for the turn of %v", g)
+		if !slices.Contains(compact, g[len(g)-1]) {
+			t.Errorf("no reply to the turn of %v", g)
 		}
 	}
 	if dups := len(got) - len(compact); dups > kills {

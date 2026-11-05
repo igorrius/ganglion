@@ -227,6 +227,21 @@ func TestDoneClearsAfterAPause(t *testing.T) {
 
 // A message whose turn never reported its end loses its reaction anyway, and
 // the entry goes.
+// Review: a change that fails does not leave the old reaction for good: the end
+// of the turn still takes it off, once.
+func TestFailedChangeStillComesOffAtTheEnd(t *testing.T) {
+	e := newReactEnv(t)
+	e.report("5", event.StageThinking)
+	e.at(8)
+	e.fake.FailNext("setMessageReaction", 502, 0)
+	e.report("5", event.StageTool)
+	e.at(11)
+	e.report("5", event.StageDone)
+	e.at(12)
+	e.at(13)
+	wantShown(t, e, emojiThinking, "")
+}
+
 func TestOldEntryIsClearedAndDropped(t *testing.T) {
 	e := newReactEnv(t)
 	e.report("5", event.StageQueued)

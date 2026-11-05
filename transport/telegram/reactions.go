@@ -229,7 +229,7 @@ func (r *Reactor) due(now time.Time) []reactionCall {
 		}
 		switch {
 		case e.ended && now.Before(e.endAt):
-		case e.ended && (e.shown == "" || e.refused):
+		case e.ended && e.shown == "":
 			delete(r.msgs, key)
 		case e.ended:
 			out = append(out, reactionCall{key, ""})

@@ -533,3 +533,47 @@ func TestAttachmentTelemetry(t *testing.T) {
 		t.Errorf("photo bytes = %v", got)
 	}
 }
+
+// A plan's edit names its first message by key: the sender delivers a
+// conversation in order, so by its turn that message has its reference, and the
+// turn that stored the edit need not wait for it (ADR-0052).
+func TestEditOfFindsTheDeliveredMessage(t *testing.T) {
+	e := newEnv(t)
+	first := out("telegram:a", "a1")
+	edit := out("telegram:a", "a2")
+	edit.EditOf = "a1"
+	e.enqueue(t, first, edit)
+	var got string
+	f := newFake(e.clock, func(m event.Outgoing, _ int) error {
+		if m.IdemKey == "a2" {
+			got = m.Edit
+		}
+		return nil
+	})
+	f.refs = map[string]string{"a1": "77"}
+	e.start(t, f)
+	e.runUntil(t, t0.Add(time.Minute), func() bool { return len(f.records()) == 2 })
+	if got != "77" {
+		t.Fatalf("edit of %q, want 77", got)
+	}
+}
+
+// With the first message given up on there is nothing to edit: the edit fails
+// and the conversation moves on.
+func TestEditOfAMessageThatFailedDoesNotBlock(t *testing.T) {
+	e := newEnv(t)
+	edit := out("telegram:a", "a2")
+	edit.EditOf = "a1"
+	e.enqueue(t, out("telegram:a", "a1"), edit, out("telegram:a", "a3"))
+	f := newFake(e.clock, func(m event.Outgoing, _ int) error {
+		if m.IdemKey == "a1" {
+			return fmt.Errorf("chat not found: %w", transport.ErrPermanent)
+		}
+		return nil
+	})
+	e.start(t, f)
+	e.runUntil(t, t0.Add(time.Minute), func() bool { return slices.Contains(f.delivered(), "a3") })
+	if got := f.delivered(); !slices.Equal(got, []string{"a3"}) {
+		t.Fatalf("delivered %v", got)
+	}
+}

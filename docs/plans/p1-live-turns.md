@@ -502,6 +502,7 @@ func TestFinishKeepsAParkedPlan(t *testing.T)
 
 func TestEditWaitsForTheMessageRef(t *testing.T)
 // SentRef "" at first: Finish waits (injected after) up to 5 s; still "" leaves it dirty, with no error
+// (replaced in review: the edit names the first message by key, EditOf, and the sender finds it; see the ledger's ruling)
 
 func TestLimitsAreRefused(t *testing.T)
 // table: 0 steps, 21 steps, a 201-rune step, a newline in a step (joined), an unknown n in Step

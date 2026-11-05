@@ -1184,7 +1184,7 @@ func TestPlanCallsHaveTheirOwnCeiling(t *testing.T) {
 	})
 	e.put(t, from("first"))
 	e.next(t)
-	if !errors.Is(last, errCallLimit) || len(step.calls) != maxPlanCalls {
+	if !errors.Is(last, errPlanLimit) || len(step.calls) != maxPlanCalls {
 		t.Fatalf("last %v, %d ran", last, len(step.calls))
 	}
 }

@@ -141,16 +141,18 @@ func measure(t *testing.T, label string, extraEnv []string, replies func([]teleg
 	time.Sleep(2 * time.Second)
 	idle := procKB(t, cmd.Process.Pid, "VmRSS")
 
+	// One at a time, each after the last reply: messages sent at once would join
+	// one turn (R-LIVE-1), and this measures 1,000 turns.
 	const n = 1000
+	deadline := time.Now().Add(5 * time.Minute)
 	for i := range n {
 		fake.AddMessage(telegramtest.Incoming{ChatID: adminID, UserID: adminID, Text: fmt.Sprintf("message %04d with some text in it", i)})
-	}
-	deadline := time.Now().Add(5 * time.Minute)
-	for replies(fake.Sent()) < n {
-		if time.Now().After(deadline) {
-			t.Fatalf("only %d of %d replies", replies(fake.Sent()), n)
+		for replies(fake.Sent()) <= i {
+			if time.Now().After(deadline) {
+				t.Fatalf("only %d of %d replies", replies(fake.Sent()), n)
+			}
+			time.Sleep(time.Millisecond)
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
 	time.Sleep(time.Second)
 	after := procKB(t, cmd.Process.Pid, "VmRSS")

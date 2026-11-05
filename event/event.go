@@ -63,6 +63,11 @@ type Outgoing struct {
 	// sending a new one; its buttons are replaced by Buttons (none removes
 	// them). An Edit without Text changes only the buttons.
 	Edit string `json:",omitempty"`
+	// EditOf is the IdemKey of a message to change in place, for a message
+	// stored before that one has a Message.Ref: the sender finds the reference
+	// when this one's turn comes (ADR-0052). A conversation is delivered in
+	// order, so the other is delivered or given up on by then.
+	EditOf string `json:",omitempty"`
 	// Ack is a Decision.Query: the message acknowledges that press with
 	// Text as a short notice (a Telegram toast) and changes no message
 	// (ruling R40).

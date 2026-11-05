@@ -56,10 +56,6 @@ const (
 	TTL = time.Hour
 	// editEvery spaces out edits, for Telegram's limits and against flicker.
 	editEvery = 2 * time.Second
-	// refWait bounds how long the end of a turn waits for the first message to
-	// be delivered, since only then can it be edited.
-	refWait = 5 * time.Second
-	refPoll = 250 * time.Millisecond
 )
 
 // Errors a call can end with.
@@ -104,18 +100,13 @@ func Render(p Plan) string {
 // Outbox is where the plan's messages go (queue.Outbox).
 type Outbox interface {
 	Enqueue(ctx context.Context, msgs ...event.Outgoing) error
-	SentRef(ctx context.Context, idemKey string) (string, error)
 }
-
-// WaitFunc waits for d or until ctx ends.
-type WaitFunc func(ctx context.Context, d time.Duration) error
 
 // Store keeps the conversations' plans.
 type Store struct {
 	db    *sql.DB
 	box   Outbox
 	now   func() time.Time
-	wait  WaitFunc
 	shown metric.Int64Counter
 	edits metric.Int64Counter
 }
@@ -125,9 +116,6 @@ type Option func(*Store)
 
 // WithClock sets the clock; the default is time.Now.
 func WithClock(now func() time.Time) Option { return func(s *Store) { s.now = now } }
-
-// WithWait sets how the Store waits for a delivered message.
-func WithWait(w WaitFunc) Option { return func(s *Store) { s.wait = w } }
 
 // New migrates the "plan" component and returns the store.
 func New(ctx context.Context, db *sql.DB, box Outbox, opts ...Option) (*Store, error) {
@@ -147,20 +135,11 @@ func New(ctx context.Context, db *sql.DB, box Outbox, opts ...Option) (*Store, e
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{db: db, box: box, now: time.Now, wait: sleep, shown: shown, edits: edits}
+	s := &Store{db: db, box: box, now: time.Now, shown: shown, edits: edits}
 	for _, o := range opts {
 		o(s)
 	}
 	return s, nil
-}
-
-func sleep(ctx context.Context, d time.Duration) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(d):
-		return nil
-	}
 }
 
 // row is a stored plan.
@@ -258,9 +237,8 @@ func (s *Store) Step(ctx context.Context, conv string, n int, st Status, note, o
 
 // Finish ends the turn's part in the plan. kept leaves its lines as they are,
 // for a press to go on (a parked call); otherwise lines not finished become ⏭
-// and the plan closes. Either way what changed goes out now, past the throttle,
-// waiting a bounded time for the first message to be delivered. A conversation
-// with no active plan is nothing to do.
+// and the plan closes. Either way what changed goes out now, past the throttle.
+// A conversation with no active plan is nothing to do.
 func (s *Store) Finish(ctx context.Context, conv string, kept bool) error {
 	now := s.now()
 	r, found, err := s.load(ctx, conv, now)
@@ -290,45 +268,22 @@ func (s *Store) changed(ctx context.Context, r row, now time.Time) error {
 	return s.flush(ctx, r, now, false)
 }
 
-// flush sends the plan as an edit when it may, and stores the row. A message not
-// delivered yet leaves it dirty, with no error: the plan is only progress.
+// flush sends the plan as an edit when it may, and stores the row. The edit names
+// the first message by key, so it needs no delivered reference: the sender finds
+// it in its turn, and the end of a turn never waits for a delivery.
 func (s *Store) flush(ctx context.Context, r row, now time.Time, final bool) error {
 	if !final && now.Sub(r.lastEdit) < editEvery {
 		s.edits.Add(ctx, 1, metric.WithAttributes(attribute.String("result", "coalesced")))
 		return s.save(ctx, r, now)
 	}
-	ref, err := s.messageRef(ctx, r.idem, final)
-	if err != nil {
-		return err
-	}
-	if ref == "" {
-		return s.save(ctx, r, now)
-	}
 	key := "plan:" + r.idem + ":v" + strconv.Itoa(r.version)
-	m := event.Outgoing{IdemKey: key, Transport: r.plan.Transport, Conv: r.conv, Text: Render(r.plan), Edit: ref}
+	m := event.Outgoing{IdemKey: key, Transport: r.plan.Transport, Conv: r.conv, Text: Render(r.plan), EditOf: showKey(r.idem)}
 	if err := s.box.Enqueue(ctx, m); err != nil {
 		return fmt.Errorf("plan: edit: %w", err)
 	}
 	s.edits.Add(ctx, 1, metric.WithAttributes(attribute.String("result", "sent")))
 	r.dirty, r.lastEdit = false, now
 	return s.save(ctx, r, now)
-}
-
-// messageRef finds the first message; at the end of a turn it waits a bounded
-// time for it to be delivered.
-func (s *Store) messageRef(ctx context.Context, idem string, wait bool) (string, error) {
-	for waited := time.Duration(0); ; waited += refPoll {
-		ref, err := s.box.SentRef(ctx, showKey(idem))
-		if err != nil {
-			return "", fmt.Errorf("plan: ref: %w", err)
-		}
-		if ref != "" || !wait || waited+refPoll > refWait {
-			return ref, nil
-		}
-		if s.wait(ctx, refPoll) != nil {
-			return "", nil // the bound ran out: the plan stays dirty
-		}
-	}
 }
 
 // load returns the conversation's active plan; one past its TTL counts as closed.
