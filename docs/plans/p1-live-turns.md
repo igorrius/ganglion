@@ -99,19 +99,19 @@ Expected: one line "ending the run: within the bar" or "over the bar: stop".
 - Create: `docs/adr/0050-additions-join-a-running-turn.md`, `docs/adr/0051-status-reactions-outside-the-outbox.md`, `docs/adr/0052-a-plan-is-delivered-during-its-turn.md`
 - Modify: `docs/adr/README.md`
 
-- [ ] **Step 1: Update the spec**
+- [x] **Step 1: Update the spec**
 
 R-AGT-1 stays one turn at a time and gains "a turn may take the messages behind it" (R-LIVE-1..). R-DLV-4
 gains the exception for the earlier answer and the plan. "Not now" gains `/stop`, a reaction chosen by the
 model, text a CLI run wrote before it was ended (`stream-json`), and reactions in groups (this last replaces
 the private-chat half of the entry at spec line 1268).
 
-- [ ] **Step 2: Add the milestone to the phase plan**
+- [x] **Step 2: Add the milestone to the phase plan**
 
 Section `#### M3 · Live turns`, before M3d, tasks 3.28 additions, 3.29 reactions, 3.30 the plan's display.
 M3d's 3.24 keeps only the press; note in the M3d design's 7.1 that the display moved here.
 
-- [ ] **Step 3: Write the three ADRs from `docs/adr/template.md`**, Status Proposed, each with at least two options and a Security section:
+- [x] **Step 3: Write the three ADRs from `docs/adr/template.md`**, Status Proposed, each with at least two options and a Security section:
 
 - 0050: end the run vs stdin (with task 0's numbers); the taking rule (design 3.4); `Taken` in `Complete`; a
   rerun's call numbers. Note there: `c.Key()` may name a different call after a rerun with additions, and it
@@ -120,9 +120,9 @@ M3d's 3.24 keeps only the press; note in the M3d design's 7.1 that the display m
 - 0051: outside the outbox vs through it; the threshold is a starting value.
 - 0052: `Outbox.Enqueue` during a turn vs at `Complete`; the plan table.
 
-- [ ] **Step 4: Ask the owner to accept the ADRs.** Do not start task 2 on a rejected one.
+- [x] **Step 4: Ask the owner to accept the ADRs.** Do not start task 2 on a rejected one.
 
-- [ ] **Step 5: Commit**, message `docs: live turns in the spec, the phase plan and three ADRs`.
+- [x] **Step 5: Commit**, message `docs: live turns in the spec, the phase plan and three ADRs`.
 
 ---
 

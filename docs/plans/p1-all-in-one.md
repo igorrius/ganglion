@@ -221,6 +221,20 @@ answers 404.
 | 3.8 End to end on the test bot: message → inbox → model → tools → outbox → reply, under the M2 crash harness | 10.2 acceptance for turns |
 | 3.20 Chatlab: the agent tested by talking to it, over the fake Bot API | Section 8 of the [design](p1-m3c-chatlab-design.md) holds: the checks the owner could not run pass through `chatlab run` or report what is wrong; seeded faults turn their scenarios red; the language problem has a baseline, a fix and a result; `TestLabStaysOutOfTheBinary` passes |
 
+#### M3 · Live turns
+
+Before M3d. Design: [p1-live-turns-design.md](p1-live-turns-design.md); plan:
+[p1-live-turns.md](p1-live-turns.md); spec R-LIVE-1..8. Decisions:
+[ADR-0050](../adr/0050-additions-join-a-running-turn.md),
+[ADR-0051](../adr/0051-status-reactions-outside-the-outbox.md),
+[ADR-0052](../adr/0052-a-plan-is-delivered-during-its-turn.md) (Proposed).
+
+| Task | Done when |
+|---|---|
+| 3.28 Additions: a message written during a turn joins it at the next boundary, on both routes (R-LIVE-1..6, ADR-0050) | An addition during a tool gets one final answer that takes both messages into account; an earlier answer goes out as a collapsed quote; a command or another person's message waits; `make crash-agent` holds with additions |
+| 3.29 Status reactions: work that takes long shows one, an addition shows 👌 (R-LIVE-7, ADR-0051) | A quick answer makes no API call; a refusal or a `429` delays no message; a stranger gets none; the owner settles the threshold live |
+| 3.30 The plan's display: `plan.show` and `plan.step`, one message edited during the turn (R-LIVE-8, ADR-0052) | A task with three steps shows one plan with edits before the final reply; a parked plan survives until the press; no button appears |
+
 #### M3d · Host commands and plans
 
 Design: [p1-m3d-host-commands-design.md](p1-m3d-host-commands-design.md)
@@ -236,7 +250,7 @@ step-by-step plan is written after M3c.
 | 3.21 `host.stats` and the node's own files: memory, load, disk, the sizes of the node's folders; the claude CLI work directory cleaned by age (R-CMD-5, R-CMD-8) | Works in a 128 MB container with `host.exec` off; the work directory stops growing |
 | 3.22 `host.exec`: argv without a shell, the class table with consequence lines in English, Russian and Ukrainian, output capped, redacted and tainting, journal, kill switch (R-CMD-1, 2, 6) | Read runs by itself; content, change and script ask with the fixed line; forbidden never runs, press or not |
 | 3.23 Long commands: past a short wait a command continues in the background and its completion resumes the conversation; time limit, process group, parallel cap (R-CMD-4) | A `du` over a large tree answers in the same conversation after the turn has ended |
-| 3.24 Plans: `plan.show` and `plan.step`, the message edited in place and kept with the outcome; one press approves the listed commands exactly; a change outside the plan gets its own press (R-CMD-7, ADR-0040) | "Clean the Go cache and the Docker images" runs after one press; `docker rm` not in the plan does not run without its own press |
+| 3.24 Plans: on the display built in 3.30, one press approves the listed commands exactly; a change outside the plan gets its own press (R-CMD-7, ADR-0040) | "Clean the Go cache and the Docker images" runs after one press; `docker rm` not in the plan does not run without its own press |
 | 3.25 Commands in task grants: exact argv with consequence lines in the creation confirmation; a run outside them is denied with one notice (R-POL-8) | A weekly `docker image prune -af` runs without a press; `docker rm` in the same task is denied |
 | 3.26 Skill scripts (3.7) move onto the sandbox | A skill script cannot read the node's secrets |
 | 3.27 M3d acceptance, scripted and live on the test bot (design section 10) | All ten checks pass; the node's RSS stays in the budget |

@@ -274,6 +274,9 @@ Guarantee: **at-least-once + idempotency.**
   channel survives a power loss.
 - **R-DLV-4.** The agent's reply, the new session state and the "incoming
   event processed" mark are written in one transaction (outbox pattern).
+  Two kinds of message are progress, not the reply, and enter the outbox during
+  the turn under a key from the turn, so a rerun does not send them twice: an
+  answer overtaken by a later message (R-LIVE-5) and a plan (R-LIVE-8).
 - **R-DLV-5.** A separate sender delivers the outbox with retries, honours
   Telegram's `429 retry_after`, and marks a message sent after success.
   Accepted residue: one duplicate if the process dies between sending and
@@ -300,7 +303,7 @@ Guarantee: **at-least-once + idempotency.**
 ### 7.2. Conversations, history and the agent loop
 
 - **R-AGT-1.** One actor (goroutine) per conversation: one turn at a time,
-  timeout, cancellation.
+  timeout, cancellation. A turn may take the messages behind it (R-LIVE-1).
 - **R-AGT-2.** History is stored in the core in a neutral format, not in any
   provider's format; long context is compacted into a summary by a cheap
   model.
@@ -323,6 +326,50 @@ Guarantee: **at-least-once + idempotency.**
   do. Without persona files a neutral default applies. A first-run
   conversation that writes the persona comes with the agent's tools (M3b)
   ([ADR-0024](adr/0024-persona-as-workspace-files.md)).
+
+Live turns ([design](plans/p1-live-turns-design.md);
+[ADR-0050](adr/0050-additions-join-a-running-turn.md),
+[ADR-0051](adr/0051-status-reactions-outside-the-outbox.md),
+[ADR-0052](adr/0052-a-plan-is-delivered-during-its-turn.md), Proposed):
+
+- **R-LIVE-1.** A turn started by a person's message takes the unbroken run of
+  pending events directly behind it, oldest first, stopping at the first that does
+  not qualify, so a later message never overtakes an earlier one. An event qualifies
+  when it is a message in the same conversation from the same person, is not a
+  command, has not expired, and the sender is within the daily limits. A schedule's,
+  a press's or an expiry's turn takes nothing, and neither does a turn with no tools.
+- **R-LIVE-2.** Additions enter at boundaries, before a model call. A running tool is
+  never interrupted. No tool call starts while an addition waits, the first one
+  included: on the API route the remaining calls get a paired result saying they did
+  not run, and on the CLI route the call is refused and the run ends.
+- **R-LIVE-3.** A CLI run ended for an addition is not a failure, a fallback or a
+  retry. The core starts a new run with the whole history. It adds an estimate of what
+  it sent to the turn's tokens, since such a run reports none. What the ended run wrote
+  is lost; its tool calls and their results are kept.
+- **R-LIVE-4.** An addition is a message like any other: the speaker's line, outside
+  text wrapped, files described (R-DLV-10). A forward or an outside reply taints the
+  session before the next model call, and its web addresses do not become known. An
+  addition grants nothing: it does not approve, change or cancel a parked call.
+- **R-LIVE-5.** An answer the model wrote before an addition is not hidden. It goes out
+  at once, marked as superseded, and stays in the history as written; the next call
+  answers with the addition in view. So does text the model wrote beside tool calls
+  that were skipped. Each transport shows a superseded message as it can: in Telegram,
+  a collapsed quote.
+- **R-LIVE-6.** Additions and further answers spend the turn's step limit and its
+  clock, which they do not extend. When either runs short, no more are taken and the
+  newest answer is the reply. The reply answers the newest message taken. `Complete`
+  marks every taken event done in its one transaction; after a crash before it, nothing
+  was marked and the turn runs again. A turn that fails after taking additions sends one
+  failure reply, keeps the messages in the history and marks them done.
+- **R-LIVE-7.** Code, never the model, sets a reaction on a person's message in a
+  private chat, only after the access list, when work takes long: 🤔 the model works,
+  👨‍💻 a tool ran, 👀 the message waits behind a turn. 👌 says at once that an addition was
+  taken. The reaction comes off at the end. A quick answer shows none. Reactions are
+  hints: no outbox, no retries, and a refusal or a `429` never delays a message.
+- **R-LIVE-8.** Before work with several steps the agent may show a plan: `plan.show` and
+  `plan.step`, one message per conversation, sent during the turn and edited in place with
+  ⏳ ✅ ❌ ⏭ and an outcome line, and kept in the chat. It displays and approves nothing:
+  policies decide. M3d adds its one press (R-CMD-7).
 
 ### 7.3. Model router
 
@@ -866,7 +913,7 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   are not hidden, since caches and logs live there too.
 - **R-CMD-7.** Before work with several steps the agent posts a plan
   message and edits it as the steps run; it stays in the chat with the
-  outcome. A plan with no step that needs a press runs without one. A
+  outcome (R-LIVE-8). A plan with no step that needs a press runs without one. A
   plan with such steps has one "Run" button that approves exactly the
   listed commands, argument for argument, in this conversation, until the
   plan ends or expires. A command that needs a press and is not in the
@@ -1265,13 +1312,28 @@ Reviewed at each gate.
   D-3; secrets set and rotated without a restart.
 - Telegram, beyond formatting, typing and replies (ADR-0025). Each item
   is to be checked against the Bot API docs of the day:
-  - a reaction on a message the agent has seen, useful in groups when
-    someone addresses the agent directly;
+  - a reaction in groups, useful when someone addresses the agent directly;
+    groups have their own allowed reactions and everyone sees one (private chats:
+    R-LIVE-7);
   - streaming answers as they are generated (needs streaming providers
     and must fit the outbox's delivery guarantee);
   - per-group behaviour and limits in the node config.
 - Voice messages: understanding them, later, as a separate module or
   model (owner, 2026-11-02).
+- Around live turns (2026-11-05):
+  - `/stop` and interrupting a run. The owner's case is adding, not stopping, and what
+    a tool already did cannot be undone.
+  - A reaction chosen by the model, "if it is really needed" (owner).
+  - A quiet window before a turn starts: rejected by the owner for now, since additions
+    come well after the first message.
+  - Status on each line of a plan by reactions: Telegram puts a reaction on a whole
+    message.
+  - Parallel tool calls in the API route. A plan's lines must not stand in the way.
+  - The text a CLI run wrote before it was ended, which needs `stream-json` on the main
+    route (ADR-0050).
+  - Keeping the history in the prompt cache across CLI runs. Today only the system prompt
+    is reused and each run writes the whole transcript to the cache again, on every turn
+    ([measurement](research/2026-11-05-cost-of-an-addition.md)).
 - Hooks and pipelines: an internal n8n (owner, 2026-11-03).
   - **Hooks** are module triggers on the node's own events, beside `cron`
     and `tool` (7.10's module ABI). Examples: before or after a tool call,

@@ -55,6 +55,9 @@ considered, how they compare, the decision and its consequences. See
 | [0047](0047-sonnet-answers-during-development.md) | During development, Sonnet answers and Haiku does compaction and checks (supersedes 0022) | Accepted | 2026-11-04 |
 | [0048](0048-chatlab-over-the-fake-bot-api.md) | Test the agent by talking to it, through a separate program over the fake Bot API | Accepted | 2026-11-04 |
 | [0049](0049-three-gaps-where-outside-text-and-private-data-cross.md) | Ask before a read script takes a tainted session's input, keep a local-only session's tools on the node, and mark `ganglion mcp`'s results as data | Accepted | 2026-11-05 |
+| [0050](0050-additions-join-a-running-turn.md) | Let a message written during a turn join it at the next boundary, ending a CLI run to do so | Proposed | 2026-11-05 |
+| [0051](0051-status-reactions-outside-the-outbox.md) | Show work that takes long by reactions set outside the outbox | Proposed | 2026-11-05 |
+| [0052](0052-a-plan-is-delivered-during-its-turn.md) | Deliver a plan during its turn through the outbox, with its own table | Proposed | 2026-11-05 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

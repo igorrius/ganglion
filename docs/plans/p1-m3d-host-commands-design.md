@@ -276,6 +276,11 @@ space, what `top` shows an ordinary user.
 
 ### 7.1 The plan message (owner)
 
+> **Moved, 2026-11-05.** The display below, without the approval, is built ahead of M3d
+> by [live turns](p1-live-turns-design.md) (task 3.30, R-LIVE-8,
+> [ADR-0052](../adr/0052-a-plan-is-delivered-during-its-turn.md)). M3d's task 3.24 keeps
+> only the press of 7.2. A step's command and consequence line come with M3d.
+
 - Before work with several steps, the agent posts a plan: numbered steps
   in plain words; each step that needs a press shows its exact command,
   the fixed consequence line from the table (4.2) and the agent's one-line
