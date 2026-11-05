@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-last-turn
+why: >-
+  R-OBS-10: /last answers with no model and shows the turn before it through the
+  real core and the Bot API, tool calls named, their arguments and results not.
+covers:
+  - agent/last.go
+  - turns/**
+model: scripted
+script:
+  - {tool: schedule.create, args: '{"kind":"reminder","at":"2099-01-01 09:00","text":"Call the plumber."}'}
+  - {say: I asked.}
+steps:
+  - say: "Remind me to call the plumber."
+  - say: "/last"
+  - facts:
+      reply: {contains: "Last turn, "}
+      history: {not_contains: "/last"}
+  - facts:
+      reply: {contains: "schedule.create"}
+  - facts:
+      reply: {contains: "asked"}
+  - facts:
+      reply: {not_contains: "plumber"}

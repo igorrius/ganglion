@@ -227,7 +227,11 @@ func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) 
 	// A failed call can still carry messages, such as the alert about
 	// a call outside a task's grant.
 	t.out = append(t.out, result.Out...)
-	t.record.Tools = append(t.record.Tools, turns.ToolUse{Name: call.Name, OK: err == nil, Ms: time.Since(started).Milliseconds()})
+	use := turns.ToolUse{Name: call.Name, OK: err == nil, Ms: time.Since(started).Milliseconds()}
+	if result.Pending != "" {
+		use.Note = turns.NoteAsked
+	}
+	t.record.Tools = append(t.record.Tools, use)
 	if err != nil {
 		return "", err
 	}

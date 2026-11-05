@@ -210,11 +210,18 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 }
 
 // decide runs or declines the call, through the journal and without the
-// policy, and stores the whole outcome as done.
+// policy, stores the whole outcome as done, and notes the call on the turn.
 func (a *Agent) decide(ctx context.Context, t *turn, it pending.Item, action string) (pending.Outcome, error) {
-	if it.Status == pending.StatusDone { // a rerun: the outcome is stored
-		return a.stored(it, action == pending.ActionApprove), nil
+	note := turns.NoteDeclined
+	if action == pending.ActionApprove {
+		note = turns.NoteApproved
 	}
+	if it.Status == pending.StatusDone { // a rerun: the outcome is stored, its time is not
+		o := a.stored(it, action == pending.ActionApprove)
+		t.record.Tools = append(t.record.Tools, turns.ToolUse{Name: it.Tool, OK: !o.Failed, Note: note})
+		return o, nil
+	}
+	started := a.d.Now()
 	var o pending.Outcome
 	if action == pending.ActionApprove {
 		o = a.runApproved(ctx, t, it)
@@ -224,6 +231,7 @@ func (a *Agent) decide(ctx context.Context, t *turn, it pending.Item, action str
 	if err := a.d.Pending.Finish(ctx, it.ID, o); err != nil {
 		return pending.Outcome{}, fmt.Errorf("agent: store the outcome of %s: %w", it.ID, err)
 	}
+	t.record.Tools = append(t.record.Tools, turns.ToolUse{Name: it.Tool, OK: !o.Failed, Ms: a.d.Now().Sub(started).Milliseconds(), Note: note})
 	return o, nil
 }
 
@@ -330,6 +338,7 @@ func (a *Agent) expired(ctx context.Context, t *turn) error {
 	}
 	if o.Result == resultExpired {
 		a.closeExpired(ctx, t, it)
+		t.record.Tools = append(t.record.Tools, turns.ToolUse{Name: it.Tool, Note: turns.NoteExpired})
 	}
 	if !slices.Contains(t.state.Pending, it.ID) {
 		return nil

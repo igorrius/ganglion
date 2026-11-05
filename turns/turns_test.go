@@ -2,6 +2,7 @@ package turns_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -73,6 +74,36 @@ func TestRerunReplacesRow(t *testing.T) {
 	got, _ := l.Totals(ctx, t0, "", "")
 	if got.Turns != 1 || got.Tokens != 340 {
 		t.Fatalf("after a rerun %+v", got)
+	}
+}
+
+// The last turn of a conversation is the newest that is not a command, with all
+// it recorded; other conversations do not show (R-OBS-10).
+func TestLastSkipsCommandsAndOtherConversations(t *testing.T) {
+	ctx := context.Background()
+	l := newLog(t)
+	at := time.Date(2026, 11, 5, 20, 0, 0, 0, time.UTC)
+	record := func(id, conv string, o turns.Outcome, after time.Duration) {
+		t.Helper()
+		if err := l.Record(ctx, turns.Turn{EventID: id, Conv: conv, Started: at.Add(after), Finished: at.Add(after), Outcome: o, Joined: 2,
+			Tools: []turns.ToolUse{{Name: "x", OK: true, Ms: 3, Note: turns.NoteApproved}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := l.Last(ctx, "a"); !errors.Is(err, turns.ErrNoTurn) {
+		t.Fatalf("an empty log: %v", err)
+	}
+	record("E1", "a", turns.OutcomeCommand, 0)
+	if _, err := l.Last(ctx, "a"); !errors.Is(err, turns.ErrNoTurn) {
+		t.Fatalf("only a command: %v", err)
+	}
+	record("E2", "a", turns.OutcomeOK, time.Second)
+	record("E3", "a", turns.OutcomeError, 2*time.Second)
+	record("E4", "a", turns.OutcomeCommand, 3*time.Second)
+	record("E5", "b", turns.OutcomeOK, 4*time.Second)
+	got, err := l.Last(ctx, "a")
+	if err != nil || got.EventID != "E3" || got.Joined != 2 || got.Tools[0].Note != turns.NoteApproved {
+		t.Fatalf("last = %+v, %v", got, err)
 	}
 }
 

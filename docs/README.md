@@ -197,9 +197,12 @@ Start here when coming back to the project.
     - The full chatlab run after the prompt's change is deferred by the owner until after
       the next feature; `task-report` and `task-selection` have their first verdict then.
   - **A closed question folds (2026-11-05, R-POL-9):** one line with the decision and its
-    time, and the question under it in a collapsed quote; the owner's look on the test bot
-    is still to come. Next in the owner's order: a command for the last turn, in the spec's
-    "Not now".
+    time, and the question under it in a collapsed quote; the owner saw it on the test bot
+    (2026-11-06).
+  - **`/last` (2026-11-05, R-OBS-10):** an admin's plain summary of the conversation's last
+    turn, with no model: time, outcome, models, steps, tools and how each was decided, the
+    messages that joined, tokens and cost. Tools are named, their arguments and results
+    never shown. The owner checked it on a live turn that read the agent's logs (2026-11-06).
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that

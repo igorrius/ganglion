@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"time"
@@ -32,10 +33,26 @@ type Attempt struct {
 
 // ToolUse is one tool call in a turn.
 type ToolUse struct {
-	Name string `json:"name"`
-	OK   bool   `json:"ok"`
-	Ms   int64  `json:"ms"`
+	Name string   `json:"name"`
+	OK   bool     `json:"ok"`
+	Ms   int64    `json:"ms"`
+	Note ToolNote `json:"note,omitempty"`
 }
+
+// ToolNote says how the owner's answer shaped a call; "" when the call needed
+// none. Asked, declined and expired calls did not run.
+type ToolNote string
+
+// Notes of a tool call.
+const (
+	NoteAsked    ToolNote = "asked"
+	NoteApproved ToolNote = "approved"
+	NoteDeclined ToolNote = "declined"
+	NoteExpired  ToolNote = "expired"
+)
+
+// ErrNoTurn is Last's answer for a conversation with no turn yet.
+var ErrNoTurn = errors.New("turns: no turn")
 
 // Outcome is how a turn ended. Outcomes are stored in the turns table and
 // label metrics, so their values never change.
@@ -65,6 +82,7 @@ type Turn struct {
 	CostUSD                  float64
 	Outcome                  Outcome
 	Error                    string
+	Joined                   int // messages that joined the turn while it ran (R-LIVE-1)
 }
 
 // Totals sums turns.
@@ -102,11 +120,11 @@ func (l *Log) Record(ctx context.Context, t Turn) error {
 	}
 	_, err = l.db.ExecContext(ctx, `INSERT OR REPLACE INTO turns
 		(event_id, conv, principal, started_ms, finished_ms, steps, route, tools, input_tokens,
-		 cache_read_tokens, cache_write_tokens, output_tokens, cost_usd, outcome, error)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 cache_read_tokens, cache_write_tokens, output_tokens, cost_usd, outcome, error, joined)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.EventID, t.Conv, t.Principal, t.Started.UnixMilli(), t.Finished.UnixMilli(), t.Steps,
 		string(route), string(tools), t.InputTokens, t.CacheReadTokens, t.CacheWriteTokens,
-		t.OutputTokens, t.CostUSD, t.Outcome, t.Error)
+		t.OutputTokens, t.CostUSD, t.Outcome, t.Error, t.Joined)
 	if err != nil {
 		return fmt.Errorf("turns: record %s: %w", t.EventID, err)
 	}
@@ -122,17 +140,40 @@ func nonNil[T any](s []T) []T {
 
 // Get returns the trace of one event.
 func (l *Log) Get(ctx context.Context, eventID string) (Turn, error) {
+	t, err := scanTurn(l.db.QueryRowContext(ctx, `SELECT `+turnColumns+` FROM turns WHERE event_id = ?`, eventID))
+	if err != nil {
+		return Turn{}, fmt.Errorf("turns: get %s: %w", eventID, err)
+	}
+	return t, nil
+}
+
+// Last returns the newest turn of conv that is not a command; ErrNoTurn when
+// there is none.
+func (l *Log) Last(ctx context.Context, conv string) (Turn, error) {
+	t, err := scanTurn(l.db.QueryRowContext(ctx, `SELECT `+turnColumns+` FROM turns
+		WHERE conv = ? AND outcome <> ? ORDER BY started_ms DESC, event_id DESC LIMIT 1`, conv, OutcomeCommand))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Turn{}, ErrNoTurn
+	}
+	if err != nil {
+		return Turn{}, fmt.Errorf("turns: last of %s: %w", conv, err)
+	}
+	return t, nil
+}
+
+const turnColumns = `event_id, conv, principal, started_ms, finished_ms, steps, route, tools,
+	input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, cost_usd, outcome, error, joined`
+
+func scanTurn(row *sql.Row) (Turn, error) {
 	var (
 		t                 Turn
 		started, finished int64
 		route, tools      string
 	)
-	err := l.db.QueryRowContext(ctx, `SELECT event_id, conv, principal, started_ms, finished_ms, steps, route, tools,
-		input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, cost_usd, outcome, error
-		FROM turns WHERE event_id = ?`, eventID).Scan(&t.EventID, &t.Conv, &t.Principal, &started, &finished, &t.Steps,
-		&route, &tools, &t.InputTokens, &t.CacheReadTokens, &t.CacheWriteTokens, &t.OutputTokens, &t.CostUSD, &t.Outcome, &t.Error)
+	err := row.Scan(&t.EventID, &t.Conv, &t.Principal, &started, &finished, &t.Steps,
+		&route, &tools, &t.InputTokens, &t.CacheReadTokens, &t.CacheWriteTokens, &t.OutputTokens, &t.CostUSD, &t.Outcome, &t.Error, &t.Joined)
 	if err != nil {
-		return Turn{}, fmt.Errorf("turns: get %s: %w", eventID, err)
+		return Turn{}, err
 	}
 	t.Started, t.Finished = time.UnixMilli(started).UTC(), time.UnixMilli(finished).UTC()
 	if err := json.Unmarshal([]byte(route), &t.Route); err != nil {

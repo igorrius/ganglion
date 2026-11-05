@@ -235,7 +235,7 @@ func (a *Agent) begin(ctx context.Context, e event.Event) (*turn, bool, error) {
 
 // finish logs and records the turn and encodes the new state.
 func (a *Agent) finish(ctx context.Context, t *turn) ([]event.Outgoing, queue.StateUpdate, error) {
-	t.record.Finished = a.d.Now()
+	t.record.Finished, t.record.Joined = a.d.Now(), len(t.taken)
 	a.logTurn(ctx, &t.record, len(t.taken))
 	// The turn's context may have run out during compaction; the trace
 	// still counts for the budget and the limits.

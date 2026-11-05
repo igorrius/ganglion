@@ -820,6 +820,14 @@ undone with `git revert`.
   group (`ganglion`, `runtime`, `process`) keeps that section, and any
   other word is a filter over the metric names (a substring, or globs
   with `*`).
+- **R-OBS-10.** `/last` shows an admin what the last turn of this conversation did,
+  in plain words and with no model (owner, 2026-11-05): when and how long, how it ended
+  and why, the models tried, the steps, each tool call and how it was decided, the messages
+  that joined it (R-LIVE-1), tokens and cost. Commands are not turns here. It joins no
+  history. It names tools and never shows their arguments or results, which hold outside
+  text and private data and which a message in a chat carries further; `turn.show`
+  (R-OBS-7) is for those. A scheduled task runs in a conversation of its own, so `/last`
+  in the chat does not show its runs.
 - **R-OBS-9.** In a network (P2) the core collects the telemetry of every
   node over the bus (owner, 2026-11-03). An edge dials out and opens no
   port, so nothing can scrape its `/metrics`.
@@ -1369,11 +1377,6 @@ Reviewed at each gate.
     R46's "fixed texts stay in English", so it needs its own ADR, and it should cover the
     plural forms and how a person's language is chosen (owner, 2026-11-05).
   - Tables in a phone's width: a wide table goes out as a monospace block that wraps badly.
-  - A command that shows an admin what the last turn did, in plain words and with no model:
-    steps, tools, model, tokens, time, messages that joined it. The data is already stored
-    (`turns`, the journal; `turn.show` in `ganglion mcp`), but only an MCP client or the
-    database can read a whole turn. It matters more once others run the node (owner,
-    2026-11-05).
   - A classifier that tells a question from a task, as a candidate first client of "Models
     by purpose": only if the main model's own judgement, given a clearer rule, is measured
     and falls short (owner, 2026-11-05).
