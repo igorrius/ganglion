@@ -27,7 +27,7 @@ considered, how they compare, the decision and its consequences. See
 | [0019](0019-release-leases-at-core-start.md) | Release inbox leases when a core starts; one core process owns a database file | Accepted | 2026-11-02 |
 | [0020](0020-neutral-history-as-conversation-state.md) | Keep history in our own neutral format, stored as the conversation state | Accepted | 2026-11-02 |
 | [0021](0021-providers-chosen-by-the-operator-claude-cli-included.md) | Let the operator choose one or more providers, the claude CLI included, for conversation | Accepted | 2026-11-02 |
-| [0022](0022-haiku-first-during-development.md) | During development, Haiku through the claude CLI answers first and DeepSeek V4.1 Flash is the fallback | Accepted | 2026-11-02 |
+| [0022](0022-haiku-first-during-development.md) | During development, Haiku through the claude CLI answers first and DeepSeek V4.1 Flash is the fallback | Superseded by 0047 | 2026-11-02 |
 | [0023](0023-json-schemas-for-yaml-files.md) | Publish JSON Schemas for ganglion's YAML files, kept in sync with the Go loaders by tests | Accepted | 2026-11-02 |
 | [0024](0024-persona-as-workspace-files.md) | Keep the agent's persona in Markdown files of the workspace; the core keeps only its rules in code | Accepted | 2026-11-02 |
 | [0025](0025-markdown-rendered-to-telegram-entities.md) | Agents write Markdown; the Telegram transport renders it to message entities with goldmark | Accepted | 2026-11-02 |
@@ -46,14 +46,14 @@ considered, how they compare, the decision and its consequences. See
 | [0038](0038-host-commands-as-argv-with-classes-in-code.md) | Give the agent host commands as argv, classed by a table in code, in a milestone M3d | Proposed | 2026-11-03 |
 | [0039](0039-command-sandbox.md) | Run host commands and skill scripts in a sandbox that fails closed | Proposed | 2026-11-03 |
 | [0040](0040-plans-as-approvals.md) | Let one press on a plan approve exactly the commands it lists | Proposed | 2026-11-03 |
-| [0041](0041-module-install-update-and-trust-boundary.md) | Install module updates from the project's GitHub Releases, checked, self-tested and switched without a restart | Proposed | 2026-11-03 |
-| [0042](0042-skills-and-scripts-before-the-sandbox.md) | Run skill scripts with a declared effect class, an environment allowlist and a timeout until the sandbox lands | Proposed | 2026-11-03 |
-| [0043](0043-logs-on-disk-with-an-own-rotator.md) | Write logs to disk through a small own rotator, synchronously | Proposed | 2026-11-03 |
-| [0044](0044-ganglion-mcp-diagnostics-over-stdio.md) | Serve read-only diagnostics as `ganglion mcp` over stdio, with the own MCP server | Proposed | 2026-11-03 |
-| [0045](0045-metrics-in-the-chat-and-attachments-in-the-outbox.md) | Render the metrics picture in process with promtop, and keep attachments in the outbox row | Proposed | 2026-11-03 |
-| [0046](0046-a-restart-is-not-a-failed-attempt.md) | Count a run a restart cut short apart from a failed attempt | Proposed | 2026-11-04 |
-| [0047](0047-sonnet-answers-during-development.md) | During development, Sonnet answers and Haiku does compaction and checks (supersedes 0022 once accepted) | Proposed | 2026-11-04 |
-| [0048](0048-chatlab-over-the-fake-bot-api.md) | Test the agent by talking to it, through a separate program over the fake Bot API | Proposed | 2026-11-04 |
+| [0041](0041-module-install-update-and-trust-boundary.md) | Install module updates from the project's GitHub Releases, checked, self-tested and switched without a restart | Accepted | 2026-11-03 |
+| [0042](0042-skills-and-scripts-before-the-sandbox.md) | Run skill scripts with a declared effect class, an environment allowlist and a timeout until the sandbox lands | Accepted | 2026-11-03 |
+| [0043](0043-logs-on-disk-with-an-own-rotator.md) | Write logs to disk through a small own rotator, synchronously | Accepted | 2026-11-03 |
+| [0044](0044-ganglion-mcp-diagnostics-over-stdio.md) | Serve read-only diagnostics as `ganglion mcp` over stdio, with the own MCP server | Accepted | 2026-11-03 |
+| [0045](0045-metrics-in-the-chat-and-attachments-in-the-outbox.md) | Render the metrics picture in process with promtop, and keep attachments in the outbox row | Accepted | 2026-11-03 |
+| [0046](0046-a-restart-is-not-a-failed-attempt.md) | Count a run a restart cut short apart from a failed attempt | Accepted | 2026-11-04 |
+| [0047](0047-sonnet-answers-during-development.md) | During development, Sonnet answers and Haiku does compaction and checks (supersedes 0022) | Accepted | 2026-11-04 |
+| [0048](0048-chatlab-over-the-fake-bot-api.md) | Test the agent by talking to it, through a separate program over the fake Bot API | Accepted | 2026-11-04 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

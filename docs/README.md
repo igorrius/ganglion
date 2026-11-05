@@ -123,16 +123,17 @@ Start here when coming back to the project.
       ([ADR-0024](adr/0024-persona-as-workspace-files.md)), the current
       time in the last user message, the depth limit (R-AGT-4) and tool
       placement (R-RTR-3).
-  - **M3c, built; the scripted acceptance passes, the owner's live run is
-    next** (branch `m3c`,
-    [plan](plans/p1-m3c-modules-skills-diagnostics.md)): module update
+  - **M3c, done (closed 2026-11-05)**
+    ([plan](plans/p1-m3c-modules-skills-diagnostics.md)): module update
     and rollback, skills, attachments and the metrics picture in
     Telegram (`/metrics`), logs on disk, `ganglion mcp` for diagnosis
     from outside, a notice when a file is sent to the agent (R-DLV-10),
     and the 3.8 acceptance under the crash harness. Decisions:
-    [ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)–[ADR-0046](adr/0046-a-restart-is-not-a-failed-attempt.md),
-    Proposed. Still open: the first `html2md/v0.1.0` tag (the owner,
-    after the merge) and the live checks of the plan's task 9, step 5.
+    [ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)–[ADR-0046](adr/0046-a-restart-is-not-a-failed-attempt.md).
+    The tag `html2md/v0.1.0` is out. Deferred until the repository opens:
+    `/modules update`, `rollback` and the broken release on a live node,
+    because a node reads releases anonymously and a private repository
+    answers 404.
     - **Acceptance (2026-11-04):** `make accept` passes on both routes.
       `make crash-agent` passes with 200 and with 1,000 `kill -9`: every
       message answered, in order, one commit per fact, every `/metrics`
@@ -151,10 +152,9 @@ Start here when coming back to the project.
       and keeping a turn's progress are in the spec's "Not now" list.
     - **The main model (2026-11-04):** the example catalogue is now Sonnet for
       turns and Haiku for compaction and checks
-      ([ADR-0047](adr/0047-sonnet-answers-during-development.md), Proposed).
+      ([ADR-0047](adr/0047-sonnet-answers-during-development.md)).
       `make accept` passes on it, and runs only the claude CLI route by default.
-    - **Chatlab (task 3.20, [ADR-0048](adr/0048-chatlab-over-the-fake-bot-api.md),
-      Proposed):** the developer runs the checks the owner could not run by hand:
+    - **Chatlab (task 3.20, [ADR-0048](adr/0048-chatlab-over-the-fake-bot-api.md)):** the developer runs the checks the owner could not run by hand:
       a channel-neutral peer talks to a real core over the fake Bot API, facts and
       a judge decide, and a table shows n of n. `bin/chatlab start`, `say`, `press`,
       `advance`, `show` and `stop` hold a conversation from the shell.
@@ -180,8 +180,8 @@ Start here when coming back to the project.
         question too long for one message failed its edit: both fixed.
       - **Binary:** nothing of the lab in it: `TestLabStaysOutOfTheBinary`, and
         47,727,550 bytes against 47,735,838 before the lab's commits.
-      - **Left for the owner:** the look on a phone, then `/modules update` and
-        `rollback` after the first `html2md` tag.
+    - **The owner's look in Telegram (2026-11-05):** the `/metrics` picture reads
+      once zoomed, the buttons respond, and the notice of a file arrives.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
@@ -231,7 +231,10 @@ Start here when coming back to the project.
       itself; a stored module shadows a newer built-in with no word of it;
       an album costs one model turn per photo; a script's stdout is not
       redacted as its stderr is; ADR-0041's host list omits
-      `release-assets.githubusercontent.com`.
+      `release-assets.githubusercontent.com`; the `/metrics` picture cannot be
+      read without zooming, on a phone or on a desktop, so a short summary could
+      come first; a file sent with no text is answered in English, since the
+      message gives no language to follow.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

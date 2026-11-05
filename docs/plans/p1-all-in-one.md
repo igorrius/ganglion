@@ -71,7 +71,7 @@ pinned by a test in the task that owns the code.
 | M3 | **The agent**, in three parts: M3a talks — **done** ([plan](p1-m3a-talking-agent.md)); M3b and M3c below ([design](p1-m3b-m3c-design.md)) | History, actors, provider, router, agent loop; a talking agent on the test bot | 1–1.5 weekends (M3a) |
 | M3r | Refactoring before M3b — **done** ([plan](p1-refactor.md)) | Go conventions and lint guardrails, the agent as a stage pipeline, `config` with `samber/do`, `ganglion run` on urfave/cli; no behaviour change | 0.25 weekend |
 | M3b | **The agent works with the world** — **done** ([plan](p1-m3b-agent-world.md)) | Tools under policies and the security baseline, confirmations and quick actions on buttons, the scheduler with reminders and scheduled agent tasks, memory, web reading, the tool-call journal, tools for the claude CLI over MCP | over 1 weekend |
-| M3c | Modules, skills, diagnostics | Module update and rollback, skills, attachments, logs on disk, `ganglion mcp`, the 3.8 acceptance | about 1 weekend |
+| M3c | Modules, skills, diagnostics — **done** ([plan](p1-m3c-modules-skills-diagnostics.md)) | Module update and rollback, skills, attachments, logs on disk, `ganglion mcp`, the 3.8 acceptance | about 1 weekend |
 | M3d | Host commands and plans ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
 | M4 | Reflexes: runner and Deye | Config, modules on cron writing sensor cells, exposed to the agent as tools (the scheduler and the first module-as-tool path come from M3b); deployed next to the current bot | 0.5 weekend |
 | M5 | Load-shedding flow | The 8.1 state machine on `virtual` load cells; Telegram notifier; shadow week | 0.5 weekend |
@@ -197,15 +197,18 @@ design section 6. Owner rulings (2026-11-03): the metrics picture is
 rendered in process by promtop v0.4.0 (M1); a model-free `/metrics` (M2);
 an own log rotator (M3); skill scripts declare `effects: read` or
 `change` (M4). Decisions:
-[ADR-0041](../adr/0041-module-install-update-and-trust-boundary.md)–[ADR-0045](../adr/0045-metrics-in-the-chat-and-attachments-in-the-outbox.md)
-(Proposed), and [ADR-0046](../adr/0046-a-restart-is-not-a-failed-attempt.md)
-(Proposed), from the crash harness.
+[ADR-0041](../adr/0041-module-install-update-and-trust-boundary.md)–[ADR-0045](../adr/0045-metrics-in-the-chat-and-attachments-in-the-outbox.md),
+and [ADR-0046](../adr/0046-a-restart-is-not-a-failed-attempt.md), from the
+crash harness.
 
 The scripted acceptance and the crash harness pass (2026-11-04). The owner's
 manual live run gave way to chatlab, task 3.20, built ([design](p1-m3c-chatlab-design.md),
-[plan](p1-m3c-chatlab.md), [ADR-0048](../adr/0048-chatlab-over-the-fake-bot-api.md),
-Proposed). M3c closes after it, the owner's short look on a phone and the first
-`html2md` tag.
+[plan](p1-m3c-chatlab.md), [ADR-0048](../adr/0048-chatlab-over-the-fake-bot-api.md)).
+M3c closed on 2026-11-05, after chatlab, the owner's look at the messages in
+Telegram and the first `html2md` tag. One check of 3.15 is deferred: `/modules
+update`, `rollback` and the broken release on a live node wait for the repository
+to open, because a node reads releases anonymously and a private repository
+answers 404.
 
 | Task | Done when |
 |---|---|

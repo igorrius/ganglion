@@ -1,6 +1,6 @@
 # ADR-0046: Count a run a restart cut short apart from a failed attempt
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-04
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-3, R-DLV-6)

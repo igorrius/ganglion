@@ -1,6 +1,6 @@
 # ADR-0043: Write logs to disk through a small own rotator, synchronously
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.9](../spec.md#79-observability) (R-OBS-6, R-OBS-7); design section 6.4 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md)); [ADR-0026](0026-opentelemetry-prometheus-and-promtop.md), [ADR-0027](0027-written-go-conventions-and-lint-guardrails.md); plan task 5 ([M3c plan](../plans/p1-m3c-modules-skills-diagnostics.md))

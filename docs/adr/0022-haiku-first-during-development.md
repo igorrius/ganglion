@@ -1,6 +1,6 @@
 # ADR-0022: During development, Haiku through the claude CLI answers first and DeepSeek V4.1 Flash is the fallback
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0047](0047-sonnet-answers-during-development.md)
 - **Date:** 2026-11-02
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.3](../spec.md#73-model-router), [7.4](../spec.md#74-providers-and-model-access), [11](../spec.md#11-open-decisions) ("First API provider"); P1 decision D-6
