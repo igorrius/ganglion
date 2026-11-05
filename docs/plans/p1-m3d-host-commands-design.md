@@ -288,8 +288,8 @@ space, what `top` shows an ordinary user.
 - The same message is edited as the work goes: ⏳ running, ✅ done,
   ❌ failed with one line why, ⏭ skipped.
 - At the end it carries the outcome (e.g. "disk: 4 GB free → 47 GB") and
-  stays in the chat as the record of what was done (call; the other
-  assistant deletes its plan, the owner did not ask for that).
+  stays in the chat as the record of what was done (owner, 2026-11-05: the
+  other assistant deletes its plan, and they want to see which plan ran).
 - Edits are throttled to stay inside Telegram's limits (builder).
 - Tools (call): `plan.show` with the steps, `plan.step` to mark one. The
   transport only edits a message; it knows nothing about plans.

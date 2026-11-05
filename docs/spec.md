@@ -1349,6 +1349,11 @@ Reviewed at each gate.
   - Where the person lives, as a setting of the node: a region for the search backend, and
     hosts it never offers. The owner's live try got Russian sites that are blocked for them,
     since the request was in Russian; a fact in memory is the first thing to try (2026-11-05).
+  - Taking an answered question out of the chat (owner's live try, 2026-11-05): after
+    "Approved. Done." the message adds nothing, since the reply says the outcome. Needs
+    `deleteMessage`, with today's edit as the fallback; the journal stays the record of what
+    was approved. An expired question keeps its mark, as nobody answered it. A plan stays:
+    the owner wants to see which plan ran.
   - Tables in a phone's width: a wide table goes out as a monospace block that wraps badly.
   - A command that shows an admin what the last turn did, in plain words and with no model:
     steps, tools, model, tokens, time, messages that joined it. The data is already stored
