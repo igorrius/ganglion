@@ -374,19 +374,19 @@ In `call`, right after `try` fails and before `logFailure` and the fallback: if 
 - Modify: the crash harness test run by `make crash-agent` (`TestCrashHarnessAgent`, `cmd/`), `tools/chatlab/faults/faults.txt`
 - Create: `tools/chatlab/scenarios/mech-addition.yaml`, `tools/chatlab/scenarios/addition-real.yaml`, `tools/chatlab/faults/addition-other-person.patch`, `tools/chatlab/faults/addition-no-taint.patch`
 
-- [ ] **Step 1: Extend the harness.** Some messages arrive while a turn runs. A message counts as answered if a reply carries its Ref, or its `taken_by` names a turn with a reply. Assert in order, one commit per fact, no duplicate quote.
+- [x] **Step 1: Extend the harness.** Some messages arrive while a turn runs. A message counts as answered if a reply carries its Ref, or its `taken_by` names a turn with a reply. Assert in order, one commit per fact, no duplicate quote.
 
-- [ ] **Step 2: Run:** `make crash-agent`, then `GANGLION_CRASH_ITERS=1000 make crash-agent`. Expected: PASS both.
+- [x] **Step 2: Run:** `make crash-agent`, then `GANGLION_CRASH_ITERS=1000 make crash-agent`. Expected: PASS both.
 
-- [ ] **Step 3: Write `mech-addition`,** scripted model: a tool, an addition during it; facts: the journal, one reply. If a scenario step cannot send while the scripted model works, add that step type to chatlab under its existing schema, with a test.
+- [x] **Step 3: Write `mech-addition`,** scripted model: a tool, an addition during it; facts: the journal, one reply. If a scenario step cannot send while the scripted model works, add that step type to chatlab under its existing schema, with a test.
 
-- [ ] **Step 4: Write `addition-real`** with the real model and a judge: the final answer takes both messages into account. `covers:` it narrowly, so that only changes to this mechanism recommend it.
+- [x] **Step 4: Write `addition-real`** with the real model and a judge: the final answer takes both messages into account. `covers:` it narrowly, so that only changes to this mechanism recommend it.
 
-- [ ] **Step 5: Add the two faults** to `faults.txt`. Run: `make lab LAB=mech-addition`, `make lab LAB=addition-real`, and `scripts/lab-faults.sh`. Expected: scenarios green, both new faults red.
+- [x] **Step 5: Add the two faults** to `faults.txt`. Run: `make lab LAB=mech-addition`, `make lab LAB=addition-real`, and `scripts/lab-faults.sh`. Expected: scenarios green, both new faults red.
 
-- [ ] **Step 6: Measure against the bar again.** Compare an `addition-real` turn's tokens with task 0's numbers. Update the note if they differ.
+- [x] **Step 6: Measure against the bar again.** Compare an `addition-real` turn's tokens with task 0's numbers. Update the note if they differ.
 
-- [ ] **Step 7: Commit**, message `crash, chatlab: additions`.
+- [x] **Step 7: Commit**, message `crash, chatlab: additions`.
 
 ---
 

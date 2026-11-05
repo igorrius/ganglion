@@ -103,18 +103,29 @@ echoes the message back (`--replay-user-messages`).
 So stdin is cheaper per addition, but this run does not show that it would stop a tool
 loop, which is what an addition needs.
 
+## A real turn
+
+The `addition-real` scenario, 3 repeats with Sonnet through the node, the real tools and
+the bridge: a question, and 2 s later an addition.
+
+| Repeat | What happened | Tokens the runs reported | Replies |
+|---|---|---|---|
+| 1 | The answer came first: it went out as a quote, then one more run | 17,921 | 2 |
+| 2 | The run ended for the addition after `web.fetch`, then one more run | 12,157 | 1 |
+| 3 | The same | 12,156 | 1 |
+
+All three answers took both messages into account. Repeat 1 is two runs left to finish, which
+is what two separate turns would spend, so it changes nothing against the bar. Repeats 2 and 3
+report only the second run, since an ended run reports no usage; what the first run spent is
+not seen here, and at most it is what repeat 1 shows. The verdict stands.
+
 ## What this does not show
 
 - **A tool boundary on the stdin route.** Case C has no tools, as planned. Whether a
   message reaches the model between two tool calls of one run was not tried, and the
   [headless docs](https://code.claude.com/docs/en/headless) do not promise it.
-- **A killed run.** No run here was ended. Whether a killed run is billed for the call it
-  was making is unknown; B's first run left to finish is the upper bound.
-- **The real tool list.** With tools on offer, the schemas add to the prefix of every call
-  in both cases. Task 6 of the [plan](../plans/p1-live-turns.md) compares a real turn with
-  these numbers.
-- **The answer's quality.** Whether B's final answer takes both messages into account is
-  for the `addition-real` scenario, also in task 6.
+- **A killed run's bill.** Whether a killed run is billed for the call it was making is
+  unknown; a run left to finish is the upper bound.
 - **A rate.** Three repeats give the order of the cost, not its spread.
 - **Money.** `total_cost_usd` is the CLI's figure at list prices; on a subscription it
   measures use, not a bill.

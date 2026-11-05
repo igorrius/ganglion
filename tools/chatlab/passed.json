@@ -1,5 +1,6 @@
 {
   "scenarios": {
+    "addition-real": "03bdaa486b3c6e2c3e5e378d25266d0002ab3a3c83b7ac77f9d4343b8415412b",
     "expiry-closes-the-question": "fe6c8eac34ab27e8f4df378cd1d2f158409405290f8bad9d379bce9b0d45569e",
     "file-pdf": "a8dc9ec8374697cb4023c13ca18d21e470ec98ec92ca04e7279e74cdb8b2c100",
     "file-photo": "fa2bcb3c9778ed4dce01c724b3b6f1eb891c6c344526c292403b474b5439bba5",
@@ -11,6 +12,8 @@
     "language-uk-after-tools": "470e491047f98f4a5d969e04e790ad2f763f93d6f6416ca744be8294f92e8b33",
     "language-uk-first": "ebdd052a773382450b6040a149c8f200555e80e21e2c14fd318959a7e10c632d",
     "language-uk-task": "f0efcb23c7188b641770fb617095e069c63f0d718f3686e8911ca9aad0d8f8da",
+    "mech-addition": "9da219c033c23788695ca857b3b5f5ba9190f61dbf56dc1097623788c812f9da",
+    "mech-addition-boundaries": "c2a3fc75b638ecd52f0e9cc7d975f0770796f8fefdf91b78e23e802d7eb7384f",
     "mech-expiry": "9ad574635ad2aa0a0fec9b36651c6ec9dfd922af0350798ec216304e77eb73fc",
     "mech-file-notice": "b391150116d503175ae1272df7e252189895d120ade0bbd6325c8986daa948c0",
     "mech-metrics": "48c319495e74586eda8025e82fe15849a7daa732a847c9c5d2df1230766edb78",
