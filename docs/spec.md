@@ -1336,6 +1336,8 @@ Reviewed at each gate.
     accepted; `--resume` would keep it, at the price of a second copy of the history.
     Worth another look with real turns' numbers
     ([measurement](research/2026-11-05-cost-of-an-addition.md)).
+  - Compacting a session after a long silence, as the owner saw Claude do: the cache
+    has gone cold by then, so it costs no cache, and the next call is smaller.
 - Hooks and pipelines: an internal n8n (owner, 2026-11-03).
   - **Hooks** are module triggers on the node's own events, beside `cron`
     and `tool` (7.10's module ABI). Examples: before or after a tool call,
