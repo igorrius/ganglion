@@ -29,3 +29,30 @@ func TestQueueDepthGauges(t *testing.T) {
 		t.Fatalf("after one done: inbox %v, outbox %v; want 1 and 0", in, out)
 	}
 }
+
+// A taken event is counted, and so is one that could not be taken: it says
+// the agent and the queue disagree about what waits behind a turn.
+func TestTakenEventsAreCounted(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	f := setup(t)
+	put(t, f, msg("telegram:a", "a1"), msg("telegram:a", "a2"), msg("telegram:b", "b1"))
+	l := lease(t, f)
+	taken := []string{idOfInbox(t, f, "a2"), idOfInbox(t, f, "b1")}
+	if err := f.q.Complete(context.Background(), l, nil, queue.StateUpdate{Taken: taken}); err != nil {
+		t.Fatal(err)
+	}
+	for outcome, want := range map[string]float64{"taken": 1, "ignored": 1} {
+		if got := rec.Value(t, "ganglion.inbox.taken", map[string]string{"outcome": outcome}); got != want {
+			t.Fatalf("%s = %v, want %v", outcome, got, want)
+		}
+	}
+}
+
+func idOfInbox(t *testing.T, f fixture, key string) string {
+	t.Helper()
+	var id string
+	if err := f.db.QueryRowContext(context.Background(), `SELECT id FROM inbox WHERE idem_key = ?`, key).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}

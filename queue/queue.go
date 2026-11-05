@@ -36,6 +36,10 @@ type Lease struct {
 type StateUpdate struct {
 	Conv string
 	Data json.RawMessage
+	// Taken are the ids of events behind the leased one that the turn took
+	// (R-LIVE-1). Complete marks them done with it. An id that is not a
+	// pending event of the leased event's conversation changes nothing.
+	Taken []string
 }
 
 // Queue is the inbox/outbox of a node.
@@ -50,6 +54,11 @@ type Queue interface {
 	// "processed" mark in one transaction (R-DLV-4). It returns
 	// ErrLeaseLost if l is no longer held.
 	Complete(ctx context.Context, l Lease, out []event.Outgoing, state StateUpdate) error
+	// Behind returns the pending events of e's conversation stored after e,
+	// oldest first, at most limit of them (R-LIVE-1). An unknown e has
+	// nothing behind it. It changes nothing: an event is taken only when
+	// Complete marks it.
+	Behind(ctx context.Context, e event.Event, limit int) ([]event.Event, error)
 }
 
 // Pending is an outgoing message waiting in the outbox.

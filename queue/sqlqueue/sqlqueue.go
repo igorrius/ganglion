@@ -15,6 +15,7 @@ import (
 
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"go.opentelemetry.io/otel/metric"
 )
 
 //go:embed migrations/*.sql
@@ -31,6 +32,7 @@ type Queue struct {
 	now         func() time.Time
 	inboxReady  chan struct{}
 	outboxReady chan struct{}
+	taken       metric.Int64Counter
 }
 
 var _ queue.Queue = (*Queue)(nil)
@@ -56,8 +58,13 @@ func New(ctx context.Context, db *sql.DB, opts ...Option) (*Queue, error) {
 	if err := observeDepths(db); err != nil {
 		return nil, err
 	}
+	taken, err := takenCounter()
+	if err != nil {
+		return nil, err
+	}
 	q := &Queue{
 		db:          db,
+		taken:       taken,
 		now:         time.Now,
 		inboxReady:  make(chan struct{}, 1),
 		outboxReady: make(chan struct{}, 1),

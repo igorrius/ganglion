@@ -87,11 +87,10 @@ func (q *Queue) Lease(ctx context.Context, d time.Duration) (queue.Lease, error)
 // conversation, or queue.ErrEmpty.
 func nextHead(ctx context.Context, c *sql.Conn, now time.Time) (event.Event, int64, runCounts, error) {
 	var (
-		e           event.Event
-		seq         int64
-		runs        runCounts
-		payload     sql.NullString
-		ttlMS, atMS int64
+		e    event.Event
+		seq  int64
+		runs runCounts
+		row  eventColumns
 	)
 	err := c.QueryRowContext(ctx,
 		`SELECT i.seq, i.id, i.idem_key, i.source, i.conv, i.kind, i.payload, i.ttl_ms, i.at_ms, i.attempts, i.interrupted
@@ -100,19 +99,60 @@ func nextHead(ctx context.Context, c *sql.Conn, now time.Time) (event.Event, int
 		   AND NOT EXISTS (SELECT 1 FROM inbox j
 		                   WHERE j.conv = i.conv AND j.status = 'pending' AND j.seq < i.seq)
 		 ORDER BY i.seq LIMIT 1`, now.UnixMilli(),
-	).Scan(&seq, &e.ID, &e.IdemKey, &e.Source, &e.Conv, &e.Kind, &payload, &ttlMS, &atMS, &runs.attempts, &runs.interrupted)
+	).Scan(&seq, &e.ID, &e.IdemKey, &e.Source, &e.Conv, &e.Kind, &row.payload, &row.ttlMS, &row.atMS, &runs.attempts, &runs.interrupted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return event.Event{}, 0, runCounts{}, queue.ErrEmpty
 	}
 	if err != nil {
 		return event.Event{}, 0, runCounts{}, err
 	}
-	if payload.Valid {
-		e.Payload = json.RawMessage(payload.String)
-	}
-	e.TTL = time.Duration(ttlMS) * time.Millisecond
-	e.At = fromMS(atMS)
+	row.fill(&e)
 	return e, seq, runs, nil
+}
+
+// eventColumns are the inbox columns that need converting into an event.
+type eventColumns struct {
+	payload     sql.NullString
+	ttlMS, atMS int64
+}
+
+// fill sets e's fields from the columns.
+func (r eventColumns) fill(e *event.Event) {
+	if r.payload.Valid {
+		e.Payload = json.RawMessage(r.payload.String)
+	}
+	e.TTL = time.Duration(r.ttlMS) * time.Millisecond
+	e.At = fromMS(r.atMS)
+}
+
+// Behind implements queue.Queue.
+func (q *Queue) Behind(ctx context.Context, e event.Event, limit int) ([]event.Event, error) {
+	rows, err := q.db.QueryContext(ctx,
+		`SELECT id, idem_key, source, conv, kind, payload, ttl_ms, at_ms
+		 FROM inbox
+		 WHERE status = 'pending' AND conv = ?
+		   AND seq > (SELECT seq FROM inbox WHERE id = ?)
+		 ORDER BY seq LIMIT ?`, e.Conv, e.ID, max(limit, 0))
+	if err != nil {
+		return nil, fmt.Errorf("sqlqueue: behind %s: %w", e.ID, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []event.Event
+	for rows.Next() {
+		var (
+			b   event.Event
+			row eventColumns
+		)
+		if err := rows.Scan(&b.ID, &b.IdemKey, &b.Source, &b.Conv, &b.Kind, &row.payload, &row.ttlMS, &row.atMS); err != nil {
+			return nil, fmt.Errorf("sqlqueue: behind %s: %w", e.ID, err)
+		}
+		row.fill(&b)
+		out = append(out, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("sqlqueue: behind %s: %w", e.ID, err)
+	}
+	return out, nil
 }
 
 // runCounts is how an event's earlier runs ended: leased and not finished, or
@@ -120,14 +160,19 @@ func nextHead(ctx context.Context, c *sql.Conn, now time.Time) (event.Event, int
 type runCounts struct{ attempts, interrupted int }
 
 // Complete implements queue.Queue. In one transaction it marks the event
-// done, stores the replies (a reply whose IdemKey is already stored is
-// skipped) and upserts the conversation state when st.Conv is set. A lease
-// that ran out but was not taken by anyone else still completes.
+// done with the events the turn took, stores the replies (a reply whose
+// IdemKey is already stored is skipped) and upserts the conversation state
+// when st.Conv is set. A lease that ran out but was not taken by anyone else
+// still completes.
 func (q *Queue) Complete(ctx context.Context, l queue.Lease, out []event.Outgoing, st queue.StateUpdate) error {
-	stored := false
+	stored, taken := false, 0
 	err := q.immediate(ctx, func(c *sql.Conn) error {
 		now := q.now()
 		if err := markDone(ctx, c, l, now); err != nil {
+			return err
+		}
+		var err error
+		if taken, err = markTaken(ctx, c, l.Event, st.Taken, now); err != nil {
 			return err
 		}
 		for _, m := range out {
@@ -145,10 +190,35 @@ func (q *Queue) Complete(ctx context.Context, l queue.Lease, out []event.Outgoin
 		}
 		return fmt.Errorf("sqlqueue: complete %s: %w", l.Event.ID, err)
 	}
+	q.countTaken(ctx, takeTaken, taken)
+	q.countTaken(ctx, takeIgnored, len(st.Taken)-taken)
 	if stored {
 		signal(q.outboxReady)
 	}
 	return nil
+}
+
+// markTaken marks the events a turn took as done and returns how many it
+// marked. The conversation comes from the leased event, so a turn can never
+// finish another conversation's event. An id that matches nothing is not an
+// error: it was not waiting any more, and nothing was lost by it.
+func markTaken(ctx context.Context, c *sql.Conn, by event.Event, ids []string, now time.Time) (int, error) {
+	taken := 0
+	for _, id := range ids {
+		res, err := c.ExecContext(ctx,
+			`UPDATE inbox SET status = 'done', done_ms = ?, taken_by = ?
+			 WHERE id = ? AND conv = ? AND status = 'pending'`,
+			now.UnixMilli(), by.ID, id, by.Conv)
+		if err != nil {
+			return 0, fmt.Errorf("taken %s: %w", id, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		taken += int(n)
+	}
+	return taken, nil
 }
 
 // markDone marks the leased event done; queue.ErrLeaseLost when the lease

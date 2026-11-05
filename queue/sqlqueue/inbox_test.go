@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -535,5 +536,127 @@ func TestLeaseAttempts(t *testing.T) {
 	f.clock.Advance(2 * time.Minute)
 	if l := lease(t, f); l.Attempts != 2 {
 		t.Fatalf("second lease attempts %d", l.Attempts)
+	}
+}
+
+// behindKeys is the IdemKeys of what waits behind e.
+func behindKeys(t *testing.T, f fixture, e event.Event, limit int) []string {
+	t.Helper()
+	es, err := f.q.Behind(context.Background(), e, limit)
+	if err != nil {
+		t.Fatalf("Behind: %v", err)
+	}
+	keys := []string{}
+	for _, b := range es {
+		keys = append(keys, b.IdemKey)
+	}
+	return keys
+}
+
+func TestBehindListsOnlyLaterEventsOfTheConversation(t *testing.T) {
+	f := setup(t)
+	put(t, f, msg("telegram:a", "a1"), msg("telegram:a", "a2"), msg("telegram:b", "b1"), msg("telegram:a", "a3"))
+	l := lease(t, f)
+	if got := behindKeys(t, f, l.Event, 10); !slices.Equal(got, []string{"a2", "a3"}) {
+		t.Fatalf("Behind(a1, 10) = %v", got)
+	}
+	if got := behindKeys(t, f, l.Event, 1); !slices.Equal(got, []string{"a2"}) {
+		t.Fatalf("Behind(a1, 1) = %v", got)
+	}
+	es, err := f.q.Behind(context.Background(), l.Event, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(es[0].Payload) != string(msg("telegram:a", "a2").Payload) || es[0].Kind != "message" || es[0].Conv != "telegram:a" || !es[0].At.Equal(t0) {
+		t.Fatalf("a2 came back as %+v", es[0])
+	}
+	if got := behindKeys(t, f, es[1], 10); len(got) != 0 {
+		t.Fatalf("Behind(a3, 10) = %v", got)
+	}
+}
+
+func TestBehindOfAnUnknownEventIsEmpty(t *testing.T) {
+	f := setup(t)
+	put(t, f, msg("telegram:a", "a1"), msg("telegram:a", "a2"))
+	if got := behindKeys(t, f, event.Event{ID: "nope", Conv: "telegram:a"}, 10); len(got) != 0 {
+		t.Fatalf("Behind(unknown) = %v", got)
+	}
+}
+
+func TestBehindSkipsFinishedEvents(t *testing.T) {
+	f := setup(t)
+	put(t, f, msg("telegram:a", "a1"), msg("telegram:a", "a2"), msg("telegram:a", "a3"))
+	l := lease(t, f)
+	es, err := f.q.Behind(context.Background(), l.Event, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.q.Complete(context.Background(), l, nil, queue.StateUpdate{Taken: []string{es[0].ID}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := behindKeys(t, f, l.Event, 10); !slices.Equal(got, []string{"a3"}) {
+		t.Fatalf("Behind after a2 was taken = %v", got)
+	}
+}
+
+func TestCompleteMarksTakenEventsDoneInOneTransaction(t *testing.T) {
+	f := setup(t)
+	put(t, f, msg("telegram:a", "a1"), msg("telegram:a", "a2"), msg("telegram:a", "a3"))
+	l := lease(t, f)
+	es, err := f.q.Behind(context.Background(), l.Event, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := queue.StateUpdate{Conv: "telegram:a", Data: json.RawMessage(`{}`), Taken: []string{es[0].ID}}
+	if err := f.q.Complete(context.Background(), l, nil, st); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, f, `SELECT count(*) FROM inbox WHERE idem_key = 'a2' AND status = 'done' AND done_ms > 0 AND taken_by = ?`, l.Event.ID); n != 1 {
+		t.Fatalf("a2 done and taken by a1: %d rows", n)
+	}
+	if next := lease(t, f); next.Event.IdemKey != "a3" {
+		t.Fatalf("next lease = %s, want a3", next.Event.IdemKey)
+	}
+}
+
+// A turn that lost its lease has answered nothing, so what it took stays
+// to be answered: the holder that finished the event took nothing.
+func TestFailedCompleteLeavesTakenEventsPending(t *testing.T) {
+	f := setup(t)
+	put(t, f, msg("telegram:a", "a1"), msg("telegram:a", "a2"))
+	stale := lease(t, f)
+	es, err := f.q.Behind(context.Background(), stale.Event, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.clock.Advance(2 * time.Minute)
+	if err := f.q.Complete(context.Background(), lease(t, f), nil, queue.StateUpdate{}); err != nil {
+		t.Fatal(err)
+	}
+	err = f.q.Complete(context.Background(), stale, nil, queue.StateUpdate{Taken: []string{es[0].ID}})
+	if !errors.Is(err, queue.ErrLeaseLost) {
+		t.Fatalf("stale Complete = %v, want ErrLeaseLost", err)
+	}
+	if n := count(t, f, `SELECT count(*) FROM inbox WHERE idem_key = 'a2' AND status = 'pending' AND taken_by IS NULL`); n != 1 {
+		t.Fatalf("a2 pending and untaken: %d rows", n)
+	}
+	if next := lease(t, f); next.Event.IdemKey != "a2" {
+		t.Fatalf("next lease = %s, want a2", next.Event.IdemKey)
+	}
+}
+
+func TestCompleteIgnoresTakenFromAnotherConversation(t *testing.T) {
+	f := setup(t)
+	put(t, f, msg("telegram:a", "a1"), msg("telegram:b", "b1"))
+	l := lease(t, f)
+	var b1 string
+	if err := f.db.QueryRowContext(context.Background(), `SELECT id FROM inbox WHERE idem_key = 'b1'`).Scan(&b1); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.q.Complete(context.Background(), l, nil, queue.StateUpdate{Taken: []string{b1}}); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, f, `SELECT count(*) FROM inbox WHERE idem_key = 'b1' AND status = 'pending' AND taken_by IS NULL`); n != 1 {
+		t.Fatalf("b1 pending and untaken: %d rows", n)
 	}
 }

@@ -138,7 +138,7 @@ M3d's 3.24 keeps only the press; note in the M3d design's 7.1 that the display m
   - `queue.Queue.Behind(ctx context.Context, e event.Event, limit int) ([]event.Event, error)`: pending events of `e.Conv` with a later seq than `e`, oldest first.
   - `queue.StateUpdate.Taken []string`: ids of events the turn took.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 func TestBehindListsOnlyLaterEventsOfTheConversation(t *testing.T)
@@ -156,15 +156,15 @@ func TestCompleteIgnoresTakenFromAnotherConversation(t *testing.T)
 // Taken: [b1] leaves b1 pending
 ```
 
-- [ ] **Step 2: Run:** `go test -race ./queue/...` Expected: FAIL, `Behind` undefined.
+- [x] **Step 2: Run:** `go test -race ./queue/...` Expected: FAIL, `Behind` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `Behind` finds `e`'s seq by id. In `Complete`, after `markDone`: `UPDATE inbox SET status = 'done', done_ms = ?, taken_by = ? WHERE id = ? AND conv = ? AND status = 'pending'` per taken id. A row that changed nothing is not an error.
 
-- [ ] **Step 4: Run:** `go test -race ./queue/... ./core/...` Expected: PASS.
+- [x] **Step 4: Run:** `go test -race ./queue/... ./core/...` Expected: PASS.
 
-- [ ] **Step 5: Commit**, message `queue: a turn can take the events behind it`, with the code map.
+- [x] **Step 5: Commit**, message `queue: a turn can take the events behind it`, with the code map.
 
 ---
 
