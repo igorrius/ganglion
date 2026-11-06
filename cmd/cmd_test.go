@@ -36,7 +36,7 @@ func captured(t *testing.T, args ...string) (config.Bootstrap, []node.Role, stri
 
 // clearEnv unsets every setting, so the developer's own .env does not leak in.
 func clearEnv(t *testing.T) {
-	for _, k := range []string{"GANGLION_DB", "GANGLION_ADMIN", "TELEGRAM_API_URL", "GANGLION_TELEGRAM_REPLY",
+	for _, k := range []string{"GANGLION_DB", "GANGLION_ADMIN", "TELEGRAM_API_URL", "GANGLION_TELEGRAM_REPLY", "GANGLION_TELEGRAM_RICH",
 		"GANGLION_METRICS_ADDR", "GANGLION_MODELS_FILE", "GANGLION_WORKSPACE", "GANGLION_DAILY_BUDGET_USD",
 		"GANGLION_DAILY_TURNS", "GANGLION_DAILY_TOKENS", "GANGLION_SESSION_IDLE", "GANGLION_TZ", "GANGLION_LOG_LEVEL",
 		"TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN_FILE", "OPENROUTER_API_KEY", "OPENROUTER_API_KEY_FILE",
@@ -53,7 +53,7 @@ func TestRunDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(roles) != 3 || b.DB != "ganglion.db" || b.BotAPIURL != "https://api.telegram.org" || b.BotToken != "" ||
-		b.Admin != "" || b.MetricsAddr != "127.0.0.1:9464" || b.TelegramReply != "auto" {
+		b.Admin != "" || b.MetricsAddr != "127.0.0.1:9464" || b.TelegramReply != "auto" || !b.TelegramRich {
 		t.Fatalf("roles %v, bootstrap %+v", roles, b)
 	}
 	a := b.Agent
@@ -85,7 +85,7 @@ func TestRunReadsEveryVariable(t *testing.T) {
 	clearEnv(t)
 	for k, v := range map[string]string{
 		"GANGLION_DB": "/data/g.db", "GANGLION_ADMIN": "telegram:user:123456", "TELEGRAM_API_URL": "http://127.0.0.1:9",
-		"GANGLION_TELEGRAM_REPLY": "always", "GANGLION_METRICS_ADDR": "off",
+		"GANGLION_TELEGRAM_REPLY": "always", "GANGLION_TELEGRAM_RICH": "off", "GANGLION_METRICS_ADDR": "off",
 		"GANGLION_MODELS_FILE": write(t, "models.yaml", models), "GANGLION_WORKSPACE": "/var/lib/ganglion",
 		"GANGLION_DAILY_BUDGET_USD": "2.5", "GANGLION_DAILY_TURNS": "100", "GANGLION_DAILY_TOKENS": "500000",
 		"GANGLION_SESSION_IDLE": "4h", "GANGLION_TZ": "UTC",
@@ -100,7 +100,7 @@ func TestRunReadsEveryVariable(t *testing.T) {
 	}
 	a := b.Agent
 	if b.DB != "/data/g.db" || b.Admin != "telegram:user:123456" || b.BotAPIURL != "http://127.0.0.1:9" ||
-		b.TelegramReply != "always" || b.MetricsAddr != "off" || b.BotToken != "7001:from-file" {
+		b.TelegramReply != "always" || b.TelegramRich || b.MetricsAddr != "off" || b.BotToken != "7001:from-file" {
 		t.Fatalf("bootstrap %+v", b)
 	}
 	if a.Catalog == nil || len(a.Catalog.Models) != 2 || a.Keys["openrouter"] != "sk-or-secret" || a.Keys["claude"] != "" ||
@@ -121,7 +121,7 @@ func TestFlagsOverrideTheEnvironment(t *testing.T) {
 
 func TestBadValuesNameTheirVariable(t *testing.T) {
 	for k, v := range map[string]string{
-		"GANGLION_ADMIN": "@igor", "GANGLION_TELEGRAM_REPLY": "sometimes", "GANGLION_TZ": "Mars/Base",
+		"GANGLION_ADMIN": "@igor", "GANGLION_TELEGRAM_REPLY": "sometimes", "GANGLION_TELEGRAM_RICH": "maybe", "GANGLION_TZ": "Mars/Base",
 		"GANGLION_DAILY_BUDGET_USD": "-1", "GANGLION_DAILY_TURNS": "many", "GANGLION_SESSION_IDLE": "soon",
 		"GANGLION_LOG_LEVEL": "chatty", "GANGLION_MODELS_FILE": "/missing.yaml", "GANGLION_SEARCH": "google",
 	} {

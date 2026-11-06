@@ -48,6 +48,8 @@ type Transport struct {
 	pollTimeout time.Duration
 	retry       backoff.Policy // between failed polls and failed sinks
 	replyMode   ReplyMode
+	rich        bool
+	richCount   richCounter
 	typingEvery time.Duration
 	commands    []transport.Command // listed in the command hints at start
 	files       fileCounter
@@ -70,6 +72,7 @@ type config struct {
 	log         *slog.Logger
 	replyMode   ReplyMode
 	commands    []transport.Command
+	rich        bool
 }
 
 // Option configures a Transport.
@@ -92,6 +95,10 @@ func WithPollTimeout(d time.Duration) Option { return func(c *config) { c.pollTi
 // WithReplyMode sets when answers are sent as replies; the default is
 // ReplyAuto.
 func WithReplyMode(m ReplyMode) Option { return func(c *config) { c.replyMode = m } }
+
+// WithRichMessages sets whether a message with a table or two headings goes out
+// as a rich message (R-DLV-11); the default is off.
+func WithRichMessages(on bool) Option { return func(c *config) { c.rich = on } }
 
 // WithCommands sets the commands listed in Telegram's command hints at
 // start (setMyCommands, rulings R43, R45); the default lists none and
@@ -124,6 +131,8 @@ func New(token string, opts ...Option) (*Transport, error) {
 		pollTimeout: cfg.pollTimeout,
 		retry:       backoff.Policy{Min: time.Second, Max: time.Minute},
 		replyMode:   cfg.replyMode,
+		rich:        cfg.rich,
+		richCount:   newRichCounter(),
 		typingEvery: 4 * time.Second,
 		commands:    cfg.commands,
 		last:        map[int64]int64{},
@@ -327,16 +336,16 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) (string, error
 	if msg.Ack != "" {
 		return "", sendError(t.ack(ctx, msg.Ack, msg.Text))
 	}
+	if t.sendsRich(msg) {
+		return t.sendRich(ctx, chat, thread, msg)
+	}
 	// An edit is never split, so one too long for a message changes only the
 	// buttons: a long question was split when it went out, and this reference
 	// holds its last part.
 	if msg.Edit != "" && (msg.Text == "" || editUnits(msg) > maxTextUnits) {
 		return msg.Edit, sendError(t.editButtons(ctx, chat, msg.Edit, msg.Buttons))
 	}
-	text, ents := render(msg.Text)
-	if strings.TrimSpace(text) == "" {
-		text, ents = msg.Text, nil // nothing visible left: send the source rather than nothing
-	}
+	text, ents := visible(msg.Text)
 	if msg.Superseded {
 		ents = collapsed(text, ents)
 	}
@@ -346,6 +355,11 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) (string, error
 	if msg.Edit != "" {
 		return msg.Edit, sendError(t.edit(ctx, chat, msg.Edit, text, ents, msg.Buttons))
 	}
+	return t.sendText(ctx, chat, thread, msg, text, ents)
+}
+
+// sendText sends rendered text as a new message.
+func (t *Transport) sendText(ctx context.Context, chat, thread int64, msg event.Outgoing, text string, ents []entity) (string, error) {
 	m, err := t.c.sendMessage(ctx, sendParams{
 		ChatID:              chat,
 		MessageThreadID:     thread,
@@ -359,6 +373,16 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) (string, error
 		return "", sendError(err)
 	}
 	return strconv.FormatInt(m.MessageID, 10), nil
+}
+
+// visible renders Markdown, or gives its source when nothing visible is left,
+// rather than nothing.
+func visible(src string) (string, []entity) {
+	text, ents := render(src)
+	if strings.TrimSpace(text) == "" {
+		return src, nil
+	}
+	return text, ents
 }
 
 // sendError maps a Bot API error of a send to the sender's terms.

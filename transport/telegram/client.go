@@ -233,6 +233,13 @@ func (c *client) sendMessage(ctx context.Context, p sendParams) (message, error)
 	return m, err
 }
 
+// sendRichMessage sends a rich message.
+func (c *client) sendRichMessage(ctx context.Context, p richParams) (message, error) {
+	var m message
+	err := c.call(ctx, "sendRichMessage", p, &m)
+	return m, err
+}
+
 // editMessageText changes the text and the buttons of a message the bot
 // sent.
 func (c *client) editMessageText(ctx context.Context, p editParams) error {

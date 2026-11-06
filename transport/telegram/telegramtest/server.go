@@ -51,6 +51,7 @@ type Outgoing struct {
 	Entities string // the entities as sent, JSON; "" when none
 	ReplyTo  int64  // reply_parameters.message_id; 0 when not a reply
 	Keyboard string // reply_markup.inline_keyboard as sent, JSON; "" when none or empty
+	Rich     bool   // sent by sendRichMessage; Text is its plain text
 }
 
 // Callback is a press of an inline button under a message the bot sent.
@@ -475,6 +476,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.getUpdates(w, r, params)
 	case "sendMessage":
 		s.sendMessage(w, params)
+	case "sendRichMessage":
+		s.sendRichMessage(w, params)
 	case "sendPhoto", "sendDocument":
 		s.sendFile(w, method, params, file)
 	case "editMessageText":
@@ -687,20 +690,25 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 	if p.ReplyParameters != nil {
 		out.ReplyTo = p.ReplyParameters.MessageID
 	}
+	s.keep(w, out)
+}
+
+// keep records a sent message and answers with it. The caller holds s.mu.
+func (s *Server) keep(w http.ResponseWriter, out Outgoing) {
 	s.sent = append(s.sent, out)
 	s.nextMsg++
-	if s.messages[p.ChatID] == nil {
-		s.messages[p.ChatID] = map[int64]shown{}
+	if s.messages[out.ChatID] == nil {
+		s.messages[out.ChatID] = map[int64]shown{}
 	}
-	s.messages[p.ChatID][s.nextMsg] = shown{text: out.Text, entities: out.Entities, keyboard: out.Keyboard}
+	s.messages[out.ChatID][s.nextMsg] = shown{text: out.Text, entities: out.Entities, keyboard: out.Keyboard}
 	msg := map[string]any{
 		"message_id": s.nextMsg,
 		"date":       time.Now().Unix(),
-		"chat":       map[string]any{"id": p.ChatID, "type": "private"},
-		"text":       p.Text,
+		"chat":       map[string]any{"id": out.ChatID, "type": "private"},
+		"text":       out.Text,
 	}
-	if p.MessageThreadID != 0 {
-		msg["message_thread_id"] = p.MessageThreadID
+	if out.ThreadID != 0 {
+		msg["message_thread_id"] = out.ThreadID
 	}
 	writeOK(w, msg)
 }

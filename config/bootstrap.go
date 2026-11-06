@@ -23,6 +23,9 @@ type Bootstrap struct {
 	// TelegramReply is GANGLION_TELEGRAM_REPLY: when answers quote the
 	// person's message — auto (default), always or off (ADR-0025).
 	TelegramReply string
+	// TelegramRich is GANGLION_TELEGRAM_RICH: a message with a table or two
+	// headings goes out as a rich message (ADR-0054).
+	TelegramRich bool
 	// ReactionAfter and ReactionDwell are GANGLION_REACTION_AFTER and
 	// GANGLION_REACTION_DWELL: how long work takes before a reaction shows, and
 	// how long one stays before the next (ADR-0051). A threshold of 0 is off.

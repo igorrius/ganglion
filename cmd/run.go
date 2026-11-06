@@ -90,7 +90,7 @@ func newLogger(out io.Writer, level slog.Level, b config.Bootstrap) (*slog.Logge
 // bootstrap turns the flags into the node's bootstrap settings, reading
 // the secrets and the model catalogue.
 func bootstrap(v flags.Run, src secrets.Source, readFile func(string) ([]byte, error)) (config.Bootstrap, error) {
-	b := config.Bootstrap{DB: v.DB, Languages: v.Languages, BotAPIURL: v.TelegramAPIURL, Admin: v.Admin, MetricsAddr: v.MetricsAddr, TelegramReply: v.TelegramReply,
+	b := config.Bootstrap{DB: v.DB, Languages: v.Languages, BotAPIURL: v.TelegramAPIURL, Admin: v.Admin, MetricsAddr: v.MetricsAddr, TelegramReply: v.TelegramReply, TelegramRich: v.TelegramRich == "on",
 		ReactionAfter: v.ReactionAfter, ReactionDwell: v.ReactionDwell}
 	b.ModulesDir = filepath.Join(filepath.Dir(v.DB), "modules")
 	if dir, on := flags.LogDir(v.DB, v.LogDir); on {

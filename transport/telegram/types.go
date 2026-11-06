@@ -99,6 +99,15 @@ type sendParams struct {
 	ReplyMarkup         *inlineMarkup    `json:"reply_markup,omitempty"`
 }
 
+// richParams are the parameters of sendRichMessage that we use.
+type richParams struct {
+	ChatID              int64            `json:"chat_id"`
+	MessageThreadID     int64            `json:"message_thread_id,omitempty"`
+	RichMessage         richMessage      `json:"rich_message"`
+	DisableNotification bool             `json:"disable_notification,omitempty"`
+	ReplyParameters     *replyParameters `json:"reply_parameters,omitempty"`
+}
+
 // editParams are the parameters of editMessageText that we use.
 type editParams struct {
 	ChatID      int64        `json:"chat_id"`
