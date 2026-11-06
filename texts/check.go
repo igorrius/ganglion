@@ -11,6 +11,9 @@ import (
 var (
 	addressPattern = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://|\bwww\.`)
 	mentionPattern = regexp.MustCompile(`(^|[^\p{L}\p{N}])@\p{L}`)
+	// valueThenSeparator is a value followed by ":" or "=", which the redaction reads as a secret's
+	// name and its value: a question would be refused, or show less than what runs.
+	valueThenSeparator = regexp.MustCompile(`\}\s*[:=]`)
 )
 
 // markupMarks are the characters Markdown formats with.
@@ -57,6 +60,8 @@ func checkText(k Key, source, s string) string {
 		return "adds an address"
 	case mentionPattern.MatchString(s) && !mentionPattern.MatchString(source):
 		return "adds a mention"
+	case valueThenSeparator.MatchString(s) && !valueThenSeparator.MatchString(source):
+		return "puts a separator after a value"
 	case strings.ContainsAny(s, bidiOverrides):
 		return "holds a direction override"
 	case strings.Count(s, "\n") > strings.Count(source, "\n"):

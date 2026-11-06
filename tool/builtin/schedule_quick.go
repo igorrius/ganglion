@@ -23,6 +23,7 @@ const (
 	varSummary = "summary"
 	varTarget  = "target"
 	varZone    = "zone"
+	varTiming  = "timing"
 )
 
 // What a press notes for the model, in English.
@@ -224,6 +225,9 @@ func (s Scheduling) askRunNow(ctx context.Context, p pending.QuickPress, j sched
 
 // title names a job's kind in sp's language.
 func (s Scheduling) title(sp texts.Speaker, j schedule.Job) string {
+	if j.Kind == schedule.KindSystem {
+		return sp.Text(texts.SchedKindSystem, nil)
+	}
 	kind := sp.Text(texts.SchedKindTask, nil)
 	if j.Kind == schedule.KindReminder {
 		kind = sp.Text(texts.SchedKindReminder, nil)
@@ -232,6 +236,15 @@ func (s Scheduling) title(sp texts.Speaker, j schedule.Job) string {
 		return sp.Text(texts.SchedSystem, texts.Vars{"kind": kind})
 	}
 	return kind
+}
+
+// shownText is a job's text for a person. The system job's stored text is the node's own, so it
+// reads in their language; what a model reads keeps the stored text.
+func shownText(sp texts.Speaker, j schedule.Job) string {
+	if j.ID == AuditJobID {
+		return sp.Text(texts.SchedAuditText, nil)
+	}
+	return j.Text
 }
 
 // timing describes when a job runs, in the node's zone.
@@ -266,9 +279,9 @@ func (s Scheduling) next(j schedule.Job) string {
 // conversation it is shown in.
 func (s Scheduling) summary(sp texts.Speaker, j schedule.Job, here string) string {
 	if j.Kind != schedule.KindTask {
-		return sp.Text(texts.SchedSummaryReminder, texts.Vars{varText: j.Text, "timing": s.timing(sp, j), varTarget: replyTarget(sp, j.Conv, here)})
+		return sp.Text(texts.SchedSummaryReminder, texts.Vars{varText: shownText(sp, j), varTiming: s.timing(sp, j), varTarget: replyTarget(sp, j.Conv, here)})
 	}
-	return sp.Text(texts.SchedSummaryTask, texts.Vars{varText: j.Text, "timing": s.timing(sp, j),
+	return sp.Text(texts.SchedSummaryTask, texts.Vars{varText: shownText(sp, j), varTiming: s.timing(sp, j),
 		"tools": orNone(sp, j.Grant.Tools), "hosts": orNone(sp, j.Grant.Hosts), varTarget: replyTarget(sp, j.Grant.ReplyTo, here)})
 }
 
@@ -276,7 +289,7 @@ func (s Scheduling) summary(sp texts.Speaker, j schedule.Job, here string) strin
 func (s Scheduling) entry(sp texts.Speaker, j schedule.Job) string {
 	title := []rune(s.title(sp, j))
 	title[0] = unicode.ToUpper(title[0])
-	return sp.Text(texts.SchedEntry, texts.Vars{"title": string(title), varText: j.Text, "timing": s.timing(sp, j)})
+	return sp.Text(texts.SchedEntry, texts.Vars{"title": string(title), varText: shownText(sp, j), varTiming: s.timing(sp, j)})
 }
 
 // detailsText is all of a job.

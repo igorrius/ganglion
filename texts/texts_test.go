@@ -208,6 +208,8 @@ func TestCheck(t *testing.T) {
 		{"bidi override", "Zadanie {name} \u202e", false},
 		{"empty", "", false},
 		{"over the limit", "{name}" + strings.Repeat("x", 201), false},
+		{"a value made to read as a secret's name", "Zadanie {name}: gotowe.", false},
+		{"the same across a line break", "Zadanie {name}=\n", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -232,6 +234,30 @@ func TestCheck(t *testing.T) {
 			t.Fatal("a 33-character button was accepted")
 		}
 	})
+}
+
+func TestApprovalTextLeavesRoomForItsValues(t *testing.T) {
+	// The policy cuts a question at 3000 characters and a persona may be 2000.
+	if limit(AskPersona) > 900 {
+		t.Fatalf("ask limit %d", limit(AskPersona))
+	}
+	for l, file := range shipped {
+		for k, s := range file {
+			if IsApproval(k) && !strings.HasPrefix(string(k), "button.") && len([]rune(s)) > limit(k) {
+				t.Errorf("%s %s over the limit", l, k)
+			}
+		}
+	}
+}
+
+func TestShippedQuestionsHaveNoValueBeforeASeparator(t *testing.T) {
+	for l, file := range shipped {
+		for k, s := range file {
+			if IsApproval(k) && valueThenSeparator.MatchString(s) {
+				t.Errorf("%s %s: %q", l, k, s)
+			}
+		}
+	}
 }
 
 func TestIsApproval(t *testing.T) {

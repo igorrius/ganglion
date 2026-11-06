@@ -82,6 +82,8 @@ const (
 	SchedKindReminder    Key = "sched.kind_reminder"
 	SchedKindTask        Key = "sched.kind_task"
 	SchedSystem          Key = "sched.system"
+	SchedKindSystem      Key = "sched.kind_system"
+	SchedAuditText       Key = "sched.audit_text"
 	SchedGone            Key = "sched.gone"
 	SchedDeleted         Key = "sched.deleted"
 	SchedNoDelete        Key = "sched.no_delete"
@@ -97,7 +99,7 @@ var allKeys = []Key{
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
-	ButtonDetails, ButtonDelete, ButtonRunNow, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
+	ButtonDetails, ButtonDelete, ButtonRunNow, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 }
 
 // Keys returns every key.
@@ -109,6 +111,9 @@ const (
 	limitToast   = 200
 	limitButton  = 32
 	limitMessage = 4000
+	// limitQuestion leaves a question room for its values under tool.MaxQuestionRunes, which the
+	// policy cuts at: a person must see the whole of what they approve (ruling R34).
+	limitQuestion = 900
 )
 
 // limit returns the most characters k's text may have.
@@ -118,6 +123,8 @@ func limit(k Key) int {
 		return limitToast
 	case strings.HasPrefix(string(k), "button."):
 		return limitButton
+	case strings.HasPrefix(string(k), "ask."):
+		return limitQuestion
 	default:
 		return limitMessage
 	}
