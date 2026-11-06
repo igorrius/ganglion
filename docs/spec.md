@@ -1414,6 +1414,10 @@ Reviewed at each gate.
   - Where the person lives, as a setting of the node: a region for the search backend, and
     hosts it never offers. The owner's live try got Russian sites that are blocked for them,
     since the request was in Russian; a fact in memory is the first thing to try (2026-11-05).
+  - A sign of life in the plan's message: when a step takes long, OpenClaw writes "working…" there,
+    and the owner noticed it (2026-11-06). Reactions and typing already show long work
+    ([ADR-0051](adr/0051-status-reactions-outside-the-outbox.md)); whether a word in the plan adds to them
+    is to be seen on a live run. It must go once the work moves on, since the chat stays clean (R-POL-9).
   - Tables in a phone's width: a wide table goes out as a monospace block that wraps badly.
   - Telegram Rich Messages (Bot API 10.1 and later): headings, lists, rules and native tables,
     which OpenClaw already sends and the owner liked in their daily report (owner, 2026-11-06).
