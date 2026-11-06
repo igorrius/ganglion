@@ -107,7 +107,7 @@ named task.
   - `func Check(en, tr map[Key]string) (ok map[Key]string, rejected map[Key]string)`: the checks,
     with a reason per rejected key
 
-- [ ] **Step 1: Write the failing tests** in `texts/texts_test.go`:
+- [x] **Step 1: Write the failing tests** in `texts/texts_test.go`:
   - `TestShippedFilesMatchEnglish`: for `ru` and `uk`, the key sets are equal and each
     text's placeholders equal English's.
   - `TestLimits`: every `Label` text within 200 characters for a toast, 32 for a button.
@@ -118,12 +118,12 @@ named task.
     stars and leaves the value's; `Label` leaves both.
   - `TestCheck`: a dropped placeholder, an added one, an added URL, an added `@mention`, added
     Markdown, an over-limit text, and an extra key are each rejected; a clean text passes.
-- [ ] **Step 2: Run** `go test ./texts/`. Expected: FAIL, no package.
-- [ ] **Step 3: Implement.** Embed `lang/*.yaml`. The inventory of keys grows with tasks 4 and 5;
+- [x] **Step 2: Run** `go test ./texts/`. Expected: FAIL, no package.
+- [x] **Step 3: Implement.** Embed `lang/*.yaml`. The inventory of keys grows with tasks 4 and 5;
   start with the keys those tasks use first. The native table is the design's few dozen languages,
   as listed in ADR-0053. Add the code-map row.
-- [ ] **Step 4: Run** `go test ./texts/`. Expected: PASS.
-- [ ] **Step 5: Commit** `texts: a catalogue of fixed texts with per-key fallback and checks`.
+- [x] **Step 4: Run** `go test ./texts/`. Expected: PASS.
+- [x] **Step 5: Commit** `texts: a catalogue of fixed texts with per-key fallback and checks`.
 
 ### Task 3: A person's language
 
@@ -145,7 +145,7 @@ named task.
   - `func (s *Store) Wanted(ctx) ([]texts.Lang, error)`: distinct languages of all persons
   - `turn.lang texts.Lang`, set in the stage after `setAdmin`; `agent.Deps.Languages` (an interface in `agent`)
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `TestResolveOrder`: all three steps.
   - `TestSeenIgnoresGarbage`: after `Seen(uk)`, then `Seen("")`, `Seen("xx")` and a 1,000-character
     string, `Resolve` is still `uk` (Review Focus 1).
@@ -154,13 +154,13 @@ named task.
   - In `transport/telegram`: `TestLanguageCodeReachesTheEvent`, for a message and a press.
   - In `agent`: `TestTurnResolvesLanguage`; a scheduled turn gets its job owner's language; a
     message to a group with no person behind it is in English.
-- [ ] **Step 2: Run** `go test ./language/ ./transport/telegram/ ./agent/`. Expected: FAIL.
-- [ ] **Step 3: Implement.** `user` gains `LanguageCode string` with the JSON name `language_code`.
+- [x] **Step 2: Run** `go test ./language/ ./transport/telegram/ ./agent/`. Expected: FAIL.
+- [x] **Step 3: Implement.** `user` gains `LanguageCode string` with the JSON name `language_code`.
   The table: `principal` primary key, `chosen`, `seen`, `notified` (a comma-separated list of
   languages), `updated_ms`. A store error while resolving logs a warning and gives English: a
   message is never lost over a language. Add the code-map row.
-- [ ] **Step 4: Run** the same command. Expected: PASS.
-- [ ] **Step 5: Commit** `language, telegram, agent: each person has a language`.
+- [x] **Step 4: Run** the same command. Expected: PASS.
+- [x] **Step 5: Commit** `language, telegram, agent: each person has a language`.
 
 ### Task 4: The agent's texts move
 
@@ -182,18 +182,18 @@ named task.
   `reply.not_available`). Task's answer text in `agent/scheduled.go` is a model's or the job's own.* Leave out what a model reads (prompts, `errorPrefix`, the speaker
   and task lines) and the diagnostics in the design's non-goals (`agent/last.go`, `agent/metrics.go`,
   `agent/modules.go`, admin alerts).
-- [ ] **Step 2: Write the failing tests:**
+- [x] **Step 2: Write the failing tests:**
   - `TestRepliesFollowTheLanguage`: `/new`, `/sessions` empty and the daily limit, for a person
     in `uk` and one in `en`, through a scripted model.
   - `TestToastAndLineUseThePressersLanguage`.
   - `TestRepliesWordedWithoutPlurals`: no English text has a count before a noun. This is a table
     the inventory fills, not a language rule.
-- [ ] **Step 3: Run** `go test ./agent/`. Expected: FAIL.
-- [ ] **Step 4: Move the strings** to keys, with Russian and Ukrainian in the files; reword any
+- [x] **Step 3: Run** `go test ./agent/`. Expected: FAIL.
+- [x] **Step 4: Move the strings** to keys, with Russian and Ukrainian in the files; reword any
   count as "Tasks: 3". English wording otherwise stays as it is, so existing tests change only
   where a count is reworded.
-- [ ] **Step 5: Run** `make test`. Expected: PASS; `TestShippedFilesMatchEnglish` passes with all keys.
-- [ ] **Step 6: Commit** `agent: fixed replies, toasts and lines follow the person's language`.
+- [x] **Step 5: Run** `make test`. Expected: PASS; `TestShippedFilesMatchEnglish` passes with all keys.
+- [x] **Step 6: Commit** `agent: fixed replies, toasts and lines follow the person's language`.
 
 ### Task 5: The tools' texts and buttons move
 
@@ -210,7 +210,7 @@ Reviewer's gate: approvals change here.
 - Produces: `tool.Call.Lang texts.Lang`; `pending.Item.Lang texts.Lang`, which sets the labels
   at the moment the buttons are stored.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `TestButtonsCarrySymbolsFromCode`: for `en`, `uk` and a pack whose labels are nonsense, the
     labels start with ✅ and ❌; `Delete` in the task list starts with 🗑.
   - `TestQuestionShowsItsSubjectAsIs`: for `web.fetch`, the address, and for `message.send`, the
@@ -219,11 +219,11 @@ Reviewer's gate: approvals change here.
     choosing `uk`: the question's stored text is unchanged, and the press's line and toast are in `uk`.
   - `TestRerunKeepsTheSameQuestion`: the same call key gives the same text after a language change,
     since `pending` keeps the first row (R-DLV-6).
-- [ ] **Step 2: Run** `go test ./tool/... ./agent/`. Expected: FAIL.
-- [ ] **Step 3: Implement.** Symbols are constants in `pending` and `schedule_quick.go`, joined
+- [x] **Step 2: Run** `go test ./tool/... ./agent/`. Expected: FAIL.
+- [x] **Step 3: Implement.** Symbols are constants in `pending` and `schedule_quick.go`, joined
   before the label. A tool's error text and result stay in English, since a model reads them.
-- [ ] **Step 4: Run** `make test`. Expected: PASS.
-- [ ] **Step 5: Commit** `tool: questions and buttons follow the person's language; symbols come from code`.
+- [x] **Step 4: Run** `make test`. Expected: PASS.
+- [x] **Step 5: Commit** `tool: questions and buttons follow the person's language; symbols come from code`.
 
 ### Task 6: `language.set`
 
@@ -231,7 +231,7 @@ Reviewer's gate: approvals change here.
 > tests that give it to a person who is not an admin are replaced by one that they do not get it, and
 > no existing test about them changes.
 
-Reviewer's gate: a security boundary and a tool offered to `family`.
+Reviewer's gate: a security boundary.
 
 **Files:**
 - Create: `tool/builtin/language.go`, `tool/builtin/language_test.go`,
@@ -244,7 +244,7 @@ Reviewer's gate: a security boundary and a tool offered to `family`.
   `Spec()` as: `Name: "language.set"`, `Class: tool.ClassSideEffect`, `Policy: tool.PolicyAuto`,
   `AdminOnly: false`, `LocalSafe: true`, `AskTaintedInput: true`.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `TestLanguageSetClean`: applied at once, no question; the next turn's fixed text is in the new language.
   - `TestLanguageSetTainted`: `PolicyConfirm`; the question has the requested language's line, then
     the current one's; approved, it applies; denied, nothing changes.
@@ -258,21 +258,25 @@ Reviewer's gate: a security boundary and a tool offered to `family`.
   - `TestLanguageSetRerun` (Review Focus 3): the same call key after a restart gives no second change.
   - In `policy`, a table case that `ruleSideEffect` does not turn this tool's clean call into a question.
     If it does, stop and report: the design's "at once" needs a policy change, reviewed on its own.
-- [ ] **Step 2: Run** `go test ./tool/builtin/ ./policy/ ./agent/`. Expected: FAIL.
-- [ ] **Step 3: Implement.** The description says it is for a lasting choice, not for translating
+- [x] **Step 2: Run** `go test ./tool/builtin/ ./policy/ ./agent/`. Expected: FAIL.
+- [x] **Step 3: Implement.** The description says it is for a lasting choice, not for translating
   one text. Register it in `config/agent.go`. A chosen language adds `[write to this person in <English
   name of language>]` to `turnLines` in `agent/stages.go`. Add a line to `IntroductionRules` to call
   the tool once the language is known. Metrics: `language.set` calls by outcome, and languages
   asked for, by how they were chosen.
-- [ ] **Step 4: Run** `make test`. Expected: PASS. Update every test that assumed a family member
+- [x] **Step 4: Run** `make test`. Expected: PASS. Update every test that assumed a family member
   has no tools at all, and name them in the task's report.
-- [ ] **Step 5: Add the chatlab scenario:** "пиши польською" chooses `pl`; "переклади це польською:
+- [x] **Step 5: Add the chatlab scenario:** "пиши польською" chooses `pl`; "переклади це польською:
   …" does not call the tool. Run it: `LAB=language-switch make lab`. Expected: n of n passes.
-- [ ] **Step 6: Measure** the tokens the tool's description adds to one turn, and write the number
+- [x] **Step 6: Measure** the tokens the tool's description adds to one turn, and write the number
   in ADR-0053.
-- [ ] **Step 7: Commit** `builtin: language.set lets a person choose by saying so`.
+- [x] **Step 7: Commit** `builtin: language.set lets a person choose by saying so`.
 
 ### Task 7: Machine translation
+
+> **Changed by the owner, 2026-11-06:** lazy. `Translator.Need(l)` replaces `Store.Wanted`, `Wake` and
+> the hourly tick; the tests below were rewritten to it. Reviews added one call per attempt, a 15-minute
+> wait after a failure, and tighter checks.
 
 Reviewer's gate: a model's output becomes text on buttons.
 
@@ -290,7 +294,7 @@ Reviewer's gate: a model's output becomes text on buttons.
   - `language.NewTranslator(*Store, router.Router, map[string]provider.Provider, opts...) *Translator`
   - `func (t *Translator) Run(ctx) error`: a node component; `func (t *Translator) Wake()`, non-blocking
 
-- [ ] **Step 1: Write the failing tests**, with a scripted provider and a fake clock:
+- [x] **Step 1: Write the failing tests**, with a scripted provider and a fake clock:
   - `TestTranslateOncePerLanguage`: two persons in `pl` make one call, and later turns none.
   - `TestStaleKeyOnly` (Review Focus 5): a changed English hash on one key sends only that key.
   - `TestBadOutputRefused`, as a table:
@@ -308,16 +312,19 @@ Reviewer's gate: a model's output becomes text on buttons.
   - `TestNeverHoldsATurn`: `Wake` returns at once while a call hangs.
   - `TestUnlistedLanguageNeverTranslated`.
   - `TestTaintedRequestWaitsForThePress`: a question open for `pl` starts no translation until it is approved.
-- [ ] **Step 2: Run** `go test ./language/ ./router/`. Expected: FAIL.
-- [ ] **Step 3: Implement.** The work is derived, so nothing needs a queue: on `Wake` and on an
+- [x] **Step 2: Run** `go test ./language/ ./router/`. Expected: FAIL.
+- [x] **Step 3: Implement.** The work is derived, so nothing needs a queue: on `Wake` and on an
   hourly tick, for each language in `Wanted` with no file, send the keys that are missing or stale.
   Write accepted texts in one transaction. The cap is 3 attempts per language per day. Metrics
   (design section 9): runs by outcome, tokens, cost, keys refused. `Store.Choose` and `Seen` call
   `Wake` through a callback when the language is new. Register the component in `config`.
-- [ ] **Step 4: Run** `go test -race ./language/ ./router/`. Expected: PASS.
-- [ ] **Step 5: Commit** `language: a language with no file is translated once, in a clean call`.
+- [x] **Step 4: Run** `go test -race ./language/ ./router/`. Expected: PASS.
+- [x] **Step 5: Commit** `language: a language with no file is translated once, in a clean call`.
 
 ### Task 8: Operator files, the notice, command hints
+
+> **Changed in execution:** `NoticeFor(principal, lang, event)` replaces `NoticeDue` and `MarkNotice`,
+> and a machine pack sets no command hints, so `TestHintsSetWhenPackReady` and `SetHints` are gone.
 
 **Files:**
 - Modify: `config/bootstrap.go`, `config/agent.go`, `texts/texts.go`, `agent/stages.go`,
@@ -330,7 +337,7 @@ Reviewer's gate: a model's output becomes text on buttons.
   `func (s *Store) NoticeDue(ctx, principal string, l texts.Lang) (bool, error)`; `MarkNotice`, in the
   same transaction as the outbox row; `Transport.SetHints(ctx, lang, cmds)`.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `TestOperatorFileLoadsAndWins`; `TestOperatorFileBadKeyRejectedWithLog`: a bad text stays in
     English and the node starts.
   - `TestOperatorDirOutsideWorkspace`: a `GANGLION_LANGUAGES` inside the workspace fails at start.
@@ -339,11 +346,11 @@ Reviewer's gate: a model's output becomes text on buttons.
   - `TestNoticeEnglishIfItsKeyFailed`.
   - `TestNoticeSurvivesRerun`: a rerun of the turn after `kill -9` does not send it twice.
   - `TestHintsSetWhenPackReady`: `setMyCommands` with `language_code=pl` once.
-- [ ] **Step 2: Run** `go test ./config/ ./texts/ ./agent/ ./transport/telegram/`. Expected: FAIL.
-- [ ] **Step 3: Implement.** The notice is appended to the outgoing text as its last paragraph,
+- [x] **Step 2: Run** `go test ./config/ ./texts/ ./agent/ ./transport/telegram/`. Expected: FAIL.
+- [x] **Step 3: Implement.** The notice is appended to the outgoing text as its last paragraph,
   using `Catalog.Text`, so no second message goes out. Metrics: texts sent by language and source.
-- [ ] **Step 4: Run** `make test`. Expected: PASS.
-- [ ] **Step 5: Commit** `language, agent: the person is told once; an operator's file comes first`.
+- [x] **Step 4: Run** `make test`. Expected: PASS.
+- [x] **Step 5: Commit** `language, agent: the person is told once; an operator's file comes first`.
 
 ### Task 8a: Regular reports follow the owner's language (R-LANG-7, owner, 2026-11-06)
 
@@ -356,16 +363,16 @@ Reviewer's gate: a model's output becomes text on buttons.
   `memory.Report` keeps its counts and findings, and its wording moves to `builtin` under keys. The
   `memory.audit` tool's result stays in English, since a model reads it.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `TestAuditReportFollowsTheOwnersLanguage`: a `uk` owner gets the title and the counts in Ukrainian,
     with nothing flagged and with one finding; a finding's path and reason stay byte for byte.
   - `TestAuditToolResultStaysEnglish`.
   - `TestSystemJobGetsTheOwnersSpeaker`, through `agent.system`.
-- [ ] **Step 2: Run** `go test ./agent/ ./tool/builtin/ ./memory/`. Expected: FAIL.
-- [ ] **Step 3: Implement.** Keys `report.audit_clean` and `report.audit_flagged`, worded with no plural:
+- [x] **Step 2: Run** `go test ./agent/ ./tool/builtin/ ./memory/`. Expected: FAIL.
+- [x] **Step 3: Implement.** Keys `report.audit_clean` and `report.audit_flagged`, worded with no plural:
   "Facts checked: {facts}. Persona files checked: {persona}."
-- [ ] **Step 4: Run** `make test`. Expected: PASS.
-- [ ] **Step 5: Commit** `agent, builtin: a regular report follows its owner's language`.
+- [x] **Step 4: Run** `make test`. Expected: PASS.
+- [x] **Step 5: Commit** `agent, builtin: a regular report follows its owner's language`.
 
 ### Task 9: Close
 

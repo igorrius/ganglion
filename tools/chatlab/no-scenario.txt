@@ -93,6 +93,7 @@ transport/telegram/types.go
 turns/**
 language/translate.go
 language/files.go
+language/telemetry.go
 texts/check.go
 texts/native.go
 texts/texts.go

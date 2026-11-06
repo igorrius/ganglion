@@ -203,6 +203,12 @@ Start here when coming back to the project.
     turn, with no model: time, outcome, models, steps, tools and how each was decided, the
     messages that joined, tokens and cost. Tools are named, their arguments and results
     never shown. The owner checked it on a live turn that read the agent's logs (2026-11-06).
+  - **Fixed texts in the person's language, built on branch `fixed-texts-language`**
+    ([plan](plans/p1-fixed-texts-language.md),
+    [ADR-0053](adr/0053-fixed-texts-in-the-persons-language.md), Proposed): tests and reviews pass; the
+    owner's look on the test bot is still to come. 46.0 MB binary, 44.9 MB RSS after 1,000 turns. The
+    `/metrics` memory test (`make memory`) is noisy and goes over its 128 MB line on `master` too: peaks
+    of 122 to 134 MB on both, so it does not separate them.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
@@ -319,8 +325,8 @@ trust with that.
 ## Language files
 
 What the bot writes without a model follows each person's language
-([ADR-0053](adr/0053-fixed-texts-in-the-persons-language.md)): the one they asked for in the chat,
-then their Telegram's, then English. English, Russian and Ukrainian ship in the binary; any other
+([ADR-0053](adr/0053-fixed-texts-in-the-persons-language.md)): the one they asked for in the chat (for
+now only an admin can ask), then their Telegram's, then English. English, Russian and Ukrainian ship in the binary; any other
 language in the table is translated once by the cheap model, and each person is told so once.
 
 To correct a text, put `<code>.yaml` in the `languages/` directory beside the database

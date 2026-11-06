@@ -283,7 +283,8 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 //     conversation or its reply target;
 //  6. memory.write and memory.forget: confirm in a tainted session, auto
 //     otherwise (the memory guard still checks the entry), though they
-//     are side effects;
+//     are side effects; language.set likewise, since it changes only the
+//     caller's own language (R-LANG-3);
 //  7. any other side effect: confirm;
 //  8. in a tainted session, a call with input to a tool that asks for it:
 //     confirm (ADR-0049);

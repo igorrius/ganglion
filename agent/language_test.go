@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/texts"
+	"github.com/igorrius/ganglion/tool/builtin"
 )
 
 // fakeLanguages is a person's language kept in a map.
@@ -347,7 +349,7 @@ func TestChosenLanguageIsToldInTheTurnOnly(t *testing.T) {
 	e.turn(t, message(owner, "Igor", "hi"))
 	e.turn(t, message("telegram:user:7", "Anna", "hi"))
 	reqs := e.smart.requests()
-	if got := lastUserRaw(reqs[0]); !strings.Contains(got, "[write to this person in Українська (uk)]") {
+	if got := lastUserRaw(reqs[0]); !strings.Contains(got, "[write to this person in Українська (uk)") {
 		t.Errorf("chosen: %q", got)
 	}
 	if strings.Contains(reqs[0].Messages[0].Content, "Українська") {
@@ -369,4 +371,82 @@ func TestLanguageSetTakesEffectInTheSameTurn(t *testing.T) {
 	if got := a.language(context.Background(), tn); got != "uk" {
 		t.Fatalf("still %s after a change", got)
 	}
+}
+
+// Final review: the last plain row may be for someone else: an admin alert, or a message the owner
+// approved for a third party, whose text must go out as the question showed it (R34).
+func TestNoticeOnlyOnAMessageToThePerson(t *testing.T) {
+	e := machineEnv(t, map[texts.Key]string{texts.ButtonApprove: "Zatwierdź", texts.NoticeMachine: noticePL})
+	tn := &turn{msg: event.Message{From: "pl"}, event: event.Event{ID: "e"}, replyConv: "telegram:42",
+		out: []event.Outgoing{{Conv: "telegram:42", Text: "reply"}, {Conv: "telegram:1", Text: "an admin alert"}}}
+	e.a.tellMachineTexts(context.Background(), tn)
+	if tn.out[1].Text != "an admin alert" || tn.out[0].Text != "reply\n\n"+noticePL {
+		t.Fatalf("%+v", tn.out)
+	}
+	tn = &turn{msg: event.Message{From: "pl"}, event: event.Event{ID: "e2"}, replyConv: "telegram:42",
+		out: []event.Outgoing{{Conv: "telegram:7", Text: "the approved message"}}}
+	e.deps.Languages = &fakeLanguages{lang: map[string]texts.Lang{"pl": "pl"}}
+	e.a = New(overDefaults(Config{}), e.deps)
+	e.a.tellMachineTexts(context.Background(), tn)
+	if tn.out[0].Text != "the approved message" {
+		t.Fatalf("%q", tn.out[0].Text)
+	}
+}
+
+func TestChosenLanguageWinsOverTheInstructions(t *testing.T) {
+	if !strings.Contains(chosenLine, "whatever") {
+		t.Fatalf("%q does not say it overrides the task's line", chosenLine)
+	}
+}
+
+func TestApprovedLanguageSetChangesTheLanguage(t *testing.T) {
+	base := newEnv(t, Config{}, nil)
+	langs := &choosingLanguages{}
+	base.deps.Languages = langs
+	var asked []texts.Lang
+	base.deps.Translate = func(l texts.Lang) { asked = append(asked, l) }
+	e := newConfirmEnvOn(t, base, builtin.NewLanguageSet(langs))
+	e.smart.push(func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+		return provider.ChatResponse{Message: provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{
+			{ID: "c1", Name: "language.set", Args: json.RawMessage(`{"code":"uk"}`)}}}}, nil
+	}, say("I asked."))
+	first := message(owner, "Igor", "go")
+	var m event.Message
+	if err := json.Unmarshal(first.Payload, &m); err != nil {
+		t.Fatal(err)
+	}
+	m.Forwarded = true // outside text, so the session is tainted
+	first.Payload, _ = json.Marshal(m)
+	var q event.Outgoing
+	for _, o := range e.turn(t, first) {
+		if len(o.Buttons) == 2 {
+			q = o
+		}
+	}
+	if q.Text == "" || langs.chosen != "" {
+		t.Fatalf("question %+v, chosen %q", q, langs.chosen)
+	}
+	e.smart.push(say("done"))
+	e.turn(t, press(owner, q.Buttons[0].ID, "1"))
+	if langs.chosen != "uk" || !slices.Contains(asked, texts.Lang("uk")) {
+		t.Fatalf("chosen %q, translator asked %v", langs.chosen, asked)
+	}
+}
+
+// choosingLanguages is a store with one person's choice.
+type choosingLanguages struct {
+	NoLanguages
+	chosen texts.Lang
+}
+
+func (c *choosingLanguages) Choose(_ context.Context, _ string, l texts.Lang) (bool, error) {
+	c.chosen = l
+	return true, nil
+}
+
+func (c *choosingLanguages) Resolve(context.Context, string) (texts.Lang, error) {
+	if c.chosen != "" {
+		return c.chosen, nil
+	}
+	return texts.English, nil
 }

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 )
 
 func TestShippedFilesMatchEnglish(t *testing.T) {
@@ -308,5 +310,18 @@ func TestIsApproval(t *testing.T) {
 	}
 	if IsApproval(ToastUsed) {
 		t.Error("a toast is not an approval text")
+	}
+}
+
+func TestSentTextsAreCounted(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	c := newCatalog(t)
+	c.Text("uk", ToastUsed, nil)
+	c.Label("pl", ToastUsed, nil)
+	if got := rec.Value(t, "ganglion.texts.sent", map[string]string{"lang": "uk", "source": "shipped"}); got != 1 {
+		t.Errorf("shipped: %v", got)
+	}
+	if got := rec.Value(t, "ganglion.texts.sent", map[string]string{"lang": "pl", "source": "english"}); got != 1 {
+		t.Errorf("fallback: %v", got)
 	}
 }

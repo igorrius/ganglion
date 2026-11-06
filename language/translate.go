@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
@@ -29,6 +28,8 @@ const (
 	// attemptsPerDay caps what a failing model can cost per language (R-LANG-5).
 	attemptsPerDay = 3
 	callTimeout    = 3 * time.Minute
+	// retryAfter is how long a language waits after a failed attempt.
+	retryAfter = 15 * time.Minute
 	// maxAnswerTokens is well above the whole catalogue in a wordy script.
 	maxAnswerTokens = 16000
 	// echoSweep is the fewest texts that say anything when they all equal English: one word such as
@@ -159,25 +160,16 @@ type Translator struct {
 	wake      chan struct{}
 	neededMu  sync.Mutex
 	needed    map[texts.Lang]bool
-	runs      metric.Int64Counter
-	refused   metric.Int64Counter
-	tokens    metric.Int64Counter
-	cost      metric.Float64Counter
+	in        instruments
+	// failedAt holds when each language last failed, so a short outage waits instead of using up
+	// the day on one person's first messages. Only Run's goroutine touches it.
+	failedAt map[texts.Lang]time.Time
 }
 
 // NewTranslator returns a Translator. cat must find packs through s.
 func NewTranslator(s *Store, cat *texts.Catalog, r router.Router, ps map[string]provider.Provider, opts ...TranslatorOption) *Translator {
-	m := otel.Meter("ganglion/language")
 	t := &Translator{store: s, cat: cat, router: r, providers: ps, now: time.Now, log: slog.New(slog.DiscardHandler),
-		wake: make(chan struct{}, 1), needed: map[texts.Lang]bool{}}
-	t.runs, _ = m.Int64Counter("ganglion.language.translations",
-		metric.WithDescription("Translation runs, by language and outcome (done, partial, refused, failed, capped)."))
-	t.refused, _ = m.Int64Counter("ganglion.language.texts_refused",
-		metric.WithDescription("Translated texts the checks refused, by language."))
-	t.tokens, _ = m.Int64Counter("ganglion.language.tokens",
-		metric.WithDescription("Tokens spent translating, by language."))
-	t.cost, _ = m.Float64Counter("ganglion.language.cost_usd",
-		metric.WithDescription("What translating cost at catalogue prices, by language."))
+		wake: make(chan struct{}, 1), needed: map[texts.Lang]bool{}, in: newInstruments(), failedAt: map[texts.Lang]time.Time{}}
 	for _, o := range opts {
 		o(t)
 	}
@@ -240,6 +232,10 @@ func (t *Translator) missing(l texts.Lang) map[texts.Key]string {
 
 // translate makes one attempt at l, within the day's cap.
 func (t *Translator) translate(ctx context.Context, l texts.Lang, source map[texts.Key]string) {
+	if last, failed := t.failedAt[l]; failed && t.now().Sub(last) < retryAfter {
+		return
+	}
+	t.failedAt[l] = t.now() // cleared by a whole result
 	ok, err := t.store.attempt(ctx, l, t.now())
 	if err != nil {
 		t.log.Warn("language: attempt not counted", "lang", string(l), "err", err)
@@ -262,19 +258,22 @@ func (t *Translator) translate(ctx context.Context, l texts.Lang, source map[tex
 		return
 	}
 	if rejected := len(source) - len(accepted); rejected > 0 {
-		t.refused.Add(ctx, int64(rejected), metric.WithAttributes(attribute.String("lang", string(l))))
+		t.in.refused.Add(ctx, int64(rejected), metric.WithAttributes(attribute.String("lang", string(l))))
 		t.log.Warn("language: translated texts refused", "lang", string(l), "count", rejected, "first", reason)
 	}
 	if err := t.store.savePack(ctx, l, model, accepted); err != nil {
 		t.log.Warn("language: translation not stored", "lang", string(l), "err", err)
 		return
 	}
+	if outcome == outcomeDone {
+		delete(t.failedAt, l)
+	}
 	t.count(ctx, l, outcome)
 	t.log.Info("language: translated", "lang", string(l), "texts", len(accepted), "outcome", outcome)
 }
 
 func (t *Translator) count(ctx context.Context, l texts.Lang, outcome string) {
-	t.runs.Add(ctx, 1, metric.WithAttributes(attribute.String("lang", string(l)), attribute.String("outcome", outcome)))
+	t.in.runs.Add(ctx, 1, metric.WithAttributes(attribute.String("lang", string(l)), attribute.String("outcome", outcome)))
 }
 
 // ask makes one call to the first candidate, so an attempt is one call and the cap means what it says.
@@ -310,8 +309,8 @@ func (t *Translator) ask(ctx context.Context, l texts.Lang, source map[texts.Key
 	}
 	u := resp.Usage
 	attrs := metric.WithAttributes(attribute.String("lang", string(l)))
-	t.tokens.Add(ctx, int64(u.InputTokens+u.OutputTokens), attrs)
-	t.cost.Add(ctx, c.Cost(u.InputTokens, u.OutputTokens), attrs)
+	t.in.tokens.Add(ctx, int64(u.InputTokens+u.OutputTokens), attrs)
+	t.in.cost.Add(ctx, c.Cost(u.InputTokens, u.OutputTokens), attrs)
 	return resp.Message.Content, c.Model, nil
 }
 

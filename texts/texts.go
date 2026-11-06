@@ -4,12 +4,16 @@
 package texts
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"maps"
 	"regexp"
 	"strings"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -240,6 +244,7 @@ func WithPacks(p PackFunc) Option { return func(c *Catalog) { c.pack = p } }
 type Catalog struct {
 	operator map[Lang]map[Key]string
 	pack     PackFunc
+	sent     metric.Int64Counter // nil for Shipped, which nobody reads metrics of
 }
 
 // Shipped returns a catalogue of the shipped files alone.
@@ -250,6 +255,8 @@ func noPack(Lang, Key) (string, bool) { return "", false }
 // New returns a catalogue of the shipped files and whatever opts add.
 func New(opts ...Option) (*Catalog, error) {
 	c := Shipped()
+	c.sent, _ = otel.Meter("ganglion/texts").Int64Counter("ganglion.texts.sent",
+		metric.WithDescription("Fixed texts written, by language and source (operator, shipped, machine, english)."))
 	for _, o := range opts {
 		o(c)
 	}
@@ -286,20 +293,27 @@ func (c *Catalog) Has(l Lang) bool {
 	return true
 }
 
+// written finds k's template in l and counts it.
+func (c *Catalog) written(l Lang, k Key) string {
+	s, src := c.find(l, k)
+	if c.sent != nil {
+		c.sent.Add(context.Background(), 1, metric.WithAttributes(attribute.String("lang", string(l)), attribute.String("source", string(src))))
+	}
+	return s
+}
+
 // placeholder matches anything in braces, so a translated placeholder is seen as one.
 var placeholder = regexp.MustCompile(`\{[^{}]*\}`)
 
 // Text returns k's text in l for a message, which the transport renders as Markdown. The template
 // is escaped, so a translation cannot add formatting; the values keep theirs.
 func (c *Catalog) Text(l Lang, k Key, v Vars) string {
-	s, _ := c.find(l, k)
-	return fill(s, v, escapeMarkdown)
+	return fill(c.written(l, k), v, escapeMarkdown)
 }
 
 // Label returns k's text in l for a button or a toast, which are not rendered.
 func (c *Catalog) Label(l Lang, k Key, v Vars) string {
-	s, _ := c.find(l, k)
-	return fill(s, v, func(s string) string { return s })
+	return fill(c.written(l, k), v, func(s string) string { return s })
 }
 
 // fill puts v into the template in one pass, so a value holding braces stays as it is.

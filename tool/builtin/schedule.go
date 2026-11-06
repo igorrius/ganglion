@@ -262,8 +262,8 @@ const toolWebFetch = "web.fetch"
 // neverGranted are tools an unattended run may never use, registered or
 // not: memory is written only with the owner at hand (R-POL-7), and the
 // persona only by the owner's own introduction, so a page a task reads
-// cannot plant an instruction in either.
-var neverGranted = []string{toolMemoryWrite, toolMemoryForget, toolPersonaPropose}
+// cannot plant an instruction in either. A language is a person's own choice, and no person is there.
+var neverGranted = []string{toolMemoryWrite, toolMemoryForget, toolPersonaPropose, toolLanguageSet}
 
 // ungrantable reports whether a grant may never name the tool: the
 // schedule tools (a task does not schedule or delete jobs) and

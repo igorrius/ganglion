@@ -11,6 +11,7 @@ import (
 
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/texts"
 )
 
@@ -232,6 +233,7 @@ func TestDailyCap(t *testing.T) {
 	for range attemptsPerDay + 3 {
 		tr.Need("pl")
 		tr.sweep(ctx)
+		c.now = c.now.Add(retryAfter + time.Second)
 	}
 	if p.calls() != attemptsPerDay {
 		t.Fatalf("%d calls", p.calls())
@@ -273,6 +275,7 @@ func TestRestartCarriesTheCap(t *testing.T) {
 	for range attemptsPerDay {
 		tr.Need("pl")
 		tr.sweep(ctx)
+		c.now = c.now.Add(retryAfter + time.Second)
 	}
 	cat, _ := texts.New(texts.WithPacks(s.Pack))
 	again := NewTranslator(s, cat, &oneModel{}, map[string]provider.Provider{"p": p}, WithTranslatorClock(c.time))
@@ -434,5 +437,47 @@ func TestRunTranslatesOnlyWhenNeeded(t *testing.T) {
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("Run = %v", err)
+	}
+}
+
+// Final review: a short outage must not use up the day on a person's first messages.
+func TestFailureRetriesLaterNotAtOnce(t *testing.T) {
+	_, c, p, tr := newTranslator(t, func(context.Context, map[texts.Key]string) (string, error) {
+		return "", errors.New("down")
+	})
+	ctx := context.Background()
+	for range 5 {
+		tr.Need("pl")
+		tr.sweep(ctx)
+	}
+	if p.calls() != 1 {
+		t.Fatalf("%d calls within one moment", p.calls())
+	}
+	c.now = c.now.Add(retryAfter + time.Second)
+	tr.Need("pl")
+	tr.sweep(ctx)
+	if p.calls() != 2 {
+		t.Fatalf("after the wait: %d calls", p.calls())
+	}
+}
+
+func TestAskedLanguagesAreCounted(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	s, _ := newStore(t)
+	ctx := context.Background()
+	if err := s.Seen(ctx, "a", "pl"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Seen(ctx, "a", "pl"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Choose(ctx, "a", "uk"); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.Value(t, "ganglion.language.asked", map[string]string{"lang": "pl", "how": "channel"}); got != 1 {
+		t.Errorf("channel: %v", got)
+	}
+	if got := rec.Value(t, "ganglion.language.asked", map[string]string{"lang": "uk", "how": "chosen"}); got != 1 {
+		t.Errorf("chosen: %v", got)
 	}
 }

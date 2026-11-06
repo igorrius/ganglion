@@ -14,6 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/texts"
 )
@@ -25,6 +28,7 @@ var migrations embed.FS
 type Store struct {
 	db      *sql.DB
 	now     func() time.Time
+	asked   metric.Int64Counter
 	packsMu sync.RWMutex
 	packs   map[texts.Lang]map[texts.Key]pack
 }
@@ -44,7 +48,7 @@ func New(ctx context.Context, db *sql.DB, opts ...Option) (*Store, error) {
 	if err := sqlitedb.Migrate(ctx, db, "language", sub); err != nil {
 		return nil, err
 	}
-	s := &Store{db: db, now: time.Now}
+	s := &Store{db: db, now: time.Now, asked: newAsked()}
 	for _, o := range opts {
 		o(s)
 	}
@@ -62,7 +66,7 @@ func (s *Store) Seen(ctx context.Context, principal, code string) error {
 	if !ok || principal == "" {
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO people (principal, seen, updated_ms) VALUES (?, ?, ?)
 		 ON CONFLICT (principal) DO UPDATE SET seen = excluded.seen, updated_ms = excluded.updated_ms
 		 WHERE seen <> excluded.seen`,
@@ -70,7 +74,14 @@ func (s *Store) Seen(ctx context.Context, principal, code string) error {
 	if err != nil {
 		return fmt.Errorf("language: seen %s: %w", principal, err)
 	}
+	if n, err := res.RowsAffected(); err == nil && n > 0 {
+		s.countAsked(ctx, l, howChannel)
+	}
 	return nil
+}
+
+func (s *Store) countAsked(ctx context.Context, l texts.Lang, how string) {
+	s.asked.Add(ctx, 1, metric.WithAttributes(attribute.String("lang", string(l)), attribute.String("how", how)))
 }
 
 // Resolve returns a person's language: the one they chose, the last one seen, or English, which is
@@ -119,6 +130,9 @@ func (s *Store) Choose(ctx context.Context, principal string, l texts.Lang) (cha
 	n, err := res.RowsAffected()
 	if err != nil {
 		return false, fmt.Errorf("language: choose %s: %w", principal, err)
+	}
+	if n > 0 {
+		s.countAsked(ctx, l, howChosen)
 	}
 	return n > 0, nil
 }

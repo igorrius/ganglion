@@ -105,6 +105,8 @@ func TestDecide(t *testing.T) {
 		{"side effect confirms", side, base(), tool.PolicyConfirm, journal.DecisionConfirm},
 		{"side effect confirms even if the tool says auto", sideAuto, base(), tool.PolicyConfirm, journal.DecisionConfirm},
 		{"memory write, clean, is auto", memory, base(), tool.PolicyAuto, journal.DecisionAllowed},
+		{"language, clean, is auto", spec("language.set", tool.ClassSideEffect, tool.PolicyAuto), base(), tool.PolicyAuto, journal.DecisionAllowed},
+		{"language, tainted, confirms", spec("language.set", tool.ClassSideEffect, tool.PolicyAuto), with(base(), func(c *tool.Call) { c.Tainted = true }), tool.PolicyConfirm, journal.DecisionConfirm},
 		{"memory write, tainted, confirms", memory, with(base(), func(c *tool.Call) { c.Tainted = true }), tool.PolicyConfirm, journal.DecisionConfirm},
 		{"memory forget, tainted, confirms", forget, with(base(), func(c *tool.Call) { c.Tainted = true }), tool.PolicyConfirm, journal.DecisionConfirm},
 		{"tainted read tool is auto", read, with(base(), func(c *tool.Call) { c.Tainted = true }), tool.PolicyAuto, journal.DecisionAllowed},

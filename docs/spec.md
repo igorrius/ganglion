@@ -980,6 +980,8 @@ What the node writes without a model reaches people who may read only their own 
   echoes English, is refused. Each stored text keeps a hash of its English source, so a release
   translates only what changed. Attempts are capped per language per day. A language requested in a
   tainted session starts only after the press.
+- **R-LANG-5a.** Command hints stay as R45 has them: shipped languages only, other languages see
+  English hints.
 - **R-LANG-6.** A person is told once per language, in that language, that the texts were translated
   by a machine and may be inaccurate. Every button that acts carries a symbol added by code, outside
   the translated text, and a question shows its command, address or text as is.

@@ -95,10 +95,10 @@ anyway, so choosing costs no extra turn. It calls a new tool, `language.set(code
 - **Telling a request apart:** "translate this into Polish" is not a choice of language.
   The tool's description says so. A wrong switch is cheap: the person sees it and says
   so. A chatlab scenario covers both phrasings with a real model.
-- **Who has it:** every allowed person, including a `family` member, who otherwise gets
-  no tools in M3b. It writes only the caller's own row, so the exception gives them
-  nothing over anyone else **(call)**. Scheduled runs are not offered it, since no
-  person is there to ask.
+- **Who has it (owner, 2026-11-06):** admins only, until what a person may do becomes a group of
+  permissions in the configuration ("Not now"). A person who is not an admin keeps no tools and no bridge
+  ([ADR-0036](../adr/0036-mcp-bridge-over-a-per-run-unix-socket.md)) and follows their channel's language.
+  Scheduled runs are not offered it, since no person is there to ask.
 - **The question's text comes from code**, from the files of both languages; the model
   supplies only the code. Two lines, because a request from an injected page looks the
   same to code as a real one: a person who cannot read the current language reads the
@@ -185,10 +185,10 @@ the press, so an injected request spends nothing **(call)**.
 
 - It runs in the background and never holds a turn. Until it finishes, the fixed texts
   are in English.
-- It is one call per language on the role used for checks (Haiku today), after which
-  the texts cost nothing.
-- It survives a restart; a failure retries later under a daily cap, then leaves English
-  in place **(builder)**.
+- It is one call per attempt, to the first model the role used for checks offers (Haiku today), after
+  which the texts cost nothing.
+- It survives a restart, since the next message asks again. A failure waits 15 minutes before the
+  next attempt, under a daily cap of 3, and English stays in place meanwhile.
 
 **Why it is safe (the owner's question on this was whether a model may touch these
 texts at all):** the danger was a translation inside a conversation, where outside text
@@ -237,8 +237,8 @@ A new table, by migration (exact shape is left to the builder):
 - per language and key: the translated text, the hash of its English source, when it was
   made and by which model.
 
-**Command hints (R45)** stay as they are for shipped languages; a machine pack sets its
-hints with `setMyCommands` once it is ready **(call)**.
+**Command hints (R45)** stay as they are for shipped languages. Other languages see English hints in
+the command menu: moving them needs keys and a change in the transport, for a small gain **(call)**.
 
 ## 8. Security
 
