@@ -966,8 +966,10 @@ What the node writes without a model reaches people who may read only their own 
 - **R-LANG-3.** A person chooses by saying so in the chat; there is no command. The model calls
   `language.set` with a code from the table of native names, for the caller alone. In a session
   that has read nothing from outside it applies at once. In a tainted one it asks with a button, in
-  the requested language with the same question in the current one under it. The tool is offered
-  to every allowed person, and not in a scheduled run.
+  the requested language with the same question in the current one under it. Until permissions exist
+  it is offered to admins only (owner, 2026-11-06), and never in a scheduled run; the others follow
+  their channel's language. What a person may do becomes a group of permissions in the configuration
+  ("Not now").
 - **R-LANG-4.** Per key, the first that has the text wins: an operator's file, a shipped file, a
   machine translation, English. Operator files live outside the workspace, and no tool writes
   machine translations.

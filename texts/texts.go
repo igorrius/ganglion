@@ -59,6 +59,8 @@ const (
 	ButtonDetails        Key = "button.details"
 	ButtonDelete         Key = "button.delete"
 	ButtonRunNow         Key = "button.run_now"
+	AskLanguage          Key = "ask.language"
+	AskLanguageNoFile    Key = "ask.language_no_file"
 	AskRunTool           Key = "ask.run_tool"
 	AskSendMessage       Key = "ask.send_message"
 	AskCreateReminder    Key = "ask.create_reminder"
@@ -104,7 +106,7 @@ var allKeys = []Key{
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
-	ButtonDetails, ButtonDelete, ButtonRunNow, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
+	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.
@@ -213,6 +215,12 @@ func (s Speaker) catalog() *Catalog {
 
 // Text is Catalog.Text in s's language.
 func (s Speaker) Text(k Key, v Vars) string { return s.catalog().Text(s.Lang, k, v) }
+
+// In is s writing in another language, from the same catalogue.
+func (s Speaker) In(l Lang) Speaker { return Speaker{Lang: l, Cat: s.Cat} }
+
+// Has reports whether s's language has its approval texts; see Catalog.Has.
+func (s Speaker) Has() bool { return s.catalog().Has(s.Lang) }
 
 // Label is Catalog.Label in s's language.
 func (s Speaker) Label(k Key) string { return s.catalog().Label(s.Lang, k, nil) }

@@ -113,6 +113,8 @@ type Deps struct {
 type Languages interface {
 	Seen(ctx context.Context, principal, code string) error
 	Resolve(ctx context.Context, principal string) (texts.Lang, error)
+	// Chosen is the language a person asked for, if they did.
+	Chosen(ctx context.Context, principal string) (texts.Lang, bool, error)
 	// NoticeFor reports whether this event's message tells principal that l's texts are a machine's.
 	NoticeFor(ctx context.Context, principal string, l texts.Lang, event string) (bool, error)
 }
@@ -125,6 +127,9 @@ func (NoLanguages) Seen(context.Context, string, string) error { return nil }
 
 // Resolve implements Languages.
 func (NoLanguages) Resolve(context.Context, string) (texts.Lang, error) { return texts.English, nil }
+
+// Chosen implements Languages.
+func (NoLanguages) Chosen(context.Context, string) (texts.Lang, bool, error) { return "", false, nil }
 
 // NoticeFor implements Languages.
 func (NoLanguages) NoticeFor(context.Context, string, texts.Lang, string) (bool, error) {

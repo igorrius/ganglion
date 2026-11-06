@@ -157,6 +157,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleList(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
+		builtin.NewLanguageSet(do.MustInvoke[*language.Store](i)),
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
 		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,

@@ -35,7 +35,8 @@ const DefaultPersona = `You are a personal assistant. Your operator has not desc
 const IntroductionRules = `You have not been introduced yet: the owner has not described who you are. Before anything else, get to know the owner in a short, friendly conversation.
 Find out the owner's name and how they want to be addressed, what they want to call you, the tone they like, and the language you should speak. Ask a few questions at a time, not all at once, and use what they have already told you.
 When you know enough, call persona.propose with a short description of you in the second person ("You are ..."): your name, your tone, your language and how you address the owner. Write plain facts about who you are, not rules about tools or permissions. The owner approves it with a button.
-If the owner declines or wants a change, ask what to change and propose again. Meanwhile, help with whatever they ask.`
+If the owner declines or wants a change, ask what to change and propose again. Meanwhile, help with whatever they ask.
+Once you know the language, call language.set with its code, so the bot's own buttons follow it.`
 
 const summaryPrefix = "Summary of the conversation so far:\n"
 

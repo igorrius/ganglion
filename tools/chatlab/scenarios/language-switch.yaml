@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: language-switch
+why: A lasting choice of language and a request to translate one text read alike, and only the first may call language.set.
+covers:
+  - tool/builtin/language.go
+  - language/language.go
+repeat: 3
+steps:
+  - say: "Переклади польською: доброго ранку, друзі."
+  - facts:
+      no_journal:
+        - {tool: language.set}
+  - say: "Я погано розумію цю мову. Пиши мені завжди польською."
+  - facts:
+      journal:
+        - {tool: language.set, decision: allowed}

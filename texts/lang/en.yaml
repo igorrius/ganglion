@@ -71,3 +71,6 @@ sched.audit_text: "Memory audit: every stored fact and persona file checked for 
 notice.machine: "Buttons and system messages here were translated automatically and may be inaccurate."
 report.audit_clean: "Nightly memory check. Facts checked: {facts}. Persona files checked: {persona}. Nothing was flagged."
 report.audit_flagged: "Nightly memory check. Facts checked: {facts}. Persona files checked: {persona}. Flagged, with nothing changed or deleted:"
+
+ask.language: "Write to you in {language}?"
+ask.language_no_file: "Switch to {language}? The bot's own buttons stay in English for now."

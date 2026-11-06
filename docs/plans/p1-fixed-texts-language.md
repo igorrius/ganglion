@@ -227,6 +227,10 @@ Reviewer's gate: approvals change here.
 
 ### Task 6: `language.set`
 
+> **Changed by the owner, 2026-11-06:** admins only until permissions exist. `AdminOnly: true`; the
+> tests that give it to a person who is not an admin are replaced by one that they do not get it, and
+> no existing test about them changes.
+
 Reviewer's gate: a security boundary and a tool offered to `family`.
 
 **Files:**

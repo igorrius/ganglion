@@ -31,6 +31,7 @@ import (
 const (
 	toolWebFetch     = "web.fetch"
 	toolMessageSend  = "message.send"
+	toolLanguageSet  = "language.set"
 	toolMemoryWrite  = "memory.write"
 	toolMemoryForget = "memory.forget"
 )
@@ -305,7 +306,7 @@ func Decide(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisi
 type rule func(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool)
 
 // rules are the rules of Decide, in order.
-var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleGrant, ruleMemoryWrite, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
+var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleGrant, ruleMemoryWrite, ruleLanguageSet, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -474,6 +475,18 @@ func ruleSideEffect(_ int, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decis
 
 func ruleMemoryWrite(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Name != toolMemoryWrite && s.Name != toolMemoryForget {
+		return "", "", false
+	}
+	if c.Tainted {
+		return confirm()
+	}
+	return tool.PolicyAuto, journal.DecisionAllowed, true
+}
+
+// ruleLanguageSet applies a person's own choice of language at once, and asks in a session that holds
+// outside content, where a page may have asked for it to make approvals unreadable (R-LANG-3).
+func ruleLanguageSet(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if s.Name != toolLanguageSet {
 		return "", "", false
 	}
 	if c.Tainted {

@@ -16,9 +16,10 @@ import (
 
 // fakeLanguages is a person's language kept in a map.
 type fakeLanguages struct {
-	seen map[string]string
-	lang map[string]texts.Lang
-	err  error
+	seen   map[string]string
+	lang   map[string]texts.Lang
+	err    error
+	chosen map[string]texts.Lang
 	// notified holds the event that told a person, by person and language.
 	notified map[string]string
 }
@@ -41,6 +42,11 @@ func (f *fakeLanguages) NoticeFor(_ context.Context, principal string, l texts.L
 	}
 	f.notified[key] = event
 	return true, nil
+}
+
+func (f *fakeLanguages) Chosen(_ context.Context, principal string) (texts.Lang, bool, error) {
+	l, ok := f.chosen[principal]
+	return l, ok, nil
 }
 
 func (f *fakeLanguages) Resolve(_ context.Context, principal string) (texts.Lang, error) {
@@ -330,5 +336,37 @@ func TestWritingToAPersonAsksForTheirLanguage(t *testing.T) {
 	e.turn(t, message("uk", "A", "/new"))
 	if !slices.Contains(asked, texts.Lang("uk")) {
 		t.Fatalf("asked %v", asked)
+	}
+}
+
+func TestChosenLanguageIsToldInTheTurnOnly(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.deps.Languages = &fakeLanguages{chosen: map[string]texts.Lang{owner: "uk"}}
+	e.a = New(overDefaults(Config{}), e.deps)
+	e.smart.push(say("ok"), say("ok"))
+	e.turn(t, message(owner, "Igor", "hi"))
+	e.turn(t, message("telegram:user:7", "Anna", "hi"))
+	reqs := e.smart.requests()
+	if got := lastUserRaw(reqs[0]); !strings.Contains(got, "[write to this person in Українська (uk)]") {
+		t.Errorf("chosen: %q", got)
+	}
+	if strings.Contains(reqs[0].Messages[0].Content, "Українська") {
+		t.Error("the system prompt changed, and its cache with it")
+	}
+	if got := lastUserRaw(reqs[1]); strings.Contains(got, "write to this person") {
+		t.Errorf("nothing chosen costs nothing: %q", got)
+	}
+}
+
+func TestLanguageSetTakesEffectInTheSameTurn(t *testing.T) {
+	langs := &fakeLanguages{lang: map[string]texts.Lang{owner: "en"}}
+	a := &Agent{d: Deps{Languages: langs, Translate: func(texts.Lang) {}}, log: discardLog()}
+	tn := &turn{msg: event.Message{From: owner}}
+	if got := a.language(context.Background(), tn); got != "en" {
+		t.Fatalf("%s", got)
+	}
+	langs.lang[owner] = "uk"
+	if got := a.language(context.Background(), tn); got != "uk" {
+		t.Fatalf("still %s after a change", got)
 	}
 }

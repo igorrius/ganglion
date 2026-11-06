@@ -68,7 +68,9 @@ does not have.
   per conversation.
 - **Choosing:** the person says so in the chat, and the model calls `language.set` with a code. No
   command. In a clean session it applies at once. In a tainted one it asks with a button, in the
-  requested language with the current one under it.
+  requested language with the current one under it. It is for admins only until permissions exist, so
+  [ADR-0036](0036-mcp-bridge-over-a-per-run-unix-socket.md)'s rule that a person who is not an admin
+  gets no tools and no bridge stands.
 - **Priority:** an operator's file, a shipped file, a machine translation, per key, with English
   behind them.
 - **Stays in English:** what a model reads, and `/last`, `/metrics`, `/modules` and admin alerts.
@@ -80,8 +82,8 @@ does not have.
 
 This replaces ruling R46. R45 stays for shipped languages.
 
-**Measured:** the tool's description adds a number of tokens to each turn, recorded here once task 6
-of the plan has measured it.
+**Measured:** the tool's name, description and schema are 319 characters, by the usual four characters
+a token about 80 tokens on an admin's turn, in the part a provider caches. An estimate, not a count.
 
 ## Security
 
@@ -90,8 +92,8 @@ Spec principle 9: every link is hostile, every input is untrusted.
 - **Trust boundaries:**
   - the model's output becomes text on buttons and approvals, after code checks it;
   - `language_code` comes from the channel;
-  - `language.set` is the first tool a person who is not an admin may call (the role is named `family`
-    in the code today, which says nothing about who they are).
+  - `language.set` applies at once in a clean session, the second tool after `memory.write` that a
+    side effect does not make ask, through its own narrow policy rule.
 - **What an attacker controls:** a web page, through the model in a tainted session; a person's
   Telegram language setting. Our English strings, and the language name sent to the translation, are
   not theirs.
@@ -101,7 +103,7 @@ Spec principle 9: every link is hostile, every input is untrusted.
 | Abuse | What stops it, in code |
 |---|---|
 | A page has the model switch the language so that the person cannot read approvals | In a tainted session `language.set` asks, in the requested and the current language |
-| A person changes someone else's language | The tool takes no target and writes the caller's own row |
+| A person changes someone else's language | Admins only for now; the tool takes no target and writes the caller's own row |
 | A model writes an approval's wording | The question comes from a file; the model supplies only a code, checked against the table |
 | Outside text steers the translation | A clean call: no tools, no history, only our strings and a name from the table |
 | A bad translation makes a dangerous approval read as safe | Symbols added by code on every button that acts; the command or address shown as is |
@@ -117,7 +119,8 @@ and an approval's meaning does not rest on the words alone.
 - A person in any listed language understands the bot, with no technical step by anyone.
 - Every person-facing string moves behind a key, and a test keeps shipped files complete.
 - A new text costs a translation per stored language, on next need.
-- People who are not admins are no longer without tools, a change to a rule tests relied on.
+- A person who is not an admin cannot choose a language by saying so until permissions exist, and
+  reads their channel's language. Replies from the model still follow the conversation.
 - A person whose Telegram is in one language and who writes in another gets mismatched buttons until
   they say something. This follows the owner's rule.
 
