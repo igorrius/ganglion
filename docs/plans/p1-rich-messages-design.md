@@ -127,22 +127,23 @@ space, since a cell with no `text` is invisible, is for the builder to try on th
 
 ## 5. A symbol tree
 
-A paragraph with a tree line is shown as a preformatted block with the lines as written, leading spaces
-and all. A tree line is one whose first characters, after any spaces and `│`, are `├` or `└`. This holds
-in both renderers, whatever the setting.
+A paragraph with a tree line keeps its levels and stays ordinary text, in both renderers, whatever the
+setting. A tree line is one whose first characters, after any spaces and `│`, are `├` or `└`.
+
+**Why text and not a preformatted block (owner, on the live look of 2026-11-06):** the owner's report is a
+tree of Jira links, "just with no extra formatting". A monospace block would lose the links. The cost is
+that a proportional font does not line columns up exactly.
+
+Each line's leading spaces, and the spaces among its `│`, become no-break spaces, which neither Markdown nor
+Telegram trims. goldmark trims a paragraph's lines, so the renderer reads each indentation back from the
+source; inside a list item it removes the item's own indentation **(builder)**.
 
 Requiring the symbol at the start keeps prose and plans out: a plan's lines start with a step's mark, so
-a `└` in a step's text does not turn the plan monospace **(call)**. A test holds this.
+a `└` in a step's text changes nothing **(call)**. A test holds this.
 
-goldmark trims a paragraph's lines, so the renderer reads each line back from the source, from the
-start of that line; inside a list item it removes the item's own indentation **(builder)**.
-
-The cost: formatting and links inside such a tree are shown as source characters. A monospace block is
-what keeps the columns aligned, and Telegram's `pre` carries no links **(call)**. This rests on the
-owner's report as it was seen; to be looked at on their tree in the live check.
-
-An ASCII tree (`|--`) and a tree of spaces with no symbols stay as they are **(call)**: the second
-cannot be told from a wrapped paragraph.
+A tree the model itself puts in a code block stays a code block: that is its choice, and the prompt does not
+change (owner). An ASCII tree (`|--`) and a tree of spaces with no symbols stay as they are **(call)**: the
+second cannot be told from a wrapped paragraph.
 
 ## 6. Length
 
@@ -274,8 +275,8 @@ agent has it. The existing limits on context apply **(builder: confirm)**.
 **How far it is trusted:** always as outside content, the way a forward is (ruling R35): `Forwarded` is
 set for any message with a `rich_message`, whether or not it has `text` or a `forward_origin`, because a
 person does not write these: a bot makes one, and an inline bot can post one with no origin **(call)**. The text sits inside the outside-content wrapper,
-and the session counts as having read outside content. That holds for the bot's own answer too: a forward
-does not prove who wrote it, the same as for an ordinary forwarded message today.
+and the session counts as having read outside content. That holds for the bot's own answer too, as for an ordinary forwarded message today:
+Telegram names the sender, but the answer may repeat a hostile page's text.
 
 **Never silent:** a message with nothing to read still reaches the agent, with a note that a rich message
 came with nothing readable, as a file's notice does (R-DLV-10) **(call)**.

@@ -80,7 +80,7 @@ filtered. A table or two headings because the owner wants the format used only w
 - **Excluded:** a message with buttons, an edit, an attachment, a fold or a superseded answer.
 - **A refusal is not a loss:** a 400 from `sendRichMessage` sends the same text the ordinary way.
 - **A rich message that arrives is read,** as outside content (owner on reading).
-- **A symbol tree** is shown as a preformatted block, with the setting on or off.
+- **A symbol tree** keeps its levels as ordinary text, with its links, with the setting on or off.
 
 The rest is in the [design](../plans/p1-rich-messages-design.md). ADR-0025 still holds for every other
 message; its mapping of tables and headings no longer holds for a message that goes rich.
@@ -109,7 +109,7 @@ today and on rich ones, where `sendRichMessage` has no parameter for it. Spec, "
 - **Easier:** a table reads as a table, a report fits one message, and no token is spent.
 - **Harder:** a second renderer to keep in step with `markdown.go`, and a third of the logic in `Parts`.
 - **Given up:**
-  - links and formatting inside a symbol tree;
+  - exact column alignment in a symbol tree, since its text is in a proportional font;
   - an app that accepts a message and cannot show it is not detected, so `off` is the only answer;
   - forwarding the bot's own answer taints the session, as any forward does.
 - **To build:** the blocks, the two tests in `Parts` and `Send`, the fallback, reading, the fake Bot API's

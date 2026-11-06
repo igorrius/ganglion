@@ -44,6 +44,8 @@ type writer struct {
 	b    strings.Builder
 	n    int // UTF-16 units written
 	ents []entity
+
+	leads map[int]string // of the tree being written (treeLeads)
 }
 
 func (w *writer) write(s string) {
@@ -104,11 +106,9 @@ func (w *writer) lines(n ast.Node) string {
 func (w *writer) block(n ast.Node, indent string) {
 	switch n := n.(type) {
 	case *ast.Paragraph, *ast.TextBlock:
-		if tree, ok := treeSource(w.src, n); ok {
-			w.span(entity{Type: entityPre}, func() { w.write(tree) })
-			return
-		}
+		w.leads = treeLeads(w.src, n)
 		w.inlines(n)
+		w.leads = nil
 	case *ast.Heading:
 		w.span(entity{Type: "bold"}, func() { w.inlines(n) })
 	case *ast.FencedCodeBlock:
@@ -283,7 +283,11 @@ func (w *writer) inlines(n ast.Node) {
 func (w *writer) inline(n ast.Node) {
 	switch n := n.(type) {
 	case *ast.Text:
-		w.write(textValue(w.src, n))
+		v := textValue(w.src, n)
+		if lead, ok := w.leads[n.Segment.Start]; ok {
+			v = treeLine(lead, v)
+		}
+		w.write(v)
 		if n.SoftLineBreak() || n.HardLineBreak() {
 			w.write("\n")
 		}

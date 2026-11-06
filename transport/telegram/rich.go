@@ -130,7 +130,8 @@ func countStructure(src string) (headings, tables int) {
 }
 
 type richWriter struct {
-	src []byte
+	src   []byte
+	leads map[int]string // of the tree being written (treeLeads)
 }
 
 func (w *richWriter) blocks(n ast.Node) []richBlock {
@@ -144,10 +145,10 @@ func (w *richWriter) blocks(n ast.Node) []richBlock {
 func (w *richWriter) block(n ast.Node) []richBlock {
 	switch n := n.(type) {
 	case *ast.Paragraph, *ast.TextBlock:
-		if tree, ok := treeSource(w.src, n); ok {
-			return []richBlock{{Type: richPre, Text: tree}}
-		}
-		return []richBlock{{Type: richParagraph, Text: w.inlines(n)}}
+		w.leads = treeLeads(w.src, n)
+		text := w.inlines(n)
+		w.leads = nil
+		return []richBlock{{Type: richParagraph, Text: text}}
 	case *ast.Heading:
 		return []richBlock{{Type: richHeading, Text: w.inlines(n), Size: n.Level}}
 	case *ast.FencedCodeBlock:
@@ -272,7 +273,11 @@ func (w *richWriter) inlines(n ast.Node) any {
 func (w *richWriter) inline(n ast.Node) []any {
 	switch n := n.(type) {
 	case *ast.Text:
-		out := []any{textValue(w.src, n)}
+		v := textValue(w.src, n)
+		if lead, ok := w.leads[n.Segment.Start]; ok {
+			v = treeLine(lead, v)
+		}
+		out := []any{v}
 		if n.SoftLineBreak() || n.HardLineBreak() {
 			out = append(out, "\n")
 		}

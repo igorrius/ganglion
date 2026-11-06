@@ -31,7 +31,7 @@ func TestRenderRichBlocks(t *testing.T) {
 		{"quote", "> a", `{"blocks":[{"type":"blockquote","blocks":[{"type":"paragraph","text":"a"}]}]}`},
 		{"long quote", "> " + long, `{"blocks":[{"type":"expandable_blockquote","text":"` + longText + `"}]}`},
 		{"divider", "---", `{"blocks":[{"type":"divider"}]}`},
-		{"tree", "root\n  └── a", `{"blocks":[{"type":"pre","text":"root\n  └── a"}]}`},
+		{"tree", "root\n  └── a", `{"blocks":[{"type":"paragraph","text":"root\n` + "\u00a0\u00a0" + `└── a"}]}`},
 		{"html block is text", "<div>x</div>", `{"blocks":[{"type":"paragraph","text":"<div>x</div>"}]}`},
 		{"inline html is text", "a <b>x</b>", `{"blocks":[{"type":"paragraph","text":"a <b>x</b>"}]}`},
 		{"bold", "**a**", `{"blocks":[{"type":"paragraph","text":{"type":"bold","text":"a"}}]}`},

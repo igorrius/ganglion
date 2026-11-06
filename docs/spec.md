@@ -1429,6 +1429,13 @@ Reviewed at each gate.
     and the owner noticed it (2026-11-06). Reactions and typing already show long work
     ([ADR-0051](adr/0051-status-reactions-outside-the-outbox.md)); whether a word in the plan adds to them
     is to be seen on a live run. It must go once the work moves on, since the chat stays clean (R-POL-9).
+    After a plan says it finished, the owner waited about 10 s for the long report with nothing to show for it
+    (2026-11-06): a message such as "…" that the answer then replaces would fill that gap. `editMessageText`
+    takes a rich message, but the first form and its edit are for a design to settle.
+  - Knowing which message a reply answers: the transport reads only a selected quote, so the agent does not
+    know which message the person replied to, while a session can hold several topics (owner, 2026-11-06).
+    A reply to the bot's own message in the current session adds nothing outside; an older one or another
+    person's needs a security pass.
   - URL previews: the Telegram transport does not set them, so Telegram's default applies on ordinary
     messages, and `sendRichMessage` has no parameter for them. A URL the model writes may be fetched by
     Telegram with no press (found 2026-11-06, [ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md)).

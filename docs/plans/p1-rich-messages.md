@@ -57,6 +57,9 @@ Failure modes the design implies and no other test would catch. Each has its tes
 
 ### Task 2: A symbol tree keeps its levels
 
+Changed on the owner's look, see [design section 5](p1-rich-messages-design.md#5-a-symbol-tree): the tree stays
+text with no-break spaces rather than the preformatted block below, and `treeLeads` replaced `treeSource`.
+
 **Files:**
 - Create: `transport/telegram/tree.go`, `transport/telegram/tree_test.go`
 - Modify: `transport/telegram/markdown.go` (case `*ast.Paragraph, *ast.TextBlock` of `block`)
