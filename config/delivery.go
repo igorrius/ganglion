@@ -36,7 +36,7 @@ func Telegram() do.Provider[*telegram.Transport] {
 	return func(i do.Injector) (*telegram.Transport, error) {
 		b := do.MustInvoke[Bootstrap](i)
 		return telegram.New(b.BotToken, telegram.WithBaseURL(b.BotAPIURL), telegram.WithLogger(do.MustInvoke[*slog.Logger](i)),
-			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)), telegram.WithCommands(do.MustInvoke[[]transport.Command](i)))
+			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)), telegram.WithRichMessages(b.TelegramRich), telegram.WithCommands(do.MustInvoke[[]transport.Command](i)))
 	}
 }
 

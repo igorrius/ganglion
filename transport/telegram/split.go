@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -15,7 +16,8 @@ const (
 	maxCaptionUnits = 1024
 )
 
-// Parts implements transport.Parter (ADR-0025). A message whose rendered
+// Parts implements transport.Parter (ADR-0025). A message that goes rich has the
+// limits of a rich message instead (R-DLV-11). Any other message whose rendered
 // text fits maxTextUnits comes back unchanged. A longer one is split
 // between Markdown blocks (paragraphs, lists, quotes, code blocks), packing
 // whole blocks while the rendered part fits. A code block that alone is too
@@ -34,10 +36,86 @@ func (t *Transport) Parts(msg event.Outgoing) []event.Outgoing {
 	if msg.Attach != nil {
 		return attachmentParts(msg)
 	}
+	if t.richShape(msg) && structured(msg.Text) {
+		return richParts(msg)
+	}
 	if renderedUnits(msg.Text) <= maxTextUnits {
 		return []event.Outgoing{msg}
 	}
 	return textParts(msg, splitMarkdown(msg.Text), 0)
+}
+
+// richParts keeps a rich message whole when it fits Telegram's limits for one.
+func richParts(msg event.Outgoing) []event.Outgoing {
+	if richFits(msg.Text) {
+		return []event.Outgoing{msg}
+	}
+	return textParts(msg, splitRich(msg.Text), 0)
+}
+
+func richFits(src string) bool { return renderRich(src).size().fits() }
+
+// splitRich packs the blocks of src into chunks that fit a rich message. A table
+// too long for one is cut between rows, and a code block as in splitMarkdown. Any
+// other block too long for one is cut by the ordinary rule, which may lose its
+// formatting there but never breaks a message.
+func splitRich(src string) []string {
+	var blocks []string
+	for _, b := range mdBlocks(src) {
+		switch {
+		case richFits(b):
+			blocks = append(blocks, b)
+		case splitsAsTable(b):
+			blocks = append(blocks, splitTable(b, richFits)...)
+		case fenceOpen(firstLine(b)) != "":
+			blocks = append(blocks, splitFence(b)...)
+		default:
+			blocks = append(blocks, cutBlock(b)...)
+		}
+	}
+	return pack(blocks, richFits)
+}
+
+// tableRule is a table's delimiter line.
+var tableRule = regexp.MustCompile(`^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$`)
+
+// tableHead returns the index of the delimiter line of the table in lines, or
+// -1. A rule alone on the first line has no header above it, so it is no table.
+func tableHead(lines []string) int {
+	for i := 1; i < len(lines); i++ {
+		// A rule with no bar is a thematic break or makes the line above a heading.
+		if strings.Contains(lines[i], "|") && tableRule.MatchString(lines[i]) {
+			return i
+		}
+	}
+	return -1
+}
+
+// splitsAsTable reports whether block's lines can be cut as a table's rows. A
+// table in the parsed tree is what counts: inside a code block the same lines are
+// code.
+func splitsAsTable(block string) bool {
+	return hasTable(block) && tableHead(strings.Split(block, "\n")) > 0
+}
+
+// splitTable cuts a table's source between rows, with the header and the
+// delimiter in each chunk, so that every chunk is a table of its own and fits
+// unless a single row is too long for that.
+func splitTable(block string, fits func(string) bool) []string {
+	lines := strings.Split(block, "\n")
+	rule := tableHead(lines)
+	head := lines[rule-1] + "\n" + lines[rule]
+	cur := strings.Join(lines[:rule+1], "\n")
+	var out []string
+	for i, row := range lines[rule+1:] {
+		if cand := cur + "\n" + row; i == 0 || fits(cand) {
+			cur = cand
+			continue
+		}
+		out = append(out, cur)
+		cur = head + "\n" + row
+	}
+	return append(out, cur)
 }
 
 // attachmentParts keeps an attachment whole when its text fits a caption
@@ -105,13 +183,32 @@ func splitMarkdown(src string) []string {
 			blocks = append(blocks, splitFence(b)...)
 			continue
 		}
-		runes := []rune(b)
-		for start := 0; start < len(runes); {
-			cut := nextCut(runes, start)
-			blocks = append(blocks, string(runes[start:cut]))
-			start = cut
+		// A table's size is its widest cell times its rows: its source may be short.
+		if splitsAsTable(b) {
+			blocks = append(blocks, splitTable(b, fitsMessage)...)
+			continue
 		}
+		blocks = append(blocks, cutBlock(b)...)
 	}
+	return pack(blocks, fitsMessage)
+}
+
+func fitsMessage(chunk string) bool { return renderedUnits(chunk) <= maxTextUnits }
+
+// cutBlock cuts a block by the M2 rule.
+func cutBlock(b string) []string {
+	var out []string
+	runes := []rune(b)
+	for start := 0; start < len(runes); {
+		cut := nextCut(runes, start)
+		out = append(out, string(runes[start:cut]))
+		start = cut
+	}
+	return out
+}
+
+// pack joins neighbouring blocks into chunks while fits holds.
+func pack(blocks []string, fits func(string) bool) []string {
 	var chunks []string
 	cur := ""
 	for _, b := range blocks {
@@ -119,7 +216,7 @@ func splitMarkdown(src string) []string {
 			cur = b
 			continue
 		}
-		if cand := cur + "\n\n" + b; renderedUnits(cand) <= maxTextUnits {
+		if cand := cur + "\n\n" + b; fits(cand) {
 			cur = cand
 			continue
 		}

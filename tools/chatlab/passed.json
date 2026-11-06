@@ -1,9 +1,9 @@
 {
   "scenarios": {
     "addition-real": "5d4a42f4068e21e5d7ee7f2fdc4d61d924d32e74b11df1c016a159b03050f88f",
-    "expiry-closes-the-question": "07cb24a44e4d739c64ec674a5a08eb16b5bcf537bd86d383ff6ea6edc8756d8e",
-    "file-pdf": "42416c6254679605ad499e335efa64313faafd60a05d7208897b7af3976af0a9",
-    "file-photo": "976fc0124138c96bfd83167526c2b637b5761ea2245e73fc47f27d361a79a9c7",
+    "expiry-closes-the-question": "148c1c09a75ab86a771067b6f40f1ebb1990e14c970261ab57c05b3f4b9f2393",
+    "file-pdf": "be5729a9fe53b47afc7f5d826c2a5e6cdbcc8f9479a719cf86d681925d3e671a",
+    "file-photo": "4086a82895a42cfbc46b7e7a5a688b83304a1edae05a988fb0d98e770a71597e",
     "language-ru-after-confirmation": "49d0b106256517252b0fb5a7de82ce1e0f1662c57dcfa2766d9e34a2667b4422",
     "language-ru-after-tools": "eb3e84ac42f8493580ff192d424ec06be57fc475fd0ef4847add9df7fa50fb74",
     "language-ru-first": "e536a9a177fe0230704bf161f74819406fda49f5718b09f162b8ab56a7c50f6a",
@@ -15,8 +15,8 @@
     "language-uk-task": "428efb405c32a5c5d11b45bd8a600c11cc409e63a0493a81c3fb8a72e2957c81",
     "mech-addition": "4e82c56006a5a8a7be1d2c154dba484dbf37e6fbd20f95aebec4a87065235292",
     "mech-addition-boundaries": "95cf420e04c7402427de36d51e40d07865dfd1e3df1464c05a7eaaf73f1cd23f",
-    "mech-expiry": "54cf0e9f6a0b1902e40a77a3f18cd0355f9cac46652a754cb9056eaff3034fad",
-    "mech-file-notice": "65bae92bd8c03537c35c4dd876d4af8be8ef1c15be4cf56e74e3dac793510a21",
+    "mech-expiry": "5ffc119a47997d7ac5c8a1232924af492f683b46c36c236c9a88b8635350dfc8",
+    "mech-file-notice": "a1d84fe954f8a0f7a17b8a5d2f419141879fe38ec7c192405be0d22d4e1b781e",
     "mech-last-turn": "28161e2707c2521a2813d69a9e328e88b93e71b06d4edc1ca2aba6c6dc59479c",
     "mech-metrics": "5df7f32305eb5c71f1d9912e2e62afce934a3574e41440903e26a67bc1377d13",
     "mech-recall-labels": "8f77f9a0b2de1820bdcbf8445cc248e8af9b153dcbbba43abece5a2cffd8917a",

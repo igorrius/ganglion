@@ -53,6 +53,7 @@ type Run struct {
 	Admin          string
 	TelegramAPIURL string
 	TelegramReply  string
+	TelegramRich   string
 	MetricsAddr    string
 	LogDir         string
 	ModelsFile     string
@@ -82,6 +83,9 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 		&cli.StringFlag{Name: "telegram-reply", Usage: "when answers quote the person's message: auto, always or off (ADR-0025)",
 			Value: "auto", Category: catTelegram, Local: true, Sources: env("GANGLION_TELEGRAM_REPLY"), Destination: &r.TelegramReply,
 			Validator: in("GANGLION_TELEGRAM_REPLY", oneOf("auto", "always", "off"))},
+		&cli.StringFlag{Name: "telegram-rich", Usage: "send a message with a table or two headings as a rich message: on or off (ADR-0054)",
+			Value: "on", Category: catTelegram, Local: true, Sources: env("GANGLION_TELEGRAM_RICH"), Destination: &r.TelegramRich,
+			Validator: in("GANGLION_TELEGRAM_RICH", oneOf("on", "off"))},
 		&cli.DurationFlag{Name: "reaction-after", Usage: "work takes this long before a reaction shows it; 0 = off (ADR-0051)", Value: 8 * time.Second,
 			Category: catTelegram, Local: true, Sources: env("GANGLION_REACTION_AFTER"), Destination: &r.ReactionAfter},
 		&cli.DurationFlag{Name: "reaction-dwell", Usage: "a reaction stays at least this long before the next", Value: 3 * time.Second,

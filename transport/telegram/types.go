@@ -33,6 +33,8 @@ type message struct {
 	From            *user  `json:"from,omitempty"`
 	Text            string `json:"text,omitempty"`
 	Caption         string `json:"caption,omitempty"`
+	// RichMessage is a rich formatted message, read when there is no text (R-DLV-12).
+	RichMessage json.RawMessage `json:"rich_message,omitempty"`
 	// Outside content (ruling R35): a forward's origin, a post Telegram
 	// forwarded from a linked channel, a reply to a message in another
 	// chat, and the quoted part of the replied message. Only their
@@ -97,6 +99,15 @@ type sendParams struct {
 	DisableNotification bool             `json:"disable_notification,omitempty"`
 	ReplyParameters     *replyParameters `json:"reply_parameters,omitempty"`
 	ReplyMarkup         *inlineMarkup    `json:"reply_markup,omitempty"`
+}
+
+// richParams are the parameters of sendRichMessage that we use.
+type richParams struct {
+	ChatID              int64            `json:"chat_id"`
+	MessageThreadID     int64            `json:"message_thread_id,omitempty"`
+	RichMessage         richMessage      `json:"rich_message"`
+	DisableNotification bool             `json:"disable_notification,omitempty"`
+	ReplyParameters     *replyParameters `json:"reply_parameters,omitempty"`
 }
 
 // editParams are the parameters of editMessageText that we use.

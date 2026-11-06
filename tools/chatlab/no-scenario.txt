@@ -89,6 +89,10 @@ transport/telegram/conv.go
 transport/telegram/files.go
 transport/telegram/markdown.go
 transport/telegram/reactions.go
+transport/telegram/rich.go
+transport/telegram/richread.go
+transport/telegram/richsend.go
+transport/telegram/tree.go
 transport/telegram/types.go
 turns/**
 language/translate.go
