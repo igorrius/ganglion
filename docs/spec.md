@@ -950,6 +950,38 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   size, age) and cleans it by age or size; `host.stats` reports it. The
   claude CLI work directory is the first case.
 
+### 7.13. The language of fixed texts
+
+What the node writes without a model reaches people who may read only their own language
+([ADR-0053](adr/0053-fixed-texts-in-the-persons-language.md)).
+
+- **R-LANG-1.** A person's language is, in this order: the one they chose, the last valid
+  language their channel reported, English. It belongs to the person, not the conversation. A
+  scheduled message follows its job's owner; a message to a group with no person behind it is in
+  English. A fixed text is rendered when its outbox row is written (R-DLV-5).
+- **R-LANG-2.** Fixed texts a person reads follow it: replies, toasts, labels, questions, folded
+  lines, an admin's included. These stay in English: what a model reads, `/last`, `/metrics`,
+  `/modules` and admin alerts. A number never changes a noun's form in a text, so no language needs
+  plural rules.
+- **R-LANG-3.** A person chooses by saying so in the chat; there is no command. The model calls
+  `language.set` with a code from the table of native names, for the caller alone. In a session
+  that has read nothing from outside it applies at once. In a tainted one it asks with a button, in
+  the requested language with the same question in the current one under it. The tool is offered
+  to every allowed person, and not in a scheduled run.
+- **R-LANG-4.** Per key, the first that has the text wins: an operator's file, a shipped file, a
+  machine translation, English. Operator files live outside the workspace, and no tool writes
+  machine translations.
+- **R-LANG-5.** A listed language with no file is translated once in the background, and never
+  holds a turn. The call has no tools and no history; its only input is our English strings and the
+  language's name. Code accepts a text only with the source's exact placeholders, within its limit,
+  and with no URL, mention or markup its source lacks. A pack missing an approval text, or that only
+  echoes English, is refused. Each stored text keeps a hash of its English source, so a release
+  translates only what changed. Attempts are capped per language per day. A language requested in a
+  tainted session starts only after the press.
+- **R-LANG-6.** A person is told once per language, in that language, that the texts were translated
+  by a machine and may be inaccurate. Every button that acts carries a symbol added by code, outside
+  the translated text, and a question shows its command, address or text as is.
+
 ## 8. First flow: Deye and load shedding (P1)
 
 Deye battery monitoring plus staged shedding of loads by battery state of
@@ -1372,11 +1404,21 @@ Reviewed at each gate.
   - Where the person lives, as a setting of the node: a region for the search backend, and
     hosts it never offers. The owner's live try got Russian sites that are blocked for them,
     since the request was in Russian; a fact in memory is the first thing to try (2026-11-05).
-  - Fixed texts in the person's language: stable keys, an English default and language files
-    anyone can add to, checked by a test, since a model cannot word them. Replaces ruling
-    R46's "fixed texts stay in English", so it needs its own ADR, and it should cover the
-    plural forms and how a person's language is chosen (owner, 2026-11-05).
   - Tables in a phone's width: a wide table goes out as a monospace block that wraps badly.
+  - Telegram Rich Messages (Bot API 10.1 and later): headings, lists, rules and native tables,
+    which OpenClaw already sends and the owner liked in their daily report (owner, 2026-11-06).
+    It may answer the tables above, and it needs its own ADR because it changes ADR-0025.
+    - **Support cannot be asked for:** the Bot API documents no field that says whether a
+      person's client shows these messages, and OpenClaw leaves them off by default because
+      some clients show them as unsupported. So it is an operator's setting, checked by eye on
+      each client.
+    - **Proposed, not decided:** the model keeps writing one ordinary Markdown, with no second
+      format and no extra rules in the prompt; the transport renders it to rich blocks with
+      goldmark when the setting is on and the text has a table or headings, and to entities
+      otherwise.
+    - **Security:** the transport builds blocks from an allowlist rather than passing the
+      model's text on, because Rich Markdown accepts HTML, and an injected image URL could
+      carry data out.
   - A classifier that tells a question from a task, as a candidate first client of "Models
     by purpose": only if the main model's own judgement, given a clearer rule, is measured
     and falls short (owner, 2026-11-05).
@@ -1400,17 +1442,18 @@ Reviewed at each gate.
   comes back empty. It needs a headless browser, too heavy for the core:
   later, as a job for a worker node, behind the same address checks and
   limits as `web.fetch` (owner, 2026-11-03, ruling R44).
-- The bot's language as an install-time setting: the fixed texts, the
-  confirmation questions and the toasts in the operator's language. In
-  M3b they are English; only the command hints follow the client's
-  language (English, Russian, Ukrainian, ruling R45) (owner, 2026-11-03,
-  ruling R46).
 - PDF generation: deferred, since Cyrillic fonts add weight; replies
   carry pictures and documents as attachments first (R-DLV-9) (owner,
   2026-11-02).
+- Installing a node with one link or one button, perhaps from a site, for a person who is
+  not a developer: they give their Telegram id or a channel, then the first-run introduction
+  takes over. So the node's admin cannot be assumed to be technical (owner, 2026-11-06).
 - Importers from popular assistants (OpenClaw first): persona, memory,
   skills and settings turned into ganglion's workspace files, so their
-  users can move over (R-MEM-3, ADR-0024).
+  users can move over (R-MEM-3, ADR-0024). The OpenClaw importer must also
+  bring its MCP servers: the owner's daily Jira report runs on one (owner,
+  2026-11-06). This needs ganglion as an MCP client, which it is not yet, and
+  a server's secrets are not copied silently.
 - Audiences and several agents: a "family mode" with its own agent or
   settings for a group of people, per-topic setups in Telegram forums,
   sub-agents and parallel agents. Until there is a public repository
