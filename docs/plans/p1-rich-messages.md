@@ -230,8 +230,8 @@ text with no-break spaces rather than the preformatted block below, and `treeLea
 - [x] **Step 1:** `make test`, `make lint`, `make memory`: 46.1 MB binary, 44.2 MB RSS after 1,000 turns. `make lab-faults` not run: no seeded fault touches this work, and it spends subscription limits.
 - [x] **Step 2:** `make lab` for what changed. If it recommends a full run, ask the owner.
 - [x] **Step 3:** A fresh reviewer reads the whole branch against the design, the ADR's Security section first.
-- [ ] **Step 4: The owner's live look on @ganglion_test_bot**, from design section 8: a table on a phone, a wide one
+- [x] **Step 4: The owner's live look on @ganglion_test_bot**, from design section 8: a table on a phone, a wide one
   with and without `is_compact`, headings and lists, their own tree, a reply to a rich message, a report above 4,096
   characters, the bot's own rich answer forwarded back. An empty table cell's form is settled here too.
-- [ ] **Step 5:** Fixes from the look. "Where we are" in `docs/README.md`. ADR-0054 Accepted when the owner says so.
-- [ ] **Step 6: Commit,** and the owner's merge.
+- [x] **Step 5:** Fixes from the look. "Where we are" in `docs/README.md`. ADR-0054 Accepted when the owner says so.
+- [x] **Step 6: Commit,** and the owner's merge.

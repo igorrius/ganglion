@@ -1,6 +1,6 @@
 # ADR-0054: Send structured replies as Telegram rich messages, from blocks the transport builds
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-06
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-5, R-DLV-10, R-DLV-11, R-DLV-12), [ADR-0025](0025-markdown-rendered-to-telegram-entities.md), [design](../plans/p1-rich-messages-design.md)

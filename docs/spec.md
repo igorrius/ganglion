@@ -1436,6 +1436,11 @@ Reviewed at each gate.
     know which message the person replied to, while a session can hold several topics (owner, 2026-11-06).
     A reply to the bot's own message in the current session adds nothing outside; an older one or another
     person's needs a security pass.
+  - A forward with a comment: Telegram delivers the comment first and the forward right after, in the same
+    second. The turn starts on the comment alone and answers that it sees no forward; the forward then joins, the first
+    answer folds (R-LIVE-1) and the second is right. Nothing is lost, but it costs a model call and a useless folded
+    answer (seen live, 2026-11-06). To check first: whether both arrive in one `getUpdates` batch, since
+    taking the whole batch before the first step would then fix it with no waiting.
   - URL previews: the Telegram transport does not set them, so Telegram's default applies on ordinary
     messages, and `sendRichMessage` has no parameter for them. A URL the model writes may be fetched by
     Telegram with no press (found 2026-11-06, [ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md)).

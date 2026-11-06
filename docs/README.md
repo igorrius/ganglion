@@ -211,14 +211,16 @@ Start here when coming back to the project.
     tokens, including the first verdicts of `task-report` and `task-selection`. 46.0 MB binary, 44.9 MB RSS after 1,000 turns. The
     `/metrics` memory test (`make memory`) is noisy and goes over its 128 MB line on `master` too: peaks
     of 122 to 134 MB on both, so it does not separate them.
-  - **Telegram Rich Messages, built on branch `rich-messages`, waiting for the owner's look on the test bot**
+  - **Telegram Rich Messages, closed 2026-11-06**
     ([design](plans/p1-rich-messages-design.md), [plan](plans/p1-rich-messages.md),
-    [ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md), Proposed): a message with a
+    [ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md), Accepted): a message with a
     table or at least two headings goes out as a rich message from an allowlist of blocks, a refusal goes the
     ordinary way, a symbol tree keeps its levels and its links, and a rich message sent to the bot is read as outside content.
     Tests, the review and the five lab scenarios it touched pass; 46.1 MB binary, 44.2 MB RSS after 1,000
-    turns. The owner's first look (2026-11-06): the table fits a phone, the long report comes as one message, Telegram
-    refused nothing, and a reply works. A forward back to the bot and a tree of links are still to be seen.
+    turns. The owner's look on the test bot (2026-11-06): the table fits a phone, the long report comes as one message,
+    a reply works, a tree of links keeps its levels and links in both kinds of message, and the bot's own rich answer
+    forwarded back is read and taints the session. Telegram refused nothing. An empty table cell has not been seen
+    live; a refusal of it would go the ordinary way. Next: knowing which message a reply answers, then `/status`.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
