@@ -1411,6 +1411,9 @@ Reviewed at each gate.
   - The agent making a file and sending it, such as a report as a PDF (owner's live try,
     2026-11-05): the transport can send documents, but no tool makes one. It said it had
     none and offered text to copy.
+    The owner wants this for certain (2026-11-06): archive a project folder and send it, find photos by
+    age and send them. Taking files from the machine depends on M3d's sandboxed commands, and what may
+    leave the node needs a security pass.
   - Where the person lives, as a setting of the node: a region for the search backend, and
     hosts it never offers. The owner's live try got Russian sites that are blocked for them,
     since the request was in Russian; a fact in memory is the first thing to try (2026-11-05).
@@ -1419,6 +1422,9 @@ Reviewed at each gate.
     ([ADR-0051](adr/0051-status-reactions-outside-the-outbox.md)); whether a word in the plan adds to them
     is to be seen on a live run. It must go once the work moves on, since the chat stays clean (R-POL-9).
   - Tables in a phone's width: a wide table goes out as a monospace block that wraps badly.
+  - A tree drawn with symbols loses its levels: Markdown strips a line's leading spaces, so the node must
+    keep them (seen 2026-11-06, with Rich Messages). The model decides when to build such a structure,
+    as the owner asked it to in their own report.
   - Telegram Rich Messages (Bot API 10.1 and later): headings, lists, rules and native tables,
     which OpenClaw already sends and the owner liked in their daily report (owner, 2026-11-06).
     It may answer the tables above, and it needs its own ADR because it changes ADR-0025.
