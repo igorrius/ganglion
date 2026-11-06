@@ -34,11 +34,34 @@ const (
 	ToastUsed       Key = "toast.used"
 	ToastExpired    Key = "toast.expired"
 	ToastNotAllowed Key = "toast.not_allowed"
+
+	LineRunning        Key = "line.running"
+	LineApproved       Key = "line.approved"
+	LineApprovedFailed Key = "line.approved_failed"
+	LineDeclined       Key = "line.declined"
+	LineUsed           Key = "line.used"
+	LineExpired        Key = "line.expired"
+
+	ReplyNoModel      Key = "reply.no_model"
+	ReplyStepLimit    Key = "reply.step_limit"
+	ReplyExpired      Key = "reply.expired"
+	ReplyDailyLimit   Key = "reply.daily_limit"
+	ReplyGiveUp       Key = "reply.give_up"
+	ReplyNewSession   Key = "reply.new_session"
+	ReplyNoSessions   Key = "reply.no_sessions"
+	ReplyNoSuchResume Key = "reply.no_such_resume"
+	ReplyResumed      Key = "reply.resumed"
+	ReplySessionRow   Key = "reply.session_row"
+	ReplyNoTasks      Key = "reply.no_tasks"
+	ReplyNotAvailable Key = "reply.not_available"
 )
 
 var allKeys = []Key{
 	ButtonApprove, ButtonDeny,
 	ToastApproved, ToastDeclined, ToastAccepted, ToastNotYours, ToastNoButton, ToastUsed, ToastExpired, ToastNotAllowed,
+	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
+	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
+	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
 }
 
 // Keys returns every key.
@@ -130,9 +153,14 @@ type Catalog struct {
 	pack     PackFunc
 }
 
+// Shipped returns a catalogue of the shipped files alone.
+func Shipped() *Catalog { return &Catalog{pack: noPack} }
+
+func noPack(Lang, Key) (string, bool) { return "", false }
+
 // New returns a catalogue of the shipped files and whatever opts add.
 func New(opts ...Option) (*Catalog, error) {
-	c := &Catalog{pack: func(Lang, Key) (string, bool) { return "", false }}
+	c := Shipped()
 	for _, o := range opts {
 		o(c)
 	}
@@ -203,12 +231,12 @@ func fill(template string, v Vars, literal func(string) string) string {
 	return b.String()
 }
 
-// escapeMarkdown puts a backslash before each ASCII punctuation mark, which CommonMark reads as
-// that mark and nothing more.
+// escapeMarkdown puts a backslash before each mark that formats, the same marks a translation may
+// not add (Check). Ordinary punctuation stays as it is, so a text reads the same in a log or a test.
 func escapeMarkdown(s string) string {
 	var b strings.Builder
 	for _, r := range s {
-		if r < 128 && strings.ContainsRune("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", r) {
+		if strings.ContainsRune(markupMarks+`&\`, r) {
 			b.WriteByte('\\')
 		}
 		b.WriteRune(r)

@@ -10,3 +10,23 @@ toast.no_button: This button no longer works.
 toast.used: Already handled.
 toast.expired: Expired.
 toast.not_allowed: Not allowed.
+
+line.running: ⏳ Approved, running…
+line.approved: Approved
+line.approved_failed: Approved, but it failed
+line.declined: Declined
+line.used: Already handled.
+line.expired: Expired
+
+reply.no_model: Sorry, no model is reachable right now. Please try again in a few minutes.
+reply.step_limit: Sorry, I could not finish that.
+reply.expired: The request expired without an answer, so nothing was done.
+reply.daily_limit: Daily limit reached; the bot answers again tomorrow.
+reply.give_up: Sorry, something went wrong with that message.
+reply.new_session: New session started.
+reply.no_sessions: No earlier sessions.
+reply.no_such_resume: No such session; see /sessions.
+reply.resumed: "Resumed: {title}"
+reply.session_row: "{n}. {span} · turns: {turns} · {title}"
+reply.no_tasks: No reminders or scheduled tasks.
+reply.not_available: This command is not available to you.

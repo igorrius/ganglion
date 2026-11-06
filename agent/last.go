@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/internal/clock"
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/internal/text"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -44,7 +45,7 @@ func (a *Agent) lastTurn(ctx context.Context, t *turn, _ string) error {
 		return err
 	}
 	if !t.admin {
-		t.reply(replyTasksNotAvailable)
+		t.reply(a.say(ctx, t, texts.ReplyNotAvailable, nil))
 		return nil
 	}
 	last, err := a.d.Turns.Last(ctx, t.event.Conv)

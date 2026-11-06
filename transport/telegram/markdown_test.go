@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/igorrius/ganglion/texts"
 )
 
 func ent(typ string, off, n int) entity { return entity{Type: typ, Offset: off, Length: n} }
@@ -153,5 +155,21 @@ func TestCollapsedRemovesQuotesInside(t *testing.T) {
 func TestCollapsedOfNothingIsNothing(t *testing.T) {
 	if got := collapsed("", nil); len(got) != 0 {
 		t.Fatalf("entities %+v", got)
+	}
+}
+
+// A fixed text's template is escaped by package texts; here it must come out as it was typed.
+func TestEscapedTextShowsItsMarks(t *testing.T) {
+	c := texts.Shipped()
+	if got := c.Text(texts.English, texts.ReplyNoSuchResume, nil); got != "No such session; see /sessions." {
+		t.Fatalf("%q", got)
+	}
+	cat, err := texts.New(texts.WithFiles(map[texts.Lang]map[texts.Key]string{"pl": {texts.ToastUsed: "a *b* _c_ `d` [e](f) #g <h> & i"}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, ents := render(cat.Text("pl", texts.ToastUsed, nil))
+	if text != "a *b* _c_ `d` [e](f) #g <h> & i" || len(ents) != 0 {
+		t.Fatalf("%q, %+v", text, ents)
 	}
 }

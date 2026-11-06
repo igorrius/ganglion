@@ -168,6 +168,20 @@ func TestTextEscapesTemplateNotValues(t *testing.T) {
 	}
 }
 
+func TestTextKeepsPlainPunctuation(t *testing.T) {
+	c := newCatalog(t, WithFiles(map[Lang]map[Key]string{"pl": {ToastUsed: "Gotowe, 1. (tak) - a.b!"}}))
+	if got, want := c.Text("pl", ToastUsed, nil), "Gotowe, 1. (tak) - a.b!"; got != want {
+		t.Errorf("%q, want %q", got, want)
+	}
+}
+
+func TestTextEscapesEveryMarkupMark(t *testing.T) {
+	c := newCatalog(t, WithFiles(map[Lang]map[Key]string{"pl": {ToastUsed: "a*_`~[]<>#|&\\b"}}))
+	if got, want := c.Text("pl", ToastUsed, nil), "a\\*\\_\\`\\~\\[\\]\\<\\>\\#\\|\\&\\\\b"; got != want {
+		t.Errorf("%q, want %q", got, want)
+	}
+}
+
 func TestValueIsNotSubstitutedAgain(t *testing.T) {
 	c := newCatalog(t, WithFiles(map[Lang]map[Key]string{"pl": {ToastUsed: "{a} {b}"}}))
 	if got, want := c.Label("pl", ToastUsed, Vars{"a": "{b}", "b": "x"}), "{b} x"; got != want {

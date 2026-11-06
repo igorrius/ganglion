@@ -172,8 +172,14 @@ named task.
 - Consumes: `texts.Catalog.Text`, `Label`; `turn.lang`.
 - Produces: `agent.Deps.Texts *texts.Catalog`.
 
-- [ ] **Step 1: Write down the inventory** in this plan, under this task: each string a person
-  sees, with its file and key. Leave out what a model reads (prompts, `errorPrefix`, the speaker
+- [x] **Step 1: Write down the inventory** in this plan, under this task: each string a person
+  sees, with its file and key. *Done: `agent/ack.go` toasts and lines (`toast.*`, `line.running`,
+  `line.approved`, `line.approved_failed`); `agent/resume.go` lines (`line.declined`, `line.used`,
+  `line.expired`); `agent/prompt.go` and `agent/limits.go` (`reply.no_model`, `reply.step_limit`,
+  `reply.expired`, `reply.daily_limit`, `reply.give_up`); `agent/commands.go`, `agent/last.go`,
+  `agent/metrics.go` and `agent/modules.go` (`reply.new_session`, `reply.no_sessions`,
+  `reply.no_such_resume`, `reply.resumed`, `reply.session_row`, `reply.no_tasks`,
+  `reply.not_available`). Task's answer text in `agent/scheduled.go` is a model's or the job's own.* Leave out what a model reads (prompts, `errorPrefix`, the speaker
   and task lines) and the diagnostics in the design's non-goals (`agent/last.go`, `agent/metrics.go`,
   `agent/modules.go`, admin alerts).
 - [ ] **Step 2: Write the failing tests:**

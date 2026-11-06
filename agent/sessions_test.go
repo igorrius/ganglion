@@ -114,7 +114,7 @@ func TestSessionsList(t *testing.T) {
 	e.turn(t, message("telegram:user:42", "Anna", "про ужин"))
 	e.turn(t, message("telegram:user:42", "Anna", "/new"))
 	out := e.turn(t, message("telegram:user:42", "Igor", "/sessions"))
-	want := "1. 3 Nov 11:00–11:00 · 1 turns · Anna: про ужин\n2. 3 Nov 10:00–10:05 · 2 turns · Igor: про бойлер"
+	want := "1. 03.11 11:00–11:00 · turns: 1 · Anna: про ужин\n2. 03.11 10:00–10:05 · turns: 2 · Igor: про бойлер"
 	if out[0].Text != want {
 		t.Fatalf("list\n got %q\nwant %q", out[0].Text, want)
 	}

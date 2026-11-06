@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool/pending"
 )
 
@@ -27,36 +28,17 @@ type NoRefs struct{}
 // SentRef implements SentRefs.
 func (NoRefs) SentRef(context.Context, string) (string, error) { return "", nil }
 
-// Toasts: the short notice that answers a press (ruling R40).
-const (
-	toastApproved   = "Approved"
-	toastDeclined   = "Declined"
-	toastAccepted   = "Accepted"
-	toastNotYours   = "This button is not yours."
-	toastNoButton   = "This button no longer works."
-	toastUsed       = "Already handled."
-	toastExpired    = "Expired."
-	toastNotAllowed = "Not allowed."
-)
-
-// Lines of an approved question: while its call runs, and when it ended.
-const (
-	lineRunning        = "⏳ Approved, running…"
-	lineApproved       = "Approved"
-	lineApprovedFailed = "Approved, but it failed"
-)
-
 // errorPrefix starts the outcome of a call that failed, as the model
 // reads it.
 const errorPrefix = "error: "
 
 // approvedLine is the last line of an approved question: whether its call
 // did what it was asked, from the stored outcome's flag.
-func approvedLine(failed bool) string {
+func approvedLine(failed bool) texts.Key {
 	if failed {
-		return lineApprovedFailed
+		return texts.LineApprovedFailed
 	}
-	return lineApproved
+	return texts.LineApproved
 }
 
 // stamped is a closed question's line with the time it was decided, in the
@@ -92,9 +74,9 @@ func (t *turn) toast(text string) {
 // (ruling R40). They go to the outbox now, not with the turn's replies;
 // their keys are the press's, so a rerun stores them once. A failure
 // costs only the early feedback: it is logged and the press goes on.
-func (a *Agent) acknowledge(ctx context.Context, t *turn, toast, question, status string) {
+func (a *Agent) acknowledge(ctx context.Context, t *turn, toast texts.Key, question, status string) {
 	var msgs []event.Outgoing
-	if o, ok := t.ack(toast); ok {
+	if o, ok := t.ack(a.label(ctx, t, toast)); ok {
 		msgs = append(msgs, o)
 	}
 	if o, ok := t.editOut(":status", pending.QuickEdit{Text: status, Folded: question}); ok && question != "" {

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool/builtin"
 )
 
@@ -22,7 +23,7 @@ func (a *Agent) showMetrics(ctx context.Context, t *turn, arg string) error {
 		return err
 	}
 	if _, ok := a.d.Tools.Lookup(builtin.MetricsTool); !ok || !t.admin {
-		t.reply(replyTasksNotAvailable)
+		t.reply(a.say(ctx, t, texts.ReplyNotAvailable, nil))
 		return nil
 	}
 	shown := len(t.out)

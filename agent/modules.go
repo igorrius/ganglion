@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/igorrius/ganglion/modstore"
+	"github.com/igorrius/ganglion/texts"
 )
 
 // Modules lists, updates and rolls back the node's modules (R-RUN-8).
@@ -46,7 +47,7 @@ func (a *Agent) modules(ctx context.Context, t *turn, arg string) error {
 		return err
 	}
 	if !t.admin {
-		t.reply(replyTasksNotAvailable)
+		t.reply(a.say(ctx, t, texts.ReplyNotAvailable, nil))
 		return nil
 	}
 	verb, name, _ := strings.Cut(strings.TrimSpace(arg), " ")

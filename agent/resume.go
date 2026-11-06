@@ -9,6 +9,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
@@ -39,11 +40,7 @@ const (
 )
 
 // Lines that say how a question ended, above its folded text (R-POL-9).
-const (
-	lineDeclined = "Declined"
-	lineUsed     = "Already handled."
-	lineExpired  = "Expired"
-)
+const ()
 
 // resume handles a press of a button and the expiry of a pending call,
 // and ends the turn; a message goes on to the next stages (ADR-0032).
@@ -82,22 +79,22 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 	switch {
 	case errors.Is(err, pending.ErrNotYours):
 		a.log.Info("agent: press refused", "conv", t.event.Conv, "principal", t.msg.From, "err", err)
-		t.toast(toastNotYours)
+		t.toast(a.label(ctx, t, texts.ToastNotYours))
 		return nil
 	case errors.Is(err, pending.ErrNotFound):
 		a.log.Info("agent: press refused", "conv", t.event.Conv, "principal", t.msg.From, "err", err)
-		t.toast(toastNoButton)
+		t.toast(a.label(ctx, t, texts.ToastNoButton))
 		return nil
 	case errors.Is(err, pending.ErrUsed) && p.Item.ID == "":
-		t.toast(toastUsed)
+		t.toast(a.label(ctx, t, texts.ToastUsed))
 		return nil // a quick button tapped twice: the first tap's edit stands
 	case errors.Is(err, pending.ErrUsed):
-		t.toast(toastUsed)
-		t.closeButtons(p.Item.Question, a.usedLine(p))
+		t.toast(a.label(ctx, t, texts.ToastUsed))
+		t.closeButtons(p.Item.Question, a.usedLine(ctx, t, p))
 		return nil
 	case errors.Is(err, pending.ErrExpired):
-		t.toast(toastExpired)
-		t.closeButtons(p.Item.Question, a.stamped(lineExpired, p.Item.Expires))
+		t.toast(a.label(ctx, t, texts.ToastExpired))
+		t.closeButtons(p.Item.Question, a.stamped(a.say(ctx, t, texts.LineExpired, nil), p.Item.Expires))
 		return nil
 	case err != nil:
 		return err
@@ -111,16 +108,16 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 // usedLine is how an answered question ended, for a second press of it:
 // the answer a press gave, or that it expired. The time is the decision's,
 // not this press's.
-func (a *Agent) usedLine(p pending.Press) string {
+func (a *Agent) usedLine(ctx context.Context, t *turn, p pending.Press) string {
 	switch {
 	case p.Answer == pending.ActionApprove:
-		return a.stamped(approvedLine(p.Item.Failed), p.Item.Answered)
+		return a.stamped(a.say(ctx, t, approvedLine(p.Item.Failed), nil), p.Item.Answered)
 	case p.Answer == pending.ActionDeny:
-		return a.stamped(lineDeclined, p.Item.Answered)
+		return a.stamped(a.say(ctx, t, texts.LineDeclined, nil), p.Item.Answered)
 	case p.Item.Status == pending.StatusExpired || p.Item.Status == pending.StatusDone:
-		return a.stamped(lineExpired, p.Item.Expires)
+		return a.stamped(a.say(ctx, t, texts.LineExpired, nil), p.Item.Expires)
 	default:
-		return lineUsed
+		return a.say(ctx, t, texts.LineUsed, nil)
 	}
 }
 
@@ -144,17 +141,17 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 	}
 	if !t.admin {
 		a.log.Info("agent: quick action refused: not an admin", "action", b.Action, "principal", t.msg.From)
-		t.toast(toastNotAllowed)
+		t.toast(a.label(ctx, t, texts.ToastNotAllowed))
 		return nil
 	}
 	run, ok := a.d.QuickActions[b.Action]
 	if !ok {
 		a.log.Warn("agent: no quick action", "action", b.Action, "conv", t.event.Conv)
-		t.toast(toastNoButton)
+		t.toast(a.label(ctx, t, texts.ToastNoButton))
 		t.closeButtons("", "")
 		return nil
 	}
-	a.acknowledge(ctx, t, toastAccepted, "", "")
+	a.acknowledge(ctx, t, texts.ToastAccepted, "", "")
 	e, err := run(ctx, pending.QuickPress{Button: b, Transport: t.event.Source, Event: t.event.ID})
 	if err != nil {
 		return fmt.Errorf("agent: quick action %s: %w", b.Action, err)
@@ -187,22 +184,22 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 		return err
 	}
 	if action == pending.ActionApprove {
-		a.acknowledge(ctx, t, toastApproved, it.Question, lineRunning)
+		a.acknowledge(ctx, t, texts.ToastApproved, it.Question, a.say(ctx, t, texts.LineRunning, nil))
 	} else {
-		a.acknowledge(ctx, t, toastDeclined, it.Question, a.stamped(lineDeclined, it.Answered))
+		a.acknowledge(ctx, t, texts.ToastDeclined, it.Question, a.stamped(a.say(ctx, t, texts.LineDeclined, nil), it.Answered))
 	}
 	o, err := a.decide(ctx, t, it, action)
 	if err != nil {
 		return err
 	}
-	line := lineDeclined
+	line := texts.LineDeclined
 	if action == pending.ActionApprove {
 		line = approvedLine(o.Failed)
 	}
 	// The call's messages, then the question with how it ended (ruling
 	// R40); again on a rerun: the outbox keeps one per key.
 	t.out = append(t.out, o.Out...)
-	t.editWith(pending.QuickEdit{Text: a.stamped(line, it.Answered), Folded: it.Question})
+	t.editWith(pending.QuickEdit{Text: a.stamped(a.say(ctx, t, line, nil), it.Answered), Folded: it.Question})
 	if !slices.Contains(t.state.Pending, it.ID) {
 		return nil
 	}
@@ -361,7 +358,7 @@ func (a *Agent) closeExpired(ctx context.Context, t *turn, it pending.Item) {
 		return
 	}
 	t.out = append(t.out, event.Outgoing{IdemKey: t.event.IdemKey + ":edit", Transport: it.Transport, Conv: it.Conv,
-		Text: a.stamped(lineExpired, it.Expires), Folded: it.Question, Edit: ref})
+		Text: a.stamped(a.say(ctx, t, texts.LineExpired, nil), it.Expires), Folded: it.Question, Edit: ref})
 }
 
 // continueWith resumes the conversation: the call's outcome joins the

@@ -43,14 +43,3 @@ const compactPrompt = `You maintain the memory of an ongoing conversation.
 Rewrite the earlier summary and the new part of the conversation into one short summary for your future self:
 who took part, facts learned, decisions made, open questions.
 Write in the language of the conversation. Output only the summary.`
-
-// Fixed replies.
-const (
-	replyNoModel    = "Sorry, no model is reachable right now. Please try again in a few minutes."
-	replyStepLimit  = "Sorry, I could not finish that."
-	replyExpired    = "The request expired without an answer, so nothing was done."
-	replyDailyLimit = "Daily limit reached; the bot answers again tomorrow."
-	// replyGiveUp ends a turn the agent gives up on: a message that failed
-	// every attempt (GiveUp), or a CLI run that failed after it ran tools.
-	replyGiveUp = "Sorry, something went wrong with that message."
-)

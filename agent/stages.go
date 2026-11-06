@@ -40,7 +40,7 @@ func (a *Agent) limits(ctx context.Context, t *turn) (bool, error) {
 		return false, nil
 	}
 	t.record.Outcome = turns.OutcomeDailyLimit
-	t.reply(replyDailyLimit)
+	t.reply(a.say(ctx, t, texts.ReplyDailyLimit, nil))
 	t.out = append(t.out, alerts...)
 	return true, nil
 }
@@ -124,10 +124,20 @@ func (a *Agent) language(ctx context.Context, t *turn) texts.Lang {
 	return l
 }
 
+// say is k's text in the turn's person's language, for a message.
+func (a *Agent) say(ctx context.Context, t *turn, k texts.Key, v texts.Vars) string {
+	return a.d.Texts.Text(a.language(ctx, t), k, v)
+}
+
+// label is k's text in the turn's person's language, for a toast or a button.
+func (a *Agent) label(ctx context.Context, t *turn, k texts.Key) string {
+	return a.d.Texts.Label(a.language(ctx, t), k, nil)
+}
+
 // endReplies are the fixed replies of a turn no model answered.
-var endReplies = map[turns.Outcome]string{
-	turns.OutcomeNoModel: replyNoModel,
-	turns.OutcomeError:   replyGiveUp, // a CLI run failed after it ran tools
+var endReplies = map[turns.Outcome]texts.Key{
+	turns.OutcomeNoModel: texts.ReplyNoModel,
+	turns.OutcomeError:   texts.ReplyGiveUp, // a CLI run failed after it ran tools
 }
 
 // converse adds user to the history and runs the model on it, with tools
@@ -148,15 +158,17 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 	if end != turns.OutcomeOK {
 		t.record.Outcome = end
 		t.state.Messages, t.state.Last = append(append(t.state.Messages, user), t.kept...), t.now
-		t.reply(endReplies[end])
+		t.reply(a.say(ctx, t, endReplies[end], nil))
 		return true, nil
 	}
 	switch {
 	case text == "" && t.noTools: // an expiry turn whose model wrote no text (R33)
-		text = replyExpired
+		text = a.say(ctx, t, texts.ReplyExpired, nil)
 	case text == "":
 		t.record.Outcome = turns.OutcomeStepLimit
-		text = lastText(added, t.kept)
+		if text = lastText(added, t.kept); text == "" {
+			text = a.say(ctx, t, texts.ReplyStepLimit, nil)
+		}
 	}
 	t.state.Messages = append(append(t.state.Messages, user), added...)
 	t.state.Last = t.now
@@ -223,7 +235,7 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 }
 
 // lastText is the newest text the model wrote, for a turn cut by the step
-// limit; replyStepLimit when it wrote none. A text already sent as an earlier
+// limit; "" when it wrote none. A text already sent as an earlier
 // answer (kept) is not the reply: the person has it, and it does not answer what
 // came after it.
 func lastText(added, kept []provider.Message) string {
@@ -234,7 +246,7 @@ func lastText(added, kept []provider.Message) string {
 			return m.Content
 		}
 	}
-	return replyStepLimit
+	return ""
 }
 
 // compactHistory folds old history into the summary once it grows past

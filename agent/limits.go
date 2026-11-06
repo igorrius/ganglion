@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/clock"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -50,6 +52,16 @@ func (a *Agent) totals(ctx context.Context, now time.Time, principal, eventID st
 	return tot, !under(tot.Turns, a.cfg.DailyTurns) || !under(tot.Tokens, a.cfg.DailyTokens)
 }
 
+// giveUpText is the apology in the language of the person behind e. GiveUp has no turn, and its
+// event may be one that failed to decode: then it is in English.
+func (a *Agent) giveUpText(e event.Event) string {
+	var who struct {
+		From string `json:"from"`
+	}
+	_ = json.Unmarshal(e.Payload, &who)
+	return a.say(context.Background(), &turn{msg: event.Message{From: who.From}}, texts.ReplyGiveUp, nil)
+}
+
 // GiveUp is the agent's core.GiveUp: an apology to the person and an
 // alert to the admins for a message that failed every attempt. A
 // scheduled job has nobody to apologise to in its conversation: only the
@@ -58,7 +70,7 @@ func (a *Agent) GiveUp(e event.Event, attempts int) []event.Outgoing {
 	var out []event.Outgoing
 	if e.Kind != event.KindSchedule {
 		out = append(out, event.Outgoing{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv,
-			Text: replyGiveUp})
+			Text: a.giveUpText(e)})
 	}
 	alerts, err := a.d.Alerts.Messages(context.Background(), "alert:give-up:"+e.ID,
 		"Gave up on event "+e.ID+" in "+e.Conv+" after "+strconv.Itoa(attempts)+" attempts.")

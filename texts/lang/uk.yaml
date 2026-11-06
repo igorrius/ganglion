@@ -9,3 +9,23 @@ toast.no_button: Ця кнопка більше не працює.
 toast.used: Вже зроблено.
 toast.expired: Час вийшов.
 toast.not_allowed: Не можна.
+
+line.running: ⏳ Дозволено, виконую…
+line.approved: Дозволено
+line.approved_failed: Дозволено, але не вийшло
+line.declined: Відхилено
+line.used: Вже зроблено.
+line.expired: Час вийшов
+
+reply.no_model: Вибачте, зараз немає доступу до жодної моделі. Спробуйте за кілька хвилин.
+reply.step_limit: Вибачте, не вдалося це завершити.
+reply.expired: Запит сплив без відповіді, тож нічого не зроблено.
+reply.daily_limit: Денний ліміт вичерпано; бот знову відповість завтра.
+reply.give_up: Вибачте, з цим повідомленням щось пішло не так.
+reply.new_session: Нову розмову розпочато.
+reply.no_sessions: Попередніх розмов немає.
+reply.no_such_resume: Такої розмови немає; дивіться /sessions.
+reply.resumed: "Продовжуємо: {title}"
+reply.session_row: "{n}. {span} · ходів: {turns} · {title}"
+reply.no_tasks: Нагадувань і завдань за розкладом немає.
+reply.not_available: Ця команда вам недоступна.
