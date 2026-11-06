@@ -121,7 +121,9 @@ const (
 	limitMessage = 4000
 	// limitQuestion leaves a question room for its values under tool.MaxQuestionRunes, which the
 	// policy cuts at: a person must see the whole of what they approve (ruling R34).
-	limitQuestion = 900
+	limitQuestion = 400
+	// limitInQuestion is for a text that goes inside a question, so several add up.
+	limitInQuestion = 300
 )
 
 // limit returns the most characters k's text may have.
@@ -133,6 +135,8 @@ func limit(k Key) int {
 		return limitButton
 	case strings.HasPrefix(string(k), "ask."):
 		return limitQuestion
+	case strings.HasPrefix(string(k), "sched."):
+		return limitInQuestion
 	default:
 		return limitMessage
 	}
@@ -141,7 +145,13 @@ func limit(k Key) int {
 // IsApproval reports whether a person reads k's text to decide an approval. A machine translation
 // missing any of these is refused whole (R-LANG-5).
 func IsApproval(k Key) bool {
-	return k == ButtonApprove || k == ButtonDeny || strings.HasPrefix(string(k), "ask.")
+	switch k {
+	case ButtonApprove, ButtonDeny, ButtonDelete, ButtonRunNow, SchedSummaryReminder, SchedSummaryTask,
+		SchedOnce, SchedEvery, SchedEveryNext, SchedThisChat, SchedNone:
+		return true
+	default:
+		return strings.HasPrefix(string(k), "ask.")
+	}
 }
 
 // Source says where a text came from.

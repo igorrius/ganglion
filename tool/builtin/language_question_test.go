@@ -3,6 +3,7 @@ package builtin_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -143,5 +144,22 @@ func TestAuditToolResultStaysEnglish(t *testing.T) {
 	}
 	if !strings.Contains(res.Text, "Checked 3 stored facts") {
 		t.Errorf("%q", res.Text)
+	}
+}
+
+// Review of task 7: a padded summary pushed the real instruction past the policy's silent cut.
+func TestScheduleQuestionTooLongIsRefused(t *testing.T) {
+	cat, err := texts.New(texts.WithFiles(map[texts.Lang]map[texts.Key]string{"pl": {
+		texts.SchedSummaryReminder: strings.Repeat("Tylko przypomnienie o pogodzie. ", 110) + "{text} {timing} {target}",
+	}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := newSchedEnv(t)
+	create := builtin.NewScheduleCreate(e.sc)
+	c := call("schedule.create", `{"kind":"reminder","at":"2026-12-01T09:00","text":"call mum"}`)
+	c.Speak = texts.Speaker{Lang: "pl", Cat: cat}
+	if _, err := create.Question(context.Background(), c); !errors.Is(err, builtin.ErrTooLongToShow) {
+		t.Fatalf("err %v", err)
 	}
 }

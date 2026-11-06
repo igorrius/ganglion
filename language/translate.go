@@ -29,6 +29,11 @@ const (
 	attemptsPerDay = 3
 	sweepEvery     = time.Hour
 	callTimeout    = 3 * time.Minute
+	// maxAnswerTokens is well above the whole catalogue in a wordy script.
+	maxAnswerTokens = 16000
+	// echoSweep is the fewest texts that say anything when they all equal English: one word such as
+	// "Details" may be correct as it is.
+	echoSweep = 5
 )
 
 // Outcomes of a translation run: a metric label.
@@ -37,6 +42,7 @@ const (
 	outcomePartial = "partial"
 	outcomeRefused = "refused"
 	outcomeFailed  = "failed"
+	outcomeCapped  = "capped"
 )
 
 const translatePrompt = `Translate the values of this JSON object into %s (language code %s). They are the fixed texts of a chat assistant: buttons, short notices and questions a person reads.
@@ -162,7 +168,7 @@ func NewTranslator(s *Store, cat *texts.Catalog, r router.Router, ps map[string]
 	t := &Translator{store: s, cat: cat, router: r, providers: ps, now: time.Now, log: slog.New(slog.DiscardHandler),
 		wake: make(chan struct{}, 1)}
 	t.runs, _ = m.Int64Counter("ganglion.language.translations",
-		metric.WithDescription("Translation runs, by language and outcome (done, partial, refused, failed)."))
+		metric.WithDescription("Translation runs, by language and outcome (done, partial, refused, failed, capped)."))
 	t.refused, _ = m.Int64Counter("ganglion.language.texts_refused",
 		metric.WithDescription("Translated texts the checks refused, by language."))
 	t.tokens, _ = m.Int64Counter("ganglion.language.tokens",
@@ -208,8 +214,8 @@ func (t *Translator) sweep(ctx context.Context) {
 		return
 	}
 	for _, l := range wanted {
-		if _, known := texts.Normalize(string(l)); !known {
-			continue
+		if n, known := texts.Normalize(string(l)); !known || n != l {
+			continue // only a value exactly from the table reaches the prompt and the metrics
 		}
 		if missing := t.missing(l); len(missing) > 0 {
 			t.translate(ctx, l, missing)
@@ -236,6 +242,7 @@ func (t *Translator) translate(ctx context.Context, l texts.Lang, source map[tex
 		return
 	}
 	if !ok {
+		t.count(ctx, l, outcomeCapped) // a person stuck in English shows here
 		return
 	}
 	answer, model, err := t.ask(ctx, l, source)
@@ -266,12 +273,21 @@ func (t *Translator) count(ctx context.Context, l texts.Lang, outcome string) {
 	t.runs.Add(ctx, 1, metric.WithAttributes(attribute.String("lang", string(l)), attribute.String("outcome", outcome)))
 }
 
-// ask calls the cheap model with a clean context: no tools, no history, only our strings and the
-// language's name from the table (R-LANG-5). It tries each candidate in turn.
+// ask makes one call to the first candidate, so an attempt is one call and the cap means what it says.
+// It has a clean context: no tools, no history, only our strings and the language's name from the
+// table (R-LANG-5).
 func (t *Translator) ask(ctx context.Context, l texts.Lang, source map[texts.Key]string) (string, string, error) {
 	cands, err := t.router.Route(ctx, router.TaskReq{Tier: router.TierCheap, Kind: router.TaskTranslate})
 	if err != nil {
 		return "", "", err
+	}
+	if len(cands) == 0 {
+		return "", "", errors.New("no model")
+	}
+	c := cands[0]
+	p, ok := t.providers[c.Provider]
+	if !ok {
+		return "", "", fmt.Errorf("no provider %s", c.Provider)
 	}
 	raw, err := json.Marshal(source)
 	if err != nil {
@@ -281,64 +297,60 @@ func (t *Translator) ask(ctx context.Context, l texts.Lang, source map[texts.Key
 		{Role: provider.RoleSystem, Content: fmt.Sprintf(translatePrompt, texts.Native(l), string(l))},
 		{Role: provider.RoleUser, Content: string(raw)},
 	}
-	last := errors.New("no model")
-	for _, c := range cands {
-		p, ok := t.providers[c.Provider]
-		if !ok {
-			continue
-		}
-		cctx, cancel := context.WithTimeout(ctx, callTimeout)
-		resp, err := p.Chat(cctx, provider.ChatRequest{Model: c.Model, Messages: msgs})
-		cancel()
-		t.router.Report(c, err)
-		if err != nil {
-			last = err
-			continue
-		}
-		u := resp.Usage
-		attrs := metric.WithAttributes(attribute.String("lang", string(l)))
-		t.tokens.Add(ctx, int64(u.InputTokens+u.OutputTokens), attrs)
-		t.cost.Add(ctx, c.Cost(u.InputTokens, u.OutputTokens), attrs)
-		return resp.Message.Content, c.Model, nil
+	cctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	resp, err := p.Chat(cctx, provider.ChatRequest{Model: c.Model, Messages: msgs, MaxTokens: maxAnswerTokens})
+	t.router.Report(c, err)
+	if err != nil {
+		return "", "", err
 	}
-	return "", "", last
+	u := resp.Usage
+	attrs := metric.WithAttributes(attribute.String("lang", string(l)))
+	t.tokens.Add(ctx, int64(u.InputTokens+u.OutputTokens), attrs)
+	t.cost.Add(ctx, c.Cost(u.InputTokens, u.OutputTokens), attrs)
+	return resp.Message.Content, c.Model, nil
 }
 
 // accept applies the checks to a model's answer (R-LANG-5). A text that fails stays in English; an
-// answer that is not JSON, only echoes English, or fails an approval text is refused whole.
+// answer that is not JSON, holds nothing, only echoes English, or fails an approval text is refused
+// whole. The reason it returns names only keys of ours, since a model's own go to the log.
 func accept(source map[texts.Key]string, answer string) (map[texts.Key]string, string, string) {
 	var tr map[texts.Key]string
 	if err := json.Unmarshal([]byte(unfence(answer)), &tr); err != nil {
 		return nil, outcomeRefused, "not JSON"
 	}
 	ok, rejected := texts.Check(source, tr)
-	for _, k := range slices.Sorted(maps.Keys(source)) {
+	if len(ok) == 0 {
+		return nil, outcomeRefused, "no text accepted"
+	}
+	var approvals, echoed, same int
+	for k := range source {
+		if ok[k] == source[k] {
+			same++
+		}
 		if !texts.IsApproval(k) {
 			continue
 		}
+		approvals++
 		if _, good := ok[k]; !good {
 			return nil, outcomeRefused, "approval text " + string(k) + " failed: " + rejected[k]
 		}
-	}
-	echo := len(ok) > 0
-	for k, s := range ok {
-		if s != source[k] {
-			echo = false
-			break
+		if ok[k] == source[k] {
+			echoed++
 		}
 	}
-	if echo {
+	if same == len(ok) && len(ok) >= echoSweep || approvals >= echoSweep && echoed == approvals {
 		return nil, outcomeRefused, "only echoes English"
 	}
 	if len(ok) == len(source) {
 		return ok, outcomeDone, ""
 	}
-	first := ""
-	for _, k := range slices.Sorted(maps.Keys(rejected)) {
-		first = string(k) + ": " + rejected[k]
-		break
+	for _, k := range slices.Sorted(maps.Keys(source)) {
+		if reason, bad := rejected[k]; bad {
+			return ok, outcomePartial, string(k) + ": " + reason
+		}
 	}
-	return ok, outcomePartial, first
+	return ok, outcomePartial, "keys missing from the answer"
 }
 
 // unfence drops a Markdown code fence around an answer, which models add unasked.

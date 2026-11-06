@@ -340,3 +340,82 @@ func TestModelFailureKeepsEnglishForTheCatalogue(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestOneCallPerAttempt(t *testing.T) {
+	s, _ := newStore(t)
+	p := &scripted{fn: func(context.Context, map[texts.Key]string) (string, error) { return "", errors.New("down") }}
+	cat, _ := texts.New(texts.WithPacks(s.Pack))
+	two := twoModels{}
+	tr := NewTranslator(s, cat, two, map[string]provider.Provider{"p": p})
+	seen(t, s, "a", "pl")
+	tr.sweep(context.Background())
+	if p.calls() != 1 {
+		t.Fatalf("an attempt made %d calls", p.calls())
+	}
+}
+
+type twoModels struct{}
+
+func (twoModels) Route(context.Context, router.TaskReq) ([]router.Candidate, error) {
+	return []router.Candidate{{Provider: "p", Model: "cheap"}, {Provider: "p", Model: "smart"}}, nil
+}
+
+func (twoModels) Report(router.Candidate, error) {}
+
+func TestCorrectTextEqualToEnglishIsKept(t *testing.T) {
+	// "Details" is German too: a small sweep is not an echo.
+	source := map[texts.Key]string{texts.ButtonDetails: "Details"}
+	ok, outcome, _ := accept(source, `{"button.details":"Details"}`)
+	if outcome != outcomeDone || ok[texts.ButtonDetails] != "Details" {
+		t.Fatalf("%s, %v", outcome, ok)
+	}
+}
+
+func TestEchoedApprovalsAreRefused(t *testing.T) {
+	out := map[texts.Key]string{}
+	source := map[texts.Key]string{}
+	for _, k := range texts.Keys() {
+		source[k] = texts.EnglishText(k)
+		if texts.IsApproval(k) {
+			out[k] = source[k]
+		} else {
+			out[k] = "PL " + source[k]
+		}
+	}
+	raw, err := json.Marshal(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, outcome, _ := accept(source, string(raw)); outcome != outcomeRefused {
+		t.Fatalf("echoed approvals: %s", outcome)
+	}
+}
+
+func TestEmptyAnswerIsRefused(t *testing.T) {
+	source := map[texts.Key]string{texts.ToastUsed: "Already handled."}
+	for _, answer := range []string{"{}", "null"} {
+		if _, outcome, _ := accept(source, answer); outcome != outcomeRefused {
+			t.Errorf("%s: %s", answer, outcome)
+		}
+	}
+}
+
+func TestReasonNeverQuotesAModelsKey(t *testing.T) {
+	source := map[texts.Key]string{texts.ToastUsed: "Already handled.", texts.ToastExpired: "Expired."}
+	answer := `{"toast.used":"","toast.expired":"Wygasło.","!injected":"x"}`
+	_, outcome, reason := accept(source, answer)
+	if outcome != outcomePartial || strings.Contains(reason, "injected") {
+		t.Fatalf("%s, %q", outcome, reason)
+	}
+}
+
+func TestMalformedStoredLanguageIsNotTranslated(t *testing.T) {
+	s, _, p, tr := newTranslator(t, polish)
+	if _, err := s.Choose(context.Background(), "a", "PL"); err != nil {
+		t.Fatal(err)
+	}
+	tr.sweep(context.Background())
+	if p.calls() != 0 {
+		t.Fatalf("%d calls", p.calls())
+	}
+}

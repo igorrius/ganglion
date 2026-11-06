@@ -351,9 +351,9 @@ func (t *ScheduleCreate) Question(ctx context.Context, c tool.Call) (string, err
 		return "", err
 	}
 	if j.Kind == schedule.KindReminder {
-		return c.Speak.Text(texts.AskCreateReminder, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}), nil
+		return whole("schedule.create", c.Speak.Text(texts.AskCreateReminder, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}))
 	}
-	return c.Speak.Text(texts.AskCreateTask, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}), nil
+	return whole("schedule.create", c.Speak.Text(texts.AskCreateTask, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}))
 }
 
 // Run creates the job. A rerun of the same call finds it created.
@@ -440,7 +440,7 @@ func (t *ScheduleDelete) Question(ctx context.Context, c tool.Call) (string, err
 	if j.Kind == schedule.KindReminder {
 		key = texts.AskDeleteReminder
 	}
-	return c.Speak.Text(key, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}), nil
+	return whole("schedule.delete", c.Speak.Text(key, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}))
 }
 
 // Run deletes the job; schedule.ErrSystem for a system job.
@@ -481,7 +481,7 @@ func (t *ScheduleRunNow) Question(ctx context.Context, c tool.Call) (string, err
 	if err != nil {
 		return "", err
 	}
-	return c.Speak.Text(texts.AskRunNow, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}), nil
+	return whole("schedule.run_now", c.Speak.Text(texts.AskRunNow, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}))
 }
 
 // Run puts the task's run now, keyed by the call's key: a confirmed call

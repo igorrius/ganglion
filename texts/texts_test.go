@@ -210,6 +210,23 @@ func TestCheck(t *testing.T) {
 		{"over the limit", "{name}" + strings.Repeat("x", 201), false},
 		{"a value made to read as a secret's name", "Zadanie {name}: gotowe.", false},
 		{"the same across a line break", "Zadanie {name}=\n", false},
+		{"a word that makes the redaction hide a value", "key: {name}", false},
+		{"the same with a token", "token: {name}", false},
+		{"a quote before the separator", "Zadanie {name}\": gotowe", false},
+		{"a bare domain", "Zadanie {name} t.me/evilbot", false},
+		{"a mail address", "Zadanie {name} a@evil.example", false},
+		{"a command", "Zadanie {name} /new", false},
+		{"an invisible address", "Zadanie {name} https\u200b://evil.example", false},
+		{"a line separator", "Zadanie {name}\u2028nacisnij", false},
+		{"a carriage return", "Zadanie {name}\rnacisnij", false},
+		{"a NUL", "Zadanie {name}\x00", false},
+		{"only invisible", "{name}\u200b", false},
+		{"Persian with a zero-width non-joiner", "کار\u200cها {name}", true},
+		{"Hebrew with a mark", "משימה {name}\u200f", true},
+		{"an isolate around a value", "משימה \u2068{name}\u2069", true},
+		{"French with a thin space", "Tâche {name}\u202f?", true},
+		{"Chinese with its own punctuation", "任务（{name}）：完成", true},
+		{"an and/or", "Zadanie {name} a/b", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -238,7 +255,7 @@ func TestCheck(t *testing.T) {
 
 func TestApprovalTextLeavesRoomForItsValues(t *testing.T) {
 	// The policy cuts a question at 3000 characters and a persona may be 2000.
-	if limit(AskPersona) > 900 {
+	if limit(AskPersona) > 400 {
 		t.Fatalf("ask limit %d", limit(AskPersona))
 	}
 	for l, file := range shipped {
@@ -256,6 +273,31 @@ func TestShippedQuestionsHaveNoValueBeforeASeparator(t *testing.T) {
 			if IsApproval(k) && valueThenSeparator.MatchString(s) {
 				t.Errorf("%s %s: %q", l, k, s)
 			}
+		}
+	}
+}
+
+func TestKnownAddressMayStay(t *testing.T) {
+	en := map[Key]string{ReplyNoSuchResume: "No such session; see /sessions."}
+	ok, rejected := Check(en, map[Key]string{ReplyNoSuchResume: "Nie ma takiej rozmowy; zobacz /sessions."})
+	if len(ok) != 1 {
+		t.Fatalf("%v", rejected)
+	}
+	if ok, _ := Check(en, map[Key]string{ReplyNoSuchResume: "Nie ma; zobacz /new."}); len(ok) != 0 {
+		t.Fatal("another command was accepted in its place")
+	}
+}
+
+// Review of task 7: these reach an approval question inside an ask.* text, so padding one could push
+// the real action past the policy's cut.
+func TestTextsInsideAQuestionAreApprovalTexts(t *testing.T) {
+	for _, k := range []Key{SchedSummaryTask, SchedSummaryReminder, SchedOnce, SchedEvery, SchedEveryNext,
+		SchedThisChat, SchedNone, ButtonDelete, ButtonRunNow} {
+		if !IsApproval(k) {
+			t.Errorf("%s", k)
+		}
+		if limit(k) > 400 {
+			t.Errorf("%s: limit %d", k, limit(k))
 		}
 	}
 }
