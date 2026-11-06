@@ -104,6 +104,10 @@ func (w *writer) lines(n ast.Node) string {
 func (w *writer) block(n ast.Node, indent string) {
 	switch n := n.(type) {
 	case *ast.Paragraph, *ast.TextBlock:
+		if tree, ok := treeSource(w.src, n); ok {
+			w.span(entity{Type: entityPre}, func() { w.write(tree) })
+			return
+		}
 		w.inlines(n)
 	case *ast.Heading:
 		w.span(entity{Type: "bold"}, func() { w.inlines(n) })
