@@ -299,6 +299,14 @@ Guarantee: **at-least-once + idempotency.**
   silently. Until the agent can read them, the transport tells it that a
   file came (name, type, size) beside the caption, and the agent says it
   cannot open it yet (M3c; reading files is in "Not now").
+- **R-DLV-11.** A message with a table or at least two headings goes out as a Telegram rich message
+  when `GANGLION_TELEGRAM_RICH` is `on`, the default. One with buttons, an edit, an attachment, a fold
+  or a superseded answer does not. The transport builds the message's blocks from an allowlist and never
+  passes the model's text to Telegram's parser, so no button or media block can come from it. A refused
+  rich message is sent the ordinary way, never lost
+  ([ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md)).
+- **R-DLV-12.** A rich message sent to the bot is read: its text comes to the agent as outside content,
+  with or without a forward's origin, and one with nothing readable is still noted, never dropped silently.
 
 ### 7.2. Conversations, history and the agent loop
 
@@ -1421,24 +1429,11 @@ Reviewed at each gate.
     and the owner noticed it (2026-11-06). Reactions and typing already show long work
     ([ADR-0051](adr/0051-status-reactions-outside-the-outbox.md)); whether a word in the plan adds to them
     is to be seen on a live run. It must go once the work moves on, since the chat stays clean (R-POL-9).
-  - Tables in a phone's width: a wide table goes out as a monospace block that wraps badly.
-  - A tree drawn with symbols loses its levels: Markdown strips a line's leading spaces, so the node must
-    keep them (seen 2026-11-06, with Rich Messages). The model decides when to build such a structure,
-    as the owner asked it to in their own report.
-  - Telegram Rich Messages (Bot API 10.1 and later): headings, lists, rules and native tables,
-    which OpenClaw already sends and the owner liked in their daily report (owner, 2026-11-06).
-    It may answer the tables above, and it needs its own ADR because it changes ADR-0025.
-    - **Support cannot be asked for:** the Bot API documents no field that says whether a
-      person's client shows these messages, and OpenClaw leaves them off by default because
-      some clients show them as unsupported. So it is an operator's setting, checked by eye on
-      each client.
-    - **Proposed, not decided:** the model keeps writing one ordinary Markdown, with no second
-      format and no extra rules in the prompt; the transport renders it to rich blocks with
-      goldmark when the setting is on and the text has a table or headings, and to entities
-      otherwise.
-    - **Security:** the transport builds blocks from an allowlist rather than passing the
-      model's text on, because Rich Markdown accepts HTML, and an injected image URL could
-      carry data out.
+  - URL previews: the Telegram transport does not set them, so Telegram's default applies on ordinary
+    messages, and `sendRichMessage` has no parameter for them. A URL the model writes may be fetched by
+    Telegram with no press (found 2026-11-06, [ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md)).
+  - Media inside a rich message, streaming through `sendRichMessageDraft`, buttons inside a message, and
+    long replies with no structure as one rich message (ADR-0054).
   - A classifier that tells a question from a task, as a candidate first client of "Models
     by purpose": only if the main model's own judgement, given a clearer rule, is measured
     and falls short (owner, 2026-11-05).
