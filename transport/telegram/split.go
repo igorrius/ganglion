@@ -66,7 +66,7 @@ func splitRich(src string) []string {
 		case richFits(b):
 			blocks = append(blocks, b)
 		case splitsAsTable(b):
-			blocks = append(blocks, splitTable(b)...)
+			blocks = append(blocks, splitTable(b, richFits)...)
 		case fenceOpen(firstLine(b)) != "":
 			blocks = append(blocks, splitFence(b)...)
 		default:
@@ -83,27 +83,32 @@ var tableRule = regexp.MustCompile(`^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$`
 // -1. A rule alone on the first line has no header above it, so it is no table.
 func tableHead(lines []string) int {
 	for i := 1; i < len(lines); i++ {
-		if strings.Contains(lines[i], "-") && tableRule.MatchString(lines[i]) {
+		// A rule with no bar is a thematic break or makes the line above a heading.
+		if strings.Contains(lines[i], "|") && tableRule.MatchString(lines[i]) {
 			return i
 		}
 	}
 	return -1
 }
 
+// splitsAsTable reports whether block's lines can be cut as a table's rows. A
+// table in the parsed tree is what counts: inside a code block the same lines are
+// code.
 func splitsAsTable(block string) bool {
-	return tableHead(strings.Split(block, "\n")) > 0
+	return hasTable(block) && tableHead(strings.Split(block, "\n")) > 0
 }
 
 // splitTable cuts a table's source between rows, with the header and the
-// delimiter in each chunk, so that every chunk is a table of its own.
-func splitTable(block string) []string {
+// delimiter in each chunk, so that every chunk is a table of its own and fits
+// unless a single row is too long for that.
+func splitTable(block string, fits func(string) bool) []string {
 	lines := strings.Split(block, "\n")
 	rule := tableHead(lines)
 	head := lines[rule-1] + "\n" + lines[rule]
 	cur := strings.Join(lines[:rule+1], "\n")
 	var out []string
 	for i, row := range lines[rule+1:] {
-		if cand := cur + "\n" + row; i == 0 || richFits(cand) {
+		if cand := cur + "\n" + row; i == 0 || fits(cand) {
 			cur = cand
 			continue
 		}
@@ -178,10 +183,17 @@ func splitMarkdown(src string) []string {
 			blocks = append(blocks, splitFence(b)...)
 			continue
 		}
+		// A table's size is its widest cell times its rows: its source may be short.
+		if splitsAsTable(b) {
+			blocks = append(blocks, splitTable(b, fitsMessage)...)
+			continue
+		}
 		blocks = append(blocks, cutBlock(b)...)
 	}
-	return pack(blocks, func(chunk string) bool { return renderedUnits(chunk) <= maxTextUnits })
+	return pack(blocks, fitsMessage)
 }
+
+func fitsMessage(chunk string) bool { return renderedUnits(chunk) <= maxTextUnits }
 
 // cutBlock cuts a block by the M2 rule.
 func cutBlock(b string) []string {

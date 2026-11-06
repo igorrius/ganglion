@@ -102,9 +102,18 @@ func renderRich(src string) richMessage {
 // structured reports whether the Markdown has what an ordinary message cannot
 // show: a table, or at least two headings, at any depth (R-DLV-11).
 func structured(src string) bool {
-	source := []byte(src)
-	doc := md.Parser().Parse(text.NewReader(source))
-	headings, table := 0, false
+	headings, tables := countStructure(src)
+	return tables > 0 || headings >= minRichHeadings
+}
+
+// hasTable reports whether the Markdown parses to a table, at any depth.
+func hasTable(src string) bool {
+	_, tables := countStructure(src)
+	return tables > 0
+}
+
+func countStructure(src string) (headings, tables int) {
+	doc := md.Parser().Parse(text.NewReader([]byte(src)))
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -113,11 +122,11 @@ func structured(src string) bool {
 		case *ast.Heading:
 			headings++
 		case *east.Table:
-			table = true
+			tables++
 		}
 		return ast.WalkContinue, nil
 	})
-	return table || headings >= minRichHeadings
+	return headings, tables
 }
 
 type richWriter struct {

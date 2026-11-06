@@ -51,8 +51,10 @@ func (t *Transport) sendsRich(msg event.Outgoing) bool {
 }
 
 // sendRich sends msg as a rich message, and the ordinary way when Telegram refuses
-// it, so that a refusal never loses a message. A 429, a 403 and a network error
-// mean the same for either way, and are returned as usual.
+// it, so that a refusal never loses a message. A 404 is a refusal too: a Bot API
+// server older than rich messages does not have the method, and a retry would hold
+// the conversation forever. A 429, a 403 and a network error mean the same for
+// either way, and are returned as usual.
 func (t *Transport) sendRich(ctx context.Context, chat, thread int64, msg event.Outgoing) (string, error) {
 	m, err := t.c.sendRichMessage(ctx, richParams{
 		ChatID:              chat,
@@ -65,7 +67,7 @@ func (t *Transport) sendRich(ctx context.Context, chat, thread int64, msg event.
 		t.richCount.add(ctx, richSent)
 		return strconv.FormatInt(m.MessageID, 10), nil
 	}
-	if ae, ok := errors.AsType[*apiError](err); !ok || ae.Code != http.StatusBadRequest {
+	if ae, ok := errors.AsType[*apiError](err); !ok || (ae.Code != http.StatusBadRequest && ae.Code != http.StatusNotFound) {
 		return "", sendError(err)
 	}
 	t.log.Warn("telegram: rich message refused, sending it the ordinary way", "idem_key", msg.IdemKey, "error", err)
@@ -74,25 +76,53 @@ func (t *Transport) sendRich(ctx context.Context, chat, thread int64, msg event.
 }
 
 // sendChunks sends msg the ordinary way, in several messages when it does not fit
-// one, and returns the last one's reference. Only the first is a reply. A failure
-// midway is retried from the start, which can repeat a chunk but cannot lose one.
+// one, and returns the last one's reference. Only the first is a reply and only the
+// last keeps the buttons. A failure midway is retried from the start, which can
+// repeat a chunk but cannot lose one.
 func (t *Transport) sendChunks(ctx context.Context, chat, thread int64, msg event.Outgoing) (string, error) {
-	chunks := []string{msg.Text}
-	if renderedUnits(msg.Text) > maxTextUnits {
-		chunks = splitMarkdown(msg.Text)
-	}
+	pieces := ordinaryPieces(msg.Text)
 	ref := ""
-	for i, chunk := range chunks {
+	for i, p := range pieces {
 		part := msg
 		if i > 0 {
 			part.ReplyTo = ""
 		}
-		text, ents := visible(chunk)
-		r, err := t.sendText(ctx, chat, thread, part, text, ents)
+		if i < len(pieces)-1 {
+			part.Buttons = nil
+		}
+		r, err := t.sendText(ctx, chat, thread, part, p.text, p.ents)
 		if err != nil {
 			return "", err
 		}
 		ref = r
 	}
 	return ref, nil
+}
+
+// piece is one ordinary message, rendered.
+type piece struct {
+	text string
+	ents []entity
+}
+
+// ordinaryPieces renders src into messages that each fit. A chunk that still does
+// not fit, such as a table with one row too long for a message, goes out as its
+// source, cut: unformatted, but all of it.
+func ordinaryPieces(src string) []piece {
+	chunks := []string{src}
+	if !fitsMessage(src) {
+		chunks = splitMarkdown(src)
+	}
+	var out []piece
+	for _, chunk := range chunks {
+		text, ents := visible(chunk)
+		if textUnits([]rune(text)) <= maxTextUnits {
+			out = append(out, piece{text, ents})
+			continue
+		}
+		for _, cut := range cutBlock(chunk) {
+			out = append(out, piece{text: cut})
+		}
+	}
+	return out
 }

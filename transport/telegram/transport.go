@@ -274,8 +274,7 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	if text == "" {
 		text = m.Caption
 	}
-	rich := text == "" && present(m.RichMessage)
-	if rich {
+	if text == "" && present(m.RichMessage) {
 		text = t.richText(m.RichMessage)
 	}
 	fs := files(m)
@@ -294,7 +293,7 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 		Name:          strings.TrimSpace(m.From.FirstName + " " + m.From.LastName),
 		Lang:          m.From.LanguageCode,
 		Ref:           strconv.FormatInt(m.MessageID, 10),
-		Forwarded:     present(m.ForwardOrigin) || m.IsAutomaticForward || rich,
+		Forwarded:     present(m.ForwardOrigin) || m.IsAutomaticForward || present(m.RichMessage),
 		ExternalReply: present(m.ExternalReply),
 		Files:         fs,
 	}
@@ -359,6 +358,9 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) (string, error
 	if msg.Edit != "" {
 		return msg.Edit, sendError(t.edit(ctx, chat, msg.Edit, text, ents, msg.Buttons))
 	}
+	if textUnits([]rune(text)) > maxTextUnits {
+		return t.sendChunks(ctx, chat, thread, msg) // one row of a table can be too long alone
+	}
 	return t.sendText(ctx, chat, thread, msg, text, ents)
 }
 
@@ -389,8 +391,10 @@ func visible(src string) (string, []entity) {
 	return text, ents
 }
 
-// richText is what the agent reads of a rich message that came to the bot. People
-// cannot write these, so it is always outside content (R-DLV-12).
+// richText is what the agent reads of a rich message that came to the bot. A person
+// does not write these: they come from a bot, by a forward or through an inline bot
+// with no forward's origin. So any message with one is outside content, whether its
+// text is filled in or not (messageEvent, R-DLV-12).
 func (t *Transport) richText(raw json.RawMessage) string {
 	text := readRich(raw)
 	if text == "" {

@@ -79,7 +79,7 @@ func TestMessageEventRich(t *testing.T) {
 	}{
 		{"forwarded", map[string]any{"rich_message": rich, "forward_origin": map[string]any{"type": "hidden_user"}}, "", "отчёт", true},
 		{"no origin still counts as outside", map[string]any{"rich_message": rich}, "", "отчёт", true},
-		{"text comes first", map[string]any{"rich_message": rich}, "сам текст", "сам текст", false},
+		{"text comes first, still outside", map[string]any{"rich_message": rich}, "сам текст", "сам текст", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := telemetrytest.Install(t)

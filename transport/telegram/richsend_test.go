@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -242,5 +243,76 @@ func TestRichThreadGoneFailsOnce(t *testing.T) {
 	}
 	if len(fake.Sent()) != 0 || fake.Calls("sendRichMessage") != 1 || fake.Calls("sendMessage") != 1 {
 		t.Fatalf("sent %+v, methods %v", fake.Sent(), fake.Methods())
+	}
+}
+
+// A server older than rich messages answers 404: retrying would hold the
+// conversation forever.
+func TestRichMethodMissingFallsBack(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	fake.FailNext("sendRichMessage", 404, 0)
+	if _, err := newRichTransport(t, fake).Send(context.Background(), richOut(tableMD)); err != nil {
+		t.Fatal(err)
+	}
+	if sent := fake.Sent(); len(sent) != 1 || sent[0].Rich {
+		t.Fatalf("sent %+v", sent)
+	}
+}
+
+func wideTable(rows int) string {
+	var b strings.Builder
+	b.WriteString("| a | b |\n|---|---|\n| " + strings.Repeat("w", 1500) + " | 1 |")
+	for i := range rows {
+		fmt.Fprintf(&b, "\n| row%d | %d |", i, i)
+	}
+	return b.String()
+}
+
+// The source is short, but an ordinary message pads every row to the widest cell.
+func TestRichRefusedWideTableIsDelivered(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	fake.FailNext("sendRichMessage", 400, 0)
+	if _, err := newRichTransport(t, fake).Send(context.Background(), richOut(wideTable(20))); err != nil {
+		t.Fatal(err)
+	}
+	all := ""
+	for _, s := range fake.Sent() {
+		all += s.Text + "\n"
+	}
+	for i := range 20 {
+		if !strings.Contains(all, fmt.Sprintf("row%d ", i)) {
+			t.Fatalf("row %d is lost", i)
+		}
+	}
+}
+
+// One row that alone cannot fit an ordinary message goes out as its source.
+func TestRichRefusedHugeRowIsDelivered(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	fake.FailNext("sendRichMessage", 400, 0)
+	huge := strings.Repeat("h", 5000)
+	if _, err := newRichTransport(t, fake).Send(context.Background(), richOut("| a |\n|---|\n| "+huge+" |")); err != nil {
+		t.Fatal(err)
+	}
+	all := ""
+	for _, s := range fake.Sent() {
+		all += s.Text
+	}
+	if strings.Count(all, "h") < 5000 {
+		t.Fatalf("%d of 5000 characters delivered", strings.Count(all, "h"))
+	}
+}
+
+// The way out, the setting off, must deliver the same table.
+func TestRichOffWideTableIsDelivered(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newTransport(t, fake)
+	for _, p := range tr.Parts(richOut(wideTable(20))) {
+		if _, err := tr.Send(context.Background(), p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(fake.Sent()) == 0 {
+		t.Fatal("nothing sent")
 	}
 }

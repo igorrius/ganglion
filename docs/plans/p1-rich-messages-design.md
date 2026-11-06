@@ -165,10 +165,13 @@ that also flips the setting may repeat or skip a part **(call: accepted, the fli
 ## 7. When Telegram refuses
 
 Today a 400 is permanent, so a refused rich message would be lost. In `Send`, a 400 from
-`sendRichMessage` is logged and counted, then the same text goes out by the ordinary path:
+`sendRichMessage`, or a 404 from a Bot API server older than the method, which a retry would never
+get past, is logged and counted, then the same text goes out by the ordinary path:
 
 - it fits: one `sendMessage`, and `Send` returns its reference;
-- it does not: `Send` sends the `splitMarkdown` chunks in order, and returns the last reference.
+- it does not: `Send` sends the `splitMarkdown` chunks in order, and returns the last reference. A table
+  is cut between rows there too, since an ordinary message pads every row to the widest cell; one row too
+  long for a message goes out as its source, unformatted.
 
 There are no buttons to place, by section 3. A failure midway returns its error and the sender retries,
 so a crash or a 429 during this rare path can repeat a chunk but cannot lose one, which matches R-DLV-5's
@@ -269,8 +272,8 @@ Rich text is a string, a list or an object with a `text`. Walking goes no deeper
 agent has it. The existing limits on context apply **(builder: confirm)**.
 
 **How far it is trusted:** always as outside content, the way a forward is (ruling R35): `Forwarded` is
-set for any message read from `rich_message`, even with no `forward_origin`, because people cannot write
-these themselves and only a bot makes one **(call)**. The text sits inside the outside-content wrapper,
+set for any message with a `rich_message`, whether or not it has `text` or a `forward_origin`, because a
+person does not write these: a bot makes one, and an inline bot can post one with no origin **(call)**. The text sits inside the outside-content wrapper,
 and the session counts as having read outside content. That holds for the bot's own answer too: a forward
 does not prove who wrote it, the same as for an ordinary forwarded message today.
 

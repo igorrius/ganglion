@@ -262,3 +262,40 @@ func TestPartsMixedCases(t *testing.T) {
 		}
 	})
 }
+
+// A rule inside a long code block is no table: the code stays code.
+func TestPartsRichLongFenceWithARule(t *testing.T) {
+	code := "# comment\n*x*\n---\n"
+	src := "# one\n\n# two\n\n```yaml\n" + strings.Repeat(code, 3000) + "```"
+	parts := (&Transport{rich: true}).Parts(event.Outgoing{IdemKey: "k", Text: src})
+	if len(parts) < 2 {
+		t.Fatalf("%d parts", len(parts))
+	}
+	for i, p := range parts {
+		for _, b := range renderRich(p.Text).Blocks {
+			if b.Type == richHeading && i > 0 {
+				t.Fatalf("part %d has a heading from the code", i)
+			}
+		}
+	}
+}
+
+// A list under a line and a rule has a heading, not a table's header.
+func TestSplitsAsTable(t *testing.T) {
+	for block, want := range map[string]bool{
+		"| a |\n|---|\n| 1 |":       true,
+		"a | b\n--|--\n1 | 2":       true,
+		"text\n| a |\n|---|\n| 1 |": true,
+		"Items\n---":                false,
+		"```\n| a |\n|---|\n```":    false,
+		"a\n\n---":                  false,
+	} {
+		if got := splitsAsTable(block); got != want {
+			t.Errorf("splitsAsTable(%q) = %v, want %v", block, got, want)
+		}
+	}
+	lines := strings.Split("Items\n---\n| a |\n|---|\n| 1 |", "\n")
+	if got := tableHead(lines); got != 3 {
+		t.Errorf("rule at line %d, want 3", got)
+	}
+}
