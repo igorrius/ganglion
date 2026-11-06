@@ -121,6 +121,7 @@ func (a *Agent) language(ctx context.Context, t *turn) texts.Lang {
 		a.log.Warn("agent: language unknown; using English", "err", err)
 	}
 	t.lang, t.langOf = l, t.msg.From
+	a.d.Translate(l)
 	return l
 }
 

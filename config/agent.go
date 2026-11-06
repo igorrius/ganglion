@@ -68,6 +68,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		States:    do.MustInvoke[*sqlqueue.Queue](i),
 		Languages: do.MustInvoke[*language.Store](i),
 		Texts:     do.MustInvoke[*texts.Catalog](i),
+		Translate: do.MustInvoke[*language.Translator](i).Need,
 		Router:    do.MustInvoke[router.Router](i),
 		Providers: do.MustInvoke[map[string]provider.Provider](i),
 		Tools:     do.MustInvoke[*tool.Registry](i),

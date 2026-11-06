@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 
@@ -70,7 +71,7 @@ func withLang(ev event.Event, code string) event.Event {
 
 func TestMessageRecordsTheChannelsLanguage(t *testing.T) {
 	langs := &fakeLanguages{}
-	a := &Agent{d: Deps{Languages: langs}, log: discardLog()}
+	a := &Agent{d: Deps{Languages: langs, Translate: func(texts.Lang) {}}, log: discardLog()}
 	tn := &turn{event: withLang(message("telegram:user:1", "Igor", "hi"), "uk")}
 	if !payloads[tn.event.Kind](tn) {
 		t.Fatal("not decoded")
@@ -83,7 +84,7 @@ func TestMessageRecordsTheChannelsLanguage(t *testing.T) {
 
 func TestDecisionRecordsThePressersLanguage(t *testing.T) {
 	langs := &fakeLanguages{}
-	a := &Agent{d: Deps{Languages: langs}, log: discardLog()}
+	a := &Agent{d: Deps{Languages: langs, Translate: func(texts.Lang) {}}, log: discardLog()}
 	raw, _ := json.Marshal(event.Decision{Button: "b", From: "telegram:user:2", Lang: "ru"})
 	tn := &turn{event: event.Event{Kind: event.KindDecision, Payload: raw}}
 	if !payloads[tn.event.Kind](tn) {
@@ -97,7 +98,7 @@ func TestDecisionRecordsThePressersLanguage(t *testing.T) {
 
 func TestTurnResolvesLanguageOfItsPerson(t *testing.T) {
 	langs := &fakeLanguages{lang: map[string]texts.Lang{"a": "uk", "owner": "pl"}}
-	a := &Agent{d: Deps{Languages: langs}, log: discardLog()}
+	a := &Agent{d: Deps{Languages: langs, Translate: func(texts.Lang) {}}, log: discardLog()}
 	tn := &turn{msg: event.Message{From: "a"}}
 	if got := a.language(context.Background(), tn); got != "uk" {
 		t.Fatalf("person: %s", got)
@@ -110,7 +111,7 @@ func TestTurnResolvesLanguageOfItsPerson(t *testing.T) {
 }
 
 func TestLanguageFailureGivesEnglish(t *testing.T) {
-	a := &Agent{d: Deps{Languages: &fakeLanguages{err: errors.New("disk")}}, log: discardLog()}
+	a := &Agent{d: Deps{Languages: &fakeLanguages{err: errors.New("disk")}, Translate: func(texts.Lang) {}}, log: discardLog()}
 	if got := a.language(context.Background(), &turn{msg: event.Message{From: "a"}}); got != texts.English {
 		t.Fatalf("%s", got)
 	}
@@ -118,7 +119,7 @@ func TestLanguageFailureGivesEnglish(t *testing.T) {
 
 func TestLanguageFailureLosesNoMessage(_ *testing.T) {
 	langs := &fakeLanguages{err: errors.New("disk")}
-	a := &Agent{d: Deps{Languages: langs}, log: discardLog()}
+	a := &Agent{d: Deps{Languages: langs, Translate: func(texts.Lang) {}}, log: discardLog()}
 	tn := &turn{event: withLang(message("a", "A", "hi"), "uk")}
 	payloads[tn.event.Kind](tn)
 	a.noteLanguage(context.Background(), tn) // no panic, no error to retry the event over
@@ -318,5 +319,16 @@ func TestSystemJobGetsTheOwnersSpeaker(t *testing.T) {
 	}
 	if got != "uk" || len(tn.out) != 1 {
 		t.Fatalf("language %q, out %+v", got, tn.out)
+	}
+}
+
+func TestWritingToAPersonAsksForTheirLanguage(t *testing.T) {
+	e := inLanguage(t)
+	var asked []texts.Lang
+	e.deps.Translate = func(l texts.Lang) { asked = append(asked, l) }
+	e.a = New(overDefaults(Config{}), e.deps)
+	e.turn(t, message("uk", "A", "/new"))
+	if !slices.Contains(asked, texts.Lang("uk")) {
+		t.Fatalf("asked %v", asked)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -27,7 +28,6 @@ import (
 const (
 	// attemptsPerDay caps what a failing model can cost per language (R-LANG-5).
 	attemptsPerDay = 3
-	sweepEvery     = time.Hour
 	callTimeout    = 3 * time.Minute
 	// maxAnswerTokens is well above the whole catalogue in a wordy script.
 	maxAnswerTokens = 16000
@@ -146,8 +146,9 @@ func WithTranslatorLogger(l *slog.Logger) TranslatorOption {
 	return func(t *Translator) { t.log = l }
 }
 
-// Translator translates fixed texts once for each language people have and no file covers, in the
-// background (R-LANG-5). The work is derived from the people table, so a restart needs no queue.
+// Translator translates fixed texts once a person is being written to in a language no file covers,
+// in the background (R-LANG-5). It is lazy: nobody written to costs nothing, and a restart needs no
+// queue, since the next message asks again.
 type Translator struct {
 	store     *Store
 	cat       *texts.Catalog
@@ -156,17 +157,19 @@ type Translator struct {
 	now       func() time.Time
 	log       *slog.Logger
 	wake      chan struct{}
+	neededMu  sync.Mutex
+	needed    map[texts.Lang]bool
 	runs      metric.Int64Counter
 	refused   metric.Int64Counter
 	tokens    metric.Int64Counter
 	cost      metric.Float64Counter
 }
 
-// NewTranslator returns a Translator. cat must find packs through s, and Choose and Seen wake it.
+// NewTranslator returns a Translator. cat must find packs through s.
 func NewTranslator(s *Store, cat *texts.Catalog, r router.Router, ps map[string]provider.Provider, opts ...TranslatorOption) *Translator {
 	m := otel.Meter("ganglion/language")
 	t := &Translator{store: s, cat: cat, router: r, providers: ps, now: time.Now, log: slog.New(slog.DiscardHandler),
-		wake: make(chan struct{}, 1)}
+		wake: make(chan struct{}, 1), needed: map[texts.Lang]bool{}}
 	t.runs, _ = m.Int64Counter("ganglion.language.translations",
 		metric.WithDescription("Translation runs, by language and outcome (done, partial, refused, failed, capped)."))
 	t.refused, _ = m.Int64Counter("ganglion.language.texts_refused",
@@ -178,45 +181,46 @@ func NewTranslator(s *Store, cat *texts.Catalog, r router.Router, ps map[string]
 	for _, o := range opts {
 		o(t)
 	}
-	s.OnNewLanguage(t.Wake)
 	return t
 }
 
-// Wake asks for a sweep. It never blocks: a person's turn may be the caller.
-func (t *Translator) Wake() {
+// Need says a person is being written to in l. It never blocks, since a person's turn is the caller,
+// and does nothing when l is covered, so it is cheap on every turn.
+func (t *Translator) Need(l texts.Lang) {
+	if n, known := texts.Normalize(string(l)); !known || n != l {
+		return // only a value exactly from the table reaches the prompt and the metrics
+	}
+	if len(t.missing(l)) == 0 {
+		return
+	}
+	t.neededMu.Lock()
+	t.needed[l] = true
+	t.neededMu.Unlock()
 	select {
 	case t.wake <- struct{}{}:
 	default:
 	}
 }
 
-// Run sweeps on a wake and every hour until ctx ends.
+// Run translates what is needed until ctx ends.
 func (t *Translator) Run(ctx context.Context) error {
-	tick := time.NewTicker(sweepEvery)
-	defer tick.Stop()
-	t.Wake() // what a restart left to do
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-t.wake:
-		case <-tick.C:
 		}
 		t.sweep(ctx)
 	}
 }
 
-// sweep translates what is missing for each language people have.
+// sweep translates what was asked for since the last one.
 func (t *Translator) sweep(ctx context.Context) {
-	wanted, err := t.store.Wanted(ctx)
-	if err != nil {
-		t.log.Warn("language: wanted languages unknown", "err", err)
-		return
-	}
-	for _, l := range wanted {
-		if n, known := texts.Normalize(string(l)); !known || n != l {
-			continue // only a value exactly from the table reaches the prompt and the metrics
-		}
+	t.neededMu.Lock()
+	needed := slices.Sorted(maps.Keys(t.needed))
+	clear(t.needed)
+	t.neededMu.Unlock()
+	for _, l := range needed {
 		if missing := t.missing(l); len(missing) > 0 {
 			t.translate(ctx, l, missing)
 		}

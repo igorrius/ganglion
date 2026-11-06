@@ -72,19 +72,13 @@ func newTranslator(t *testing.T, fn func(context.Context, map[texts.Key]string) 
 	return s, c, p, tr
 }
 
-func seen(t *testing.T, s *Store, principal, code string) {
-	t.Helper()
-	if err := s.Seen(context.Background(), principal, code); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestTranslateOncePerLanguage(t *testing.T) {
 	s, _, p, tr := newTranslator(t, polish)
 	ctx := context.Background()
-	seen(t, s, "a", "pl")
-	seen(t, s, "b", "pl")
+	tr.Need("pl")
+	tr.Need("pl")
 	tr.sweep(ctx)
+	tr.Need("pl")
 	tr.sweep(ctx)
 	if p.calls() != 1 {
 		t.Fatalf("%d calls", p.calls())
@@ -95,9 +89,9 @@ func TestTranslateOncePerLanguage(t *testing.T) {
 }
 
 func TestShippedAndEnglishNeverTranslated(t *testing.T) {
-	s, _, p, tr := newTranslator(t, polish)
-	seen(t, s, "a", "uk")
-	seen(t, s, "b", "en")
+	_, _, p, tr := newTranslator(t, polish)
+	tr.Need("uk")
+	tr.Need("en")
 	tr.sweep(context.Background())
 	if p.calls() != 0 {
 		t.Fatalf("%d calls", p.calls())
@@ -107,7 +101,7 @@ func TestShippedAndEnglishNeverTranslated(t *testing.T) {
 func TestStaleKeyOnly(t *testing.T) {
 	s, _, p, tr := newTranslator(t, polish)
 	ctx := context.Background()
-	seen(t, s, "a", "pl")
+	tr.Need("pl")
 	tr.sweep(ctx)
 	if _, err := s.db.Exec(`UPDATE packs SET source_hash = 'old' WHERE lang = 'pl' AND key = ?`, string(texts.ToastUsed)); err != nil {
 		t.Fatal(err)
@@ -118,6 +112,11 @@ func TestStaleKeyOnly(t *testing.T) {
 	if _, ok := s.Pack("pl", texts.ToastUsed); ok {
 		t.Fatal("a stale text is still used")
 	}
+	tr.sweep(ctx)
+	if p.calls() != 1 {
+		t.Fatalf("translated with nobody to read it: %d calls", p.calls())
+	}
+	tr.Need("pl")
 	tr.sweep(ctx)
 	if p.calls() != 2 {
 		t.Fatalf("%d calls", p.calls())
@@ -160,7 +159,7 @@ func TestBadOutputRefused(t *testing.T) {
 				raw, err := json.Marshal(out)
 				return string(raw), err
 			})
-			seen(t, s, "a", "pl")
+			tr.Need("pl")
 			tr.sweep(context.Background())
 			if tc.whole {
 				if _, ok := s.Pack("pl", texts.ToastExpired); ok {
@@ -183,7 +182,7 @@ func TestEchoOfEnglishRefused(t *testing.T) {
 		raw, err := json.Marshal(keys)
 		return string(raw), err
 	})
-	seen(t, s, "a", "pl")
+	tr.Need("pl")
 	tr.sweep(context.Background())
 	if _, ok := s.Pack("pl", texts.ToastUsed); ok {
 		t.Fatal("an echo of English was kept")
@@ -195,7 +194,7 @@ func TestFencedJSONAccepted(t *testing.T) {
 		raw, err := polish(ctx, keys)
 		return "```json\n" + raw + "\n```", err
 	})
-	seen(t, s, "a", "pl")
+	tr.Need("pl")
 	tr.sweep(context.Background())
 	if _, ok := s.Pack("pl", texts.ToastUsed); !ok {
 		t.Fatal("a fenced answer was refused")
@@ -203,8 +202,8 @@ func TestFencedJSONAccepted(t *testing.T) {
 }
 
 func TestRequestHoldsOnlyOurStrings(t *testing.T) {
-	s, _, p, tr := newTranslator(t, polish)
-	seen(t, s, "a", "pl")
+	_, _, p, tr := newTranslator(t, polish)
+	tr.Need("pl")
 	tr.sweep(context.Background())
 	req := p.reqs[0]
 	if len(req.Tools) != 0 || req.Exec != nil || len(req.Messages) != 2 ||
@@ -226,18 +225,19 @@ func TestRequestHoldsOnlyOurStrings(t *testing.T) {
 }
 
 func TestDailyCap(t *testing.T) {
-	s, c, p, tr := newTranslator(t, func(context.Context, map[texts.Key]string) (string, error) {
+	_, c, p, tr := newTranslator(t, func(context.Context, map[texts.Key]string) (string, error) {
 		return "", errors.New("down")
 	})
 	ctx := context.Background()
-	seen(t, s, "a", "pl")
 	for range attemptsPerDay + 3 {
+		tr.Need("pl")
 		tr.sweep(ctx)
 	}
 	if p.calls() != attemptsPerDay {
 		t.Fatalf("%d calls", p.calls())
 	}
 	c.now = c.now.Add(25 * time.Hour)
+	tr.Need("pl")
 	tr.sweep(ctx)
 	if p.calls() != attemptsPerDay+1 {
 		t.Fatalf("after a day: %d calls", p.calls())
@@ -247,7 +247,7 @@ func TestDailyCap(t *testing.T) {
 func TestRestartResumes(t *testing.T) {
 	s, _, p, tr := newTranslator(t, polish)
 	ctx := context.Background()
-	seen(t, s, "a", "pl")
+	tr.Need("pl")
 	tr.sweep(ctx)
 	fresh, err := New(ctx, s.db)
 	if err != nil {
@@ -258,6 +258,7 @@ func TestRestartResumes(t *testing.T) {
 	}
 	cat, _ := texts.New(texts.WithPacks(fresh.Pack))
 	again := NewTranslator(fresh, cat, &oneModel{}, map[string]provider.Provider{"p": p})
+	again.Need("pl")
 	again.sweep(ctx)
 	if p.calls() != 1 {
 		t.Fatalf("translated again: %d calls", p.calls())
@@ -269,12 +270,13 @@ func TestRestartCarriesTheCap(t *testing.T) {
 		return "", errors.New("down")
 	})
 	ctx := context.Background()
-	seen(t, s, "a", "pl")
 	for range attemptsPerDay {
+		tr.Need("pl")
 		tr.sweep(ctx)
 	}
 	cat, _ := texts.New(texts.WithPacks(s.Pack))
 	again := NewTranslator(s, cat, &oneModel{}, map[string]provider.Provider{"p": p}, WithTranslatorClock(c.time))
+	again.Need("pl")
 	again.sweep(ctx)
 	if p.calls() != attemptsPerDay {
 		t.Fatalf("a restart reset the cap: %d calls", p.calls())
@@ -284,7 +286,7 @@ func TestRestartCarriesTheCap(t *testing.T) {
 func TestNeverHoldsATurn(t *testing.T) {
 	release := make(chan struct{})
 	entered := make(chan struct{}, 1)
-	s, _, _, tr := newTranslator(t, func(ctx context.Context, keys map[texts.Key]string) (string, error) {
+	_, _, _, tr := newTranslator(t, func(ctx context.Context, keys map[texts.Key]string) (string, error) {
 		entered <- struct{}{}
 		<-release
 		return polish(ctx, keys)
@@ -292,11 +294,10 @@ func TestNeverHoldsATurn(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- tr.Run(ctx) }()
-	seen(t, s, "a", "pl")
-	tr.Wake()
+	tr.Need("pl")
 	<-entered
 	for range 5 { // none of these may block while the call hangs
-		tr.Wake()
+		tr.Need("pl")
 	}
 	close(release)
 	cancel()
@@ -306,26 +307,11 @@ func TestNeverHoldsATurn(t *testing.T) {
 }
 
 func TestUnlistedLanguageNeverTranslated(t *testing.T) {
-	s, _, p, tr := newTranslator(t, polish)
-	seen(t, s, "a", "xx")
+	_, _, p, tr := newTranslator(t, polish)
+	tr.Need("xx")
 	tr.sweep(context.Background())
 	if p.calls() != 0 {
 		t.Fatalf("%d calls", p.calls())
-	}
-}
-
-func TestNewLanguageWakesTheTranslator(t *testing.T) {
-	s, _ := newStore(t)
-	woken := 0
-	s.OnNewLanguage(func() { woken++ })
-	ctx := context.Background()
-	seen(t, s, "a", "pl")
-	seen(t, s, "a", "pl")
-	if _, err := s.Choose(ctx, "a", "de"); err != nil {
-		t.Fatal(err)
-	}
-	if woken != 2 {
-		t.Fatalf("woken %d times", woken)
 	}
 }
 
@@ -333,7 +319,7 @@ func TestModelFailureKeepsEnglishForTheCatalogue(t *testing.T) {
 	s, _, _, tr := newTranslator(t, func(context.Context, map[texts.Key]string) (string, error) {
 		return "", errors.New("down")
 	})
-	seen(t, s, "a", "pl")
+	tr.Need("pl")
 	tr.sweep(context.Background())
 	cat, _ := texts.New(texts.WithPacks(s.Pack))
 	if got := cat.Label("pl", texts.ToastUsed, nil); got != texts.EnglishText(texts.ToastUsed) {
@@ -347,7 +333,7 @@ func TestOneCallPerAttempt(t *testing.T) {
 	cat, _ := texts.New(texts.WithPacks(s.Pack))
 	two := twoModels{}
 	tr := NewTranslator(s, cat, two, map[string]provider.Provider{"p": p})
-	seen(t, s, "a", "pl")
+	tr.Need("pl")
 	tr.sweep(context.Background())
 	if p.calls() != 1 {
 		t.Fatalf("an attempt made %d calls", p.calls())
@@ -410,12 +396,43 @@ func TestReasonNeverQuotesAModelsKey(t *testing.T) {
 }
 
 func TestMalformedStoredLanguageIsNotTranslated(t *testing.T) {
+	_, _, p, tr := newTranslator(t, polish)
+	tr.Need("PL")
+	tr.sweep(context.Background())
+	if p.calls() != 0 {
+		t.Fatalf("%d calls", p.calls())
+	}
+}
+
+// The owner's ruling: lazy. A language in the table with nobody being written to costs nothing, so a
+// removed person's language needs no special case.
+func TestNobodyWrittenToCostsNothing(t *testing.T) {
 	s, _, p, tr := newTranslator(t, polish)
-	if _, err := s.Choose(context.Background(), "a", "PL"); err != nil {
+	if err := s.Seen(context.Background(), "gone", "pl"); err != nil {
 		t.Fatal(err)
 	}
 	tr.sweep(context.Background())
 	if p.calls() != 0 {
 		t.Fatalf("%d calls", p.calls())
+	}
+}
+
+func TestRunTranslatesOnlyWhenNeeded(t *testing.T) {
+	entered := make(chan struct{}, 1)
+	s, _, _, tr := newTranslator(t, func(ctx context.Context, keys map[texts.Key]string) (string, error) {
+		entered <- struct{}{}
+		return polish(ctx, keys)
+	})
+	if err := s.Seen(context.Background(), "a", "pl"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- tr.Run(ctx) }()
+	tr.Need("pl")
+	<-entered
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run = %v", err)
 	}
 }

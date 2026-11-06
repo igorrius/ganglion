@@ -97,6 +97,9 @@ type Deps struct {
 	Plans Plans
 	// Languages knows each person's language (R-LANG-1); NoLanguages when unset.
 	Languages Languages
+	// Translate says a person is being written to in a language, which may need translating
+	// (R-LANG-5). It must not block; nothing happens when unset.
+	Translate func(texts.Lang)
 	// Texts are the fixed texts a person reads (R-LANG-2); the shipped files when unset.
 	Texts *texts.Catalog
 	// Status hears the stages of a person's message (R-LIVE-7); NoStatus when
@@ -166,6 +169,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Languages == nil {
 		d.Languages = NoLanguages{}
+	}
+	if d.Translate == nil {
+		d.Translate = func(texts.Lang) {}
 	}
 	if d.Texts == nil {
 		d.Texts = texts.Shipped()

@@ -174,7 +174,9 @@ a few dozen and notes it in the ADR.
 
 ## 6. Machine translation
 
-**When:** the first time an allowed person's language is in the table and has no file.
+**When (lazily, owner, 2026-11-06):** when the node is writing to an allowed person in a language
+that is in the table and has no file. A language nobody is being written to costs nothing, so a removed
+person needs no special case, and a text changed by a release is translated when next needed.
 Strangers never reach it, since they get no reply. It needs no one's permission
 **(owner)**. A language requested in a tainted session starts its translation only after
 the press, so an injected request spends nothing **(call)**.

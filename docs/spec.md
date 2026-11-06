@@ -971,8 +971,8 @@ What the node writes without a model reaches people who may read only their own 
 - **R-LANG-4.** Per key, the first that has the text wins: an operator's file, a shipped file, a
   machine translation, English. Operator files live outside the workspace, and no tool writes
   machine translations.
-- **R-LANG-5.** A listed language with no file is translated once in the background, and never
-  holds a turn. The call has no tools and no history; its only input is our English strings and the
+- **R-LANG-5.** A listed language with no file is translated once in the background, lazily: only
+  when the node is writing to a person in it (owner, 2026-11-06), and never holds a turn. The call has no tools and no history; its only input is our English strings and the
   language's name. Code accepts a text only with the source's exact placeholders, within its limit,
   and with no URL, mention or markup its source lacks. A pack missing an approval text, or that only
   echoes English, is refused. Each stored text keeps a hash of its English source, so a release

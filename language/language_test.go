@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -87,13 +86,6 @@ func TestSeenIgnoresGarbage(t *testing.T) {
 			t.Errorf("after %.10q: %s", code, got)
 		}
 	}
-	wanted, err := s.Wanted(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(wanted, []texts.Lang{"uk"}) {
-		t.Errorf("wanted: %v", wanted)
-	}
 }
 
 func TestSeenNormalizes(t *testing.T) {
@@ -172,31 +164,6 @@ func TestSeenWritesOnlyOnChange(t *testing.T) {
 	}
 	if got := updatedMs(t, s); got == 1000 {
 		t.Error("a new language did not write the row")
-	}
-}
-
-func TestWantedCountsChosenOverSeen(t *testing.T) {
-	s, _ := newStore(t)
-	ctx := context.Background()
-	if err := s.Seen(ctx, "a", "uk"); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Seen(ctx, "b", "uk"); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Seen(ctx, "c", "de"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Choose(ctx, "c", "pl"); err != nil {
-		t.Fatal(err)
-	}
-	wanted, err := s.Wanted(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	slices.Sort(wanted)
-	if !slices.Equal(wanted, []texts.Lang{"pl", "uk"}) {
-		t.Errorf("wanted: %v", wanted)
 	}
 }
 
