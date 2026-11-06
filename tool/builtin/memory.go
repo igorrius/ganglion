@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -362,18 +363,24 @@ type AuditJob struct{ facts Facts }
 // NewAuditJob returns the audit job over f.
 func NewAuditJob(f Facts) AuditJob { return AuditJob{facts: f} }
 
-// auditTitle starts the report the owner gets.
-const auditTitle = "Nightly memory check. "
-
 // Run audits and returns the report. The reasons are a model's words
 // about stored text: they go to the owner only, never into a model's
 // context.
-func (a AuditJob) Run(ctx context.Context) (string, error) {
+func (a AuditJob) Run(ctx context.Context, sp texts.Speaker) (string, error) {
 	rep, err := a.facts.Audit(ctx)
 	if err != nil {
 		return "", fmt.Errorf("memory audit: %w", err)
 	}
-	return auditTitle + rep.String(), nil
+	counts := texts.Vars{"facts": strconv.Itoa(rep.Facts), "persona": strconv.Itoa(rep.Persona)}
+	if len(rep.Findings) == 0 {
+		return sp.Text(texts.ReportAuditClean, counts), nil
+	}
+	var b strings.Builder
+	b.WriteString(sp.Text(texts.ReportAuditFlagged, counts))
+	for _, f := range rep.Findings {
+		fmt.Fprintf(&b, "\n- %s: %s", f.Path, f.Reason) // a verdict's own words (R-LANG-7)
+	}
+	return b.String(), nil
 }
 
 // The scheduled audit: a system job that cannot be deleted, run as the

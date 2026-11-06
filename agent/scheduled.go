@@ -113,7 +113,7 @@ func (a *Agent) system(ctx context.Context, t *turn, j schedule.Job) error {
 		a.log.Warn("agent: system job of a principal who is not an admin; skipped", "job", j.ID, "principal", j.Owner)
 		return nil
 	}
-	report, err := run(ctx)
+	report, err := run(ctx, a.speaker(ctx, t))
 	if err != nil {
 		return fmt.Errorf("agent: system job %s: %w", j.ID, err)
 	}

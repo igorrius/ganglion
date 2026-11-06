@@ -6,6 +6,7 @@ package texts
 import (
 	"embed"
 	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 
@@ -84,13 +85,17 @@ const (
 	SchedSystem          Key = "sched.system"
 	SchedKindSystem      Key = "sched.kind_system"
 	SchedAuditText       Key = "sched.audit_text"
-	SchedGone            Key = "sched.gone"
-	SchedDeleted         Key = "sched.deleted"
-	SchedNoDelete        Key = "sched.no_delete"
-	SchedNotTask         Key = "sched.not_task"
-	SchedThisChat        Key = "sched.this_chat"
-	SchedNone            Key = "sched.none"
-	SchedStarted         Key = "sched.started"
+
+	NoticeMachine      Key = "notice.machine"
+	ReportAuditClean   Key = "report.audit_clean"
+	ReportAuditFlagged Key = "report.audit_flagged"
+	SchedGone          Key = "sched.gone"
+	SchedDeleted       Key = "sched.deleted"
+	SchedNoDelete      Key = "sched.no_delete"
+	SchedNotTask       Key = "sched.not_task"
+	SchedThisChat      Key = "sched.this_chat"
+	SchedNone          Key = "sched.none"
+	SchedStarted       Key = "sched.started"
 )
 
 var allKeys = []Key{
@@ -99,8 +104,11 @@ var allKeys = []Key{
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
-	ButtonDetails, ButtonDelete, ButtonRunNow, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
+	ButtonDetails, ButtonDelete, ButtonRunNow, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 }
+
+// EnglishAll returns every English text, which a file or a translation is checked against.
+func EnglishAll() map[Key]string { return maps.Clone(shipped[English]) }
 
 // Keys returns every key.
 func Keys() []Key { return allKeys }

@@ -316,6 +316,19 @@ Until the sandbox of M3d, a script can read whatever the node's user can
 read, the database and secret files included: install only scripts you
 trust with that.
 
+## Language files
+
+What the bot writes without a model follows each person's language
+([ADR-0053](adr/0053-fixed-texts-in-the-persons-language.md)): the one they asked for in the chat,
+then their Telegram's, then English. English, Russian and Ukrainian ship in the binary; any other
+language in the table is translated once by the cheap model, and each person is told so once.
+
+To correct a text, put `<code>.yaml` in the `languages/` directory beside the database
+(`GANGLION_LANGUAGES` moves it, but never into the workspace), with the keys you want from
+`texts/lang/en.yaml`, and restart. A text keeps its `{placeholders}` and adds no links, mentions or
+Markdown; one that does not is logged and left out. Your file comes before a shipped file and a
+translation, key by key.
+
 ## Releasing a module
 
 A built-in module ships in the binary and is updated on a running node

@@ -45,7 +45,7 @@ type NameFunc func(ctx context.Context, principal string) (string, error)
 // the memory audit: it runs without a model and returns the report sent
 // to the job's conversation (ruling R36). An error leaves the event to be
 // handled again.
-type SystemJob func(ctx context.Context) (string, error)
+type SystemJob func(ctx context.Context, sp texts.Speaker) (string, error)
 
 // Deps are the agent's collaborators. All are required except Middleware,
 // QuickActions, SystemJobs, Facts, Inbox, Plans, Status, Now and Log; the composition root
@@ -110,6 +110,8 @@ type Deps struct {
 type Languages interface {
 	Seen(ctx context.Context, principal, code string) error
 	Resolve(ctx context.Context, principal string) (texts.Lang, error)
+	// NoticeFor reports whether this event's message tells principal that l's texts are a machine's.
+	NoticeFor(ctx context.Context, principal string, l texts.Lang, event string) (bool, error)
 }
 
 // NoLanguages is the Languages of an agent that knows none: everyone reads English.
@@ -120,6 +122,11 @@ func (NoLanguages) Seen(context.Context, string, string) error { return nil }
 
 // Resolve implements Languages.
 func (NoLanguages) Resolve(context.Context, string) (texts.Lang, error) { return texts.English, nil }
+
+// NoticeFor implements Languages.
+func (NoLanguages) NoticeFor(context.Context, string, texts.Lang, string) (bool, error) {
+	return false, nil
+}
 
 // Plans is the end of a turn for a conversation's plan (plan.Store).
 type Plans interface {
@@ -276,6 +283,7 @@ func (a *Agent) finish(ctx context.Context, t *turn) ([]event.Outgoing, queue.St
 	if err := a.d.Plans.Finish(rctx, t.event.Conv, len(t.state.Pending) > 0); err != nil {
 		a.log.Warn("agent: plan not finished", "conv", t.event.Conv, "err", err)
 	}
+	a.tellMachineTexts(rctx, t)
 	data, err := json.Marshal(t.state)
 	if err != nil {
 		return nil, queue.StateUpdate{}, err

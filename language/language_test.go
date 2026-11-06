@@ -1,7 +1,10 @@
 package language
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -194,5 +197,80 @@ func TestWantedCountsChosenOverSeen(t *testing.T) {
 	slices.Sort(wanted)
 	if !slices.Equal(wanted, []texts.Lang{"pl", "uk"}) {
 		t.Errorf("wanted: %v", wanted)
+	}
+}
+
+func TestNoticeOncePerLanguage(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	for _, tc := range []struct {
+		lang  texts.Lang
+		event string
+		want  bool
+	}{
+		{"pl", "e1", true},
+		{"pl", "e1", true}, // a rerun of the same turn writes the same message
+		{"pl", "e2", false},
+		{"de", "e3", true},
+		{"pl", "e4", false},
+	} {
+		got, err := s.NoticeFor(ctx, person, tc.lang, tc.event)
+		if err != nil || got != tc.want {
+			t.Errorf("%s %s: %v, %v; want %v", tc.lang, tc.event, got, err, tc.want)
+		}
+	}
+}
+
+func TestLoadFiles(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("pl.yaml", "toast.used: Już załatwione.\ntoast.expired: https://evil.example\nreply.resumed: bez wartości\n")
+	write("xx.yaml", "toast.used: nope\n")
+	write("de.yaml", ":: not yaml ::\n\t- x")
+	write("notes.txt", "toast.used: nope\n")
+	var logs bytes.Buffer
+	files := LoadFiles(dir, slog.New(slog.NewTextHandler(&logs, nil)))
+	if len(files) != 1 || files["pl"][texts.ToastUsed] != "Już załatwione." {
+		t.Fatalf("%+v", files)
+	}
+	if _, ok := files["pl"][texts.ToastExpired]; ok {
+		t.Error("a text with an address was accepted")
+	}
+	if _, ok := files["pl"][texts.ReplyResumed]; ok {
+		t.Error("a text without its placeholder was accepted")
+	}
+	for _, want := range []string{"toast.expired", "reply.resumed", "xx.yaml", "de.yaml"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("the log does not name %s:\n%s", want, logs.String())
+		}
+	}
+}
+
+func TestLoadFilesNoDirectory(t *testing.T) {
+	if got := LoadFiles(filepath.Join(t.TempDir(), "none"), slog.New(slog.DiscardHandler)); len(got) != 0 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestDirOutsideWorkspace(t *testing.T) {
+	root := t.TempDir()
+	ws := filepath.Join(root, "workspace")
+	for _, tc := range []struct {
+		dir string
+		ok  bool
+	}{
+		{filepath.Join(root, "languages"), true},
+		{filepath.Join(root, "workspace2"), true},
+		{ws, false},
+		{filepath.Join(ws, "languages"), false},
+		{filepath.Join(ws, "..", "workspace", "x"), false},
+	} {
+		if err := CheckOutside(tc.dir, ws); (err == nil) != tc.ok {
+			t.Errorf("%s: %v", tc.dir, err)
+		}
 	}
 }

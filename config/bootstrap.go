@@ -12,6 +12,7 @@ import (
 // command line fills it; the providers read it (ADR-0028, ADR-0029).
 type Bootstrap struct {
 	DB        string // GANGLION_DB, default "ganglion.db"
+	Languages string // GANGLION_LANGUAGES: an operator's language files; default "languages" beside the database
 	BotToken  string // TELEGRAM_BOT_TOKEN or the file named by TELEGRAM_BOT_TOKEN_FILE; empty → no Telegram transport
 	BotAPIURL string // TELEGRAM_API_URL, default "https://api.telegram.org"
 	Admin     string // GANGLION_ADMIN, e.g. "telegram:user:123"; seeded as admin at start

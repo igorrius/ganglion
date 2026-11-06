@@ -18,6 +18,7 @@ import (
 	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -327,7 +328,7 @@ func TestMemoryAuditJobRunsWithoutAModelTurn(t *testing.T) {
 	m.jobs[j.ID] = j
 	out := m.turn(t, fired(j))
 	if len(out) != 1 || out[0].Conv != "telegram:42" || out[0].Transport != "telegram" ||
-		!strings.Contains(out[0].Text, fmt.Sprintf("Checked %d stored facts", facts)) {
+		!strings.Contains(out[0].Text, fmt.Sprintf("Facts checked: %d", facts)) {
 		t.Fatalf("out %+v", out)
 	}
 	if n := len(m.smart.requests()); n != 0 {
@@ -343,7 +344,7 @@ func TestMemoryAuditJobRunsWithoutAModelTurn(t *testing.T) {
 func TestSystemJobNeedsAnAdminAndItsCode(t *testing.T) {
 	e := newEnv(t, Config{}, nil)
 	ran := 0
-	e.deps.SystemJobs = map[string]SystemJob{"system:x": func(context.Context) (string, error) { ran++; return "report", nil }}
+	e.deps.SystemJobs = map[string]SystemJob{"system:x": func(context.Context, texts.Speaker) (string, error) { ran++; return "report", nil }}
 	e.a = New(overDefaults(Config{}), e.deps)
 	j := schedule.Job{ID: "system:x", Owner: owner, Conv: "telegram:42", Transport: "telegram", Kind: schedule.KindSystem,
 		Cron: "0 4 * * *", Text: "x", System: true, Created: t0}

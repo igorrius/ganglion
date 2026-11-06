@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -149,4 +152,42 @@ func (s *Store) Wanted(ctx context.Context) ([]texts.Lang, error) {
 		out = append(out, texts.Lang(l))
 	}
 	return out, rows.Err()
+}
+
+// NoticeFor reports whether event's message should tell principal that l's texts are a machine's:
+// once per language, and again for the same event, since a rerun writes the same message.
+func (s *Store) NoticeFor(ctx context.Context, principal string, l texts.Lang, event string) (bool, error) {
+	due := false
+	err := sqlitedb.Immediate(ctx, s.db, func(c *sql.Conn) error {
+		var notified string
+		err := c.QueryRowContext(ctx, `SELECT notified FROM people WHERE principal = ?`, principal).Scan(&notified)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		entries := map[string]string{}
+		if notified != "" {
+			for e := range strings.SplitSeq(notified, ",") {
+				lang, ev, _ := strings.Cut(e, "=")
+				entries[lang] = ev
+			}
+		}
+		if ev, told := entries[string(l)]; told {
+			due = ev == event
+			return nil
+		}
+		due = true
+		entries[string(l)] = event
+		parts := make([]string, 0, len(entries))
+		for _, lang := range slices.Sorted(maps.Keys(entries)) {
+			parts = append(parts, lang+"="+entries[lang])
+		}
+		_, err = c.ExecContext(ctx, `INSERT INTO people (principal, notified, updated_ms) VALUES (?, ?, ?)
+			ON CONFLICT (principal) DO UPDATE SET notified = excluded.notified`,
+			principal, strings.Join(parts, ","), s.now().UnixMilli())
+		return err
+	})
+	if err != nil {
+		return false, fmt.Errorf("language: notice %s: %w", principal, err)
+	}
+	return due, nil
 }

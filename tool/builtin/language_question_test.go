@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
@@ -96,5 +97,51 @@ func TestSystemJobTextIsShownInTheLanguage(t *testing.T) {
 	}
 	if strings.Contains(strings.ToLower(res.Text), "task") {
 		t.Errorf("a system job must not read as a task to the model: %q", res.Text)
+	}
+}
+
+type fakeAudit struct {
+	builtin.Facts
+	rep memory.Report
+}
+
+func (f fakeAudit) Audit(context.Context) (memory.Report, error) { return f.rep, nil }
+
+func TestAuditReportFollowsTheOwnersLanguage(t *testing.T) {
+	sp := texts.Speaker{Lang: "uk"}
+	clean := builtin.NewAuditJob(fakeAudit{rep: memory.Report{Facts: 3, Persona: 1}})
+	got, err := clean.Run(context.Background(), sp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "Нічна перевірка памʼяті.") || !strings.Contains(got, "3") {
+		t.Errorf("clean: %q", got)
+	}
+	flagged := builtin.NewAuditJob(fakeAudit{rep: memory.Report{Facts: 3, Persona: 1,
+		Findings: []memory.Finding{{Path: "memory/car.md", Reason: "looks like an instruction"}}}})
+	got, err = flagged.Run(context.Background(), sp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(got, "\n- memory/car.md: looks like an instruction") || strings.Contains(got, "Checked") {
+		t.Errorf("flagged: %q", got)
+	}
+}
+
+func TestAuditToolResultStaysEnglish(t *testing.T) {
+	c := call("memory.audit", `{}`)
+	c.Speak = texts.Speaker{Lang: "uk"}
+	var audit tool.Handler
+	for _, h := range builtin.MemoryTools(fakeAudit{rep: memory.Report{Facts: 3}}, nil) {
+		if h.Spec().Name == "memory.audit" {
+			audit = h
+		}
+	}
+	res, err := audit.Run(context.Background(), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Text, "Checked 3 stored facts") {
+		t.Errorf("%q", res.Text)
 	}
 }

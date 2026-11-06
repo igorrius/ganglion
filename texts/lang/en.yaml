@@ -67,3 +67,7 @@ sched.none: "none"
 sched.started: "Started; the answer goes to {target}."
 sched.kind_system: "system job"
 sched.audit_text: "Memory audit: every stored fact and persona file checked for hidden instructions; nothing is changed."
+
+notice.machine: "Buttons and system messages here were translated automatically and may be inaccurate."
+report.audit_clean: "Nightly memory check. Facts checked: {facts}. Persona files checked: {persona}. Nothing was flagged."
+report.audit_flagged: "Nightly memory check. Facts checked: {facts}. Persona files checked: {persona}. Flagged, with nothing changed or deleted:"

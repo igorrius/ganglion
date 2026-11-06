@@ -139,6 +139,33 @@ func (a *Agent) speaker(ctx context.Context, t *turn) texts.Speaker {
 	return texts.Speaker{Lang: a.language(ctx, t), Cat: a.d.Texts}
 }
 
+// tellMachineTexts adds to the turn's last plain message, once per person per language, that the
+// fixed texts were translated by a machine (R-LANG-6). It goes with a message rather than as its own,
+// and only a message to read uses it up. A failure leaves the person untold this turn.
+func (a *Agent) tellMachineTexts(ctx context.Context, t *turn) {
+	l := a.language(ctx, t)
+	if t.msg.From == "" || a.d.Texts.Source(l, texts.ButtonApprove) != texts.SourceMachine {
+		return
+	}
+	last := -1
+	for i, o := range t.out {
+		if o.Text != "" && o.Edit == "" && o.EditOf == "" && o.Ack == "" {
+			last = i
+		}
+	}
+	if last < 0 {
+		return
+	}
+	due, err := a.d.Languages.NoticeFor(ctx, t.msg.From, l, t.event.ID)
+	if err != nil {
+		a.log.Warn("agent: machine-translation notice skipped", "err", err)
+		return
+	}
+	if due {
+		t.out[last].Text += "\n\n" + a.d.Texts.Text(l, texts.NoticeMachine, nil)
+	}
+}
+
 // endReplies are the fixed replies of a turn no model answered.
 var endReplies = map[turns.Outcome]texts.Key{
 	turns.OutcomeNoModel: texts.ReplyNoModel,

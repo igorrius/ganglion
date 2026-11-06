@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/texts"
 )
 
@@ -17,6 +18,8 @@ type fakeLanguages struct {
 	seen map[string]string
 	lang map[string]texts.Lang
 	err  error
+	// notified holds the event that told a person, by person and language.
+	notified map[string]string
 }
 
 func (f *fakeLanguages) Seen(_ context.Context, principal, code string) error {
@@ -25,6 +28,18 @@ func (f *fakeLanguages) Seen(_ context.Context, principal, code string) error {
 	}
 	f.seen[principal] = code
 	return f.err
+}
+
+func (f *fakeLanguages) NoticeFor(_ context.Context, principal string, l texts.Lang, event string) (bool, error) {
+	if f.notified == nil {
+		f.notified = map[string]string{}
+	}
+	key := principal + "/" + string(l)
+	if prev, ok := f.notified[key]; ok {
+		return prev == event, nil
+	}
+	f.notified[key] = event
+	return true, nil
 }
 
 func (f *fakeLanguages) Resolve(_ context.Context, principal string) (texts.Lang, error) {
@@ -216,5 +231,92 @@ func TestOpenQuestionKeepsItsText(t *testing.T) {
 	}
 	if folded != q.Text {
 		t.Errorf("the stored question changed: %q, want %q", folded, q.Text)
+	}
+}
+
+// machineEnv reads Polish from a machine pack, Ukrainian from a shipped file and English.
+func machineEnv(t *testing.T, packed map[texts.Key]string) *env {
+	t.Helper()
+	cat, err := texts.New(texts.WithPacks(func(l texts.Lang, k texts.Key) (string, bool) {
+		s, ok := packed[k]
+		return s, ok && l == "pl"
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := newEnv(t, Config{}, nil)
+	e.deps.Languages = &fakeLanguages{lang: map[string]texts.Lang{"pl": "pl", "uk": "uk"}}
+	e.deps.Texts = cat
+	e.a = New(overDefaults(Config{}), e.deps)
+	return e
+}
+
+const noticePL = "Tłumaczenie maszynowe."
+
+func TestNoticeOnce(t *testing.T) {
+	e := machineEnv(t, map[texts.Key]string{texts.ButtonApprove: "Zatwierdź", texts.NoticeMachine: noticePL})
+	e.smart.push(say("one"), say("two"))
+	first := e.turn(t, message("pl", "A", "hi"))
+	if len(first) != 1 || first[0].Text != "one\n\n"+noticePL {
+		t.Fatalf("first %+v", first)
+	}
+	second := e.turn(t, message("pl", "A", "hi again"))
+	if len(second) != 1 || second[0].Text != "two" {
+		t.Fatalf("second %+v", second)
+	}
+}
+
+func TestNoticeNotForShipped(t *testing.T) {
+	e := machineEnv(t, nil)
+	e.smart.push(say("one"))
+	if out := e.turn(t, message("uk", "A", "hi")); out[0].Text != "one" {
+		t.Fatalf("%q", out[0].Text)
+	}
+}
+
+func TestNoticeEnglishIfItsKeyFailed(t *testing.T) {
+	e := machineEnv(t, map[texts.Key]string{texts.ButtonApprove: "Zatwierdź"})
+	e.smart.push(say("one"))
+	out := e.turn(t, message("pl", "A", "hi"))
+	if want := "one\n\n" + texts.EnglishText(texts.NoticeMachine); out[0].Text != want {
+		t.Fatalf("%q", out[0].Text)
+	}
+}
+
+func TestNoticeSurvivesRerun(t *testing.T) {
+	e := machineEnv(t, map[texts.Key]string{texts.ButtonApprove: "Zatwierdź", texts.NoticeMachine: noticePL})
+	ev := message("pl", "A", "hi")
+	e.smart.push(say("one"), say("one"))
+	o1, _, err1 := e.a.Handle(context.Background(), ev)
+	o2, _, err2 := e.a.Handle(context.Background(), ev) // a restart reruns the same event
+	if err1 != nil || err2 != nil || o1[0].Text != o2[0].Text || !strings.HasSuffix(o2[0].Text, noticePL) {
+		t.Fatalf("%q, %v; %q, %v", o1[0].Text, err1, o2[0].Text, err2)
+	}
+}
+
+func TestNoticeWaitsForAMessage(t *testing.T) {
+	e := machineEnv(t, map[texts.Key]string{texts.ButtonApprove: "Zatwierdź", texts.NoticeMachine: noticePL})
+	raw, _ := json.Marshal(event.Decision{Button: "unknown", From: "pl", Ref: "1", Query: "q"})
+	e.turn(t, event.Event{ID: "e", IdemKey: "k", Source: "telegram", Conv: "telegram:1", Kind: event.KindDecision, Payload: raw})
+	e.smart.push(say("one"))
+	if out := e.turn(t, message("pl", "A", "hi")); !strings.HasSuffix(out[0].Text, noticePL) {
+		t.Fatalf("a toast used up the notice: %q", out[0].Text)
+	}
+}
+
+func TestSystemJobGetsTheOwnersSpeaker(t *testing.T) {
+	e := inLanguage(t)
+	var got texts.Lang
+	e.deps.SystemJobs = map[string]SystemJob{"system:x": func(_ context.Context, sp texts.Speaker) (string, error) {
+		got = sp.Lang
+		return "report", nil
+	}}
+	e.a = New(overDefaults(Config{}), e.deps)
+	tn := &turn{msg: event.Message{From: "uk"}}
+	if err := e.a.system(context.Background(), tn, schedule.Job{ID: "system:x"}); err != nil {
+		t.Fatal(err)
+	}
+	if got != "uk" || len(tn.out) != 1 {
+		t.Fatalf("language %q, out %+v", got, tn.out)
 	}
 }

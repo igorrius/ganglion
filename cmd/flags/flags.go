@@ -57,6 +57,7 @@ type Run struct {
 	LogDir         string
 	ModelsFile     string
 	Workspace      string
+	Languages      string
 	DailyBudgetUSD float64
 	ReactionAfter  time.Duration
 	ReactionDwell  time.Duration
@@ -90,6 +91,8 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 		LogDirFlag(&r.LogDir),
 		&cli.StringFlag{Name: "models-file", Usage: "the model catalogue; without it the agent is off and the bot echoes",
 			Category: catAgent, Local: true, Sources: env("GANGLION_MODELS_FILE"), Destination: &r.ModelsFile, TakesFile: true},
+		&cli.StringFlag{Name: "languages", Usage: "your language files, <code>.yaml, outside the workspace; default: languages beside the database",
+			Category: catAgent, Local: true, Sources: env("GANGLION_LANGUAGES"), Destination: &r.Languages, TakesFile: true},
 		&cli.StringFlag{Name: "workspace", Usage: "the agent's files (persona/*.md)", Value: "workspace", Category: catAgent,
 			Local: true, Sources: env("GANGLION_WORKSPACE"), Destination: &r.Workspace, TakesFile: true},
 		&cli.FloatFlag{Name: "daily-budget-usd", Usage: "paid smart models stop for the day after this spend", Value: 1.0,

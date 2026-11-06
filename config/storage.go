@@ -3,6 +3,7 @@ package config
 import (
 	"database/sql"
 	"log/slog"
+	"path/filepath"
 	"time"
 
 	"github.com/igorrius/ganglion/access"
@@ -76,7 +77,16 @@ func Languages() do.Provider[*language.Store] {
 // Texts provides the fixed texts, machine translations included.
 func Texts() do.Provider[*texts.Catalog] {
 	return func(i do.Injector) (*texts.Catalog, error) {
-		return texts.New(texts.WithPacks(do.MustInvoke[*language.Store](i).Pack))
+		b := do.MustInvoke[Bootstrap](i)
+		dir := b.Languages
+		if dir == "" {
+			dir = filepath.Join(filepath.Dir(b.DB), "languages")
+		}
+		if err := language.CheckOutside(dir, b.Agent.Workspace); err != nil {
+			return nil, err
+		}
+		return texts.New(texts.WithPacks(do.MustInvoke[*language.Store](i).Pack),
+			texts.WithFiles(language.LoadFiles(dir, do.MustInvoke[*slog.Logger](i))))
 	}
 }
 
