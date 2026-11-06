@@ -1471,6 +1471,9 @@ Reviewed at each gate.
     how that is managed, and whether an agent becomes an abstraction, say an admin agent in a private
     chat and another for a group, with its own tools and security. The role name `family` in the code
     means "allowed and not an admin" and should not shape this (owner, 2026-11-06).
+  - Settings as a hierarchy (owner, 2026-11-06): a language for a chat or a group, and within it a
+    forum and a forum's topic, set in the configuration; and what a person may do, such as choosing
+    their own language, as a group of permissions named in the configuration.
   - Where a bot answers, the owner's ruling (2026-11-06), to close before the repository opens:
     - **A private chat:** every message, only from people named in the configuration.
     - **A group or a forum:** only when the bot itself is addressed, whatever Telegram's privacy mode
