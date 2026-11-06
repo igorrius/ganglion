@@ -211,6 +211,13 @@ Start here when coming back to the project.
     tokens, including the first verdicts of `task-report` and `task-selection`. 46.0 MB binary, 44.9 MB RSS after 1,000 turns. The
     `/metrics` memory test (`make memory`) is noisy and goes over its 128 MB line on `master` too: peaks
     of 122 to 134 MB on both, so it does not separate them.
+  - **Telegram Rich Messages, built on branch `rich-messages`, waiting for the owner's look on the test bot**
+    ([design](plans/p1-rich-messages-design.md), [plan](plans/p1-rich-messages.md),
+    [ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md), Proposed): a message with a
+    table or at least two headings goes out as a rich message from an allowlist of blocks, a refusal goes the
+    ordinary way, a symbol tree keeps its levels, and a rich message sent to the bot is read as outside content.
+    Tests, the review and the five lab scenarios it touched pass; 46.1 MB binary, 44.2 MB RSS after 1,000
+    turns. Nothing has been sent to real Telegram yet, so which shapes it refuses is unknown.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
@@ -248,6 +255,18 @@ Start here when coming back to the project.
       uncommitted; a Telegram display name can read like the owner's in
       the speaker prefix; an approved page is capped like a tool result
       while an auto-allowed one is not.
+    - Rich Messages:
+      - rich blocks Telegram may refuse, which then go the ordinary way: an empty list item or quote, an empty
+        link or heading, a link inside a link (a badge); the fake accepts them;
+      - an ordered list from 0 loses its first number, since `value` is left out at zero;
+      - a tree inside a quote loses one column on its deeper lines;
+      - the last line of a multi-line raw HTML block is not shown, in both renderers (older than this work);
+      - link addresses are sent with their escapes unresolved, in both renderers;
+      - inline formulas and custom emoji in a rich message sent to the bot are not read;
+      - `Parts` parses repeatedly: 1.8 s for a 1,000-row table, 9.5 s for 5,000 rows, in the one sender goroutine;
+      - an ordinary message still makes a link from any scheme, `tg://` included;
+      - a table inside a quote or a list above the limits is cut by length, without its header;
+      - deploying this, with its default on, while a split message is in flight may skip or repeat a part.
     - M3c: an admin alert at start when a stored module falls back or a
       skill is not loaded (both are logged and visible otherwise); pin the
       GitHub Actions by commit SHA in `modules-release.yml`; prune old

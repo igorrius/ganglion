@@ -53,7 +53,7 @@ Failure modes the design implies and no other test would catch. Each has its tes
 
 - [x] **Step 1:** ADR-0054, Proposed, and its row.
 - [x] **Step 2:** R-DLV-11 and R-DLV-12 in the spec; "Not now" updated.
-- [ ] **Step 3: Commit** with the design and this plan, on branch `rich-messages`.
+- [x] **Step 3: Commit** with the design and this plan, on branch `rich-messages`.
 
 ### Task 2: A symbol tree keeps its levels
 
@@ -67,7 +67,7 @@ Failure modes the design implies and no other test would catch. Each has its tes
 - Produces: `func isTreeLine(line string) bool`: true when, after any spaces and `│`, the line starts with
   `├` or `└`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `TestRenderKeepsTreeLevels`: a tree with a root line and lines indented with spaces and with `│`. Rendered
     text equals the source lines, one `pre` entity over all of it.
   - `TestRenderTreeInAList`: the same inside `- item`, with the item's indentation removed.
@@ -75,11 +75,11 @@ Failure modes the design implies and no other test would catch. Each has its tes
     contains `└`, copied as a literal with a mark from `plan/plan.go`, since the transport does not import
     `plan`; `│` alone.
   - `TestRenderTreeInFenceUnchanged`: a fenced tree gives the same result as before this change.
-- [ ] **Step 2: Run to see them fail.** `go test ./transport/telegram -run 'Tree' -count=1`.
-- [ ] **Step 3: Implement.** goldmark trims each line's start, so walk back from a segment's `Start` to the
+- [x] **Step 2: Run to see them fail.** `go test ./transport/telegram -run 'Tree' -count=1`.
+- [x] **Step 3: Implement.** goldmark trims each line's start, so walk back from a segment's `Start` to the
   previous newline in `src`.
-- [ ] **Step 4: Run** `go test ./transport/telegram -count=1`: PASS.
-- [ ] **Step 5: Commit** with `docs/architecture/05-code-map.md`.
+- [x] **Step 4: Run** `go test ./transport/telegram -count=1`: PASS.
+- [x] **Step 5: Commit** with `docs/architecture/05-code-map.md`.
 
 ### Task 3: Markdown to blocks
 
@@ -99,7 +99,7 @@ Failure modes the design implies and no other test would catch. Each has its tes
     counts runes; list items and table rows count as blocks; a refusal is covered by task 4 if Telegram
     counts differently.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `TestRenderRichBlocks`, table-driven, one row for each row of design section 4, comparing marshalled JSON.
     Include ordered list `value` from a start of 3, heading sizes 1 and 6, a long quote of paragraphs as
     `expandable_blockquote`, a long quote holding a list as `blockquote`.
@@ -112,11 +112,11 @@ Failure modes the design implies and no other test would catch. Each has its tes
   - `TestStructured`: true for a table, two `#` headings, two headings inside a quote; false for one heading, a
     plain list, headings and a table only inside a code fence.
   - `TestRichSize`: blocks counted at each limit.
-- [ ] **Step 2: Run to see them fail.** `go test ./transport/telegram -run 'Rich|Structured' -count=1`.
-- [ ] **Step 3: Implement** in the shape of `writer` in `markdown.go`, with one function per block kind
+- [x] **Step 2: Run to see them fail.** `go test ./transport/telegram -run 'Rich|Structured' -count=1`.
+- [x] **Step 3: Implement** in the shape of `writer` in `markdown.go`, with one function per block kind
   (`gocognit` caps at 20). A tree paragraph is a `pre` block.
-- [ ] **Step 4: Run** `go test ./transport/telegram -count=1`: PASS.
-- [ ] **Step 5: Commit.**
+- [x] **Step 4: Run** `go test ./transport/telegram -count=1`: PASS.
+- [x] **Step 5: Commit.**
 
 ### Task 4: Sending, the setting, the fallback
 
@@ -142,7 +142,7 @@ Failure modes the design implies and no other test would catch. Each has its tes
   - Counter `ganglion.telegram.rich` with label `outcome`, a named type: `sent`, `refused` (task 6 adds `read`,
     `unreadable`).
 
-- [ ] **Step 1: Write the failing tests**, through `New` and the fake:
+- [x] **Step 1: Write the failing tests**, through `New` and the fake:
   - `TestSendRichWhenStructured`: a table goes through `sendRichMessage`, with reply, thread and silent carried;
     one heading goes through `sendMessage`.
   - `TestRichExclusions`: table-driven, one row per excluded field: goes the ordinary way.
@@ -157,13 +157,13 @@ Failure modes the design implies and no other test would catch. Each has its tes
     `ErrPermanent`, nothing delivered.
   - Flag: extend `cmd/cmd_test.go`'s env tables, with an invalid value refused.
   - Server: `telegramtest/server_test.go` for each 400 above.
-- [ ] **Step 2: Run to see them fail.**
-- [ ] **Step 3: Implement.** In `Send`, after the attachment and ack branches:
+- [x] **Step 2: Run to see them fail.**
+- [x] **Step 3: Implement.** In `Send`, after the attachment and ack branches:
   `if t.richShape(msg) && (structured(msg.Text) || renderedUnits(msg.Text) > maxTextUnits)` call a new
   `sendRich`, which on a `400` logs at warn (message id and kinds only), counts `refused` and calls the ordinary
   path, chunked by `splitMarkdown` when it does not fit. `sendRichMessage` joins `sendError`'s mapping unchanged.
-- [ ] **Step 4: Run** `go test ./transport/telegram/... ./cmd/... ./config/... -count=1`: PASS; `make lint`.
-- [ ] **Step 5: Commit** with the code map.
+- [x] **Step 4: Run** `go test ./transport/telegram/... ./cmd/... ./config/... -count=1`: PASS; `make lint`.
+- [x] **Step 5: Commit** with the code map.
 
 ### Task 5: Length
 
@@ -175,7 +175,7 @@ Failure modes the design implies and no other test would catch. Each has its tes
 - Produces: `func splitRich(src string) []string`; `func splitTable(block string) []string`, which cuts a table's
   source between rows and repeats its header and delimiter lines.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `TestPartsRichOneMessage`: a table with 20,000 characters: one part, key unchanged. With the setting off: parts
     as today.
   - `TestPartsPlainLongUnchanged`: 10,000 characters of paragraphs and one heading: the same parts as today.
@@ -186,12 +186,12 @@ Failure modes the design implies and no other test would catch. Each has its tes
     above 4,096 units even with no heading of its own.
   - `TestPartsMixedCases`: a long question with a table: buttons on the last part only, and it goes ordinary; text
     overflowing a caption with a table goes rich.
-- [ ] **Step 2: Run to see them fail.**
-- [ ] **Step 3: Implement.** In `Parts`, after the `Attach` branch and before the ordinary test: `if
+- [x] **Step 2: Run to see them fail.**
+- [x] **Step 3: Implement.** In `Parts`, after the `Attach` branch and before the ordinary test: `if
   t.richShape(msg) && structured(msg.Text)`. Reuse `mdBlocks` and `textParts`; a non-table block too long falls to
   `nextCut`.
-- [ ] **Step 4: Run** `go test ./transport/telegram/... ./outbox/... -count=1`: PASS.
-- [ ] **Step 5: Commit.**
+- [x] **Step 4: Run** `go test ./transport/telegram/... ./outbox/... -count=1`: PASS.
+- [x] **Step 5: Commit.**
 
 ### Task 6: Reading a rich message
 
@@ -204,7 +204,7 @@ Failure modes the design implies and no other test would catch. Each has its tes
 - Produces: `func readRich(raw json.RawMessage) string`: the flattened text by the table of design section 11; "" if
   nothing is readable or the JSON is invalid. Depth stops at `maxRichDepth`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `TestReadRich`, table-driven, one row per row of design section 11, including rich text as a string, a list and
     a nested object, and a file block giving its caption and the word that a file was there, with no `file_id`.
   - `TestReadRichDepth`: 40 levels of nesting: returns, no panic.
@@ -214,19 +214,19 @@ Failure modes the design implies and no other test would catch. Each has its tes
     readable]`, counter `unreadable`; `read` for the others.
   - `TestRichContentIsOutside`, in `agent`: a command-like `/new` in such a message runs no command and is wrapped;
     a `callback_data` in a buttons block does not appear in the content.
-- [ ] **Step 2: Run to see them fail.**
-- [ ] **Step 3: Implement.** Unknown block types add nothing. Confirm the size against the agent's limits on a user
+- [x] **Step 2: Run to see them fail.**
+- [x] **Step 3: Implement.** Unknown block types add nothing. Confirm the size against the agent's limits on a user
   message and, if there is none, cap with `internal/text` at `maxRichChars`.
-- [ ] **Step 4: Run** `go test ./transport/telegram/... ./agent/... -count=1`: PASS.
-- [ ] **Step 5: Commit.**
+- [x] **Step 4: Run** `go test ./transport/telegram/... ./agent/... -count=1`: PASS.
+- [x] **Step 5: Commit.**
 
 ### Task 7: Closing
 
 **Files:** `docs/README.md`, `docs/architecture/05-code-map.md`, `tools/chatlab/passed.json`.
 
-- [ ] **Step 1:** `make test`, `make lint`, `make lab-faults`, `make memory`; note the binary size and RSS.
-- [ ] **Step 2:** `make lab` for what changed. If it recommends a full run, ask the owner.
-- [ ] **Step 3:** A fresh reviewer reads the whole branch against the design, the ADR's Security section first.
+- [x] **Step 1:** `make test`, `make lint`, `make memory`: 46.1 MB binary, 44.2 MB RSS after 1,000 turns. `make lab-faults` not run: no seeded fault touches this work, and it spends subscription limits.
+- [x] **Step 2:** `make lab` for what changed. If it recommends a full run, ask the owner.
+- [x] **Step 3:** A fresh reviewer reads the whole branch against the design, the ADR's Security section first.
 - [ ] **Step 4: The owner's live look on @ganglion_test_bot**, from design section 8: a table on a phone, a wide one
   with and without `is_compact`, headings and lists, their own tree, a reply to a rich message, a report above 4,096
   characters, the bot's own rich answer forwarded back. An empty table cell's form is settled here too.
