@@ -1,6 +1,6 @@
 # ADR-0053: Send fixed texts in the person's language, from a catalogue with a one-time machine translation
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-06
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.13](../spec.md#713-the-language-of-fixed-texts), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-9), [7.9](../spec.md#79-observability) (R-OBS-8)

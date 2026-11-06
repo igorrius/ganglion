@@ -205,8 +205,9 @@ Start here when coming back to the project.
     never shown. The owner checked it on a live turn that read the agent's logs (2026-11-06).
   - **Fixed texts in the person's language, built on branch `fixed-texts-language`**
     ([plan](plans/p1-fixed-texts-language.md),
-    [ADR-0053](adr/0053-fixed-texts-in-the-persons-language.md), Proposed): tests and reviews pass; the
-    owner's look on the test bot is still to come. 46.0 MB binary, 44.9 MB RSS after 1,000 turns. The
+    [ADR-0053](adr/0053-fixed-texts-in-the-persons-language.md)): tests and reviews pass. The owner saw
+    a reply follow Telegram's language on the test bot (2026-11-06); a spoken switch and a machine
+    translation have not been seen live yet. 46.0 MB binary, 44.9 MB RSS after 1,000 turns. The
     `/metrics` memory test (`make memory`) is noisy and goes over its 128 MB line on `master` too: peaks
     of 122 to 134 MB on both, so it does not separate them.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans

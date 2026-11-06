@@ -58,7 +58,7 @@ considered, how they compare, the decision and its consequences. See
 | [0050](0050-additions-join-a-running-turn.md) | Let a message written during a turn join it at the next boundary, ending a CLI run to do so | Accepted | 2026-11-05 |
 | [0051](0051-status-reactions-outside-the-outbox.md) | Show work that takes long by reactions set outside the outbox | Accepted | 2026-11-05 |
 | [0052](0052-a-plan-is-delivered-during-its-turn.md) | Deliver a plan during its turn through the outbox, with its own table | Accepted | 2026-11-05 |
-| [0053](0053-fixed-texts-in-the-persons-language.md) | Send fixed texts in the person's language, from a catalogue with a one-time machine translation | Proposed | 2026-11-06 |
+| [0053](0053-fixed-texts-in-the-persons-language.md) | Send fixed texts in the person's language, from a catalogue with a one-time machine translation | Accepted | 2026-11-06 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).
