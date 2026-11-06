@@ -54,6 +54,41 @@ const (
 	ReplySessionRow   Key = "reply.session_row"
 	ReplyNoTasks      Key = "reply.no_tasks"
 	ReplyNotAvailable Key = "reply.not_available"
+
+	ButtonDetails        Key = "button.details"
+	ButtonDelete         Key = "button.delete"
+	ButtonRunNow         Key = "button.run_now"
+	AskRunTool           Key = "ask.run_tool"
+	AskSendMessage       Key = "ask.send_message"
+	AskCreateReminder    Key = "ask.create_reminder"
+	AskCreateTask        Key = "ask.create_task"
+	AskDeleteReminder    Key = "ask.delete_reminder"
+	AskDeleteTask        Key = "ask.delete_task"
+	AskRunNow            Key = "ask.run_now"
+	AskOpenPage          Key = "ask.open_page"
+	AskSwitchCell        Key = "ask.switch_cell"
+	AskRemember          Key = "ask.remember"
+	AskForgetFact        Key = "ask.forget_fact"
+	AskForgetSlug        Key = "ask.forget_slug"
+	AskPersona           Key = "ask.persona"
+	AskSkillScript       Key = "ask.skill_script"
+	SchedSummaryReminder Key = "sched.summary_reminder"
+	SchedSummaryTask     Key = "sched.summary_task"
+	SchedEntry           Key = "sched.entry"
+	SchedDetails         Key = "sched.details"
+	SchedOnce            Key = "sched.once"
+	SchedEvery           Key = "sched.every"
+	SchedEveryNext       Key = "sched.every_next"
+	SchedKindReminder    Key = "sched.kind_reminder"
+	SchedKindTask        Key = "sched.kind_task"
+	SchedSystem          Key = "sched.system"
+	SchedGone            Key = "sched.gone"
+	SchedDeleted         Key = "sched.deleted"
+	SchedNoDelete        Key = "sched.no_delete"
+	SchedNotTask         Key = "sched.not_task"
+	SchedThisChat        Key = "sched.this_chat"
+	SchedNone            Key = "sched.none"
+	SchedStarted         Key = "sched.started"
 )
 
 var allKeys = []Key{
@@ -62,6 +97,7 @@ var allKeys = []Key{
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
+	ButtonDetails, ButtonDelete, ButtonRunNow, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 }
 
 // Keys returns every key.
@@ -135,6 +171,26 @@ func mustLoad(langs ...Lang) map[Lang]map[Key]string {
 
 // EnglishText returns k's English text.
 func EnglishText(k Key) string { return shipped[English][k] }
+
+// Speaker writes in one person's language. The zero Speaker writes English from the shipped files,
+// which is what a text a model reads wants.
+type Speaker struct {
+	Lang Lang
+	Cat  *Catalog
+}
+
+func (s Speaker) catalog() *Catalog {
+	if s.Cat != nil {
+		return s.Cat
+	}
+	return Shipped()
+}
+
+// Text is Catalog.Text in s's language.
+func (s Speaker) Text(k Key, v Vars) string { return s.catalog().Text(s.Lang, k, v) }
+
+// Label is Catalog.Label in s's language.
+func (s Speaker) Label(k Key) string { return s.catalog().Label(s.Lang, k, nil) }
 
 // Option configures a Catalog.
 type Option func(*Catalog)

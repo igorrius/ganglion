@@ -152,7 +152,7 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 		return nil
 	}
 	a.acknowledge(ctx, t, texts.ToastAccepted, "", "")
-	e, err := run(ctx, pending.QuickPress{Button: b, Transport: t.event.Source, Event: t.event.ID})
+	e, err := run(ctx, pending.QuickPress{Speak: a.speaker(ctx, t), Button: b, Transport: t.event.Source, Event: t.event.ID})
 	if err != nil {
 		return fmt.Errorf("agent: quick action %s: %w", b.Action, err)
 	}
@@ -243,6 +243,7 @@ func (a *Agent) stored(it pending.Item, ran bool) pending.Outcome {
 func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pending.Outcome {
 	c := it.Call()
 	c.Admin, c.Tainted = t.admin, it.Tainted || t.state.Tainted
+	c.Speak = a.speaker(ctx, t)
 	c.KnownURL = knownURLs(t.state.Messages).has
 	if o, refused := a.refuseBadArgs(ctx, c); refused {
 		return o

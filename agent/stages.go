@@ -134,6 +134,11 @@ func (a *Agent) label(ctx context.Context, t *turn, k texts.Key) string {
 	return a.d.Texts.Label(a.language(ctx, t), k, nil)
 }
 
+// speaker writes in the language of the turn's person, for a tool.
+func (a *Agent) speaker(ctx context.Context, t *turn) texts.Speaker {
+	return texts.Speaker{Lang: a.language(ctx, t), Cat: a.d.Texts}
+}
+
 // endReplies are the fixed replies of a turn no model answered.
 var endReplies = map[turns.Outcome]texts.Key{
 	turns.OutcomeNoModel: texts.ReplyNoModel,

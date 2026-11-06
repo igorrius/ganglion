@@ -223,7 +223,7 @@ func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) 
 	if !isPlanCall(call) {
 		a.report(t, t.refs[0], event.StageTool)
 	}
-	result, err := a.tool(ctx, a.toolCall(t, call))
+	result, err := a.tool(ctx, a.toolCall(ctx, t, call))
 	// A failed call can still carry messages, such as the alert about
 	// a call outside a task's grant.
 	t.out = append(t.out, result.Out...)
@@ -250,11 +250,11 @@ func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) 
 }
 
 // toolCall is the context of the turn's next call.
-func (a *Agent) toolCall(t *turn, call provider.ToolCall) tool.Call {
+func (a *Agent) toolCall(ctx context.Context, t *turn, call provider.ToolCall) tool.Call {
 	return tool.Call{
 		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Transport: t.transport, Principal: t.msg.From,
 		Admin: t.admin, Tainted: t.state.Tainted, LocalOnly: t.state.LocalOnly, Grant: t.grant, KnownURL: t.known.has, Depth: t.depth,
-		Name: call.Name, Args: call.Args,
+		Speak: a.speaker(ctx, t), Name: call.Name, Args: call.Args,
 	}
 }
 

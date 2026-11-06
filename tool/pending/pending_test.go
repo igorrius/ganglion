@@ -106,7 +106,7 @@ func TestAskReturnsTheQuestionWithButtons(t *testing.T) {
 	if q.IdemKey != "01TURN:2:confirm" || q.Transport != "telegram" || q.Conv != "telegram:42" || q.Text != "Run web.fetch with {...}?" {
 		t.Fatalf("question %+v", q)
 	}
-	if len(q.Buttons) != 2 || q.Buttons[0].Label != "Approve" || q.Buttons[1].Label != "Deny" {
+	if len(q.Buttons) != 2 || q.Buttons[0].Label != "✅ Approve" || q.Buttons[1].Label != "❌ Deny" {
 		t.Fatalf("buttons %+v", q.Buttons)
 	}
 	for _, b := range q.Buttons {

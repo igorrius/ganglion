@@ -15,6 +15,7 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/pending"
 )
@@ -350,9 +351,9 @@ func (t *ScheduleCreate) Question(ctx context.Context, c tool.Call) (string, err
 		return "", err
 	}
 	if j.Kind == schedule.KindReminder {
-		return "Create a reminder?\n" + t.s.summary(j, c.Conv), nil
+		return c.Speak.Text(texts.AskCreateReminder, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}), nil
 	}
-	return "Create a scheduled task? It runs unattended, as you, and spends tokens.\n" + t.s.summary(j, c.Conv), nil
+	return c.Speak.Text(texts.AskCreateTask, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}), nil
 }
 
 // Run creates the job. A rerun of the same call finds it created.
@@ -364,7 +365,7 @@ func (t *ScheduleCreate) Run(ctx context.Context, c tool.Call) (tool.Result, err
 	if err := t.s.Jobs.Create(ctx, j); err != nil && !errors.Is(err, schedule.ErrExists) {
 		return tool.Result{}, fmt.Errorf("schedule.create: %w", err)
 	}
-	return tool.Result{Text: fmt.Sprintf("created %s %s; %s", j.Kind, j.ID, t.s.timing(j))}, nil
+	return tool.Result{Text: fmt.Sprintf("created %s %s; %s", j.Kind, j.ID, t.s.timing(texts.Speaker{}, j))}, nil
 }
 
 // ScheduleList is the schedule.list tool.
@@ -400,13 +401,13 @@ func (t *ScheduleList) Run(ctx context.Context, c tool.Call) (tool.Result, error
 	lines := make([]string, 0, len(jobs))
 	out := make([]event.Outgoing, 0, len(jobs))
 	for _, j := range jobs {
-		buttons, err := t.s.buttons(ctx, j, c.Principal, c.Conv, ActionDetails, ActionDelete, ActionRunNow)
+		buttons, err := t.s.buttons(ctx, c.Speak, j, c.Principal, c.Conv, ActionDetails, ActionDelete, ActionRunNow)
 		if err != nil {
 			return tool.Result{}, fmt.Errorf("schedule.list: %w", err)
 		}
-		lines = append(lines, "- "+j.ID+" ("+t.s.title(j)+", "+t.s.timing(j)+"): "+j.Text)
+		lines = append(lines, "- "+j.ID+" ("+t.s.title(texts.Speaker{}, j)+", "+t.s.timing(texts.Speaker{}, j)+"): "+j.Text)
 		out = append(out, event.Outgoing{IdemKey: c.Key() + ":list:" + j.ID, Transport: c.Transport, Conv: c.Conv,
-			Text: t.s.entry(j), Buttons: buttons})
+			Text: t.s.entry(c.Speak, j), Buttons: buttons})
 	}
 	return tool.Result{Text: strconv.Itoa(len(jobs)) + " jobs, shown to the owner with buttons:\n" + strings.Join(lines, "\n"), Out: out}, nil
 }
@@ -435,7 +436,11 @@ func (t *ScheduleDelete) Question(ctx context.Context, c tool.Call) (string, err
 	if err != nil {
 		return "", err
 	}
-	return "Delete this " + string(j.Kind) + "?\n" + t.s.summary(j, c.Conv), nil
+	key := texts.AskDeleteTask
+	if j.Kind == schedule.KindReminder {
+		key = texts.AskDeleteReminder
+	}
+	return c.Speak.Text(key, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}), nil
 }
 
 // Run deletes the job; schedule.ErrSystem for a system job.
@@ -476,10 +481,8 @@ func (t *ScheduleRunNow) Question(ctx context.Context, c tool.Call) (string, err
 	if err != nil {
 		return "", err
 	}
-	return runNowQuestion + t.s.summary(j, c.Conv), nil
+	return c.Speak.Text(texts.AskRunNow, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}), nil
 }
-
-const runNowQuestion = "Run this task now?\n"
 
 // Run puts the task's run now, keyed by the call's key: a confirmed call
 // keeps its key, so a rerun of the turn that ran it (a crash before its

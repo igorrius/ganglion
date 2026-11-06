@@ -189,3 +189,32 @@ func TestToastUsesThePressersLanguage(t *testing.T) {
 		t.Fatalf("toast %q", got)
 	}
 }
+
+func TestOpenQuestionKeepsItsText(t *testing.T) {
+	langs := &fakeLanguages{lang: map[string]texts.Lang{}}
+	base := newEnv(t, Config{}, nil)
+	base.deps.Languages = langs
+	e := newConfirmEnvOn(t, base, newSideTool())
+	q, _ := e.ask(t, "schedule.create")
+	if q.Buttons[0].Label != "✅ Approve" {
+		t.Fatalf("label %q", q.Buttons[0].Label)
+	}
+	langs.lang[owner] = "uk" // the person changes language while the question is open
+	e.smart.push(say("done"))
+	out := e.turn(t, press(owner, q.Buttons[0].ID, "1"))
+	var toast, folded string
+	for _, o := range append(e.early.got(), out...) {
+		if o.Ack != "" {
+			toast = o.Text
+		}
+		if o.Folded != "" {
+			folded = o.Folded
+		}
+	}
+	if toast != "Дозволено" {
+		t.Errorf("toast %q", toast)
+	}
+	if folded != q.Text {
+		t.Errorf("the stored question changed: %q, want %q", folded, q.Text)
+	}
+}

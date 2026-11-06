@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/igorrius/ganglion/cells"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -151,7 +152,7 @@ func (s *CellsSet) Question(_ context.Context, c tool.Call) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return whole("cells.set", "Switch "+a.ID+" "+a.Value+"?")
+	return whole("cells.set", c.Speak.Text(texts.AskSwitchCell, texts.Vars{"id": a.ID, "value": a.Value}))
 }
 
 // Run sets the cell's desired value to "on" or "off", with the call's

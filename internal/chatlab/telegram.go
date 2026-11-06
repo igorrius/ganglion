@@ -7,7 +7,9 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
+	"strings"
 	"sync/atomic"
+	"unicode"
 
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 )
@@ -74,7 +76,7 @@ func (p *Telegram) SendFile(_ context.Context, f File) error {
 func (p *Telegram) Press(_ context.Context, label string) error {
 	for _, m := range slices.Backward(p.fake.Showing()) {
 		for _, b := range buttons(m.Keyboard) {
-			if b.Text == label {
+			if plainLabel(b.Text) == label {
 				p.last.Store(p.fake.AddCallback(telegramtest.Callback{ChatID: m.ChatID, UserID: p.chat, Name: p.name,
 					MessageID: m.MessageID, Data: b.Data}))
 				return nil
@@ -98,7 +100,7 @@ func (p *Telegram) Messages() []Message {
 	for _, s := range p.fake.Showing() {
 		m := Message{Text: s.Text, Replaced: edited[s.MessageID]}
 		for _, b := range buttons(s.Keyboard) {
-			m.Buttons = append(m.Buttons, b.Text)
+			m.Buttons = append(m.Buttons, plainLabel(b.Text))
 		}
 		all = append(all, numbered{s.MessageID, m})
 	}
@@ -149,4 +151,14 @@ func CheckLoopback(rawURL string) error {
 		return fmt.Errorf("chatlab: Bot API URL %q is not a loopback address", rawURL)
 	}
 	return nil
+}
+
+// plainLabel is a button's label without the symbol code puts before it, so a scenario names a
+// button by its word (R-LANG-6).
+func plainLabel(label string) string {
+	head, rest, ok := strings.Cut(label, " ")
+	if !ok || head == "" || unicode.IsLetter([]rune(head)[0]) {
+		return label
+	}
+	return rest
 }

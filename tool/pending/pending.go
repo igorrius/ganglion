@@ -22,6 +22,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"go.opentelemetry.io/otel"
 )
@@ -60,10 +61,11 @@ const (
 	ActionDeny    = "deny"
 )
 
-// Labels of the confirmation buttons.
+// Symbols on the confirmation buttons, outside the translated label, so a button reads correctly
+// whatever a machine translation made of its words (R-LANG-6).
 const (
-	labelApprove = "Approve"
-	labelDeny    = "Deny"
+	markApprove = "✅ "
+	markDeny    = "❌ "
 )
 
 // Errors of Press; the agent decides on them with errors.Is.
@@ -132,6 +134,8 @@ type Button struct {
 
 // QuickPress is a press of a quick-action button as its action sees it.
 type QuickPress struct {
+	// Speak writes in the language of the person who pressed (R-LANG-2).
+	Speak     texts.Speaker
 	Button    Button
 	Transport string // the transport of the button's conversation
 	Event     string // the id of the press's event; the same when the event is handled again
@@ -223,7 +227,7 @@ func (s *Store) Ask(ctx context.Context, c tool.Call, question string) (string, 
 	now := s.now().UTC()
 	it := Item{ID: event.NewID(now), Conv: c.Conv, Transport: c.Transport, Principal: c.Principal, TurnID: c.TurnID, N: c.N,
 		Tool: c.Name, Args: c.Args, Question: question, Status: StatusWaiting, Expires: now.Add(s.ttl), Tainted: c.Tainted, Depth: c.Depth}
-	id, err := s.insert(ctx, it, now)
+	id, err := s.insert(ctx, it, c.Speak, now)
 	if err != nil {
 		return "", fmt.Errorf("pending: ask %s: %w", c.Key(), err)
 	}
@@ -276,7 +280,7 @@ func (s *Store) Parked(ctx context.Context, c tool.Call) (string, error) {
 
 // insert stores it with its two buttons, unless its call key is stored
 // already; it returns the stored id.
-func (s *Store) insert(ctx context.Context, it Item, now time.Time) (string, error) {
+func (s *Store) insert(ctx context.Context, it Item, sp texts.Speaker, now time.Time) (string, error) {
 	var id string
 	err := s.tx(ctx, func(tx *sql.Conn) error {
 		res, err := tx.ExecContext(ctx, `INSERT INTO pending_calls (id, turn_id, n, conv, transport, principal, tool, args, question,
@@ -291,8 +295,8 @@ func (s *Store) insert(ctx context.Context, it Item, now time.Time) (string, err
 		}
 		id = it.ID
 		for _, b := range []Button{
-			{Action: ActionApprove, Label: labelApprove},
-			{Action: ActionDeny, Label: labelDeny},
+			{Action: ActionApprove, Label: markApprove + sp.Label(texts.ButtonApprove)},
+			{Action: ActionDeny, Label: markDeny + sp.Label(texts.ButtonDeny)},
 		} {
 			b.ID, b.Pending, b.Principal, b.Conv, b.Expires = NewButtonID(), it.ID, it.Principal, it.Conv, it.Expires
 			if err := insertButton(ctx, tx, b); err != nil {

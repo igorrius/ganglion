@@ -6,35 +6,49 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/pending"
 )
 
-// Texts of the quick actions.
+// Placeholders that several texts share.
 const (
-	textGone      = "This job no longer exists."
-	textDeleted   = "Deleted."
-	textSystem    = "A system job cannot be deleted."
-	textNotTask   = "Only a task can run now."
-	textThisChat  = "this chat"
-	textNone      = "none"
-	systemMarker  = " (system)"
-	labelDetails  = "Details"
-	labelDelete   = "Delete"
-	labelRunNow   = "Run now"
-	textStartedTo = "Started; the answer goes to "
+	varText    = "text"
+	varSummary = "summary"
+	varTarget  = "target"
+	varZone    = "zone"
+)
+
+// What a press notes for the model, in English.
+const (
 	noteDeleted   = "the owner deleted %s %s: %s"
 	noteRan       = "the owner ran %s %s now: %s"
 	noteHeadRunes = 100
 )
 
-// buttonLabels are the labels of the quick actions.
-var buttonLabels = map[string]string{ActionDetails: labelDetails, ActionDelete: labelDelete, ActionRunNow: labelRunNow}
+// Symbols on the buttons that act, outside the translated label (R-LANG-6). Details only shows.
+const (
+	markDelete = "🗑 "
+	markRunNow = "▶️ "
+)
+
+// buttonLabel is the label of a quick action in sp's language.
+func buttonLabel(sp texts.Speaker, action string) string {
+	switch action {
+	case ActionDelete:
+		return markDelete + sp.Label(texts.ButtonDelete)
+	case ActionRunNow:
+		return markRunNow + sp.Label(texts.ButtonRunNow)
+	default:
+		return sp.Label(texts.ButtonDetails)
+	}
+}
 
 // QuickActions are the buttons of a listed job by action name, for the
 // agent (agent.Deps.QuickActions). Each edits the job's own message.
@@ -45,7 +59,7 @@ func (s Scheduling) QuickActions() map[string]pending.QuickAction {
 // buttons stores the quick-action buttons of job j for principal in conv
 // and returns them, in the order of actions: Delete only for a job that
 // is not a system job, Run now only for a task.
-func (s Scheduling) buttons(ctx context.Context, j schedule.Job, principal, conv string, actions ...string) ([]event.Button, error) {
+func (s Scheduling) buttons(ctx context.Context, sp texts.Speaker, j schedule.Job, principal, conv string, actions ...string) ([]event.Button, error) {
 	args, err := json.Marshal(idArgs{ID: j.ID})
 	if err != nil {
 		return nil, err
@@ -55,7 +69,7 @@ func (s Scheduling) buttons(ctx context.Context, j schedule.Job, principal, conv
 		if action == ActionDelete && j.System || action == ActionRunNow && j.Kind != schedule.KindTask {
 			continue
 		}
-		stored = append(stored, pending.Button{ID: pending.NewButtonID(), Action: action, Label: buttonLabels[action],
+		stored = append(stored, pending.Button{ID: pending.NewButtonID(), Action: action, Label: buttonLabel(sp, action),
 			Principal: principal, Conv: conv, Args: args, Expires: s.Now().Add(listButtonsTTL)})
 	}
 	if err := s.Buttons.AddButtons(ctx, stored...); err != nil {
@@ -89,13 +103,13 @@ func (s Scheduling) pressedJob(ctx context.Context, p pending.QuickPress) (sched
 func (s Scheduling) details(ctx context.Context, p pending.QuickPress) (pending.QuickEdit, error) {
 	j, ok, err := s.pressedJob(ctx, p)
 	if err != nil || !ok {
-		return pending.QuickEdit{Text: textGone}, err
+		return pending.QuickEdit{Text: p.Speak.Text(texts.SchedGone, nil)}, err
 	}
-	buttons, err := s.buttons(ctx, j, p.Button.Principal, p.Button.Conv, ActionDelete, ActionRunNow)
+	buttons, err := s.buttons(ctx, p.Speak, j, p.Button.Principal, p.Button.Conv, ActionDelete, ActionRunNow)
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}
-	return pending.QuickEdit{Text: s.detailsText(j, p.Button.Conv), Buttons: buttons}, nil
+	return pending.QuickEdit{Text: s.detailsText(p.Speak, j, p.Button.Conv), Buttons: buttons}, nil
 }
 
 // deleteByButton deletes the job at once: the press is the owner's own
@@ -106,24 +120,24 @@ func (s Scheduling) deleteByButton(ctx context.Context, p pending.QuickPress) (p
 		return s.deletedBy(ctx, p)
 	}
 	if err != nil {
-		return pending.QuickEdit{Text: textGone}, err
+		return pending.QuickEdit{Text: p.Speak.Text(texts.SchedGone, nil)}, err
 	}
 	err = s.Jobs.Delete(ctx, j.ID, p.Button.Principal, p.Event)
 	switch {
 	case errors.Is(err, schedule.ErrSystem):
-		return pending.QuickEdit{Text: s.entry(j) + "\n\n" + textSystem}, nil
+		return pending.QuickEdit{Text: s.entry(p.Speak, j) + "\n\n" + p.Speak.Text(texts.SchedNoDelete, nil)}, nil
 	case errors.Is(err, schedule.ErrNotFound):
-		return pending.QuickEdit{Text: textGone}, nil
+		return pending.QuickEdit{Text: p.Speak.Text(texts.SchedGone, nil)}, nil
 	case err != nil:
 		return pending.QuickEdit{}, err
 	}
-	return s.deletedEdit(j), nil
+	return s.deletedEdit(p, j), nil
 }
 
 // deletedEdit is the job's message once deleted, with the note for the
 // history (ruling R42).
-func (s Scheduling) deletedEdit(j schedule.Job) pending.QuickEdit {
-	return pending.QuickEdit{Text: s.entry(j) + "\n\n" + textDeleted, Note: fmt.Sprintf(noteDeleted, j.Kind, j.ID, head(j.Text))}
+func (s Scheduling) deletedEdit(p pending.QuickPress, j schedule.Job) pending.QuickEdit {
+	return pending.QuickEdit{Text: s.entry(p.Speak, j) + "\n\n" + p.Speak.Text(texts.SchedDeleted, nil), Note: fmt.Sprintf(noteDeleted, j.Kind, j.ID, head(j.Text))}
 }
 
 // deletedBy answers a Delete press of a job that is not there: the same
@@ -137,13 +151,13 @@ func (s Scheduling) deletedBy(ctx context.Context, p pending.QuickPress) (pendin
 	j, err := s.Jobs.Get(ctx, a.ID)
 	switch {
 	case errors.Is(err, schedule.ErrNotFound):
-		return pending.QuickEdit{Text: textGone}, nil
+		return pending.QuickEdit{Text: p.Speak.Text(texts.SchedGone, nil)}, nil
 	case err != nil:
 		return pending.QuickEdit{}, err
 	case j.Deleted && j.DeletedBy == p.Event && j.Owner == p.Button.Principal:
-		return s.deletedEdit(j), nil
+		return s.deletedEdit(p, j), nil
 	}
-	return pending.QuickEdit{Text: textGone}, nil
+	return pending.QuickEdit{Text: p.Speak.Text(texts.SchedGone, nil)}, nil
 }
 
 // head is the start of a job's text on one line, for a note.
@@ -159,20 +173,20 @@ func (s Scheduling) runByButton(ctx context.Context, p pending.QuickPress) (pend
 	j, ok, err := s.pressedJob(ctx, p)
 	switch {
 	case err != nil || !ok:
-		return pending.QuickEdit{Text: textGone}, err
+		return pending.QuickEdit{Text: p.Speak.Text(texts.SchedGone, nil)}, err
 	case j.Kind != schedule.KindTask:
-		return pending.QuickEdit{Text: s.entry(j) + "\n\n" + textNotTask}, nil
+		return pending.QuickEdit{Text: s.entry(p.Speak, j) + "\n\n" + p.Speak.Text(texts.SchedNotTask, nil)}, nil
 	case s.mayAct(j):
 		return s.askRunNow(ctx, p, j)
 	}
 	if err := s.Runner.RunKey(ctx, j.ID, p.Button.Principal, p.Event); err != nil {
 		return pending.QuickEdit{}, err
 	}
-	buttons, err := s.buttons(ctx, j, p.Button.Principal, p.Button.Conv, ActionDetails, ActionDelete, ActionRunNow)
+	buttons, err := s.buttons(ctx, p.Speak, j, p.Button.Principal, p.Button.Conv, ActionDetails, ActionDelete, ActionRunNow)
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}
-	shown := s.entry(j) + "\n\n" + textStartedTo + replyTarget(j.Grant.ReplyTo, p.Button.Conv) + "."
+	shown := s.entry(p.Speak, j) + "\n\n" + p.Speak.Text(texts.SchedStarted, texts.Vars{varTarget: replyTarget(p.Speak, j.Grant.ReplyTo, p.Button.Conv)})
 	return pending.QuickEdit{Text: shown, Buttons: buttons, Note: fmt.Sprintf(noteRan, j.Kind, j.ID, head(j.Text))}, nil
 }
 
@@ -195,9 +209,9 @@ func (s Scheduling) askRunNow(ctx context.Context, p pending.QuickPress, j sched
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}
-	c := tool.Call{TurnID: p.Button.ID, N: 1, Conv: p.Button.Conv, Transport: p.Transport, Principal: p.Button.Principal,
+	c := tool.Call{Speak: p.Speak, TurnID: p.Button.ID, N: 1, Conv: p.Button.Conv, Transport: p.Transport, Principal: p.Button.Principal,
 		Name: ActionRunNow, Args: args}
-	id, err := s.Buttons.Ask(ctx, c, redact.String(runNowQuestion+s.summary(j, p.Button.Conv)))
+	id, err := s.Buttons.Ask(ctx, c, redact.String(p.Speak.Text(texts.AskRunNow, texts.Vars{varSummary: s.summary(p.Speak, j, p.Button.Conv)})))
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}
@@ -208,25 +222,28 @@ func (s Scheduling) askRunNow(ctx context.Context, p pending.QuickPress, j sched
 	return pending.QuickEdit{Text: q.Text, Buttons: q.Buttons, Key: q.IdemKey}, nil
 }
 
-// title is "task" or "reminder", marked when it is a system job.
-func (s Scheduling) title(j schedule.Job) string {
-	if j.System {
-		return string(j.Kind) + systemMarker
+// title names a job's kind in sp's language.
+func (s Scheduling) title(sp texts.Speaker, j schedule.Job) string {
+	kind := sp.Text(texts.SchedKindTask, nil)
+	if j.Kind == schedule.KindReminder {
+		kind = sp.Text(texts.SchedKindReminder, nil)
 	}
-	return string(j.Kind)
+	if j.System {
+		return sp.Text(texts.SchedSystem, texts.Vars{"kind": kind})
+	}
+	return kind
 }
 
 // timing describes when a job runs, in the node's zone.
-func (s Scheduling) timing(j schedule.Job) string {
+func (s Scheduling) timing(sp texts.Speaker, j schedule.Job) string {
 	zone := s.Loc.String()
 	if j.Cron == "" {
-		return "once at " + j.At.In(s.Loc).Format(timeLayout) + " (" + zone + ")"
+		return sp.Text(texts.SchedOnce, texts.Vars{"at": j.At.In(s.Loc).Format(timeLayout), varZone: zone})
 	}
-	text := fmt.Sprintf("every %q (%s)", j.Cron, zone)
 	if next := s.next(j); next != "" {
-		text += ", next at " + next
+		return sp.Text(texts.SchedEveryNext, texts.Vars{"cron": j.Cron, varZone: zone, "next": next})
 	}
-	return text
+	return sp.Text(texts.SchedEvery, texts.Vars{"cron": j.Cron, varZone: zone})
 }
 
 // next is the job's next run in the node's zone; "" when there is none.
@@ -247,40 +264,38 @@ func (s Scheduling) next(j schedule.Job) string {
 // summary is what a job does, line by line: the text, the schedule, and
 // for a task its grant and who receives the answer. here is the
 // conversation it is shown in.
-func (s Scheduling) summary(j schedule.Job, here string) string {
+func (s Scheduling) summary(sp texts.Speaker, j schedule.Job, here string) string {
 	if j.Kind != schedule.KindTask {
-		return "Text: " + j.Text + "\nSchedule: " + s.timing(j) + "\nSent to: " + replyTarget(j.Conv, here)
+		return sp.Text(texts.SchedSummaryReminder, texts.Vars{varText: j.Text, "timing": s.timing(sp, j), varTarget: replyTarget(sp, j.Conv, here)})
 	}
-	return "Instruction: " + j.Text +
-		"\nSchedule: " + s.timing(j) +
-		"\nTools: " + orNone(j.Grant.Tools) +
-		"\nHosts web.fetch may reach: " + orNone(j.Grant.Hosts) +
-		"\nReplies go to: " + replyTarget(j.Grant.ReplyTo, here)
+	return sp.Text(texts.SchedSummaryTask, texts.Vars{varText: j.Text, "timing": s.timing(sp, j),
+		"tools": orNone(sp, j.Grant.Tools), "hosts": orNone(sp, j.Grant.Hosts), varTarget: replyTarget(sp, j.Grant.ReplyTo, here)})
 }
 
 // entry is a job's message in a list.
-func (s Scheduling) entry(j schedule.Job) string {
-	title := s.title(j)
-	return strings.ToUpper(title[:1]) + title[1:] + ": " + j.Text + "\nSchedule: " + s.timing(j)
+func (s Scheduling) entry(sp texts.Speaker, j schedule.Job) string {
+	title := []rune(s.title(sp, j))
+	title[0] = unicode.ToUpper(title[0])
+	return sp.Text(texts.SchedEntry, texts.Vars{"title": string(title), varText: j.Text, "timing": s.timing(sp, j)})
 }
 
 // detailsText is all of a job.
-func (s Scheduling) detailsText(j schedule.Job, here string) string {
-	return s.title(j) + " " + j.ID + "\n" + s.summary(j, here) + "\nNext run: " + orDash(s.next(j)) +
-		"\nCreated: " + j.Created.In(s.Loc).Format(timeLayout)
+func (s Scheduling) detailsText(sp texts.Speaker, j schedule.Job, here string) string {
+	return sp.Text(texts.SchedDetails, texts.Vars{"title": s.title(sp, j), "id": j.ID, varSummary: s.summary(sp, j, here),
+		"next": orDash(s.next(j)), "created": j.Created.In(s.Loc).Format(timeLayout)})
 }
 
 // replyTarget names a conversation for the person reading in here.
-func replyTarget(conv, here string) string {
+func replyTarget(sp texts.Speaker, conv, here string) string {
 	if conv == here {
-		return textThisChat
+		return sp.Text(texts.SchedThisChat, nil)
 	}
 	return conv
 }
 
-func orNone(items []string) string {
+func orNone(sp texts.Speaker, items []string) string {
 	if len(items) == 0 {
-		return textNone
+		return sp.Text(texts.SchedNone, nil)
 	}
 	return strings.Join(items, ", ")
 }

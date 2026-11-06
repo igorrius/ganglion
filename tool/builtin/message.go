@@ -12,6 +12,7 @@ import (
 
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -147,7 +148,7 @@ func (m *MessageSend) Question(ctx context.Context, c tool.Call) (string, error)
 	if err != nil {
 		return "", err
 	}
-	return whole("message.send", "Send this message to "+to+"?\n\n"+a.Text)
+	return whole("message.send", c.Speak.Text(texts.AskSendMessage, texts.Vars{"to": to, varText: a.Text}))
 }
 
 // recipient names where a message to target goes (conv, resolved): this

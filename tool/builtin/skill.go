@@ -12,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/skills"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -115,7 +116,7 @@ func (s *skillScript) Question(_ context.Context, c tool.Call) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return whole(s.sk.ToolName(), fmt.Sprintf("Run the script of skill %s?\n%s\nInput:\n%s", s.sk.Name, oneLine(s.sk.Description), quote(in)))
+	return whole(s.sk.ToolName(), c.Speak.Text(texts.AskSkillScript, texts.Vars{"name": s.sk.Name, "about": oneLine(s.sk.Description), "input": quote(in)}))
 }
 
 // quote prefixes every line of s with "> ", so an input's lines cannot

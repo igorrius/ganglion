@@ -295,7 +295,8 @@ func remind(id string) schedule.Job {
 func labels(bs []event.Button) string {
 	var out []string
 	for _, b := range bs {
-		out = append(out, b.Label)
+		// The word; TestButtonsThatActCarrySymbols holds the symbol.
+		out = append(out, strings.NewReplacer("🗑 ", "", "▶️ ", "", "✅ ", "", "❌ ", "").Replace(b.Label))
 	}
 	return strings.Join(out, ",")
 }

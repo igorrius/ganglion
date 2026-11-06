@@ -345,7 +345,7 @@ func TestPressFeedbackOrderOverTelegram(t *testing.T) {
 		Text string `json:"text"`
 		Data string `json:"callback_data"`
 	}
-	if err := json.Unmarshal([]byte(question.Keyboard), &rows); err != nil || len(rows) != 2 || rows[0][0].Text != "Approve" {
+	if err := json.Unmarshal([]byte(question.Keyboard), &rows); err != nil || len(rows) != 2 || rows[0][0].Text != "✅ Approve" {
 		t.Fatalf("question %+v: %v", question, err)
 	}
 	before := len(fake.Methods())

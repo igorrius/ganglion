@@ -12,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/guard"
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/memory"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -142,7 +143,7 @@ func (p *PersonaPropose) Question(ctx context.Context, c tool.Call) (string, err
 	case !v.OK:
 		return "", errPersonaHeldBack
 	}
-	return "Make this my description? It is saved as " + memory.IdentityFile + ", and you can edit that file by hand later.\n\n" + text, nil
+	return c.Speak.Text(texts.AskPersona, texts.Vars{"file": memory.IdentityFile, varText: text}), nil
 }
 
 // Run writes the approved persona. The session's taint counts as at the

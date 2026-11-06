@@ -22,6 +22,7 @@ import (
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/internal/urlnorm"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
 )
@@ -242,7 +243,7 @@ func (p *Policy) confirm(ctx context.Context, h tool.Handler, c tool.Call) (tool
 func question(ctx context.Context, h tool.Handler, c tool.Call) (string, error) {
 	q, ok := h.(tool.Questioner)
 	if !ok {
-		return fmt.Sprintf("Run %s with %s?", c.Name, text.Truncate(redact.String(string(c.Args)), questionArgsRunes)), nil
+		return c.Speak.Text(texts.AskRunTool, texts.Vars{"name": c.Name, "args": text.Truncate(redact.String(string(c.Args)), questionArgsRunes)}), nil
 	}
 	s, err := q.Question(ctx, c)
 	if err != nil {

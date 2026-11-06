@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/igorrius/ganglion/internal/urlnorm"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/web"
 )
@@ -73,7 +74,6 @@ func (w *WebFetch) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 
 // questionFetch starts web.fetch's question; the address follows in a
 // code span, where Markdown changes nothing.
-const questionFetch = "Open this page?\n"
 
 // errUserinfo refuses an address with a user name or password before
 // the host, which the fetcher refuses too: asking would be pointless.
@@ -106,7 +106,7 @@ func (*WebFetch) Question(_ context.Context, c tool.Call) (string, error) {
 	if strings.Contains(norm, "`") {
 		return "", errBacktick
 	}
-	return whole("web.fetch: the address", questionFetch+"`"+norm+"`")
+	return whole("web.fetch: the address", c.Speak.Text(texts.AskOpenPage, texts.Vars{"address": "`" + norm + "`"}))
 }
 
 // pageText is the page with its address, title and type on top.

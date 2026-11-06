@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -96,8 +97,8 @@ func (w *MemoryWrite) Question(_ context.Context, c tool.Call) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return whole(toolMemoryWrite, "Remember this fact? This conversation holds content from outside, so check it is yours.\n\n"+
-		strings.Join(strings.Fields(a.Title), " ")+": "+strings.TrimSpace(a.Body))
+	return whole(toolMemoryWrite, c.Speak.Text(texts.AskRemember, texts.Vars{
+		"fact": strings.Join(strings.Fields(a.Title), " ") + ": " + strings.TrimSpace(a.Body)}))
 }
 
 // Run stores the fact with where it came from: the turn and the
@@ -177,9 +178,9 @@ func (f *MemoryForget) Question(_ context.Context, c tool.Call) (string, error) 
 		return "", err
 	}
 	if e, err := f.facts.Read(slug); err == nil {
-		return "Forget this fact (" + slug + ")?\n\n" + e.Title + ": " + e.Body, nil
+		return c.Speak.Text(texts.AskForgetFact, texts.Vars{"slug": slug, "fact": e.Title + ": " + e.Body}), nil
 	}
-	return "Forget the fact " + slug + "?", nil
+	return c.Speak.Text(texts.AskForgetSlug, texts.Vars{"slug": slug}), nil
 }
 
 // Run removes the fact in a commit that names the turn.

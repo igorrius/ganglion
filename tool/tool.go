@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/texts"
 )
 
 // Class is what a tool does to the world. Classes are stored in the
@@ -96,8 +97,11 @@ type Call struct {
 	Grant     *Grant // non-nil only in a scheduled task's turn
 	Depth     int    // R-AGT-4
 	KnownURL  URLFunc
-	Name      string
-	Args      json.RawMessage
+	// Speak writes what the person reads in their language (R-LANG-2); a
+	// tool's result and errors stay in English, since a model reads them.
+	Speak texts.Speaker
+	Name  string
+	Args  json.RawMessage
 }
 
 // Key identifies the call across reruns of its turn: the idempotency key
