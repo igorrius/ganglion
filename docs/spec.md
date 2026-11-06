@@ -1465,6 +1465,20 @@ Reviewed at each gate.
   sub-agents and parallel agents. Until there is a public repository
   with install docs and settled processes, a node is one operator, one
   agent, one bot (owner, 2026-11-02).
+  - Who uses a node is not settled, and "family" is only the owner's own case: a home, a company
+    chat or any other group may use one, paying through an API such as OpenRouter. To work out,
+    after research: limiting Telegram users and groups, which tools a person or a group gets and
+    how that is managed, and whether an agent becomes an abstraction, say an admin agent in a private
+    chat and another for a group, with its own tools and security. The role name `family` in the code
+    means "allowed and not an admin" and should not shape this (owner, 2026-11-06).
+  - Where a bot answers, the owner's ruling (2026-11-06), to close before the repository opens:
+    - **A private chat:** every message, only from people named in the configuration.
+    - **A group or a forum:** only when the bot itself is addressed, whatever Telegram's privacy mode
+      says. Groups, forums and later other systems are named in the configuration of that channel.
+    - **Today's gap:** the node has no such rule. It answers whatever Telegram delivers from an allowed
+      person, in any group, and a bot made a group's admin receives every message.
+    - **Later, as a plugin or a worker:** reading everything and working out what to react to, such as in
+      an automated chat, needs a classifier and its own targeting.
 - Models by purpose (owner, 2026-11-05): a role for short decisions, embedding
   models for memory and search, models that read pictures. Whoever sets up an
   agent picks its models, and may have only an OpenAI-compatible API, so ganglion

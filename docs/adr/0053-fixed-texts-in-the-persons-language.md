@@ -90,7 +90,8 @@ Spec principle 9: every link is hostile, every input is untrusted.
 - **Trust boundaries:**
   - the model's output becomes text on buttons and approvals, after code checks it;
   - `language_code` comes from the channel;
-  - `language.set` is the first tool a `family` member may call.
+  - `language.set` is the first tool a person who is not an admin may call (the role is named `family`
+    in the code today, which says nothing about who they are).
 - **What an attacker controls:** a web page, through the model in a tainted session; a person's
   Telegram language setting. Our English strings, and the language name sent to the translation, are
   not theirs.
@@ -116,7 +117,7 @@ and an approval's meaning does not rest on the words alone.
 - A person in any listed language understands the bot, with no technical step by anyone.
 - Every person-facing string moves behind a key, and a test keeps shipped files complete.
 - A new text costs a translation per stored language, on next need.
-- `family` members are no longer without tools, a change to a rule tests relied on.
+- People who are not admins are no longer without tools, a change to a rule tests relied on.
 - A person whose Telegram is in one language and who writes in another gets mismatched buttons until
   they say something. This follows the owner's rule.
 
