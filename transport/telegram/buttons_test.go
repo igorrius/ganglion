@@ -307,3 +307,18 @@ func TestFoldedQuestionStaysInsideTheQuote(t *testing.T) {
 		t.Fatalf("entities %+v, want %+v", ents, want)
 	}
 }
+
+func TestLanguageCodeReachesTheDecision(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	c := &collector{}
+	run(t, newTransport(t, fake), c.sink)
+	fake.AddCallback(telegramtest.Callback{ChatID: 42, UserID: 42, MessageID: 17, Data: "c:" + buttonID, Language: "uk"})
+	eventually(t, "a decision event", func() bool { return len(c.got()) == 1 })
+	var d event.Decision
+	if err := json.Unmarshal(c.got()[0].Payload, &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Lang != "uk" {
+		t.Fatalf("decision language %q", d.Lang)
+	}
+}

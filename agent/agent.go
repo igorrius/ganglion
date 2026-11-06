@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/skills"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
@@ -94,12 +95,29 @@ type Deps struct {
 	// Plans closes or keeps a conversation's plan at the end of a turn
 	// (R-LIVE-8); NoPlans when unset.
 	Plans Plans
+	// Languages knows each person's language (R-LANG-1); NoLanguages when unset.
+	Languages Languages
 	// Status hears the stages of a person's message (R-LIVE-7); NoStatus when
 	// unset. It must not block.
 	Status StatusFunc
 	Now    func() time.Time
 	Log    *slog.Logger
 }
+
+// Languages is what the agent needs of a person's language (language.Store).
+type Languages interface {
+	Seen(ctx context.Context, principal, code string) error
+	Resolve(ctx context.Context, principal string) (texts.Lang, error)
+}
+
+// NoLanguages is the Languages of an agent that knows none: everyone reads English.
+type NoLanguages struct{}
+
+// Seen implements Languages.
+func (NoLanguages) Seen(context.Context, string, string) error { return nil }
+
+// Resolve implements Languages.
+func (NoLanguages) Resolve(context.Context, string) (texts.Lang, error) { return texts.English, nil }
 
 // Plans is the end of a turn for a conversation's plan (plan.Store).
 type Plans interface {
@@ -136,6 +154,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Facts == nil {
 		d.Facts = NoFacts
+	}
+	if d.Languages == nil {
+		d.Languages = NoLanguages{}
 	}
 	if d.Modules == nil {
 		d.Modules = NoModules{}
@@ -228,6 +249,7 @@ func (a *Agent) begin(ctx context.Context, e event.Event) (*turn, bool, error) {
 	}
 	t.state, t.now = st, a.d.Now()
 	t.transport, t.replyConv = e.Source, e.Conv
+	a.noteLanguage(ctx, t)
 	t.refs = []string{t.msg.Ref}
 	t.record = turns.Turn{EventID: e.ID, Conv: e.Conv, Principal: t.msg.From, Started: t.now, Outcome: turns.OutcomeOK}
 	return t, true, nil

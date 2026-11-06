@@ -90,6 +90,7 @@ func (t *Transport) decisionEvent(botID int64, u update) (event.Event, bool) {
 		Name:   strings.TrimSpace(cq.From.FirstName + " " + cq.From.LastName),
 		Ref:    strconv.FormatInt(m.MessageID, 10),
 		Query:  cq.ID,
+		Lang:   cq.From.LanguageCode,
 	})
 	if err != nil {
 		return event.Event{}, false // a struct of strings always marshals

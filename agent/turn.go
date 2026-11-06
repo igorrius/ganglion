@@ -8,6 +8,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
@@ -26,7 +27,10 @@ type turn struct {
 	record turns.Turn // the trace: route, tools, tokens, outcome
 	out    []event.Outgoing
 	admin  bool // the sender may use tools
-	calls  int  // tool calls so far in this turn; the next is calls+1
+	// lang is the language of the person this turn is for, once langOf found it.
+	lang   texts.Lang
+	langOf string
+	calls  int // tool calls so far in this turn; the next is calls+1
 	// execCalls are the calls a CLI provider ran through Exec; at most
 	// MaxSteps a turn.
 	execCalls int

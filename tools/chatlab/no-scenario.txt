@@ -91,3 +91,7 @@ transport/telegram/markdown.go
 transport/telegram/reactions.go
 transport/telegram/types.go
 turns/**
+language/language.go
+texts/check.go
+texts/native.go
+texts/texts.go

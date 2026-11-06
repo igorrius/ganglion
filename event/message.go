@@ -7,6 +7,9 @@ type Message struct {
 	From string `json:"from"`           // principal, e.g. "telegram:user:123"
 	Name string `json:"name,omitempty"` // display name, for the model and logs
 	Ref  string `json:"ref,omitempty"`  // the channel's reference to this message, opaque to the core
+	// Lang is the language the channel reports for the sender, raw and
+	// unchecked; language.Store.Seen checks it (R-LANG-1).
+	Lang string `json:"lang,omitempty"`
 	// Forwarded marks Text as someone else's words: a forward, or a post
 	// the channel forwarded on its own. Quote is text of another message
 	// the sender quoted; ExternalReply marks a reply to a message in
@@ -58,6 +61,8 @@ type Decision struct {
 	// handler acknowledges the press with a short notice (ruling R40).
 	// "" when the channel has none.
 	Query string `json:"query,omitempty"`
+	// Lang is as Message.Lang, for the person who pressed.
+	Lang string `json:"lang,omitempty"`
 }
 
 // ToolResult is the payload of an event of kind "tool.result": a pending

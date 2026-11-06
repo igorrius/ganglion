@@ -279,6 +279,7 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 		Text:          text,
 		From:          Principal(m.From.ID),
 		Name:          strings.TrimSpace(m.From.FirstName + " " + m.From.LastName),
+		Lang:          m.From.LanguageCode,
 		Ref:           strconv.FormatInt(m.MessageID, 10),
 		Forwarded:     present(m.ForwardOrigin) || m.IsAutomaticForward,
 		ExternalReply: present(m.ExternalReply),

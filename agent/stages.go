@@ -11,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/skills"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/turns"
 )
@@ -91,6 +92,36 @@ func (a *Agent) setAdmin(ctx context.Context, t *turn) error {
 	}
 	t.admin = admin
 	return nil
+}
+
+// noteLanguage records the language the channel reports for the sender. A failure is logged and
+// costs nothing but the language: a message is never lost over it.
+func (a *Agent) noteLanguage(ctx context.Context, t *turn) {
+	code := t.msg.Lang
+	if t.event.Kind == event.KindDecision {
+		code = t.decision.Lang
+	}
+	if code == "" {
+		return
+	}
+	if err := a.d.Languages.Seen(ctx, t.msg.From, code); err != nil {
+		a.log.Warn("agent: language not recorded", "err", err)
+	}
+}
+
+// language returns the language of the person the turn is for, t.msg.From. Paths that learn the
+// person late (a scheduled job, an expired question) have set it by the time they write to them. A
+// failure gives English: a person gets a message they may not read rather than none.
+func (a *Agent) language(ctx context.Context, t *turn) texts.Lang {
+	if t.lang != "" && t.langOf == t.msg.From {
+		return t.lang
+	}
+	l, err := a.d.Languages.Resolve(ctx, t.msg.From)
+	if err != nil {
+		a.log.Warn("agent: language unknown; using English", "err", err)
+	}
+	t.lang, t.langOf = l, t.msg.From
+	return l
 }
 
 // endReplies are the fixed replies of a turn no model answered.

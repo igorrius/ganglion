@@ -571,3 +571,20 @@ func TestPlainMessageIsNotCollapsed(t *testing.T) {
 		t.Fatalf("entities %s", got)
 	}
 }
+
+func TestLanguageCodeReachesTheMessage(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	c := &collector{}
+	cancel, result := run(t, newTransport(t, fake), c.sink)
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "with", Language: "uk"})
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "without"})
+	eventually(t, "two events", func() bool { return len(c.got()) == 2 })
+	if got := payload(t, c.got()[0]).Lang; got != "uk" {
+		t.Errorf("with a language_code: %q", got)
+	}
+	if got := payload(t, c.got()[1]).Lang; got != "" {
+		t.Errorf("without one: %q", got)
+	}
+	cancel()
+	_ = result()
+}

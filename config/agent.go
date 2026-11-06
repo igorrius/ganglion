@@ -12,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/diag"
+	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/plan"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider"
@@ -64,6 +65,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 	cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
 	return cfg, agent.Deps{
 		States:    do.MustInvoke[*sqlqueue.Queue](i),
+		Languages: do.MustInvoke[*language.Store](i),
 		Router:    do.MustInvoke[router.Router](i),
 		Providers: do.MustInvoke[map[string]provider.Provider](i),
 		Tools:     do.MustInvoke[*tool.Registry](i),

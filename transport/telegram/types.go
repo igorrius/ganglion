@@ -84,6 +84,8 @@ type user struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name,omitempty"`
 	Username  string `json:"username,omitempty"`
+	// LanguageCode is optional, and an IETF tag when set (R-LANG-1).
+	LanguageCode string `json:"language_code,omitempty"`
 }
 
 // sendParams are the parameters of sendMessage that we use.

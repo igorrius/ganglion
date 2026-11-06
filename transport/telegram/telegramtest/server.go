@@ -36,6 +36,7 @@ type Incoming struct {
 	Text     string // empty: a message without text, such as a sticker
 	Caption  string // caption of a photo or document
 	IsBot    bool   // the sender is a bot
+	Language string // the sender's language_code; "" for none
 	// Extra are more Bot API message fields, set as they are: "photo",
 	// "document", "voice" and the like.
 	Extra map[string]any
@@ -60,6 +61,7 @@ type Callback struct {
 	Name      string
 	MessageID int64  // the message holding the button; 0 for an inaccessible message
 	Data      string // the button's callback_data
+	Language  string // the presser's language_code; "" for none
 }
 
 // Edit is one successful edit; an edit of the buttons only keeps the text.
@@ -199,7 +201,7 @@ func (s *Server) AddMessage(m Incoming) int64 {
 		"message_id": s.nextMsg,
 		"date":       time.Now().Unix(),
 		"chat":       map[string]any{"id": m.ChatID, "type": chatType, "is_forum": m.ThreadID != 0},
-		"from":       map[string]any{"id": m.UserID, "is_bot": m.IsBot, "first_name": name},
+		"from":       sender(m.UserID, m.IsBot, name, m.Language),
 	}
 	if m.Text != "" {
 		msg["text"] = m.Text
@@ -220,6 +222,15 @@ func (s *Server) AddMessage(m Incoming) int64 {
 	close(s.notify)
 	s.notify = make(chan struct{})
 	return s.nextUpdate
+}
+
+// sender is the Bot API User of an update.
+func sender(id int64, isBot bool, name, language string) map[string]any {
+	from := map[string]any{"id": id, "is_bot": isBot, "first_name": name}
+	if language != "" {
+		from["language_code"] = language
+	}
+	return from
 }
 
 // AddCallback queues a press of an inline button and returns its
@@ -246,7 +257,7 @@ func (s *Server) AddCallback(c Callback) int64 {
 	}
 	s.updates = append(s.updates, map[string]any{"update_id": s.nextUpdate, "callback_query": map[string]any{
 		"id":            "cq" + strconv.FormatInt(s.nextQuery, 10),
-		"from":          map[string]any{"id": c.UserID, "is_bot": false, "first_name": name},
+		"from":          sender(c.UserID, false, name, c.Language),
 		"message":       msg,
 		"chat_instance": "ci" + strconv.FormatInt(c.ChatID, 10),
 		"data":          c.Data,

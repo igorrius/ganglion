@@ -9,6 +9,7 @@ import (
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/cells/sqlstore"
+	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/schedule"
@@ -61,6 +62,13 @@ func Access() do.Provider[*access.List] {
 	return func(i do.Injector) (*access.List, error) {
 		return access.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB,
 			access.WithAdmin(do.MustInvoke[Bootstrap](i).Admin))
+	}
+}
+
+// Languages provides each person's language.
+func Languages() do.Provider[*language.Store] {
+	return func(i do.Injector) (*language.Store, error) {
+		return language.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
 	}
 }
 
