@@ -254,6 +254,26 @@ func (w *writer) table(t *east.Table) string {
 	return strings.Join(out, "\n")
 }
 
+// textValue is what a text node shows, its escapes resolved.
+func textValue(src []byte, n *ast.Text) string {
+	v := n.Segment.Value(src)
+	if !n.IsRaw() {
+		v = util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(v)))
+	}
+	return string(v)
+}
+
+// codeValue is the text of an inline code span.
+func codeValue(src []byte, n *ast.CodeSpan) string {
+	var b strings.Builder
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		if t, ok := c.(*ast.Text); ok {
+			b.Write(t.Segment.Value(src))
+		}
+	}
+	return b.String()
+}
+
 func (w *writer) inlines(n ast.Node) {
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		w.inline(c)
@@ -263,11 +283,7 @@ func (w *writer) inlines(n ast.Node) {
 func (w *writer) inline(n ast.Node) {
 	switch n := n.(type) {
 	case *ast.Text:
-		v := n.Segment.Value(w.src)
-		if !n.IsRaw() {
-			v = util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(v)))
-		}
-		w.write(string(v))
+		w.write(textValue(w.src, n))
 		if n.SoftLineBreak() || n.HardLineBreak() {
 			w.write("\n")
 		}
@@ -282,13 +298,7 @@ func (w *writer) inline(n ast.Node) {
 	case *east.Strikethrough:
 		w.span(entity{Type: "strikethrough"}, func() { w.inlines(n) })
 	case *ast.CodeSpan:
-		var b strings.Builder
-		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-			if t, ok := c.(*ast.Text); ok {
-				b.Write(t.Segment.Value(w.src))
-			}
-		}
-		w.span(entity{Type: "code"}, func() { w.write(b.String()) })
+		w.span(entity{Type: "code"}, func() { w.write(codeValue(w.src, n)) })
 	case *ast.Link:
 		w.span(entity{Type: "text_link", URL: string(n.Destination)}, func() { w.inlines(n) })
 	case *ast.Image:
