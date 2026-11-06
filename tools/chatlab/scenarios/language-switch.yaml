@@ -10,7 +10,7 @@ steps:
   - facts:
       no_journal:
         - {tool: language.set}
-  - say: "Я погано розумію цю мову. Пиши мені завжди польською."
+  - say: "Я не розумію українську, відтепер пиши мені польською."
   - facts:
       journal:
         - {tool: language.set, decision: allowed}
