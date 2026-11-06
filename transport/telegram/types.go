@@ -33,6 +33,8 @@ type message struct {
 	From            *user  `json:"from,omitempty"`
 	Text            string `json:"text,omitempty"`
 	Caption         string `json:"caption,omitempty"`
+	// RichMessage is a rich formatted message, read when there is no text (R-DLV-12).
+	RichMessage json.RawMessage `json:"rich_message,omitempty"`
 	// Outside content (ruling R35): a forward's origin, a post Telegram
 	// forwarded from a linked channel, a reply to a message in another
 	// chat, and the quoted part of the replied message. Only their

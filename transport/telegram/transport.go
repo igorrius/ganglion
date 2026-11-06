@@ -274,6 +274,10 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	if text == "" {
 		text = m.Caption
 	}
+	rich := text == "" && present(m.RichMessage)
+	if rich {
+		text = t.richText(m.RichMessage)
+	}
 	fs := files(m)
 	if text == "" && len(fs) == 0 {
 		t.log.Debug("telegram: update skipped", "update_id", u.UpdateID, "reason", "no text and no file")
@@ -290,7 +294,7 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 		Name:          strings.TrimSpace(m.From.FirstName + " " + m.From.LastName),
 		Lang:          m.From.LanguageCode,
 		Ref:           strconv.FormatInt(m.MessageID, 10),
-		Forwarded:     present(m.ForwardOrigin) || m.IsAutomaticForward,
+		Forwarded:     present(m.ForwardOrigin) || m.IsAutomaticForward || rich,
 		ExternalReply: present(m.ExternalReply),
 		Files:         fs,
 	}
@@ -383,6 +387,18 @@ func visible(src string) (string, []entity) {
 		return src, nil
 	}
 	return text, ents
+}
+
+// richText is what the agent reads of a rich message that came to the bot. People
+// cannot write these, so it is always outside content (R-DLV-12).
+func (t *Transport) richText(raw json.RawMessage) string {
+	text := readRich(raw)
+	if text == "" {
+		t.richCount.add(context.Background(), richUnreadable)
+		return richNothingReadable
+	}
+	t.richCount.add(context.Background(), richRead)
+	return text
 }
 
 // sendError maps a Bot API error of a send to the sender's terms.
