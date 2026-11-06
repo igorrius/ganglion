@@ -981,6 +981,12 @@ What the node writes without a model reaches people who may read only their own 
 - **R-LANG-6.** A person is told once per language, in that language, that the texts were translated
   by a machine and may be inaccurate. Every button that acts carries a symbol added by code, outside
   the translated text, and a question shows its command, address or text as is.
+- **R-LANG-7.** A regular report follows its job owner's language (R-LANG-1), whoever writes it
+  (owner, 2026-11-06). A system job written in code takes its texts from the catalogue and is given
+  the owner's language. A system job that a model writes is told that language in its turn's lines.
+  A task a person created keeps following its instruction, unless they chose a language. A model's
+  verdict quoted in a report (a memory check's reason) stays in the words it was given, since the
+  check is a measured security boundary.
 
 ## 8. First flow: Deye and load shedding (P1)
 

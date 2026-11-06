@@ -341,6 +341,28 @@ Reviewer's gate: a model's output becomes text on buttons.
 - [ ] **Step 4: Run** `make test`. Expected: PASS.
 - [ ] **Step 5: Commit** `language, agent: the person is told once; an operator's file comes first`.
 
+### Task 8a: Regular reports follow the owner's language (R-LANG-7, owner, 2026-11-06)
+
+**Files:**
+- Modify: `agent/agent.go`, `agent/scheduled.go`, `tool/builtin/memory.go`, `memory/audit.go`,
+  `config/memory.go`, `texts/texts.go`, `texts/lang/*.yaml`
+
+**Interfaces:**
+- Produces: `agent.SystemJob` becomes `func(ctx context.Context, sp texts.Speaker) (string, error)`;
+  `memory.Report` keeps its counts and findings, and its wording moves to `builtin` under keys. The
+  `memory.audit` tool's result stays in English, since a model reads it.
+
+- [ ] **Step 1: Write the failing tests:**
+  - `TestAuditReportFollowsTheOwnersLanguage`: a `uk` owner gets the title and the counts in Ukrainian,
+    with nothing flagged and with one finding; a finding's path and reason stay byte for byte.
+  - `TestAuditToolResultStaysEnglish`.
+  - `TestSystemJobGetsTheOwnersSpeaker`, through `agent.system`.
+- [ ] **Step 2: Run** `go test ./agent/ ./tool/builtin/ ./memory/`. Expected: FAIL.
+- [ ] **Step 3: Implement.** Keys `report.audit_clean` and `report.audit_flagged`, worded with no plural:
+  "Facts checked: {facts}. Persona files checked: {persona}."
+- [ ] **Step 4: Run** `make test`. Expected: PASS.
+- [ ] **Step 5: Commit** `agent, builtin: a regular report follows its owner's language`.
+
 ### Task 9: Close
 
 **Files:** Modify `docs/README.md`, this plan.
