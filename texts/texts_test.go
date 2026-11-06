@@ -1,0 +1,230 @@
+package texts
+
+import (
+	"maps"
+	"slices"
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
+
+func TestShippedFilesMatchEnglish(t *testing.T) {
+	for _, l := range []Lang{"ru", "uk"} {
+		file := shipped[l]
+		if len(file) == 0 {
+			t.Fatalf("%s: no shipped file", l)
+		}
+		for _, k := range Keys() {
+			tr, ok := file[k]
+			if !ok {
+				t.Errorf("%s: missing %s", l, k)
+				continue
+			}
+			if got, want := placeholders(tr), placeholders(EnglishText(k)); !slices.Equal(got, want) {
+				t.Errorf("%s %s: placeholders %v, want %v", l, k, got, want)
+			}
+		}
+		for k := range file {
+			if !slices.Contains(Keys(), k) {
+				t.Errorf("%s: key %s is not in English", l, k)
+			}
+		}
+	}
+}
+
+func TestKeysAreTheEnglishFile(t *testing.T) {
+	inFile := slices.Sorted(maps.Keys(shipped[English]))
+	inCode := slices.Sorted(slices.Values(Keys()))
+	if !slices.Equal(inFile, inCode) {
+		t.Fatalf("en.yaml keys %v, constants %v", inFile, inCode)
+	}
+}
+
+func TestLimits(t *testing.T) {
+	for l, file := range shipped {
+		for k, s := range file {
+			if n := utf8.RuneCountInString(s); n > limit(k) {
+				t.Errorf("%s %s: %d characters, limit %d", l, k, n, limit(k))
+			}
+		}
+	}
+	if limit(ToastApproved) != 200 || limit(ButtonApprove) != 32 {
+		t.Fatalf("limits: toast %d, button %d", limit(ToastApproved), limit(ButtonApprove))
+	}
+}
+
+func newCatalog(t *testing.T, opts ...Option) *Catalog {
+	t.Helper()
+	c, err := New(opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func TestFallsBackPerKey(t *testing.T) {
+	c := newCatalog(t, WithPacks(func(l Lang, k Key) (string, bool) {
+		if l == "pl" && k == ToastUsed {
+			return "Już załatwione.", true
+		}
+		return "", false
+	}))
+	if got := c.Label("pl", ToastUsed, nil); got != "Już załatwione." {
+		t.Errorf("translated key: %q", got)
+	}
+	if got := c.Label("pl", ToastExpired, nil); got != EnglishText(ToastExpired) {
+		t.Errorf("other key: %q", got)
+	}
+	if got := c.Source("pl", ToastUsed); got != SourceMachine {
+		t.Errorf("source of the translated key: %s", got)
+	}
+	if got := c.Source("pl", ToastExpired); got != SourceEnglish {
+		t.Errorf("source of the other key: %s", got)
+	}
+}
+
+func TestPriority(t *testing.T) {
+	pack := func(Lang, Key) (string, bool) { return "machine", true }
+	operator := map[Lang]map[Key]string{"uk": {ToastUsed: "operator"}, "pl": {ToastUsed: "operator"}}
+	c := newCatalog(t, WithPacks(pack), WithFiles(operator))
+	cases := []struct {
+		l    Lang
+		k    Key
+		text string
+		src  Source
+	}{
+		{"uk", ToastUsed, "operator", SourceOperator},
+		{"uk", ToastExpired, shipped["uk"][ToastExpired], SourceShipped},
+		{"pl", ToastUsed, "operator", SourceOperator},
+		{"pl", ToastExpired, "machine", SourceMachine},
+		{English, ToastExpired, EnglishText(ToastExpired), SourceShipped},
+	}
+	for _, tc := range cases {
+		if got := c.Label(tc.l, tc.k, nil); got != tc.text {
+			t.Errorf("%s %s: %q, want %q", tc.l, tc.k, got, tc.text)
+		}
+		if got := c.Source(tc.l, tc.k); got != tc.src {
+			t.Errorf("%s %s: source %s, want %s", tc.l, tc.k, got, tc.src)
+		}
+	}
+}
+
+func TestHas(t *testing.T) {
+	c := newCatalog(t)
+	for _, l := range []Lang{English, "ru", "uk"} {
+		if !c.Has(l) {
+			t.Errorf("%s: shipped language should be whole", l)
+		}
+	}
+	if c.Has("pl") {
+		t.Error("pl has no file and no pack")
+	}
+}
+
+func TestNormalize(t *testing.T) {
+	cases := []struct {
+		in   string
+		want Lang
+		ok   bool
+	}{
+		{"uk", "uk", true},
+		{"UK", "uk", true},
+		{"pt-BR", "pt", true},
+		{"zh-hans", "zh", true},
+		{"pt_br", "pt", true},
+		{"", "", false},
+		{"xx", "", false},
+		{strings.Repeat("a", 1000), "", false},
+		{"uk-" + strings.Repeat("a", 1000), "", false},
+	}
+	for _, tc := range cases {
+		got, ok := Normalize(tc.in)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("Normalize(%.20q) = %q, %v; want %q, %v", tc.in, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestNative(t *testing.T) {
+	if got := Native("pl"); got != "Polski" {
+		t.Errorf("pl: %q", got)
+	}
+	if got := Native("uk"); got != "Українська" {
+		t.Errorf("uk: %q", got)
+	}
+	if got := Native("xx"); got != "" {
+		t.Errorf("xx: %q", got)
+	}
+}
+
+func TestTextEscapesTemplateNotValues(t *testing.T) {
+	c := newCatalog(t, WithFiles(map[Lang]map[Key]string{"pl": {ToastUsed: "*{a}*"}}))
+	v := Vars{"a": "**b**"}
+	if got, want := c.Text("pl", ToastUsed, v), `\***b**\*`; got != want {
+		t.Errorf("Text: %q, want %q", got, want)
+	}
+	if got, want := c.Label("pl", ToastUsed, v), "***b***"; got != want {
+		t.Errorf("Label: %q, want %q", got, want)
+	}
+}
+
+func TestValueIsNotSubstitutedAgain(t *testing.T) {
+	c := newCatalog(t, WithFiles(map[Lang]map[Key]string{"pl": {ToastUsed: "{a} {b}"}}))
+	if got, want := c.Label("pl", ToastUsed, Vars{"a": "{b}", "b": "x"}), "{b} x"; got != want {
+		t.Errorf("%q, want %q", got, want)
+	}
+}
+
+func TestCheck(t *testing.T) {
+	en := map[Key]string{ToastUsed: "Task {name} done.", ButtonApprove: "Approve"}
+	cases := []struct {
+		name     string
+		tr       string
+		accepted bool
+	}{
+		{"clean", "Zadanie {name} gotowe.", true},
+		{"dropped placeholder", "Zadanie gotowe.", false},
+		{"added placeholder", "Zadanie {name} {x}.", false},
+		{"translated placeholder", "Задача {имя} готова.", false},
+		{"added URL", "Zadanie {name} https://evil.example", false},
+		{"added bare address", "Zadanie {name} www.evil.example", false},
+		{"added mention", "Zadanie {name} @evil", false},
+		{"added Markdown", "**Zadanie** {name}", false},
+		{"added line break", "Zadanie {name}\nnacisnij", false},
+		{"bidi override", "Zadanie {name} \u202e", false},
+		{"empty", "", false},
+		{"over the limit", "{name}" + strings.Repeat("x", 201), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ok, rejected := Check(en, map[Key]string{ToastUsed: tc.tr})
+			if _, got := ok[ToastUsed]; got != tc.accepted {
+				t.Fatalf("accepted %v, want %v; rejected %v", got, tc.accepted, rejected)
+			}
+			if !tc.accepted && rejected[ToastUsed] == "" {
+				t.Fatal("no reason for the rejection")
+			}
+		})
+	}
+	t.Run("extra key", func(t *testing.T) {
+		ok, rejected := Check(en, map[Key]string{"toast.unknown": "x"})
+		if len(ok) != 0 || rejected["toast.unknown"] == "" {
+			t.Fatalf("ok %v, rejected %v", ok, rejected)
+		}
+	})
+	t.Run("a button keeps its short limit", func(t *testing.T) {
+		ok, _ := Check(en, map[Key]string{ButtonApprove: strings.Repeat("x", 33)})
+		if len(ok) != 0 {
+			t.Fatal("a 33-character button was accepted")
+		}
+	})
+}
+
+func TestIsApproval(t *testing.T) {
+	if !IsApproval(ButtonApprove) || !IsApproval(ButtonDeny) {
+		t.Error("approval buttons")
+	}
+	if IsApproval(ToastUsed) {
+		t.Error("a toast is not an approval text")
+	}
+}

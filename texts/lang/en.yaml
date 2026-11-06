@@ -1,0 +1,12 @@
+# The English texts. A key here and its constant in texts.go are added together.
+button.approve: Approve
+button.deny: Deny
+
+toast.approved: Approved
+toast.declined: Declined
+toast.accepted: Accepted
+toast.not_yours: This button is not yours.
+toast.no_button: This button no longer works.
+toast.used: Already handled.
+toast.expired: Expired.
+toast.not_allowed: Not allowed.

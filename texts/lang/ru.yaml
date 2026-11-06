@@ -1,0 +1,11 @@
+button.approve: Разрешить
+button.deny: Отклонить
+
+toast.approved: Разрешено
+toast.declined: Отклонено
+toast.accepted: Принято
+toast.not_yours: Эта кнопка не для вас.
+toast.no_button: Эта кнопка больше не работает.
+toast.used: Уже сделано.
+toast.expired: Время вышло.
+toast.not_allowed: Нельзя.
