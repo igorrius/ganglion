@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"sync"
 	"time"
 
 	"github.com/igorrius/ganglion/sqlitedb"
@@ -21,6 +22,10 @@ var migrations embed.FS
 type Store struct {
 	db  *sql.DB
 	now func() time.Time
+	// newLanguage hears of a language that may need translating; it must not block.
+	newLanguage func()
+	packsMu     sync.RWMutex
+	packs       map[texts.Lang]map[texts.Key]pack
 }
 
 // Option configures a Store.
@@ -38,12 +43,18 @@ func New(ctx context.Context, db *sql.DB, opts ...Option) (*Store, error) {
 	if err := sqlitedb.Migrate(ctx, db, "language", sub); err != nil {
 		return nil, err
 	}
-	s := &Store{db: db, now: time.Now}
+	s := &Store{db: db, now: time.Now, newLanguage: func() {}}
 	for _, o := range opts {
 		o(s)
 	}
+	if err := s.loadPacks(ctx); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
+
+// OnNewLanguage sets who hears that someone's language changed. It is set once, before any use.
+func (s *Store) OnNewLanguage(f func()) { s.newLanguage = f }
 
 // Seen records the language a person's channel reported. A value outside the table of native names
 // counts as missing and never replaces one already known. It writes only when the language changed,
@@ -53,13 +64,16 @@ func (s *Store) Seen(ctx context.Context, principal, code string) error {
 	if !ok || principal == "" {
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO people (principal, seen, updated_ms) VALUES (?, ?, ?)
 		 ON CONFLICT (principal) DO UPDATE SET seen = excluded.seen, updated_ms = excluded.updated_ms
 		 WHERE seen <> excluded.seen`,
 		principal, string(l), s.now().UnixMilli())
 	if err != nil {
 		return fmt.Errorf("language: seen %s: %w", principal, err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n > 0 {
+		s.newLanguage()
 	}
 	return nil
 }
@@ -110,6 +124,9 @@ func (s *Store) Choose(ctx context.Context, principal string, l texts.Lang) (cha
 	n, err := res.RowsAffected()
 	if err != nil {
 		return false, fmt.Errorf("language: choose %s: %w", principal, err)
+	}
+	if n > 0 {
+		s.newLanguage()
 	}
 	return n > 0, nil
 }

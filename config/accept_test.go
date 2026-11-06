@@ -580,7 +580,7 @@ func firstLine(s string) string {
 	return line
 }
 
-func texts(msgs []telegramtest.Outgoing) string {
+func sentTexts(msgs []telegramtest.Outgoing) string {
 	parts := make([]string, len(msgs))
 	for i, m := range msgs {
 		parts[i] = m.Text
@@ -744,7 +744,7 @@ func (h *acceptNode) m3cScenario(t *testing.T) {
 			"file_id": "d", "file_unique_id": "d", "file_name": "invoice.pdf", "mime_type": "application/pdf", "file_size": 1200000}}})
 	h.settle(t, up)
 	cannot := regexp.MustCompile(`(?i)cannot|can't|can not|unable|not able|не могу|не можу`)
-	if got := texts(h.sent(mark)); !cannot.MatchString(got) {
+	if got := sentTexts(h.sent(mark)); !cannot.MatchString(got) {
 		t.Errorf("the reply to a PDF does not say the file cannot be opened: %q", got)
 	}
 
@@ -794,19 +794,19 @@ func (h *acceptNode) memoryScenario(t *testing.T) {
 		}
 	}
 	if stored == "" {
-		t.Fatalf("no memory file holds the fact; the bot said %q", texts(got))
+		t.Fatalf("no memory file holds the fact; the bot said %q", sentTexts(got))
 	}
 
-	if got := h.say(t, "/new"); !strings.Contains(texts(got), "New session started.") {
-		t.Fatalf("/new answered %q", texts(got))
+	if got := h.say(t, "/new"); !strings.Contains(sentTexts(got), "New session started.") {
+		t.Fatalf("/new answered %q", sentTexts(got))
 	}
 	start = time.Now()
-	if got := h.say(t, "What inverter do I have?"); !strings.Contains(texts(got), "Deye") {
-		t.Errorf("the fact was not recalled in the new session: %q", texts(got))
+	if got := h.say(t, "What inverter do I have?"); !strings.Contains(sentTexts(got), "Deye") {
+		t.Errorf("the fact was not recalled in the new session: %q", sentTexts(got))
 	}
 	got = h.say(t, "What do you remember about me?")
-	if !strings.Contains(texts(got), "Deye") {
-		t.Errorf("the fact is not listed: %q", texts(got))
+	if !strings.Contains(sentTexts(got), "Deye") {
+		t.Errorf("the fact is not listed: %q", sentTexts(got))
 	}
 	h.noteJournal(t, start)
 }
@@ -897,7 +897,7 @@ func (h *acceptNode) ratesScenario(t *testing.T) {
 	entry := func(text string) bool { return strings.HasPrefix(text, "Task: "+job.text) }
 	run, ok := h.button("Run now", entry)
 	if !ok {
-		t.Fatalf("the list has no Run now button for the job; sent %q", texts(got))
+		t.Fatalf("the list has no Run now button for the job; sent %q", sentTexts(got))
 	}
 	h.press(t, run)
 	if b, ok := h.button("Approve", func(text string) bool { return strings.HasPrefix(text, "Run this task now?") }); ok {
@@ -943,7 +943,7 @@ func (h *acceptNode) ratesScenario(t *testing.T) {
 		t.Errorf("task turns after the delete: %d, want 2", n)
 	}
 	if extra := h.sent(mark); len(extra) != 0 {
-		t.Errorf("sent after the delete: %q", texts(extra))
+		t.Errorf("sent after the delete: %q", sentTexts(extra))
 	}
 	h.noteJournal(t, start)
 }
@@ -1206,7 +1206,7 @@ func (h *acceptNode) expiryScenario(t *testing.T) {
 		qs = questions(got)
 	}
 	if len(qs) == 0 {
-		t.Fatalf("no confirmation was asked; the bot said %q", texts(got))
+		t.Fatalf("no confirmation was asked; the bot said %q", sentTexts(got))
 	}
 	stale, ok := h.button("Approve", func(text string) bool { return text == qs[0].Text })
 	if !ok {
@@ -1231,8 +1231,8 @@ func (h *acceptNode) expiryScenario(t *testing.T) {
 	if reminders != 0 {
 		t.Errorf("an expired request created %d reminders", reminders)
 	}
-	if !saysExpired.MatchString(texts(got)) {
-		t.Errorf("the model's answer does not say the request expired: %q", texts(got))
+	if !saysExpired.MatchString(sentTexts(got)) {
+		t.Errorf("the model's answer does not say the request expired: %q", sentTexts(got))
 	}
 	// The question closes by itself. Its old button data, pressed from a
 	// chat that has not refreshed, approves nothing.

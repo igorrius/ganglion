@@ -14,6 +14,7 @@ import (
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
@@ -69,6 +70,13 @@ func Access() do.Provider[*access.List] {
 func Languages() do.Provider[*language.Store] {
 	return func(i do.Injector) (*language.Store, error) {
 		return language.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
+	}
+}
+
+// Texts provides the fixed texts, machine translations included.
+func Texts() do.Provider[*texts.Catalog] {
+	return func(i do.Injector) (*texts.Catalog, error) {
+		return texts.New(texts.WithPacks(do.MustInvoke[*language.Store](i).Pack))
 	}
 }
 

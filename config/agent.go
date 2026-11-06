@@ -23,6 +23,7 @@ import (
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/skills"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
@@ -66,6 +67,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 	return cfg, agent.Deps{
 		States:    do.MustInvoke[*sqlqueue.Queue](i),
 		Languages: do.MustInvoke[*language.Store](i),
+		Texts:     do.MustInvoke[*texts.Catalog](i),
 		Router:    do.MustInvoke[router.Router](i),
 		Providers: do.MustInvoke[map[string]provider.Provider](i),
 		Tools:     do.MustInvoke[*tool.Registry](i),
@@ -123,6 +125,15 @@ func IsAdmin() do.Provider[agent.AdminFunc] {
 func Plans() do.Provider[*plan.Store] {
 	return func(i do.Injector) (*plan.Store, error) {
 		return plan.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sqlqueue.Queue](i))
+	}
+}
+
+// Translator provides the background translation of fixed texts.
+func Translator() do.Provider[*language.Translator] {
+	return func(i do.Injector) (*language.Translator, error) {
+		return language.NewTranslator(do.MustInvoke[*language.Store](i), do.MustInvoke[*texts.Catalog](i),
+			do.MustInvoke[router.Router](i), do.MustInvoke[map[string]provider.Provider](i),
+			language.WithTranslatorLogger(do.MustInvoke[*slog.Logger](i))), nil
 	}
 }
 
