@@ -20,6 +20,7 @@ func TestOutsideTextIsMarked(t *testing.T) {
 		t.Fatal(err)
 	}
 	const head = `"message_id":5,"date":1,"chat":{"id":42,"type":"private"},"from":{"id":42,"is_bot":false,"first_name":"Igor"}`
+	const topic = `"message_id":5,"date":1,"chat":{"id":-100,"type":"supergroup","is_forum":true},"from":{"id":42,"is_bot":false,"first_name":"Igor"},"message_thread_id":10,"is_topic_message":true`
 	for name, tc := range map[string]struct {
 		raw  string
 		want event.Message
@@ -52,6 +53,16 @@ func TestOutsideTextIsMarked(t *testing.T) {
 			event.Message{Text: "more?", Reply: &event.Replied{Ref: "9", At: time.Unix(1, 0).UTC(), Text: "report", Forwarded: true}}},
 		"null forward origin": {`{` + head + `,"text":"hi","forward_origin":null}`,
 			event.Message{Text: "hi"}},
+		// In a forum topic Telegram points every message that is no explicit reply
+		// at the topic's root, the service message that created it: not a reply.
+		"topic message under its root": {`{` + topic + `,"text":"hi","reply_to_message":{"message_id":10,"date":1,"chat":{"id":-100,"type":"supergroup","is_forum":true},"from":{"id":42,"is_bot":false,"first_name":"Igor"},"message_thread_id":10,"forum_topic_created":{"name":"Trip","icon_color":7322096}}}`,
+			event.Message{Text: "hi"}},
+		"topic root without its service field": {`{` + topic + `,"text":"hi","reply_to_message":{"message_id":10,"date":1,"chat":{"id":-100,"type":"supergroup","is_forum":true},"from":{"id":7001,"is_bot":true,"first_name":"Bot"}}}`,
+			event.Message{Text: "hi"}},
+		"topic created message": {`{` + head + `,"text":"hi","reply_to_message":{"message_id":11,"date":1,"chat":{"id":42,"type":"private"},"from":{"id":7001,"is_bot":true,"first_name":"Bot"},"forum_topic_created":{"name":"Trip","icon_color":7322096}}}`,
+			event.Message{Text: "hi"}},
+		"reply to the bot in a topic": {`{` + topic + `,"text":"more?","reply_to_message":{"message_id":12,"date":1,"chat":{"id":-100,"type":"supergroup","is_forum":true},"from":{"id":7001,"is_bot":true,"first_name":"Bot"},"message_thread_id":10,"is_topic_message":true,"text":"Apples are red."}}`,
+			event.Message{Text: "more?", Reply: &event.Replied{Ref: "12", ByBot: true, At: time.Unix(1, 0).UTC(), Text: "Apples are red."}}},
 	} {
 		var u update
 		if err := json.Unmarshal([]byte(`{"update_id":9,"message":`+tc.raw+`}`), &u); err != nil {

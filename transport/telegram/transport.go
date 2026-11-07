@@ -302,7 +302,7 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	if m.Quote != nil {
 		msg.Quote = m.Quote.Text
 	}
-	if r := m.ReplyToMessage; r != nil {
+	if r := m.ReplyToMessage; r != nil && !topicRoot(m, r) {
 		msg.Reply = t.replied(botID, m.From.ID, r)
 	}
 	payload, err := json.Marshal(msg)
@@ -323,6 +323,14 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 		Payload: payload,
 		At:      at,
 	}, true
+}
+
+// topicRoot reports whether r, the message m replies to, is the root of m's forum
+// topic: Telegram points every message in a topic that is no explicit reply at the
+// service message that created the topic, whose id is the topic's. That is no
+// reply, so it brings no note and no taint.
+func topicRoot(m, r *message) bool {
+	return (m.IsTopicMessage && r.MessageID == m.MessageThreadID) || present(r.ForumTopicCreated)
 }
 
 // replied is what a reply answers, as Telegram reports it (R-DLV-13). Its text is
