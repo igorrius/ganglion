@@ -1461,6 +1461,17 @@ Reviewed at each gate.
   - A classifier that tells a question from a task, as a candidate first client of "Models
     by purpose": only if the main model's own judgement, given a clearer rule, is measured
     and falls short (owner, 2026-11-05).
+  - Fewer presses for pages that differ in one parameter: on the owner's live run of 2026-11-07,
+    "the exchange rates" asked twice (one URL for the dollar, one for the euro), and a reply
+    "and in the west?" to a weather answer asked again for the same site with another city. The
+    owner's idea: a quick model judges whether a new URL only changes a parameter of one already
+    approved, and the node asks only when it says no or no such model is configured. The security
+    side is decided first (owner): R-WEB-2 asks because a query string the model built is a
+    channel out, so "only a parameter changed" is exactly what an exfiltration looks like, and a
+    model's verdict on it would be a decision made by a model under outside influence. Options to
+    weigh in its own brainstorm: one press for a plan's listed URLs (as R-CMD-7 does for
+    commands), an approval for a host and path with the parameter values shown, or the model's
+    verdict only in a clean session (R-POL-6).
 - Hooks and pipelines: an internal n8n (owner, 2026-11-03).
   - **Hooks** are module triggers on the node's own events, beside `cron`
     and `tool` (7.10's module ABI). Examples: before or after a tool call,
