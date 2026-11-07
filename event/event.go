@@ -84,6 +84,8 @@ type Outgoing struct {
 	// it ended (R-POL-9). The transport shows it collapsed if it can, and never
 	// as part of Text. It counts toward an edit's length.
 	Folded string `json:",omitempty"`
+	// Origin is where the message came from (R-DLV-14); nil until it is stored.
+	Origin *Origin `json:",omitempty"`
 }
 
 // Stage is where the work on a person's message stands (R-LIVE-7). The agent

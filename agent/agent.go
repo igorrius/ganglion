@@ -223,6 +223,7 @@ func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, qu
 		return nil, queue.StateUpdate{}, err
 	}
 	defer a.reportDone(t)
+	ctx = event.WithOrigin(ctx, t.origin)
 	if err := runStages(ctx, t, a.stages); err != nil {
 		return nil, queue.StateUpdate{}, err
 	}
@@ -299,5 +300,6 @@ func (a *Agent) finish(ctx context.Context, t *turn) ([]event.Outgoing, queue.St
 	if err != nil {
 		return nil, queue.StateUpdate{}, err
 	}
+	stamp(t.out, t.origin())
 	return t.out, queue.StateUpdate{Conv: t.event.Conv, Data: data, Taken: t.taken}, nil
 }

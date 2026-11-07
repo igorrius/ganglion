@@ -67,16 +67,17 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 	t.record.Principal, t.transport = j.Owner, j.Transport
 	switch j.Kind {
 	case schedule.KindReminder:
-		t.replyConv = j.Conv
+		t.made, t.replyConv = event.OriginReminder, j.Conv
 		t.reply(j.Text)
 		return true, a.noteReminder(ctx, t, j)
 	case schedule.KindTask:
+		t.made = event.OriginTask
 		g := j.Grant
 		t.grant, t.replyConv = &g, g.ReplyTo
 		t.record.Outcome = turns.OutcomeOK
 		return false, a.setRecipient(ctx, t, j.Owner)
 	case schedule.KindSystem:
-		t.replyConv = j.Conv
+		t.made, t.replyConv = event.OriginSystem, j.Conv
 		return true, a.system(ctx, t, j)
 	default:
 		a.log.Warn("agent: scheduled job of an unknown kind", "job", j.ID, "kind", j.Kind)
