@@ -98,6 +98,32 @@ func TestPressMissingLabel(t *testing.T) {
 	}
 }
 
+func TestReplyAnswersTheNewestMatch(t *testing.T) {
+	p, fake := newTestPeer(t)
+	botSays(t, fake, "Clean answer about apples.")
+	newer := botSays(t, fake, "More on apples.")
+	botSays(t, fake, "About pears.")
+	if err := p.Reply(context.Background(), "apples", "Tell me more."); err != nil {
+		t.Fatal(err)
+	}
+	u := pendingUpdates(t, fake)
+	r := u[0].Message.ReplyTo
+	if len(u) != 1 || u[0].Message.Text != "Tell me more." || r == nil || r.MessageID != newer || r.Text != "More on apples." || !r.From.IsBot {
+		t.Fatalf("update %+v, replying to %+v", u, r)
+	}
+	if p.Taken() {
+		t.Fatal("the reply is not waiting for the node")
+	}
+}
+
+func TestReplyToNothing(t *testing.T) {
+	p, fake := newTestPeer(t)
+	botSays(t, fake, "About pears.")
+	if err := p.Reply(context.Background(), "apples", "Tell me more."); !errors.Is(err, ErrNoMessage) {
+		t.Fatalf("err %v", err)
+	}
+}
+
 func TestMessagesAppliesEdits(t *testing.T) {
 	p, fake := newTestPeer(t)
 	id := botSays(t, fake, "Create?", "Approve")
@@ -171,7 +197,14 @@ type update struct {
 		Text, Caption string
 		Chat          struct{ ID int64 }
 		From          struct{ ID int64 }
-		Document      *struct {
+		ReplyTo       *struct {
+			MessageID int64 `json:"message_id"`
+			Text      string
+			From      struct {
+				IsBot bool `json:"is_bot"`
+			}
+		} `json:"reply_to_message"`
+		Document *struct {
 			FileName string `json:"file_name"`
 			MimeType string `json:"mime_type"`
 			FileSize int64  `json:"file_size"`

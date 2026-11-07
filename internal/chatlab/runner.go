@@ -117,7 +117,7 @@ func missingTool(o RunOptions, s Scenario) string {
 
 func (r *repeatRun) step(ctx context.Context, st Step) error {
 	switch {
-	case st.Say != "", st.Press != "", st.Send != nil:
+	case st.Say != "", st.Press != "", st.Send != nil, st.Reply != nil:
 		r.note(st)
 		if err := Do(ctx, r.n.Peer(), st); err != nil {
 			return err
@@ -164,6 +164,8 @@ func (r *repeatRun) note(st Step) {
 		fmt.Fprintf(&r.log, "\n**owner:** %s\n", st.Say)
 	case st.Press != "":
 		fmt.Fprintf(&r.log, "\n**owner presses** [%s]\n", st.Press)
+	case st.Reply != nil:
+		fmt.Fprintf(&r.log, "\n**owner replies** to the message with %q: %s\n", st.Reply.To, st.Reply.Say)
 	default:
 		fmt.Fprintf(&r.log, "\n**owner sends** a %s, %s: %s\n", st.Send.Kind, st.Send.Name, st.Send.Caption)
 	}

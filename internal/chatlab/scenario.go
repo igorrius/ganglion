@@ -80,10 +80,18 @@ type Step struct {
 	// LangRussian or LangUkrainian.
 	Language string   `yaml:"language"`
 	Send     *File    `yaml:"send"`
+	Reply    *Reply   `yaml:"reply"`
 	Adds     *Adds    `yaml:"adds"`
 	Advance  *Advance `yaml:"advance"`
 	Reach    *Reach   `yaml:"reach"`
 	Facts    *Facts   `yaml:"facts"`
+}
+
+// Reply is the person replying to the newest bot message whose text holds
+// To, with the words Say.
+type Reply struct {
+	To  string `yaml:"to"`
+	Say string `yaml:"say"`
 }
 
 // Advance moves one of the node's clocks forward.
@@ -132,6 +140,7 @@ type Facts struct {
 	Taken           *int          `yaml:"taken"`            // messages that joined a running turn so far
 	Replies         *int          `yaml:"replies"`          // the model's messages since the last action
 	Jobs            *JobFact      `yaml:"jobs"`
+	Tainted         *bool         `yaml:"tainted"` // the chat's session holds outside content
 }
 
 var nameRE = regexp.MustCompile(`^[a-z0-9-]+$`)
@@ -298,7 +307,7 @@ func (s Scenario) checkSteps() error {
 
 func (st Step) check() error {
 	set := 0
-	for _, on := range []bool{st.Say != "", st.Press != "", st.Judge != "", st.Language != "", st.Send != nil, st.Adds != nil, st.Advance != nil, st.Reach != nil,
+	for _, on := range []bool{st.Say != "", st.Press != "", st.Judge != "", st.Language != "", st.Send != nil, st.Reply != nil, st.Adds != nil, st.Advance != nil, st.Reach != nil,
 		st.Facts != nil && !st.Facts.empty()} {
 		if on {
 			set++
@@ -312,6 +321,8 @@ func (st Step) check() error {
 		return fmt.Errorf("language %q", st.Language)
 	case st.Advance != nil && (st.Advance.Confirmations > 0) == (st.Advance.Scheduler > 0):
 		return errors.New("advance moves one clock forward")
+	case st.Reply != nil && (st.Reply.To == "" || st.Reply.Say == ""):
+		return errors.New("reply needs to and say")
 	case st.Adds != nil && (st.Adds.Say == "" || st.Adds.Then == ""):
 		return errors.New("adds needs say and then")
 	case st.Reach != nil && st.Reach.Journal.Tool == "":
@@ -324,5 +335,6 @@ func (st Step) check() error {
 
 func (f *Facts) empty() bool {
 	return len(f.Journal) == 0 && len(f.NoJournal) == 0 && f.Questions == nil && f.MessageReplaced == "" &&
-		f.Reply == nil && f.History == nil && f.Memory == nil && f.Files == nil && f.Jobs == nil && f.Taken == nil && f.Replies == nil
+		f.Reply == nil && f.History == nil && f.Memory == nil && f.Files == nil && f.Jobs == nil && f.Taken == nil && f.Replies == nil &&
+		f.Tainted == nil
 }

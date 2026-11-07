@@ -16,6 +16,10 @@ type Peer interface {
 	// Press presses the newest button showing with label; ErrNoButton when
 	// none shows, so a scenario cannot pass by pressing nothing.
 	Press(ctx context.Context, label string) error
+	// Reply replies with text to the newest bot message whose text holds
+	// to; ErrNoMessage when none shows, so a scenario cannot pass by
+	// replying to nothing.
+	Reply(ctx context.Context, to, text string) error
 	// Messages is everything shown to the person, oldest first, edits
 	// applied. A new message always comes after the ones before it.
 	Messages() []Message
@@ -55,7 +59,10 @@ type Message struct {
 // ErrNoButton is returned by Press when no button with the label shows.
 var ErrNoButton = errors.New("chatlab: no such button is showing")
 
-// Do makes the peer do what a say, send or press step says.
+// ErrNoMessage is returned by Reply when no bot message holds the text.
+var ErrNoMessage = errors.New("chatlab: no such message is showing")
+
+// Do makes the peer do what a say, send, press or reply step says.
 func Do(ctx context.Context, p Peer, s Step) error {
 	switch {
 	case s.Say != "":
@@ -64,6 +71,8 @@ func Do(ctx context.Context, p Peer, s Step) error {
 		return p.Press(ctx, s.Press)
 	case s.Send != nil:
 		return p.SendFile(ctx, *s.Send)
+	case s.Reply != nil:
+		return p.Reply(ctx, s.Reply.To, s.Reply.Say)
 	}
 	return errors.New("chatlab: this step is not the peer's")
 }

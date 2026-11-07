@@ -459,6 +459,9 @@ func ReadView(ctx context.Context, n *Node, last []Message) (View, error) {
 	if v.History, err = n.history(ctx); err != nil {
 		return View{}, err
 	}
+	if v.Tainted, err = n.tainted(ctx); err != nil {
+		return View{}, err
+	}
 	files, err := filepath.Glob(filepath.Join(n.ws, "memory", "*.md"))
 	if err != nil {
 		return View{}, fmt.Errorf("chatlab: memory: %w", err)
@@ -487,6 +490,21 @@ func ReadView(ctx context.Context, n *Node, last []Message) (View, error) {
 		return View{}, fmt.Errorf("chatlab: jobs: %w", err)
 	}
 	return v, nil
+}
+
+// tainted is whether the owner's chat's session holds outside content; a chat
+// with no state yet holds none.
+func (n *Node) tainted(ctx context.Context) (bool, error) {
+	var on bool
+	err := n.db.QueryRowContext(ctx, `SELECT coalesce(json_extract(data, '$.tainted'), 0) FROM conv_state WHERE conv = ?`,
+		fmt.Sprintf("telegram:%d", labChat)).Scan(&on)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("chatlab: taint: %w", err)
+	}
+	return on, nil
 }
 
 // history is the owner's chat as stored: its summary, then one line per
