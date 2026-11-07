@@ -225,6 +225,29 @@ func (s *Server) AddMessage(m Incoming) int64 {
 	return s.nextUpdate
 }
 
+// ReplyTo is the Bot API reply_to_message object of the bot's message
+// messageID in chatID as it shows now, after its edits, for Incoming.Extra.
+// It is nil when the bot has no such message.
+func (s *Server) ReplyTo(chatID, messageID int64) map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, ok := s.messages[chatID][messageID]
+	if !ok {
+		return nil
+	}
+	chatType := "private"
+	if chatID < 0 {
+		chatType = "supergroup"
+	}
+	return map[string]any{
+		"message_id": messageID,
+		"date":       time.Now().Unix(),
+		"chat":       map[string]any{"id": chatID, "type": chatType},
+		"from":       sender(s.botID, true, "Test", ""),
+		"text":       m.text,
+	}
+}
+
 // sender is the Bot API User of an update.
 func sender(id int64, isBot bool, name, language string) map[string]any {
 	from := map[string]any{"id": id, "is_bot": isBot, "first_name": name}

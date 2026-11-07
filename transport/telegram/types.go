@@ -38,11 +38,13 @@ type message struct {
 	// Outside content (ruling R35): a forward's origin, a post Telegram
 	// forwarded from a linked channel, a reply to a message in another
 	// chat, and the quoted part of the replied message. Only their
-	// presence and the quote's text are read.
+	// presence and the quote's text are read. The message a reply
+	// answers (ReplyToMessage) is outside content too (R-DLV-13).
 	ForwardOrigin      json.RawMessage `json:"forward_origin,omitempty"`
 	IsAutomaticForward bool            `json:"is_automatic_forward,omitempty"`
 	ExternalReply      json.RawMessage `json:"external_reply,omitempty"`
 	Quote              *textQuote      `json:"quote,omitempty"`
+	ReplyToMessage     *message        `json:"reply_to_message,omitempty"`
 	// Files that came with the message (R-DLV-10); only what describes
 	// them is read, never the file id.
 	Photo     []fileInfo `json:"photo,omitempty"`

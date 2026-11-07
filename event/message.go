@@ -1,5 +1,7 @@
 package event
 
+import "time"
+
 // Message is the payload of an event of kind "message": text a person sent
 // through a chat transport, in a form that does not depend on the channel.
 type Message struct {
@@ -22,7 +24,26 @@ type Message struct {
 	// Files are the files that came with the message. Nothing downloads
 	// them yet: the agent is told that they came (R-DLV-10).
 	Files []File `json:"files,omitempty"`
+	// Reply is the message this one answers, as the channel reports it
+	// (R-DLV-13); nil when it answers none.
+	Reply *Replied `json:"reply,omitempty"`
 }
+
+// Replied is a message a person answered with a reply, as the channel reports it
+// (R-DLV-13). Its text is the channel's copy, outside content unless the node's own
+// outbox holds the message (R-DLV-14).
+type Replied struct {
+	Ref       string    `json:"ref"`                 // as Message.Ref, and the outbox's ref of a message the node sent
+	ByBot     bool      `json:"by_bot,omitempty"`    // the channel says the node's bot wrote it
+	BySender  bool      `json:"by_sender,omitempty"` // the channel says the person replying wrote it
+	At        time.Time `json:"at,omitzero"`
+	Text      string    `json:"text,omitempty"`      // cut at MaxRepliedRunes
+	Forwarded bool      `json:"forwarded,omitempty"` // it is a forward: someone else's words
+	HasFile   bool      `json:"has_file,omitempty"`  // a file came with it
+}
+
+// MaxRepliedRunes caps the channel's copy of a replied message.
+const MaxRepliedRunes = 4096
 
 // FileKind is what kind of file a person sent.
 type FileKind string
