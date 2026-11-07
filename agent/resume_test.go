@@ -1032,6 +1032,10 @@ type fakeRefs map[string]string
 
 func (f fakeRefs) SentRef(_ context.Context, key string) (string, error) { return f[key], nil }
 
+func (fakeRefs) SentByRef(context.Context, string, string, string) (event.Outgoing, bool, error) {
+	return event.Outgoing{}, false, nil
+}
+
 // questionEdit is the edit of a message in out, if any.
 func questionEdit(out []event.Outgoing) (event.Outgoing, bool) {
 	for _, o := range out {

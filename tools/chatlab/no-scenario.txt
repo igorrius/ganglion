@@ -10,6 +10,7 @@ agent/limits.go
 agent/model.go
 agent/modules.go
 agent/persona.go
+agent/reply.go
 agent/state.go
 agent/telemetry.go
 alert/**

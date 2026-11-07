@@ -1,0 +1,192 @@
+package agent
+
+import (
+	"cmp"
+	"context"
+	"time"
+
+	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/internal/text"
+	"github.com/igorrius/ganglion/tool"
+)
+
+// What a reply brings into the history (R-DLV-13, R-DLV-14, design section 3
+// of p1-reply-context, ADR-0055).
+const (
+	replyExcerptRunes = 150  // a message the history already holds: a pointer to it
+	replyTextRunes    = 2000 // any other: its text
+	sourceReplied     = "replied message"
+	unknownTime       = "an unknown time"
+	unknownSource     = "an unknown source"
+	withFile          = "a message with a file"
+)
+
+// replyKind is how a replied message reached the history; the metric's label.
+type replyKind string
+
+// Reply kinds.
+const (
+	replyCurrent replyKind = "current" // the bot's, in this session
+	replyEarlier replyKind = "earlier" // the bot's, elsewhere, written clean
+	replyTainted replyKind = "tainted" // the bot's, written tainted or of no known origin
+	replyOwn     replyKind = "own"     // the sender's own words
+	replyOutside replyKind = "outside" // anything else, or not found
+	replyFailed  replyKind = "failed"  // the lookup failed: as outside
+)
+
+// replyNote is what the history says about the message a reply answers.
+type replyNote struct {
+	kind    replyKind // "" when the message answers none
+	line    string    // after the sender's words; "" for none
+	outside bool      // it taints the session
+}
+
+// sources name where a message the node sent came from, for the note.
+var sources = map[event.OriginKind]string{
+	event.OriginTurn:     "an earlier session",
+	event.OriginTask:     "a scheduled task's report",
+	event.OriginReminder: "a reminder",
+	event.OriginSystem:   "a system job's report",
+}
+
+// repliedRow is what the node's outbox holds for the bot's message a reply
+// answers: the row, whether there is one, and whether reading it failed.
+type repliedRow struct {
+	row    event.Outgoing
+	found  bool
+	failed bool
+}
+
+// lookupReplied reads from the outbox the message m answers when the channel
+// says the bot wrote it and it is not a forward; for any other reply it reads
+// nothing. The row is found by the ref in this transport and conversation, so a
+// copy that matches no row is outside content (R-DLV-14). A failed read is
+// logged, without the text or the ref, and leaves failed set: it costs only the
+// taint.
+func (a *Agent) lookupReplied(ctx context.Context, transport, conv string, m event.Message) repliedRow {
+	r := m.Reply
+	if r == nil || !r.ByBot || r.Forwarded || r.Ref == "" {
+		return repliedRow{}
+	}
+	row, found, err := a.d.Sent.SentByRef(ctx, transport, conv, r.Ref)
+	if err != nil {
+		if ctx.Err() == nil {
+			a.log.Warn("agent: replied message not read", "conv", conv, "err", err)
+		}
+		return repliedRow{failed: true}
+	}
+	return repliedRow{row: row, found: found}
+}
+
+// replyNoteFor sorts m's reply into a note, given what the outbox holds for it
+// (got), the id of the session the message joins and the node's location. The
+// bot's message is judged by its row: Telegram's copy decides nothing about it.
+// A selected quote takes the place of the replied text, and taints as the
+// message it was taken from (design section 3).
+func replyNoteFor(m event.Message, got repliedRow, session string, loc *time.Location) replyNote {
+	r := m.Reply
+	switch {
+	case r == nil && m.Quote == "":
+		return replyNote{}
+	case r == nil:
+		return outsideNote(replyOutside, unknownTime, m.Quote, false)
+	case r.Forwarded:
+		return outsideNote(replyOutside, when(r.At, loc), cmp.Or(m.Quote, r.Text), r.HasFile)
+	case r.ByBot:
+		return botNote(m, got, session, when(r.At, loc))
+	case r.BySender:
+		return ownNote(when(r.At, loc), cmp.Or(m.Quote, r.Text), r.HasFile)
+	}
+	return outsideNote(replyOutside, when(r.At, loc), cmp.Or(m.Quote, r.Text), r.HasFile)
+}
+
+// botNote is the note of a reply to the bot's message sent at, by its row.
+// The taint is checked before the session, so text written tainted is wrapped
+// even in its own session: an address in it never becomes known.
+func botNote(m event.Message, got repliedRow, session, at string) replyNote {
+	r := m.Reply
+	switch {
+	case got.failed:
+		return outsideNote(replyFailed, at, cmp.Or(m.Quote, r.Text), r.HasFile)
+	case !got.found:
+		return outsideNote(replyOutside, at, cmp.Or(m.Quote, r.Text), r.HasFile)
+	}
+	o, body := got.row.Origin, cmp.Or(m.Quote, got.row.Text)
+	src, known := unknownSource, false
+	if o != nil {
+		src, known = sources[o.Kind]
+	}
+	head := "[in reply to your message of " + at
+	switch {
+	case !known || o.Tainted:
+		return replyNote{kind: replyTainted, outside: true,
+			line: head + ", from " + cmp.Or(src, unknownSource) + "; its text is outside content]" + wrapped(body)}
+	case o.Session != "" && o.Session == session:
+		return replyNote{kind: replyCurrent, line: head + quoted(body, replyExcerptRunes, r.HasFile) + "]"}
+	}
+	if body == "" {
+		return replyNote{kind: replyEarlier, line: head + ", from " + src + filed(r.HasFile) + "]"}
+	}
+	return replyNote{kind: replyEarlier, line: head + ", from " + src + ":]\n" + text.Truncate(body, replyTextRunes)}
+}
+
+// ownNote is the note of a reply to the sender's own message, from the
+// channel's copy: their words, not outside content.
+func ownNote(at, body string, hasFile bool) replyNote {
+	return replyNote{kind: replyOwn, line: "[in reply to their own message of " + at + quoted(body, replyTextRunes, hasFile) + "]"}
+}
+
+// outsideNote is the note of a message someone else wrote, or one not known
+// to be the bot's: its text wrapped as outside content, tainting the session.
+func outsideNote(kind replyKind, at, body string, hasFile bool) replyNote {
+	line := "[in reply to a message of " + at
+	if body == "" {
+		line += filed(hasFile) + "]"
+	} else {
+		line += "]" + wrapped(body)
+	}
+	return replyNote{kind: kind, outside: true, line: line}
+}
+
+// quoted is `: "<body cut at n runes>"`, or the file mark when body is empty.
+func quoted(body string, n int, hasFile bool) string {
+	if body == "" {
+		return filed(hasFile)
+	}
+	return `: "` + text.Truncate(body, n) + `"`
+}
+
+// filed is ": a message with a file" when a file came with the message
+// (R-DLV-10), "" otherwise.
+func filed(hasFile bool) string {
+	if hasFile {
+		return ": " + withFile
+	}
+	return ""
+}
+
+// wrapped is body on its own line wrapped as outside content, "" for none.
+func wrapped(body string) string {
+	if body == "" {
+		return ""
+	}
+	return "\n" + tool.WrapExternal(sourceReplied, text.Truncate(body, replyTextRunes))
+}
+
+// when is at in loc as the turn's time line writes it; a zero time is an
+// unknown one.
+func when(at time.Time, loc *time.Location) string {
+	if at.IsZero() {
+		return unknownTime
+	}
+	return at.In(loc).Format(nowLayout)
+}
+
+// classifyReply sorts m's reply by got, the lookup's result, into the note for
+// t's session, and counts it. It reads t.state, so on the additions path the
+// caller holds t.mu; the lookup, which is I/O, runs before it is taken.
+func (a *Agent) classifyReply(ctx context.Context, t *turn, m event.Message, got repliedRow) replyNote {
+	note := replyNoteFor(m, got, t.state.Session, a.cfg.Location)
+	a.observeReply(ctx, note.kind)
+	return note
+}

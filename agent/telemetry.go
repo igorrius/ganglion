@@ -36,6 +36,7 @@ type instruments struct {
 	quotes       metric.Int64Counter
 	runsEnded    metric.Int64Counter
 	inboxErrors  metric.Int64Counter
+	replies      metric.Int64Counter
 }
 
 func newInstruments() instruments {
@@ -61,6 +62,8 @@ func newInstruments() instruments {
 	in.quotes, _ = m.Int64Counter("ganglion.additions.quotes", metric.WithDescription("Answers sent as overtaken by a later message, by result: stored, with_turn."))
 	in.inboxErrors, _ = m.Int64Counter("ganglion.additions.inbox_errors", metric.WithDescription("Reads of what waits behind a turn that failed; the messages keep their own turns."))
 	in.runsEnded, _ = m.Int64Counter("ganglion.additions.runs_ended", metric.WithDescription("CLI runs ended at a tool boundary for an addition."))
+	in.replies, _ = m.Int64Counter("ganglion.replies",
+		metric.WithDescription("Messages that answer another, by kind: current, earlier, tainted, own, outside, failed."))
 	return in
 }
 
@@ -138,6 +141,15 @@ func (a *Agent) observeQuote(ctx context.Context, stored bool) {
 		result = "with_turn"
 	}
 	a.in.quotes.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+}
+
+// observeReply counts a message that answers another by how the replied
+// message reached the history; a message that answers none is not counted.
+func (a *Agent) observeReply(ctx context.Context, kind replyKind) {
+	if kind == "" {
+		return
+	}
+	a.in.replies.Add(ctx, 1, metric.WithAttributes(attribute.String("kind", string(kind))))
 }
 
 // observeCompaction counts a compaction by its result.

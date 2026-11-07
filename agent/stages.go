@@ -52,7 +52,8 @@ func (a *Agent) answer(ctx context.Context, t *turn) (bool, error) {
 		return false, err
 	}
 	a.report(t, t.refs[0], event.StageThinking)
-	content, outside := userContent(t.msg)
+	note := a.classifyReply(ctx, t, t.msg, a.lookupReplied(ctx, t.event.Source, t.event.Conv, t.msg))
+	content, outside := userContent(t.msg, note)
 	if outside {
 		t.state.Tainted = true // before the model runs: its calls in this turn see it
 	}
@@ -60,28 +61,26 @@ func (a *Agent) answer(ctx context.Context, t *turn) (bool, error) {
 	return a.converse(ctx, t, user)
 }
 
-// Sources of outside text in a person's message (ruling R35).
-const (
-	sourceForwarded = "forwarded message"
-	sourceQuoted    = "quoted message"
-)
+// sourceForwarded names a forward's text as outside content (ruling R35).
+const sourceForwarded = "forwarded message"
 
 // userContent is the history's line for a person's message: "<speaker>:
-// <text>". Text the sender did not write is wrapped as outside content: a
-// forward whole, a quote after the sender's own words. outside reports
-// whether the message holds any, a reply to a message in another chat
-// included (ruling R35). Files that came with it are noted after it, a
-// named one as outside content (R-DLV-10).
-func userContent(m event.Message) (content string, outside bool) {
+// <text>". A forward is someone else's text, wrapped whole as outside
+// content. Otherwise the note of the message it answers follows the
+// sender's own words (R-DLV-13). outside reports whether the message holds
+// outside content: a forward, an outside note, a reply to a message in
+// another chat (ruling R35, R-DLV-14). Files that came with it are noted
+// after it, a named one as outside content (R-DLV-10).
+func userContent(m event.Message, note replyNote) (content string, outside bool) {
 	notes, named := fileNotes(m.Files)
 	if m.Forwarded {
 		return speaker(m) + ": " + tool.WrapExternal(sourceForwarded, m.Text) + notes, true
 	}
 	content = speaker(m) + ": " + m.Text
-	if m.Quote != "" {
-		content += "\n" + tool.WrapExternal(sourceQuoted, m.Quote)
+	if note.line != "" {
+		content += "\n" + note.line
 	}
-	return content + notes, m.Quote != "" || m.ExternalReply || named
+	return content + notes, note.outside || m.ExternalReply || named
 }
 
 // setAdmin looks up whether the turn's principal may use tools.
