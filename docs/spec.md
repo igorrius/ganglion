@@ -308,16 +308,19 @@ Guarantee: **at-least-once + idempotency.**
 - **R-DLV-12.** A rich message sent to the bot is read: its text comes to the agent as outside content,
   with or without a forward's origin, and one with nothing readable is still noted, never dropped silently.
 - **R-DLV-13.** A reply tells the agent which message it answers, for the bot's messages and the
-  sender's own, of any age, a task's report and a reminder included: a short pointer to a message of the
-  current session, which the history already holds; the time, the source and the text, cut at about
-  2,000 characters, of any other. A forward, another person's message, a message in another chat or one
-  the node cannot find comes as outside content
+  sender's own, up to 90 days old, a task's report and a reminder included: a short pointer to a message
+  of the current session, which the history already holds; the time, the source and the text, cut at
+  about 2,000 characters, of any other. A forward, another person's message, a message in another chat,
+  a message of the node's older than 90 days or one the node cannot find comes as outside content. In a
+  forum topic, the topic's root, which Telegram names as the replied message of every message that is no
+  explicit reply, is not a reply
   ([design](plans/p1-reply-context-design.md),
   [ADR-0055](adr/0055-a-reply-carries-the-replied-messages-origin.md)).
 - **R-DLV-14.** Every message the node sends records its origin: the session that made it and whether
   that session was tainted. The origin of a reply to the node's message is read from its own outbox by any part's ref, never
   from the channel's copy. A failed lookup never fails or delays the turn: the channel's copy is then
-  outside content.
+  outside content. Messages stored outside a turn (alerts, notifiers, the give-up reply) record none
+  and count as tainted.
 
 ### 7.2. Conversations, history and the agent loop
 

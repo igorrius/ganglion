@@ -70,7 +70,7 @@ Failure modes the design implies and no other test would catch. Each has its tes
 - Produces: `queue.Outbox.PartSent(ctx context.Context, id string, parts int, ref string) error` (a new
   `ref` argument) and `queue.Outbox.SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, bool, error)`.
 
-- [ ] **Step 1: The migration**
+- [x] **Step 1: The migration**
 
 ```sql
 -- Every delivered part's message, as the transport names it, so a reply to any of
@@ -85,7 +85,7 @@ CREATE TABLE outbox_refs (
 );
 ```
 
-- [ ] **Step 2: Write the failing tests** in `queue/sqlqueue/outbox_test.go`, with the file's existing
+- [x] **Step 2: Write the failing tests** in `queue/sqlqueue/outbox_test.go`, with the file's existing
   `setup` and `reply` helpers:
 
 ```go
@@ -151,12 +151,12 @@ func TestSentByRefFollowsEditsWithText(t *testing.T) {
 `dueID` is a small helper in the test file: it calls `f.q.Due(ctx, 1)` and returns the one message's
 `Msg.ID`, failing the test when there is not exactly one.
 
-- [ ] **Step 3: Run them to see them fail**
+- [x] **Step 3: Run them to see them fail**
 
 Run: `go test ./queue/sqlqueue/ -run 'SentByRef' -v`
 Expected: the build fails because `PartSent` has the wrong arity and `SentByRef` does not exist.
 
-- [ ] **Step 4: Implement** in `queue/sqlqueue/outbox.go`:
+- [x] **Step 4: Implement** in `queue/sqlqueue/outbox.go`:
 
 ```go
 // PartSent implements queue.Outbox. The count never goes down; a ref is recorded
@@ -226,7 +226,7 @@ The errors are worded as `updatePending`'s, which `PartSent` used before. Docume
 	SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, bool, error)
 ```
 
-- [ ] **Step 5: The sender calls `PartSent` for every part,** a single one included, with the ref only
+- [x] **Step 5: The sender calls `PartSent` for every part,** a single one included, with the ref only
   when the part shows text of its own. In `outbox/sender.go`'s `deliver` loop, replace the `len(parts) > 1`
   block:
 
@@ -251,12 +251,12 @@ func shownRef(part event.Outgoing, ref string) string {
   Add a sender test with the fake transport of `sender_test.go` that a two-part message records both
   refs and a buttons-only edit records none.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `go test -race ./queue/... ./outbox/... && make lint`
 Expected: PASS.
 
-- [ ] **Step 7: Commit** with the code map's row for `queue/sqlqueue` and `outbox` updated
+- [x] **Step 7: Commit** with the code map's row for `queue/sqlqueue` and `outbox` updated
   ("finds a delivered message by any part's ref, R-DLV-14").
 
 ### Task 3: Every message the node sends records its origin
@@ -272,7 +272,7 @@ Expected: PASS.
   `OriginTask`, `OriginReminder`, `OriginSystem`, `event.WithOrigin(ctx, func() event.Origin) context.Context`,
   `event.OriginOf(ctx) (event.Origin, bool)`, `event.Outgoing.Origin *event.Origin`.
 
-- [ ] **Step 1: The type** in `event/origin.go`:
+- [x] **Step 1: The type** in `event/origin.go`:
 
 ```go
 package event
@@ -325,7 +325,7 @@ func OriginOf(ctx context.Context) (Origin, bool) {
 	Origin *Origin `json:",omitempty"`
 ```
 
-- [ ] **Step 2: Failing tests.** `event/origin_test.go`: `OriginOf` of a bare context is false; of a
+- [x] **Step 2: Failing tests.** `event/origin_test.go`: `OriginOf` of a bare context is false; of a
   context with `WithOrigin` it is the function's value at the time of the call (change the value the
   function reads between two calls). `queue/sqlqueue/inbox_test.go`:
 
@@ -359,12 +359,12 @@ func TestEnqueueStampsTheContextsOrigin(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run them to see them fail**
+- [x] **Step 3: Run them to see them fail**
 
 Run: `go test ./event/ ./queue/sqlqueue/ -run 'Origin' -v`
 Expected: FAIL to build (no `event.Origin`).
 
-- [ ] **Step 4: Stamp in `insertOutgoing`,** before the body is marshalled:
+- [x] **Step 4: Stamp in `insertOutgoing`,** before the body is marshalled:
 
 ```go
 	if m.Origin == nil {
@@ -374,7 +374,7 @@ Expected: FAIL to build (no `event.Origin`).
 	}
 ```
 
-- [ ] **Step 5: The agent's origin.** In `agent/turn.go` add a field and a method:
+- [x] **Step 5: The agent's origin.** In `agent/turn.go` add a field and a method:
 
 ```go
 	// made is what made this turn's messages, for their origin (R-DLV-14); ""
@@ -416,7 +416,7 @@ func stamp(out []event.Outgoing, o event.Origin) {
   `event.OriginSystem` in the three cases. In `Handle`, after `begin`:
   `ctx = event.WithOrigin(ctx, t.origin)`. In `finish`, before `return`: `stamp(t.out, t.origin())`.
 
-- [ ] **Step 6: Agent tests** in `agent/origin_test.go`, with `newEnv` from `agent_test.go` and the
+- [x] **Step 6: Agent tests** in `agent/origin_test.go`, with `newEnv` from `agent_test.go` and the
   queue the additions tests use (`e.deps.Outbox = q`):
   - a plain turn's reply carries `{turn, <session>, false}`;
   - a turn whose tool returns `External` stores its reply tainted, while a plan shown before that call
@@ -424,12 +424,12 @@ func stamp(out []event.Outgoing, o event.Origin) {
   - a task run's report carries `{task, <the task conversation's session>, …}`, a reminder
     `{reminder, …, false}` even in a tainted chat session, and the audit's report `{system, …, true}`.
 
-- [ ] **Step 7: Run**
+- [x] **Step 7: Run**
 
 Run: `go test -race ./event/ ./queue/... ./agent/ ./plan/ && make lint`
 Expected: PASS.
 
-- [ ] **Step 8: Commit** with the code map's rows for `event` and `agent` updated.
+- [x] **Step 8: Commit** with the code map's rows for `event` and `agent` updated.
 
 ### Task 4: The Telegram transport reads what a reply answers
 
@@ -462,7 +462,7 @@ const MaxRepliedRunes = 4096
 - `telegramtest.(*Server).ReplyTo(chatID, messageID int64) map[string]any`: the Bot API
   `reply_to_message` object of the bot's message `messageID` as it shows now, for `Incoming.Extra`.
 
-- [ ] **Step 1: Failing cases** in the table of `TestOutsideTextIsMarked` (`forward_test.go`); the bot
+- [x] **Step 1: Failing cases** in the table of `TestOutsideTextIsMarked` (`forward_test.go`); the bot
   is user 7001, as `toEvent(7001, u)` says:
 
 ```go
@@ -479,12 +479,12 @@ const MaxRepliedRunes = 4096
   is 5,000 runes and check it arrives cut to `MaxRepliedRunes` runes plus the ellipsis `text.Truncate`
   adds.
 
-- [ ] **Step 2: Run to see them fail**
+- [x] **Step 2: Run to see them fail**
 
 Run: `go test ./transport/telegram/ -run TestOutsideTextIsMarked -v`
 Expected: FAIL to build (no `Replied`).
 
-- [ ] **Step 3: Implement.** In `types.go`, `message` gets
+- [x] **Step 3: Implement.** In `types.go`, `message` gets
   `ReplyToMessage *message `json:"reply_to_message,omitempty"``; the comment on outside content names it.
   In `messageEvent`:
 
@@ -521,17 +521,17 @@ func (t *Transport) replied(botID, sender int64, r *message) *event.Replied {
   Add a case for a rich message by the bot (`ByBot`, not `Forwarded`) and one by another bot
   (`Forwarded`).
 
-- [ ] **Step 4: The fake.** `telegramtest.(*Server).ReplyTo` builds the object from `s.messages[chat][id]`
+- [x] **Step 4: The fake.** `telegramtest.(*Server).ReplyTo` builds the object from `s.messages[chat][id]`
   (what the bot's message shows after its edits), with `from` the bot (`s.botID`, `is_bot: true`) and
   `date` now. A test in `server_test.go` sends a message, edits it, and checks `ReplyTo` gives the edited
   text.
 
-- [ ] **Step 5: Run**
+- [x] **Step 5: Run**
 
 Run: `go test -race ./transport/... ./event/ && make lint`
 Expected: PASS.
 
-- [ ] **Step 6: Commit** with the code map's `transport/telegram` row: `reply_to_message` → `Reply`.
+- [x] **Step 6: Commit** with the code map's `transport/telegram` row: `reply_to_message` → `Reply`.
 
 ### Task 5: The agent's note and the taint by origin
 
@@ -546,7 +546,7 @@ Expected: PASS.
 - Consumes: `queue.Outbox.SentByRef` (task 2), `event.Origin` (task 3), `event.Replied` (task 4).
 - Produces: `userContent(m event.Message, note replyNote) (string, bool)`.
 
-- [ ] **Step 1: Widen `SentRefs`** in `agent/ack.go`:
+- [x] **Step 1: Widen `SentRefs`** in `agent/ack.go`:
 
 ```go
 // SentRefs finds delivered messages (queue.Outbox).
@@ -563,7 +563,7 @@ func (NoRefs) SentByRef(context.Context, string, string, string) (event.Outgoing
 }
 ```
 
-- [ ] **Step 2: Failing table test** in `agent/reply_test.go`. A fake `SentRefs` holds outbox rows by ref;
+- [x] **Step 2: Failing table test** in `agent/reply_test.go`. A fake `SentRefs` holds outbox rows by ref;
   the turn's session is `"s1"`. For each case the test runs a turn with `outsideMessage(...)` (from
   `forward_test.go`) and reads `e.state(t)`:
 
@@ -584,12 +584,12 @@ func (NoRefs) SentByRef(context.Context, string, string, string) (event.Outgoing
 
   Also check a URL in a clean earlier message becomes known, and one in a tainted one does not.
 
-- [ ] **Step 3: Run to see it fail**
+- [x] **Step 3: Run to see it fail**
 
 Run: `go test ./agent/ -run 'TestReply' -v`
 Expected: FAIL to build (`replyNote` undefined).
 
-- [ ] **Step 4: Implement `agent/reply.go`:**
+- [x] **Step 4: Implement `agent/reply.go`:**
 
 ```go
 package agent
@@ -652,7 +652,9 @@ func (a *Agent) replied(ctx context.Context, t *turn, m event.Message) replyNote
 
   `botReply` calls `a.d.Sent.SentByRef(ctx, t.event.Source, t.event.Conv, r.Ref)`; on an error it logs
   `agent: replied message not read` at Warn with `conv` and `err` and returns the outside note with kind
-  `replyFailed`; when not found, the outside note. Otherwise, with `body := cmp.Or(m.Quote, row.Text)`:
+  `replyFailed`; when not found, the outside note. Otherwise, with `body := cmp.Or(m.Quote, row.Text)`
+  (as built, taint before session: the tainted case below is checked first, so a tainted row is wrapped
+  even in its own session, there as a wrapped 150-rune excerpt; design section 3):
   - `row.Origin != nil && row.Origin.Session != "" && row.Origin.Session == t.state.Session` → kind
     `replyCurrent`, line `[in reply to your message of <when>: "<text.Truncate(body, replyExcerptRunes)>"]`;
   - `row.Origin == nil || row.Origin.Tainted` → kind `replyTainted`, outside, line
@@ -666,7 +668,7 @@ func (a *Agent) replied(ctx context.Context, t *turn, m event.Message) replyNote
   wrapped text, `outside: true`. `a.when(at)` formats `at` in `a.cfg.Location` with `nowLayout`, and
   gives `an unknown time` for a zero time. Every note's words are English (design section 3).
 
-- [ ] **Step 5: Use it.** `userContent` takes the note in place of reading `m.Quote` itself:
+- [x] **Step 5: Use it.** `userContent` takes the note in place of reading `m.Quote` itself:
 
 ```go
 func userContent(m event.Message, note replyNote) (content string, outside bool) {
@@ -687,7 +689,7 @@ func userContent(m event.Message, note replyNote) (content string, outside bool)
   once nothing uses it, and update `TestQuoteAndExternalReplyTaint` to the new line for a quote with no
   reply.
 
-- [ ] **Step 6: The metric** in `agent/telemetry.go`:
+- [x] **Step 6: The metric** in `agent/telemetry.go`:
 
 ```go
 	in.replies, _ = m.Int64Counter("ganglion.replies",
@@ -697,12 +699,12 @@ func userContent(m event.Message, note replyNote) (content string, outside bool)
   counted once per message with a note, with the label `kind`. A test reads it back through the
   Prometheus text, as the other agent metrics' tests do.
 
-- [ ] **Step 7: Run**
+- [x] **Step 7: Run**
 
 Run: `go test -race ./agent/ ./config/ && make test && make lint`
 Expected: PASS.
 
-- [ ] **Step 8: Commit** with the code map's `agent` row ("a reply's note and taint by origin, R-DLV-13,
+- [x] **Step 8: Commit** with the code map's `agent` row ("a reply's note and taint by origin, R-DLV-13,
   R-DLV-14") and the observability list in `docs/architecture` that names the agent's metrics, if it does.
 
 ### Task 6: Chatlab replies, and the seeded fault
@@ -720,12 +722,12 @@ Expected: PASS.
 - Consumes: `telegramtest.(*Server).ReplyTo` (task 4).
 - Produces: the step `reply: {to: <text in a bot message>, say: <text>}` and the fact `tainted: <bool>`.
 
-- [ ] **Step 1: Failing loader and facts tests.** A scenario with
+- [x] **Step 1: Failing loader and facts tests.** A scenario with
   `- reply: {to: "apples", say: "more?"}` loads into `Step.Reply{To: "apples", Say: "more?"}`; one with
   an empty `to` is refused. `Check(Facts{Tainted: ptr(false)}, View{Tainted: true})` gives one line,
   `tainted: wanted false, found true`.
 
-- [ ] **Step 2: Implement.** `Peer.Reply(ctx, to, text string) error` replies to the newest bot message
+- [x] **Step 2: Implement.** `Peer.Reply(ctx, to, text string) error` replies to the newest bot message
   whose text contains `to`, `ErrNoMessage` when none shows (a scenario cannot pass by replying to
   nothing). The Telegram peer finds the message in `p.fake.Showing()` and adds an `Incoming` with
   `Extra: map[string]any{"reply_to_message": p.fake.ReplyTo(p.chat, id)}`. `View.Tainted` reads
@@ -733,7 +735,7 @@ Expected: PASS.
   `schemas/chatlab-scenario.schema.json` to match; `schemas/schemas_test.go` and
   `internal/chatlab/scenario_test.go` check the two agree.
 
-- [ ] **Step 3: The mechanics scenario,** on the scripted model, so it spends no model tokens; it is the
+- [x] **Step 3: The mechanics scenario,** on the scripted model, so it spends no model tokens; it is the
   one `make lab-faults` turns red in step 5:
 
 ```yaml
@@ -774,7 +776,7 @@ steps:
   If the scripted model's order does not fit how a `writes` step joins a turn, adjust the script to what
   `mech-addition-boundaries` does; the facts must not change.
 
-- [ ] **Step 4: The real-model scenario** for the topic, run by `make lab` when its files change:
+- [x] **Step 4: The real-model scenario** for the topic, run by `make lab` when its files change:
 
 ```yaml
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
@@ -791,18 +793,18 @@ steps:
   - judge: "The last answer is about the boiler's temperature at night, not about the ficus."
 ```
 
-- [ ] **Step 5: The seeded fault.** `make lab-faults` runs from a clean worktree and spends subscription
+- [x] **Step 5: The seeded fault.** `make lab-faults` runs from a clean worktree and spends subscription
   limits, so commit first and ask the owner before running it. With the code from task 5 in place, write
   `tools/chatlab/faults/reply-origin-taint.patch` that makes `botReply` ignore `row.Origin.Tainted` (the
   tainted case falls through to `replyEarlier`), and add `reply-origin-taint mech-reply-origin` to
   `faults.txt`. `make lab-faults` must show it red, and the scenario green without it.
 
-- [ ] **Step 6: Run**
+- [x] **Step 6: Run**
 
 Run: `go test -race ./internal/chatlab/ && make lab-faults && make lab LAB=mech-reply-origin && make lab LAB=reply-topic`
 Expected: PASS; `reply-topic` 3 of 3. Ask the owner before any `make lab-all`.
 
-- [ ] **Step 7: Commit** with `tools/chatlab/passed.json` as `make lab` leaves it and the code map's chatlab
+- [x] **Step 7: Commit** with `tools/chatlab/passed.json` as `make lab` leaves it and the code map's chatlab
   row.
 
 ### Task 7: Closing

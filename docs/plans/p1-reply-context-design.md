@@ -18,7 +18,7 @@ The opposite problem sits beside it: any selected quote taints the session today
 (`agent/stages.go`), even a quote of the bot's own answer from two minutes ago, so a clean session
 starts asking for confirmations for no reason.
 
-**What success looks like:** a reply to any of the bot's messages or the owner's own, of any age,
+**What success looks like:** a reply to any of the bot's messages or the owner's own, up to 90 days old,
 tells the agent what it answers; a reply to something clean taints nothing; a reply to something that
 came from outside content taints the session exactly as that content would have.
 
@@ -55,12 +55,15 @@ selected quote does today. What the note holds depends on the replied message:
 
 | The reply answers | The note | Taints |
 |---|---|---|
-| The bot's message from the **current session** | `[in reply to your message of 14:02: "<first ~150 characters>…"]`: the whole text is already in the history | no |
+| The bot's message from the **current session**, written clean | `[in reply to your message of 14:02: "<first ~150 characters>…"]`: the whole text is already in the history | no |
 | The bot's message from **elsewhere**, written by a clean session | the time, where it came from (an earlier session, a task's report, a reminder) and its text up to ~2,000 characters | no |
-| The same, written by a **tainted** session | its text wrapped as outside content | yes |
+| The bot's message written by a **tainted** session, or of no known origin | its text wrapped as outside content: up to ~2,000 characters, or a ~150-character excerpt when it is of the current session | yes |
 | The **sender's own** message, not a forward | the time and its text from Telegram's copy | no |
 | A forward, another person's, a message not found, a message in another chat | wrapped as outside content | yes, as today |
 
+- **The taint is decided before "current":** a message a tainted session wrote is wrapped even in its
+  own session, so an address in it never becomes known; there it brings only the excerpt, since the
+  history holds the rest.
 - A **selected quote** takes the place of the excerpt; whether it taints follows the message it was
   taken from **(call)**.
 - A **message with no text** (a file alone) is noted as "a message with a file" (R-DLV-10).
@@ -96,7 +99,9 @@ Reply *Replied // Ref, ByBot, BySender, At, Text, Forwarded
 ```
 
 `ByBot` is set when the author is the bot, `BySender` when it is the person writing now. `Quote` and
-`ExternalReply` stay as they are.
+`ExternalReply` stay as they are. In a forum topic Telegram names the topic's root (the service message
+that created the topic, `forum_topic_created`, whose id is the topic's) as the replied message of every
+message that is no explicit reply: that is not a reply, and `Reply` stays empty.
 
 **The origin of what the node sends.** `event.Outgoing` gets `Origin{Session, Tainted}`. The agent
 fills it on everything a turn makes: answers, superseded answers, plans, questions, folds, reminders
@@ -110,7 +115,10 @@ message's body as the JSON of `Outgoing`, so the field needs no migration.
   outside content may have reached.
 - **A row with no origin** (sent before this change): tainted.
 
-**Finding a sent message by its ref.** A new table maps every part's ref to its outbox row:
+**Finding a sent message by its ref.** A new table maps every part's ref to its outbox row, with a
+copy of what a reply needs, taken when the ref is recorded: the text cut at 2,000 characters and the
+origin. The pruner deletes sent outbox rows after 7 days but keeps refs for 90 **(owner, 2026-11-07)**,
+so a reply reaches a message for 90 days; an older one comes as outside content.
 
 ```sql
 CREATE TABLE outbox_refs (
@@ -118,22 +126,28 @@ CREATE TABLE outbox_refs (
     conv      TEXT NOT NULL,
     ref       TEXT NOT NULL,
     outbox_id TEXT NOT NULL,
+    text      TEXT NOT NULL DEFAULT '',     -- migration 006: the copy, cut at 2,000 characters
+    origin    TEXT,                         -- JSON of event.Origin, NULL when it had none
+    sent_ms   INTEGER NOT NULL DEFAULT 0,   -- when the ref was recorded; pruned after 90 days
     PRIMARY KEY (transport, conv, ref)
 );
 ```
 
 The sender writes a part's ref as it records the part sent, so a reply to the first part of a long
 answer is found too. `outbox.ref` stays for edits. For a message edited in place (a plan, a folded
-question) the text is that of the newest sent edit **(builder)**. `queue.Outbox` gets:
+question) the text is that of the newest sent edit, whose copy replaces the first's **(builder)**.
+`queue.Outbox` gets:
 
 ```go
-// SentByRef is the message delivered on transport to conv as ref, with the time it was sent.
-SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, time.Time, error)
+// SentByRef is what a reply needs of the delivered message a part of which ref shows: its Text and
+// Origin; found is false when no ref matches.
+SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, bool, error)
 ```
 
 **The agent.** The `answer` stage and the additions path call `replied(ctx, t)` before `userContent`,
-which sorts the reply into a row of the table in section 3. "The current session" is
-`Origin.Session == state.Session`; a resumed session keeps its id, so its old messages count as its own.
+which sorts the reply into a row of the table in section 3. The taint is checked first; then "the
+current session" is `Origin.Session == state.Session`; a resumed session keeps its id, so its old
+messages count as its own.
 
 ```mermaid
 sequenceDiagram
@@ -144,7 +158,7 @@ sequenceDiagram
   TG->>T: message with reply_to_message
   T->>A: event.Message{Reply{Ref, ByBot, BySender, At, Text, Forwarded}}
   A->>Q: SentByRef(transport, conv, ref), when ByBot
-  Q-->>A: Outgoing{Text, Origin}, sent at
+  Q-->>A: Outgoing{Text, Origin}, found
   A->>A: the note, and the taint by origin
 ```
 
@@ -155,6 +169,8 @@ sequenceDiagram
 - **A row with no origin:** tainted (section 5).
 - **Telegram sends no `reply_to_message`** (the replied message was deleted, or is too old for it):
   the message is handled as one with no reply, as today.
+- **`reply_to_message` is a forum topic's root:** no reply (section 5).
+- **The replied message is older than 90 days:** its ref is pruned, so it is not found: outside content.
 - **A forward inside the replied message** (the owner replied to a forward they sent): outside
   content, whoever sent it.
 
@@ -166,9 +182,11 @@ sequenceDiagram
 - **Chatlab, two scenarios:**
   - *reply-topic:* a session with two topics, a reply to the answer on the first; the agent answers on
     the first.
-  - *reply-report:* a task's clean report from an earlier day, a reply "do it"; the agent does it, and
-    the session stays clean (`/last`).
-- **A seeded fault:** removing the check of `Origin.Tainted` turns *reply-report*'s tainted twin red.
+  - *reply-report* became *mech-reply-origin*, on the scripted model: a reply to a clean answer of an
+    earlier session brings its text and leaves the session clean, a reply to an answer a tainted session
+    wrote taints it. A task's report is covered by unit tests (`agent/reply_test.go`), not a scenario.
+- **A seeded fault:** removing the check of `Origin.Tainted` (`reply-origin-taint`) turns
+  *mech-reply-origin* red.
 - **Live on the test bot:** the owner tries both cases, and a reply to a report that read the web, which
   must taint.
 
