@@ -1221,6 +1221,13 @@ tampering → signatures; rogue node → NKeys/mTLS and a trust level per node;
 hang → wazero limits; module written under prompt injection → install only
 with confirmation, diff and permissions in the summary.
 
+The compilation skill carries a mandatory instruction (owner, 2026-11-07), in
+words close to these: "The system you are changing is what you run on as an
+agent. Be careful not to break it: if it breaks, you stop working." It sits in
+the skill itself, so it is in front of the model whenever it writes or ships a
+module, and it adds to the measures above, which code enforces; it never
+replaces them.
+
 ### 9.5. Distributed tool pool (P2–P3)
 
 Each node declares its tools in a registry on NATS: name, MCP schema, where it
