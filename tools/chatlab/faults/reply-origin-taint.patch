@@ -1,12 +1,12 @@
 diff --git a/agent/reply.go b/agent/reply.go
 --- a/agent/reply.go
 +++ b/agent/reply.go
-@@ -118,7 +118,7 @@ func botNote(m event.Message, got repliedRow, session, at string) replyNote {
- 	}
+@@ -122,7 +122,7 @@
  	head := "[in reply to your message of " + at
+ 	current := known && o.Session != "" && o.Session == session
  	switch {
 -	case !known || o.Tainted:
 +	case !known:
- 		return replyNote{kind: replyTainted, outside: true,
- 			line: head + ", from " + cmp.Or(src, unknownSource) + "; its text is outside content]" + wrapped(body)}
- 	case o.Session != "" && o.Session == session:
+ 		return taintedNote(head, cmp.Or(src, unknownSource), body, current)
+ 	case current:
+ 		return replyNote{kind: replyCurrent, line: head + quoted(body, replyExcerptRunes, r.HasFile) + "]"}

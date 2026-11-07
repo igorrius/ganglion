@@ -92,10 +92,17 @@ func TestReplyNote(t *testing.T) {
 			want: replyNote{kind: replyTainted, outside: true, line: "[in reply to your message of " + repliedWhen +
 				", from a system job's report; its text is outside content]\n" + tool.WrapExternal(sourceReplied, apples)}},
 		// The session is tainted already; the text is wrapped all the same,
-		// so an address in it does not become known.
+		// so an address in it does not become known, and as the history holds
+		// it already, only an excerpt comes.
 		{name: "tainted, current session", msg: event.Message{Reply: bot}, got: found(apples, &event.Origin{Kind: event.OriginTurn, Session: "s1", Tainted: true}),
 			want: replyNote{kind: replyTainted, outside: true, line: "[in reply to your message of " + repliedWhen +
-				", from an earlier session; its text is outside content]\n" + tool.WrapExternal(sourceReplied, apples)}},
+				", from this session; its text is outside content]\n" + tool.WrapExternal(sourceReplied, apples)}},
+		{name: "tainted, current session, excerpt cut", msg: event.Message{Reply: bot}, got: found(long, &event.Origin{Kind: event.OriginTurn, Session: "s1", Tainted: true}),
+			want: replyNote{kind: replyTainted, outside: true, line: "[in reply to your message of " + repliedWhen +
+				", from this session; its text is outside content]\n" + tool.WrapExternal(sourceReplied, strings.Repeat("a", replyExcerptRunes)+"…")}},
+		{name: "tainted, earlier session, text cut", msg: event.Message{Reply: bot}, got: found(long, &event.Origin{Kind: event.OriginTurn, Session: "s0", Tainted: true}),
+			want: replyNote{kind: replyTainted, outside: true, line: "[in reply to your message of " + repliedWhen +
+				", from an earlier session; its text is outside content]\n" + tool.WrapExternal(sourceReplied, strings.Repeat("a", replyTextRunes)+"…")}},
 		{name: "no origin", msg: event.Message{Reply: bot}, got: found("x", nil),
 			want: replyNote{kind: replyTainted, outside: true, line: "[in reply to your message of " + repliedWhen +
 				", from an unknown source; its text is outside content]\n" + tool.WrapExternal(sourceReplied, "x")}},

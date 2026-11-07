@@ -18,6 +18,7 @@ const (
 	sourceReplied     = "replied message"
 	unknownTime       = "an unknown time"
 	unknownSource     = "an unknown source"
+	thisSession       = "this session"
 	withFile          = "a message with a file"
 )
 
@@ -61,8 +62,8 @@ type repliedRow struct {
 // says the bot wrote it and it is not a forward; for any other reply it reads
 // nothing. The row is found by the ref in this transport and conversation, so a
 // copy that matches no row is outside content (R-DLV-14). A failed read is
-// logged, without the text or the ref, and leaves failed set: it costs only the
-// taint.
+// logged without the text, its error naming the ref (a message id, not
+// sensitive), and leaves failed set: it costs only the taint.
 func (a *Agent) lookupReplied(ctx context.Context, transport, conv string, m event.Message) repliedRow {
 	r := m.Reply
 	if r == nil || !r.ByBot || r.Forwarded || r.Ref == "" {
@@ -102,7 +103,9 @@ func replyNoteFor(m event.Message, got repliedRow, session string, loc *time.Loc
 
 // botNote is the note of a reply to the bot's message sent at, by its row.
 // The taint is checked before the session, so text written tainted is wrapped
-// even in its own session: an address in it never becomes known.
+// even in its own session: an address in it never becomes known. A quote is not
+// checked against the row: a forged one gains nothing, since the sender's own
+// words are plain anyway.
 func botNote(m event.Message, got repliedRow, session, at string) replyNote {
 	r := m.Reply
 	switch {
@@ -117,17 +120,29 @@ func botNote(m event.Message, got repliedRow, session, at string) replyNote {
 		src, known = sources[o.Kind]
 	}
 	head := "[in reply to your message of " + at
+	current := known && o.Session != "" && o.Session == session
 	switch {
 	case !known || o.Tainted:
-		return replyNote{kind: replyTainted, outside: true,
-			line: head + ", from " + cmp.Or(src, unknownSource) + "; its text is outside content]" + wrapped(body)}
-	case o.Session != "" && o.Session == session:
+		return taintedNote(head, cmp.Or(src, unknownSource), body, current)
+	case current:
 		return replyNote{kind: replyCurrent, line: head + quoted(body, replyExcerptRunes, r.HasFile) + "]"}
 	}
 	if body == "" {
 		return replyNote{kind: replyEarlier, line: head + ", from " + src + filed(r.HasFile) + "]"}
 	}
 	return replyNote{kind: replyEarlier, line: head + ", from " + src + ":]\n" + text.Truncate(body, replyTextRunes)}
+}
+
+// taintedNote is the note of the bot's message from src written tainted or of
+// no known origin: its text wrapped as outside content that taints. One of the
+// current session, whose history holds it already, brings only an excerpt.
+func taintedNote(head, src, body string, current bool) replyNote {
+	n := replyTextRunes
+	if current {
+		src, n = thisSession, replyExcerptRunes
+	}
+	return replyNote{kind: replyTainted, outside: true,
+		line: head + ", from " + src + "; its text is outside content]" + wrapped(body, n)}
 }
 
 // ownNote is the note of a reply to the sender's own message, from the
@@ -143,7 +158,7 @@ func outsideNote(kind replyKind, at, body string, hasFile bool) replyNote {
 	if body == "" {
 		line += filed(hasFile) + "]"
 	} else {
-		line += "]" + wrapped(body)
+		line += "]" + wrapped(body, replyTextRunes)
 	}
 	return replyNote{kind: kind, outside: true, line: line}
 }
@@ -165,12 +180,13 @@ func filed(hasFile bool) string {
 	return ""
 }
 
-// wrapped is body on its own line wrapped as outside content, "" for none.
-func wrapped(body string) string {
+// wrapped is body cut at n runes on its own line, wrapped as outside content;
+// "" for none.
+func wrapped(body string, n int) string {
 	if body == "" {
 		return ""
 	}
-	return "\n" + tool.WrapExternal(sourceReplied, text.Truncate(body, replyTextRunes))
+	return "\n" + tool.WrapExternal(sourceReplied, text.Truncate(body, n))
 }
 
 // when is at in loc as the turn's time line writes it; a zero time is an
