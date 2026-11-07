@@ -204,7 +204,7 @@ func TestPartSentSurvivesReopen(t *testing.T) {
 	clock := &fakeClock{now: t0}
 	f := openAt(t, path, clock)
 	enqueue(t, f, reply("telegram:a", "a1"))
-	if err := f.q.PartSent(context.Background(), idOf(t, f, "a1"), 2); err != nil {
+	if err := f.q.PartSent(context.Background(), idOf(t, f, "a1"), 2, ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.db.Close(); err != nil {
@@ -254,5 +254,72 @@ func TestSentKeepsTheRef(t *testing.T) {
 	}
 	if ref, err := f.q.SentRef(ctx, "nope"); err != nil || ref != "" {
 		t.Fatalf("an unknown key: %q, %v", ref, err)
+	}
+}
+
+func dueID(t *testing.T, f fixture) string {
+	t.Helper()
+	ps, _ := due(t, f, 1)
+	if len(ps) != 1 {
+		t.Fatalf("due messages = %d, want 1", len(ps))
+	}
+	return ps[0].Msg.ID
+}
+
+// R-DLV-14: a reply to any part of a split message finds the message.
+func TestSentByRefFindsEveryPart(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	m := reply("telegram:1", "k1:reply:0")
+	m.Text = "a long answer"
+	if err := f.q.Enqueue(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	id := dueID(t, f)
+	for i, ref := range []string{"10", "11"} {
+		if err := f.q.PartSent(ctx, id, i+1, ref); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.q.Sent(ctx, id, "11"); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"10", "11"} {
+		got, found, err := f.q.SentByRef(ctx, "telegram", "telegram:1", ref)
+		if err != nil || !found || got.Text != "a long answer" {
+			t.Fatalf("ref %s: found %v, %+v, %v", ref, found, got, err)
+		}
+	}
+	if _, found, _ := f.q.SentByRef(ctx, "telegram", "telegram:2", "10"); found {
+		t.Fatal("a ref was found in another conversation")
+	}
+}
+
+// An edit with text points the message at the edit's row, so a reply reads what it
+// shows now; an edit of the buttons only (no ref given) leaves it.
+func TestSentByRefFollowsEditsWithText(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	send := func(key, text, ref string) {
+		t.Helper()
+		m := reply("telegram:1", key)
+		m.Text = text
+		if err := f.q.Enqueue(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+		id := dueID(t, f)
+		if err := f.q.PartSent(ctx, id, 1, ref); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.q.Sent(ctx, id, "20"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send("plan:1:show", "1. read", "20")
+	send("plan:1:v2", "1. read \u2713", "20")
+	send("q:1:buttons", "", "")
+	got, found, err := f.q.SentByRef(ctx, "telegram", "telegram:1", "20")
+	if err != nil || !found || got.Text != "1. read \u2713" {
+		t.Fatalf("found %v, %+v, %v", found, got, err)
 	}
 }

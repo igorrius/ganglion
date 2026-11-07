@@ -79,9 +79,13 @@ type Outbox interface {
 	// retry time has come, oldest first, at most limit of them, and the
 	// earliest retry time among conversations not due yet (zero if none).
 	Due(ctx context.Context, limit int) (due []Pending, next time.Time, err error)
-	// PartSent records that the first parts parts of a split message are
-	// delivered, so a resumed sender does not send them again.
-	PartSent(ctx context.Context, id string, parts int) error
+	// PartSent records that the first parts parts of a message are delivered,
+	// so a resumed sender does not send them again, and that ref, when not "",
+	// now shows this message's text (R-DLV-14).
+	PartSent(ctx context.Context, id string, parts int, ref string) error
+	// SentByRef is the delivered message that ref on transport in conv shows,
+	// found false when no row has that ref (R-DLV-14).
+	SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, bool, error)
 	// Sent marks the message delivered; ref is what the transport calls it,
 	// "" when it names none.
 	Sent(ctx context.Context, id, ref string) error

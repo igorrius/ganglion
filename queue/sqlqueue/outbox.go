@@ -90,10 +90,58 @@ func (q *Queue) Due(ctx context.Context, limit int) ([]queue.Pending, time.Time,
 	return due, fromMS(next), nil
 }
 
-// PartSent implements queue.Outbox. The count never goes down.
-func (q *Queue) PartSent(ctx context.Context, id string, parts int) error {
-	return q.updatePending(ctx, "part sent", id,
-		`UPDATE outbox SET parts_sent = max(parts_sent, ?) WHERE id = ? AND status = 'pending'`, parts, id)
+// PartSent implements queue.Outbox. The count never goes down; a ref is recorded
+// for SentByRef.
+func (q *Queue) PartSent(ctx context.Context, id string, parts int, ref string) error {
+	return q.immediate(ctx, func(c *sql.Conn) error {
+		res, err := c.ExecContext(ctx,
+			`UPDATE outbox SET parts_sent = max(parts_sent, ?) WHERE id = ? AND status = 'pending'`, parts, id)
+		if err != nil {
+			return fmt.Errorf("sqlqueue: part sent %s: %w", id, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("sqlqueue: part sent %s: %w", id, err)
+		}
+		if n == 0 {
+			return fmt.Errorf("sqlqueue: part sent %s: no pending message with this id", id)
+		}
+		return noteRef(ctx, c, id, ref)
+	})
+}
+
+// noteRef points ref at the outbox row id, "" being no ref.
+func noteRef(ctx context.Context, c *sql.Conn, id, ref string) error {
+	if ref == "" {
+		return nil
+	}
+	_, err := c.ExecContext(ctx,
+		`INSERT INTO outbox_refs (transport, conv, ref, outbox_id)
+		 SELECT transport, conv, ?, id FROM outbox WHERE id = ?
+		 ON CONFLICT (transport, conv, ref) DO UPDATE SET outbox_id = excluded.outbox_id`, ref, id)
+	if err != nil {
+		return fmt.Errorf("sqlqueue: ref of %s: %w", id, err)
+	}
+	return nil
+}
+
+// SentByRef implements queue.Outbox.
+func (q *Queue) SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, bool, error) {
+	var body string
+	err := q.db.QueryRowContext(ctx,
+		`SELECT o.body FROM outbox_refs r JOIN outbox o ON o.id = r.outbox_id
+		 WHERE r.transport = ? AND r.conv = ? AND r.ref = ?`, transport, conv, ref).Scan(&body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return event.Outgoing{}, false, nil
+	}
+	if err != nil {
+		return event.Outgoing{}, false, fmt.Errorf("sqlqueue: message %s in %s: %w", ref, conv, err)
+	}
+	var m event.Outgoing
+	if err := json.Unmarshal([]byte(body), &m); err != nil {
+		return event.Outgoing{}, false, fmt.Errorf("sqlqueue: message %s in %s: %w", ref, conv, err)
+	}
+	return m, true, nil
 }
 
 // Sent implements queue.Outbox.

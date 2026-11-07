@@ -209,10 +209,8 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 		if r != "" {
 			ref = r
 		}
-		if len(parts) > 1 {
-			if err := s.ob.PartSent(ctx, msg.ID, i+1); err != nil {
-				return true, err
-			}
+		if err := s.ob.PartSent(ctx, msg.ID, i+1, shownRef(parts[i], r)); err != nil {
+			return true, err
 		}
 	}
 	if err := s.ob.Sent(ctx, msg.ID, ref); err != nil {
@@ -298,4 +296,14 @@ func (s *Sender) failed(ctx context.Context, log *slog.Logger, p queue.Pending, 
 		log.Warn("outbox: send failed, will retry", "err", sendErr, "not_before", notBefore)
 		return true, s.ob.Retry(ctx, p.Msg.ID, notBefore, sendErr.Error())
 	}
+}
+
+// shownRef is the ref a reply to this part finds it by: none for a toast, which
+// changes no message, or for a message with no text of its own (an edit of the
+// buttons only) (R-DLV-14).
+func shownRef(part event.Outgoing, ref string) string {
+	if part.Text == "" || part.Ack != "" {
+		return ""
+	}
+	return ref
 }
