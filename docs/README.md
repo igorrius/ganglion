@@ -336,7 +336,8 @@ is needed for tests: they run against a fake Bot API.
   (`GANGLION_ADMIN=telegram:user:<id>`); strangers get no reply. Any
   "user info" bot shows it, or the `from.id` of your message in
   `getUpdates`.
-- **Running locally:** a `.env` file in the repository root (git-ignored):
+- **Running locally:** a `.env` file in the repository root (git-ignored); copy
+  [`.env.example`](../.env.example), which also lists the optional variables:
 
   ```sh
   TELEGRAM_TEST_BOT_TOKEN=<token from @BotFather>
