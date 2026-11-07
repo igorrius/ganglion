@@ -1,6 +1,7 @@
 package chatlab
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -92,5 +93,17 @@ func TestTakenAndReplies(t *testing.T) {
 	}
 	if got := Check(Facts{Taken: &two, Replies: &one}, v); len(got) != 2 {
 		t.Fatalf("failures %v", got)
+	}
+}
+
+func TestTainted(t *testing.T) {
+	if got := Check(Facts{Tainted: new(false)}, View{Tainted: true}); !slices.Equal(got, []string{"tainted: wanted false, found true"}) {
+		t.Fatalf("failures %v", got)
+	}
+	if got := Check(Facts{Tainted: new(true)}, View{Tainted: true}); len(got) != 0 {
+		t.Fatalf("failures %v", got)
+	}
+	if got := Check(Facts{}, View{Tainted: true}); len(got) != 0 {
+		t.Fatalf("an unasked taint failed: %v", got)
 	}
 }

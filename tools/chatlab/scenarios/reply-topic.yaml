@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: reply-topic
+why: >-
+  The owner, 2026-11-06: a session holds several topics, and a reply to one of them
+  must be answered on that topic, not on the newest.
+covers:
+  - agent/reply.go
+steps:
+  - say: "What is a good temperature for a hot water boiler at home?"
+  - say: "And how often should I water a ficus?"
+  - reply: {to: "boiler", say: "And at night?"}
+  - judge: "The last answer is about the boiler's temperature at night, not about the ficus."

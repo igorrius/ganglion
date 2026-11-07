@@ -25,8 +25,11 @@ type turn struct {
 	now    time.Time
 	record turns.Turn // the trace: route, tools, tokens, outcome
 	out    []event.Outgoing
-	admin  bool // the sender may use tools
-	calls  int  // tool calls so far in this turn; the next is calls+1
+	// made is what made this turn's messages, for their origin (R-DLV-14); ""
+	// is a turn with a person.
+	made  event.OriginKind
+	admin bool // the sender may use tools
+	calls int  // tool calls so far in this turn; the next is calls+1
 	// execCalls are the calls a CLI provider ran through Exec; at most
 	// MaxSteps a turn.
 	execCalls int
@@ -75,6 +78,35 @@ type turn struct {
 	// it was; both are guarded by mu (R-LIVE-3).
 	endRun   context.CancelCauseFunc
 	runEnded bool
+}
+
+// origin is where what the turn stores now comes from (R-DLV-14). A reminder's text
+// was set when it was made, in a clean session or after the owner's press (R-POL-6),
+// so it is clean; a system job reports on memory outside content may have reached,
+// so it is tainted. It reads the turn's state, so it is called where that may be
+// read: in a stage, or under t.mu from a tool a CLI provider runs.
+func (t *turn) origin() event.Origin {
+	o := event.Origin{Kind: event.OriginTurn, Session: t.state.Session, Tainted: t.state.Tainted}
+	switch t.made {
+	case event.OriginTask:
+		o.Kind = event.OriginTask
+	case event.OriginReminder:
+		o.Kind, o.Tainted = event.OriginReminder, false
+	case event.OriginSystem:
+		o.Kind, o.Tainted = event.OriginSystem, true
+	case event.OriginTurn:
+	}
+	return o
+}
+
+// stamp gives each message in out with no origin of its own o.
+func stamp(out []event.Outgoing, o event.Origin) {
+	for i := range out {
+		if out[i].Origin == nil {
+			of := o
+			out[i].Origin = &of
+		}
+	}
 }
 
 // reply adds the answer to the person's message. A turn answers once, so

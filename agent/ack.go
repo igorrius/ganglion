@@ -16,17 +16,28 @@ type Enqueuer interface {
 	Enqueue(ctx context.Context, msgs ...event.Outgoing) error
 }
 
-// SentRefs says where a delivered message went (queue.Outbox); "" when it
-// was not delivered.
+// SentRefs finds delivered messages (queue.Outbox).
 type SentRefs interface {
+	// SentRef is where the message with idemKey went; "" when it was not
+	// delivered.
 	SentRef(ctx context.Context, idemKey string) (string, error)
+	// SentByRef is the delivered message ref shows in conv on transport,
+	// found false when the node sent none there (R-DLV-14).
+	SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, bool, error)
 }
 
-// NoRefs knows of no delivered message: expired questions wait for a press.
+// NoRefs knows of no delivered message: expired questions wait for a press,
+// and a reply to the bot is outside content.
 type NoRefs struct{}
 
 // SentRef implements SentRefs.
 func (NoRefs) SentRef(context.Context, string) (string, error) { return "", nil }
+
+// SentByRef implements SentRefs: nothing is found, so a reply is outside
+// content.
+func (NoRefs) SentByRef(context.Context, string, string, string) (event.Outgoing, bool, error) {
+	return event.Outgoing{}, false, nil
+}
 
 // errorPrefix starts the outcome of a call that failed, as the model
 // reads it.

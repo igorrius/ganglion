@@ -140,14 +140,20 @@ func decodeMessage(payload json.RawMessage) (event.Message, bool) {
 }
 
 // join adds the additions to the turn as a turn's first message is added
-// (R-LIVE-4): the speaker's line and outside text wrapped; outside content
-// taints the session before the next model call, and only the person's own
-// words make an address known. The reply answers the newest one taken.
+// (R-LIVE-4): the speaker's line, the note of the message it answers and
+// outside text wrapped; outside content taints the session before the next
+// model call, and only the person's own words make an address known. The
+// reply answers the newest one taken. The messages the additions answer are
+// read before t.mu is taken: that is I/O.
 func (a *Agent) join(ctx context.Context, t *turn, msgs, added []provider.Message, adds []additionMsg) (allMsgs, allAdded []provider.Message) {
+	got := make([]repliedRow, len(adds))
+	for i, add := range adds {
+		got[i] = a.lookupReplied(ctx, t.event.Source, t.event.Conv, add.msg)
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	for _, add := range adds {
-		content, outside := userContent(add.msg)
+	for i, add := range adds {
+		content, outside := userContent(add.msg, a.classifyReply(ctx, t, add.msg, got[i]))
 		if outside {
 			t.state.Tainted = true
 		}

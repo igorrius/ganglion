@@ -71,6 +71,7 @@
         "judge": { "description": "A claim about the model's last words.", "type": "string" },
         "language": { "description": "Checks the model's last words by their letters, with no model.", "enum": ["ru", "uk"] },
         "send": { "$ref": "#/$defs/file" },
+        "reply": { "$ref": "#/$defs/reply" },
         "adds": { "$ref": "#/$defs/adds" },
         "advance": { "$ref": "#/$defs/advance" },
         "reach": { "$ref": "#/$defs/reach" },
@@ -87,6 +88,16 @@
         "type": { "description": "MIME type.", "type": "string" },
         "size": { "type": "integer", "minimum": 0 },
         "caption": { "type": "string" }
+      }
+    },
+    "reply": {
+      "description": "The person replies to the newest bot message whose text holds to. None showing is a failure.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["to", "say"],
+      "properties": {
+        "to": { "description": "Text in the bot's message.", "type": "string", "minLength": 1 },
+        "say": { "type": "string", "minLength": 1 }
       }
     },
     "advance": {
@@ -154,7 +165,8 @@
         "files": { "description": "Attachments shown so far.", "type": "integer", "minimum": 0 },
         "taken": { "description": "Messages that joined a running turn so far.", "type": "integer", "minimum": 0 },
         "replies": { "description": "The model's messages since the last action.", "type": "integer", "minimum": 0 },
-        "jobs": { "$ref": "#/$defs/jobFact" }
+        "jobs": { "$ref": "#/$defs/jobFact" },
+        "tainted": { "description": "The chat's session holds outside content.", "type": "boolean" }
       }
     }
   }

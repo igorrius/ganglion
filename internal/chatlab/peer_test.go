@@ -41,8 +41,8 @@ func TestOnlyTheConnectorKnowsTelegram(t *testing.T) {
 
 // memoryPeer is a channel with no Telegram in it.
 type memoryPeer struct {
-	said, pressed []string
-	sent          []File
+	said, pressed, replied []string
+	sent                   []File
 }
 
 func (p *memoryPeer) Say(_ context.Context, text string) error {
@@ -60,17 +60,23 @@ func (p *memoryPeer) Press(_ context.Context, label string) error {
 	return nil
 }
 
+func (p *memoryPeer) Reply(_ context.Context, to, text string) error {
+	p.replied = append(p.replied, to+": "+text)
+	return nil
+}
+
 func (*memoryPeer) Messages() []Message { return nil }
 
 func TestScenarioStepsNeedNoTelegram(t *testing.T) {
 	p := &memoryPeer{}
 	ctx := context.Background()
-	for _, s := range []Step{{Say: "hi"}, {Press: "Approve"}, {Send: &File{Kind: KindPhoto, Name: "a.jpg"}}} {
+	for _, s := range []Step{{Say: "hi"}, {Press: "Approve"}, {Send: &File{Kind: KindPhoto, Name: "a.jpg"}},
+		{Reply: &Reply{To: "apples", Say: "more?"}}} {
 		if err := Do(ctx, p, s); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(p.said) != 1 || len(p.pressed) != 1 || len(p.sent) != 1 {
+	if len(p.said) != 1 || len(p.pressed) != 1 || len(p.sent) != 1 || !slices.Equal(p.replied, []string{"apples: more?"}) {
 		t.Fatalf("peer %+v", p)
 	}
 	if err := Do(ctx, p, Step{Judge: "x"}); err == nil {

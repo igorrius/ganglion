@@ -86,6 +86,20 @@ func (p *Telegram) Press(_ context.Context, label string) error {
 	return fmt.Errorf("%w: %q", ErrNoButton, label)
 }
 
+// Reply implements Peer: the message carries the Bot API copy of the bot's
+// message it answers, as the chat shows it now.
+func (p *Telegram) Reply(_ context.Context, to, text string) error {
+	for _, m := range slices.Backward(p.fake.Showing()) {
+		if m.ChatID != p.chat || !strings.Contains(m.Text, to) {
+			continue
+		}
+		p.last.Store(p.fake.AddMessage(telegramtest.Incoming{ChatID: p.chat, UserID: p.chat, Name: p.name, Text: text,
+			Extra: map[string]any{"reply_to_message": p.fake.ReplyTo(p.chat, m.MessageID)}}))
+		return nil
+	}
+	return fmt.Errorf("%w: %q", ErrNoMessage, to)
+}
+
 // Messages implements Peer.
 func (p *Telegram) Messages() []Message {
 	edited := map[int64]bool{}

@@ -150,7 +150,7 @@ the "Not now" list (section 14); the phase does not grow.
 | `idemKey` | Idempotency key of an event or call |
 | `ttl` | Command lifetime; an expired command is not executed |
 | Escalation | An event from a module to the agent: "a model is needed" |
-| Tainted session | A session that external content (a web page, a search result, a forwarded message, a quoted message or a reply to a message in another chat) has entered; side effects in it need confirmation (R-POL-6) |
+| Tainted session | A session that external content (a web page, a search result, a forwarded message, a quoted or replied message not written by the owner or by a clean session, or a reply to a message in another chat) has entered; side effects in it need confirmation (R-POL-6) |
 | Grant | What a scheduled agent task may do, fixed and approved by the owner when the task is created (R-POL-8) |
 
 ## 5. Architecture
@@ -307,6 +307,20 @@ Guarantee: **at-least-once + idempotency.**
   ([ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md)).
 - **R-DLV-12.** A rich message sent to the bot is read: its text comes to the agent as outside content,
   with or without a forward's origin, and one with nothing readable is still noted, never dropped silently.
+- **R-DLV-13.** A reply tells the agent which message it answers, for the bot's messages and the
+  sender's own, up to 90 days old, a task's report and a reminder included: a short pointer to a message
+  of the current session, which the history already holds; the time, the source and the text, cut at
+  about 2,000 characters, of any other. A forward, another person's message, a message in another chat,
+  a message of the node's older than 90 days or one the node cannot find comes as outside content. In a
+  forum topic, the topic's root, which Telegram names as the replied message of every message that is no
+  explicit reply, is not a reply
+  ([design](plans/p1-reply-context-design.md),
+  [ADR-0055](adr/0055-a-reply-carries-the-replied-messages-origin.md)).
+- **R-DLV-14.** Every message the node sends records its origin: the session that made it and whether
+  that session was tainted. The origin of a reply to the node's message is read from its own outbox by any part's ref, never
+  from the channel's copy. A failed lookup never fails or delays the turn: the channel's copy is then
+  outside content. Messages stored outside a turn (alerts, notifiers, the give-up reply) record none
+  and count as tainted.
 
 ### 7.2. Conversations, history and the agent loop
 
@@ -646,7 +660,9 @@ human); module install — tests + reviewer + admin.
   web page, a search result, a forwarded message (a quote of another
   message and a reply to a message in another chat count too: the
   transport marks them and the agent wraps that text as data), a
-  scheduled task's fetch.
+  scheduled task's fetch. A reply to, or a quote of, a message the node sent
+  taints only when the session that wrote it was tainted, or its origin is
+  unknown (R-DLV-14, ADR-0055).
   - The taint is per session, not per turn: the content stays in the
     history and would steer the next turn.
   - It lasts until the session ends (`/new`, idle reset, R-AGT-6) and
@@ -1205,6 +1221,13 @@ tampering → signatures; rogue node → NKeys/mTLS and a trust level per node;
 hang → wazero limits; module written under prompt injection → install only
 with confirmation, diff and permissions in the summary.
 
+The compilation skill carries a mandatory instruction (owner, 2026-11-07), in
+words close to these: "The system you are changing is what you run on as an
+agent. Be careful not to break it: if it breaks, you stop working." It sits in
+the skill itself, so it is in front of the model whenever it writes or ships a
+module, and it adds to the measures above, which code enforces; it never
+replaces them.
+
 ### 9.5. Distributed tool pool (P2–P3)
 
 Each node declares its tools in a registry on NATS: name, MCP schema, where it
@@ -1432,10 +1455,6 @@ Reviewed at each gate.
     After a plan says it finished, the owner waited about 10 s for the long report with nothing to show for it
     (2026-11-06): a message such as "…" that the answer then replaces would fill that gap. `editMessageText`
     takes a rich message, but the first form and its edit are for a design to settle.
-  - Knowing which message a reply answers: the transport reads only a selected quote, so the agent does not
-    know which message the person replied to, while a session can hold several topics (owner, 2026-11-06).
-    A reply to the bot's own message in the current session adds nothing outside; an older one or another
-    person's needs a security pass.
   - A forward with a comment: Telegram delivers the comment first and the forward right after, in the same
     second. The turn starts on the comment alone and answers that it sees no forward; the forward then joins, the first
     answer folds (R-LIVE-1) and the second is right. Nothing is lost, but it costs a model call and a useless folded
@@ -1449,6 +1468,17 @@ Reviewed at each gate.
   - A classifier that tells a question from a task, as a candidate first client of "Models
     by purpose": only if the main model's own judgement, given a clearer rule, is measured
     and falls short (owner, 2026-11-05).
+  - Fewer presses for pages that differ in one parameter: on the owner's live run of 2026-11-07,
+    "the exchange rates" asked twice (one URL for the dollar, one for the euro), and a reply
+    "and in the west?" to a weather answer asked again for the same site with another city. The
+    owner's idea: a quick model judges whether a new URL only changes a parameter of one already
+    approved, and the node asks only when it says no or no such model is configured. The security
+    side is decided first (owner): R-WEB-2 asks because a query string the model built is a
+    channel out, so "only a parameter changed" is exactly what an exfiltration looks like, and a
+    model's verdict on it would be a decision made by a model under outside influence. Options to
+    weigh in its own brainstorm: one press for a plan's listed URLs (as R-CMD-7 does for
+    commands), an approval for a host and path with the parameter values shown, or the model's
+    verdict only in a clean session (R-POL-6).
 - Hooks and pipelines: an internal n8n (owner, 2026-11-03).
   - **Hooks** are module triggers on the node's own events, beside `cron`
     and `tool` (7.10's module ABI). Examples: before or after a tool call,

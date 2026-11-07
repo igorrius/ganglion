@@ -90,17 +90,84 @@ func (q *Queue) Due(ctx context.Context, limit int) ([]queue.Pending, time.Time,
 	return due, fromMS(next), nil
 }
 
-// PartSent implements queue.Outbox. The count never goes down.
-func (q *Queue) PartSent(ctx context.Context, id string, parts int) error {
-	return q.updatePending(ctx, "part sent", id,
-		`UPDATE outbox SET parts_sent = max(parts_sent, ?) WHERE id = ? AND status = 'pending'`, parts, id)
+// PartSent implements queue.Outbox. The count never goes down; ref, when not "",
+// becomes the message's ref, and shown is noted for SentByRef.
+func (q *Queue) PartSent(ctx context.Context, id string, parts int, ref, shown string) error {
+	return q.immediate(ctx, func(c *sql.Conn) error {
+		res, err := c.ExecContext(ctx,
+			`UPDATE outbox SET parts_sent = max(parts_sent, ?), ref = CASE WHEN ? = '' THEN ref ELSE ? END
+			 WHERE id = ? AND status = 'pending'`, parts, ref, ref, id)
+		if err := onePending(res, err); err != nil {
+			return fmt.Errorf("sqlqueue: part sent %s: %w", id, err)
+		}
+		return noteRef(ctx, c, id, shown, q.now().UnixMilli())
+	})
 }
 
-// Sent implements queue.Outbox.
-func (q *Queue) Sent(ctx context.Context, id, ref string) error {
-	return q.updatePending(ctx, "sent", id,
-		`UPDATE outbox SET status = 'sent', done_ms = ?, ref = ? WHERE id = ? AND status = 'pending'`,
-		q.now().UnixMilli(), ref, id)
+// refTextRunes is how much of a message's text its ref keeps for a reply
+// (R-DLV-13); the agent cuts what it shows the model to the same length.
+const refTextRunes = 2000
+
+// noteRef points ref at the outbox row id and copies what a reply needs from
+// it, its text cut at refTextRunes and its origin, with the time now, so the
+// ref outlives the row (RefRetention); "" is no ref. A ref noted again, by an
+// edit with text, takes the edit's copy.
+func noteRef(ctx context.Context, c *sql.Conn, id, ref string, now int64) error {
+	if ref == "" {
+		return nil
+	}
+	_, err := c.ExecContext(ctx,
+		`INSERT INTO outbox_refs (transport, conv, ref, outbox_id, text, origin, sent_ms)
+		 SELECT transport, conv, ?, id, coalesce(substr(json_extract(body, '$.Text'), 1, ?), ''),
+		        json_extract(body, '$.Origin'), ?
+		 FROM outbox WHERE id = ?
+		 ON CONFLICT (transport, conv, ref) DO UPDATE SET outbox_id = excluded.outbox_id,
+		   text = excluded.text, origin = excluded.origin, sent_ms = excluded.sent_ms`,
+		ref, refTextRunes, now, id)
+	if err != nil {
+		return fmt.Errorf("sqlqueue: ref of %s: %w", id, err)
+	}
+	return nil
+}
+
+// SentByRef implements queue.Outbox. It reads the copy the ref keeps, so it
+// finds a message the outbox has pruned: its Text and Origin, nothing else.
+func (q *Queue) SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, bool, error) {
+	var (
+		m      event.Outgoing
+		origin sql.NullString
+	)
+	err := q.db.QueryRowContext(ctx,
+		`SELECT text, origin FROM outbox_refs WHERE transport = ? AND conv = ? AND ref = ?`,
+		transport, conv, ref).Scan(&m.Text, &origin)
+	if errors.Is(err, sql.ErrNoRows) {
+		return event.Outgoing{}, false, nil
+	}
+	if err != nil {
+		return event.Outgoing{}, false, fmt.Errorf("sqlqueue: message %s in %s: %w", ref, conv, err)
+	}
+	if origin.Valid {
+		m.Origin = new(event.Origin)
+		if err := json.Unmarshal([]byte(origin.String), m.Origin); err != nil {
+			return event.Outgoing{}, false, fmt.Errorf("sqlqueue: origin of message %s in %s: %w", ref, conv, err)
+		}
+	}
+	return m, true, nil
+}
+
+// Sent implements queue.Outbox. A ref of "" keeps the one a part recorded, so a
+// message resumed after its last part was recorded keeps that part's ref.
+func (q *Queue) Sent(ctx context.Context, id, ref, shown string) error {
+	return q.immediate(ctx, func(c *sql.Conn) error {
+		now := q.now().UnixMilli()
+		res, err := c.ExecContext(ctx,
+			`UPDATE outbox SET status = 'sent', done_ms = ?, ref = CASE WHEN ? = '' THEN ref ELSE ? END
+			 WHERE id = ? AND status = 'pending'`, now, ref, ref, id)
+		if err := onePending(res, err); err != nil {
+			return fmt.Errorf("sqlqueue: sent %s: %w", id, err)
+		}
+		return noteRef(ctx, c, id, shown, now)
+	})
 }
 
 // SentRef implements queue.Outbox.
@@ -135,15 +202,24 @@ func (q *Queue) Fail(ctx context.Context, id string, reason string) error {
 // the row is missing or already finished.
 func (q *Queue) updatePending(ctx context.Context, op, id, stmt string, args ...any) error {
 	res, err := q.db.ExecContext(ctx, stmt, args...)
-	if err != nil {
+	if err := onePending(res, err); err != nil {
 		return fmt.Errorf("sqlqueue: %s %s: %w", op, id, err)
+	}
+	return nil
+}
+
+// onePending is the outcome of an update of one pending outbox row: err, or an
+// error when it changed no row because the row is missing or already finished.
+func onePending(res sql.Result, err error) error {
+	if err != nil {
+		return err
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("sqlqueue: %s %s: %w", op, id, err)
+		return err
 	}
 	if n == 0 {
-		return fmt.Errorf("sqlqueue: %s %s: no pending message with this id", op, id)
+		return errors.New("no pending message with this id")
 	}
 	return nil
 }

@@ -229,3 +229,22 @@ func TestFakeShowingFollowsEdits(t *testing.T) {
 		t.Fatalf("after the edit %+v", got)
 	}
 }
+
+func TestFakeReplyToShowsTheEditedMessage(t *testing.T) {
+	s := NewServer(t, token)
+	post(t, s, token, "sendMessage", map[string]any{"chat_id": 42, "text": "first"})
+	id := s.Showing()[0].MessageID
+	post(t, s, token, "editMessageText", map[string]any{"chat_id": 42, "message_id": id, "text": "edited"})
+	r := s.ReplyTo(42, id)
+	from, _ := r["from"].(map[string]any)
+	chat, _ := r["chat"].(map[string]any)
+	if r["message_id"] != id || r["text"] != "edited" || from["id"] != int64(7001) || from["is_bot"] != true || chat["type"] != "private" {
+		t.Fatalf("reply_to_message %+v", r)
+	}
+	if _, ok := r["date"].(int64); !ok {
+		t.Errorf("date %v", r["date"])
+	}
+	if s.ReplyTo(42, id+100) != nil {
+		t.Error("an unknown message has no reply_to_message")
+	}
+}

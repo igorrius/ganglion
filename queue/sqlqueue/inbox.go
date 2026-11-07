@@ -270,6 +270,11 @@ func insertOutgoing(ctx context.Context, c *sql.Conn, m event.Outgoing, now time
 	if m.ID == "" {
 		m.ID = event.NewID(now)
 	}
+	if m.Origin == nil {
+		if o, ok := event.OriginOf(ctx); ok {
+			m.Origin = &o
+		}
+	}
 	body, err := json.Marshal(m)
 	if err != nil {
 		return false, err

@@ -128,6 +128,8 @@ func TestLoadScenarioRefuses(t *testing.T) {
 		{"advance of both", "name: x\nwhy: y\nsteps:\n  - advance: {confirmations: 1m, scheduler: 1m}\n  - judge: holds\n", "advance"},
 		{"reach without a tool", "name: x\nwhy: y\nsteps:\n  - reach: {nudge: go}\n  - judge: holds\n", "reach"},
 		{"file of an unknown kind", "name: x\nwhy: y\nsteps:\n  - send: {kind: voice, name: a.ogg}\n  - judge: holds\n", "kind"},
+		{"reply to nothing", "name: x\nwhy: y\nsteps:\n  - reply: {to: '', say: more?}\n  - judge: holds\n", "reply"},
+		{"reply saying nothing", "name: x\nwhy: y\nsteps:\n  - reply: {to: apples}\n  - judge: holds\n", "reply"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := LoadScenario(writeScenario(t, t.TempDir(), "x", tc.body))
@@ -176,6 +178,7 @@ func TestSchemaMatchesTheLoader(t *testing.T) {
 		{"/$defs/page", Page{}},
 		{"/$defs/step", Step{}},
 		{"/$defs/file", File{}},
+		{"/$defs/reply", Reply{}},
 		{"/$defs/advance", Advance{}},
 		{"/$defs/reach", Reach{}},
 		{"/$defs/journalFact", JournalFact{}},
@@ -228,5 +231,24 @@ func TestWritesAndAddsAreChecked(t *testing.T) {
 	half.Steps = []Step{{Adds: &Adds{Say: "only one"}}, {Judge: "holds"}}
 	if err := half.check("x"); err == nil {
 		t.Error("an adds step without its second message passed")
+	}
+}
+
+func TestLoadScenarioReply(t *testing.T) {
+	s, err := LoadScenario(writeScenario(t, t.TempDir(), "x", `name: x
+why: y
+steps:
+  - say: Tell me about apples.
+  - reply: {to: "apples", say: "more?"}
+  - facts: {tainted: false}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := s.Steps[1].Reply; r == nil || *r != (Reply{To: "apples", Say: "more?"}) {
+		t.Fatalf("reply %+v", r)
+	}
+	if f := s.Steps[2].Facts; f == nil || f.Tainted == nil || *f.Tainted {
+		t.Fatalf("facts %+v", f)
 	}
 }

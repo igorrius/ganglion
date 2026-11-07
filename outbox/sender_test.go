@@ -441,6 +441,85 @@ func TestSenderRecordsTheRefOfTheButtons(t *testing.T) {
 	}
 }
 
+// A message whose one part was delivered and recorded before the process died is
+// marked sent on resume without losing the part's ref, so a later edit of it
+// still finds the message.
+func TestResumedMessageKeepsItsPartsRef(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	edit := out("telegram:a", "a2")
+	edit.EditOf = "a1"
+	e.enqueue(t, out("telegram:a", "a1"), edit)
+	ps, _, err := e.q.Due(ctx, 1)
+	if err != nil || len(ps) != 1 {
+		t.Fatalf("due: %+v, %v", ps, err)
+	}
+	// The sender before the crash delivered a1's only part and recorded it.
+	if err := e.q.PartSent(ctx, ps[0].Msg.ID, 1, "77", "77"); err != nil {
+		t.Fatal(err)
+	}
+
+	var got string
+	f := newFake(e.clock, func(m event.Outgoing, _ int) error {
+		if m.IdemKey == "a2" {
+			got = m.Edit
+		}
+		return nil
+	})
+	e.start(t, f)
+	e.runUntil(t, t0.Add(time.Minute), func() bool {
+		ps, _, err := e.q.Due(ctx, 10)
+		return err == nil && len(ps) == 0
+	})
+	if keys := f.delivered(); !slices.Equal(keys, []string{"a2"}) {
+		t.Fatalf("delivered %v, want only the edit", keys)
+	}
+	if ref, err := e.q.SentRef(ctx, "a1"); err != nil || ref != "77" {
+		t.Fatalf("SentRef(a1) = %q, %v; want the delivered part's 77", ref, err)
+	}
+	if got != "77" {
+		t.Fatalf("edit of %q, want 77", got)
+	}
+}
+
+// R-DLV-14: every part's ref finds the message.
+func TestSenderRecordsEveryPartsRef(t *testing.T) {
+	clock := newVClock()
+	e := openEnv(t, filepath.Join(t.TempDir(), "queue.db"), clock)
+	e.enqueue(t, out("telegram:a", "a1"))
+	f := newFake(clock, nil)
+	f.refs = map[string]string{"a1:p0": "1", "a1:p1": "2", "a1:p2": "3"}
+	e.start(t, partFake{f})
+	e.runUntil(t, t0.Add(time.Minute), func() bool { return len(f.delivered()) == 3 })
+	for _, ref := range []string{"1", "2", "3"} {
+		got, found, err := e.q.SentByRef(context.Background(), "telegram", "telegram:a", ref)
+		if err != nil || !found || got.Text != "secret family text" {
+			t.Fatalf("ref %s: found %v, %+v, %v", ref, found, got, err)
+		}
+	}
+}
+
+// R-DLV-14: a buttons-only edit and a toast change no message's text, so they
+// record no ref.
+func TestSenderRecordsNoRefForButtonsOnlyOrToast(t *testing.T) {
+	clock := newVClock()
+	e := openEnv(t, filepath.Join(t.TempDir(), "queue.db"), clock)
+	buttons := out("telegram:a", "b1")
+	buttons.Text = ""
+	toast := out("telegram:a", "t1")
+	toast.Ack = "done"
+	e.enqueue(t, buttons, toast)
+	f := newFake(clock, nil)
+	f.refs = map[string]string{"b1": "7", "t1": "8"}
+	e.start(t, f)
+	e.runUntil(t, t0.Add(time.Minute), func() bool { return len(f.delivered()) == 2 })
+	for _, ref := range []string{"7", "8"} {
+		if _, found, err := e.q.SentByRef(context.Background(), "telegram", "telegram:a", ref); err != nil || found {
+			t.Fatalf("ref %s: found %v, %v; want none", ref, found, err)
+		}
+	}
+}
+
 func TestWakeTriggersImmediateSend(t *testing.T) {
 	e := newEnv(t)
 	tr := newFake(e.clock, nil)

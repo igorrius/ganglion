@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/backoff"
+	txt "github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/transport"
 )
 
@@ -300,6 +302,9 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	if m.Quote != nil {
 		msg.Quote = m.Quote.Text
 	}
+	if r := m.ReplyToMessage; r != nil && !topicRoot(m, r) {
+		msg.Reply = t.replied(botID, m.From.ID, r)
+	}
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		return event.Event{}, false // a struct of strings always marshals
@@ -318,6 +323,36 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 		Payload: payload,
 		At:      at,
 	}, true
+}
+
+// topicRoot reports whether r, the message m replies to, is the root of m's forum
+// topic: Telegram points every message in a topic that is no explicit reply at the
+// service message that created the topic, whose id is the topic's. That is no
+// reply, so it brings no note and no taint.
+func topicRoot(m, r *message) bool {
+	return (m.IsTopicMessage && r.MessageID == m.MessageThreadID) || present(r.ForumTopicCreated)
+}
+
+// replied is what a reply answers, as Telegram reports it (R-DLV-13). Its text is
+// read the way an incoming message's is, cut, and its files only noted.
+func (t *Transport) replied(botID, sender int64, r *message) *event.Replied {
+	out := &event.Replied{Ref: strconv.FormatInt(r.MessageID, 10), HasFile: len(files(r)) > 0}
+	if r.Date > 0 {
+		out.At = time.Unix(r.Date, 0).UTC()
+	}
+	if r.From != nil {
+		out.ByBot = r.From.ID == botID
+		out.BySender = r.From.ID == sender && !r.From.IsBot
+	}
+	// A rich message comes from a bot (R-DLV-12): someone else's words, unless it is
+	// this node's bot's own, which the agent reads from its outbox.
+	out.Forwarded = present(r.ForwardOrigin) || r.IsAutomaticForward || (present(r.RichMessage) && !out.ByBot)
+	body := cmp.Or(r.Text, r.Caption)
+	if body == "" && present(r.RichMessage) {
+		body = readRich(r.RichMessage) // not counted: richText's metric is for messages to the bot
+	}
+	out.Text = txt.Truncate(body, event.MaxRepliedRunes)
+	return out
 }
 
 // Send implements transport.Transport. A message with Ack answers that

@@ -197,7 +197,10 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	ctx, span := s.tracer.Start(ctx, "outbox.send", trace.WithAttributes(
 		attribute.String("message.id", msg.ID), attribute.String("transport", msg.Transport), attribute.Int("parts", len(parts))))
 	defer span.End()
-	ref := "" // of the last part with one, which holds a message's buttons
+	// The last part is recorded with the message by Sent, in one transaction; the
+	// ref the outbox keeps is the last part's with one, which holds the buttons.
+	// A message resumed with every part recorded is only marked sent.
+	ref, shown := "", ""
 	for i := p.PartsSent; i < len(parts); i++ {
 		r, err := t.Send(ctx, parts[i])
 		if err != nil {
@@ -206,16 +209,15 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 			}
 			return s.failed(ctx, log, p, err)
 		}
-		if r != "" {
-			ref = r
+		ref, shown = r, shownRef(parts[i], r)
+		if i == len(parts)-1 {
+			break
 		}
-		if len(parts) > 1 {
-			if err := s.ob.PartSent(ctx, msg.ID, i+1); err != nil {
-				return true, err
-			}
+		if err := s.ob.PartSent(ctx, msg.ID, i+1, ref, shown); err != nil {
+			return true, err
 		}
 	}
-	if err := s.ob.Sent(ctx, msg.ID, ref); err != nil {
+	if err := s.ob.Sent(ctx, msg.ID, ref, shown); err != nil {
 		return true, err
 	}
 	s.countSent(ctx, msg)
@@ -298,4 +300,14 @@ func (s *Sender) failed(ctx context.Context, log *slog.Logger, p queue.Pending, 
 		log.Warn("outbox: send failed, will retry", "err", sendErr, "not_before", notBefore)
 		return true, s.ob.Retry(ctx, p.Msg.ID, notBefore, sendErr.Error())
 	}
+}
+
+// shownRef is the ref a reply to this part finds it by: none for a toast, which
+// changes no message, or for a message with no text of its own (an edit of the
+// buttons only) (R-DLV-14).
+func shownRef(part event.Outgoing, ref string) string {
+	if part.Text == "" || part.Ack != "" {
+		return ""
+	}
+	return ref
 }

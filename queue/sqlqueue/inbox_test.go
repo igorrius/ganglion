@@ -419,7 +419,7 @@ func TestPrune(t *testing.T) {
 	}
 
 	f.clock.Advance(24 * time.Hour)
-	n, err := f.q.Prune(ctx, retention)
+	n, err := f.q.Prune(ctx, retention, sqlqueue.RefRetention)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -658,5 +658,33 @@ func TestCompleteIgnoresTakenFromAnotherConversation(t *testing.T) {
 	}
 	if n := count(t, f, `SELECT count(*) FROM inbox WHERE idem_key = 'b1' AND status = 'pending' AND taken_by IS NULL`); n != 1 {
 		t.Fatalf("b1 pending and untaken: %d rows", n)
+	}
+}
+
+// R-DLV-14: a message stored with no origin under a context that carries one gets
+// it; one with its own keeps it.
+func TestEnqueueStampsTheContextsOrigin(t *testing.T) {
+	f := setup(t)
+	own := event.Origin{Kind: event.OriginReminder, Session: "s0"}
+	ctx := event.WithOrigin(context.Background(), func() event.Origin {
+		return event.Origin{Kind: event.OriginTurn, Session: "s1", Tainted: true}
+	})
+	bare, kept := reply("telegram:1", "a"), reply("telegram:1", "b")
+	kept.Origin = &own
+	if err := f.q.Enqueue(ctx, bare, kept); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]event.Origin{"a": {Kind: event.OriginTurn, Session: "s1", Tainted: true}, "b": own} {
+		var body string
+		if err := f.db.QueryRow(`SELECT body FROM outbox WHERE idem_key = ?`, key).Scan(&body); err != nil {
+			t.Fatal(err)
+		}
+		var got event.Outgoing
+		if err := json.Unmarshal([]byte(body), &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Origin == nil || *got.Origin != want {
+			t.Errorf("%s: origin %+v, want %+v", key, got.Origin, want)
+		}
 	}
 }

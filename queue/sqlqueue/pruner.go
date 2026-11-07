@@ -25,8 +25,8 @@ func OpenOwned(ctx context.Context, db *sql.DB, logger *slog.Logger, opts ...Opt
 	return q, nil
 }
 
-// Pruner deletes finished queue rows older than Retention, at start and
-// then every Every. It is a node component.
+// Pruner deletes finished queue rows older than Retention and refs older
+// than RefRetention, at start and then every Every. It is a node component.
 type Pruner struct {
 	Queue *Queue
 	Every time.Duration
@@ -40,7 +40,7 @@ func (Pruner) Name() string { return "prune" }
 // and tried again next time.
 func (p Pruner) Run(ctx context.Context) error {
 	for {
-		if n, err := p.Queue.Prune(ctx, Retention); err != nil {
+		if n, err := p.Queue.Prune(ctx, Retention, RefRetention); err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}
