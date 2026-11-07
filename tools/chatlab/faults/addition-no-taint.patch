@@ -1,10 +1,10 @@
 diff --git a/agent/additions.go b/agent/additions.go
 --- a/agent/additions.go
 +++ b/agent/additions.go
-@@ -148,9 +148,7 @@
+@@ -154,9 +154,7 @@ func (a *Agent) join(ctx context.Context, t *turn, msgs, added []provider.Messag
  	defer t.mu.Unlock()
- 	for _, add := range adds {
- 		content, outside := userContent(add.msg)
+ 	for i, add := range adds {
+ 		content, outside := userContent(add.msg, a.classifyReply(ctx, t, add.msg, got[i]))
 -		if outside {
 -			t.state.Tainted = true
 -		}
