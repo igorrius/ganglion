@@ -26,6 +26,12 @@ var migrations embed.FS
 // cannot come back from it.
 const Retention = 7 * 24 * time.Hour
 
+// RefRetention is how long Prune callers keep the refs of delivered messages
+// with the copy of what a reply to one needs (R-DLV-13, ADR-0055): a reply
+// reaches a message up to 90 days old, though the outbox keeps the message
+// itself only for Retention.
+const RefRetention = 90 * 24 * time.Hour
+
 // Queue is a queue.Queue backed by SQLite.
 type Queue struct {
 	db          *sql.DB
@@ -105,16 +111,21 @@ func (q *Queue) State(ctx context.Context, conv string) (json.RawMessage, error)
 }
 
 // Prune deletes inbox rows that are done or expired and outbox rows that
-// are sent or failed, finished more than olderThan ago. Pending rows are
-// never deleted. It returns the number of rows removed.
-func (q *Queue) Prune(ctx context.Context, olderThan time.Duration) (int, error) {
-	cutoff := q.now().Add(-olderThan).UnixMilli()
+// are sent or failed, finished more than olderThan ago, and the refs of
+// delivered messages sent more than refsOlderThan ago. Pending rows are never
+// deleted. It returns the number of rows removed.
+func (q *Queue) Prune(ctx context.Context, olderThan, refsOlderThan time.Duration) (int, error) {
+	now := q.now()
 	var total int64
-	for _, stmt := range []string{
-		`DELETE FROM inbox WHERE status IN ('done', 'expired') AND done_ms < ?`,
-		`DELETE FROM outbox WHERE status IN ('sent', 'failed') AND done_ms < ?`,
+	for _, p := range []struct {
+		stmt   string
+		cutoff int64
+	}{
+		{`DELETE FROM inbox WHERE status IN ('done', 'expired') AND done_ms < ?`, now.Add(-olderThan).UnixMilli()},
+		{`DELETE FROM outbox WHERE status IN ('sent', 'failed') AND done_ms < ?`, now.Add(-olderThan).UnixMilli()},
+		{`DELETE FROM outbox_refs WHERE sent_ms < ?`, now.Add(-refsOlderThan).UnixMilli()},
 	} {
-		res, err := q.db.ExecContext(ctx, stmt, cutoff)
+		res, err := q.db.ExecContext(ctx, p.stmt, p.cutoff)
 		if err != nil {
 			return int(total), fmt.Errorf("sqlqueue: prune: %w", err)
 		}

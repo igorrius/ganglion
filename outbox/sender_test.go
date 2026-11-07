@@ -452,7 +452,7 @@ func TestSenderRecordsEveryPartsRef(t *testing.T) {
 	e.runUntil(t, t0.Add(time.Minute), func() bool { return len(f.delivered()) == 3 })
 	for _, ref := range []string{"1", "2", "3"} {
 		got, found, err := e.q.SentByRef(context.Background(), "telegram", "telegram:a", ref)
-		if err != nil || !found || got.IdemKey != "a1" {
+		if err != nil || !found || got.Text != "secret family text" {
 			t.Fatalf("ref %s: found %v, %+v, %v", ref, found, got, err)
 		}
 	}

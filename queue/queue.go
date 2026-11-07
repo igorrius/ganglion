@@ -83,8 +83,10 @@ type Outbox interface {
 	// so a resumed sender does not send them again, and that ref, when not "",
 	// now shows this message's text (R-DLV-14).
 	PartSent(ctx context.Context, id string, parts int, ref string) error
-	// SentByRef is the delivered message that ref on transport in conv shows,
-	// found false when no row has that ref (R-DLV-14).
+	// SentByRef is what a reply needs of the delivered message a part of which
+	// ref on transport in conv shows: its Text, cut at 2,000 characters, and its
+	// Origin, kept up to 90 days though the message itself may be pruned
+	// sooner (R-DLV-13). Found is false when no ref matches (R-DLV-14).
 	SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, bool, error)
 	// Sent marks the message delivered; ref is what the transport calls it,
 	// "" when it names none.

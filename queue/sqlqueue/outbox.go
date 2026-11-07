@@ -106,40 +106,57 @@ func (q *Queue) PartSent(ctx context.Context, id string, parts int, ref string) 
 		if n == 0 {
 			return fmt.Errorf("sqlqueue: part sent %s: no pending message with this id", id)
 		}
-		return noteRef(ctx, c, id, ref)
+		return noteRef(ctx, c, id, ref, q.now().UnixMilli())
 	})
 }
 
-// noteRef points ref at the outbox row id, "" being no ref.
-func noteRef(ctx context.Context, c *sql.Conn, id, ref string) error {
+// refTextRunes is how much of a message's text its ref keeps for a reply
+// (R-DLV-13); the agent cuts what it shows the model to the same length.
+const refTextRunes = 2000
+
+// noteRef points ref at the outbox row id and copies what a reply needs from
+// it, its text cut at refTextRunes and its origin, with the time now, so the
+// ref outlives the row (RefRetention); "" is no ref. A ref noted again, by an
+// edit with text, takes the edit's copy.
+func noteRef(ctx context.Context, c *sql.Conn, id, ref string, now int64) error {
 	if ref == "" {
 		return nil
 	}
 	_, err := c.ExecContext(ctx,
-		`INSERT INTO outbox_refs (transport, conv, ref, outbox_id)
-		 SELECT transport, conv, ?, id FROM outbox WHERE id = ?
-		 ON CONFLICT (transport, conv, ref) DO UPDATE SET outbox_id = excluded.outbox_id`, ref, id)
+		`INSERT INTO outbox_refs (transport, conv, ref, outbox_id, text, origin, sent_ms)
+		 SELECT transport, conv, ?, id, coalesce(substr(json_extract(body, '$.Text'), 1, ?), ''),
+		        json_extract(body, '$.Origin'), ?
+		 FROM outbox WHERE id = ?
+		 ON CONFLICT (transport, conv, ref) DO UPDATE SET outbox_id = excluded.outbox_id,
+		   text = excluded.text, origin = excluded.origin, sent_ms = excluded.sent_ms`,
+		ref, refTextRunes, now, id)
 	if err != nil {
 		return fmt.Errorf("sqlqueue: ref of %s: %w", id, err)
 	}
 	return nil
 }
 
-// SentByRef implements queue.Outbox.
+// SentByRef implements queue.Outbox. It reads the copy the ref keeps, so it
+// finds a message the outbox has pruned: its Text and Origin, nothing else.
 func (q *Queue) SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, bool, error) {
-	var body string
+	var (
+		m      event.Outgoing
+		origin sql.NullString
+	)
 	err := q.db.QueryRowContext(ctx,
-		`SELECT o.body FROM outbox_refs r JOIN outbox o ON o.id = r.outbox_id
-		 WHERE r.transport = ? AND r.conv = ? AND r.ref = ?`, transport, conv, ref).Scan(&body)
+		`SELECT text, origin FROM outbox_refs WHERE transport = ? AND conv = ? AND ref = ?`,
+		transport, conv, ref).Scan(&m.Text, &origin)
 	if errors.Is(err, sql.ErrNoRows) {
 		return event.Outgoing{}, false, nil
 	}
 	if err != nil {
 		return event.Outgoing{}, false, fmt.Errorf("sqlqueue: message %s in %s: %w", ref, conv, err)
 	}
-	var m event.Outgoing
-	if err := json.Unmarshal([]byte(body), &m); err != nil {
-		return event.Outgoing{}, false, fmt.Errorf("sqlqueue: message %s in %s: %w", ref, conv, err)
+	if origin.Valid {
+		m.Origin = new(event.Origin)
+		if err := json.Unmarshal([]byte(origin.String), m.Origin); err != nil {
+			return event.Outgoing{}, false, fmt.Errorf("sqlqueue: origin of message %s in %s: %w", ref, conv, err)
+		}
 	}
 	return m, true, nil
 }

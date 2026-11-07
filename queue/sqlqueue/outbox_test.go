@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/queue"
+	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/transport"
 )
 
@@ -300,10 +304,10 @@ func TestSentByRefFindsEveryPart(t *testing.T) {
 func TestSentByRefFollowsEditsWithText(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
-	send := func(key, text, ref string) {
+	send := func(key, text, ref string, o *event.Origin) {
 		t.Helper()
 		m := reply("telegram:1", key)
-		m.Text = text
+		m.Text, m.Origin = text, o
 		if err := f.q.Enqueue(ctx, m); err != nil {
 			t.Fatal(err)
 		}
@@ -315,11 +319,103 @@ func TestSentByRefFollowsEditsWithText(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	send("plan:1:show", "1. read", "20")
-	send("plan:1:v2", "1. read \u2713", "20")
-	send("q:1:buttons", "", "")
+	send("plan:1:show", "1. read", "20", &event.Origin{Kind: event.OriginTurn, Session: "s1", Tainted: true})
+	send("plan:1:v2", "1. read \u2713", "20", &event.Origin{Kind: event.OriginTurn, Session: "s2"})
+	send("q:1:buttons", "", "", nil)
+	f.clock.Advance(sqlqueue.Retention + time.Hour)
+	if _, err := f.q.Prune(ctx, sqlqueue.Retention, sqlqueue.RefRetention); err != nil {
+		t.Fatal(err)
+	}
 	got, found, err := f.q.SentByRef(ctx, "telegram", "telegram:1", "20")
-	if err != nil || !found || got.Text != "1. read \u2713" {
-		t.Fatalf("found %v, %+v, %v", found, got, err)
+	want := event.Outgoing{Text: "1. read \u2713", Origin: &event.Origin{Kind: event.OriginTurn, Session: "s2"}}
+	if err != nil || !found || !reflect.DeepEqual(got, want) {
+		t.Fatalf("found %v, %+v, %v; want the edit's copy", found, got, err)
+	}
+}
+
+// sendWithRef stores m and delivers it as one part that ref shows.
+func sendWithRef(t *testing.T, f fixture, m event.Outgoing, ref string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := f.q.Enqueue(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	id := dueID(t, f)
+	if err := f.q.PartSent(ctx, id, 1, ref); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.q.Sent(ctx, id, ref); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// R-DLV-13: a reply reaches a message up to 90 days old, while the outbox keeps
+// the message itself for 7: the ref keeps a copy of its text and origin.
+func TestSentByRefOutlivesTheOutbox(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	m := reply("telegram:1", "k1:reply:0")
+	m.Text = "Apples are red."
+	m.Origin = &event.Origin{Kind: event.OriginTurn, Session: "s1", Tainted: true}
+	sendWithRef(t, f, m, "10")
+	sendWithRef(t, f, reply("telegram:1", "alert:1"), "11") // stored with no origin
+
+	f.clock.Advance(sqlqueue.Retention + time.Hour)
+	if _, err := f.q.Prune(ctx, sqlqueue.Retention, sqlqueue.RefRetention); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, f, `SELECT count(*) FROM outbox`); n != 0 {
+		t.Fatalf("outbox rows after the prune = %d, want 0", n)
+	}
+	got, found, err := f.q.SentByRef(ctx, "telegram", "telegram:1", "10")
+	if err != nil || !found {
+		t.Fatalf("after the outbox's prune: found %v, %v", found, err)
+	}
+	want := event.Outgoing{Text: "Apples are red.", Origin: m.Origin}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	got, found, err = f.q.SentByRef(ctx, "telegram", "telegram:1", "11")
+	if err != nil || !found || got.Origin != nil || got.Text != "hi" {
+		t.Fatalf("a message with no origin: found %v, %+v, %v", found, got, err)
+	}
+}
+
+// A ref is kept RefRetention, then pruned with its copy.
+func TestRefsArePrunedAfterRefRetention(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	sendWithRef(t, f, reply("telegram:1", "old"), "10")
+	f.clock.Advance(30 * 24 * time.Hour)
+	sendWithRef(t, f, reply("telegram:1", "new"), "11")
+
+	f.clock.Advance(sqlqueue.RefRetention - 30*24*time.Hour + time.Hour)
+	n, err := f.q.Prune(ctx, sqlqueue.Retention, sqlqueue.RefRetention)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 { // both outbox rows and the old ref
+		t.Fatalf("Prune removed %d rows, want 3", n)
+	}
+	if c := count(t, f, `SELECT count(*) FROM outbox_refs WHERE ref = '10'`); c != 0 {
+		t.Fatalf("a ref older than RefRetention is kept")
+	}
+	if _, found, err := f.q.SentByRef(ctx, "telegram", "telegram:1", "10"); err != nil || found {
+		t.Fatalf("a ref older than RefRetention: found %v, %v", found, err)
+	}
+	if _, found, err := f.q.SentByRef(ctx, "telegram", "telegram:1", "11"); err != nil || !found {
+		t.Fatalf("a younger ref: found %v, %v", found, err)
+	}
+}
+
+// The copy is cut at 2,000 characters, counted as runes.
+func TestRefCopyIsCut(t *testing.T) {
+	f := setup(t)
+	m := reply("telegram:1", "long")
+	m.Text = strings.Repeat("я", 5000)
+	sendWithRef(t, f, m, "10")
+	got, found, err := f.q.SentByRef(context.Background(), "telegram", "telegram:1", "10")
+	if err != nil || !found || got.Text != strings.Repeat("я", 2000) {
+		t.Fatalf("found %v, %d runes, %v; want 2000", found, utf8.RuneCountInString(got.Text), err)
 	}
 }

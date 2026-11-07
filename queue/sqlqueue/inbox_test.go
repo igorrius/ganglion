@@ -419,7 +419,7 @@ func TestPrune(t *testing.T) {
 	}
 
 	f.clock.Advance(24 * time.Hour)
-	n, err := f.q.Prune(ctx, retention)
+	n, err := f.q.Prune(ctx, retention, sqlqueue.RefRetention)
 	if err != nil {
 		t.Fatal(err)
 	}
