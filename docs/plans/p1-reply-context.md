@@ -812,9 +812,9 @@ Expected: PASS; `reply-topic` 3 of 3. Ask the owner before any `make lab-all`.
 **Files:** `docs/architecture/05-code-map.md`, `docs/README.md`, `docs/plans/p1-reply-context.md`,
 `docs/adr/0055-a-reply-carries-the-replied-messages-origin.md` (status only, after the owner's look).
 
-- [ ] **Step 1: The whole branch's review** with superpowers:requesting-code-review, against the review
+- [x] **Step 1: The whole branch's review** with superpowers:requesting-code-review, against the review
   focus above and ADR-0055's abuse cases; fix what it finds, each fix with its test.
-- [ ] **Step 2: Measure:** `make crash-agent` with 200 `kill -9` (every message answered, in order) and
+- [x] **Step 2: Measure:** `make crash-agent` with 200 `kill -9` (every message answered, in order) and
   `make memory` (the binary's size and RSS after 1,000 turns against 46.1 MB and 44.2 MB); write the
   numbers in `docs/README.md`.
 - [ ] **Step 3: The owner's look on the test bot** (`make live-agent`): a reply to an answer on the first

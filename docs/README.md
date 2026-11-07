@@ -221,11 +221,23 @@ Start here when coming back to the project.
     a reply works, a tree of links keeps its levels and links in both kinds of message, and the bot's own rich answer
     forwarded back is read and taints the session. Telegram refused nothing. An empty table cell has not been seen
     live; a refusal of it would go the ordinary way. Next: knowing which message a reply answers, then `/status`.
-  - **Knowing which message a reply answers, designed 2026-11-07**
-    ([design](plans/p1-reply-context-design.md),
+  - **Knowing which message a reply answers, built on branch `reply-context`, waiting for the owner's look**
+    ([design](plans/p1-reply-context-design.md), [plan](plans/p1-reply-context.md),
     [ADR-0055](adr/0055-a-reply-carries-the-replied-messages-origin.md), Proposed; R-DLV-13, R-DLV-14):
-    a reply to the bot's messages or the owner's own, of any age, tells the agent what it answers, and the
-    taint follows the origin the node's outbox recorded for the replied message. The plan comes next.
+    - a reply to the bot's messages or the owner's own, up to 90 days old, tells the agent what it answers:
+      a short pointer for a message of the current session, the text for any other;
+    - every message the node sends records its origin (session, taint, kind); `outbox_refs` keeps every
+      delivered part's ref with a copy of the text and origin for 90 days, while the outbox keeps 7;
+    - the taint follows that origin: a reply to a clean message taints nothing, so a quote of the bot's own
+      clean answer no longer taints; a tainted origin, no origin, a forged copy, a forward or a failed lookup
+      taints; the taint is decided before "current session";
+    - a forum topic's root is not a reply.
+    - Tests, the task reviews and the whole branch's review pass. Chatlab: `mech-reply-origin` 3 of 3 on the
+      scripted model, `reply-topic` 3 of 3 on the real model, and the seeded fault `reply-origin-taint` turns
+      it red. `make crash-agent` holds with 200 `kill -9`; 46.2 MB binary, 45.5 MB RSS after 1,000 turns
+      (Rich Messages: 46.1 and 44.2).
+    - Open: the owner's look on the test bot; `make lab` recommends a full run because `agent/stages.go`
+      changed (`make lab-all` or `make lab-skip-full`, the owner's call).
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
@@ -275,6 +287,17 @@ Start here when coming back to the project.
       - an ordinary message still makes a link from any scheme, `tg://` included;
       - a table inside a quote or a list above the limits is cut by length, without its header;
       - deploying this, with its default on, while a split message is in flight may skip or repeat a part.
+    - Replies (ADR-0055):
+      - a reply to an attachment sent without a caption, or to a piece of a table the transport cut into
+        several messages, is not found and counts as outside content;
+      - an approved parked call after `/new` is stored with the new session's clean origin (the owner approved
+        its text); a reply to a folded question reads its status line, not the question;
+      - alerts, the give-up reply and notifiers store no origin, so a reply to them taints;
+      - no test of the CLI tool path's origin or of the early quote and acknowledgement;
+      - `ganglion.replies` counts again on a retried turn;
+      - after a crash the last part of a split message may be sent again (at least once, as before);
+      - `noteRef` reads the whole outbox body, attachment bytes included, to copy the text;
+      - a tainted replied message with only a file has no "a message with a file" mark.
     - M3c: an admin alert at start when a stored module falls back or a
       skill is not loaded (both are logged and visible otherwise); pin the
       GitHub Actions by commit SHA in `modules-release.yml`; prune old
