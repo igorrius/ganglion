@@ -221,6 +221,11 @@ Start here when coming back to the project.
     a reply works, a tree of links keeps its levels and links in both kinds of message, and the bot's own rich answer
     forwarded back is read and taints the session. Telegram refused nothing. An empty table cell has not been seen
     live; a refusal of it would go the ordinary way. Next: knowing which message a reply answers, then `/status`.
+  - **Knowing which message a reply answers, designed 2026-11-07**
+    ([design](plans/p1-reply-context-design.md),
+    [ADR-0055](adr/0055-a-reply-carries-the-replied-messages-origin.md), Proposed; R-DLV-13, R-DLV-14):
+    a reply to the bot's messages or the owner's own, of any age, tells the agent what it answers, and the
+    taint follows the origin the node's outbox recorded for the replied message. The plan comes next.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that

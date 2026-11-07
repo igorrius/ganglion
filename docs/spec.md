@@ -150,7 +150,7 @@ the "Not now" list (section 14); the phase does not grow.
 | `idemKey` | Idempotency key of an event or call |
 | `ttl` | Command lifetime; an expired command is not executed |
 | Escalation | An event from a module to the agent: "a model is needed" |
-| Tainted session | A session that external content (a web page, a search result, a forwarded message, a quoted message or a reply to a message in another chat) has entered; side effects in it need confirmation (R-POL-6) |
+| Tainted session | A session that external content (a web page, a search result, a forwarded message, a quoted or replied message not written by the owner or by a clean session, or a reply to a message in another chat) has entered; side effects in it need confirmation (R-POL-6) |
 | Grant | What a scheduled agent task may do, fixed and approved by the owner when the task is created (R-POL-8) |
 
 ## 5. Architecture
@@ -307,6 +307,17 @@ Guarantee: **at-least-once + idempotency.**
   ([ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md)).
 - **R-DLV-12.** A rich message sent to the bot is read: its text comes to the agent as outside content,
   with or without a forward's origin, and one with nothing readable is still noted, never dropped silently.
+- **R-DLV-13.** A reply tells the agent which message it answers, for the bot's messages and the
+  sender's own, of any age, a task's report and a reminder included: a short pointer to a message of the
+  current session, which the history already holds; the time, the source and the text, cut at about
+  2,000 characters, of any other. A forward, another person's message, a message in another chat or one
+  the node cannot find comes as outside content
+  ([design](plans/p1-reply-context-design.md),
+  [ADR-0055](adr/0055-a-reply-carries-the-replied-messages-origin.md)).
+- **R-DLV-14.** Every message the node sends records its origin: the session that made it and whether
+  that session was tainted. The origin of a reply to the node's message is read from its own outbox by any part's ref, never
+  from the channel's copy. A failed lookup never fails or delays the turn: the channel's copy is then
+  outside content.
 
 ### 7.2. Conversations, history and the agent loop
 
@@ -646,7 +657,9 @@ human); module install — tests + reviewer + admin.
   web page, a search result, a forwarded message (a quote of another
   message and a reply to a message in another chat count too: the
   transport marks them and the agent wraps that text as data), a
-  scheduled task's fetch.
+  scheduled task's fetch. A reply to, or a quote of, a message the node sent
+  taints only when the session that wrote it was tainted, or its origin is
+  unknown (R-DLV-14, ADR-0055).
   - The taint is per session, not per turn: the content stays in the
     history and would steer the next turn.
   - It lasts until the session ends (`/new`, idle reset, R-AGT-6) and
@@ -1432,10 +1445,6 @@ Reviewed at each gate.
     After a plan says it finished, the owner waited about 10 s for the long report with nothing to show for it
     (2026-11-06): a message such as "…" that the answer then replaces would fill that gap. `editMessageText`
     takes a rich message, but the first form and its edit are for a design to settle.
-  - Knowing which message a reply answers: the transport reads only a selected quote, so the agent does not
-    know which message the person replied to, while a session can hold several topics (owner, 2026-11-06).
-    A reply to the bot's own message in the current session adds nothing outside; an older one or another
-    person's needs a security pass.
   - A forward with a comment: Telegram delivers the comment first and the forward right after, in the same
     second. The turn starts on the comment alone and answers that it sees no forward; the forward then joins, the first
     answer folds (R-LIVE-1) and the second is right. Nothing is lost, but it costs a model call and a useless folded
