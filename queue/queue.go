@@ -80,17 +80,19 @@ type Outbox interface {
 	// earliest retry time among conversations not due yet (zero if none).
 	Due(ctx context.Context, limit int) (due []Pending, next time.Time, err error)
 	// PartSent records that the first parts parts of a message are delivered,
-	// so a resumed sender does not send them again, and that ref, when not "",
-	// now shows this message's text (R-DLV-14).
-	PartSent(ctx context.Context, id string, parts int, ref string) error
+	// so a resumed sender does not send them again; ref, when not "", is what
+	// the transport calls the last of them, kept as the message's until another
+	// is given; shown, when not "", now shows this message's text (R-DLV-14).
+	PartSent(ctx context.Context, id string, parts int, ref, shown string) error
 	// SentByRef is what a reply needs of the delivered message a part of which
 	// ref on transport in conv shows: its Text, cut at 2,000 characters, and its
 	// Origin, kept up to 90 days though the message itself may be pruned
 	// sooner (R-DLV-13). Found is false when no ref matches (R-DLV-14).
 	SentByRef(ctx context.Context, transport, conv, ref string) (event.Outgoing, bool, error)
-	// Sent marks the message delivered; ref is what the transport calls it,
-	// "" when it names none.
-	Sent(ctx context.Context, id, ref string) error
+	// Sent marks the message delivered, its last part as PartSent would record
+	// it: ref is what the transport calls that part, "" keeping the ref an
+	// earlier part recorded; shown, when not "", now shows this message's text.
+	Sent(ctx context.Context, id, ref, shown string) error
 	// SentRef is the ref of the delivered message with idemKey, "" when it
 	// is unknown, not delivered yet or has no ref.
 	SentRef(ctx context.Context, idemKey string) (string, error)

@@ -132,7 +132,7 @@ func TestDueNextIsEarliestRetry(t *testing.T) {
 func TestSentMovesConversationOn(t *testing.T) {
 	f := setup(t)
 	enqueue(t, f, reply("telegram:a", "a1"), reply("telegram:a", "a2"))
-	if err := f.q.Sent(context.Background(), idOf(t, f, "a1"), ""); err != nil {
+	if err := f.q.Sent(context.Background(), idOf(t, f, "a1"), "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := keys(first(due(t, f, 100))); !slices.Equal(got, []string{"a2"}) {
@@ -162,13 +162,13 @@ func TestMarkingAFinishedMessageFails(t *testing.T) {
 	ctx := context.Background()
 	enqueue(t, f, reply("telegram:a", "a1"))
 	id := idOf(t, f, "a1")
-	if err := f.q.Sent(ctx, id, ""); err != nil {
+	if err := f.q.Sent(ctx, id, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.q.Retry(ctx, id, t0, "x"); err == nil {
 		t.Error("Retry of a sent message succeeded")
 	}
-	if err := f.q.Sent(ctx, "no-such-id", ""); err == nil {
+	if err := f.q.Sent(ctx, "no-such-id", "", ""); err == nil {
 		t.Error("Sent of an unknown id succeeded")
 	}
 }
@@ -208,7 +208,7 @@ func TestPartSentSurvivesReopen(t *testing.T) {
 	clock := &fakeClock{now: t0}
 	f := openAt(t, path, clock)
 	enqueue(t, f, reply("telegram:a", "a1"))
-	if err := f.q.PartSent(context.Background(), idOf(t, f, "a1"), 2, ""); err != nil {
+	if err := f.q.PartSent(context.Background(), idOf(t, f, "a1"), 2, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.db.Close(); err != nil {
@@ -250,7 +250,7 @@ func TestSentKeepsTheRef(t *testing.T) {
 	if ref, err := f.q.SentRef(ctx, "k"); err != nil || ref != "" {
 		t.Fatalf("before sending: %q, %v", ref, err)
 	}
-	if err := f.q.Sent(ctx, idOf(t, f, "k"), "77"); err != nil {
+	if err := f.q.Sent(ctx, idOf(t, f, "k"), "77", ""); err != nil {
 		t.Fatal(err)
 	}
 	if ref, err := f.q.SentRef(ctx, "k"); err != nil || ref != "77" {
@@ -258,6 +258,24 @@ func TestSentKeepsTheRef(t *testing.T) {
 	}
 	if ref, err := f.q.SentRef(ctx, "nope"); err != nil || ref != "" {
 		t.Fatalf("an unknown key: %q, %v", ref, err)
+	}
+}
+
+// A message resumed with every part recorded is marked sent with no ref of its
+// own: it keeps the ref its last part recorded.
+func TestSentKeepsAPartsRef(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	enqueue(t, f, reply("telegram:a", "k"))
+	id := idOf(t, f, "k")
+	if err := f.q.PartSent(ctx, id, 1, "77", "77"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.q.Sent(ctx, id, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if ref, err := f.q.SentRef(ctx, "k"); err != nil || ref != "77" {
+		t.Fatalf("SentRef = %q, %v; want the part's 77", ref, err)
 	}
 }
 
@@ -280,12 +298,10 @@ func TestSentByRefFindsEveryPart(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := dueID(t, f)
-	for i, ref := range []string{"10", "11"} {
-		if err := f.q.PartSent(ctx, id, i+1, ref); err != nil {
-			t.Fatal(err)
-		}
+	if err := f.q.PartSent(ctx, id, 1, "10", "10"); err != nil {
+		t.Fatal(err)
 	}
-	if err := f.q.Sent(ctx, id, "11"); err != nil {
+	if err := f.q.Sent(ctx, id, "11", "11"); err != nil {
 		t.Fatal(err)
 	}
 	for _, ref := range []string{"10", "11"} {
@@ -311,11 +327,7 @@ func TestSentByRefFollowsEditsWithText(t *testing.T) {
 		if err := f.q.Enqueue(ctx, m); err != nil {
 			t.Fatal(err)
 		}
-		id := dueID(t, f)
-		if err := f.q.PartSent(ctx, id, 1, ref); err != nil {
-			t.Fatal(err)
-		}
-		if err := f.q.Sent(ctx, id, "20"); err != nil {
+		if err := f.q.Sent(ctx, dueID(t, f), "20", ref); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -340,11 +352,7 @@ func sendWithRef(t *testing.T, f fixture, m event.Outgoing, ref string) {
 	if err := f.q.Enqueue(ctx, m); err != nil {
 		t.Fatal(err)
 	}
-	id := dueID(t, f)
-	if err := f.q.PartSent(ctx, id, 1, ref); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.q.Sent(ctx, id, ref); err != nil {
+	if err := f.q.Sent(ctx, dueID(t, f), ref, ref); err != nil {
 		t.Fatal(err)
 	}
 }

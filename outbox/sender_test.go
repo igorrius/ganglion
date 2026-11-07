@@ -441,6 +441,47 @@ func TestSenderRecordsTheRefOfTheButtons(t *testing.T) {
 	}
 }
 
+// A message whose one part was delivered and recorded before the process died is
+// marked sent on resume without losing the part's ref, so a later edit of it
+// still finds the message.
+func TestResumedMessageKeepsItsPartsRef(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	edit := out("telegram:a", "a2")
+	edit.EditOf = "a1"
+	e.enqueue(t, out("telegram:a", "a1"), edit)
+	ps, _, err := e.q.Due(ctx, 1)
+	if err != nil || len(ps) != 1 {
+		t.Fatalf("due: %+v, %v", ps, err)
+	}
+	// The sender before the crash delivered a1's only part and recorded it.
+	if err := e.q.PartSent(ctx, ps[0].Msg.ID, 1, "77", "77"); err != nil {
+		t.Fatal(err)
+	}
+
+	var got string
+	f := newFake(e.clock, func(m event.Outgoing, _ int) error {
+		if m.IdemKey == "a2" {
+			got = m.Edit
+		}
+		return nil
+	})
+	e.start(t, f)
+	e.runUntil(t, t0.Add(time.Minute), func() bool {
+		ps, _, err := e.q.Due(ctx, 10)
+		return err == nil && len(ps) == 0
+	})
+	if keys := f.delivered(); !slices.Equal(keys, []string{"a2"}) {
+		t.Fatalf("delivered %v, want only the edit", keys)
+	}
+	if ref, err := e.q.SentRef(ctx, "a1"); err != nil || ref != "77" {
+		t.Fatalf("SentRef(a1) = %q, %v; want the delivered part's 77", ref, err)
+	}
+	if got != "77" {
+		t.Fatalf("edit of %q, want 77", got)
+	}
+}
+
 // R-DLV-14: every part's ref finds the message.
 func TestSenderRecordsEveryPartsRef(t *testing.T) {
 	clock := newVClock()

@@ -197,7 +197,10 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 	ctx, span := s.tracer.Start(ctx, "outbox.send", trace.WithAttributes(
 		attribute.String("message.id", msg.ID), attribute.String("transport", msg.Transport), attribute.Int("parts", len(parts))))
 	defer span.End()
-	ref := "" // of the last part with one, which holds a message's buttons
+	// The last part is recorded with the message by Sent, in one transaction; the
+	// ref the outbox keeps is the last part's with one, which holds the buttons.
+	// A message resumed with every part recorded is only marked sent.
+	ref, shown := "", ""
 	for i := p.PartsSent; i < len(parts); i++ {
 		r, err := t.Send(ctx, parts[i])
 		if err != nil {
@@ -206,14 +209,15 @@ func (s *Sender) deliver(ctx context.Context, p queue.Pending) (bool, error) {
 			}
 			return s.failed(ctx, log, p, err)
 		}
-		if r != "" {
-			ref = r
+		ref, shown = r, shownRef(parts[i], r)
+		if i == len(parts)-1 {
+			break
 		}
-		if err := s.ob.PartSent(ctx, msg.ID, i+1, shownRef(parts[i], r)); err != nil {
+		if err := s.ob.PartSent(ctx, msg.ID, i+1, ref, shown); err != nil {
 			return true, err
 		}
 	}
-	if err := s.ob.Sent(ctx, msg.ID, ref); err != nil {
+	if err := s.ob.Sent(ctx, msg.ID, ref, shown); err != nil {
 		return true, err
 	}
 	s.countSent(ctx, msg)
