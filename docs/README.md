@@ -220,10 +220,10 @@ Start here when coming back to the project.
     turns. The owner's look on the test bot (2026-11-06): the table fits a phone, the long report comes as one message,
     a reply works, a tree of links keeps its levels and links in both kinds of message, and the bot's own rich answer
     forwarded back is read and taints the session. Telegram refused nothing. An empty table cell has not been seen
-    live; a refusal of it would go the ordinary way. Next: knowing which message a reply answers, then `/status`.
-  - **Knowing which message a reply answers, built on branch `reply-context`, waiting for the owner's look**
+    live; a refusal of it would go the ordinary way. Next: `/status`.
+  - **Knowing which message a reply answers, closed 2026-11-07**
     ([design](plans/p1-reply-context-design.md), [plan](plans/p1-reply-context.md),
-    [ADR-0055](adr/0055-a-reply-carries-the-replied-messages-origin.md), Proposed; R-DLV-13, R-DLV-14):
+    [ADR-0055](adr/0055-a-reply-carries-the-replied-messages-origin.md), Accepted; R-DLV-13, R-DLV-14):
     - a reply to the bot's messages or the owner's own, up to 90 days old, tells the agent what it answers:
       a short pointer for a message of the current session, the text for any other;
     - every message the node sends records its origin (session, taint, kind); `outbox_refs` keeps every
@@ -236,8 +236,16 @@ Start here when coming back to the project.
       scripted model, `reply-topic` 3 of 3 on the real model, and the seeded fault `reply-origin-taint` turns
       it red. `make crash-agent` holds with 200 `kill -9`; 46.2 MB binary, 45.5 MB RSS after 1,000 turns
       (Rich Messages: 46.1 and 44.2).
-    - Open: the owner's look on the test bot; `make lab` recommends a full run because `agent/stages.go`
-      changed (`make lab-all` or `make lab-skip-full`, the owner's call).
+    - The full lab (owner's call, 2026-11-07): 33 of 34 passed, 1,576,142 tokens. `language-ru-task` was
+      flaky: one of five Russian answers kept the Ukrainian word "сьогодні" from the page it read, the known
+      weakness of scheduled tasks' language, which replies do not touch.
+    - The owner's look on the test bot (2026-11-07): a reply "and in the west?" to a weather answer was
+      answered for Lviv; a reply to a task report that read the web knew the rates and asked before writing
+      memory (tainted); a reply to a clean answer wrote memory with no question (`ganglion_replies`: one
+      `earlier`, two `tainted`). The memory check then held back that fact, a sum, as not about the owner,
+      which is its own rule. Seen on the way: two presses for two currency pages and a third for the same
+      weather site with another city (in "Not now", security first); the first-run introduction did not
+      run because the workspace was copied from the example persona.
   - **M3d, after M3c (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that

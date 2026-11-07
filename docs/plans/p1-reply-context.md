@@ -817,9 +817,9 @@ Expected: PASS; `reply-topic` 3 of 3. Ask the owner before any `make lab-all`.
 - [x] **Step 2: Measure:** `make crash-agent` with 200 `kill -9` (every message answered, in order) and
   `make memory` (the binary's size and RSS after 1,000 turns against 46.1 MB and 44.2 MB); write the
   numbers in `docs/README.md`.
-- [ ] **Step 3: The owner's look on the test bot** (`make live-agent`): a reply to an answer on the first
+- [x] **Step 3: The owner's look on the test bot** (`make live-agent`): a reply to an answer on the first
   of two topics; a reply "do it" to a clean task report from the day before, which asks nothing it would
   not have asked; a reply to a report that read the web, which taints (`/last`). Write what they saw.
-- [ ] **Step 4:** "Where we are" in `docs/README.md` says it is closed; ADR-0055 becomes Accepted and its
+- [x] **Step 4:** "Where we are" in `docs/README.md` says it is closed; ADR-0055 becomes Accepted and its
   row too, only after the owner says so.
-- [ ] **Step 5: Commit,** and hand the branch to the owner to merge.
+- [x] **Step 5: Commit,** and hand the branch to the owner to merge.

@@ -60,7 +60,7 @@ considered, how they compare, the decision and its consequences. See
 | [0052](0052-a-plan-is-delivered-during-its-turn.md) | Deliver a plan during its turn through the outbox, with its own table | Accepted | 2026-11-05 |
 | [0053](0053-fixed-texts-in-the-persons-language.md) | Send fixed texts in the person's language, from a catalogue with a one-time machine translation | Accepted | 2026-11-06 |
 | [0054](0054-structured-replies-as-rich-blocks-the-transport-builds.md) | Send structured replies as Telegram rich messages, from blocks the transport builds | Accepted | 2026-11-06 |
-| [0055](0055-a-reply-carries-the-replied-messages-origin.md) | Let a reply carry the replied message's origin, from the node's own outbox | Proposed | 2026-11-07 |
+| [0055](0055-a-reply-carries-the-replied-messages-origin.md) | Let a reply carry the replied message's origin, from the node's own outbox | Accepted | 2026-11-07 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

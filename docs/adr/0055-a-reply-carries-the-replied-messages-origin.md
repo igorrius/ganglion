@@ -1,6 +1,6 @@
 # ADR-0055: Let a reply carry the replied message's origin, from the node's own outbox
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-07
 - **Deciders:** Igor Artasevych
 - **Spec:** [R-DLV-13, R-DLV-14](../spec.md#71-guaranteed-delivery),
