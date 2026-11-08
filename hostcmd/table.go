@@ -39,6 +39,7 @@ var (
 	systemPrune = Entry{Change, texts.CmdDockerSystemPrune}
 	serviceStop = Entry{Change, texts.CmdSystemctlStop}
 	vacuum      = Entry{Change, texts.CmdJournalVacuum}
+	wrapper     = Entry{Forbidden, texts.CmdWrapper}
 )
 
 // Subcommands named in several tables.
@@ -48,6 +49,8 @@ const (
 	subPrune   = "prune"
 	subStop    = "stop"
 	subLogs    = "logs"
+	optFile    = "--file"
+	optVolumes = "--volumes"
 )
 
 func fixed(e Entry) rule { return func([]string) Entry { return e } }
@@ -60,17 +63,48 @@ func every(e Entry, names ...string) map[string]rule {
 	return m
 }
 
-// withFlags is base moved by any of flags, matched whole or as "--name=value",
-// up to a lone "--".
+// lookupFlag finds the entry a flag moves a command to. A flag matches whole
+// or as "--name=value"; a long flag also by a prefix of at least "--x", as
+// getopt takes an abbreviation; a short cluster ("-uf", "-ofile") by each of
+// its letters. Several matches give the most severe, so a flag is only ever
+// read up, never down.
+func lookupFlag(flags map[string]Entry, a string) (Entry, bool) {
+	name, _, _ := strings.Cut(a, "=")
+	if f, ok := flags[name]; ok {
+		return f, true
+	}
+	var best Entry
+	found := false
+	pick := func(f Entry) {
+		if !found || severity[f.Class] > severity[best.Class] ||
+			(severity[f.Class] == severity[best.Class] && f.Line < best.Line) {
+			best, found = f, true
+		}
+	}
+	switch {
+	case strings.HasPrefix(a, "--") && len(name) >= 3:
+		for k, f := range flags {
+			if strings.HasPrefix(k, "--") && strings.HasPrefix(k, name) {
+				pick(f)
+			}
+		}
+	case strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && len(a) > 2:
+		for _, r := range a[1:] {
+			if f, ok := flags["-"+string(r)]; ok {
+				pick(f)
+			}
+		}
+	}
+	return best, found
+}
+
+// withFlags is base moved by any of flags (see lookupFlag). Every argument is
+// read, a lone "--" included: find takes its start points after it.
 func withFlags(base Entry, flags map[string]Entry) rule {
 	return func(args []string) Entry {
 		e := base
 		for _, a := range args {
-			if a == "--" {
-				break
-			}
-			name, _, _ := strings.Cut(a, "=")
-			if f, ok := flags[name]; ok {
+			if f, ok := lookupFlag(flags, a); ok {
 				e = over(e, f)
 			}
 		}
@@ -79,13 +113,17 @@ func withFlags(base Entry, flags map[string]Entry) rule {
 }
 
 // subcommands classes by the first argument that is not a flag; other is a
-// subcommand not listed, or none. A flag's value read as a subcommand lands
-// in other, which is never below change.
-func subcommands(subs map[string]rule, other Entry) rule {
+// subcommand not listed, or none. A flag before the subcommand that is not in
+// allowed gives other: it may take the next argument as its value or point
+// the program elsewhere (docker --host).
+func subcommands(allowed []string, subs map[string]rule, other Entry) rule {
 	return func(args []string) Entry {
 		for i, a := range args {
 			if strings.HasPrefix(a, "-") {
-				continue
+				if slices.Contains(allowed, a) {
+					continue
+				}
+				return other
 			}
 			if r, ok := subs[a]; ok {
 				return r(args[i+1:])
@@ -108,10 +146,54 @@ func inline(flags ...string) rule {
 	}
 }
 
-// program is awk or sed: the program is an argument, unless -f names a file.
-func program(args []string) Entry {
+// inlineOnly is inline for an interpreter that keeps parsing options after
+// the code (node -r, perl -M), which load files: any later option makes it a
+// script from a file.
+func inlineOnly(flags ...string) rule {
+	run := inline(flags...)
+	return func(args []string) Entry {
+		if e := run(args); e.Class != Script {
+			return e
+		}
+		for _, a := range args[2:] {
+			if strings.HasPrefix(a, "-") {
+				return scriptFile
+			}
+		}
+		return script
+	}
+}
+
+// awkFiles are the options of awk that load a program or a library.
+var awkFiles = []string{"-f", "-E", "-i", "-l", optFile, "--exec", "--include", "--load"}
+
+// awk is the program as an argument, unless an option names a file.
+func awk(args []string) Entry {
 	for _, a := range args {
-		if a == "-f" || strings.HasPrefix(a, "--file") {
+		for _, p := range awkFiles {
+			if strings.HasPrefix(a, p) || longPrefix(a, p) {
+				return scriptFile
+			}
+		}
+	}
+	return script
+}
+
+// longPrefix reports whether a is an abbreviation (at least "--xy") of the
+// long option opt.
+func longPrefix(a, opt string) bool {
+	name, _, _ := strings.Cut(a, "=")
+	return strings.HasPrefix(opt, "--") && strings.HasPrefix(name, "--") && len(name) >= 4 && strings.HasPrefix(opt, name)
+}
+
+// sed is the program as an argument, unless --file or a short cluster with f
+// names a file.
+func sed(args []string) Entry {
+	for _, a := range args {
+		if longPrefix(a, optFile) {
+			return scriptFile
+		}
+		if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.Contains(a, "f") {
 			return scriptFile
 		}
 	}
@@ -192,104 +274,201 @@ func top(args []string) Entry {
 	return read
 }
 
-// journalctl prints entries unless asked only for its size; vacuuming
-// deletes them.
+// journalFlags: --disk-usage only reads the size; the rest changes the
+// journal or needs root. Any other argument shows entries.
+var journalFlags = map[string]Entry{
+	"--disk-usage": read, "--vacuum-size": vacuum, "--vacuum-time": vacuum, "--vacuum-files": vacuum,
+	"--rotate": root, "--flush": root, "--sync": root, "--setup-keys": root,
+	"--relinquish-var": root, "--smart-relinquish-var": root,
+}
+
 func journalctl(args []string) Entry {
-	e := read
-	for _, a := range args {
-		name, _, _ := strings.Cut(a, "=")
-		switch name {
-		case "--disk-usage":
-		case "--vacuum-size", "--vacuum-time", "--vacuum-files":
-			e = over(e, vacuum)
-		default:
-			e = over(e, content)
-		}
-	}
 	if len(args) == 0 {
 		return content
+	}
+	e := read
+	for _, a := range args {
+		if f, ok := lookupFlag(journalFlags, a); ok {
+			e = over(e, f)
+		} else {
+			e = over(e, content)
+		}
 	}
 	return e
 }
 
+// systemctlRemote are the options that reach another machine or the system's
+// own manager; anywhere in the command they make it a root command.
+var systemctlRemote = withFlags(read, map[string]Entry{
+	"-H": root, "--host": root, "-M": root, "--machine": root, "--system": root, "--global": root,
+})
+
+// systemctlFlags are the options allowed before the subcommand.
+var systemctlFlags = []string{"--user", "--no-pager"}
+
 // systemctl acts on the owner's own services only with --user; without it
 // a change needs root.
 func systemctl(args []string) Entry {
+	if systemctlRemote(args).Class == Forbidden {
+		return root
+	}
 	if slices.Contains(args, "--user") {
-		return subcommands(map[string]rule{
+		return subcommands(systemctlFlags, map[string]rule{
 			subStop: fixed(serviceStop), subKill: fixed(serviceStop), "status": fixed(content),
 			"list-units": fixed(read), "list-timers": fixed(read), "is-active": fixed(read), "is-failed": fixed(read),
 		}, outside)(args)
 	}
-	return subcommands(map[string]rule{
+	return subcommands(systemctlFlags, map[string]rule{
 		"status": fixed(content), "list-units": fixed(read), "is-active": fixed(read), "is-failed": fixed(read),
 	}, root)(args)
 }
 
-// docker runs only the subcommands listed (ruling 4).
-var docker = subcommands(map[string]rule{
-	"ps": fixed(read), "images": fixed(read), "version": fixed(read),
+// hostname reads the name; a name given as an argument or read from a file
+// sets it.
+func hostname(args []string) Entry {
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			return root
+		}
+	}
+	return withFlags(read, map[string]Entry{"-F": root, optFile: root, "-b": root, "--boot": root})(args)
+}
+
+// uniq with two arguments that are not options writes the second as a file.
+func uniq(args []string) Entry {
+	n := 0
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			n++
+		}
+	}
+	if n >= 2 {
+		return create
+	}
+	return content
+}
+
+// tarScript are the options that run a program. The first argument may be
+// the old style, letters with no dash.
+var tarScript = withFlags(archive, map[string]Entry{
+	"-I": script, "--use-compress-program": script, "--checkpoint-action": script, "--to-command": script,
+	"--info-script": script, "-F": script, "--new-volume-script": script, "--rsh-command": script,
+	"--rmt-command": script,
+})
+
+func tar(args []string) Entry {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		args = append([]string{"-" + args[0]}, args[1:]...)
+	}
+	return tarScript(args)
+}
+
+// zipScript: -TT names the program that tests the archive.
+var zipScript = withFlags(archive, map[string]Entry{"--unzip-command": script})
+
+func zip(args []string) Entry {
+	for _, a := range args {
+		if strings.HasPrefix(a, "-TT") {
+			return script
+		}
+	}
+	return zipScript(args)
+}
+
+// psListing are the options of docker's listings that print command lines.
+var psListing = withFlags(read, map[string]Entry{"--no-trunc": content, "--format": content})
+
+// dockerRm: -v also deletes the container's anonymous volumes.
+var dockerRm = withFlags(containerRm, map[string]Entry{"-v": volumeRm, optVolumes: volumeRm})
+
+// docker runs only the subcommands listed (ruling 4); no option before the
+// subcommand is taken (--host reaches another machine).
+var docker = subcommands(nil, map[string]rule{
+	"ps": psListing, "images": fixed(read), "version": fixed(read),
 	subLogs: fixed(content), subInspect: fixed(content),
-	"rm": fixed(containerRm), "rmi": fixed(rmi), subStop: fixed(dockerStop), subKill: fixed(dockerStop),
+	"rm": dockerRm, "rmi": fixed(rmi), subStop: fixed(dockerStop), subKill: fixed(dockerStop),
 	"run": fixed(outside), "exec": fixed(outside), "create": fixed(outside), "start": fixed(outside), "restart": fixed(outside),
-	"system": subcommands(map[string]rule{
-		"df": fixed(read), subPrune: withFlags(systemPrune, map[string]Entry{"--volumes": volumeRm}),
+	"system": subcommands(nil, map[string]rule{
+		"df": fixed(read), subPrune: withFlags(systemPrune, map[string]Entry{optVolumes: volumeRm}),
 	}, dockerOther),
-	"image": subcommands(map[string]rule{
+	"image": subcommands(nil, map[string]rule{
 		"ls": fixed(read), "history": fixed(read), subInspect: fixed(content), subPrune: fixed(imagePrune), "rm": fixed(rmi),
 	}, dockerOther),
-	"builder": subcommands(map[string]rule{subPrune: fixed(buildPrune), "du": fixed(read)}, dockerOther),
-	"buildx":  subcommands(map[string]rule{subPrune: fixed(buildPrune), "du": fixed(read)}, dockerOther),
-	"container": subcommands(map[string]rule{
-		"ls": fixed(read), subInspect: fixed(content), subLogs: fixed(content), "rm": fixed(containerRm),
+	"builder": subcommands(nil, map[string]rule{subPrune: fixed(buildPrune), "du": fixed(read)}, dockerOther),
+	"buildx":  subcommands(nil, map[string]rule{subPrune: fixed(buildPrune), "du": fixed(read)}, dockerOther),
+	"container": subcommands(nil, map[string]rule{
+		"ls": psListing, subInspect: fixed(content), subLogs: fixed(content), "rm": dockerRm,
 		subPrune: fixed(containerRm), subStop: fixed(dockerStop),
 	}, dockerOther),
-	"volume": subcommands(map[string]rule{
+	"volume": subcommands(nil, map[string]rule{
 		"ls": fixed(read), subInspect: fixed(content), "rm": fixed(volumeRm), subPrune: fixed(volumeRm),
 	}, dockerOther),
-	"compose": subcommands(map[string]rule{
-		"ps": fixed(read), subLogs: fixed(content), subStop: fixed(dockerStop), "down": fixed(containerRm),
+	"compose": subcommands(nil, map[string]rule{
+		"ps": psListing, subLogs: fixed(content), subStop: fixed(dockerStop),
+		"down": withFlags(containerRm, map[string]Entry{"-v": volumeRm, optVolumes: volumeRm, "--rmi": rmi}),
 	}, outside),
 }, dockerOther)
 
+// programs are the programs with a rule of their own.
+var programs = map[string]rule{
+	"find": withFlags(read, map[string]Entry{
+		"-delete": remove, "-exec": script, "-execdir": script, "-ok": script, "-okdir": script,
+		"-fprint": create, "-fprint0": create, "-fprintf": create, "-fls": create, "-files0-from": content,
+	}),
+	"ps": ps, "top": top, "journalctl": journalctl, "systemctl": systemctl, "docker": docker,
+	"env": env, "awk": awk, "gawk": awk, "mawk": awk, "sed": sed, "hostname": hostname, "uniq": uniq,
+	"tar": tar, "zip": zip,
+	"go": subcommands(nil, map[string]rule{
+		"version": fixed(read), "clean": fixed(goClean),
+		"env": withFlags(content, map[string]Entry{"-w": outside, "-u": outside}),
+	}, unknown),
+	"cargo": subcommands(nil, map[string]rule{"clean": fixed(cargoClean)}, unknown),
+	"bash":  inline("-c"), "sh": inline("-c"), "dash": inline("-c"), "zsh": inline("-c"), "ksh": inline("-c"),
+	"fish": inline("-c"), "python": inline("-c"), "python3": inline("-c"),
+	"node": inlineOnly("-e", "--eval", "-p", "--print"), "perl": inlineOnly("-e", "-E"),
+	"du":   withFlags(read, map[string]Entry{"--files0-from": content}),
+	"wc":   withFlags(read, map[string]Entry{"--files0-from": content}),
+	"date": withFlags(read, map[string]Entry{"-f": content, optFile: content, "-s": root, "--set": root}),
+	"file": withFlags(read, map[string]Entry{
+		"-f": content, "--files-from": content, "-C": create, "--compile": create, "-m": content, "--magic-file": content,
+	}),
+	"tree": withFlags(read, map[string]Entry{"-o": create, "-R": create, "--fromfile": content}),
+	"sort": withFlags(content, map[string]Entry{"-o": create, "--output": create, "--compress-program": script}),
+	"rg":   withFlags(content, map[string]Entry{"--pre": script}),
+	"less": withFlags(content, map[string]Entry{"--log-file": create, "-o": create, "-O": create, "--LOG-FILE": create}),
+	"xxd":  withFlags(content, map[string]Entry{"-r": create, "-revert": create}),
+}
+
+// groups are the programs that share one entry whatever their arguments.
+var groups = []struct {
+	e     Entry
+	names []string
+}{
+	{read, []string{"df", "ls", "free", "uptime", "uname", "whoami", "id", "nproc", "lsblk", "findmnt",
+		"stat", "which", "realpath", "pwd", "sleep", "true", "false", "echo"}},
+	{content, []string{"cat", "head", "tail", "more", "grep", "egrep", "fgrep", "zcat", "bzcat", "xzcat",
+		"zgrep", "strings", "od", "hexdump", "base64", "diff", "cmp", "cut", "tr", "jq",
+		"column", "nl", "tac", "rev"}},
+	{remove, []string{"rm", "rmdir", "shred", "unlink"}},
+	{move, []string{"mv", "cp", "install"}},
+	{create, []string{"mkdir", "touch", "ln", "mkfifo"}},
+	{perms, []string{"chmod", "chown", "chgrp"}},
+	{kill, []string{"kill", "pkill", "killall"}},
+	{archive, []string{"gzip", "gunzip", "unzip", "xz", "unxz", "zstd", "bzip2"}},
+	{truncate, []string{"truncate"}},
+	{network, []string{"curl", "wget"}},
+	{script, []string{"xargs"}},
+	{root, []string{"sudo", "su", "doas", "pkexec", "run0", "sg", "newgrp", "chroot"}},
+	{allEnv, []string{"printenv"}},
+	{wrapper, []string{"timeout", "nice", "ionice", "stdbuf", "time", "flock", "chrt", "taskset", "strace", "ltrace",
+		"watch", "script", "unbuffer", "expect", "firejail", "bwrap", "systemd-inhibit", "dbus-run-session", "busybox"}},
+	{outside, []string{"systemd-run", "crontab", "at", "batch", "nohup", "setsid", "screen", "tmux", "ssh", "scp",
+		"sftp", "nc", "ncat", "socat", "nsenter", "unshare", "podman", "rsync"}},
+}
+
 // table is every program the node knows, by name.
 var table = func() map[string]rule {
-	t := map[string]rule{
-		"find": withFlags(read, map[string]Entry{
-			"-delete": remove, "-exec": script, "-execdir": script, "-ok": script, "-okdir": script,
-			"-fprint": create, "-fprint0": create, "-fprintf": create, "-fls": create,
-		}),
-		"ps": ps, "top": top, "journalctl": journalctl, "systemctl": systemctl, "docker": docker,
-		"env": env, "awk": program, "gawk": program, "mawk": program, "sed": program,
-		"go":    subcommands(map[string]rule{"version": fixed(read), "env": fixed(content), "clean": fixed(goClean)}, unknown),
-		"cargo": subcommands(map[string]rule{"clean": fixed(cargoClean)}, unknown),
-		"bash":  inline("-c"), "sh": inline("-c"), "dash": inline("-c"), "zsh": inline("-c"), "ksh": inline("-c"),
-		"fish": inline("-c"), "python": inline("-c"), "python3": inline("-c"),
-		"node": inline("-e", "--eval", "-p", "--print"), "perl": inline("-e", "-E"),
-	}
-	groups := []struct {
-		e     Entry
-		names []string
-	}{
-		{read, []string{"df", "du", "ls", "tree", "free", "uptime", "uname", "whoami", "id", "nproc", "lsblk", "findmnt",
-			"stat", "wc", "date", "hostname", "which", "file", "realpath", "pwd", "sleep", "true", "false", "echo"}},
-		{content, []string{"cat", "head", "tail", "less", "more", "grep", "egrep", "fgrep", "rg", "zcat", "bzcat", "xzcat",
-			"zgrep", "strings", "od", "xxd", "hexdump", "base64", "diff", "cmp", "sort", "uniq", "cut", "tr", "jq",
-			"column", "nl", "tac", "rev"}},
-		{remove, []string{"rm", "rmdir", "shred", "unlink"}},
-		{move, []string{"mv", "cp", "install", "rsync"}},
-		{create, []string{"mkdir", "touch", "ln", "mkfifo"}},
-		{perms, []string{"chmod", "chown", "chgrp"}},
-		{kill, []string{"kill", "pkill", "killall"}},
-		{archive, []string{"tar", "gzip", "gunzip", "zip", "unzip", "xz", "unxz", "zstd", "bzip2"}},
-		{truncate, []string{"truncate"}},
-		{network, []string{"curl", "wget"}},
-		{script, []string{"xargs"}},
-		{root, []string{"sudo", "su", "doas", "pkexec", "run0", "sg", "newgrp", "chroot"}},
-		{allEnv, []string{"printenv"}},
-		{outside, []string{"systemd-run", "crontab", "at", "batch", "nohup", "setsid", "screen", "tmux", "ssh", "scp",
-			"sftp", "nc", "ncat", "socat", "nsenter", "unshare", "podman"}},
-	}
+	t := maps.Clone(programs)
 	for _, g := range groups {
 		maps.Copy(t, every(g.e, g.names...))
 	}
