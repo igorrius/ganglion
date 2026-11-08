@@ -8,6 +8,9 @@ covers:
   - agent/status.go
   - status/**
   - skills/status.go
+  - config/status.go
+  - modstore/status.go
+  - transport/telegram/health.go
 model: scripted
 skills: [skills/bad-name]
 script:
