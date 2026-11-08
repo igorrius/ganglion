@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/skills"
+	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/pending"
@@ -105,8 +106,10 @@ type Deps struct {
 	// Status hears the stages of a person's message (R-LIVE-7); NoStatus when
 	// unset. It must not block.
 	Status StatusFunc
-	Now    func() time.Time
-	Log    *slog.Logger
+	// StatusSources are the components /status asks (R-OBS-11); none when unset.
+	StatusSources []status.Source
+	Now           func() time.Time
+	Log           *slog.Logger
 }
 
 // Languages is what the agent needs of a person's language (language.Store).

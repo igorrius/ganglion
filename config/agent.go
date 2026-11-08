@@ -23,6 +23,7 @@ import (
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/skills"
+	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
@@ -74,27 +75,28 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Tools:     do.MustInvoke[*tool.Registry](i),
 		// Around every tool call, outermost first: traced, journal, then
 		// the policy for the calls the model makes.
-		Middleware:   []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
-		Policy:       do.MustInvoke[*policy.Policy](i).Middleware(),
-		Pending:      do.MustInvoke[*pending.Store](i),
-		Outbox:       do.MustInvoke[*sqlqueue.Queue](i),
-		Inbox:        do.MustInvoke[*sqlqueue.Queue](i),
-		Status:       do.MustInvoke[agent.StatusFunc](i),
-		Plans:        do.MustInvoke[*plan.Store](i),
-		Sent:         do.MustInvoke[*sqlqueue.Queue](i),
-		QuickActions: do.MustInvoke[builtin.Scheduling](i).QuickActions(),
-		Jobs:         do.MustInvoke[*schedule.Store](i),
-		IsAdmin:      do.MustInvoke[agent.AdminFunc](i),
-		Names:        do.MustInvoke[*access.List](i).Name,
-		Turns:        do.MustInvoke[*turns.Log](i),
-		Archive:      do.MustInvoke[agent.SessionStore](i),
-		Alerts:       do.MustInvoke[alert.Admins](i),
-		Persona:      agent.PersonaDir(b.Agent.Workspace),
-		Facts:        do.MustInvoke[Remembering](i).Facts,
-		SystemJobs:   do.MustInvoke[Remembering](i).Jobs,
-		Modules:      do.MustInvoke[agent.Modules](i),
-		Skills:       do.MustInvoke[Skilled](i).Set,
-		Log:          do.MustInvoke[*slog.Logger](i),
+		Middleware:    []tool.Middleware{do.MustInvoke[*journal.Journal](i).Middleware()},
+		Policy:        do.MustInvoke[*policy.Policy](i).Middleware(),
+		Pending:       do.MustInvoke[*pending.Store](i),
+		Outbox:        do.MustInvoke[*sqlqueue.Queue](i),
+		Inbox:         do.MustInvoke[*sqlqueue.Queue](i),
+		Status:        do.MustInvoke[agent.StatusFunc](i),
+		Plans:         do.MustInvoke[*plan.Store](i),
+		Sent:          do.MustInvoke[*sqlqueue.Queue](i),
+		QuickActions:  do.MustInvoke[builtin.Scheduling](i).QuickActions(),
+		Jobs:          do.MustInvoke[*schedule.Store](i),
+		IsAdmin:       do.MustInvoke[agent.AdminFunc](i),
+		Names:         do.MustInvoke[*access.List](i).Name,
+		Turns:         do.MustInvoke[*turns.Log](i),
+		Archive:       do.MustInvoke[agent.SessionStore](i),
+		Alerts:        do.MustInvoke[alert.Admins](i),
+		Persona:       agent.PersonaDir(b.Agent.Workspace),
+		Facts:         do.MustInvoke[Remembering](i).Facts,
+		SystemJobs:    do.MustInvoke[Remembering](i).Jobs,
+		Modules:       do.MustInvoke[agent.Modules](i),
+		Skills:        do.MustInvoke[Skilled](i).Set,
+		StatusSources: do.MustInvoke[[]status.Source](i),
+		Log:           do.MustInvoke[*slog.Logger](i),
 	}
 }
 

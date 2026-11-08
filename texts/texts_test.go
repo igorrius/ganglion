@@ -325,3 +325,9 @@ func TestSentTextsAreCounted(t *testing.T) {
 		t.Errorf("fallback: %v", got)
 	}
 }
+
+func TestEscape(t *testing.T) {
+	if got := Escape("my_skill [x]"); got != `my\_skill \[x\]` {
+		t.Fatalf("Escape = %q", got)
+	}
+}

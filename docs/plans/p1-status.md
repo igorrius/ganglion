@@ -327,7 +327,7 @@ Keys added here (English; Russian and Ukrainian in the same commit):
 | `status.reason_limit_near` | `past 80% of a daily limit` |
 | `status.reason_limit_reached` | `a daily limit is reached` |
 
-- [ ] **Step 1: Write the failing tests** in `agent/status_test.go`, on the agent's test env
+- [x] **Step 1: Write the failing tests** in `agent/status_test.go`, on the agent's test env
   (`newEnv`, `e.turn`, `message(owner, …)` of `agent_test.go`), as `TestLastCommandShowsTheTurnBefore`
   does:
 
@@ -401,9 +401,9 @@ Keys added here (English; Russian and Ukrainian in the same commit):
 
   And in `texts/texts_test.go`: `TestEscape` (`Escape("my_skill [x]") == `my\_skill \[x\]``).
 
-- [ ] **Step 2: Run** `go test ./agent/ ./texts/`. Expected: FAIL.
+- [x] **Step 2: Run** `go test ./agent/ ./texts/`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
   `texts.Escape` exports `escapeMarkdown` with a doc comment: for a value put into a message's text.
 
@@ -488,9 +488,9 @@ Keys added here (English; Russian and Ukrainian in the same commit):
   Register `do.Lazy(StatusSources())` in `Core` (`config/config.go`) and set
   `StatusSources: do.MustInvoke[[]status.Source](i)` in `agentParts`.
 
-- [ ] **Step 4: Run** `go test -race ./agent/ ./texts/ ./status/ ./config/` and `make lint`. Expected: PASS.
+- [x] **Step 4: Run** `go test -race ./agent/ ./texts/ ./status/ ./config/` and `make lint`. Expected: PASS.
 
-- [ ] **Step 5: Commit** `agent: /status shows an admin how the node is doing (R-OBS-11)`.
+- [x] **Step 5: Commit** `agent: /status shows an admin how the node is doing (R-OBS-11)`.
 
 ### Task 3: The node's own lines
 

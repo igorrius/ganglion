@@ -57,6 +57,9 @@ func (a *Agent) commandTable() []commandEntry {
 		{"/last", a.lastTurn, map[transport.Lang]string{
 			transport.LangDefault: "What the last turn did", transport.LangRussian: "Что сделал последний ход",
 			transport.LangUkrainian: "Що зробив останній хід"}},
+		{"/status", a.showStatus, map[transport.Lang]string{
+			transport.LangDefault: "How the node is doing", transport.LangRussian: "Как дела у ноды",
+			transport.LangUkrainian: "Як справи у вузла"}},
 		{"/metrics", a.showMetrics, map[transport.Lang]string{
 			transport.LangDefault:   "Agent metrics as a picture: /metrics [all | ganglion | runtime | process | filter]",
 			transport.LangRussian:   "Метрики агента картинкой: /metrics [all | ganglion | runtime | process | фильтр]",

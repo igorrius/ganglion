@@ -103,7 +103,21 @@ const (
 	SchedNone          Key = "sched.none"
 	SchedStarted       Key = "sched.started"
 
-	StatusNoAnswer Key = "status.no_answer"
+	StatusNoAnswer           Key = "status.no_answer"
+	StatusVerdictOK          Key = "status.verdict_ok"
+	StatusVerdictWarn        Key = "status.verdict_warn"
+	StatusVerdictFail        Key = "status.verdict_fail"
+	StatusSectionNode        Key = "status.section_node"
+	StatusSectionModels      Key = "status.section_models"
+	StatusSectionDelivery    Key = "status.section_delivery"
+	StatusSectionProblems    Key = "status.section_problems"
+	StatusSince              Key = "status.since"
+	StatusSession            Key = "status.session"
+	StatusSessionFallback    Key = "status.session_fallback"
+	StatusSessionNone        Key = "status.session_none"
+	StatusDay                Key = "status.day"
+	StatusReasonLimitNear    Key = "status.reason_limit_near"
+	StatusReasonLimitReached Key = "status.reason_limit_reached"
 )
 
 var allKeys = []Key{
@@ -113,7 +127,7 @@ var allKeys = []Key{
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
-	StatusNoAnswer,
+	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.
@@ -336,6 +350,10 @@ func fill(template string, v Vars, literal func(string) string) string {
 	b.WriteString(literal(template[last:]))
 	return b.String()
 }
+
+// Escape keeps s as written when it goes into a message as a value: a skill named my_skill is not
+// read as italics.
+func Escape(s string) string { return escapeMarkdown(s) }
 
 // escapeMarkdown puts a backslash before each mark that formats, the same marks a translation may
 // not add (Check). Ordinary punctuation stays as it is, so a text reads the same in a log or a test.
