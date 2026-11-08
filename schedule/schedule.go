@@ -154,6 +154,7 @@ type Scheduler struct {
 	after AfterFunc
 	log   *slog.Logger
 	in    instruments
+	h     health // what /status shows
 }
 
 // New returns a scheduler of st's jobs in loc (R-SCH-1) that puts their
@@ -192,6 +193,13 @@ func (s *Scheduler) Run(ctx context.Context) error {
 // joins the failures of the jobs that could not fire.
 func (s *Scheduler) Tick(ctx context.Context) error {
 	now := s.now()
+	err := s.tick(ctx, now)
+	s.h.ticked(now, err)
+	return err
+}
+
+// tick is Tick at now.
+func (s *Scheduler) tick(ctx context.Context, now time.Time) error {
 	if err := s.putUnput(ctx, now); err != nil {
 		return err
 	}
@@ -269,6 +277,7 @@ func (s *Scheduler) put(ctx context.Context, j Job, key string, slot, now time.T
 		return fmt.Errorf("schedule: put the event of %s: %w", j.ID, err)
 	}
 	s.in.observeLag(ctx, j.Kind, now.Sub(slot))
+	s.h.put(now.Sub(slot))
 	return s.st.markPut(ctx, j.ID, slot, now)
 }
 

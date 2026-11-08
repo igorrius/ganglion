@@ -699,29 +699,29 @@ stored version {version} failed its check at start`.
 - Produces: `func (s *Scheduler) Status(ctx context.Context, sc status.Scope) []status.Check`, `Name()`
   `"scheduler"`.
 
-Keys: `status.jobs` `Jobs: {n}, next {time}`; `status.jobs_none` `Jobs: none`;
+Keys: `status.jobs` `Jobs: {n}, next {time}`; `status.jobs_idle` `Jobs: {n}, nothing ahead`; `status.jobs_none` `Jobs: none`;
 `status.reason_sched_lag` `the last run was {lag} late`; `status.reason_sched_failing` `its ticks fail`;
 `status.reason_sched_stalled` `no tick for {for}`.
 
-- [ ] **Step 1: Write the failing tests** with the injected `now` and `after`:
+- [x] **Step 1: Write the failing tests** with the injected `now` and `after`:
   - two jobs, an hourly task and a reminder at 18:00, at 17:10: `OK` "Jobs: 2, next 18:00";
   - no jobs: `OK` `jobs_none`;
   - a run put 90 s after its slot: `Warn` `reason_sched_lag` "1 min";
   - a tick that failed last: `Warn` `reason_sched_failing` with `Since` that tick;
   - no tick for 3 minutes: `Warn` `reason_sched_stalled`.
 
-- [ ] **Step 2: Run** `go test ./schedule/`. Expected: FAIL.
+- [x] **Step 2: Run** `go test ./schedule/`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** `Scheduler` gains `health struct{ mu sync.Mutex; ticked, failed time.Time;
+- [x] **Step 3: Implement.** `Scheduler` gains `health struct{ mu sync.Mutex; ticked, failed time.Time;
   lag time.Duration }`, set in `Run` after each `Tick` and in `put` with the lag. The next run is the
   smallest of each active job's next slot after `now` (a one-shot's `At` when it has not run; a cron's
   `spec.Next(max(last, now), loc)`), through the same `due` rules. Bounds: `lagWarn = time.Minute`,
   `tickStale = 2 * time.Minute`. Append the scheduler to the sources in `config/status.go` inside the
   agent's branch.
 
-- [ ] **Step 4: Run** `go test -race ./schedule/ ./config/`. Expected: PASS.
+- [x] **Step 4: Run** `go test -race ./schedule/ ./config/`. Expected: PASS.
 
-- [ ] **Step 5: Commit** `schedule: /status shows the jobs, the next run and a late or failing tick`.
+- [x] **Step 5: Commit** `schedule: /status shows the jobs, the next run and a late or failing tick`.
 
 ### Task 9: Chatlab's check and its seeded fault
 
