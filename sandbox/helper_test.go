@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // run runs argv in the sandbox with deny denied, and returns its output and
@@ -166,5 +167,29 @@ func TestSudoGainsNothing(t *testing.T) {
 func TestAMissingProgramFailsBeforeRunning(t *testing.T) {
 	if _, code := run(t, nil, "no-such-program-ganglion"); code != exitSetup {
 		t.Fatalf("exit %d, want %d", code, exitSetup)
+	}
+}
+
+func TestNewIsReadyWhereTheKernelHoldsIt(t *testing.T) {
+	abi, err := landlockABI()
+	if err != nil {
+		t.Skipf("no Landlock here: %v", err)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(self, Policy{Env: []string{"PATH=/usr/bin:/bin"}}, fakeKernel{euid: 1000, abi: abi}, time.Unix(0, 0))
+	if ok, r := s.Ready(); !ok {
+		t.Fatalf("not ready: %v", r)
+	}
+	dir, file := secretDir(t)
+	s = New(self, Policy{Deny: []string{dir}, Env: []string{"PATH=/usr/bin:/bin"}}, fakeKernel{euid: 1000, abi: abi}, time.Unix(0, 0))
+	cmd, err := s.Command(t.Context(), []string{"cat", file}, "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, err := cmd.CombinedOutput(); err == nil || strings.Contains(string(out), "hunter2") {
+		t.Fatalf("read a denied file through Command: %v, %q", err, out)
 	}
 }

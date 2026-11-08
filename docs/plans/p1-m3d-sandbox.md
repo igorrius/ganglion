@@ -1237,7 +1237,7 @@ git commit -m "sandbox: the helper sets no_new_privs and Landlock, then execs th
   - `func (s *Sandbox) Command(ctx context.Context, argv []string, dir string) (*exec.Cmd, error)`:
     `ErrOff` when not ready.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 package sandbox
@@ -1318,12 +1318,12 @@ func TestNewIsReadyWhereTheKernelHoldsIt(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./sandbox/ -run 'TestNew'`
 Expected: FAIL, `undefined: New`.
 
-- [ ] **Step 3: Write the kernel checks**
+- [x] **Step 3: Write the kernel checks**
 
 `sandbox/kernel_linux.go`:
 
@@ -1358,7 +1358,7 @@ func (hostKernel) Dumpable() (bool, error) {
 `LandlockABI` returns `errNotLinux`; `New` checks `runtime.GOOS != "linux"` first and is off with
 `NotLinux`.
 
-- [ ] **Step 4: Write `New`, `Ready` and `Command`**
+- [x] **Step 4: Write `New`, `Ready` and `Command`**
 
 ```go
 // Reason is why the sandbox is off; Ready when it is on.
@@ -1494,12 +1494,12 @@ func closeSpec(cmd *exec.Cmd) {
 `EnvFiles` returns paths through `filepath.Join`; resolve them with `filepath.EvalSymlinks` the same
 way `DenyList` does before they join `deny` (a `.env` reached through a symlinked folder).
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `go test -race ./sandbox/`
 Expected: PASS; the linux test `TestNewIsReadyWhereTheKernelHoldsIt` runs on the owner's machine.
 
-- [ ] **Step 6: Lint, then commit**
+- [x] **Step 6: Lint, then commit**
 
 ```bash
 git add sandbox
