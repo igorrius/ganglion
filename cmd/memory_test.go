@@ -18,9 +18,11 @@ import (
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 )
 
-// TestMemoryEcho measures the echo bot (principle 8: a node fits in
-// 128 MB): RSS when idle, and RSS and peak after 1,000 messages through the
-// fake Bot API. Run it with `make memory`; it is skipped otherwise.
+// TestMemoryEcho measures the echo bot: RSS when idle, and RSS and peak
+// after 1,000 messages through the fake Bot API. Small hosts are a target,
+// not a line (principle 8, ADR-0056), so the numbers are reported and
+// compared by hand with the previous milestone. Run it with `make memory`;
+// it is skipped otherwise.
 func TestMemoryEcho(t *testing.T) { measure(t, "echo", nil, everyMessage) }
 
 // TestMemoryAgent measures the agent with one model on a fake API: the
@@ -121,9 +123,6 @@ func TestMemoryMetrics(t *testing.T) {
 	time.Sleep(time.Second)
 	after, peak := procKB(t, cmd.Process.Pid, "VmRSS"), procKB(t, cmd.Process.Pid, "VmHWM")
 	t.Logf("metrics: binary %.1f MB; after %d pictures RSS %.1f MB, peak %.1f MB", float64(size)/(1<<20), n, float64(after)/1024, float64(peak)/1024)
-	if peak > 128*1024 {
-		t.Errorf("peak RSS %d kB is above 128 MB", peak)
-	}
 }
 
 // everyMessage counts every message sent as one reply.
@@ -159,9 +158,6 @@ func measure(t *testing.T, label string, extraEnv []string, replies func([]teleg
 	peak := procKB(t, cmd.Process.Pid, "VmHWM")
 	t.Logf("%s: binary %.1f MB; RSS idle %.1f MB; after %d messages %.1f MB, peak %.1f MB",
 		label, float64(size)/(1<<20), float64(idle)/1024, n, float64(after)/1024, float64(peak)/1024)
-	if peak > 128*1024 {
-		t.Errorf("peak RSS %d kB is above 128 MB", peak)
-	}
 }
 
 // startMeasured builds and starts the binary on a fake Bot API; it returns

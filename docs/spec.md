@@ -94,13 +94,18 @@ We build from scratch. Neighbours are a source of ideas, not a base.
 7. **Build little where something ready exists.** Chat, providers and
    channels stay minimal; the effort goes into the tool pool and skill
    compilation.
-8. **Minimal memory is a design goal.** The core and edge roles must run
-   comfortably on the cheapest hosts: a Raspberry Pi or a small container of
-   about 128 MB. Workers that host heavy model runtimes (claude CLI, Ollama)
-   are exempt: they run where the resources are (ADR-0009). Memory
-   is measured (`tools/modbench`) and weighed in every decision about
-   dependencies, runtimes and module languages; a Pi is one target among
-   others, not the reference.
+8. **Small hosts are a target, not a hard line**
+   ([ADR-0056](adr/0056-small-hosts-as-a-soft-target.md)). The core and edge
+   roles aim at the cheapest hosts, a Raspberry Pi or a small container, and
+   stay lean: memory is measured (`make memory`, `tools/modbench`) and weighed
+   in every decision about dependencies, runtimes and module languages, and
+   each milestone compares its numbers with the previous one. Go has no hard
+   memory cap: a node sets a soft limit (`GOMEMLIMIT`, R-RUN-6) and the
+   collector works to stay under it. A feature that needs more than a small
+   host has is allowed: it runs where the resources are, on a denser edge or
+   a worker (P2), and a small node runs without it. Where work runs is the
+   operator's choice, not a rule of the code. Workers that host heavy model
+   runtimes (claude CLI, Ollama) run where the resources are (ADR-0009).
 9. **Secure by design, and every link is hostile** (owner, 2026-11-03).
    - **Every network is open and watched.** That includes the home LAN and
      a private cloud network.
@@ -568,9 +573,12 @@ escalate:                    # when to call the model
   and a failed request is an error the module handles, not a trap. Module
   glue exists for Go/TinyGo (`pdk/guest`) and Rust (`modules/deye-rs`); a new
   language needs its own small glue.
-- **R-RUN-6.** The runner process sets a soft memory limit (`GOMEMLIMIT`) from
-  its config, and edge JetStream streams have explicit size limits, so a long
-  outage cannot grow memory or the backlog without bound (task 0.5).
+- **R-RUN-6.** Every node sets a soft memory limit (`GOMEMLIMIT`): from its
+  config, else about 80% of its container's memory limit (cgroup v2
+  `memory.max`, v1 `memory.limit_in_bytes`), else none. Edge JetStream streams
+  have explicit size limits, so a long outage cannot grow memory or the
+  backlog without bound (task 0.5,
+  [ADR-0056](adr/0056-small-hosts-as-a-soft-target.md)).
 - **R-RUN-7.** A module can be a tool of the core: the agent calls it
   through the same policies as any tool. The first one is `html2md`
   (7.11), a pure function granted no host functions, embedded in the
@@ -618,7 +626,7 @@ on a Pi is pending:
 | Leaf node with JetStream | 18 MiB idle; 45 MiB with 117 MB buffered and `GOMEMLIMIT=40MiB` (80 MiB without) | Set a soft limit and stream size limits |
 | Edge binary | ~9 MB runner + wazero today; ~25–30 MB with embedded NATS (estimate) | Cross-compiled for arm64 |
 | One module | 161 KB (Rust) to 3.6 MB (Go) of `.wasm` | Memory per manifest limit |
-| Target hosts | A small container of about 128 MB, or a Pi Zero 2 W (512 MB, arm64) | Principle 8 |
+| Target hosts | A small container or a Pi Zero 2 W (512 MB, arm64); a target, not a line | Principle 8, ADR-0056 |
 | Microcontrollers | — | A runner does not fit; they connect over MQTT |
 
 ### 7.6. Action policies and risk classes

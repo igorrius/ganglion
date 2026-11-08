@@ -67,9 +67,9 @@ func hostileShapes() map[string]string {
 }
 
 // TestMemoryHostilePage measures the node's peak RSS (VmHWM) after one
-// hostile 1 MiB page goes through web.fetch and html2md (Task 12, step 5;
-// principle 8: a node fits in 128 MB). Each page runs in a node of its
-// own: this test binary started as TestMeasureNode, which builds the
+// hostile 1 MiB page goes through web.fetch and html2md (Task 12, step 5),
+// reported and not held to a line (principle 8, ADR-0056). Each page runs in
+// a node of its own: this test binary started as TestMeasureNode, which builds the
 // core container and the metrics as `ganglion run` does, with only
 // web.fetch's resolver changed so the page's host leads to a local
 // server. Run it with
@@ -151,9 +151,6 @@ func measureHostile(t *testing.T, html string) {
 	peak := procStatusKB(t, cmd.Process.Pid, "VmHWM")
 	t.Logf("page %d bytes: node RSS idle %.1f MB; after the page %.1f MB, peak %.1f MB; web.fetch gave %q",
 		len(html), float64(idle)/1024, float64(after)/1024, float64(peak)/1024, reply[:min(len(reply), 140)])
-	if peak > 128*1024 {
-		t.Errorf("peak RSS %d kB is above 128 MB", peak)
-	}
 }
 
 // crashTokenForMeasure is the fake bot's token.

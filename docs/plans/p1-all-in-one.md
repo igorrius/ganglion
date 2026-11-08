@@ -30,9 +30,11 @@ Telegram Bot API, an OpenAI-compatible model API, YAML config.
 
 ## Global constraints
 
-- Core and edge fit a container of about 128 MB; the runner sets
-  `GOMEMLIMIT` (principle 8, R-RUN-6). Memory is checked with `modbench` or
-  the process RSS before each milestone is closed.
+- Core and edge aim at small hosts, held by a soft limit, not a line
+  ([ADR-0056](../adr/0056-small-hosts-as-a-soft-target.md)); every node sets
+  `GOMEMLIMIT` (principle 8, R-RUN-6). Memory is measured with `make memory`
+  or `modbench` before each milestone is closed and compared with the previous
+  milestone; a growth needs a reason.
 - Testing uses a separate Telegram bot with its own token; two processes must
   never poll one token (R-DLV-8).
 - Anthropic access only as in ADR-0009: own API key; the claude CLI worker
@@ -279,7 +281,7 @@ sandbox spike (3.20) comes first.
 
 | Task | Done when |
 |---|---|
-| 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets through a secret source (environment and `*_FILE` first), never in the YAML; `GOMEMLIMIT` (R-RUN-6); a JSON Schema in `schemas/` kept in sync by a test ([ADR-0023](../adr/0023-json-schemas-for-yaml-files.md)) | Config tests; a bad config fails at start with a clear message |
+| 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets through a secret source (environment and `*_FILE` first), never in the YAML; `GOMEMLIMIT` from the config, else about 80% of the container's memory limit (R-RUN-6, ADR-0056); a JSON Schema in `schemas/` kept in sync by a test ([ADR-0023](../adr/0023-json-schemas-for-yaml-files.md)) | Config tests; a bad config fails at start with a clear message; in a container limited to 256 MB with no setting, `GOMEMLIMIT` is about 205 MB |
 | 4.2 **Done in M3b (task 3.10).** Scheduler: cron in Europe/Kyiv, `cron_runs` table, catch-up after downtime runs each missed job once; `idemKey` = job + scheduled time; the agent's `schedule.*` uses it. M4 adds module cron triggers on it | Tests across a DST change and a simulated downtime |
 | 4.3 Cell host functions for modules (`cell.get`, `cell.report`, `cell.set`), granted per cell in the manifest; `pdk` and `pdk/guest` updated | Runner conformance suite extended and green |
 | 4.4 Runner in `node.Run`: modules from config, triggered by the scheduler or called by the agent as tools (`deye.status`; the minimal "module as a tool" path, with an embedded module, **moved to M3b**, task 3.11; M4 extends it to modules from config); optional `init` and `health` exports (spec 7.5); a minimal supervisor — backoff after failures, N failures in M minutes disable the module and emit `module.crashloop`; failures and `auth_failed` reach the agent as events; `cells.Reconcile` at start and periodically, `ExpireDue` on a short tick (M1 review) | `deye-reader` writes the `grid` and `soc` sensor cells on schedule; the agent answers "how is the battery?" through the tool; a failing probe module is disabled |

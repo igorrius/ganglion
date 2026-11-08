@@ -217,8 +217,9 @@ Start here when coming back to the project.
     a reply follow Telegram's language on the test bot (2026-11-06); a spoken switch and a machine
     translation have not been seen live yet. The full lab passed 32 of 32 on 2026-11-06, for 1,454,519
     tokens, including the first verdicts of `task-report` and `task-selection`. 46.0 MB binary, 44.9 MB RSS after 1,000 turns. The
-    `/metrics` memory test (`make memory`) is noisy and goes over its 128 MB line on `master` too: peaks
-    of 122 to 134 MB on both, so it does not separate them.
+    `/metrics` memory test (`make memory`) is noisy and went over its 128 MB line on `master` too: peaks
+    of 122 to 134 MB on both, so it did not separate them. The line went with
+    [ADR-0056](adr/0056-small-hosts-as-a-soft-target.md) (2026-11-08).
   - **Telegram Rich Messages (task 3.36), closed 2026-11-06**
     ([design](plans/p1-rich-messages-design.md), [plan](plans/p1-rich-messages.md),
     [ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md), Accepted): a message with a
@@ -254,6 +255,11 @@ Start here when coming back to the project.
       which is its own rule. Seen on the way: two presses for two currency pages and a third for the same
       weather site with another city (in "Not now", security first); the first-run introduction did not
       run because the workspace was copied from the example persona.
+  - **Memory is a target, not a line (2026-11-08,
+    [ADR-0056](adr/0056-small-hosts-as-a-soft-target.md)):** principle 8 aims at small hosts, held by
+    `GOMEMLIMIT`; each milestone compares its numbers with the previous one; a feature that does not fit
+    a small host runs on a denser node. The memory tests report and no longer fail above 128 MB.
+    Setting `GOMEMLIMIT` from the container's limit is M4 task 4.1.
   - **M3d, after `/status` (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
@@ -281,7 +287,7 @@ Start here when coming back to the project.
       when the first admin changes; episodes are a substring scan of the
       newest 500 sessions, not full-text search; the M4 policy override
       against the tainted-memory rule; the html2md worst case peaks at
-      99 MB of the 128 MB budget; transcript indentation covers only the
+      99 MB; transcript indentation covers only the
       line breaks it lists; `web.WithResolver` and `web.WithConnect` are
       exported test seams; no automated depth check of htmd's own
       html5ever 0.38 tree; the nightly audit runs inside one event,
