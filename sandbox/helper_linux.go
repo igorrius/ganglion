@@ -43,8 +43,11 @@ func helper() error {
 	if err := restrict(sp.ABI, sp.Grants); err != nil {
 		return err
 	}
+	if err := refuseUnixSockets(); err != nil {
+		return err
+	}
 	if sp.Try != "" {
-		tryRead(sp.Try)
+		try(sp.Try)
 	}
 	if err := os.Chdir(sp.Dir); err != nil { // first, so ./script is found in its folder
 		return err
@@ -56,11 +59,17 @@ func helper() error {
 	return unix.Exec(prog, sp.Argv, sp.Env)
 }
 
-// tryRead is the self-test: it exits 0 when path is denied and
-// exitReadable when it reads.
-func tryRead(path string) {
-	if _, err := os.ReadFile(path); errors.Is(err, os.ErrPermission) {
-		os.Exit(0)
+// try is the self-test: it exits 0 when path is denied and a Unix socket
+// cannot be opened, and exitReadable when either works.
+func try(path string) {
+	if _, err := os.ReadFile(path); !errors.Is(err, os.ErrPermission) {
+		os.Exit(exitReadable)
 	}
-	os.Exit(exitReadable)
+	if fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM, 0); err == nil || !errors.Is(err, unix.EPERM) {
+		if err == nil {
+			_ = unix.Close(fd)
+		}
+		os.Exit(exitReadable)
+	}
+	os.Exit(0)
 }

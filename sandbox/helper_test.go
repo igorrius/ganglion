@@ -342,3 +342,49 @@ func TestConnectFromInside(t *testing.T) {
 	b, _ := io.ReadAll(c)
 	fmt.Println("got:", string(b))
 }
+
+// TestPathSocketsAreRefused: below Landlock 9 a command opens no Unix
+// socket, so a listener in an allowed folder (gpg-agent, the keyring's
+// D-Bus) is out of reach (owner, 2026-11-08).
+func TestPathSocketsAreRefused(t *testing.T) {
+	dir, _ := secretDir(t)
+	name := filepath.Join(dir, "agent.sock")
+	ln, err := net.Listen("unix", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_, _ = c.Write([]byte("SOCKSECRET"))
+			_ = c.Close()
+		}
+	}()
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := ready(t, Policy{Env: []string{"PATH=/usr/bin:/bin", connectEnv + "=" + name}})
+	out, _ := output(t, s, "/", self, "-test.run=^TestConnectFromInside$")
+	if strings.Contains(out, "SOCKSECRET") || !strings.Contains(out, "refused:") {
+		t.Fatalf("a Unix socket outside the sandbox: %q", out)
+	}
+}
+
+// TestEverydayCommandsStillRun: refusing Unix sockets leaves the read
+// commands working (ls -l asks NSS for names, which falls back to files).
+func TestEverydayCommandsStillRun(t *testing.T) {
+	s := ready(t, Policy{})
+	for _, argv := range [][]string{{"ls", "-l", "/"}, {"ps", "-e"}, {"df", "-h", "/"}} {
+		if _, err := exec.LookPath(argv[0]); err != nil {
+			continue
+		}
+		if out, code := output(t, s, "/", argv...); code != 0 {
+			t.Errorf("%v: exit %d, %q", argv, code, out)
+		}
+	}
+}

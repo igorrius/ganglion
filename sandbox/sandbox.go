@@ -23,7 +23,7 @@ const HelperArg = "__sandbox"
 const exitSetup = 125
 
 // exitReadable is the helper's exit code when the self-test could read
-// the file it should not (spec.Try).
+// the file it should not, or open a Unix socket (spec.Try).
 const exitReadable = 126
 
 // specFD is the file descriptor the helper reads its spec from.

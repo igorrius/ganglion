@@ -17,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -41,10 +42,11 @@ func checks() [][2]string {
 		{"kernel", kernel()},
 		{"arch", runtime.GOARCH},
 		{"euid", strconv.Itoa(os.Geteuid())},
+		{"seccomp mode (before the probe adds one)", statusField("Seccomp")},
 		{"Landlock ABI", landlock()},
 		{"no_new_privs", nnp()},
+		{"seccomp filter installs", filter()},
 		{"not dumpable closes environ", dumpable()},
-		{"seccomp mode", statusField("Seccomp")},
 		{"Yama ptrace_scope", read("/proc/sys/kernel/yama/ptrace_scope")},
 		{"unprivileged user namespaces", read("/proc/sys/kernel/unprivileged_userns_clone") + ", max " + read("/proc/sys/user/max_user_namespaces")},
 		{"container", container()},
@@ -82,6 +84,18 @@ func nnp() string {
 		return "cannot read: " + err.Error()
 	}
 	return "set, reads " + strconv.Itoa(v)
+}
+
+// filter installs an allow-all seccomp filter, as the sandbox's helper
+// installs its own (no_new_privs is set by nnp, which runs first).
+func filter() string {
+	prog := []unix.SockFilter{{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ALLOW}}
+	fprog := unix.SockFprog{Len: 1, Filter: &prog[0]}
+	if _, _, errno := unix.RawSyscall(unix.SYS_PRCTL, unix.PR_SET_SECCOMP, unix.SECCOMP_MODE_FILTER,
+		uintptr(unsafe.Pointer(&fprog))); errno != 0 {
+		return "no: " + errno.Error()
+	}
+	return "yes"
 }
 
 func dumpable() string {

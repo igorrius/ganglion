@@ -27,8 +27,8 @@ func landlockABI() (int, error) {
 }
 
 // rights is every file system right ABI abi knows, up to version 5. Unix
-// socket connections (a later ABI) are not handled: Docker's socket is the
-// class table's to forbid (ADR-0039).
+// socket connections (ABI 9) are not handled here: until that version is
+// built on, the helper refuses Unix sockets with seccomp (refuseUnixSockets).
 func rights(abi int) uint64 {
 	r := uint64(unix.LANDLOCK_ACCESS_FS_MAKE_SYM<<1 - 1) // version 1: EXECUTE … MAKE_SYM
 	if abi >= 2 {

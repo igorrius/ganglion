@@ -964,9 +964,13 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
 - **R-CMD-3.** Every command runs in a sandbox: it cannot gain privileges
   (`no_new_privs`), gets a clean environment, cannot read the node's
   environment or memory (the node marks itself not dumpable; `ps` still
-  lists it, as it lists every process, owner 2026-11-08), and cannot read the node's data directory, its secret files,
-  `.env` and `.env.*` files in any folder, or a default list of the
-  owner's secret stores. If the node cannot set
+  lists it, as it lists every process, owner 2026-11-08), and cannot read
+  the node's data directory, its secret files, `.env` and `.env.*` files
+  in any folder, or a default list of the owner's secret stores. Below Landlock ABI 9, which reaches socket files,
+  a command opens no Unix socket at all, so gpg-agent and the keyring are
+  out of reach (`docker ps`, `systemctl --user` and `lpstat` with them);
+  signals are not limited, so `kill` reaches the owner's processes
+  (owner, 2026-11-08; [ADR-0039](adr/0039-command-sandbox.md)). If the node cannot set
   this up, or runs as root, `host.exec` is not offered and the node says
   why.
 - **R-CMD-4.** A command longer than a short wait continues in the

@@ -99,6 +99,41 @@ an unprivileged `USER`.
 The spec's open decision "Sandbox for scripts and MCP modules" is closed
 by this ADR once it is accepted; MCP modules (P3) revisit it.
 
+## Refined by the spike and the review (2026-11-08)
+
+The build of task 3.20 and a review that tried to break it settled what
+option A needs beyond the paragraph above:
+
+- **The helper is the process's own image** (`/proc/self/exe`), and the
+  node's binary is denied: a command that replaced the file at the
+  binary's path would otherwise run as the next helper, before any rule.
+- **The deny list is built again for each command** and keeps paths that
+  do not exist yet, so a secret store or data file that appears after
+  start is denied, and a store that became a symlink is followed. A
+  folder created later directly in a split folder is denied as well
+  (fail closed).
+- **Unix sockets.** Landlock reaches socket files only from ABI 9; below
+  it a command could ask gpg-agent or the keyring (over D-Bus) for
+  secrets without touching a denied file. Below ABI 9 the helper refuses
+  `socket(AF_UNIX, …)` and `io_uring_setup` with a seccomp filter, and the
+  self-test checks it (owner, 2026-11-08: refuse all rather than allow
+  with the risk). The price: `docker ps`, `systemctl --user` and `lpstat`
+  do not work from commands there. Abstract sockets are scoped to the
+  sandbox from ABI 6 as well. `socketpair` stays.
+- **Signals are not scoped** (owner, 2026-11-08): `kill` is a change
+  command behind a press and must reach the owner's processes; a command
+  can therefore stop the node, which loses no secret.
+- **Files that run at the owner's next login** (shell start files,
+  `~/.config/systemd`, `~/.local/share/systemd`, autostart,
+  `environment.d`) are denied with the secret stores and shell histories:
+  writing them would leave the sandbox later.
+- **The data folder** is denied whole when the database has a folder of
+  its own; when it lies in the working folder, home or `/`, the database
+  and its journal files are.
+- **`.env`, `.env.*` and `.envrc`** are found under the command's folder
+  and home to depth 3 at each command, symlinks resolved to their
+  targets; a deeper one stays readable (the spike's note).
+
 ## Consequences
 
 - Skill scripts (3.7) move onto this sandbox in M3d (task 3.26).
@@ -106,9 +141,13 @@ by this ADR once it is accepted; MCP modules (P3) revisit it.
   configs, the node's data directory, `.env` and `.env.*` files in any
   folder) is ours to keep; the
   owner can extend it.
-- Landlock's grant-only model means the allowed tree is enumerated at
-  start; a folder created later under a denied parent stays denied, one
-  under an allowed parent follows the parent.
+- Landlock's grant-only model means the allowed tree is enumerated for
+  each command; something created later directly in a split folder is
+  denied, something under a granted folder follows that folder.
+- Path rules do not reach a second name of a denied file: an existing
+  hard link, a bind mount or a filesystem snapshot elsewhere stays
+  readable. Landlock keeps a command from making new links into denied
+  places or new mounts.
 - Commands are Linux only; on another OS the tool is off.
 - A user in the `docker` group can reach root through Docker; the class
   table forbids the Docker subcommands that start containers, and
@@ -119,3 +158,7 @@ by this ADR once it is accepted; MCP modules (P3) revisit it.
 - The spike shows Railway or a Pi lacks Landlock or user namespaces (then
   B, or commands off there).
 - MCP modules (P3) need the same sandbox with network rules.
+- A node runs on a kernel with Landlock ABI 9: build socket rules on
+  `LANDLOCK_ACCESS_FS_RESOLVE_UNIX` there (deny the sockets under denied
+  paths and the owner's agent and keyring sockets, allow the rest), test
+  it on such a kernel, and drop the seccomp refusal on it.

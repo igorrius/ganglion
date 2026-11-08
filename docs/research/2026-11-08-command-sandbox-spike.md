@@ -32,6 +32,7 @@ long a search for `.env` files under the home folder takes (depth 4, skipping `.
 | euid | 1000 |
 | Landlock ABI | 7 |
 | no_new_privs | set, reads 1 |
+| seccomp filter installs | yes |
 | not dumpable closes environ | yes, owned by root |
 | seccomp mode | 0 |
 | Yama ptrace_scope | 1 |
@@ -51,6 +52,7 @@ the grants all fail; `env` shows the allowlist only; `sudo -n true` refuses unde
 | euid | 65532 (`nonroot`); 0 with `--user 0` |
 | Landlock ABI | 7 (the default seccomp profile lets the syscalls through) |
 | no_new_privs | set, reads 1 |
+| seccomp filter installs | yes |
 | not dumpable closes environ | yes, owned by root (as root: meaningless) |
 | seccomp mode | 2 (filter) |
 | container | `/.dockerenv`; pid 1 cgroup `0::/` |
@@ -62,6 +64,16 @@ Waiting for the owner's run.
 ### Raspberry Pi (arm64)
 
 Waiting for the owner's run.
+
+## After the review
+
+A review of the branch broke the first build four ways, all closed with an abuse test each: a
+secret store made after start (the deny list is now built for each command and keeps paths that do
+not exist yet), the helper binary replaced by a command (the helper is now `/proc/self/exe` and the
+binary is denied), a `.env` that is a symlink, and Unix sockets that reach gpg-agent and the keyring
+(Landlock reaches socket files only from ABI 9; below it the helper refuses Unix sockets with
+seccomp, the owner's choice). The probe gained the row "seccomp filter installs" for that.
+[ADR-0039](../adr/0039-command-sandbox.md) lists the rest.
 
 ## Conclusion (so far)
 
