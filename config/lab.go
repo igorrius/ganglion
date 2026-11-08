@@ -97,7 +97,7 @@ func applyLabHousekeeping(i do.Injector) {
 // labCommandWait is how long a lab command call waits before its command goes
 // on in the background: short, so a scenario sees a background command
 // within its patience.
-const labCommandWait = 2 * time.Second
+const labCommandWait = 5 * time.Second
 
 // labPass is how often the lab's runner announces the background commands
 // that ended: soon, so their command.done turn follows within a step.

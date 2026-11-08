@@ -145,7 +145,9 @@ func TestACommandSeesOnlyTheAllowedEnvironment(t *testing.T) {
 	if failed(out) {
 		t.Fatalf("python3 failed:\n%s", out)
 	}
-	allowed := []string{"PATH", "HOME", "LANG", "TZ", "TERM"}
+	// LC_CTYPE is Python's own, set by its C-locale coercion (PEP 538), not
+	// passed in.
+	allowed := []string{"PATH", "HOME", "LANG", "TZ", "TERM", "LC_CTYPE"}
 	var seen []string
 	for line := range strings.Lines(out) {
 		if k, ok := strings.CutPrefix(strings.TrimSpace(line), "VAR "); ok {
@@ -185,7 +187,7 @@ func TestEnvIsForbiddenEvenPressed(t *testing.T) {
 
 // R-CMD-6 under the real sandbox: a content command on a file git ignores
 // asks with the warning, git being asked inside the sandbox; the same
-// command on a tracked file asks without it.
+// command on an untracked file it does not ignore asks without it.
 func TestTheQuestionWarnsOfAFileGitIgnores(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
@@ -195,7 +197,7 @@ func TestTheQuestionWarnsOfAFileGitIgnores(t *testing.T) {
 	if out, err := exec.Command("git", "-C", repo, "init", "-q").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
-	for name, body := range map[string]string{".gitignore": "local.conf\n", "local.conf": "password=x\n", "tracked.conf": "x\n"} {
+	for name, body := range map[string]string{".gitignore": "local.conf\n", "local.conf": "password=x\n", "untracked.conf": "x\n"} {
 		if err := os.WriteFile(filepath.Join(repo, name), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -209,7 +211,7 @@ func TestTheQuestionWarnsOfAFileGitIgnores(t *testing.T) {
 		t.Fatal("host.exec asks no question")
 	}
 	warning, _, _ := strings.Cut(texts.EnglishText(texts.CmdGitIgnored), "{repo}")
-	for file, want := range map[string]bool{"local.conf": true, "tracked.conf": false} {
+	for file, want := range map[string]bool{"local.conf": true, "untracked.conf": false} {
 		c := n.call("cat", filepath.Join(repo, file))
 		c.Speak = texts.Speaker{}
 		text, err := q.Question(context.Background(), c)

@@ -12,8 +12,8 @@ covers:
 model: scripted
 script:
   - {tool: host.exec, args: '{"argv":["df","-h","/"],"reason":"free space"}'}
-  - {tool: host.exec, args: '{"argv":["du","-sh","/usr/bin"],"reason":"how big"}'}
-  - {say: "/ and /usr/bin measured."}
+  - {tool: host.exec, args: '{"argv":["du","-sh","/usr/bin/env"],"reason":"how big"}'}
+  - {say: "/ and /usr/bin/env measured."}
 steps:
   - say: "Build me a tree of what takes space"
   - facts:

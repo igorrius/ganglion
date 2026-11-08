@@ -11,7 +11,7 @@ covers:
   - event/**
 model: scripted
 script:
-  - {tool: host.exec, args: '{"argv":["sleep","4"],"reason":"a long measure"}'}
+  - {tool: host.exec, args: '{"argv":["sleep","8"],"reason":"a long measure"}'}
   - {say: "It runs in the background."}
   - {say: "The measure finished."}
 steps:
@@ -21,4 +21,4 @@ steps:
       history: {contains: "still running"}
   - facts:
       reply: {contains: "measure finished"}
-      history: {contains: "[command finished] sleep 4"}
+      history: {contains: "[command finished] sleep 8"}
