@@ -68,6 +68,10 @@ func (a *Agent) commandTable() []commandEntry {
 			transport.LangDefault:   "Modules: /modules update or rollback <name>",
 			transport.LangRussian:   "Модули: /modules update или rollback <имя>",
 			transport.LangUkrainian: "Модулі: /modules update або rollback <назва>"}},
+		{"/commands", a.commandsSwitch, map[transport.Lang]string{
+			transport.LangDefault:   "Host commands: /commands on or off",
+			transport.LangRussian:   "Команды на компьютере: /commands on или off",
+			transport.LangUkrainian: "Команди на комп'ютері: /commands on або off"}},
 	}
 }
 

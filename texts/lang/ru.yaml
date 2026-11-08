@@ -29,6 +29,9 @@ reply.resumed: "Продолжаем: {title}"
 reply.session_row: "{n}. {span} · ходов: {turns} · {title}"
 reply.no_tasks: Напоминаний и задач по расписанию нет.
 reply.not_available: Эта команда вам недоступна.
+reply.commands_on: Команды включены.
+reply.commands_off: Команды выключены. /commands on включает их снова.
+reply.commands_usage: Напишите /commands on или /commands off.
 
 button.details: "Подробнее"
 button.delete: "Удалить"
@@ -132,6 +135,7 @@ status.unit_min: "мин"
 status.unit_sec: "с"
 status.sandbox_ready: "Песочница команд: готова, Landlock {abi}"
 status.sandbox_off: "Песочница команд: выключена"
+status.commands_off: "Команды: выключены через /commands"
 status.reason_sandbox_not_linux: "это не Linux"
 status.reason_sandbox_root: "нода работает от root"
 status.reason_sandbox_landlock: "в ядре нет Landlock"

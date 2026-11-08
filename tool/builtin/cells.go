@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/texts"
@@ -16,6 +17,12 @@ type Cells interface {
 	Get(ctx context.Context, id string) (cells.Cell, error)
 	SetDesired(ctx context.Context, id string, v json.RawMessage, src string, expectVersion int64) (cells.Cell, error)
 }
+
+// errToolSwitch is the refusal of a tools.* cell: the owner's switches.
+var errToolSwitch = errors.New("tools.* cells are the owner's switches; they set them with /commands")
+
+// toolSwitchPrefix starts the id of a cell that only an admin's command sets.
+const toolSwitchPrefix = "tools."
 
 // Values a switch takes through cells.set.
 const (
@@ -138,6 +145,9 @@ func (*CellsSet) args(c tool.Call) (setArgs, error) {
 	}
 	if a.ID == "" {
 		return setArgs{}, errors.New("cells.set: id is empty")
+	}
+	if strings.HasPrefix(a.ID, toolSwitchPrefix) {
+		return setArgs{}, fmt.Errorf("cells.set: %w", errToolSwitch)
 	}
 	if a.Value != valueOn && a.Value != valueOff {
 		return setArgs{}, fmt.Errorf(`cells.set: value must be "on" or "off", got %q`, a.Value)

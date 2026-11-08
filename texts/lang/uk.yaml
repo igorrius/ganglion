@@ -29,6 +29,9 @@ reply.resumed: "Продовжуємо: {title}"
 reply.session_row: "{n}. {span} · ходів: {turns} · {title}"
 reply.no_tasks: Нагадувань і завдань за розкладом немає.
 reply.not_available: Ця команда вам недоступна.
+reply.commands_on: Команди ввімкнено.
+reply.commands_off: Команди вимкнено. /commands on вмикає їх знову.
+reply.commands_usage: Напишіть /commands on або /commands off.
 
 button.details: "Докладніше"
 button.delete: "Видалити"
@@ -132,6 +135,7 @@ status.unit_min: "хв"
 status.unit_sec: "с"
 status.sandbox_ready: "Пісочниця команд: готова, Landlock {abi}"
 status.sandbox_off: "Пісочниця команд: вимкнена"
+status.commands_off: "Команди: вимкнено через /commands"
 status.reason_sandbox_not_linux: "це не Linux"
 status.reason_sandbox_root: "нода працює від root"
 status.reason_sandbox_landlock: "у ядрі немає Landlock"

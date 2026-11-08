@@ -47,18 +47,21 @@ const (
 	LineUsed           Key = "line.used"
 	LineExpired        Key = "line.expired"
 
-	ReplyNoModel      Key = "reply.no_model"
-	ReplyStepLimit    Key = "reply.step_limit"
-	ReplyExpired      Key = "reply.expired"
-	ReplyDailyLimit   Key = "reply.daily_limit"
-	ReplyGiveUp       Key = "reply.give_up"
-	ReplyNewSession   Key = "reply.new_session"
-	ReplyNoSessions   Key = "reply.no_sessions"
-	ReplyNoSuchResume Key = "reply.no_such_resume"
-	ReplyResumed      Key = "reply.resumed"
-	ReplySessionRow   Key = "reply.session_row"
-	ReplyNoTasks      Key = "reply.no_tasks"
-	ReplyNotAvailable Key = "reply.not_available"
+	ReplyNoModel       Key = "reply.no_model"
+	ReplyStepLimit     Key = "reply.step_limit"
+	ReplyExpired       Key = "reply.expired"
+	ReplyDailyLimit    Key = "reply.daily_limit"
+	ReplyGiveUp        Key = "reply.give_up"
+	ReplyNewSession    Key = "reply.new_session"
+	ReplyNoSessions    Key = "reply.no_sessions"
+	ReplyNoSuchResume  Key = "reply.no_such_resume"
+	ReplyResumed       Key = "reply.resumed"
+	ReplySessionRow    Key = "reply.session_row"
+	ReplyNoTasks       Key = "reply.no_tasks"
+	ReplyNotAvailable  Key = "reply.not_available"
+	ReplyCommandsOn    Key = "reply.commands_on"
+	ReplyCommandsOff   Key = "reply.commands_off"
+	ReplyCommandsUsage Key = "reply.commands_usage"
 
 	ButtonDetails        Key = "button.details"
 	ButtonDelete         Key = "button.delete"
@@ -105,6 +108,7 @@ const (
 	SchedStarted       Key = "sched.started"
 
 	StatusNoAnswer               Key = "status.no_answer"
+	StatusCommandsOff            Key = "status.commands_off"
 	StatusVerdictOK              Key = "status.verdict_ok"
 	StatusVerdictWarn            Key = "status.verdict_warn"
 	StatusVerdictFail            Key = "status.verdict_fail"
@@ -207,7 +211,7 @@ var allKeys = []Key{
 	ToastApproved, ToastDeclined, ToastAccepted, ToastNotYours, ToastNoButton, ToastUsed, ToastExpired, ToastNotAllowed,
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
-	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
+	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, StatusCommandsOff,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, AskHostExec, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, StatusModuleFallback, StatusReasonModuleFailed, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled, StatusUnitDay, StatusUnitHour, StatusUnitMin, StatusUnitSec, StatusSandboxReady, StatusSandboxOff, StatusReasonSandboxNotLinux, StatusReasonSandboxRoot, StatusReasonSandboxLandlock, StatusReasonSandboxDumpable, StatusReasonSandboxSelfTest,
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,

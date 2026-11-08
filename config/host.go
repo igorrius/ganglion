@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
@@ -79,10 +80,20 @@ func Runner() do.Provider[*host.Runner] {
 	}
 }
 
-// commandGate is open while the sandbox is on; task 6 adds the kill switch.
-type commandGate struct{ s *sandbox.Sandbox }
+// Switch provides the kill switch of host.exec, its cell defined at start.
+func Switch() do.Provider[*host.Switch] {
+	return func(i do.Injector) (*host.Switch, error) {
+		return host.NewSwitch(do.MustInvoke[Startup](i), do.MustInvoke[*cells.Service](i))
+	}
+}
 
-func (g commandGate) Open() bool { ok, _ := g.s.Ready(); return ok }
+// commandGate is open while the sandbox is on and the kill switch is not off.
+type commandGate struct {
+	s  *sandbox.Sandbox
+	sw *host.Switch
+}
+
+func (g commandGate) Open() bool { ok, _ := g.s.Ready(); return ok && g.sw.Open() }
 
 // HostExec provides host.exec over the runner, in the node user's home.
 func HostExec() do.Provider[*builtin.HostExec] {
@@ -92,6 +103,6 @@ func HostExec() do.Provider[*builtin.HostExec] {
 		if err != nil {
 			home = "/"
 		}
-		return builtin.NewHostExec(do.MustInvoke[*host.Runner](i), host.NewIgnored(s), commandGate{s}, home), nil
+		return builtin.NewHostExec(do.MustInvoke[*host.Runner](i), host.NewIgnored(s), commandGate{s, do.MustInvoke[*host.Switch](i)}, home), nil
 	}
 }

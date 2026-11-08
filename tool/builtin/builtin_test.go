@@ -352,3 +352,16 @@ func TestCellsSetNeedsConfirm(t *testing.T) {
 		t.Fatalf("cells.get = %+v, %v", res, err)
 	}
 }
+
+// Ruling 6: the agent cannot set a tools.* cell, at the question or the run.
+func TestCellsSetRefusesToolSwitches(t *testing.T) {
+	svc := lamp(t)
+	set := builtin.NewCellsSet(svc)
+	c := call("cells.set", `{"id":"tools.host_exec","value":"on"}`)
+	if _, err := set.Run(context.Background(), c); err == nil || !strings.Contains(err.Error(), "/commands") {
+		t.Fatalf("run: %v", err)
+	}
+	if _, err := confirmed(t, c, set); err == nil || !strings.Contains(err.Error(), "/commands") {
+		t.Fatalf("question: %v", err)
+	}
+}

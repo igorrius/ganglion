@@ -3,6 +3,7 @@ package config
 import (
 	"time"
 
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/sandbox"
@@ -29,6 +30,7 @@ func StatusSources() do.Provider[[]status.Source] {
 			do.MustInvoke[*modstore.Store](i),
 			do.MustInvoke[*schedule.Scheduler](i),
 			do.MustInvoke[*sandbox.Sandbox](i),
+			do.MustInvoke[*host.Switch](i),
 		}
 		return append(sources, do.MustInvoke[Watched](i)...), nil
 	}

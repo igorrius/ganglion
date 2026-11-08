@@ -106,6 +106,9 @@ type Deps struct {
 	// Status hears the stages of a person's message (R-LIVE-7); NoStatus when
 	// unset. It must not block.
 	Status StatusFunc
+	// Switch is host.exec's kill switch, set by an admin's /commands (R-POL-5);
+	// NoSwitch when unset.
+	Switch Switch
 	// StatusSources are the components /status asks (R-OBS-11); none when unset.
 	StatusSources []status.Source
 	Now           func() time.Time
@@ -189,6 +192,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Inbox == nil {
 		d.Inbox = NoInbox{}
+	}
+	if d.Switch == nil {
+		d.Switch = NoSwitch{}
 	}
 	if d.Plans == nil {
 		d.Plans = NoPlans{}
