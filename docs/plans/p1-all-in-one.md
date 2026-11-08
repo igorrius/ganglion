@@ -75,7 +75,7 @@ pinned by a test in the task that owns the code.
 | M3b | **The agent works with the world** — **done** ([plan](p1-m3b-agent-world.md)) | Tools under policies and the security baseline, confirmations and quick actions on buttons, the scheduler with reminders and scheduled agent tasks, memory, web reading, the tool-call journal, tools for the claude CLI over MCP | over 1 weekend |
 | M3c | Modules, skills, diagnostics — **done** ([plan](p1-m3c-modules-skills-diagnostics.md)) | Module update and rollback, skills, attachments, logs on disk, `ganglion mcp`, the 3.8 acceptance | about 1 weekend |
 | M3 live | Live turns — **done** ([plan](p1-live-turns.md)) | Additions join a running turn, status reactions, a plan shown during the turn | |
-| M3 more | After using the bot — **done**; `/status` built, waiting for the owner's look | A closed question folds, `/last`, fixed texts in the person's language, rich messages, replies that know what they answer, `/status` | |
+| M3 more | After using the bot — **done** | A closed question folds, `/last`, fixed texts in the person's language, rich messages, replies that know what they answer, `/status` | |
 | M3d | Host commands and plans ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
 | M4 | Reflexes: runner and Deye | Config, modules on cron writing sensor cells, exposed to the agent as tools (the scheduler and the first module-as-tool path come from M3b); deployed next to the current bot | 0.5 weekend |
 | M5 | Load-shedding flow | The 8.1 state machine on `virtual` load cells; Telegram notifier; shadow week | 0.5 weekend |
@@ -245,7 +245,7 @@ Closed on 2026-11-05. Before M3d. Design: [p1-live-turns-design.md](p1-live-turn
 #### M3 · More, after using the bot
 
 Small pieces the owner asked for after living with the bot, each with its own
-design and plan where it needed one. All but `/status` are closed.
+design and plan where it needed one. All are closed.
 
 | Task | Done when |
 |---|---|
@@ -254,7 +254,7 @@ design and plan where it needed one. All but `/status` are closed.
 | 3.35 Fixed texts in the person's language ([design](p1-fixed-texts-language-design.md), [plan](p1-fixed-texts-language.md); 7.13, R-LANG-1..7, [ADR-0053](../adr/0053-fixed-texts-in-the-persons-language.md); closed 2026-11-06) | A reply follows Telegram's language on the test bot; the full lab passes |
 | 3.36 Telegram rich messages ([design](p1-rich-messages-design.md), [plan](p1-rich-messages.md); R-DLV-11, 12, [ADR-0054](../adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md); closed 2026-11-06) | A table fits a phone, a long report comes as one message, a refusal goes the ordinary way |
 | 3.37 Knowing which message a reply answers ([design](p1-reply-context-design.md), [plan](p1-reply-context.md); R-DLV-13, 14, [ADR-0055](../adr/0055-a-reply-carries-the-replied-messages-origin.md); closed 2026-11-07) | A reply to a weather answer is answered for the new city; the taint follows the replied message's origin |
-| 3.38 `/status` in Telegram: a verdict, then the node, the models, delivery and what is off, from sources each component registers ([design](p1-status-design.md), [plan](p1-status.md); R-OBS-11) | Section 8 of the design holds; the owner reads it on the test bot |
+| 3.38 `/status` in Telegram: a verdict, then the node, the models, delivery and what is off, from sources each component registers ([design](p1-status-design.md), [plan](p1-status.md); R-OBS-11; closed 2026-11-08) | Section 8 of the design holds; the owner reads it on the test bot |
 
 #### M3d · Host commands and plans
 

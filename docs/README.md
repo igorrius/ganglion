@@ -6,8 +6,7 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** the owner's look at `/status` on the test bot (task 3.38, built on branch `status`), then
-  M3d: its step-by-step plan, starting with the sandbox spike (3.20) on the owner's machine, Railway
+- **Next:** M3d: its step-by-step plan, starting with the sandbox spike (3.20) on the owner's machine, Railway
   and a Pi.
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
@@ -261,7 +260,7 @@ Start here when coming back to the project.
     `GOMEMLIMIT`; each milestone compares its numbers with the previous one; a feature that does not fit
     a small host runs on a denser node. The memory tests report and no longer fail above 128 MB.
     Setting `GOMEMLIMIT` from the container's limit is M4 task 4.1.
-  - **`/status` (task 3.38), built on branch `status` 2026-11-08**
+  - **`/status` (task 3.38), closed 2026-11-08**
     ([design](plans/p1-status-design.md), [plan](plans/p1-status.md), R-OBS-11):
     - an admin's `/status`, with no model and no note in the history: a verdict, then the node (the full
       version, uptime, memory against `GOMEMLIMIT`, the database and logs), the models (this session's,
@@ -276,7 +275,10 @@ Start here when coming back to the project.
     - measured (`make memory`, ADR-0056): 46.4 MB binary (replies: 46.2); the agent with tools at
       47–48 MB after 1,000 turns against 44–46 MB on `master`, but 46–49 MB with the sources switched
       off, and runs of the same code differ by 3 MB: within the measure's noise;
-    - waits for the owner's look on the test bot.
+    - the owner's look on the test bot found three things, fixed: the job count now matches the list
+      (a one-time job that ran is not counted), a catch-up run after a restart is not late, and
+      lengths of time are written in the reader's units from the catalogue, in Go with no model call;
+    - no full lab run: the branch does not touch the turn's stages (owner, 2026-11-08).
   - **M3d, after `/status` (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that

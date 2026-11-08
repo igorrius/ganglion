@@ -777,8 +777,8 @@ Keys: `status.jobs` `Jobs: {n}, next {time}`; `status.jobs_idle` `Jobs: {n}, not
 - [x] **Step 2: Run** `make test`, `make lint`, `make lab` for what changed. Ask the owner before any full run.
 - [x] **Step 3: Request a whole-branch review** with superpowers:requesting-code-review; fix or record
   each finding.
-- [ ] **Step 4: The owner's look on the test bot:** `/status` on a phone, in Russian; the session's
+- [x] **Step 4: The owner's look on the test bot:** `/status` on a phone, in Russian; the session's
   models; a skill broken on purpose shows; the verdict reads at a glance.
 - [x] **Step 5: Update "Where we are"** in `docs/README.md` (3.38 closed, the deferred minors) and the
   code map's statuses.
-- [ ] **Step 6: Commit** `docs: /status done`, and ask the owner about the merge.
+- [x] **Step 6: Commit** `docs: /status done`, and ask the owner about the merge.
