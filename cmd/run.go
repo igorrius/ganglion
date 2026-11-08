@@ -92,6 +92,7 @@ func bootstrap(v flags.Run, src secrets.Source, readFile func(string) ([]byte, e
 	b.ModulesDir = filepath.Join(filepath.Dir(v.DB), "modules")
 	b.ClaudeDir = filepath.Join(filepath.Dir(v.DB), "claude")
 	b.SandboxDeny = filepath.SplitList(v.SandboxDeny)
+	b.SandboxHideNames = v.SandboxHideNames == "on"
 	if dir, on := flags.LogDir(v.DB, v.LogDir); on {
 		b.LogDir = dir
 	}

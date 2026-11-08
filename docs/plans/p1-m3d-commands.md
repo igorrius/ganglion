@@ -4813,6 +4813,113 @@ git commit -m "accept: M3d's ten checks, scripted — chatlab scenarios, the san
 
 ---
 
+### Task 11a: Commands may list the folders the sandbox splits (owner, 2026-11-08)
+
+Found while building Task 11. Landlock grants whole trees only, so the sandbox of task 3.20 splits
+every folder that holds a denied path into its other entries and grants those, never the folder
+itself. On the owner's machine `/`, `/home` and `~` are split (they hold `~/.ssh`, `~/.gnupg` and
+the like), so `ls ~`, `du -sh ~` and `ls /` fail with "Permission denied", while `du -sh ~/projects`
+works. The agent cannot build "the tree of what takes space in my home" in one command.
+
+The owner decided on 2026-11-08: by default a command may **list** a split folder (Landlock's
+`READ_DIR` on it, which reaches its whole tree), so the names inside denied folders become visible
+(for example that `~/.ssh` holds `id_ed25519`), never their contents. The old behaviour stays
+available through configuration: `GANGLION_SANDBOX_HIDE_NAMES=on` (flag `--sandbox-hide-names`).
+
+**Files:**
+- Create: `docs/adr/0057-commands-may-list-split-folders.md`
+- Modify: `sandbox/grants.go`, `sandbox/landlock_linux.go`, `sandbox/sandbox.go` (`Policy.HideNames`), `sandbox/*_test.go`,
+  `cmd/flags/flags.go`, `cmd/run.go`, `config/bootstrap.go` (`SandboxHideNames`), `config/sandbox.go`,
+  `config/hostexec_accept_test.go`, `docs/spec.md` (R-CMD-3), `docs/adr/README.md`, `docs/architecture/05-code-map.md`
+
+**Interfaces:**
+- Produces:
+  - `sandbox.Grant` gains `List bool`: a list-only grant of a split folder, `READ_DIR` and nothing else;
+  - `sandbox.Grants(deny []string, list Lister, hideNames bool) ([]Grant, error)`, with every caller updated;
+  - `sandbox.Policy.HideNames bool`;
+  - `config.Bootstrap.SandboxHideNames bool`.
+
+- [x] **Step 1: The ADR, before the code**
+
+  Write ADR-0057 from `docs/adr/template.md`:
+  - **Status:** Accepted (2026-11-08), owner.
+  - **Links:** R-CMD-3 and ADR-0039, which it refines. ADR-0039 is accepted and not rewritten; this
+    ADR records the change.
+  - **Context:** the split folders above, and what fails because of them (`ls ~`, `du -sh ~`,
+    `ls /`, `ls /tmp` when the data folder is there).
+  - **Options:**
+    - A: keep it, so split folders cannot be listed;
+    - B: `READ_DIR` on each split folder, so names inside denied folders become visible but no
+      contents;
+    - C: a Go tool that lists a split folder's sizes outside the sandbox. It duplicates `du`, and
+      every command the agent tries would still fail.
+  - **Comparison:** what the agent can answer, what leaks (names only), and the effort.
+    `READ_DIR` grants listing only; reading, writing, executing and truncating files stay
+    denied.
+  - **Decision:** B by default, A through `GANGLION_SANDBOX_HIDE_NAMES=on`.
+  - **Consequences:**
+    - file names in `~/.ssh`, `~/.gnupg`, the data folder and the workspace can reach the model;
+    - a press still guards every content command;
+    - the self-test still reads a denied file.
+
+  Add its row to `docs/adr/README.md`.
+
+  In spec R-CMD-3, after "cannot read the node's data directory…", add: "A command may list a
+  folder that holds a denied path, so the names inside denied folders are visible but not their
+  contents (owner, 2026-11-08, ADR-0057); `GANGLION_SANDBOX_HIDE_NAMES=on` hides them too."
+
+- [x] **Step 2: Write the failing tests**
+
+  - `sandbox/grants_test.go`:
+    - with denied `/home/o/.ssh`, `Grants` holds a `List` grant for `/`, `/home` and `/home/o`,
+      next to today's grants of their other entries;
+    - with `hideNames` true, it holds no `List` grant;
+    - a denied folder itself never gets a `List` grant: `/home/o/.ssh` is reached only through
+      its parent's.
+  - A sandbox test with the real Landlock, skipped when not ready, in the package's existing
+    style. A temp tree has `top/secret/key` denied and `top/open/file` open:
+    - `ls top` works;
+    - `ls top/secret` lists `key`;
+    - `cat top/secret/key` fails with "Permission denied";
+    - writing `top/new` fails, since a list grant writes nothing;
+    - with `HideNames`, `ls top` fails.
+  - `config/hostexec_accept_test.go`: through `host.exec` with the real sandbox, `ls <home>`
+    succeeds, and reading a denied secret still fails.
+
+- [x] **Step 3: Run them to see them fail**
+
+Run: `go test ./sandbox/ ./config/ -run 'Grants|List|HideNames|Accept' -v`
+Expected: FAIL; the List grant and the hide flag do not exist.
+
+- [x] **Step 4: Implement**
+
+  - `grants.go`'s `split`: when a folder is split (some denied path lies under it) and the folder
+    itself is not denied, append `Grant{Path: dir, Dir: true, List: true}` unless `hideNames` is
+    set.
+  - `landlock_linux.go`'s `addRule`: a `List` grant adds a path-beneath rule with
+    `LANDLOCK_ACCESS_FS_READ_DIR` only.
+  - `Sandbox.Command` and the self-test pass `p.HideNames`.
+  - Flag: `--sandbox-hide-names` (env `GANGLION_SANDBOX_HIDE_NAMES`, `on` or `off`, default `off`),
+    next to `--sandbox-deny` in `cmd/flags/flags.go`.
+  - `cmd/run.go` sets `b.SandboxHideNames`, and `config/sandbox.go` passes it to the `Policy`.
+  - The start log line `sandbox: ready` gains `hide_names`.
+
+- [x] **Step 5: Run, document, commit**
+
+Run: `go test ./sandbox/ ./config/ ./cmd/` then `go test ./...`, and lint.
+Expected: PASS.
+
+  - The code map's sandbox row: "a split folder may be listed (READ_DIR, ADR-0057) unless
+    `GANGLION_SANDBOX_HIDE_NAMES=on`".
+  - "Where we are" waits for task 12.
+
+```bash
+git add sandbox/ cmd/ config/ docs/
+git commit -m "sandbox: commands may list the folders it splits; GANGLION_SANDBOX_HIDE_NAMES=on hides the names (ADR-0057)"
+```
+
+---
+
 ### Task 12: Docs, measure, review, the live check, the ADRs accepted (3.27)
 
 - [ ] **Step 1: Architecture.**

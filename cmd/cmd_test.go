@@ -42,7 +42,7 @@ func clearEnv(t *testing.T) {
 		"GANGLION_METRICS_ADDR", "GANGLION_MODELS_FILE", "GANGLION_WORKSPACE", "GANGLION_DAILY_BUDGET_USD",
 		"GANGLION_DAILY_TURNS", "GANGLION_DAILY_TOKENS", "GANGLION_SESSION_IDLE", "GANGLION_TZ", "GANGLION_LOG_LEVEL",
 		"TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN_FILE", "OPENROUTER_API_KEY", "OPENROUTER_API_KEY_FILE",
-		"GANGLION_SEARCH", "BRAVE_API_KEY", "BRAVE_API_KEY_FILE", "GANGLION_SANDBOX_DENY"} {
+		"GANGLION_SEARCH", "BRAVE_API_KEY", "BRAVE_API_KEY_FILE", "GANGLION_SANDBOX_DENY", "GANGLION_SANDBOX_HIDE_NAMES"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("GANGLION_LOG_DIR", "off") // no logs/ beside the test's default ganglion.db
@@ -55,7 +55,7 @@ func TestRunDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(roles) != 3 || b.DB != "ganglion.db" || b.BotAPIURL != "https://api.telegram.org" || b.BotToken != "" ||
-		b.Admin != "" || b.MetricsAddr != "127.0.0.1:9464" || b.TelegramReply != "auto" || !b.TelegramRich {
+		b.Admin != "" || b.MetricsAddr != "127.0.0.1:9464" || b.TelegramReply != "auto" || !b.TelegramRich || b.SandboxHideNames {
 		t.Fatalf("roles %v, bootstrap %+v", roles, b)
 	}
 	a := b.Agent
@@ -92,7 +92,7 @@ func TestRunReadsEveryVariable(t *testing.T) {
 		"GANGLION_DAILY_BUDGET_USD": "2.5", "GANGLION_DAILY_TURNS": "100", "GANGLION_DAILY_TOKENS": "500000",
 		"GANGLION_SESSION_IDLE": "4h", "GANGLION_TZ": "UTC",
 		"TELEGRAM_BOT_TOKEN_FILE": write(t, "tg", "7001:from-file\n"), "OPENROUTER_API_KEY": " sk-or-secret\n",
-		"GANGLION_SEARCH": "off", "BRAVE_API_KEY_FILE": write(t, "brave", "BSA-key\n"),
+		"GANGLION_SEARCH": "off", "BRAVE_API_KEY_FILE": write(t, "brave", "BSA-key\n"), "GANGLION_SANDBOX_HIDE_NAMES": "on",
 	} {
 		t.Setenv(k, v)
 	}
@@ -102,7 +102,8 @@ func TestRunReadsEveryVariable(t *testing.T) {
 	}
 	a := b.Agent
 	if b.DB != "/data/g.db" || b.Admin != "telegram:user:123456" || b.BotAPIURL != "http://127.0.0.1:9" ||
-		b.TelegramReply != "always" || b.TelegramRich || b.MetricsAddr != "off" || b.BotToken != "7001:from-file" {
+		b.TelegramReply != "always" || b.TelegramRich || b.MetricsAddr != "off" || b.BotToken != "7001:from-file" ||
+		!b.SandboxHideNames {
 		t.Fatalf("bootstrap %+v", b)
 	}
 	if a.Catalog == nil || len(a.Catalog.Models) != 2 || a.Keys["openrouter"] != "sk-or-secret" || a.Keys["claude"] != "" ||
@@ -126,6 +127,7 @@ func TestBadValuesNameTheirVariable(t *testing.T) {
 		"GANGLION_ADMIN": "@igor", "GANGLION_TELEGRAM_REPLY": "sometimes", "GANGLION_TELEGRAM_RICH": "maybe", "GANGLION_TZ": "Mars/Base",
 		"GANGLION_DAILY_BUDGET_USD": "-1", "GANGLION_DAILY_TURNS": "many", "GANGLION_SESSION_IDLE": "soon",
 		"GANGLION_LOG_LEVEL": "chatty", "GANGLION_MODELS_FILE": "/missing.yaml", "GANGLION_SEARCH": "google",
+		"GANGLION_SANDBOX_HIDE_NAMES": "yes",
 	} {
 		t.Run(k, func(t *testing.T) {
 			clearEnv(t)

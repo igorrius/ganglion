@@ -35,9 +35,9 @@ type commandNode struct {
 
 // startCommandNode builds the node as `ganglion run` does, with a bot token
 // in a TELEGRAM_BOT_TOKEN_FILE and a provider key in the environment, and
-// runs the runner of host commands. It skips where the sandbox cannot be
-// ready.
-func startCommandNode(t *testing.T) *commandNode {
+// runs the runner of host commands. Each of with changes the bootstrap
+// before the node is built. It skips where the sandbox cannot be ready.
+func startCommandNode(t *testing.T, with ...func(*Bootstrap)) *commandNode {
 	t.Helper()
 	notDumpable(t)
 	if !hostSandboxReady() {
@@ -52,6 +52,9 @@ func startCommandNode(t *testing.T) *commandNode {
 	t.Setenv("OR_KEY", key)
 	b := agentConfig(t)
 	b.BotToken, b.Agent.Keys = token, map[string]string{"or": key}
+	for _, w := range with {
+		w(&b)
+	}
 
 	i := New(context.Background(), b, slog.New(slog.DiscardHandler))
 	t.Cleanup(func() { _ = i.Shutdown() })
@@ -221,5 +224,42 @@ func TestTheQuestionWarnsOfAFileGitIgnores(t *testing.T) {
 		if got := strings.Contains(text, warning); got != want {
 			t.Errorf("cat %s: warning %t, want %t:\n%s", file, got, want, text)
 		}
+	}
+}
+
+// ADR-0057, abuse test (conventions, section 11): through host.exec with the
+// real sandbox, home and "/", which the sandbox splits around the owner's
+// secret stores, may be listed, and so may the node's data folder, yet a
+// denied file in it still cannot be read.
+func TestACommandListsHomeButReadsNoSecret(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "/" {
+		t.Skip("no home folder to list")
+	}
+	n := startCommandNode(t)
+	for _, dir := range []string{home, "/"} {
+		if out := n.runApproved(t, "ls", "-a", dir); failed(out) {
+			t.Fatalf("ls %s failed:\n%s", dir, out)
+		}
+	}
+	if out := n.runApproved(t, "ls", filepath.Dir(n.db)); failed(out) || !strings.Contains(out, filepath.Base(n.db)) {
+		t.Errorf("the data folder was not listed:\n%s", out)
+	}
+	for _, f := range []string{n.db, n.tokenFile} {
+		if out := n.runApproved(t, "cat", f); !failed(out) || !strings.Contains(out, "Permission denied") {
+			t.Errorf("cat %s was not refused:\n%s", f, out)
+		}
+	}
+}
+
+// GANGLION_SANDBOX_HIDE_NAMES=on reaches the sandbox: home is not listed.
+func TestHiddenNamesKeepHomeUnlisted(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "/" {
+		t.Skip("no home folder to list")
+	}
+	n := startCommandNode(t, func(b *Bootstrap) { b.SandboxHideNames = true })
+	if out := n.runApproved(t, "ls", home); !failed(out) || !strings.Contains(out, "Permission denied") {
+		t.Fatalf("ls %s with hidden names:\n%s", home, out)
 	}
 }

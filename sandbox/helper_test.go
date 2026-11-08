@@ -30,7 +30,7 @@ func run(t *testing.T, deny []string, argv ...string) (string, int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	grants, err := Grants(deny, os.ReadDir)
+	grants, err := Grants(deny, os.ReadDir, false) // the default: split folders are listed
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestAFileCreatedAfterTheGrantsIsDenied(t *testing.T) {
 	if err := os.Mkdir(inner, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	grants, err := Grants([]string{filepath.Join(inner, "denied")}, os.ReadDir) // splits inner
+	grants, err := Grants([]string{filepath.Join(inner, "denied")}, os.ReadDir, false) // splits inner
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,5 +386,70 @@ func TestEverydayCommandsStillRun(t *testing.T) {
 		if out, code := output(t, s, "/", argv...); code != 0 {
 			t.Errorf("%v: exit %d, %q", argv, code, out)
 		}
+	}
+}
+
+// splitTree is top/secret/key, denied with its folder, beside
+// top/open/file, which is not; it returns top.
+func splitTree(t *testing.T) string {
+	t.Helper()
+	dir, _ := secretDir(t)
+	top := filepath.Join(dir, "top")
+	for _, f := range []string{"secret/key", "open/file"} {
+		p := filepath.Join(top, f)
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("hunter2"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return top
+}
+
+// ADR-0057, abuse test (conventions, section 11): a folder split around a
+// denied one may be listed, and so may the denied folder through it, but
+// nothing in it is read and nothing is written beside it.
+func TestASplitFolderIsListedNotRead(t *testing.T) {
+	top := splitTree(t)
+	secret := filepath.Join(top, "secret")
+	s := ready(t, Policy{Deny: func() []string { return []string{secret} }})
+	if out, code := output(t, s, "/", "ls", top); code != 0 || !strings.Contains(out, "open") || !strings.Contains(out, "secret") {
+		t.Errorf("ls top: exit %d, %q", code, out)
+	}
+	if out, code := output(t, s, "/", "ls", secret); code != 0 || !strings.Contains(out, "key") {
+		t.Errorf("ls top/secret: exit %d, %q", code, out)
+	}
+	if out, code := output(t, s, "/", "cat", filepath.Join(top, "open", "file")); code != 0 || !strings.Contains(out, "hunter2") {
+		t.Errorf("cat top/open/file: exit %d, %q", code, out)
+	}
+	if out, code := output(t, s, "/", "cat", filepath.Join(secret, "key")); code == 0 || strings.Contains(out, "hunter2") ||
+		!strings.Contains(out, "Permission denied") {
+		t.Errorf("read a denied file in a listed folder: exit %d, %q", code, out)
+	}
+	for _, argv := range [][]string{{"touch", filepath.Join(top, "new")}, {"mkdir", filepath.Join(top, "newdir")},
+		{"touch", filepath.Join(secret, "new")}, {"rm", filepath.Join(secret, "key")}} {
+		if out, code := output(t, s, "/", argv...); code == 0 {
+			t.Errorf("%v: a list grant wrote: %q", argv, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(secret, "key")); err != nil {
+		t.Errorf("the denied file is gone: %v", err)
+	}
+}
+
+// GANGLION_SANDBOX_HIDE_NAMES=on: a split folder is not listed, as before
+// ADR-0057.
+func TestHideNamesKeepsASplitFolderUnlisted(t *testing.T) {
+	top := splitTree(t)
+	secret := filepath.Join(top, "secret")
+	s := ready(t, Policy{Deny: func() []string { return []string{secret} }, HideNames: true})
+	for _, dir := range []string{top, secret} {
+		if out, code := output(t, s, "/", "ls", dir); code == 0 || strings.Contains(out, "key") {
+			t.Errorf("ls %s with hidden names: exit %d, %q", dir, code, out)
+		}
+	}
+	if out, code := output(t, s, "/", "cat", filepath.Join(top, "open", "file")); code != 0 {
+		t.Errorf("cat top/open/file with hidden names: exit %d, %q", code, out)
 	}
 }

@@ -85,16 +85,24 @@ func addRule(ruleset int, g Grant, handled uint64) error {
 		return fmt.Errorf("open %s: %w", g.Path, err)
 	}
 	defer func() { _ = unix.Close(p) }()
-	access := handled
-	if !g.Dir {
-		access &= fileRights
-	}
-	attr := unix.LandlockPathBeneathAttr{Allowed_access: access, Parent_fd: int32(p)}
+	attr := unix.LandlockPathBeneathAttr{Allowed_access: access(g, handled), Parent_fd: int32(p)}
 	if _, _, errno := unix.Syscall6(unix.SYS_LANDLOCK_ADD_RULE, uintptr(ruleset), unix.LANDLOCK_RULE_PATH_BENEATH,
 		uintptr(unsafe.Pointer(&attr)), 0, 0, 0); errno != 0 {
 		return fmt.Errorf("landlock_add_rule %s: %w", g.Path, errno)
 	}
 	return nil
+}
+
+// access is what g grants of handled: listing alone for a List grant
+// (ADR-0057), a file's rights for a file, all of them for a folder.
+func access(g Grant, handled uint64) uint64 {
+	switch {
+	case g.List:
+		return handled & unix.LANDLOCK_ACCESS_FS_READ_DIR
+	case !g.Dir:
+		return handled & fileRights
+	}
+	return handled
 }
 
 // specFile is sp as JSON in an anonymous memory file, read from its start.

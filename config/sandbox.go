@@ -37,10 +37,11 @@ func Sandbox() do.Provider[*sandbox.Sandbox] {
 			Workspace: b.Agent.Workspace, Languages: b.Languages}
 		environ := os.Environ()
 		p := sandbox.Policy{
-			Deny:     func() []string { return sandbox.DenyList(home, cwd, node, environ, b.SandboxDeny) },
-			Env:      commandEnv(home, b.Agent.TZ),
-			EnvRoots: roots(home),
-			EnvDepth: envDepth,
+			Deny:      func() []string { return sandbox.DenyList(home, cwd, node, environ, b.SandboxDeny) },
+			Env:       commandEnv(home, b.Agent.TZ),
+			EnvRoots:  roots(home),
+			EnvDepth:  envDepth,
+			HideNames: b.SandboxHideNames,
 		}
 		// The helper is this process's own image, not the path it came
 		// from: a command that replaced the file would otherwise run as the
@@ -50,7 +51,7 @@ func Sandbox() do.Provider[*sandbox.Sandbox] {
 		if ok, r := s.Ready(); !ok {
 			log.Info("sandbox: commands are off", "reason", r.String())
 		} else {
-			log.Info("sandbox: ready", "denied", len(p.Deny()))
+			log.Info("sandbox: ready", "denied", len(p.Deny()), "hide_names", p.HideNames)
 		}
 		return s, nil
 	}

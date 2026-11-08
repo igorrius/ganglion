@@ -91,6 +91,10 @@ type Policy struct {
 	Env      []string        // the whole environment, KEY=VALUE
 	EnvRoots []string        // where .env files are looked for, besides the command's folder
 	EnvDepth int
+	// HideNames keeps the folders split around a denied path unlisted, so
+	// the names inside denied folders stay hidden too
+	// (GANGLION_SANDBOX_HIDE_NAMES, ADR-0057).
+	HideNames bool
 }
 
 // denied is what the policy denies now.
@@ -156,7 +160,7 @@ func (s *Sandbox) selfTest() bool {
 	if err != nil {
 		return false
 	}
-	grants, err := Grants([]string{resolved}, os.ReadDir)
+	grants, err := Grants([]string{resolved}, os.ReadDir, s.policy.HideNames)
 	if err != nil {
 		return false
 	}
@@ -189,7 +193,7 @@ func (s *Sandbox) Command(ctx context.Context, argv []string, dir string, env ..
 			deny = append(deny, resolved)
 		}
 	}
-	grants, err := Grants(deny, os.ReadDir)
+	grants, err := Grants(deny, os.ReadDir, s.policy.HideNames)
 	if err != nil {
 		return nil, err
 	}

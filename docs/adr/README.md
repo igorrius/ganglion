@@ -62,6 +62,7 @@ considered, how they compare, the decision and its consequences. See
 | [0054](0054-structured-replies-as-rich-blocks-the-transport-builds.md) | Send structured replies as Telegram rich messages, from blocks the transport builds | Accepted | 2026-11-06 |
 | [0055](0055-a-reply-carries-the-replied-messages-origin.md) | Let a reply carry the replied message's origin, from the node's own outbox | Accepted | 2026-11-07 |
 | [0056](0056-small-hosts-as-a-soft-target.md) | Treat small hosts as a soft target held by GOMEMLIMIT, not as a 128 MB line | Accepted | 2026-11-08 |
+| [0057](0057-commands-may-list-split-folders.md) | Let commands list the folders the sandbox splits | Accepted | 2026-11-08 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

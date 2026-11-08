@@ -939,6 +939,7 @@ The scheduler moves up from M4 to M3b; M4 reuses it for module triggers.
 M3d, after M3c. Design: [M3d design](plans/p1-m3d-host-commands-design.md);
 decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
 [ADR-0039](adr/0039-command-sandbox.md),
+[ADR-0057](adr/0057-commands-may-list-split-folders.md),
 [ADR-0040](adr/0040-plans-as-approvals.md) (Proposed).
 
 - **R-CMD-1.** `host.exec` runs a program with a list of arguments, with
@@ -973,7 +974,10 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   environment or memory (the node marks itself not dumpable; `ps` still
   lists it, as it lists every process, owner 2026-11-08), and cannot read
   the node's data directory, its secret files, `.env` and `.env.*` files
-  in any folder, or a default list of the owner's secret stores. Below Landlock ABI 9, which reaches socket files,
+  in any folder, or a default list of the owner's secret stores. A command may list a
+  folder that holds a denied path, so the names inside denied folders are visible but not their
+  contents (owner, 2026-11-08, [ADR-0057](adr/0057-commands-may-list-split-folders.md));
+  `GANGLION_SANDBOX_HIDE_NAMES=on` hides them too. Below Landlock ABI 9, which reaches socket files,
   a command opens no Unix socket at all, so gpg-agent and the keyring are
   out of reach (`docker ps`, `systemctl --user` and `lpstat` with them);
   signals are not limited, so `kill` reaches the owner's processes

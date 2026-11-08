@@ -42,6 +42,10 @@ type Bootstrap struct {
 	// SandboxDeny is GANGLION_SANDBOX_DENY: paths the owner adds to what
 	// commands may neither read nor write (R-CMD-3).
 	SandboxDeny []string
+	// SandboxHideNames is GANGLION_SANDBOX_HIDE_NAMES=on: commands may not
+	// list the folders the sandbox splits, so the names inside denied
+	// folders stay hidden too (ADR-0057). Off by default.
+	SandboxHideNames bool
 	// Metrics draws the node's own metrics for metrics.show and /metrics
 	// (ADR-0045); the command line sets it from telemetry, nil leaves the
 	// tool out.
