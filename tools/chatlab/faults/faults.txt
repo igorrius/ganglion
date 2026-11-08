@@ -9,3 +9,4 @@ parked-check r38-identical-call-asks-once
 addition-other-person mech-addition-boundaries
 addition-no-taint mech-addition-boundaries
 reply-origin-taint mech-reply-origin
+status-verdict mech-status

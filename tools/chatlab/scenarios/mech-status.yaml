@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-status
+why: >-
+  R-OBS-11: /status answers with no model through the real core and the Bot API, with
+  its sections; a skill that is not loaded makes the verdict a warning and is named
+  with the kind of rule it broke.
+covers:
+  - agent/status.go
+  - status/**
+  - skills/status.go
+model: scripted
+skills: [skills/bad-name]
+script:
+  - {say: Never asked; /status needs no model.}
+steps:
+  - say: "/status"
+  - facts:
+      reply: {contains: "Needs a look"}
+      history: {not_contains: "/status"}
+  - facts:
+      reply: {contains: "Skill bad-name is not loaded"}
+  - facts:
+      reply: {contains: "frontmatter"}
+  - facts:
+      reply: {contains: "Delivery"}

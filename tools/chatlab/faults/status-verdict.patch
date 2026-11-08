@@ -1,0 +1,12 @@
+diff --git a/status/status.go b/status/status.go
+index 7b0d60e..3e54f9a 100644
+--- a/status/status.go
++++ b/status/status.go
+@@ -127,6 +127,7 @@ func Order(checks []Check) []Check {
+ // Verdict is Fail if any line fails, else Warn if any warns, else OK, with
+ // the count of the lines that warn or fail. Off counts for nothing.
+ func Verdict(checks []Check) (State, int) {
++	return OK, 0 // seeded fault: the verdict ignores every line
+ 	v, n := OK, 0
+ 	for _, c := range checks {
+ 		switch c.State {
