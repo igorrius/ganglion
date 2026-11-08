@@ -543,23 +543,23 @@ GOMEMLIMIT {limit}`; `status.memory_no_limit` `Memory {rss}, peak {peak}; no GOM
 
 **Interfaces:**
 - Produces: `func (l *Log) Status(ctx context.Context, s status.Scope) []status.Check`, `Name()` `"turns"`;
-  `func (l *Log) LastAttempts(ctx context.Context, since time.Time) ([]ModelSeen, error)` with
+  `func (l *Log) ModelsSeen(ctx context.Context, since time.Time) ([]ModelSeen, error)` with
   `type ModelSeen struct{ Model string; Answered, Failed time.Time; Kind string }`.
 
 Keys: `status.model_answered` `{model}: answered {time}`; `status.model_silent` `{model}: no answer in 7
 days`; `status.reason_model_failed` `failed {time} ({kind})`; `status.turns_failed` `Failed turns in the
 last day: {n}`.
 
-- [ ] **Step 1: Write the failing tests** on a temp database with recorded turns:
+- [x] **Step 1: Write the failing tests** on a temp database with recorded turns:
   - a model that answered at 12:40 and failed at 12:00: `OK`, "answered 12:40";
   - one that failed at 12:50 after answering at 12:40: `Warn`, reason with `timeout`;
   - every model failing last: each `Fail`;
   - turns older than 7 days are not read;
   - two `error` outcomes and one `no_model` in the last day, one older: `Warn`, `{n}` 3.
 
-- [ ] **Step 2: Run** `go test ./turns/`. Expected: FAIL.
+- [x] **Step 2: Run** `go test ./turns/`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** `LastAttempts` in one query over `json_each(route)`:
+- [x] **Step 3: Implement.** `ModelsSeen` in one query over `json_each(route)`:
 
   ```sql
   SELECT json_extract(a.value, '$.model') AS model,
@@ -575,9 +575,9 @@ last day: {n}`.
   are `outcome IN ('error', 'no_model')` since `s.Now - 24h`, `SectionProblems`, `Warn` when above 0.
   Append `do.MustInvoke[*turns.Log](i)` to the sources in `config/status.go`.
 
-- [ ] **Step 4: Run** `go test -race ./turns/ ./config/`. Expected: PASS.
+- [x] **Step 4: Run** `go test -race ./turns/ ./config/`. Expected: PASS.
 
-- [ ] **Step 5: Commit** `turns: /status reads each model's last answer and the failed turns`.
+- [x] **Step 5: Commit** `turns: /status reads each model's last answer and the failed turns`.
 
 ### Task 5: Telegram's polling
 

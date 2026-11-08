@@ -98,3 +98,7 @@ status.memory_no_limit: "Пам'ять {rss}, пік {peak}; GOMEMLIMIT не з�
 status.reason_memory_high: "понад 90% м'якого ліміту"
 status.files: "База {db}, журнали {logs}"
 status.files_no_logs: "База {db}, журнали вимкнено"
+status.model_answered: "{model}: відповідала {time}"
+status.model_silent: "{model}: не відповідала 7 днів"
+status.reason_model_failed: "останній виклик не вдався ({kind})"
+status.turns_failed: "Невдалих ходів за добу: {n}"

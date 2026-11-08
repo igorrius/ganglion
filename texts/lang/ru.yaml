@@ -98,3 +98,7 @@ status.memory_no_limit: "Память {rss}, пик {peak}; GOMEMLIMIT не за
 status.reason_memory_high: "выше 90% мягкого лимита"
 status.files: "База {db}, логи {logs}"
 status.files_no_logs: "База {db}, логи выключены"
+status.model_answered: "{model}: отвечала {time}"
+status.model_silent: "{model}: не отвечала 7 дней"
+status.reason_model_failed: "последний вызов не удался ({kind})"
+status.turns_failed: "Неудачных ходов за сутки: {n}"
