@@ -6,8 +6,8 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** the owner's look at the sandbox line in `/status` on the test bot (3.20, branch
-  `m3d-sandbox`), then M3d's plan for 3.21–3.27 on what the spike found.
+- **Next:** M3d's plan for 3.21–3.27 (`host.stats`, `host.exec` with its class table, long
+  commands, plans, commands in task grants, skill scripts on the sandbox), on what the spike found.
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
   - 0.2 Deye reader in WASM on wazero: matched `deye.py` on the live API,
@@ -298,7 +298,8 @@ Start here when coming back to the project.
     - measured: binary 46.4 MB, as on `master`; the agent with tools 44.7 MB after 1,000 turns;
     - open: Railway and a Pi not measured (`tools/sandboxprobe`); hard links and bind mounts made
       before are out of reach of path rules; a `.env` deeper than three folders stays readable;
-      Windows and macOS have no commands ("Not now").
+      Windows and macOS have no commands ("Not now");
+    - the owner's look on the test bot: "✅ Command sandbox: ready, Landlock 7".
   - **M3d, after `/status` (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that

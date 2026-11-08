@@ -1804,5 +1804,5 @@ git commit -m "sandbox: the node starts its own binary as the helper; /status sh
   as its brief; fix each finding or record it with its reason.
 - [x] **Step 6: "Where we are"** in `docs/README.md`: 3.20 closed, what the spike found per host,
   the minors left; `p1-all-in-one.md`'s 3.20 row "closed 2026-11-…"; tick this plan.
-- [ ] **Step 7: The owner's look**: `/status` on the test bot shows the sandbox line; then commit
+- [x] **Step 7: The owner's look** (2026-11-08: "✅ Command sandbox: ready, Landlock 7" on the test bot): `/status` on the test bot shows the sandbox line; then commit
   `docs: the command sandbox done`, and ask the owner about the merge.
