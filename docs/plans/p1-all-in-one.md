@@ -75,7 +75,7 @@ pinned by a test in the task that owns the code.
 | M3b | **The agent works with the world** — **done** ([plan](p1-m3b-agent-world.md)) | Tools under policies and the security baseline, confirmations and quick actions on buttons, the scheduler with reminders and scheduled agent tasks, memory, web reading, the tool-call journal, tools for the claude CLI over MCP | over 1 weekend |
 | M3c | Modules, skills, diagnostics — **done** ([plan](p1-m3c-modules-skills-diagnostics.md)) | Module update and rollback, skills, attachments, logs on disk, `ganglion mcp`, the 3.8 acceptance | about 1 weekend |
 | M3 live | Live turns — **done** ([plan](p1-live-turns.md)) | Additions join a running turn, status reactions, a plan shown during the turn | |
-| M3 more | After using the bot — **done** except `/status` | A closed question folds, `/last`, fixed texts in the person's language, rich messages, replies that know what they answer, `/status` | |
+| M3 more | After using the bot — **done**; `/status` built, waiting for the owner's look | A closed question folds, `/last`, fixed texts in the person's language, rich messages, replies that know what they answer, `/status` | |
 | M3d | Host commands and plans ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
 | M4 | Reflexes: runner and Deye | Config, modules on cron writing sensor cells, exposed to the agent as tools (the scheduler and the first module-as-tool path come from M3b); deployed next to the current bot | 0.5 weekend |
 | M5 | Load-shedding flow | The 8.1 state machine on `virtual` load cells; Telegram notifier; shadow week | 0.5 weekend |

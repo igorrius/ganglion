@@ -91,9 +91,9 @@ the dependency diagram with `status --> texts`).
   }
   type Source interface {
       Name() string // a closed-set name for the "no answer" line: "telegram", "turns", ...
-      Status(ctx context.Context, s Scope) []Check
+      Status(ctx context.Context, s Scope) ([]Check, error) // as built after the review: an error is logged by Collect
   }
-  func Collect(ctx context.Context, s Scope, sources []Source, timeout time.Duration) []Check
+  func Collect(ctx context.Context, s Scope, sources []Source, timeout time.Duration, log *slog.Logger) []Check
   func Order(checks []Check) []Check // stable, by section
   func Verdict(checks []Check) (State, int) // OK, Warn or Fail; the count of warn and fail lines
   func Bytes(n int64) string             // "512 B", "45 MB", "1.2 GB"
@@ -772,13 +772,13 @@ Keys: `status.jobs` `Jobs: {n}, next {time}`; `status.jobs_idle` `Jobs: {n}, not
 **Files:** `docs/README.md`, `docs/plans/p1-all-in-one.md` (3.38 done), this plan,
 `docs/architecture/05-code-map.md`.
 
-- [ ] **Step 1: Measure** with `make memory`; record the binary and RSS beside reply context's 46.2 MB
+- [x] **Step 1: Measure** with `make memory`; record the binary and RSS beside reply context's 46.2 MB
   and 45.5 MB (ADR-0056: compared, not held to a line).
-- [ ] **Step 2: Run** `make test`, `make lint`, `make lab` for what changed. Ask the owner before any full run.
-- [ ] **Step 3: Request a whole-branch review** with superpowers:requesting-code-review; fix or record
+- [x] **Step 2: Run** `make test`, `make lint`, `make lab` for what changed. Ask the owner before any full run.
+- [x] **Step 3: Request a whole-branch review** with superpowers:requesting-code-review; fix or record
   each finding.
 - [ ] **Step 4: The owner's look on the test bot:** `/status` on a phone, in Russian; the session's
   models; a skill broken on purpose shows; the verdict reads at a glance.
-- [ ] **Step 5: Update "Where we are"** in `docs/README.md` (3.38 closed, the deferred minors) and the
+- [x] **Step 5: Update "Where we are"** in `docs/README.md` (3.38 closed, the deferred minors) and the
   code map's statuses.
 - [ ] **Step 6: Commit** `docs: /status done`, and ask the owner about the merge.

@@ -6,8 +6,9 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** `/status` in Telegram (task 3.38), then M3d: its step-by-step plan, starting with
-  the sandbox spike (3.20) on the owner's machine, Railway and a Pi.
+- **Next:** the owner's look at `/status` on the test bot (task 3.38, built on branch `status`), then
+  M3d: its step-by-step plan, starting with the sandbox spike (3.20) on the owner's machine, Railway
+  and a Pi.
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
   - 0.2 Deye reader in WASM on wazero: matched `deye.py` on the live API,
@@ -260,6 +261,22 @@ Start here when coming back to the project.
     `GOMEMLIMIT`; each milestone compares its numbers with the previous one; a feature that does not fit
     a small host runs on a denser node. The memory tests report and no longer fail above 128 MB.
     Setting `GOMEMLIMIT` from the container's limit is M4 task 4.1.
+  - **`/status` (task 3.38), built on branch `status` 2026-11-08**
+    ([design](plans/p1-status-design.md), [plan](plans/p1-status.md), R-OBS-11):
+    - an admin's `/status`, with no model and no note in the history: a verdict, then the node (the full
+      version, uptime, memory against `GOMEMLIMIT`, the database and logs), the models (this session's,
+      each model's last answer and failure, the day against the limits and the spend), delivery
+      (Telegram's last poll, the queues) and what is off (skills not loaded, a module fallen back, failed
+      turns, the scheduler), in the person's language;
+    - every component reports through `status.Source`, registered in `config` with one line; a reason is
+      a fixed text, never an error's text;
+    - tests, lint and the whole branch's review pass, its findings fixed (a compaction read as a
+      fallback, a module warning that never cleared, sources' failures not logged). Chatlab:
+      `mech-status` 3 of 3 on the scripted model; the seeded fault `status-verdict` turns it red;
+    - measured (`make memory`, ADR-0056): 46.4 MB binary (replies: 46.2); the agent with tools at
+      47–48 MB after 1,000 turns against 44–46 MB on `master`, but 46–49 MB with the sources switched
+      off, and runs of the same code differ by 3 MB: within the measure's noise;
+    - waits for the owner's look on the test bot.
   - **M3d, after `/status` (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
@@ -325,6 +342,16 @@ Start here when coming back to the project.
       - an ordinary message still makes a link from any scheme, `tg://` included;
       - a table inside a quote or a list above the limits is cut by length, without its header;
       - deploying this, with its default on, while a split message is in flight may skip or repeat a part.
+    - `/status`:
+      - the models' lines are those seen in the last week, not the catalogue's: a model taken out of the
+        catalogue warns for a week, and one never used shows nothing;
+      - after a `409` polling stops, so `/status` cannot reach the bot over Telegram; its line is for
+        another transport, or for after a restart;
+      - the queues' line shows one reason: a message waiting too long hides the undelivered count;
+      - a section outside the four is sorted last and not shown;
+      - no config-level test that the list holds Telegram's source exactly when Telegram is on;
+      - `make lab-faults` as a whole and a full lab run wait for the owner (chatlab recommends a full run
+        for `agent/stages.go`, which this branch did not change).
     - Replies (ADR-0055):
       - a reply to an attachment sent without a caption, or to a piece of a table the transport cut into
         several messages, is not found and counts as outside content;
