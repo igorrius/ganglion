@@ -122,9 +122,10 @@ type Store struct {
 	builtins map[string]Builtin
 	tools    map[string]*runner.SwapTool
 
-	mu       sync.Mutex        // one update or rollback at a time
-	activeMu sync.Mutex        // the gauge reads active without waiting for an update
-	active   map[string]string // module → source of the active version, for the gauge
+	mu       sync.Mutex          // one update or rollback at a time
+	activeMu sync.Mutex          // the gauge reads active without waiting for an update
+	active   map[string]string   // module → source of the active version, for the gauge
+	fellBack map[string]fallback // modules whose stored version failed its check at start, for /status
 	log      *slog.Logger
 
 	updates  metric.Int64Counter
@@ -143,7 +144,7 @@ func Open(ctx context.Context, db *sql.DB, dir string, now func() time.Time, dep
 		return nil, err
 	}
 	s := &Store{db: db, dir: dir, now: now, deps: deps, builtins: map[string]Builtin{}, tools: map[string]*runner.SwapTool{},
-		active: map[string]string{}, log: deps.Logger}
+		active: map[string]string{}, fellBack: map[string]fallback{}, log: deps.Logger}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
 	}
@@ -215,6 +216,7 @@ func (s *Store) load(ctx context.Context, b Builtin) (*runner.LazyTool, string, 
 			return tool, v.Source, nil
 		}
 		s.log.Warn("modstore: the stored version fails its check; the built-in build runs", "module", b.Name, "version", v.Version, "err", err)
+		s.noteFallback(b.Name, v.Version)
 		if err := s.setState(ctx, b.Name, v.SHA256, StateFailed, "at start: "+reasonOf(err)); err != nil {
 			return nil, "", err
 		}

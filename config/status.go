@@ -3,7 +3,9 @@ package config
 import (
 	"time"
 
+	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/status/proc"
 	"github.com/igorrius/ganglion/transport/telegram"
@@ -15,11 +17,14 @@ import (
 // that is on adds its own.
 func StatusSources() do.Provider[[]status.Source] {
 	return func(i do.Injector) ([]status.Source, error) {
-		b := do.MustInvoke[Bootstrap](i)
+		b, start := do.MustInvoke[Bootstrap](i), time.Time(do.MustInvoke[ProcessStart](i))
+		sk := do.MustInvoke[Skilled](i)
 		sources := []status.Source{
-			proc.New(time.Time(do.MustInvoke[ProcessStart](i)), proc.Files{DB: b.DB, Logs: b.LogDir}),
+			proc.New(start, proc.Files{DB: b.DB, Logs: b.LogDir}),
 			do.MustInvoke[*turns.Log](i),
 			do.MustInvoke[*sqlqueue.Queue](i),
+			skills.Refused{Problems: sk.Problems, Loaded: len(sk.Set.Names()), Since: start},
+			do.MustInvoke[*modstore.Store](i),
 		}
 		return append(sources, do.MustInvoke[Watched](i)...), nil
 	}

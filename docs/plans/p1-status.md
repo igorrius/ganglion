@@ -667,7 +667,7 @@ script breaks a rule`; `status.reason_skill_builtin` `a built-in skill has its n
 `status.module_fallback` `Module {module}: the built-in build runs`; `status.reason_module_failed` `the
 stored version {version} failed its check at start`.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `skills.Load` gives each problem its kind: a file in place of a directory (`shape`), a directory with
     no `SKILL.md` (`read`), a name that is not the directory's (`frontmatter`), a script that is not
     executable (`script`), a workspace skill named like a built-in (`builtin`);
@@ -676,19 +676,19 @@ stored version {version} failed its check at start`.
   - `modstore`: a stored version whose file is gone at `Open` makes `Status` give `Warn`
     `module_fallback` with `{version}`; a clean start gives no line.
 
-- [ ] **Step 2: Run** `go test ./skills/ ./modstore/`. Expected: FAIL.
+- [x] **Step 2: Run** `go test ./skills/ ./modstore/`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** Set `Kind` where `Load` and `loadDir` append a problem: `loadDir` returns a
+- [x] **Step 3: Implement.** Set `Kind` where `Load` and `loadDir` append a problem: `loadDir` returns a
   typed `*loadError{kind ProblemKind; err error}`, unwrapped in `Load`. `modstore.load` records
   `s.fellBack[b.Name] = fallback{version: v.Version, at: s.now()}` (a map under `activeMu`) where it logs
   the fallback. `config.Skills` keeps the problems and the load time in `Skilled`, and
   `config/status.go` appends `skills.Refused{Problems: sk.Problems, Loaded: len(sk.Set.Names()), Since:
-  time.Time(do.MustInvoke[ProcessStart](i))}` and `do.MustInvoke[*modstore.Store](i)` when the agent is
-  on (both are agent parts: append them inside `if agentOn(b)`).
+  time.Time(do.MustInvoke[ProcessStart](i))}` and `do.MustInvoke[*modstore.Store](i)`. As built: no `agentOn` branch, since only the agent
+  asks for the list.
 
-- [ ] **Step 4: Run** `go test -race ./skills/ ./modstore/ ./config/`. Expected: PASS.
+- [x] **Step 4: Run** `go test -race ./skills/ ./modstore/ ./config/`. Expected: PASS.
 
-- [ ] **Step 5: Commit** `skills, modstore: /status names what is not loaded and why`.
+- [x] **Step 5: Commit** `skills, modstore: /status names what is not loaded and why`.
 
 ### Task 8: The scheduler
 

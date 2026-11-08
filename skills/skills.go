@@ -70,10 +70,33 @@ type Skill struct {
 // ToolName is the tool of a script skill: skill.<name with - → _>.
 func (s Skill) ToolName() string { return "skill." + strings.ReplaceAll(s.Name, "-", "_") }
 
-// Problem is a skill that was not loaded, and why.
+// Problem is a skill that was not loaded, and why: Reason for the log, Kind
+// for /status, which shows no loader's text.
 type Problem struct {
 	Skill, Reason string
+	Kind          ProblemKind
 }
+
+// ProblemKind is what kind of rule a skill broke.
+type ProblemKind string
+
+// The kinds of problems.
+const (
+	ProblemShape       ProblemKind = "shape"       // not a directory, or a symlink
+	ProblemRead        ProblemKind = "read"        // SKILL.md cannot be read
+	ProblemFrontmatter ProblemKind = "frontmatter" // the frontmatter breaks a rule
+	ProblemScript      ProblemKind = "script"      // the script breaks a rule
+	ProblemBuiltinName ProblemKind = "builtin"     // a built-in skill has its name
+)
+
+// loadError is a workspace skill's failure and its kind.
+type loadError struct {
+	kind ProblemKind
+	err  error
+}
+
+func (e *loadError) Error() string { return e.err.Error() }
+func (e *loadError) Unwrap() error { return e.err }
 
 // Set is the loaded skills by name.
 type Set struct {
@@ -162,9 +185,10 @@ func Load(builtin fs.FS, workspace string, deny []string) (Set, []Problem, error
 		sk, err := loadDir(root, d, deny)
 		switch {
 		case err != nil:
-			problems = append(problems, Problem{Skill: d.Name(), Reason: err.Error()})
+			problems = append(problems, Problem{Skill: d.Name(), Reason: err.Error(), Kind: kindOf(err)})
 		case set.byName[sk.Name].Builtin:
-			problems = append(problems, Problem{Skill: sk.Name, Reason: "a built-in skill has this name; a workspace skill cannot replace it"})
+			problems = append(problems, Problem{Skill: sk.Name, Reason: "a built-in skill has this name; a workspace skill cannot replace it",
+				Kind: ProblemBuiltinName})
 		default:
 			set.byName[sk.Name] = sk
 		}
@@ -175,27 +199,35 @@ func Load(builtin fs.FS, workspace string, deny []string) (Set, []Problem, error
 // loadDir reads one workspace skill and checks its script.
 func loadDir(root string, d fs.DirEntry, deny []string) (Skill, error) {
 	if !d.IsDir() || d.Type()&fs.ModeSymlink != 0 {
-		return Skill{}, errors.New("not a directory")
+		return Skill{}, &loadError{ProblemShape, errors.New("not a directory")}
 	}
 	dir, err := filepath.Abs(filepath.Join(root, d.Name())) // a script runs by its absolute path, from another directory
 	if err != nil {
-		return Skill{}, err
+		return Skill{}, &loadError{ProblemRead, err}
 	}
 	src, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
 	if err != nil {
-		return Skill{}, err
+		return Skill{}, &loadError{ProblemRead, err}
 	}
 	sk, err := parse(d.Name(), src)
 	if err != nil {
-		return Skill{}, err
+		return Skill{}, &loadError{ProblemFrontmatter, err}
 	}
 	sk.Dir = dir
 	if sk.Script != nil {
 		if err := checkScript(dir, *sk.Script, deny); err != nil {
-			return Skill{}, err
+			return Skill{}, &loadError{ProblemScript, err}
 		}
 	}
 	return sk, nil
+}
+
+// kindOf is a load failure's kind; frontmatter when it has none.
+func kindOf(err error) ProblemKind {
+	if le, ok := errors.AsType[*loadError](err); ok {
+		return le.kind
+	}
+	return ProblemFrontmatter
 }
 
 // parse reads a SKILL.md: the frontmatter between "---" lines, then the

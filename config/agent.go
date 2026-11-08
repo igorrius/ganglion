@@ -176,8 +176,9 @@ func metricsTools(b Bootstrap) []tool.Handler {
 
 // Skilled is the loaded skills and their tools.
 type Skilled struct {
-	Set   skills.Set
-	Tools []tool.Handler
+	Set      skills.Set
+	Tools    []tool.Handler
+	Problems []skills.Problem // the workspace skills not loaded, for /status
 }
 
 // Skills loads the built-in and the workspace skills; a script never
@@ -202,7 +203,7 @@ func Skills() do.Provider[Skilled] {
 		if err != nil {
 			return Skilled{}, err
 		}
-		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg), runs)}, nil
+		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg), runs), Problems: problems}, nil
 	}
 }
 
