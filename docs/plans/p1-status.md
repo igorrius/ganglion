@@ -511,16 +511,16 @@ GOMEMLIMIT {limit}`; `status.memory_no_limit` `Memory {rss}, peak {peak}; no GOM
 `status.reason_memory_high` `above 90% of the soft limit`; `status.files` `Database {db}, logs {logs}`;
 `status.files_no_logs` `Database {db}, logs off`.
 
-- [ ] **Step 1: Write the failing tests:** the version line with a commit (`status.version`, `{commit}`
+- [x] **Step 1: Write the failing tests:** the version line with a commit (`status.version`, `{commit}`
   the first 7 characters, `{date}` `2006-01-02`), with `Modified` (`status.version_modified`), and without
   VCS (`status.version_unknown`); `{platform}` is `OS/Arch`; uptime from a fixed start and `Scope.Now`; memory `OK` with
   no limit (`memory_no_limit`), `Warn` with `reason_memory_high` when RSS is 95% of the limit; no memory
   line when the reader says `ok == false`; the file sizes of a temp database with a `-wal` file beside it
   (both counted) and a temp log directory of two files.
 
-- [ ] **Step 2: Run** `go test ./status/proc/`. Expected: FAIL.
+- [x] **Step 2: Run** `go test ./status/proc/`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** The default memory reader parses `VmRSS` and `VmHWM` (kB) from
+- [x] **Step 3: Implement.** The default memory reader parses `VmRSS` and `VmHWM` (kB) from
   `/proc/self/status`; it returns `ok == false` where the file is missing. The default limit is
   `debug.SetMemoryLimit(-1)`; `math.MaxInt64` means none. The log size walks `files.Logs` one level
   (rotated files are flat, ADR-0043). All lines are `SectionNode`. Register in `config/status.go`:
@@ -532,9 +532,9 @@ GOMEMLIMIT {limit}`; `status.memory_no_limit` `Memory {rss}, peak {peak}; no GOM
   }
   ```
 
-- [ ] **Step 4: Run** `go test -race ./status/... ./config/`. Expected: PASS.
+- [x] **Step 4: Run** `go test -race ./status/... ./config/`. Expected: PASS.
 
-- [ ] **Step 5: Commit** `status/proc: the node's version, uptime, memory and files`.
+- [x] **Step 5: Commit** `status/proc: the node's version, uptime, memory and files`.
 
 ### Task 4: Models and failed turns from the turns log
 

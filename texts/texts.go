@@ -118,6 +118,15 @@ const (
 	StatusDay                Key = "status.day"
 	StatusReasonLimitNear    Key = "status.reason_limit_near"
 	StatusReasonLimitReached Key = "status.reason_limit_reached"
+	StatusVersion            Key = "status.version"
+	StatusVersionModified    Key = "status.version_modified"
+	StatusVersionUnknown     Key = "status.version_unknown"
+	StatusUptime             Key = "status.uptime"
+	StatusMemory             Key = "status.memory"
+	StatusMemoryNoLimit      Key = "status.memory_no_limit"
+	StatusReasonMemoryHigh   Key = "status.reason_memory_high"
+	StatusFiles              Key = "status.files"
+	StatusFilesNoLogs        Key = "status.files_no_logs"
 )
 
 var allKeys = []Key{
@@ -127,7 +136,7 @@ var allKeys = []Key{
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
-	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached,
+	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.
