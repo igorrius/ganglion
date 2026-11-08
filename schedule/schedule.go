@@ -193,6 +193,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 // joins the failures of the jobs that could not fire.
 func (s *Scheduler) Tick(ctx context.Context) error {
 	now := s.now()
+	s.h.starting(now)
 	err := s.tick(ctx, now)
 	s.h.ticked(now, err)
 	return err
@@ -277,7 +278,7 @@ func (s *Scheduler) put(ctx context.Context, j Job, key string, slot, now time.T
 		return fmt.Errorf("schedule: put the event of %s: %w", j.ID, err)
 	}
 	s.in.observeLag(ctx, j.Kind, now.Sub(slot))
-	s.h.put(now.Sub(slot))
+	s.h.put(slot, now.Sub(slot))
 	return s.st.markPut(ctx, j.ID, slot, now)
 }
 

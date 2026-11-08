@@ -2,6 +2,7 @@ package schedule
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ const (
 // failed and since when, and how late the last run was put.
 type health struct {
 	mu      sync.Mutex
+	first   time.Time // this process's first tick: a slot before it is a catch-up (R-SCH-1), not a late run
 	last    time.Time
 	failing time.Time // the first of the failing ticks in a row; zero when the last succeeded
 	lag     time.Duration
@@ -39,10 +41,22 @@ func (h *health) ticked(now time.Time, err error) {
 	}
 }
 
-// put records how late a run was put.
-func (h *health) put(lag time.Duration) {
+// starting records the start of a tick: the first one marks when this process began to run jobs.
+func (h *health) starting(now time.Time) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.first.IsZero() {
+		h.first = now
+	}
+}
+
+// put records how late a run for slot was put; a run caught up after downtime is not late.
+func (h *health) put(slot time.Time, lag time.Duration) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if slot.Before(h.first) {
+		return
+	}
 	h.lag = max(lag, 0)
 }
 
@@ -53,6 +67,7 @@ func (s *Scheduler) Status(ctx context.Context, sc status.Scope) ([]status.Check
 	if err != nil {
 		return nil, err
 	}
+	jobs = slices.DeleteFunc(jobs, ran) // as the list shows them
 	c := status.Check{Section: status.SectionProblems, State: status.OK, Line: texts.StatusJobsNone}
 	if len(jobs) > 0 {
 		c.Line, c.Vars = texts.StatusJobsIdle, texts.Vars{"n": strconv.Itoa(len(jobs))}
@@ -110,6 +125,9 @@ func (s *Scheduler) nextOf(a activeJob, now time.Time) time.Time {
 	}
 	return spec.Next(now, s.loc)
 }
+
+// ran reports a one-time job that has run: the list no longer shows it.
+func ran(a activeJob) bool { return a.Cron == "" && !a.last.IsZero() }
 
 // later is the later of two times.
 func later(a, b time.Time) time.Time {

@@ -37,6 +37,7 @@ func TestStatusNextRun(t *testing.T) {
 func TestStatusLateRun(t *testing.T) {
 	e := newEnv(t)
 	e.create(t, task("hourly", "0 * * * *"))
+	e.tick(t)                                             // the node runs before the slot
 	e.now = time.Date(2026, 11, 3, 9, 1, 30, 0, time.UTC) // the 09:00 slot put 90 s late
 	e.tick(t)
 	c := e.jobsLine(t)
@@ -79,5 +80,31 @@ func TestStatusOverdueReminderIsNotInThePast(t *testing.T) {
 	e.create(t, reminder("late", t0.Add(-time.Hour)))
 	if c := e.jobsLine(t); c.Line != texts.StatusJobs || c.Vars["time"] != "10:00" {
 		t.Errorf("%+v", c)
+	}
+}
+
+// Owner's look, 2026-11-08: a one-time job that has run is not counted, as the list does not show it.
+func TestStatusCountsWhatTheListShows(t *testing.T) {
+	e := newEnv(t)
+	e.create(t, task("hourly", "0 * * * *"))
+	e.create(t, reminder("done", t0.Add(time.Minute)))
+	e.now = t0.Add(2 * time.Minute)
+	e.tick(t)
+	if c := e.jobsLine(t); c.Vars["n"] != "1" {
+		t.Errorf("%+v", c)
+	}
+}
+
+// Owner's look, 2026-11-08: a run caught up after the node was down is the catch-up rule
+// (R-SCH-1), not a late scheduler.
+func TestStatusCatchUpIsNotLate(t *testing.T) {
+	e := newEnv(t)
+	e.create(t, task("audit", "0 4 * * *")) // 04:00 Kyiv, as the memory audit
+	e.now = t0.Add(20 * time.Hour)          // the node starts at 06:00 Kyiv the next day
+	if got := e.tick(t); len(got) != 1 {
+		t.Fatalf("no catch-up run: %+v", got)
+	}
+	if c := e.jobsLine(t); c.State != status.OK {
+		t.Errorf("catch-up: %+v", c)
 	}
 }
