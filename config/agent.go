@@ -239,13 +239,14 @@ func Scheduling() do.Provider[builtin.Scheduling] {
 	return func(i do.Injector) (builtin.Scheduling, error) {
 		root := i.RootScope()
 		return builtin.Scheduling{
-			Jobs:    do.MustInvoke[*schedule.Store](i),
-			Runner:  do.MustInvoke[*schedule.Scheduler](i),
-			Specs:   func(name string) (tool.Spec, bool) { return do.MustInvoke[*tool.Registry](root).Spec(name) },
-			Buttons: do.MustInvoke[*pending.Store](i),
-			Convs:   do.MustInvoke[builtin.Convs](i),
-			Loc:     do.MustInvoke[Bootstrap](i).Agent.TZ,
-			Now:     time.Now,
+			Jobs:     do.MustInvoke[*schedule.Store](i),
+			Runner:   do.MustInvoke[*schedule.Scheduler](i),
+			Specs:    func(name string) (tool.Spec, bool) { return do.MustInvoke[*tool.Registry](root).Spec(name) },
+			Buttons:  do.MustInvoke[*pending.Store](i),
+			Convs:    do.MustInvoke[builtin.Convs](i),
+			Commands: do.MustInvoke[*builtin.HostExec](i),
+			Loc:      do.MustInvoke[Bootstrap](i).Agent.TZ,
+			Now:      time.Now,
 		}, nil
 	}
 }

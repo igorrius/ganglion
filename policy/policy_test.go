@@ -673,3 +673,82 @@ func TestPlanInATask(t *testing.T) {
 		}
 	}
 }
+
+// R-POL-8: a task runs a read command whenever host.exec is granted and any
+// other only as listed, argv exact; a forbidden one never runs.
+func TestCommandsInAGrant(t *testing.T) {
+	g := &tool.Grant{Tools: []string{"host.exec"}, Commands: []tool.Command{{Argv: []string{"docker", "image", "prune", "-af"}}}}
+	cases := []struct {
+		argv []string
+		pol  tool.Policy
+		d    journal.Decision
+	}{
+		{[]string{"docker", "image", "prune", "-af"}, tool.PolicyAuto, journal.DecisionAllowed},
+		{[]string{"docker", "system", "df"}, tool.PolicyAuto, journal.DecisionAllowed}, // read needs no listing
+		{[]string{"docker", "rm", "x"}, tool.PolicyForbidden, journal.DecisionOutOfGrant},
+		{[]string{"docker", "image", "prune", "-a"}, tool.PolicyForbidden, journal.DecisionOutOfGrant}, // not the same argv
+		{[]string{"docker", "run", "x"}, tool.PolicyForbidden, journal.DecisionForbidden},
+	}
+	for _, c := range cases {
+		call := execCall(c.argv...)
+		call.Grant = g
+		call.Tainted = true // a run's own reads taint it; the grant still holds (R-POL-8)
+		if pol, d := policy.Decide(policy.DefaultMaxDepth, execSpec(), call); pol != c.pol || d != c.d {
+			t.Errorf("%v: %s %s, want %s %s", c.argv, pol, d, c.pol, c.d)
+		}
+	}
+}
+
+// The folder is part of the command: the same argv elsewhere is not granted.
+func TestACommandInAnotherFolderIsOutsideTheGrant(t *testing.T) {
+	g := &tool.Grant{Tools: []string{"host.exec"}, Commands: []tool.Command{{Argv: []string{"rm", "-r", "build"}, Dir: "/srv/a"}}}
+	for dir, want := range map[string]journal.Decision{"/srv/a": journal.DecisionAllowed, "/srv/b": journal.DecisionOutOfGrant, "": journal.DecisionOutOfGrant} {
+		args, _ := json.Marshal(map[string]any{"argv": []string{"rm", "-r", "build"}, "dir": dir, "reason": "r"})
+		call := tool.Call{Name: "host.exec", Admin: true, Args: args, Grant: g}
+		if _, d := policy.Decide(policy.DefaultMaxDepth, execSpec(), call); d != want {
+			t.Errorf("dir %q: %s, want %s", dir, d, want)
+		}
+	}
+}
+
+// R-CMD-2: a forbidden command never runs, whatever the grant lists.
+func TestForbiddenCommandBeatsAGrant(t *testing.T) {
+	g := &tool.Grant{Tools: []string{"host.exec"}, Commands: []tool.Command{{Argv: []string{"sudo", "true"}}, {Argv: []string{"docker", "run", "x"}}}}
+	for _, argv := range [][]string{{"sudo", "true"}, {"docker", "run", "x"}} {
+		call := execCall(argv...)
+		call.Grant = g
+		if pol, d := policy.Decide(policy.DefaultMaxDepth, execSpec(), call); pol != tool.PolicyForbidden || d != journal.DecisionForbidden {
+			t.Errorf("%v: %s %s", argv, pol, d)
+		}
+	}
+}
+
+// R-POL-8: a command outside the grant is refused, the alert names it, and a
+// second call the same day makes the same notice.
+func TestACommandOutsideTheGrantAlertsOnceAndNamesIt(t *testing.T) {
+	s := execSpec()
+	s.InputSchema = json.RawMessage(`{"type":"object","properties":{"argv":{"type":"array"},"reason":{"type":"string"}}}`)
+	h := &counter{s: s}
+	now := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	run := chain(t, h, &fakeAsker{}, policy.WithAlerts(grantAlerts()), policy.WithClock(func() time.Time { return now }, time.UTC))
+	var keys []string
+	for _, argv := range [][]string{{"rm", "-r", "x"}, {"mv", "a", "b"}} {
+		c := execCall(argv...)
+		c.Conv = "task:J7"
+		c.Grant = &tool.Grant{Tools: []string{"host.exec"}}
+		res, err := run(context.Background(), c)
+		if !errors.Is(err, tool.ErrOutOfGrant) || len(res.Out) != 1 {
+			t.Fatalf("%v: %+v, %v", argv, res, err)
+		}
+		if argv[0] == "rm" && !strings.Contains(res.Out[0].Text, "rm -r x") {
+			t.Errorf("the alert does not name the command: %q", res.Out[0].Text)
+		}
+		keys = append(keys, res.Out[0].IdemKey)
+	}
+	if keys[0] != keys[1] || keys[0] != "alert:grant:J7:2026-11-03:telegram:user:1" {
+		t.Fatalf("keys %v", keys)
+	}
+	if h.calls != 0 {
+		t.Fatalf("the tool ran %d times", h.calls)
+	}
+}

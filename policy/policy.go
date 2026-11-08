@@ -264,12 +264,23 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 	err := fmt.Errorf("policy: %s is outside this task's grant: %w", c.Name, tool.ErrOutOfGrant)
 	job := strings.TrimPrefix(c.Conv, tool.TaskConvPrefix)
 	day := p.now().In(p.loc).Format(time.DateOnly)
-	msgs, aerr := p.alerts.Messages(ctx, "alert:grant:"+job+":"+day,
-		fmt.Sprintf("Task %s tried to use %s, which its grant does not allow. The call was refused.", job, c.Name))
+	msgs, aerr := p.alerts.Messages(ctx, "alert:grant:"+job+":"+day, outOfGrantText(job, c))
 	if aerr != nil {
 		p.log.Error("policy: grant alert not built", "task", job, "err", aerr)
 	}
 	return tool.Result{Out: msgs}, err
+}
+
+// outOfGrantText words the alert. A host command is named, so the admin sees
+// what the task tried; the argv is shown as hostcmd writes it and redacted.
+func outOfGrantText(job string, c tool.Call) string {
+	if c.Name == toolHostExec {
+		if x, err := hostcmd.ParseExec(c.Args); err == nil {
+			return fmt.Sprintf("Task %s tried to run %s, which its grant does not list. The call was refused.",
+				job, redact.String(hostcmd.Show(x.Command.Argv)))
+		}
+	}
+	return fmt.Sprintf("Task %s tried to use %s, which its grant does not allow. The call was refused.", job, c.Name)
 }
 
 // Decide returns what to do with call c of tool s and the journal's name
@@ -287,7 +298,8 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 //  6. a scheduled task's call: outside its grant is out_of_grant, inside
 //     it is auto, even in a tainted session (R-POL-8); web.fetch is
 //     inside only on a granted host, message.send only to the task's own
-//     conversation or its reply target;
+//     conversation or its reply target, host.exec only a read command or
+//     one the grant lists, argv and folder exact;
 //  7. memory.write and memory.forget: confirm in a tainted session, auto
 //     otherwise (the memory guard still checks the entry), though they
 //     are side effects; language.set likewise, since it changes only the
@@ -417,6 +429,18 @@ func inGrant(g tool.Grant, s tool.Spec, c tool.Call) bool {
 var grantArgs = map[string]func(g tool.Grant, c tool.Call) bool{
 	toolWebFetch:    hostInGrant,
 	toolMessageSend: convInGrant,
+	toolHostExec:    commandInGrant,
+}
+
+// commandInGrant reports whether a task may run the command: a read command
+// whenever host.exec is granted, any other only as listed, argv and folder
+// exact. An argv that does not parse is outside.
+func commandInGrant(g tool.Grant, c tool.Call) bool {
+	x, err := hostcmd.ParseExec(c.Args)
+	if err != nil {
+		return false
+	}
+	return hostcmd.Classify(x.Command.Argv).Class == hostcmd.Read || slices.ContainsFunc(g.Commands, x.Command.Equal)
 }
 
 // hostInGrant reports whether web.fetch's address is on a granted host.

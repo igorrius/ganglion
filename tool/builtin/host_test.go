@@ -136,7 +136,7 @@ func TestHostExecRefusesWhatThePolicyShouldHaveStopped(t *testing.T) {
 		{Args: execArgs("rm", "-r", "/tmp/x")},                                                    // needs a press; neither approved nor planned
 		{Args: execArgs("cat", "/etc/shadow"), Tainted: true},                                     // content, tainted, unpressed
 		{Args: execArgs("bash", "-c", "true"), Planned: func(tool.Command) bool { return false }}, // not in the plan
-		{Args: execArgs("rm", "-r", "/tmp/x"), Grant: &tool.Grant{Tools: []string{HostExecTool}}}, // not in a grant until task 9
+		{Args: execArgs("rm", "-r", "/tmp/x"), Grant: &tool.Grant{Tools: []string{HostExecTool}}}, // not in the grant
 		{Args: json.RawMessage(`{"argv":[],"reason":"r"}`), Approved: true},                       // no program
 	}
 	for _, c := range refused {
@@ -157,10 +157,37 @@ func TestHostExecRefusesWhatThePolicyShouldHaveStopped(t *testing.T) {
 		{Approved: true, Args: execArgs("rm", "-r", "/tmp/x")},
 		{Planned: all, Args: execArgs("rm", "-r", "/tmp/x")},
 		{Grant: &tool.Grant{Tools: []string{HostExecTool}}, Args: execArgs("df", "-h")},
+		{Grant: &tool.Grant{Tools: []string{HostExecTool}, Commands: []tool.Command{{Argv: []string{"rm", "-r", "/tmp/x"}}}}, Args: execArgs("rm", "-r", "/tmp/x")},
 	}
 	for _, c := range ran {
 		if _, err := h.Run(context.Background(), c); err != nil {
 			t.Errorf("%s was refused: %v", c.Args, err)
+		}
+	}
+}
+
+// A grant lists argv and folder exactly: the same argv in another folder, or with
+// one more argument, is outside it, and forbidden stays forbidden though listed.
+func TestHostExecGrantIsExact(t *testing.T) {
+	cs := &commands{answer: host.Answer{Done: true}}
+	h := NewHostExec(cs, noIgnored{}, open(true), "/h")
+	g := &tool.Grant{Tools: []string{HostExecTool}, Commands: []tool.Command{{Argv: []string{"rm", "-r", "build"}, Dir: "/srv/a"}, {Argv: []string{"sudo", "true"}}}}
+	args := func(dir string, argv ...string) json.RawMessage {
+		b, _ := json.Marshal(map[string]any{"argv": argv, "dir": dir, "reason": "r"})
+		return b
+	}
+	for _, c := range []struct {
+		args json.RawMessage
+		want error
+	}{
+		{args("/srv/a", "rm", "-r", "build"), nil},
+		{args("/srv/b", "rm", "-r", "build"), tool.ErrOutOfGrant},
+		{args("", "rm", "-r", "build"), tool.ErrOutOfGrant},
+		{args("/srv/a", "rm", "-r", "build", "x"), tool.ErrOutOfGrant},
+		{args("", "sudo", "true"), tool.ErrForbidden},
+	} {
+		if _, err := h.Run(context.Background(), tool.Call{Grant: g, Args: c.args}); !errors.Is(err, c.want) {
+			t.Errorf("%s: %v, want %v", c.args, err, c.want)
 		}
 	}
 }

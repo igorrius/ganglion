@@ -87,6 +87,7 @@ const (
 	AskPlan              Key = "ask.plan"
 	SchedSummaryReminder Key = "sched.summary_reminder"
 	SchedSummaryTask     Key = "sched.summary_task"
+	SchedSummaryCommands Key = "sched.summary_commands"
 	SchedEntry           Key = "sched.entry"
 	SchedDetails         Key = "sched.details"
 	SchedOnce            Key = "sched.once"
@@ -214,7 +215,7 @@ var allKeys = []Key{
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, StatusCommandsOff,
-	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, AskHostExec, AskPlan, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
+	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, AskHostExec, AskPlan, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, StatusModuleFallback, StatusReasonModuleFailed, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled, StatusUnitDay, StatusUnitHour, StatusUnitMin, StatusUnitSec, StatusSandboxReady, StatusSandboxOff, StatusReasonSandboxNotLinux, StatusReasonSandboxRoot, StatusReasonSandboxLandlock, StatusReasonSandboxDumpable, StatusReasonSandboxSelfTest,
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
 }
@@ -258,7 +259,7 @@ func limit(k Key) int {
 // missing any of these is refused whole (R-LANG-5).
 func IsApproval(k Key) bool {
 	switch k {
-	case ButtonApprove, ButtonDeny, ButtonDelete, ButtonRunNow, SchedSummaryReminder, SchedSummaryTask,
+	case ButtonApprove, ButtonDeny, ButtonDelete, ButtonRunNow, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands,
 		SchedOnce, SchedEvery, SchedEveryNext, SchedThisChat, SchedNone:
 		return true
 	default:

@@ -4329,7 +4329,7 @@ git commit -m "plan: one press on a plan approves exactly its commands, in its c
   - `schedule.create`'s `grant.commands`: `[{"argv": [...], "dir": "..."}]`;
   - `texts.SchedSummaryCommands`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 // policy/policy_test.go
@@ -4371,12 +4371,12 @@ func TestACommandOutsideTheGrantAlertsOnceAndNamesIt(t *testing.T) {
   - a grant listing a relative `dir` is refused;
   - `schedule.list`'s details show the commands.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./policy/ ./tool/builtin/ -run 'Grant|Schedule' -v`
 Expected: FAIL, `Grant.Commands` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
   `tool/tool.go`'s `Grant` gains:
 
@@ -4479,7 +4479,7 @@ func grantCommands(cmds []tool.Command, tools []string) ([]tool.Command, error) 
   - `mayAct` (Run now by button) already asks when the grant holds a side-effect tool, which
     `host.exec` is. Add a test that it asks.
 
-- [ ] **Step 4: Run, commit**
+- [x] **Step 4: Run, commit**
 
 Run: `go test ./... && make lint`
 Expected: PASS.

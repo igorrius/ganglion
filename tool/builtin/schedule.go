@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/hostcmd"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
@@ -82,8 +83,11 @@ type Scheduling struct {
 	Specs   SpecFunc
 	Buttons Buttons
 	Convs   Convs // who may receive a task's replies
-	Loc     *time.Location
-	Now     func() time.Time
+	// Commands words the commands of a task's grant in its summary, as a
+	// press on host.exec would see them (the *HostExec).
+	Commands CommandQuestions
+	Loc      *time.Location
+	Now      func() time.Time
 }
 
 // createArgs are the arguments of schedule.create.
@@ -96,9 +100,10 @@ type createArgs struct {
 }
 
 type grantArgs struct {
-	Tools   []string `json:"tools"`
-	Hosts   []string `json:"hosts"`
-	ReplyTo string   `json:"reply_to"`
+	Tools    []string       `json:"tools"`
+	Hosts    []string       `json:"hosts"`
+	ReplyTo  string         `json:"reply_to"`
+	Commands []tool.Command `json:"commands"`
 }
 
 // idArgs are the arguments of the tools and buttons on one job.
@@ -234,7 +239,7 @@ func (s Scheduling) grant(ctx context.Context, c tool.Call, j *schedule.Job, g *
 		g = &grantArgs{}
 	}
 	if j.Kind == schedule.KindReminder {
-		if len(g.Tools) > 0 || len(g.Hosts) > 0 || g.ReplyTo != "" {
+		if len(g.Tools) > 0 || len(g.Hosts) > 0 || g.ReplyTo != "" || len(g.Commands) > 0 {
 			return fmt.Errorf("%w: a reminder has no grant", errInvalid)
 		}
 		return nil
@@ -247,7 +252,11 @@ func (s Scheduling) grant(ctx context.Context, c tool.Call, j *schedule.Job, g *
 	if err != nil {
 		return err
 	}
-	j.Grant = tool.Grant{Tools: tools, Hosts: hosts, ReplyTo: c.Conv}
+	cmds, err := grantCommands(g.Commands, tools)
+	if err != nil {
+		return err
+	}
+	j.Grant = tool.Grant{Tools: tools, Hosts: hosts, ReplyTo: c.Conv, Commands: cmds}
 	if g.ReplyTo != "" && g.ReplyTo != c.Conv {
 		if j.Transport, j.Grant.ReplyTo, err = s.Convs.resolve(ctx, c, g.ReplyTo); err != nil {
 			return fmt.Errorf("schedule.create: reply_to: %w", err)
@@ -310,6 +319,37 @@ func grantHosts(hosts []string, fetch bool) ([]string, error) {
 	return slices.Compact(out), nil
 }
 
+// maxGrantCommands caps the commands of one grant, as the schema says.
+const maxGrantCommands = 20
+
+// grantCommands checks the commands a task may run: host.exec granted, each
+// argv one the node would run, none forbidden; read ones need no listing but
+// are kept as given. The folder must be absolute, as host.exec has it.
+func grantCommands(cmds []tool.Command, tools []string) ([]tool.Command, error) {
+	if len(cmds) == 0 {
+		return nil, nil
+	}
+	if !slices.Contains(tools, HostExecTool) {
+		return nil, fmt.Errorf("%w: grant: commands need host.exec in tools", errInvalid)
+	}
+	if len(cmds) > maxGrantCommands {
+		return nil, fmt.Errorf("%w: grant: at most %d commands", errInvalid, maxGrantCommands)
+	}
+	for _, cmd := range cmds {
+		raw, err := json.Marshal(map[string]any{"argv": cmd.Argv, "dir": cmd.Dir})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := hostcmd.ParseExec(raw); err != nil {
+			return nil, fmt.Errorf("%w: grant: %w", errInvalid, err)
+		}
+		if hostcmd.Classify(cmd.Argv).Class == hostcmd.Forbidden {
+			return nil, fmt.Errorf("%w: grant: %s never runs", errInvalid, hostcmd.Show(cmd.Argv))
+		}
+	}
+	return cmds, nil
+}
+
 // ScheduleCreate is the schedule.create tool.
 type ScheduleCreate struct{ s Scheduling }
 
@@ -333,7 +373,10 @@ func (*ScheduleCreate) Spec() tool.Spec {
 			`"at":{"type":"string","description":"one time, YYYY-MM-DD HH:MM in the node's time zone"},` +
 			`"text":{"type":"string","description":"the reminder's text or the task's instruction"},` +
 			`"grant":{"type":"object","description":"a task's tools, the hosts web.fetch may reach (bare names such as bank.gov.ua), and the conversation or person the answer goes to (default: this chat)",` +
-			`"properties":{"tools":{"type":"array","items":{"type":"string"}},"hosts":{"type":"array","items":{"type":"string"}},"reply_to":{"type":"string"}},` +
+			`"properties":{"tools":{"type":"array","items":{"type":"string"}},"hosts":{"type":"array","items":{"type":"string"}},"reply_to":{"type":"string"},` +
+			`"commands":{"type":"array","maxItems":20,"items":{"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":64},` +
+			`"dir":{"type":"string"}},"required":["argv"],"additionalProperties":false},` +
+			`"description":"exact host commands the runs may execute that need a press; host.exec must be in tools"}},` +
 			`"additionalProperties":false}},` +
 			`"required":["kind","text"],"additionalProperties":false}`),
 		Class:     tool.ClassSideEffect,
@@ -351,9 +394,9 @@ func (t *ScheduleCreate) Question(ctx context.Context, c tool.Call) (string, err
 		return "", err
 	}
 	if j.Kind == schedule.KindReminder {
-		return whole("schedule.create", c.Speak.Text(texts.AskCreateReminder, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}))
+		return whole("schedule.create", c.Speak.Text(texts.AskCreateReminder, texts.Vars{varSummary: t.s.summary(ctx, c.Speak, j, c.Conv)}))
 	}
-	return whole("schedule.create", c.Speak.Text(texts.AskCreateTask, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}))
+	return whole("schedule.create", c.Speak.Text(texts.AskCreateTask, texts.Vars{varSummary: t.s.summary(ctx, c.Speak, j, c.Conv)}))
 }
 
 // Run creates the job. A rerun of the same call finds it created.
@@ -440,7 +483,7 @@ func (t *ScheduleDelete) Question(ctx context.Context, c tool.Call) (string, err
 	if j.Kind == schedule.KindReminder {
 		key = texts.AskDeleteReminder
 	}
-	return whole("schedule.delete", c.Speak.Text(key, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}))
+	return whole("schedule.delete", c.Speak.Text(key, texts.Vars{varSummary: t.s.summary(ctx, c.Speak, j, c.Conv)}))
 }
 
 // Run deletes the job; schedule.ErrSystem for a system job.
@@ -481,7 +524,7 @@ func (t *ScheduleRunNow) Question(ctx context.Context, c tool.Call) (string, err
 	if err != nil {
 		return "", err
 	}
-	return whole("schedule.run_now", c.Speak.Text(texts.AskRunNow, texts.Vars{varSummary: t.s.summary(c.Speak, j, c.Conv)}))
+	return whole("schedule.run_now", c.Speak.Text(texts.AskRunNow, texts.Vars{varSummary: t.s.summary(ctx, c.Speak, j, c.Conv)}))
 }
 
 // Run puts the task's run now, keyed by the call's key: a confirmed call

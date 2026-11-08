@@ -55,6 +55,7 @@ ask.host_exec: "Виконати цю команду?\n{command}\n{line}{warning
 ask.plan: "Виконати цей план? Одне натискання дозволяє рівно перелічені в ньому команди, у цьому чаті, на годину, і нічого більше.\n\n{plan}"
 sched.summary_reminder: "Текст: {text}\nРозклад: {timing}\nКуди: {target}"
 sched.summary_task: "Завдання: {text}\nРозклад: {timing}\nІнструменти: {tools}\nАдреси для web.fetch: {hosts}\nВідповіді йдуть: {target}"
+sched.summary_commands: "Команди, які можуть виконувати запуски:\n{commands}"
 sched.entry: "{title}: {text}\nРозклад: {timing}"
 sched.details: "{title} {id}\n{summary}\nНаступний запуск: {next}\nСтворено: {created}"
 sched.once: "один раз: {at} ({zone})"

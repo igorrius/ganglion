@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/igorrius/ganglion/host"
@@ -161,9 +162,15 @@ func (h *HostExec) allowedAs(cl hostcmd.Class, c tool.Call, cmd tool.Command) er
 	}
 }
 
-// granted is task 9's check of a task's grant; until then a task's command
-// that needs a press is outside it.
-func (h *HostExec) granted(tool.Call, tool.Command) error { return tool.ErrOutOfGrant }
+// granted checks a task's command that needs a press against its grant: the
+// same check as the policy's, so a run that reached the tool past the policy
+// is still refused (R-POL-8).
+func (h *HostExec) granted(c tool.Call, cmd tool.Command) error {
+	if slices.ContainsFunc(c.Grant.Commands, cmd.Equal) {
+		return nil
+	}
+	return fmt.Errorf("host.exec: %s is not in this task's grant: %w", hostcmd.Show(cmd.Argv), tool.ErrOutOfGrant)
+}
 
 func (h *HostExec) dir(cmd tool.Command) string {
 	if cmd.Dir == "" {

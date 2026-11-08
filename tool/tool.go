@@ -97,6 +97,9 @@ type Grant struct {
 	Tools   []string `json:"tools"`
 	Hosts   []string `json:"hosts"`
 	ReplyTo string   `json:"reply_to"`
+	// Commands are the exact host commands the runs may execute that need a
+	// press; read commands run whenever host.exec is granted (R-POL-8, ADR-0040).
+	Commands []Command `json:"commands,omitempty"`
 }
 
 // URLFunc reports whether an address is known: it came from the owner's
