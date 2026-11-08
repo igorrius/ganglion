@@ -308,7 +308,7 @@ git commit -m "tools: sandboxprobe, the M3d sandbox spike"
 - Create: `docs/research/2026-11-08-command-sandbox-spike.md`
 - Modify: `docs/adr/0039-command-sandbox.md` (only if a host changes the decision)
 
-- [ ] **Step 1: Ask the owner to run the probe on Railway and the Pi**, with the exact commands:
+- [ ] **Step 1: Ask the owner to run the probe on Railway and the Pi** (asked; not yet run, the owner accepted the ADR without them on 2026-11-08), with the exact commands:
   - Pi: `GOOS=linux GOARCH=arm64 go build -o bin/sandboxprobe-arm64 ./tools/sandboxprobe`, copy it to
     the Pi, run `./sandboxprobe-arm64` as the user the node would run as;
   - Railway: a new service from this repository with the Dockerfile path
@@ -317,7 +317,7 @@ git commit -m "tools: sandboxprobe, the M3d sandbox spike"
 
   The owner pastes both tables. Tasks 3 and 4 may go on meanwhile: they hold on the owner's machine.
 
-- [ ] **Step 2: Write the research note** in the format of the other notes in `docs/research/`
+- [x] **Step 2: Write the research note** in the format of the other notes in `docs/research/`
   (question, method, results, conclusion). Results: one table per host (owner's machine, local
   Docker, Railway, Pi). Conclusion answers:
   1. Where Landlock is present, and so where commands can be on.
@@ -327,12 +327,12 @@ git commit -m "tools: sandboxprobe, the M3d sandbox spike"
   4. What finding `.env` files costs (`.env files under $HOME, depth 4`), and so whether the sandbox
      denies them by a scan at each command (task 3's `EnvFiles`) and where the scan stops.
 
-- [ ] **Step 3: Checkpoint with the owner.** If a host lacks Landlock: commands are off there (the
+- [x] **Step 3: Checkpoint with the owner.** If a host lacks Landlock: commands are off there (the
   ADR's "Revisit when"); option B is not taken without the owner. If the scan of `.env` files is too
   slow on the owner's machine (over 100 ms), propose a lower depth to the owner before task 3's
   `EnvFiles` is written.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/research/2026-11-08-command-sandbox-spike.md docs/adr/0039-command-sandbox.md
@@ -1790,19 +1790,19 @@ git commit -m "sandbox: the node starts its own binary as the helper; /status sh
 - Modify: `docs/adr/0039-command-sandbox.md`, `docs/adr/README.md`, `docs/spec.md`,
   `docs/architecture/05-code-map.md`, `docs/README.md`, `docs/plans/p1-all-in-one.md`, this plan.
 
-- [ ] **Step 1: ADR-0039 → Accepted** if task 2 held on every host the node runs on, with a
+- [x] **Step 1: ADR-0039 → Accepted** if task 2 held on every host the node runs on, with a
   "Spike" paragraph linking the research note; else it stays Proposed and the note says what is
   open. The row in `docs/adr/README.md` follows.
-- [ ] **Step 2: Spec.** Section 11's open decision "Sandbox for scripts and MCP modules": closed for
+- [x] **Step 2: Spec.** Section 11's open decision "Sandbox for scripts and MCP modules": closed for
   commands and scripts by ADR-0039 (MCP modules in P3). R-CMD-3: add "the owner adds paths with
   `GANGLION_SANDBOX_DENY`" and the `.env` depth from the note.
-- [ ] **Step 3: Code map.** `sandbox` (leaf; imports `status`, `texts`) with one line per file; the
+- [x] **Step 3: Code map.** `sandbox` (leaf; imports `status`, `texts`) with one line per file; the
   dependency diagram gets `config --> sandbox` and `sandbox --> status`; `tools/sandboxprobe`.
-- [ ] **Step 4: Measure.** `make memory`: the binary's size and the agent's RSS against `master`'s
+- [x] **Step 4: Measure.** `make memory`: the binary's size and the agent's RSS against `master`'s
   (ADR-0056 compares, it does not fail); write both in "Where we are".
-- [ ] **Step 5: Whole-branch review** with superpowers:requesting-code-review, the Review Focus above
+- [x] **Step 5: Whole-branch review** with superpowers:requesting-code-review, the Review Focus above
   as its brief; fix each finding or record it with its reason.
-- [ ] **Step 6: "Where we are"** in `docs/README.md`: 3.20 closed, what the spike found per host,
+- [x] **Step 6: "Where we are"** in `docs/README.md`: 3.20 closed, what the spike found per host,
   the minors left; `p1-all-in-one.md`'s 3.20 row "closed 2026-11-…"; tick this plan.
 - [ ] **Step 7: The owner's look**: `/status` on the test bot shows the sandbox line; then commit
   `docs: the command sandbox done`, and ask the owner about the merge.

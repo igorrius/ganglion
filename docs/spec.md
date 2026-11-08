@@ -970,7 +970,9 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   a command opens no Unix socket at all, so gpg-agent and the keyring are
   out of reach (`docker ps`, `systemctl --user` and `lpstat` with them);
   signals are not limited, so `kill` reaches the owner's processes
-  (owner, 2026-11-08; [ADR-0039](adr/0039-command-sandbox.md)). If the node cannot set
+  (owner, 2026-11-08; [ADR-0039](adr/0039-command-sandbox.md)). The
+  owner adds paths with `GANGLION_SANDBOX_DENY`; `.env` files are found
+  to three folders deep under home and the command's folder. If the node cannot set
   this up, or runs as root, `host.exec` is not offered and the node says
   why.
 - **R-CMD-4.** A command longer than a short wait continues in the
@@ -1379,7 +1381,7 @@ fallback until the gate is passed.
 | Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles (conversation, writing tools, analysis) | For development, tiers: Sonnet for turns, Haiku for compaction and checks ([ADR-0047](adr/0047-sonnet-answers-during-development.md)). Short decisions and embeddings wait for a concrete task ("Models by purpose" in the "Not now" list). Opus when the agent writes skills or modules | When the agent starts writing skills or modules |
 | Where nodes live | Cloud hosting · Pi · home PC | Edge in the cloud or on a Pi, claude CLI worker on the owner's PC | The P1 monthly bill |
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
-| Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Proposed for host commands and skill scripts in [ADR-0039](adr/0039-command-sandbox.md): `no_new_privs`, a clean environment, Landlock, the node not dumpable, fail closed | A spike in M3d on the owner's machine, Railway and a Pi |
+| Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Closed for host commands and skill scripts by [ADR-0039](adr/0039-command-sandbox.md) (accepted 2026-11-08): `no_new_privs`, a clean environment, Landlock, no Unix sockets below Landlock 9, the node not dumpable, fail closed | Railway and a Pi measured with `tools/sandboxprobe`; MCP modules in P3 |
 | How long ended sessions (episodes) are kept | Forever, searched by `memory.recall` (today: the newest 500 per chat) · a retention: sessions older than N days are dropped after consolidation has read them | A retention after consolidation (owner, 2026-11-03): nothing is dropped that consolidation has not read, so a fact the owner never confirmed is still turned into one or kept; what was said by chance fades | M7 task 7.2, with the nightly consolidation; N is chosen there |
 | Telemetry of edge nodes | Each edge to an OpenTelemetry collector over OTLP · Prometheus scrapes each edge · snapshots over the NATS bus, collected by the core | Decided by the owner (2026-11-03): over the bus, collected by the core, without JetStream for metrics (R-OBS-9). A collector needs one more link and one more service for every edge; the bus is already there. An outside collector can later be fed by the core | ADR at the start of P2, with the protocol |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |

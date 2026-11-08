@@ -6,8 +6,8 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** M3d: its step-by-step plan, starting with the sandbox spike (3.20) on the owner's machine, Railway
-  and a Pi.
+- **Next:** the owner's look at the sandbox line in `/status` on the test bot (3.20, branch
+  `m3d-sandbox`), then M3d's plan for 3.21–3.27 on what the spike found.
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
   - 0.2 Deye reader in WASM on wazero: matched `deye.py` on the live API,
@@ -279,14 +279,34 @@ Start here when coming back to the project.
       (a one-time job that ran is not counted), a catch-up run after a restart is not late, and
       lengths of time are written in the reader's units from the catalogue, in Go with no model call;
     - no full lab run: the branch does not touch the turn's stages (owner, 2026-11-08).
+  - **The command sandbox (task 3.20), closed 2026-11-08** on branch `m3d-sandbox`
+    ([plan](plans/p1-m3d-sandbox.md), [spike](research/2026-11-08-command-sandbox-spike.md),
+    [ADR-0039](adr/0039-command-sandbox.md) accepted, R-CMD-3):
+    - the node starts its own image as `ganglion __sandbox` with a clean environment; the helper sets
+      `no_new_privs`, confines itself with Landlock, refuses Unix sockets with seccomp below
+      Landlock 9 and execs the command; the node's environment and memory stay closed because it is
+      not dumpable, and `ps` still sees the machine (owner);
+    - denied for each command: the node's binary, data, logs, modules and workspace, `*_FILE`
+      secrets, the owner's secret stores, shell histories and the files that run at login,
+      `.env` files three folders deep, `GANGLION_SANDBOX_DENY`; 59 paths on the owner's machine;
+    - checks at start and a self-test; off with a reason in `/status` and the log (not Linux, root,
+      no Landlock, dumpable, self-test); signals not limited, so `kill` will reach the owner's
+      processes (owner);
+    - a review broke the first build four ways (a store made after start, the helper binary
+      replaced, a `.env` symlink, Unix sockets to gpg-agent and the keyring); each is closed with an
+      abuse test;
+    - measured: binary 46.4 MB, as on `master`; the agent with tools 44.7 MB after 1,000 turns;
+    - open: Railway and a Pi not measured (`tools/sandboxprobe`); hard links and bind mounts made
+      before are out of reach of path rules; a `.env` deeper than three folders stays readable;
+      Windows and macOS have no commands ("Not now").
   - **M3d, after `/status` (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
     fails closed; `host.stats`; a plan message whose one press approves
     exactly its commands; commands in task grants; the node accounts for
     its own files. [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
-    [ADR-0039](adr/0039-command-sandbox.md),
-    [ADR-0040](adr/0040-plans-as-approvals.md), Proposed. Reading files
+    [ADR-0039](adr/0039-command-sandbox.md) (accepted),
+    [ADR-0040](adr/0040-plans-as-approvals.md) (Proposed). Reading files
     and pictures sent to the agent is its own brainstorm after M3d.
   - Scope stays one operator, one agent, one bot (spec 14). Voice
     messages and PDF generation went to "Not now".

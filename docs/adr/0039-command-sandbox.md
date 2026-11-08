@@ -1,6 +1,6 @@
 # ADR-0039: Run host commands and skill scripts in a sandbox that fails closed
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-08)
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-3), [11](../spec.md#11-open-decisions) ("Sandbox for scripts and MCP modules"), [7.8](../spec.md#78-security-and-operations-mvp); [M3d design](../plans/p1-m3d-host-commands-design.md) section 5; [ADR-0038](0038-host-commands-as-argv-with-classes-in-code.md), [ADR-0031](0031-agent-security-baseline.md); decision D-5 in the [phase plan](../plans/p1-all-in-one.md#decisions-to-take-during-p1)
@@ -99,6 +99,16 @@ an unprivileged `USER`.
 The spec's open decision "Sandbox for scripts and MCP modules" is closed
 by this ADR once it is accepted; MCP modules (P3) revisit it.
 
+## Spike
+
+Task 3.20's [spike](../research/2026-11-08-command-sandbox-spike.md) ran on
+the owner's machine (Landlock ABI 7) and in a Docker container with the
+default seccomp profile (ABI 7): Landlock, `no_new_privs`, a seccomp
+filter and a not-dumpable node all hold. Railway and a Pi are not yet
+measured; the owner accepted the decision on these two (2026-11-08). On
+either, the node's checks at start decide: it says in `/status` and its
+log whether commands are on, and why not.
+
 ## Refined by the spike and the review (2026-11-08)
 
 The build of task 3.20 and a review that tried to break it settled what
@@ -155,8 +165,8 @@ option A needs beyond the paragraph above:
 
 ## Revisit when
 
-- The spike shows Railway or a Pi lacks Landlock or user namespaces (then
-  B, or commands off there).
+- Railway or a Pi, once measured with `tools/sandboxprobe`, lacks Landlock
+  or a seccomp filter (then commands are off there, or B).
 - MCP modules (P3) need the same sandbox with network rules.
 - A node runs on a kernel with Landlock ABI 9: build socket rules on
   `LANDLOCK_ACCESS_FS_RESOLVE_UNIX` there (deny the sockets under denied
