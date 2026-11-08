@@ -40,7 +40,7 @@ long a search for `.env` files under the home folder takes (depth 4, skipping `.
 | container | none (pid 1 cgroup `0::/init.scope`) |
 | .env files under $HOME, depth 4 | 3 found in 2,471 folders, 111 ms |
 
-The real node on this machine logs `sandbox: ready` with 12 denied paths; its self-test ran the
+The real node on this machine logs `sandbox: ready` (12 denied paths at first, 59 after the review added the stores, autorun files and paths that do not exist yet); its self-test ran the
 helper through `ganglion __sandbox` and could not read the denied file. The package's abuse tests pass
 here: a denied file, a write into a denied folder, a symlink to a denied file and a file created after
 the grants all fail; `env` shows the allowlist only; `sudo -n true` refuses under `no_new_privs`.
