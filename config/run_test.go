@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -406,7 +407,12 @@ func TestHostStatsWithoutTheSandbox(t *testing.T) {
 	c := tool.Call{TurnID: "01EV1", N: 1, Conv: "telegram:42", Transport: "telegram", Principal: "telegram:user:42", Admin: true,
 		Name: "host.stats", Args: json.RawMessage(`{}`)}
 	res, err := run(context.Background(), c)
-	if err != nil || !strings.Contains(res.Text, "Memory:") {
-		t.Fatalf("host.stats: %+v, %v", res, err)
+	// Memory and load come from /proc, so off Linux the answer says they are not known.
+	want := "Machine memory and load: not known here"
+	if runtime.GOOS == "linux" {
+		want = "Memory:"
+	}
+	if err != nil || !strings.Contains(res.Text, want) || !strings.Contains(res.Text, "The node's own files:") {
+		t.Fatalf("host.stats: %+v, %v; want %q", res, err, want)
 	}
 }
