@@ -1629,3 +1629,10 @@ Reviewed at each gate.
 - Choosing the model in the chat from the catalogue's models, per session;
   `/status` already shows the session's model, so it needs no change then
   (owner, 2026-11-08).
+- Raised privileges for managing remote servers: commands that need root,
+  given by the owner from the chat in a way that stays safe in transit and
+  on the node. Today `sudo` and its kin are forbidden (R-CMD-2), and the
+  owner runs such a command by hand from a command the agent prepared, as
+  desktop agents do. How to authorise and protect such a command is open;
+  revisit after the base mechanisms are built, checked and the repository
+  is public (owner, 2026-11-08).
