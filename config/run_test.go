@@ -15,11 +15,15 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/node"
+	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
+	"github.com/samber/do/v2"
 )
 
 const testToken = "7001:test-secret"
@@ -275,10 +279,10 @@ func TestAgentOverTelegram(t *testing.T) {
 	for _, tl := range reqs[0].Tools {
 		offered = append(offered, tl["function"].(map[string]any)["name"].(string))
 	}
-	want := "cells.get,cells.set,journal.search,language.set,logs.search,memory.audit,memory.forget,memory.read,memory.recall,memory.write," +
+	want := "cells.get,cells.set,host.stats,journal.search,language.set,logs.search,memory.audit,memory.forget,memory.read,memory.recall,memory.write," +
 		"message.send,persona.propose,plan.show,plan.step,schedule.create,schedule.delete,schedule.list,schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
 	if _, err := exec.LookPath("git"); err != nil {
-		want = "cells.get,cells.set,journal.search,language.set,logs.search,message.send,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
+		want = "cells.get,cells.set,host.stats,journal.search,language.set,logs.search,message.send,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
 			"schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
 	}
 	if got := strings.Join(offered, ","); got != want {
@@ -374,5 +378,35 @@ func TestPressFeedbackOrderOverTelegram(t *testing.T) {
 	eventually(t, "the second toast", func() bool { return len(fake.Toasts()) == 2 })
 	if got := fake.Toasts()[1].Text; got != "Already handled." || len(fake.Sent()) != 4 {
 		t.Fatalf("second press: toast %q, sent %d", got, len(fake.Sent()))
+	}
+}
+
+// rootKernel is a kernel that runs as root, so the sandbox is off.
+type rootKernel struct{}
+
+func (rootKernel) Euid() int                 { return 0 }
+func (rootKernel) LandlockABI() (int, error) { return 0, nil }
+func (rootKernel) Dumpable() (bool, error)   { return false, nil }
+
+// R-CMD-5: with the sandbox off, a node of 128 MB still tells its admin the
+// machine's numbers, since host.stats starts no subprocess.
+func TestHostStatsWithoutTheSandbox(t *testing.T) {
+	i := New(context.Background(), agentConfig(t), slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	do.OverrideValue(i, sandbox.New("/nonexistent", sandbox.Policy{}, rootKernel{}, time.Now()))
+	reg, err := do.Invoke[*tool.Registry](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := do.Invoke[*policy.Policy](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := p.Middleware()(reg.Run)
+	c := tool.Call{TurnID: "01EV1", N: 1, Conv: "telegram:42", Transport: "telegram", Principal: "telegram:user:42", Admin: true,
+		Name: "host.stats", Args: json.RawMessage(`{}`)}
+	res, err := run(context.Background(), c)
+	if err != nil || !strings.Contains(res.Text, "Memory:") {
+		t.Fatalf("host.stats: %+v, %v", res, err)
 	}
 }

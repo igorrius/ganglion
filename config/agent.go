@@ -12,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/diag"
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/plan"
 	"github.com/igorrius/ganglion/policy"
@@ -160,6 +161,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewLanguageSet(do.MustInvoke[*language.Store](i)),
+		builtin.NewHostStats(do.MustInvoke[*host.Stats](i)),
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
 		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,

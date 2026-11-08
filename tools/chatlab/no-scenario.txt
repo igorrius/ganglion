@@ -80,6 +80,7 @@ tool/registry.go
 tool/tool.go
 tool/builtin/cells.go
 tool/builtin/diag.go
+tool/builtin/host.go
 tool/builtin/message.go
 tool/builtin/persona.go
 tool/builtin/question.go

@@ -46,3 +46,11 @@ func Janitor() do.Provider[*host.Janitor] {
 		return host.NewJanitor(do.MustInvoke[[]host.Place](i), do.MustInvoke[*slog.Logger](i)), nil
 	}
 }
+
+// Stats provides host.stats' reader over the node's places.
+func Stats() do.Provider[*host.Stats] {
+	return func(i do.Injector) (*host.Stats, error) {
+		b := do.MustInvoke[Bootstrap](i)
+		return host.NewStats(do.MustInvoke[[]host.Place](i), filepath.Dir(b.DB)), nil
+	}
+}
