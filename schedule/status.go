@@ -90,10 +90,10 @@ func (h *health) judge(c status.Check, now time.Time) status.Check {
 		c.State, c.Reason, c.Since = status.Warn, texts.StatusReasonSchedFailing, h.failing
 	case !h.last.IsZero() && now.Sub(h.last) > tickStale:
 		c.State, c.Reason, c.Since = status.Warn, texts.StatusReasonSchedStalled, h.last
-		c.Vars["for"] = status.Duration(now.Sub(h.last))
+		c.Spans = map[string]time.Duration{"for": now.Sub(h.last)}
 	case h.lag > lagWarn:
 		c.State, c.Reason = status.Warn, texts.StatusReasonSchedLag
-		c.Vars["lag"] = status.Duration(h.lag)
+		c.Spans = map[string]time.Duration{"lag": h.lag}
 	}
 	return c
 }

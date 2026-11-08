@@ -52,7 +52,7 @@ func TestStatusStalePoll(t *testing.T) {
 	h := NewHealth(fixedClock)
 	h.polledNow()
 	c := line(t, h, healthStart.Add(3*time.Minute))
-	if c.State != status.Warn || c.Reason != texts.StatusReasonPollStale || c.Vars["for"] != "3 min" {
+	if c.State != status.Warn || c.Reason != texts.StatusReasonPollStale || c.Spans["for"] != 3*time.Minute {
 		t.Errorf("stale: %+v", c)
 	}
 }

@@ -154,6 +154,10 @@ const (
 	StatusReasonSchedLag         Key = "status.reason_sched_lag"
 	StatusReasonSchedFailing     Key = "status.reason_sched_failing"
 	StatusReasonSchedStalled     Key = "status.reason_sched_stalled"
+	StatusUnitDay                Key = "status.unit_day"
+	StatusUnitHour               Key = "status.unit_hour"
+	StatusUnitMin                Key = "status.unit_min"
+	StatusUnitSec                Key = "status.unit_sec"
 )
 
 var allKeys = []Key{
@@ -163,7 +167,7 @@ var allKeys = []Key{
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
-	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, StatusModuleFallback, StatusReasonModuleFailed, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled,
+	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, StatusModuleFallback, StatusReasonModuleFailed, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled, StatusUnitDay, StatusUnitHour, StatusUnitMin, StatusUnitSec,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.

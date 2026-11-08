@@ -67,8 +67,8 @@ func TestVersionLine(t *testing.T) {
 
 func TestUptime(t *testing.T) {
 	c := lines(t, New(start, Files{}, WithMemory(noMemory)))[texts.StatusUptime]
-	if c.Vars["uptime"] != "3 d 4 h" {
-		t.Errorf("uptime %q", c.Vars["uptime"])
+	if c.Spans["uptime"] != 76*time.Hour {
+		t.Errorf("uptime %v", c.Spans["uptime"])
 	}
 }
 

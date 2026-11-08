@@ -21,20 +21,27 @@ func Bytes(n int64) string {
 	return fmt.Sprintf("%d %s", int64(f), units[u])
 }
 
+// Units are the words of days, hours, minutes and seconds in one language,
+// short forms that do not change with the number.
+type Units struct{ Day, Hour, Min, Sec string }
+
+// EnglishUnits are the English units.
+var EnglishUnits = Units{Day: "d", Hour: "h", Min: "min", Sec: "s"}
+
 // Duration is d in its two largest units, cut, not rounded: "40 s",
-// "12 min", "3 h 5 min", "3 d 4 h".
-func Duration(d time.Duration) string {
+// "12 min", "3 h 5 min", "3 d 4 h" in English.
+func Duration(d time.Duration, u Units) string {
 	d = max(d, 0)
 	days, hours, mins := int(d/(24*time.Hour)), int(d/time.Hour)%24, int(d/time.Minute)%60
 	switch {
 	case days > 0:
-		return pair(days, "d", hours, "h")
+		return pair(days, u.Day, hours, u.Hour)
 	case hours > 0:
-		return pair(hours, "h", mins, "min")
+		return pair(hours, u.Hour, mins, u.Min)
 	case mins > 0:
-		return fmt.Sprintf("%d min", mins)
+		return fmt.Sprintf("%d %s", mins, u.Min)
 	default:
-		return fmt.Sprintf("%d s", int(d/time.Second))
+		return fmt.Sprintf("%d %s", int(d/time.Second), u.Sec)
 	}
 }
 

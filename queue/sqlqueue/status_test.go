@@ -49,7 +49,7 @@ func TestStatusOldWaiting(t *testing.T) {
 	inboxRow(t, f, "done", t0.Add(-time.Hour), "done")
 	outboxRow(t, f, "o", t0.Add(-10*time.Second), time.Time{}, "pending")
 	c := queueLine(t, f)
-	if c.State != status.Warn || c.Reason != texts.StatusReasonQueueOld || c.Vars["for"] != "2 min" ||
+	if c.State != status.Warn || c.Reason != texts.StatusReasonQueueOld || c.Spans["for"] != 2*time.Minute ||
 		c.Vars["inbox"] != "1" || c.Vars["outbox"] != "1" || !c.Since.Equal(t0.Add(-2*time.Minute)) {
 		t.Errorf("%+v", c)
 	}

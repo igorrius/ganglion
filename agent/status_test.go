@@ -158,3 +158,21 @@ func TestStatusCompactionIsNoFallback(t *testing.T) {
 		t.Errorf("reply:\n%s", reply)
 	}
 }
+
+// Owner's look, 2026-11-08: lengths of time are in the reader's units, from the catalogue, with no model.
+func TestStatusUnitsInTheReadersLanguage(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.deps.Languages = &fakeLanguages{lang: map[string]texts.Lang{owner: "uk"}}
+	e.deps.Translate = func(texts.Lang) {}
+	e.deps.StatusSources = []status.Source{fakeSource{name: "scheduler", checks: []status.Check{{Section: status.SectionProblems,
+		State: status.Warn, Line: texts.StatusJobsNone, Reason: texts.StatusReasonSchedLag,
+		Spans: map[string]time.Duration{"lag": 9*time.Hour + 18*time.Minute}}}}}
+	e.a = New(overDefaults(Config{}), e.deps)
+	calls := len(e.smart.requests()) + len(e.cheap.requests())
+	if reply := statusReply(t, e); !strings.Contains(reply, "запізнився на 9 год 18 хв") {
+		t.Errorf("reply:\n%s", reply)
+	}
+	if len(e.smart.requests())+len(e.cheap.requests()) != calls {
+		t.Error("a model was called")
+	}
+}

@@ -41,7 +41,7 @@ func TestStatusLateRun(t *testing.T) {
 	e.now = time.Date(2026, 11, 3, 9, 1, 30, 0, time.UTC) // the 09:00 slot put 90 s late
 	e.tick(t)
 	c := e.jobsLine(t)
-	if c.State != status.Warn || c.Reason != texts.StatusReasonSchedLag || c.Vars["lag"] != "1 min" {
+	if c.State != status.Warn || c.Reason != texts.StatusReasonSchedLag || c.Spans["lag"] != 90*time.Second {
 		t.Errorf("late: %+v", c)
 	}
 }
@@ -69,7 +69,7 @@ func TestStatusStalledTicks(t *testing.T) {
 	e.tick(t)
 	e.now = e.now.Add(3 * time.Minute)
 	c := e.jobsLine(t)
-	if c.State != status.Warn || c.Reason != texts.StatusReasonSchedStalled || c.Vars["for"] != "3 min" {
+	if c.State != status.Warn || c.Reason != texts.StatusReasonSchedStalled || c.Spans["for"] != 3*time.Minute {
 		t.Errorf("stalled: %+v", c)
 	}
 }

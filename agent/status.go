@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -133,10 +132,19 @@ func near(used, limit int) bool { return limit > 0 && float64(used) >= limitNear
 func renderStatus(checks []status.Check, sp texts.Speaker, s status.Scope) string {
 	var b strings.Builder
 	b.WriteString(verdictLine(checks, sp))
+	r := lineRenderer{sp: sp, scope: s, units: status.Units{Day: sp.Text(texts.StatusUnitDay, nil), Hour: sp.Text(texts.StatusUnitHour, nil),
+		Min: sp.Text(texts.StatusUnitMin, nil), Sec: sp.Text(texts.StatusUnitSec, nil)}}
 	for _, sec := range status.Sections {
-		writeSection(&b, sec, checks, sp, s)
+		r.section(&b, sec, checks)
 	}
 	return b.String()
+}
+
+// lineRenderer writes lines in one reader's language: its texts and its units of time.
+type lineRenderer struct {
+	sp    texts.Speaker
+	scope status.Scope
+	units status.Units
 }
 
 // verdictLine is the first line: all well, or how many lines need a look or do not work.
@@ -146,39 +154,42 @@ func verdictLine(checks []status.Check, sp texts.Speaker) string {
 	return statusMarks[v] + " " + sp.Text(key, texts.Vars{"n": strconv.Itoa(n)})
 }
 
-// writeSection writes sec's heading and lines, or nothing when it has none.
-func writeSection(b *strings.Builder, sec status.Section, checks []status.Check, sp texts.Speaker, s status.Scope) {
+// section writes sec's heading and lines, or nothing when it has none.
+func (r lineRenderer) section(b *strings.Builder, sec status.Section, checks []status.Check) {
 	head := false
 	for _, c := range checks {
 		if c.Section != sec {
 			continue
 		}
 		if !head {
-			b.WriteString("\n\n## " + sp.Text(statusTitles[sec], nil) + "\n")
+			b.WriteString("\n\n## " + r.sp.Text(statusTitles[sec], nil) + "\n")
 			head = true
 		}
-		b.WriteString("\n- " + statusLine(c, sp, s))
+		b.WriteString("\n- " + r.line(c))
 	}
 }
 
-// statusLine is one line: its mark, its text, and for a line that is not OK its reason and since when.
-func statusLine(c status.Check, sp texts.Speaker, s status.Scope) string {
-	v := escaped(c.Vars)
-	line := statusMarks[c.State] + " " + sp.Text(c.Line, v)
+// line is one line: its mark, its text, and for a line that is not OK its reason and since when.
+func (r lineRenderer) line(c status.Check) string {
+	v := r.values(c)
+	line := statusMarks[c.State] + " " + r.sp.Text(c.Line, v)
 	if c.Reason != "" {
-		line += " — " + sp.Text(c.Reason, v)
+		line += " — " + r.sp.Text(c.Reason, v)
 	}
 	if c.State != status.OK && !c.Since.IsZero() {
-		line += " (" + sp.Text(texts.StatusSince, texts.Vars{"time": status.Clock(c.Since, s)}) + ")"
+		line += " (" + r.sp.Text(texts.StatusSince, texts.Vars{"time": status.Clock(c.Since, r.scope)}) + ")"
 	}
 	return line
 }
 
-// escaped is a copy of v whose values show as written.
-func escaped(v texts.Vars) texts.Vars {
-	out := maps.Clone(v)
-	for k, s := range out {
+// values are c's values shown as written, its lengths of time in the reader's units.
+func (r lineRenderer) values(c status.Check) texts.Vars {
+	out := make(texts.Vars, len(c.Vars)+len(c.Spans))
+	for k, s := range c.Vars {
 		out[k] = texts.Escape(s)
+	}
+	for k, d := range c.Spans {
+		out[k] = texts.Escape(status.Duration(d, r.units))
 	}
 	return out
 }

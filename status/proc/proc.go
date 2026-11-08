@@ -69,7 +69,7 @@ func (*Source) Name() string { return "node" }
 // Status implements status.Source.
 func (s *Source) Status(_ context.Context, sc status.Scope) ([]status.Check, error) {
 	out := []status.Check{s.version(), {Section: status.SectionNode, State: status.OK, Line: texts.StatusUptime,
-		Vars: texts.Vars{"uptime": status.Duration(sc.Now.Sub(s.start))}}}
+		Spans: map[string]time.Duration{"uptime": sc.Now.Sub(s.start)}}}
 	if c, ok := s.memoryLine(); ok {
 		out = append(out, c)
 	}

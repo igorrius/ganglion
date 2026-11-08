@@ -56,7 +56,7 @@ func (h *Health) Status(_ context.Context, s status.Scope) ([]status.Check, erro
 		c.Vars = texts.Vars{"time": status.Clock(h.polled, s)}
 		if since := s.Now.Sub(h.polled); since > pollStale {
 			c.State, c.Reason, c.Since = status.Warn, texts.StatusReasonPollStale, h.polled
-			c.Vars["for"] = status.Duration(since)
+			c.Spans = map[string]time.Duration{"for": since}
 		}
 	}
 	if h.stop != "" {

@@ -49,7 +49,10 @@ type Check struct {
 	Line    texts.Key  // the line's text
 	Reason  texts.Key  // why it is not OK; "" when there is none
 	Vars    texts.Vars // the values of Line and Reason, already formatted
-	Since   time.Time  // when the state began; zero when unknown
+	// Spans are values that are lengths of time, written in the reader's
+	// language when the line is shown (Duration).
+	Spans map[string]time.Duration
+	Since time.Time // when the state began; zero when unknown
 }
 
 // Scope is who asked and when.

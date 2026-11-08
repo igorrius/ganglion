@@ -46,7 +46,7 @@ func (q *Queue) Status(ctx context.Context, s status.Scope) ([]status.Check, err
 	switch {
 	case !oldest.IsZero() && s.Now.Sub(oldest) > queueOld:
 		c.State, c.Reason, c.Since = status.Warn, texts.StatusReasonQueueOld, oldest
-		c.Vars["for"] = status.Duration(s.Now.Sub(oldest))
+		c.Spans = map[string]time.Duration{"for": s.Now.Sub(oldest)}
 	case failed > 0:
 		c.State, c.Reason = status.Warn, texts.StatusReasonUndelivered
 		c.Vars["n"] = strconv.Itoa(failed)

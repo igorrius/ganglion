@@ -20,7 +20,7 @@ func TestDuration(t *testing.T) {
 		0: "0 s", 40 * time.Second: "40 s", 12 * time.Minute: "12 min", 12*time.Minute + 30*time.Second: "12 min",
 		3*time.Hour + 5*time.Minute: "3 h 5 min", 3 * time.Hour: "3 h", 76 * time.Hour: "3 d 4 h", 48 * time.Hour: "2 d",
 	} {
-		if got := status.Duration(d); got != want {
+		if got := status.Duration(d, status.EnglishUnits); got != want {
 			t.Errorf("Duration(%v) = %q, want %q", d, got, want)
 		}
 	}
@@ -37,5 +37,12 @@ func TestClock(t *testing.T) {
 	}
 	if got := status.Clock(time.Date(2026, 11, 7, 10, 40, 0, 0, time.UTC), s); got != "2026-11-07 12:40" {
 		t.Errorf("yesterday: %q", got)
+	}
+}
+
+func TestDurationInAnotherLanguage(t *testing.T) {
+	uk := status.Units{Day: "д", Hour: "год", Min: "хв", Sec: "с"}
+	if got := status.Duration(9*time.Hour+18*time.Minute, uk); got != "9 год 18 хв" {
+		t.Errorf("%q", got)
 	}
 }
