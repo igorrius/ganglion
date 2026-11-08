@@ -112,6 +112,12 @@ type Call struct {
 	Grant     *Grant // non-nil only in a scheduled task's turn
 	Depth     int    // R-AGT-4
 	KnownURL  URLFunc
+	// Planned reports whether the conversation's approved plan lists a host
+	// command (R-CMD-7); nil approves nothing.
+	Planned CommandFunc
+	// Approved is set only when the agent runs a call the owner pressed
+	// Approve on: a tool that must never run unapproved checks it (ADR-0040).
+	Approved bool
 	// Speak writes what the person reads in their language (R-LANG-2); a
 	// tool's result and errors stay in English, since a model reads them.
 	Speak texts.Speaker
@@ -128,6 +134,9 @@ type Result struct {
 	Text     string
 	External bool   // the text is outside content: the session becomes tainted and the text is wrapped as data
 	Pending  string // non-empty: the id of a call awaiting confirmation; Text says so
+	// Job is a host command still running in the background; its end
+	// resumes the conversation (R-CMD-4). Text says so.
+	Job string
 	// Out are the messages the tool produces; the agent sends them with the
 	// turn's replies. They are delivered even when the call returns an
 	// error, so a tool must not return both unless it means to: the

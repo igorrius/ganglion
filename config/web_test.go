@@ -87,7 +87,8 @@ func TestLocalSafeToolsAreTheListed(t *testing.T) {
 		if s.LocalSafe {
 			got = append(got, s.Name)
 		}
-		if s.Name == "web.fetch" || s.Name == "web.search" || s.Name == "memory.write" || s.Name == "message.send" || s.Name == "schedule.create" {
+		if s.Name == "web.fetch" || s.Name == "web.search" || s.Name == "memory.write" || s.Name == "message.send" || s.Name == "schedule.create" ||
+			s.Name == "host.exec" {
 			if s.LocalSafe {
 				t.Errorf("%s leaves the node", s.Name)
 			}

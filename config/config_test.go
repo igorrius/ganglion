@@ -21,6 +21,7 @@ import (
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
@@ -100,10 +101,19 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"cells.get", "cells.set", "host.stats", "message.send", "plan.show", "plan.step", "schedule.create", "schedule.delete", "schedule.list",
-		"schedule.run_now", "web.fetch", "web.search", "logs.search", "journal.search", "turns.failed", "skill.read", "language.set"}
+	want := []string{"cells.get", "cells.set", "host.exec", "host.stats", "message.send", "plan.show", "plan.step", "schedule.create", "schedule.delete",
+		"schedule.list", "schedule.run_now", "web.fetch", "web.search", "logs.search", "journal.search", "turns.failed", "skill.read", "language.set"}
 	if _, err := exec.LookPath("git"); err == nil {
 		want = append(want, "memory.audit", "memory.forget", "memory.read", "memory.recall", "memory.write", "persona.propose")
+	}
+	// host.exec is registered always and on offer only while the sandbox is
+	// ready (R-CMD-1, R-CMD-3).
+	offered, ready := len(want), readyOf(do.MustInvoke[*sandbox.Sandbox](i))
+	if !ready {
+		offered--
+	}
+	if reg.Offered("host.exec", true) != ready {
+		t.Errorf("host.exec offered %v, the sandbox ready %v", !ready, ready)
 	}
 	for _, name := range want {
 		s, ok := reg.Spec(name)
@@ -115,8 +125,8 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 			t.Errorf("%s is offered to everyone", name)
 		}
 	}
-	if got := len(reg.Specs(true)); got != len(want) {
-		t.Errorf("%d tools on offer to an admin, want %d", got, len(want))
+	if got := len(reg.Specs(true)); got != offered {
+		t.Errorf("%d tools on offer to an admin, want %d", got, offered)
 	}
 	comps, err := do.Invoke[[]node.Component](i)
 	if err != nil {
@@ -279,4 +289,13 @@ func TestSecretValuesListsEverySecretTheNodeRead(t *testing.T) {
 	if want := []string{"brave", "k1", "k2", "tok"}; !slices.Equal(got, want) {
 		t.Fatalf("SecretValues = %q, want %q", got, want)
 	}
+}
+
+// readyOf reports whether s runs commands.
+func readyOf(s *sandbox.Sandbox) bool { ok, _ := s.Ready(); return ok }
+
+// hostSandboxReady reports whether a node started by this test would have
+// its sandbox ready: the same checks, on this kernel.
+func hostSandboxReady() bool {
+	return readyOf(sandbox.New(selfImage, sandbox.Policy{}, sandbox.HostKernel(), time.Now()))
 }

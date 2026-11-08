@@ -4,6 +4,7 @@
 # to depend on a file, move it to that scenario's covers.
 main.go
 host/**
+hostcmd/**
 access/**
 agent/commands.go
 agent/config.go

@@ -1255,6 +1255,24 @@ func TestParkedCallKeepsThePlan(t *testing.T) {
 	}
 }
 
+// R-CMD-4: a command that goes on in the background is listed once in the
+// state, and the plan stays open while it runs.
+func TestBackgroundCommandKeepsThePlan(t *testing.T) {
+	cmd := &fakeTool{name: "host.exec", result: tool.Result{Text: "still running", External: true, Job: "k:1"}}
+	e := newEnv(t, Config{}, registry(t, cmd))
+	f := &planFinish{}
+	e.deps.Plans = f
+	e.a = New(overDefaults(Config{}), e.deps)
+	e.smart.push(callTools("host.exec", "host.exec"), say("it runs"))
+	e.turn(t, message(owner, "Igor", "clean the cache"))
+	if st := e.state(t); !slices.Equal(st.Commands, []string{"k:1"}) {
+		t.Fatalf("commands %v", st.Commands)
+	}
+	if !slices.Equal(f.kept, []bool{true}) {
+		t.Fatalf("kept %v", f.kept)
+	}
+}
+
 // A plan is progress: failing to close one costs the turn nothing.
 func TestPlanFinishFailureDoesNotFailTheTurn(t *testing.T) {
 	e := newAddEnv(t, Config{})

@@ -19,6 +19,7 @@ import (
 
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/hostcmd"
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/internal/urlnorm"
@@ -34,6 +35,7 @@ const (
 	toolLanguageSet  = "language.set"
 	toolMemoryWrite  = "memory.write"
 	toolMemoryForget = "memory.forget"
+	toolHostExec     = "host.exec"
 )
 
 const (
@@ -143,8 +145,9 @@ func New(cfg Config, reg *tool.Registry, ask Asker, opts ...Option) *Policy {
 // tool's declared parameters are refused first (tool.CheckArgs, ruling
 // R18): the rules below read them by exact name. A confirm parks the call with the Asker
 // and does not run it; a forbidden or out-of-grant call returns an error
-// for the model and does not run. The decision goes to the journal around
-// this middleware (journal.Annotate).
+// for the model and does not run. A planned host command runs as auto does:
+// the policy decides, the decision only names why in the journal. The
+// decision goes to the journal around this middleware (journal.Annotate).
 func (p *Policy) Middleware() tool.Middleware {
 	return func(next tool.Func) tool.Func {
 		return func(ctx context.Context, c tool.Call) (tool.Result, error) {
@@ -277,23 +280,28 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 //  3. in a local-only session, a tool not declared LocalSafe: forbidden,
 //     whatever a grant says (ADR-0049);
 //  4. a forbidden tool: forbidden, whatever a grant says;
-//  5. a scheduled task's call: outside its grant is out_of_grant, inside
+//  5. a forbidden host command, or host.exec arguments the table cannot
+//     read: forbidden, before any grant, plan or press (R-CMD-2);
+//  6. a scheduled task's call: outside its grant is out_of_grant, inside
 //     it is auto, even in a tainted session (R-POL-8); web.fetch is
 //     inside only on a granted host, message.send only to the task's own
 //     conversation or its reply target;
-//  6. memory.write and memory.forget: confirm in a tainted session, auto
+//  7. memory.write and memory.forget: confirm in a tainted session, auto
 //     otherwise (the memory guard still checks the entry), though they
 //     are side effects; language.set likewise, since it changes only the
 //     caller's own language (R-LANG-3);
-//  7. any other side effect: confirm;
-//  8. in a tainted session, a call with input to a tool that asks for it:
+//  8. a host command by its class: read is auto, even in a tainted
+//     session; one the conversation's approved plan lists is planned; any
+//     other confirms (R-CMD-2, R-CMD-7);
+//  9. any other side effect: confirm;
+//  10. in a tainted session, a call with input to a tool that asks for it:
 //     confirm (ADR-0049);
-//  9. message.send to another conversation: confirm;
-//  10. web.fetch of an address the owner or a search did not bring: confirm;
-//  11. the tool's own policy.
+//  11. message.send to another conversation: confirm;
+//  12. web.fetch of an address the owner or a search did not bring: confirm;
+//  13. the tool's own policy.
 //
 // An argument a rule needs that does not parse makes the call confirm,
-// never auto.
+// never auto; host.exec's arguments that do not parse make it forbidden.
 func Decide(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision) {
 	for _, r := range rules {
 		if pol, d, ok := r(maxDepth, s, c); ok {
@@ -307,7 +315,8 @@ func Decide(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisi
 type rule func(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool)
 
 // rules are the rules of Decide, in order.
-var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleGrant, ruleMemoryWrite, ruleLanguageSet, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
+var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleCommandForbidden, ruleGrant,
+	ruleMemoryWrite, ruleLanguageSet, ruleHostExec, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -465,6 +474,40 @@ func ruleForbidden(_ int, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decisi
 		return forbidden()
 	}
 	return "", "", false
+}
+
+// ruleCommandForbidden refuses a forbidden host command before any grant, plan
+// or press can allow it (R-CMD-2), and an argv the table cannot read.
+func ruleCommandForbidden(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if s.Name != toolHostExec {
+		return "", "", false
+	}
+	x, err := hostcmd.ParseExec(c.Args)
+	if err != nil || hostcmd.Classify(x.Command.Argv).Class == hostcmd.Forbidden {
+		return forbidden()
+	}
+	return "", "", false
+}
+
+// ruleHostExec decides a host command by its class in the table: read runs by
+// itself, even in a tainted session; a command the conversation's approved plan
+// lists runs as planned; any other asks (R-CMD-2, R-CMD-7).
+func ruleHostExec(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if s.Name != toolHostExec {
+		return "", "", false
+	}
+	x, err := hostcmd.ParseExec(c.Args)
+	if err != nil {
+		return forbidden()
+	}
+	switch e := hostcmd.Classify(x.Command.Argv); {
+	case e.Class == hostcmd.Read:
+		return tool.PolicyAuto, journal.DecisionAllowed, true
+	case c.Planned != nil && c.Planned(x.Command):
+		return tool.PolicyAuto, journal.DecisionPlanned, true
+	default:
+		return confirm()
+	}
 }
 
 func ruleSideEffect(_ int, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decision, bool) {

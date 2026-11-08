@@ -246,6 +246,9 @@ func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) 
 	if result.Pending != "" && !slices.Contains(t.state.Pending, result.Pending) {
 		t.state.Pending = append(t.state.Pending, result.Pending)
 	}
+	if result.Job != "" && !slices.Contains(t.state.Commands, result.Job) {
+		t.state.Commands = append(t.state.Commands, result.Job)
+	}
 	return text, nil
 }
 

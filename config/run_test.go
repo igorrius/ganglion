@@ -286,6 +286,10 @@ func TestAgentOverTelegram(t *testing.T) {
 		want = "cells.get,cells.set,host.stats,journal.search,language.set,logs.search,message.send,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
 			"schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
 	}
+	// host.exec is on offer only where the sandbox is ready (R-CMD-1).
+	if hostSandboxReady() {
+		want = strings.Replace(want, "cells.set,", "cells.set,host.exec,", 1)
+	}
 	if got := strings.Join(offered, ","); got != want {
 		t.Fatalf("the admin was offered %q", got)
 	}
@@ -414,5 +418,14 @@ func TestHostStatsWithoutTheSandbox(t *testing.T) {
 	}
 	if err != nil || !strings.Contains(res.Text, want) || !strings.Contains(res.Text, "The node's own files:") {
 		t.Fatalf("host.stats: %+v, %v; want %q", res, err, want)
+	}
+	// R-CMD-3, fail closed: with the sandbox off host.exec is not offered,
+	// and a call the model makes up for it anyway runs nothing.
+	if reg.Offered("host.exec", true) {
+		t.Fatal("host.exec is offered with the sandbox off")
+	}
+	c.N, c.Name, c.Args = 2, "host.exec", json.RawMessage(`{"argv":["df","-h"],"reason":"space"}`)
+	if res, err := run(context.Background(), c); err == nil || !strings.Contains(err.Error(), "commands are off") {
+		t.Fatalf("host.exec with the sandbox off: %+v, %v", res, err)
 	}
 }

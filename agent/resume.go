@@ -243,7 +243,9 @@ func (a *Agent) stored(it pending.Item, ran bool) pending.Outcome {
 func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pending.Outcome {
 	c := it.Call()
 	c.Admin, c.Tainted = t.admin, it.Tainted || t.state.Tainted
-	c.Speak = a.speaker(ctx, t)
+	// The owner pressed Approve on this call: a tool that never runs
+	// unapproved reads it (ADR-0040).
+	c.Speak, c.Approved = a.speaker(ctx, t), true
 	c.KnownURL = knownURLs(t.state.Messages).has
 	if o, refused := a.refuseBadArgs(ctx, c); refused {
 		return o

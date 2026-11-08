@@ -293,9 +293,10 @@ func (a *Agent) finish(ctx context.Context, t *turn) ([]event.Outgoing, queue.St
 	if err := a.d.Turns.Record(rctx, t.record); err != nil {
 		a.log.Warn("agent: trace not recorded", "id", t.event.ID, "err", err)
 	}
-	// A parked call goes on after its press, and the plan with it. A plan is
-	// progress, so a failure here costs the turn nothing.
-	if err := a.d.Plans.Finish(rctx, t.event.Conv, len(t.state.Pending) > 0); err != nil {
+	// A parked call goes on after its press, and a command in the background
+	// after its end (R-CMD-4), and the plan with them. A plan is progress, so
+	// a failure here costs the turn nothing.
+	if err := a.d.Plans.Finish(rctx, t.event.Conv, len(t.state.Pending) > 0 || len(t.state.Commands) > 0); err != nil {
 		a.log.Warn("agent: plan not finished", "conv", t.event.Conv, "err", err)
 	}
 	a.tellMachineTexts(rctx, t)

@@ -10,6 +10,7 @@ import (
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/sandbox"
+	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/samber/do/v2"
 )
 
@@ -75,5 +76,22 @@ func Runner() do.Provider[*host.Runner] {
 			do.MustInvoke[*sqlqueue.Queue](i).Put, commandLimits(),
 			host.WithRedact(func(s string) string { return values(redact.String(s)) }),
 			host.WithRunnerLog(do.MustInvoke[*slog.Logger](i)))
+	}
+}
+
+// commandGate is open while the sandbox is on; task 6 adds the kill switch.
+type commandGate struct{ s *sandbox.Sandbox }
+
+func (g commandGate) Open() bool { ok, _ := g.s.Ready(); return ok }
+
+// HostExec provides host.exec over the runner, in the node user's home.
+func HostExec() do.Provider[*builtin.HostExec] {
+	return func(i do.Injector) (*builtin.HostExec, error) {
+		s := do.MustInvoke[*sandbox.Sandbox](i)
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = "/"
+		}
+		return builtin.NewHostExec(do.MustInvoke[*host.Runner](i), host.NewIgnored(s), commandGate{s}, home), nil
 	}
 }

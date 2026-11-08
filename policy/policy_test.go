@@ -532,3 +532,60 @@ func TestLocalOnlyRefusalSaysWhy(t *testing.T) {
 		t.Fatal("the tool ran")
 	}
 }
+
+func execSpec() tool.Spec {
+	return tool.Spec{Name: "host.exec", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm, AdminOnly: true}
+}
+
+func execCall(argv ...string) tool.Call {
+	args, _ := json.Marshal(map[string]any{"argv": argv, "reason": "r"})
+	return tool.Call{Name: "host.exec", Admin: true, Args: args}
+}
+
+// R-CMD-2, R-CMD-7: a host command is decided by its class in the table, and
+// a forbidden one never runs, whatever else holds.
+func TestDecideHostExec(t *testing.T) {
+	planned := func(cmd tool.Command) bool { return cmd.Equal(tool.Command{Argv: []string{"go", "clean", "-cache"}}) }
+	cases := []struct {
+		name string
+		call tool.Call
+		pol  tool.Policy
+		d    journal.Decision
+	}{
+		{"read runs", execCall("df", "-h"), tool.PolicyAuto, journal.DecisionAllowed},
+		{"read runs tainted", func() tool.Call { c := execCall("du", "-sh", "/x"); c.Tainted = true; return c }(), tool.PolicyAuto, journal.DecisionAllowed},
+		{"content asks", execCall("cat", "/etc/hosts"), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"content asks tainted", func() tool.Call { c := execCall("cat", "/etc/hosts"); c.Tainted = true; return c }(), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"change asks", execCall("rm", "-r", "/tmp/x"), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"script asks", execCall("bash", "-c", "true"), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"forbidden never", execCall("sudo", "true"), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"planned runs", func() tool.Call { c := execCall("go", "clean", "-cache"); c.Planned = planned; return c }(), tool.PolicyAuto, journal.DecisionPlanned},
+		{"planned elsewhere asks", func() tool.Call {
+			args, _ := json.Marshal(map[string]any{"argv": []string{"go", "clean", "-cache"}, "dir": "/other", "reason": "r"})
+			c := execCall()
+			c.Args, c.Planned = args, planned
+			return c
+		}(), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"not in the plan asks", func() tool.Call { c := execCall("docker", "rm", "x"); c.Planned = planned; return c }(), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"forbidden though planned", func() tool.Call {
+			c := execCall("sudo", "true")
+			c.Planned = func(tool.Command) bool { return true }
+			return c
+		}(), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"forbidden though granted", func() tool.Call {
+			c := execCall("sudo", "true")
+			c.Grant = &tool.Grant{Tools: []string{"host.exec"}}
+			return c
+		}(), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"unparsed argv is forbidden", tool.Call{Name: "host.exec", Admin: true, Args: json.RawMessage(`{"argv":"rm -rf /","reason":"r"}`)}, tool.PolicyForbidden, journal.DecisionForbidden},
+		{"empty argv is forbidden", execCall(), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"not for a non-admin", func() tool.Call { c := execCall("df"); c.Admin = false; return c }(), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"not in a local-only session", func() tool.Call { c := execCall("df"); c.LocalOnly = true; return c }(), tool.PolicyForbidden, journal.DecisionForbidden},
+	}
+	for _, c := range cases {
+		pol, d := policy.Decide(policy.DefaultMaxDepth, execSpec(), c.call)
+		if pol != c.pol || d != c.d {
+			t.Errorf("%s: %s %s, want %s %s", c.name, pol, d, c.pol, c.d)
+		}
+	}
+}

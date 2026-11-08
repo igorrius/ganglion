@@ -2,6 +2,8 @@ package agent
 
 import (
 	"encoding/json"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,5 +77,21 @@ func TestStateV2RoundTripsTaintAndPending(t *testing.T) {
 	clean, _ := json.Marshal(State{})
 	if string(clean) != `{"v":2,"summary":"","messages":[]}` {
 		t.Fatalf("a clean state writes %s", clean)
+	}
+}
+
+// R-CMD-4: the keys of commands still running in the background survive a
+// save, and a state without any writes none.
+func TestStateRoundTripsCommands(t *testing.T) {
+	raw, err := json.Marshal(State{Commands: []string{"e1:2", "e3:1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"commands":["e1:2","e3:1"]`) {
+		t.Fatalf("written %s", raw)
+	}
+	back, err := DecodeState(raw)
+	if err != nil || !slices.Equal(back.Commands, []string{"e1:2", "e3:1"}) {
+		t.Fatalf("round trip %s -> %+v, %v", raw, back, err)
 	}
 }

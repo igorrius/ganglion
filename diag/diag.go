@@ -80,7 +80,7 @@ func (d *Diag) table() []entry {
 	return []entry{
 		{tool("logs.search", "Search the node's log files, newest first. query: a substring (case-insensitive); level: debug, info, warn or error, the lowest shown; since: a Go duration back from now such as 2h, or an RFC 3339 time; limit: at most 200.",
 			`{"query":{"type":"string"},"level":{"type":"string","enum":["debug","info","warn","error"]},"since":{"type":"string"},"limit":{"type":"integer"}}`), d.logsSearch},
-		{tool("journal.search", "Search the tool-call journal, newest first: by turn id, tool name or policy decision (allowed, confirm, approved, denied, expired, forbidden, out_of_grant). Arguments and results are redacted and capped.",
+		{tool("journal.search", "Search the tool-call journal, newest first: by turn id, tool name or policy decision (allowed, confirm, approved, denied, expired, forbidden, out_of_grant, planned). Arguments and results are redacted and capped.",
 			`{"turn":{"type":"string"},"tool":{"type":"string"},"decision":{"type":"string"},"since":{"type":"string"},"limit":{"type":"integer"}}`), d.journalSearch},
 		{tool("turns.failed", "Recent turns that did not end with an answer: no model, a limit, an error. Each with its route (providers tried and their errors).",
 			`{"since":{"type":"string"},"limit":{"type":"integer"}}`), d.turnsFailed},
