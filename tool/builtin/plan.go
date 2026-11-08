@@ -24,6 +24,9 @@ type Plans interface {
 	Show(ctx context.Context, c tool.Call, steps []plan.Step) error
 	Step(ctx context.Context, conv string, n int, st plan.Status, note, outcome string) error
 	Approved(ctx context.Context, conv string) ([]tool.Command, error)
+	// Check reports whether Show would take the steps: its limits, run
+	// before the plan is asked.
+	Check(sp texts.Speaker, transport string, steps []plan.Step) error
 }
 
 // CommandQuestions words a command's lines in a question (*HostExec). Its
@@ -66,7 +69,7 @@ func (*planShow) Spec() tool.Spec {
 		"Show the person the steps of work with several steps, in plain words, as one message that is then edited as they go. "+
 			"Calling it again changes the same message. A step may carry the host command it runs (argv, dir, reason). "+
 			"If any command needs the person's press, the plan is asked as one question: one press approves exactly those "+
-			"commands, in this chat, for an hour.",
+			"commands, in this chat, for an hour; run each with host.exec repeating its argv and dir exactly as approved.",
 		`{"type":"object","properties":{"steps":{"type":"array","items":{"anyOf":[{"type":"string","maxLength":200},`+
 			`{"type":"object","properties":{"text":{"type":"string"},"argv":{"type":"array","items":{"type":"string"},"maxItems":64},`+
 			`"dir":{"type":"string"},"reason":{"type":"string"}},"required":["text"],"additionalProperties":false}]},`+
@@ -86,14 +89,19 @@ func (t *planShow) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	if err := planAllowed(c, steps); err != nil {
 		return tool.Result{}, err
 	}
-	shown := make([]plan.Step, len(steps))
-	for i, s := range steps {
-		shown[i] = plan.Step{Text: s.Text, Command: s.Command}
-	}
-	if err := t.p.Show(ctx, c, shown); err != nil {
+	if err := t.p.Show(ctx, c, planSteps(steps)); err != nil {
 		return tool.Result{}, err
 	}
 	return tool.Result{Text: "shown"}, nil
+}
+
+// planSteps are the parsed steps as the store takes them.
+func planSteps(steps []hostcmd.PlanStep) []plan.Step {
+	out := make([]plan.Step, len(steps))
+	for i, s := range steps {
+		out[i] = plan.Step{Text: s.Text, Command: s.Command}
+	}
+	return out
 }
 
 // planAllowed checks again what the policy decided, as host.exec does: a
@@ -120,9 +128,14 @@ func planAllowed(c tool.Call, steps []hostcmd.PlanStep) error {
 // Question implements tool.Questioner: the plan as the person will approve it,
 // each command with its folder, and one that needs a press with its fixed line
 // and the agent's reason apart (R-CMD-6), in one question that must show whole.
+// A plan past the store's limits is refused first, so no press is spent on a
+// plan Show would refuse.
 func (t *planShow) Question(ctx context.Context, c tool.Call) (string, error) {
 	steps, err := hostcmd.ParsePlan(c.Args)
 	if err != nil {
+		return "", err
+	}
+	if err := t.p.Check(c.Speak, c.Transport, planSteps(steps)); err != nil {
 		return "", err
 	}
 	var b strings.Builder

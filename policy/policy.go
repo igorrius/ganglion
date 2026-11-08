@@ -94,6 +94,10 @@ func (NoAsk) Outgoing(context.Context, string) (event.Outgoing, error) {
 // Config holds the policy settings.
 type Config struct {
 	MaxDepth int // calls deeper than this are forbidden
+	// Home is the node user's home, the folder of a host command without
+	// dir: a grant's command matches the call with "" read as home
+	// (tool.Command.SameAs).
+	Home string
 	// Overrides replace a tool's default policy by tool name. None in M3b;
 	// the node YAML of M4 fills it.
 	Overrides map[string]tool.Policy
@@ -115,6 +119,11 @@ func WithClock(now func() time.Time, loc *time.Location) Option {
 	return func(p *Policy) { p.now, p.loc = now, loc }
 }
 
+// WithRedact sets how secrets leave the alert about a call outside a task's
+// grant: the node passes redact.String with its own secret values, as for the
+// runner's output. The default is redact.String.
+func WithRedact(f func(string) string) Option { return func(p *Policy) { p.redact = f } }
+
 // WithLogger sets where a failed alert is reported. The default drops it.
 func WithLogger(l *slog.Logger) Option { return func(p *Policy) { p.log = l } }
 
@@ -127,12 +136,13 @@ type Policy struct {
 	now    func() time.Time
 	loc    *time.Location
 	log    *slog.Logger
+	redact func(string) string
 }
 
 // New returns a policy over the registry's tools; confirmations go to ask.
 func New(cfg Config, reg *tool.Registry, ask Asker, opts ...Option) *Policy {
 	p := &Policy{
-		cfg: cfg, reg: reg, ask: ask, now: time.Now, loc: time.UTC, log: slog.New(slog.DiscardHandler),
+		cfg: cfg, reg: reg, ask: ask, now: time.Now, loc: time.UTC, log: slog.New(slog.DiscardHandler), redact: redact.String,
 		alerts: alert.Admins{List: func(context.Context) ([]string, error) { return nil, nil }},
 	}
 	for _, o := range opts {
@@ -166,7 +176,7 @@ func (p *Policy) Middleware() tool.Middleware {
 				return tool.Result{}, fmt.Errorf("policy: %s: %w", c.Name, err)
 			}
 			s := p.spec(h.Spec())
-			pol, d := Decide(p.cfg.MaxDepth, s, c)
+			pol, d := Decide(p.cfg, s, c)
 			journal.Annotate(ctx, d)
 			switch {
 			case d == journal.DecisionOutOfGrant:
@@ -264,7 +274,7 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 	err := fmt.Errorf("policy: %s is outside this task's grant: %w", c.Name, tool.ErrOutOfGrant)
 	job := strings.TrimPrefix(c.Conv, tool.TaskConvPrefix)
 	day := p.now().In(p.loc).Format(time.DateOnly)
-	msgs, aerr := p.alerts.Messages(ctx, "alert:grant:"+job+":"+day, outOfGrantText(job, c))
+	msgs, aerr := p.alerts.Messages(ctx, "alert:grant:"+job+":"+day, p.outOfGrantText(job, c))
 	if aerr != nil {
 		p.log.Error("policy: grant alert not built", "task", job, "err", aerr)
 	}
@@ -272,12 +282,13 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 }
 
 // outOfGrantText words the alert. A host command is named, so the admin sees
-// what the task tried; the argv is shown as hostcmd writes it and redacted.
-func outOfGrantText(job string, c tool.Call) string {
+// what the task tried; the argv is shown as hostcmd writes it, with secrets
+// and the node's own secret values removed.
+func (p *Policy) outOfGrantText(job string, c tool.Call) string {
 	if c.Name == toolHostExec {
 		if x, err := hostcmd.ParseExec(c.Args); err == nil {
 			return fmt.Sprintf("Task %s tried to run %s, which its grant does not list. The call was refused.",
-				job, text.CodeSpan(redact.String(hostcmd.Show(x.Command.Argv))))
+				job, text.CodeSpan(p.redact(hostcmd.Show(x.Command.Argv))))
 		}
 	}
 	return fmt.Sprintf("Task %s tried to use %s, which its grant does not allow. The call was refused.", job, c.Name)
@@ -287,7 +298,7 @@ func outOfGrantText(job string, c tool.Call) string {
 // for the decision. The rules run in order and the first that applies
 // wins (design section 4):
 //
-//  1. deeper than maxDepth: forbidden (R-AGT-4);
+//  1. deeper than cfg.MaxDepth: forbidden (R-AGT-4);
 //  2. an admin-only tool for a non-admin: forbidden;
 //  3. in a local-only session, a tool not declared LocalSafe: forbidden,
 //     whatever a grant says (ADR-0049);
@@ -320,9 +331,9 @@ func outOfGrantText(job string, c tool.Call) string {
 // An argument a rule needs that does not parse makes the call confirm,
 // never auto; host.exec's arguments that do not parse make it forbidden,
 // plan.show's make it confirm.
-func Decide(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision) {
+func Decide(cfg Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision) {
 	for _, r := range rules {
-		if pol, d, ok := r(maxDepth, s, c); ok {
+		if pol, d, ok := r(cfg, s, c); ok {
 			return pol, d
 		}
 	}
@@ -330,7 +341,7 @@ func Decide(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisi
 }
 
 // rule returns a decision when it applies to the call.
-type rule func(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool)
+type rule func(cfg Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool)
 
 // rules are the rules of Decide, in order.
 var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleCommandForbidden, ruleGrant,
@@ -359,14 +370,14 @@ func forbidden() (tool.Policy, journal.Decision, bool) {
 	return tool.PolicyForbidden, journal.DecisionForbidden, true
 }
 
-func ruleDepth(maxDepth int, _ tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
-	if c.Depth > maxDepth {
+func ruleDepth(cfg Config, _ tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if c.Depth > cfg.MaxDepth {
 		return forbidden()
 	}
 	return "", "", false
 }
 
-func ruleAdminOnly(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleAdminOnly(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.AdminOnly && !c.Admin {
 		return forbidden()
 	}
@@ -377,14 +388,14 @@ func ruleAdminOnly(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisi
 // default, so a tool added later stays off until it says it is safe.
 func localRefused(s tool.Spec, c tool.Call) bool { return c.LocalOnly && !s.LocalSafe }
 
-func ruleLocalOnly(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleLocalOnly(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if localRefused(s, c) {
 		return forbidden()
 	}
 	return "", "", false
 }
 
-func ruleTaintedInput(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleTaintedInput(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.AskTaintedInput && c.Tainted && hasInput(c) {
 		return confirm()
 	}
@@ -403,48 +414,51 @@ func hasInput(c tool.Call) bool {
 	return given && string(raw) != `""`
 }
 
-func ruleGrant(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleGrant(cfg Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if c.Grant == nil {
 		return "", "", false
 	}
-	if !inGrant(*c.Grant, s, c) {
+	if !inGrant(*c.Grant, s, c, cfg.Home) {
 		return tool.PolicyForbidden, journal.DecisionOutOfGrant, true
 	}
 	return tool.PolicyAuto, journal.DecisionAllowed, true
 }
 
 // inGrant reports whether the grant covers the call: the tool, and for
-// the tools in grantArgs their arguments.
-func inGrant(g tool.Grant, s tool.Spec, c tool.Call) bool {
+// the tools in grantArgs their arguments; home is the folder of a host
+// command without dir.
+func inGrant(g tool.Grant, s tool.Spec, c tool.Call, home string) bool {
 	if !slices.Contains(g.Tools, s.Name) {
 		return false
 	}
 	check, ok := grantArgs[s.Name]
-	return !ok || check(g, c)
+	return !ok || check(g, c, home)
 }
 
 // grantArgs check the arguments of granted tools that reach out: where
 // web.fetch reads and where message.send writes. An argument that does
 // not parse is outside the grant.
-var grantArgs = map[string]func(g tool.Grant, c tool.Call) bool{
+var grantArgs = map[string]func(g tool.Grant, c tool.Call, home string) bool{
 	toolWebFetch:    hostInGrant,
 	toolMessageSend: convInGrant,
 	toolHostExec:    commandInGrant,
 }
 
 // commandInGrant reports whether a task may run the command: a read command
-// whenever host.exec is granted, any other only as listed, argv and folder
-// exact. An argv that does not parse is outside.
-func commandInGrant(g tool.Grant, c tool.Call) bool {
+// whenever host.exec is granted, any other only as listed, argv exact and in
+// the same folder, "" read as home on both sides. An argv that does not parse
+// is outside.
+func commandInGrant(g tool.Grant, c tool.Call, home string) bool {
 	x, err := hostcmd.ParseExec(c.Args)
 	if err != nil {
 		return false
 	}
-	return hostcmd.Classify(x.Command.Argv).Class == hostcmd.Read || slices.ContainsFunc(g.Commands, x.Command.Equal)
+	return hostcmd.Classify(x.Command.Argv).Class == hostcmd.Read ||
+		slices.ContainsFunc(g.Commands, func(gc tool.Command) bool { return gc.SameAs(x.Command, home) })
 }
 
 // hostInGrant reports whether web.fetch's address is on a granted host.
-func hostInGrant(g tool.Grant, c tool.Call) bool {
+func hostInGrant(g tool.Grant, c tool.Call, _ string) bool {
 	host, ok := hostOf(c)
 	return ok && slices.ContainsFunc(g.Hosts, func(h string) bool { return strings.EqualFold(h, host) })
 }
@@ -452,7 +466,7 @@ func hostInGrant(g tool.Grant, c tool.Call) bool {
 // convInGrant reports whether message.send goes where the task answers:
 // no conv (its own), its own conversation, or the grant's reply target
 // (R-POL-8); a task cannot send its findings anywhere else.
-func convInGrant(g tool.Grant, c tool.Call) bool {
+func convInGrant(g tool.Grant, c tool.Call, _ string) bool {
 	var args map[string]json.RawMessage
 	if err := json.Unmarshal(c.Args, &args); err != nil || args == nil {
 		return false
@@ -499,7 +513,7 @@ func stringArg(c tool.Call, name string) (string, bool) {
 	return v, true
 }
 
-func ruleForbidden(_ int, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleForbidden(_ Config, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Policy == tool.PolicyForbidden {
 		return forbidden()
 	}
@@ -510,7 +524,7 @@ func ruleForbidden(_ int, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decisi
 // or press can allow it (R-CMD-2), and an argv the table cannot read; a plan
 // with a forbidden command in a step likewise. plan.show's steps that do not
 // parse are left to rulePlanShow.
-func ruleCommandForbidden(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleCommandForbidden(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	switch s.Name {
 	case toolHostExec:
 		x, err := hostcmd.ParseExec(c.Args)
@@ -534,7 +548,7 @@ func forbiddenStep(st hostcmd.PlanStep) bool {
 // ruleHostExec decides a host command by its class in the table: read runs by
 // itself, even in a tainted session; a command the conversation's approved plan
 // lists runs as planned; any other asks (R-CMD-2, R-CMD-7).
-func ruleHostExec(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleHostExec(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Name != toolHostExec {
 		return "", "", false
 	}
@@ -555,7 +569,7 @@ func ruleHostExec(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisio
 // rulePlanShow asks for a plan with a command that needs a press and that the
 // conversation's approved plan does not list; the plan is that question
 // (R-CMD-7). A forbidden command makes the whole plan forbidden.
-func rulePlanShow(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func rulePlanShow(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Name != toolPlanShow {
 		return "", "", false
 	}
@@ -581,14 +595,14 @@ func rulePlanShow(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisio
 	return "", "", false
 }
 
-func ruleSideEffect(_ int, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleSideEffect(_ Config, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Class == tool.ClassSideEffect {
 		return confirm()
 	}
 	return "", "", false
 }
 
-func ruleMemoryWrite(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleMemoryWrite(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Name != toolMemoryWrite && s.Name != toolMemoryForget {
 		return "", "", false
 	}
@@ -600,7 +614,7 @@ func ruleMemoryWrite(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Deci
 
 // ruleLanguageSet applies a person's own choice of language at once, and asks in a session that holds
 // outside content, where a page may have asked for it to make approvals unreadable (R-LANG-3).
-func ruleLanguageSet(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleLanguageSet(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Name != toolLanguageSet {
 		return "", "", false
 	}
@@ -610,7 +624,7 @@ func ruleLanguageSet(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Deci
 	return tool.PolicyAuto, journal.DecisionAllowed, true
 }
 
-func ruleMessageSend(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleMessageSend(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Name != toolMessageSend {
 		return "", "", false
 	}
@@ -620,7 +634,7 @@ func ruleMessageSend(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Deci
 	return "", "", false
 }
 
-func ruleWebFetch(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+func ruleWebFetch(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Name != toolWebFetch {
 		return "", "", false
 	}

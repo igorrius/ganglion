@@ -14,6 +14,10 @@ type Config struct {
 	DailyTokens   int           // per principal; 0 = off
 	SessionIdle   time.Duration // a new session after this much silence; 0 = off
 	Location      *time.Location
+	// Home is the node user's home, the folder of a host command without
+	// dir: an approved plan's command matches a call with "" read as home
+	// (tool.Command.SameAs), and a task run's commands are shown with it.
+	Home string
 }
 
 // DefaultConfig returns the agent's defaults.

@@ -123,7 +123,7 @@ func TestDecide(t *testing.T) {
 		{"unknown policy fails closed", spec("x", tool.ClassRead, "weird"), base(), tool.PolicyForbidden, journal.DecisionForbidden},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			pol, dec := policy.Decide(policy.DefaultMaxDepth, tc.s, tc.c)
+			pol, dec := policy.Decide(policy.DefaultConfig(), tc.s, tc.c)
 			if pol != tc.pol || dec != tc.dec {
 				t.Fatalf("Decide = %s, %s; want %s, %s", pol, dec, tc.pol, tc.dec)
 			}
@@ -484,7 +484,7 @@ func TestTaintedInputAsks(t *testing.T) {
 		{"a tool that does not ask", plain, tainted(`{"input":"data"}`), tool.PolicyAuto},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if pol, _ := policy.Decide(policy.DefaultMaxDepth, tc.s, tc.c); pol != tc.pol {
+			if pol, _ := policy.Decide(policy.DefaultConfig(), tc.s, tc.c); pol != tc.pol {
 				t.Fatalf("Decide = %s, want %s", pol, tc.pol)
 			}
 		})
@@ -512,7 +512,7 @@ func TestLocalOnlyRefusesATool(t *testing.T) {
 		{"another session", leaves, base(), tool.PolicyAuto, journal.DecisionAllowed},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if pol, dec := policy.Decide(policy.DefaultMaxDepth, tc.s, tc.c); pol != tc.pol || dec != tc.dec {
+			if pol, dec := policy.Decide(policy.DefaultConfig(), tc.s, tc.c); pol != tc.pol || dec != tc.dec {
 				t.Fatalf("Decide = %s, %s; want %s, %s", pol, dec, tc.pol, tc.dec)
 			}
 		})
@@ -583,7 +583,7 @@ func TestDecideHostExec(t *testing.T) {
 		{"not in a local-only session", func() tool.Call { c := execCall("df"); c.LocalOnly = true; return c }(), tool.PolicyForbidden, journal.DecisionForbidden},
 	}
 	for _, c := range cases {
-		pol, d := policy.Decide(policy.DefaultMaxDepth, execSpec(), c.call)
+		pol, d := policy.Decide(policy.DefaultConfig(), execSpec(), c.call)
 		if pol != c.pol || d != c.d {
 			t.Errorf("%s: %s %s, want %s %s", c.name, pol, d, c.pol, c.d)
 		}
@@ -643,7 +643,7 @@ func TestDecidePlanShow(t *testing.T) {
 		{"not in a local-only session", func() tool.Call { c := planCall("a"); c.LocalOnly = true; return c }(), tool.PolicyForbidden, journal.DecisionForbidden},
 	}
 	for _, c := range cases {
-		pol, d := policy.Decide(policy.DefaultMaxDepth, planSpec(), c.call)
+		pol, d := policy.Decide(policy.DefaultConfig(), planSpec(), c.call)
 		if pol != c.pol || d != c.d {
 			t.Errorf("%s: %s %s, want %s %s", c.name, pol, d, c.pol, c.d)
 		}
@@ -668,7 +668,7 @@ func TestPlanInATask(t *testing.T) {
 	} {
 		c := planCall(tc.step)
 		c.Grant = tc.grant
-		if pol, d := policy.Decide(policy.DefaultMaxDepth, planSpec(), c); pol != tc.pol || d != tc.d {
+		if pol, d := policy.Decide(policy.DefaultConfig(), planSpec(), c); pol != tc.pol || d != tc.d {
 			t.Errorf("%s: %s %s, want %s %s", tc.name, pol, d, tc.pol, tc.d)
 		}
 	}
@@ -693,7 +693,7 @@ func TestCommandsInAGrant(t *testing.T) {
 		call := execCall(c.argv...)
 		call.Grant = g
 		call.Tainted = true // a run's own reads taint it; the grant still holds (R-POL-8)
-		if pol, d := policy.Decide(policy.DefaultMaxDepth, execSpec(), call); pol != c.pol || d != c.d {
+		if pol, d := policy.Decide(policy.DefaultConfig(), execSpec(), call); pol != c.pol || d != c.d {
 			t.Errorf("%v: %s %s, want %s %s", c.argv, pol, d, c.pol, c.d)
 		}
 	}
@@ -705,8 +705,32 @@ func TestACommandInAnotherFolderIsOutsideTheGrant(t *testing.T) {
 	for dir, want := range map[string]journal.Decision{"/srv/a": journal.DecisionAllowed, "/srv/b": journal.DecisionOutOfGrant, "": journal.DecisionOutOfGrant} {
 		args, _ := json.Marshal(map[string]any{"argv": []string{"rm", "-r", "build"}, "dir": dir, "reason": "r"})
 		call := tool.Call{Name: "host.exec", Admin: true, Args: args, Grant: g}
-		if _, d := policy.Decide(policy.DefaultMaxDepth, execSpec(), call); d != want {
+		if _, d := policy.Decide(policy.DefaultConfig(), execSpec(), call); d != want {
 			t.Errorf("dir %q: %s, want %s", dir, d, want)
+		}
+	}
+}
+
+// A command without dir runs in home: a grant without a folder covers the call
+// with dir set to home, and the reverse; any other folder stays outside.
+func TestAGrantReadsNoFolderAsHome(t *testing.T) {
+	cfg := policy.DefaultConfig()
+	cfg.Home = "/home/o"
+	for _, c := range []struct {
+		grantDir, callDir string
+		want              journal.Decision
+	}{
+		{"", "/home/o", journal.DecisionAllowed},
+		{"/home/o", "", journal.DecisionAllowed},
+		{"", "", journal.DecisionAllowed},
+		{"", "/srv", journal.DecisionOutOfGrant},
+		{"/home/o", "/home/o/x", journal.DecisionOutOfGrant},
+	} {
+		g := &tool.Grant{Tools: []string{"host.exec"}, Commands: []tool.Command{{Argv: []string{"rm", "-r", "build"}, Dir: c.grantDir}}}
+		args, _ := json.Marshal(map[string]any{"argv": []string{"rm", "-r", "build"}, "dir": c.callDir, "reason": "r"})
+		call := tool.Call{Name: "host.exec", Admin: true, Args: args, Grant: g}
+		if _, d := policy.Decide(cfg, execSpec(), call); d != c.want {
+			t.Errorf("grant dir %q, call dir %q: %s, want %s", c.grantDir, c.callDir, d, c.want)
 		}
 	}
 }
@@ -717,7 +741,7 @@ func TestForbiddenCommandBeatsAGrant(t *testing.T) {
 	for _, argv := range [][]string{{"sudo", "true"}, {"docker", "run", "x"}} {
 		call := execCall(argv...)
 		call.Grant = g
-		if pol, d := policy.Decide(policy.DefaultMaxDepth, execSpec(), call); pol != tool.PolicyForbidden || d != journal.DecisionForbidden {
+		if pol, d := policy.Decide(policy.DefaultConfig(), execSpec(), call); pol != tool.PolicyForbidden || d != journal.DecisionForbidden {
 			t.Errorf("%v: %s %s", argv, pol, d)
 		}
 	}
@@ -770,5 +794,24 @@ func TestTheAlertShowsTheCommandInACodeSpan(t *testing.T) {
 	got := res.Out[0].Text
 	if !strings.Contains(got, span) || strings.Contains(strings.Replace(got, span, "", 1), "[Open](") {
 		t.Fatalf("alert %q, want the command in %s and nowhere else", got, span)
+	}
+}
+
+// The alert hides the node's own secret values, which no pattern of
+// redact.String knows, as the runner's output does.
+func TestTheAlertHidesTheNodesSecretValues(t *testing.T) {
+	s := execSpec()
+	s.InputSchema = json.RawMessage(`{"type":"object","properties":{"argv":{"type":"array"},"reason":{"type":"string"}}}`)
+	hide := func(v string) string { return strings.ReplaceAll(v, "plainvalue123", "[redacted]") }
+	run := chain(t, &counter{s: s}, &fakeAsker{}, policy.WithAlerts(grantAlerts()), policy.WithRedact(hide))
+	c := execCall("curl", "-H", "X-Key: plainvalue123", "https://x.example")
+	c.Conv = "task:J7"
+	c.Grant = &tool.Grant{Tools: []string{"host.exec"}}
+	res, err := run(context.Background(), c)
+	if !errors.Is(err, tool.ErrOutOfGrant) || len(res.Out) != 1 {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	if got := res.Out[0].Text; strings.Contains(got, "plainvalue123") || !strings.Contains(got, "[redacted]") {
+		t.Fatalf("alert %q shows the node's secret", got)
 	}
 }

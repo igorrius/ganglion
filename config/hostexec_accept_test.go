@@ -176,7 +176,7 @@ func TestEnvIsForbiddenEvenPressed(t *testing.T) {
 	if !ok {
 		t.Fatal("no host.exec spec")
 	}
-	if _, d := policy.Decide(8, spec, c); d != journal.DecisionForbidden {
+	if _, d := policy.Decide(policy.Config{MaxDepth: 8}, spec, c); d != journal.DecisionForbidden {
 		t.Fatalf("the policy decided %q for env, want forbidden", d)
 	}
 	if _, err := n.pol.Middleware()(n.reg.Run)(context.Background(), c); !errors.Is(err, tool.ErrForbidden) {

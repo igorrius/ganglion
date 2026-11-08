@@ -646,3 +646,75 @@ func TestACommandCountsWithinTheLimit(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+// newHomeEnv is newEnv with the node user's home set, as the node runs it.
+func newHomeEnv(t *testing.T, home string) *env {
+	t.Helper()
+	e := newEnv(t)
+	var err error
+	e.s, err = New(context.Background(), e.db, e.box, WithClock(func() time.Time { return e.now }), WithHome(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+// A command without dir runs in home, and its plan says so, as its question
+// does.
+func TestACommandWithoutAFolderShowsHome(t *testing.T) {
+	e := newHomeEnv(t, "/home/o")
+	steps := []Step{{Text: "Clean", Command: &tool.Command{Argv: []string{"go", "clean", "-cache"}}}}
+	if err := e.s.Show(context.Background(), call(1), steps); err != nil {
+		t.Fatal(err)
+	}
+	if want := "⏳ 1. Clean\n    `go clean -cache` in `/home/o`"; e.box.msgs[0].Text != want {
+		t.Fatalf("got %q\nwant %q", e.box.msgs[0].Text, want)
+	}
+}
+
+// A plan shown again keeps an approved command whose folder it now writes as
+// home, or leaves out where it was home, and drops one in any other folder.
+func TestAnApprovedCommandStaysListedInHomeEitherWay(t *testing.T) {
+	for _, c := range []struct {
+		approved, shown string
+		kept            bool
+	}{{"", "/home/o", true}, {"/home/o", "", true}, {"", "/srv", false}} {
+		e := newHomeEnv(t, "/home/o")
+		e.approve(t, conv, tool.Command{Argv: []string{"go", "clean", "-cache"}, Dir: c.approved})
+		steps := []Step{{Text: "x", Command: &tool.Command{Argv: []string{"go", "clean", "-cache"}, Dir: c.shown}}}
+		if err := e.s.Show(context.Background(), tool.Call{TurnID: "e2", N: 1, Conv: conv, Transport: "telegram"}, steps); err != nil {
+			t.Fatal(err)
+		}
+		if got := len(e.approved(t, conv)) == 1; got != c.kept {
+			t.Errorf("approved in %q, shown in %q: kept %v, want %v", c.approved, c.shown, got, c.kept)
+		}
+	}
+}
+
+// Check runs Show's limits without showing anything.
+func TestCheckRunsTheLimits(t *testing.T) {
+	e := newHomeEnv(t, "/home/o")
+	sp := call(1).Speak
+	long := strings.Repeat("x", 1000)
+	many := make([]Step, maxSteps+1)
+	for i := range many {
+		many[i] = Step{Text: "s"}
+	}
+	for name, steps := range map[string][]Step{
+		"none":       nil,
+		"too many":   many,
+		"empty text": {{Text: "  "}},
+		"too long": {{Text: "a", Command: &tool.Command{Argv: []string{"echo", long}}}, {Text: "b", Command: &tool.Command{Argv: []string{"echo", long}}},
+			{Text: "c", Command: &tool.Command{Argv: []string{"echo", long}}}, {Text: "d", Command: &tool.Command{Argv: []string{"echo", long}}}},
+	} {
+		if err := e.s.Check(sp, "telegram", steps); !errors.Is(err, ErrLimit) {
+			t.Errorf("%s: %v, want ErrLimit", name, err)
+		}
+	}
+	if err := e.s.Check(sp, "telegram", words("a", "b")); err != nil {
+		t.Fatalf("a good plan: %v", err)
+	}
+	if len(e.box.msgs) != 0 {
+		t.Fatalf("Check sent %+v", e.box.msgs)
+	}
+}

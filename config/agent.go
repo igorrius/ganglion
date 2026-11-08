@@ -67,6 +67,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 	b := do.MustInvoke[Bootstrap](i)
 	cfg := agent.DefaultConfig()
 	cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
+	cfg.Home = commandHome()
 	return cfg, agent.Deps{
 		States:    do.MustInvoke[*sqlqueue.Queue](i),
 		Languages: do.MustInvoke[*language.Store](i),
@@ -104,13 +105,17 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 	}
 }
 
-// Policy provides the tool policy: the default settings, alerts to the
-// admins, the node's calendar day.
+// Policy provides the tool policy: the default settings with the node user's
+// home, alerts to the admins without the node's secrets, the node's calendar
+// day.
 func Policy() do.Provider[*policy.Policy] {
 	return func(i do.Injector) (*policy.Policy, error) {
 		b := do.MustInvoke[Bootstrap](i)
-		return policy.New(policy.DefaultConfig(), do.MustInvoke[*tool.Registry](i), do.MustInvoke[policy.Asker](i),
+		cfg := policy.DefaultConfig()
+		cfg.Home = commandHome()
+		return policy.New(cfg, do.MustInvoke[*tool.Registry](i), do.MustInvoke[policy.Asker](i),
 			policy.WithAlerts(do.MustInvoke[alert.Admins](i)),
+			policy.WithRedact(secretRedact(b)),
 			policy.WithClock(time.Now, b.Agent.TZ),
 			policy.WithLogger(do.MustInvoke[*slog.Logger](i))), nil
 	}
@@ -131,7 +136,7 @@ func IsAdmin() do.Provider[agent.AdminFunc] {
 // Plans provides the conversations' plans.
 func Plans() do.Provider[*plan.Store] {
 	return func(i do.Injector) (*plan.Store, error) {
-		return plan.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sqlqueue.Queue](i))
+		return plan.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sqlqueue.Queue](i), plan.WithHome(commandHome()))
 	}
 }
 

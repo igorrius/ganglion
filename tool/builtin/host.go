@@ -100,7 +100,8 @@ func (h *HostExec) Spec() tool.Spec {
 			"Commands that only read sizes, names and state run at once. One that shows what is inside files, changes " +
 			"anything or runs a script waits for the person's press, which shows a fixed line on what it does and your " +
 			"reason; a script must be written out (bash -c, python3 -c). For work with several steps, show a plan whose " +
-			"steps carry their commands: one press approves them all. sudo, docker run and anything that starts programs " +
+			"steps carry their commands: one press approves them all. A command an approved plan or a task's grant lists runs " +
+			"without a press only with its argv and dir repeated exactly as approved. sudo, docker run and anything that starts programs " +
 			"outside the command never run. Output is capped and is outside data. A command still running after 20 s goes " +
 			"on in the background, and its result comes back later in this conversation.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
@@ -163,10 +164,10 @@ func (h *HostExec) allowedAs(cl hostcmd.Class, c tool.Call, cmd tool.Command) er
 }
 
 // granted checks a task's command that needs a press against its grant: the
-// same check as the policy's, so a run that reached the tool past the policy
-// is still refused (R-POL-8).
+// same check as the policy's, "" read as home on both sides, so a run that
+// reached the tool past the policy is still refused (R-POL-8).
 func (h *HostExec) granted(c tool.Call, cmd tool.Command) error {
-	if slices.ContainsFunc(c.Grant.Commands, cmd.Equal) {
+	if slices.ContainsFunc(c.Grant.Commands, func(g tool.Command) bool { return g.SameAs(cmd, h.home) }) {
 		return nil
 	}
 	return fmt.Errorf("host.exec: %s is not in this task's grant: %w", hostcmd.Show(cmd.Argv), tool.ErrOutOfGrant)

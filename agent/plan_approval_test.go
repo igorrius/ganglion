@@ -43,7 +43,7 @@ type planEnv struct {
 func newPlanEnv(t *testing.T) *planEnv {
 	t.Helper()
 	e := newEnv(t, Config{}, nil)
-	store, err := plan.New(context.Background(), e.db, e.early)
+	store, err := plan.New(context.Background(), e.db, e.early, plan.WithHome("/home/o"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func newPlanEnv(t *testing.T) *planEnv {
 	exec := builtin.NewHostExec(ran, planNoIgnored{}, planGate{}, "/home/o")
 	c := newConfirmEnvOn(t, e, append(builtin.NewPlanTools(store, exec), exec)...)
 	c.deps.Plans = store
-	c.a = New(overDefaults(Config{}), c.deps)
+	c.a = New(overDefaults(Config{Home: "/home/o"}), c.deps)
 	return &planEnv{confirmEnv: c, plans: store, ran: ran}
 }
 
@@ -180,5 +180,41 @@ func TestPlannedIsTheConversationsAndTheFolders(t *testing.T) {
 	}
 	if e.a.planned(ctx, "telegram:42")(tool.Command{Argv: cmd.Argv, Dir: "/elsewhere"}) {
 		t.Fatal("the command in another folder is planned")
+	}
+}
+
+// A command without dir runs in home: a plan step without dir approves
+// host.exec with dir set to home, and a step with dir home approves one
+// without dir; another folder still asks.
+func TestAPlannedCommandMatchesHomeEitherWay(t *testing.T) {
+	for _, c := range []struct {
+		stepDir, callDir string
+		planned          bool
+	}{{"", "/home/o", true}, {"/home/o", "", true}, {"", "/srv", false}} {
+		e := newPlanEnv(t)
+		cmd := tool.Command{Argv: []string{"go", "clean", "-cache"}, Dir: c.stepDir}
+		show := tool.Call{TurnID: "e1", N: 1, Conv: "telegram:42", Transport: "telegram", Approved: true}
+		if err := e.plans.Show(context.Background(), show, []plan.Step{{Text: "x", Command: &cmd}}); err != nil {
+			t.Fatal(err)
+		}
+		if got := e.a.planned(context.Background(), "telegram:42")(tool.Command{Argv: cmd.Argv, Dir: c.callDir}); got != c.planned {
+			t.Errorf("step dir %q, call dir %q: planned %v, want %v", c.stepDir, c.callDir, got, c.planned)
+		}
+	}
+}
+
+// End to end: the pressed plan's step has no dir, and the model repeats the
+// command with dir set to home: it runs as planned, without a second question.
+func TestAPlanWithoutAFolderRunsTheCommandInHome(t *testing.T) {
+	e := newPlanEnv(t)
+	q, _ := e.askPlan(t)
+	e.smart.push(callWith("host.exec", `{"argv":["go","clean","-cache"],"dir":"/home/o","reason":"step 2"}`), say("Cleaned."))
+	pr := press(owner, q.Buttons[0].ID, "77")
+	e.turn(t, pr)
+	if len(e.ran.argv) != 1 {
+		t.Fatalf("ran %v", e.ran.argv)
+	}
+	if d := e.decisions(t, pr.ID+":1"); !slices.Contains(d, journal.DecisionPlanned) {
+		t.Fatalf("the command in home: decisions %v, want planned", d)
 	}
 }

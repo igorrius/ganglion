@@ -32,6 +32,11 @@ func (f *fakePlans) Show(_ context.Context, c tool.Call, steps []plan.Step) erro
 
 func (f *fakePlans) Approved(context.Context, string) ([]tool.Command, error) { return nil, f.result }
 
+// Check runs the store's own limits, as the node's store does.
+func (f *fakePlans) Check(sp texts.Speaker, transport string, steps []plan.Step) error {
+	return plan.Check(sp, transport, "/home/o", steps)
+}
+
 // noRun is a host runner a plan never reaches.
 type noRun struct{}
 
@@ -295,5 +300,26 @@ func TestPlanOutcomeIsNotAboutDelivery(t *testing.T) {
 	_, step := planTools(&fakePlans{})
 	if s := string(step.Spec().InputSchema); !strings.Contains(s, "Never say that an answer or a report was sent") {
 		t.Fatalf("schema %s", s)
+	}
+}
+
+// A plan past the store's limits is refused before it is asked, so the owner
+// never spends a press on a plan Show would refuse.
+func TestPlanQuestionRunsThePlansLimits(t *testing.T) {
+	show := builtin.NewPlanTools(&fakePlans{}, hostExec(""))[0].(tool.Questioner)
+	many := make([]any, 21)
+	for i := range many {
+		many[i] = "step"
+	}
+	long := strings.Repeat("x", 1000)
+	for name, args := range map[string]json.RawMessage{
+		"21 steps":   planArgs(many...),
+		"empty text": planArgs("  "),
+		"too long": planArgs(cmdStep("a", "", "echo", long), cmdStep("b", "", "echo", long),
+			cmdStep("c", "", "echo", long), cmdStep("d", "", "echo", long)),
+	} {
+		if _, err := show.Question(context.Background(), tool.Call{Args: args}); !errors.Is(err, plan.ErrLimit) {
+			t.Errorf("%s: %v, want plan.ErrLimit", name, err)
+		}
 	}
 }

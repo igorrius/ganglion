@@ -68,9 +68,8 @@ func Runner() do.Provider[*host.Runner] {
 // newRunner builds the runner of host commands with lim and opts.
 func newRunner(i do.Injector, lim host.Limits, opts ...host.RunnerOption) (*host.Runner, error) {
 	b := do.MustInvoke[Bootstrap](i)
-	values := redact.Values(b.SecretValues()...)
 	opts = append([]host.RunnerOption{
-		host.WithRedact(func(s string) string { return values(redact.String(s)) }),
+		host.WithRedact(secretRedact(b)),
 		host.WithRunnerLog(do.MustInvoke[*slog.Logger](i)),
 	}, opts...)
 	return host.NewRunner(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sandbox.Sandbox](i),
@@ -98,14 +97,27 @@ type commandGate struct {
 
 func (g commandGate) Open() bool { return g.sandboxGate.Open() && g.sw.Open() }
 
+// secretRedact removes secrets by pattern and the node's own secret values,
+// for command output and the alert that names a command.
+func secretRedact(b Bootstrap) func(string) string {
+	values := redact.Values(b.SecretValues()...)
+	return func(s string) string { return values(redact.String(s)) }
+}
+
+// commandHome is the node user's home: the folder of a host command without
+// dir, for host.exec, the policy, the agent and the plans alike.
+func commandHome() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/"
+	}
+	return home
+}
+
 // HostExec provides host.exec over the runner, in the node user's home.
 func HostExec() do.Provider[*builtin.HostExec] {
 	return func(i do.Injector) (*builtin.HostExec, error) {
 		s := do.MustInvoke[*sandbox.Sandbox](i)
-		home, err := os.UserHomeDir()
-		if err != nil {
-			home = "/"
-		}
-		return builtin.NewHostExec(do.MustInvoke[*host.Runner](i), host.NewIgnored(s), commandGate{sandboxGate{s}, do.MustInvoke[*host.Switch](i)}, home), nil
+		return builtin.NewHostExec(do.MustInvoke[*host.Runner](i), host.NewIgnored(s), commandGate{sandboxGate{s}, do.MustInvoke[*host.Switch](i)}, commandHome()), nil
 	}
 }

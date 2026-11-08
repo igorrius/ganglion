@@ -262,8 +262,9 @@ func (a *Agent) toolCall(ctx context.Context, t *turn, call provider.ToolCall) t
 }
 
 // planned asks the conversation's approved plan, at the time of the call, so a
-// plan shown earlier in the same turn counts and a closed one does not. A plan
-// that cannot be read approves nothing.
+// plan shown earlier in the same turn counts and a closed one does not. A
+// command matches argv exact and in the same folder, "" read as home on both
+// sides. A plan that cannot be read approves nothing.
 func (a *Agent) planned(ctx context.Context, conv string) tool.CommandFunc {
 	return func(cmd tool.Command) bool {
 		list, err := a.d.Plans.Approved(ctx, conv)
@@ -271,7 +272,7 @@ func (a *Agent) planned(ctx context.Context, conv string) tool.CommandFunc {
 			a.log.Warn("agent: approved plan not read", "conv", conv, "err", err)
 			return false
 		}
-		return slices.ContainsFunc(list, cmd.Equal)
+		return slices.ContainsFunc(list, func(p tool.Command) bool { return p.SameAs(cmd, a.cfg.Home) })
 	}
 }
 

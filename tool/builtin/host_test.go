@@ -192,6 +192,22 @@ func TestHostExecGrantIsExact(t *testing.T) {
 	}
 }
 
+// A command without dir runs in home, so a grant without a folder covers the
+// call with dir set to home, and the reverse; another folder stays outside.
+func TestHostExecGrantReadsNoFolderAsHome(t *testing.T) {
+	h := NewHostExec(&commands{answer: host.Answer{Done: true}}, noIgnored{}, open(true), "/h")
+	for _, c := range []struct {
+		grantDir, callDir string
+		want              error
+	}{{"", "/h", nil}, {"/h", "", nil}, {"", "/srv", tool.ErrOutOfGrant}, {"/h", "/h/x", tool.ErrOutOfGrant}} {
+		g := &tool.Grant{Tools: []string{HostExecTool}, Commands: []tool.Command{{Argv: []string{"rm", "-r", "build"}, Dir: c.grantDir}}}
+		args, _ := json.Marshal(map[string]any{"argv": []string{"rm", "-r", "build"}, "dir": c.callDir, "reason": "r"})
+		if _, err := h.Run(context.Background(), tool.Call{Grant: g, Args: args}); !errors.Is(err, c.want) {
+			t.Errorf("grant dir %q, call dir %q: %v, want %v", c.grantDir, c.callDir, err, c.want)
+		}
+	}
+}
+
 // Only a read command runs without a press: a class the check does not know
 // fails closed, as one that needs a press.
 func TestHostExecRunsOnlyReadWithoutAPress(t *testing.T) {

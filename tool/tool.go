@@ -79,8 +79,26 @@ type Command struct {
 	Dir  string   `json:"dir,omitempty"`
 }
 
-// Equal reports whether o is the same command, argument for argument.
+// Equal reports whether o is the same command, argument for argument and
+// folder as written. An approval or a grant is matched with SameAs instead.
 func (c Command) Equal(o Command) bool { return c.Dir == o.Dir && slices.Equal(c.Argv, o.Argv) }
+
+// SameAs reports whether o is the same command as c where it runs: argv
+// exact, and the folders equal once "" is read as home, the node user's home
+// that a command without dir runs in. Every approval and grant is matched
+// with it, so a plan step without dir approves host.exec with dir set to home
+// and the reverse, while any other folder stays another command (ADR-0040).
+func (c Command) SameAs(o Command, home string) bool {
+	return runsIn(c.Dir, home) == runsIn(o.Dir, home) && slices.Equal(c.Argv, o.Argv)
+}
+
+// runsIn is the folder dir names, with "" as home.
+func runsIn(dir, home string) string {
+	if dir == "" {
+		return home
+	}
+	return dir
+}
 
 // CommandFunc reports whether a command is approved in the call's
 // conversation (an approved plan lists it, R-CMD-7).

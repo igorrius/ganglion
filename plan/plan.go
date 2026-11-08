@@ -120,6 +120,7 @@ type Outbox interface {
 type Store struct {
 	db    *sql.DB
 	box   Outbox
+	home  string
 	now   func() time.Time
 	shown metric.Int64Counter
 	edits metric.Int64Counter
@@ -130,6 +131,12 @@ type Option func(*Store)
 
 // WithClock sets the clock; the default is time.Now.
 func WithClock(now func() time.Time) Option { return func(s *Store) { s.now = now } }
+
+// WithHome sets the node user's home, the folder of a host command without
+// dir: a step's command is shown in it, and the approved commands a new plan
+// still lists are matched with "" read as home (tool.Command.SameAs). The
+// default is "", which shows no folder for such a command.
+func WithHome(home string) Option { return func(s *Store) { s.home = home } }
 
 // New migrates the "plan" component and returns the store.
 func New(ctx context.Context, db *sql.DB, box Outbox, opts ...Option) (*Store, error) {
@@ -189,7 +196,7 @@ func (r row) messageKey() string {
 // (R-CMD-7, ADR-0040). A new message is stored first under a key from the call,
 // so a crash in between shows it once.
 func (s *Store) Show(ctx context.Context, c tool.Call, steps []Step) error {
-	p, err := newPlan(c.Speak, c.Transport, steps)
+	p, err := newPlan(c.Speak, c.Transport, s.home, steps)
 	if err != nil {
 		return err
 	}
@@ -202,7 +209,7 @@ func (s *Store) Show(ctx context.Context, c tool.Call, steps []Step) error {
 		return s.showApproved(ctx, c, p, r, found, now)
 	}
 	if found {
-		r.plan, r.approved = p, stillListed(r.approved, p)
+		r.plan, r.approved = p, stillListed(r.approved, p, s.home)
 		return s.changed(ctx, r, now)
 	}
 	r = row{conv: c.Conv, idem: c.Key(), plan: p, version: 1, active: true, lastEdit: now}
@@ -240,10 +247,10 @@ func needPress(p Plan) []tool.Command {
 }
 
 // stillListed keeps the approved commands that p still lists, argv and folder
-// alike: a new plan approves nothing new.
-func stillListed(approved []tool.Command, p Plan) []tool.Command {
+// alike, "" read as home: a new plan approves nothing new.
+func stillListed(approved []tool.Command, p Plan, home string) []tool.Command {
 	return slices.DeleteFunc(slices.Clone(approved), func(a tool.Command) bool {
-		return !slices.ContainsFunc(p.Steps, func(st Step) bool { return st.Command != nil && st.Command.Equal(a) })
+		return !slices.ContainsFunc(p.Steps, func(st Step) bool { return st.Command != nil && st.Command.SameAs(a, home) })
 	})
 }
 
@@ -263,10 +270,26 @@ func (s *Store) Approved(ctx context.Context, conv string) ([]tool.Command, erro
 	return slices.Clone(r.approved), nil
 }
 
+// Check reports whether steps make a plan Show would take: 1 to 20 steps, each
+// with text of 1 to 200 characters, the whole message within 3500 UTF-16
+// units with each command written out for sp's person in its folder. plan.show
+// checks it before its question, so a plan past the limits is refused before
+// the owner is asked.
+func (s *Store) Check(sp texts.Speaker, transport string, steps []Step) error {
+	return Check(sp, transport, s.home, steps)
+}
+
+// Check is Store.Check for a store whose home is home.
+func Check(sp texts.Speaker, transport, home string, steps []Step) error {
+	_, err := newPlan(sp, transport, home, steps)
+	return err
+}
+
 // newPlan checks the steps and makes a plan with the first one running. A step
 // is one line: a line break in it becomes a space. A command step's command is
-// written out for sp's person, and counts within the plan's size.
-func newPlan(sp texts.Speaker, transport string, steps []Step) (Plan, error) {
+// written out for sp's person, in its folder (home when it has none), and
+// counts within the plan's size.
+func newPlan(sp texts.Speaker, transport, home string, steps []Step) (Plan, error) {
 	if len(steps) == 0 || len(steps) > maxSteps {
 		return Plan{}, fmt.Errorf("%w: a plan has 1 to %d steps, this one %d", ErrLimit, maxSteps, len(steps))
 	}
@@ -279,7 +302,7 @@ func newPlan(sp texts.Speaker, transport string, steps []Step) (Plan, error) {
 		p.Steps[i] = Step{Text: text, Status: Waiting}
 		if st.Command != nil {
 			cmd := tool.Command{Argv: slices.Clone(st.Command.Argv), Dir: st.Command.Dir}
-			p.Steps[i].Command, p.Steps[i].Line = &cmd, commandLine(sp, cmd)
+			p.Steps[i].Command, p.Steps[i].Line = &cmd, commandLine(sp, cmd, home)
 		}
 	}
 	p.Steps[0].Status = Running
@@ -292,14 +315,19 @@ func newPlan(sp texts.Speaker, transport string, steps []Step) (Plan, error) {
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // commandLine is cmd as a person reads it under its step: written by
-// hostcmd.Show in a code span a backtick cannot end, as a command's question
-// shows it, with its folder when it has one.
-func commandLine(sp texts.Speaker, cmd tool.Command) string {
+// hostcmd.Show in a code span a backtick cannot end, in its folder, as a
+// command's question shows it: home for a command without dir. With no home
+// known the folder is left out.
+func commandLine(sp texts.Speaker, cmd tool.Command, home string) string {
 	line := text.CodeSpan(hostcmd.Show(cmd.Argv))
-	if cmd.Dir == "" {
+	dir := cmd.Dir
+	if dir == "" {
+		dir = home
+	}
+	if dir == "" {
 		return line
 	}
-	return sp.Text(texts.CmdIn, texts.Vars{"command": line, "dir": text.CodeSpan(hostcmd.Show([]string{cmd.Dir}))})
+	return sp.Text(texts.CmdIn, texts.Vars{"command": line, "dir": text.CodeSpan(hostcmd.Show([]string{dir}))})
 }
 
 // closeUpTo marks what the end of step n means for the others: the lines before

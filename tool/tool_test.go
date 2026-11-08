@@ -232,3 +232,23 @@ func TestCommandEqual(t *testing.T) {
 		t.Error("another folder or argv is another command")
 	}
 }
+
+func TestCommandSameAsReadsNoDirAsHome(t *testing.T) {
+	cmd := func(dir string, argv ...string) tool.Command { return tool.Command{Argv: argv, Dir: dir} }
+	for _, c := range []struct {
+		a, b tool.Command
+		want bool
+	}{
+		{cmd("", "rm", "-r", "x"), cmd("/home/o", "rm", "-r", "x"), true},
+		{cmd("/home/o", "rm", "-r", "x"), cmd("", "rm", "-r", "x"), true},
+		{cmd("", "rm", "-r", "x"), cmd("", "rm", "-r", "x"), true},
+		{cmd("/srv", "rm", "-r", "x"), cmd("/srv", "rm", "-r", "x"), true},
+		{cmd("", "rm", "-r", "x"), cmd("/srv", "rm", "-r", "x"), false},
+		{cmd("/home/o/x", "rm", "-r", "x"), cmd("", "rm", "-r", "x"), false},
+		{cmd("", "rm", "-r", "x"), cmd("/home/o", "rm", "-r", "y"), false},
+	} {
+		if got := c.a.SameAs(c.b, "/home/o"); got != c.want {
+			t.Errorf("%v.SameAs(%v, /home/o) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
