@@ -49,7 +49,13 @@ func (c *capture) Write(p []byte) (int, error) {
 // text is the kept output, valid UTF-8 and hidden, with a mark where the
 // middle was left out. Each side is hidden with its edge before it is cut,
 // so a secret across a cut is hidden whole; a cut through a hidden mark
-// shows only the mark's part.
+// shows only the mark's part. Hiding shrinks or grows the text, so where
+// the output went on past a side's edge, edge bytes of the hidden side are
+// dropped at that end before the cut: they may hold a secret the edge's end
+// cut through, which hide could not match (a secret is shorter than edge).
+// A side may then show fewer than its bytes. The count in the mark is the
+// output outside its first head and last tail bytes: exact when nothing was
+// hidden, else what those sides stand for, not the bytes of the text shown.
 func (c *capture) text(hide func(string) string) (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -57,20 +63,30 @@ func (c *capture) text(hide func(string) string) (string, bool) {
 		return hide(strings.ToValidUTF8(string(c.head)+string(c.tail), "")), false
 	}
 	head := hide(strings.ToValidUTF8(string(c.head), ""))
-	head = strings.ToValidUTF8(head[:min(len(head), c.keepH)], "")
-	tail := hide(strings.ToValidUTF8(string(c.tailEdge()), ""))
-	tail = strings.ToValidUTF8(tail[max(0, len(tail)-c.keepT):], "")
+	end := len(head)
+	if c.total > int64(len(c.head)) { // the output went on past the head's edge
+		end -= edge
+	}
+	head = strings.ToValidUTF8(head[:max(0, min(c.keepH, end))], "")
+	raw, cut := c.tailEdge()
+	tail := hide(strings.ToValidUTF8(string(raw), ""))
+	from := len(tail) - c.keepT
+	if cut { // the tail's edge began inside the output
+		from = max(from, edge)
+	}
+	tail = strings.ToValidUTF8(tail[min(len(tail), max(0, from)):], "")
 	return fmt.Sprintf("%s\n… %d bytes left out …\n%s", head, c.total-int64(c.keepH+c.keepT), tail), true
 }
 
-// tailEdge is the last maxT bytes of the output. While nothing was dropped
-// they may begin in the head.
-func (c *capture) tailEdge() []byte {
+// tailEdge is the last maxT bytes of the output, and whether output came
+// before them. While nothing was dropped they may begin in the head.
+func (c *capture) tailEdge() ([]byte, bool) {
 	all := c.tail
 	if int64(len(c.head)+len(c.tail)) == c.total {
 		all = append(append([]byte(nil), c.head...), c.tail...)
 	}
-	return all[max(0, len(all)-c.maxT):]
+	start := max(0, len(all)-c.maxT)
+	return all[start:], c.total > int64(len(all)-start)
 }
 
 // size is how many bytes the command wrote in all.

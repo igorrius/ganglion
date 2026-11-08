@@ -78,3 +78,68 @@ func TestASecretAcrossEitherCutIsHiddenWhole(t *testing.T) {
 		noPartOf(t, got)
 	}
 }
+
+// short is a second, short secret the tests' redactor knows.
+const short = "pw-98765"
+
+// hideBoth hides both secrets.
+func hideBoth(s string) string {
+	return strings.ReplaceAll(hideSecret(s), short, "[redacted]")
+}
+
+// noPartOfEither fails when any 6 characters of either secret appear.
+func noPartOfEither(t *testing.T, label, text string) {
+	t.Helper()
+	for _, s := range []string{secret, short} {
+		for i := 0; i+6 <= len(s); i++ {
+			if strings.Contains(text, s[i:i+6]) {
+				t.Fatalf("%s: %q of a secret reached the text: %q", label, s[i:i+6], text)
+			}
+		}
+	}
+}
+
+// Many secrets at an edge shrink as they are hidden; the text never reaches
+// past the margin into a secret the edge's end or start cut through.
+func TestManySecretsAtAnEdgeNeverShowAPart(t *testing.T) {
+	write := func(c *capture, s string) {
+		for b := []byte(s); len(b) > 0; {
+			n := min(4096, len(b))
+			_, _ = c.Write(b[:n])
+			b = b[n:]
+		}
+	}
+	for _, size := range []int{32, 64, 1024} {
+		for _, n := range []int{1, 5, 20, 40} {
+			for pad := 0; pad < 60; pad += 7 {
+				for _, mix := range []string{secret, secret + short, short + "x" + secret} {
+					run := strings.Repeat(mix, n)
+					middle := strings.Repeat("y", 5000)
+					c := newCapture(size, size)
+					write(c, strings.Repeat("x", pad)+run+middle)
+					got, _ := c.text(hideBoth)
+					noPartOfEither(t, "head", got)
+					c = newCapture(size, size)
+					write(c, middle+run+strings.Repeat("z", pad))
+					got, _ = c.text(hideBoth)
+					noPartOfEither(t, "tail", got)
+				}
+			}
+		}
+	}
+}
+
+// The re-review's input: 40 secrets, then 5000 bytes, with Head 1024.
+func TestFortySecretsAtTheHeadShowNoPart(t *testing.T) {
+	c := newCapture(1024, 1024)
+	_, _ = c.Write([]byte(strings.Repeat(secret, 40) + strings.Repeat("y", 5000)))
+	got, cut := c.text(hideSecret)
+	if !cut {
+		t.Fatal("nothing cut")
+	}
+	noPartOf(t, got)
+	c = newCapture(1024, 1024)
+	_, _ = c.Write([]byte(strings.Repeat("y", 5000) + strings.Repeat(secret, 40)))
+	got, _ = c.text(hideSecret)
+	noPartOf(t, got)
+}
