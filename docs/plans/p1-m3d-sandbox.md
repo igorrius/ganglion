@@ -87,7 +87,7 @@ reports it without the sandbox package, so it runs before any of it exists.
 - Produces: a binary that prints one `| name | value |` Markdown row per check, ready to paste into
   the research note; `-hold` waits for a signal after the report.
 
-- [ ] **Step 1: Write the probe**
+- [x] **Step 1: Write the probe**
 
 ```go
 // Command sandboxprobe reports what a host offers the command sandbox of
@@ -263,7 +263,7 @@ func envScan() string {
 }
 ```
 
-- [ ] **Step 2: Write the Dockerfile**
+- [x] **Step 2: Write the Dockerfile**
 
 ```dockerfile
 # The sandbox probe as a container, for Railway: M3d task 3.20.
@@ -280,7 +280,7 @@ COPY --from=build /probe /probe
 ENTRYPOINT ["/probe", "-hold"]
 ```
 
-- [ ] **Step 3: Build, lint and run it here**
+- [x] **Step 3: Build, lint and run it here**
 
 Run: `go mod tidy && go build ./tools/sandboxprobe && go run ./tools/sandboxprobe`
 Expected: a table; on the owner's machine Landlock ABI ≥ 5, `no_new_privs` "set, reads 1",
@@ -288,11 +288,12 @@ Expected: a table; on the owner's machine Landlock ABI ≥ 5, `no_new_privs` "se
 direct requirements. Then `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./tools/sandboxprobe/...`
 Expected: 0 issues.
 
-- [ ] **Step 4: Run it in a local container** (Docker's default seccomp profile, as most hosts)
+- [x] **Step 4: Run it in a local container** (Docker's default seccomp profile, as most hosts)
 
-Run: `docker build -f tools/sandboxprobe/Dockerfile -t sandboxprobe . && docker run --rm sandboxprobe /probe`
-Expected: a table; record it. (The `ENTRYPOINT` holds; passing `/probe` as the command does not, so
-`docker run` returns.) If `docker` is not installed, skip and say so in the note.
+Run: `docker build -f tools/sandboxprobe/Dockerfile -t sandboxprobe . && docker run --rm --entrypoint /probe sandboxprobe`
+Expected: a table; record it. (The image's `ENTRYPOINT` holds with `-hold`; `--entrypoint /probe`
+runs it without, so `docker run` returns.) Run it again with `--user 0` to see root. If `docker` is
+not installed, skip and say so in the note.
 
 - [ ] **Step 5: Commit**
 
