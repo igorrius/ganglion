@@ -277,7 +277,7 @@ func outOfGrantText(job string, c tool.Call) string {
 	if c.Name == toolHostExec {
 		if x, err := hostcmd.ParseExec(c.Args); err == nil {
 			return fmt.Sprintf("Task %s tried to run %s, which its grant does not list. The call was refused.",
-				job, redact.String(hostcmd.Show(x.Command.Argv)))
+				job, text.CodeSpan(redact.String(hostcmd.Show(x.Command.Argv))))
 		}
 	}
 	return fmt.Sprintf("Task %s tried to use %s, which its grant does not allow. The call was refused.", job, c.Name)

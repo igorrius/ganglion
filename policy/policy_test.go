@@ -752,3 +752,23 @@ func TestACommandOutsideTheGrantAlertsOnceAndNamesIt(t *testing.T) {
 		t.Fatalf("the tool ran %d times", h.calls)
 	}
 }
+
+// The argv of a run that may be tainted reaches an admin's alert only inside a
+// code span, so page-supplied Markdown cannot become a link or formatting.
+func TestTheAlertShowsTheCommandInACodeSpan(t *testing.T) {
+	s := execSpec()
+	s.InputSchema = json.RawMessage(`{"type":"object","properties":{"argv":{"type":"array"},"reason":{"type":"string"}}}`)
+	run := chain(t, &counter{s: s}, &fakeAsker{}, policy.WithAlerts(grantAlerts()))
+	c := execCall("rm", "[Open](https://evil.example)", "_x_")
+	c.Conv = "task:J7"
+	c.Grant = &tool.Grant{Tools: []string{"host.exec"}}
+	res, err := run(context.Background(), c)
+	if !errors.Is(err, tool.ErrOutOfGrant) || len(res.Out) != 1 {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	span := "`" + "rm '[Open](https://evil.example)' _x_" + "`"
+	got := res.Out[0].Text
+	if !strings.Contains(got, span) || strings.Contains(strings.Replace(got, span, "", 1), "[Open](") {
+		t.Fatalf("alert %q, want the command in %s and nowhere else", got, span)
+	}
+}
