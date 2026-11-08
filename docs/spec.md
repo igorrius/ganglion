@@ -1641,3 +1641,9 @@ Reviewed at each gate.
   desktop agents do. How to authorise and protect such a command is open;
   revisit after the base mechanisms are built, checked and the repository
   is public (owner, 2026-11-08).
+- Host commands on Windows (and macOS): today the command sandbox is
+  Linux only and the tool is off elsewhere (R-CMD-3, ADR-0039). Windows
+  needs its own mechanism (AppContainer, restricted tokens, job objects),
+  with its own ADR; WSL2 runs a Linux kernel, so the probe there
+  (`tools/sandboxprobe`) says whether the Linux sandbox already holds.
+  To come back to, not to drop (owner, 2026-11-08).
