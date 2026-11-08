@@ -75,14 +75,22 @@ database and `sudo` stay open.
 
 ## Decision
 
-**A, failing closed**, to be confirmed by a spike in M3d task 3.20 on the
-owner's machine, Railway and a Pi before this ADR is accepted. It keeps
+**A without the PID namespace, failing closed** (owner, 2026-11-08). A
+PID namespace would leave `ps`, `top` and `kill` blind to the machine,
+the very questions commands are for, and needs user namespaces that
+containers often lack. The node instead marks itself not dumpable (it
+already does, ADR-0042): its `/proc/<pid>/environ` and memory then belong
+to root, and a process of the same user cannot read them. `ps` still
+lists the node with its command line, which holds no secret. The rest of
+option A stands as written, to be confirmed by a spike in M3d task 3.20
+on the owner's machine, Railway and a Pi before this ADR is accepted. It
+keeps
 "on the owner's behalf", adds no binary and no resident process, and its
 parts are what the kernel already offers. B stays the fallback if the
 spike shows A cannot hide the denied paths well enough.
 
 Fail closed: if the node cannot set up `no_new_privs`, the clean
-environment, the hidden node process and the denied paths, or if it
+environment, a node that is not dumpable and the denied paths, or if it
 runs as root (uid 0, where `no_new_privs` takes nothing away),
 `host.exec` is not offered to the model and the node reports why.
 `host.stats` does not depend on the sandbox. The M4 container image sets

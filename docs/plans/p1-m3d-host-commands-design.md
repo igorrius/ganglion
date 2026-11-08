@@ -226,7 +226,11 @@ Every command:
    inherits it (builder's choice).
 2. **Gets a clean environment.** Only a fixed allowlist (`PATH`, `HOME`,
    `LANG`, `TZ`, `TERM=dumb`, call), never the node's variables.
-3. **Cannot see the node's process.** Otherwise `/proc/<node pid>/environ`
+3. **Cannot read the node's environment or memory.** Changed by the owner
+   on 2026-11-08: the node marks itself not dumpable, so its
+   `/proc/<pid>/environ` and memory belong to root; no PID namespace, since
+   one would leave `ps` and `top` blind to the machine. The original
+   wording follows. **Cannot see the node's process.** Otherwise `/proc/<node pid>/environ`
    gives the node's secrets back to a process of the same user. A separate
    PID namespace is one way; the ADR compares others.
 4. **Cannot read the node's data or secret files**: the data directory

@@ -263,12 +263,13 @@ Design: [p1-m3d-host-commands-design.md](p1-m3d-host-commands-design.md)
 [ADR-0038](../adr/0038-host-commands-as-argv-with-classes-in-code.md),
 [ADR-0039](../adr/0039-command-sandbox.md),
 [ADR-0040](../adr/0040-plans-as-approvals.md) (Proposed). The
-step-by-step plan is written when M3d starts, after `/status` (3.38); the
-sandbox spike (3.20) comes first.
+sandbox spike (3.20) comes first, with its own plan:
+[p1-m3d-sandbox.md](p1-m3d-sandbox.md); the plan for 3.21–3.27 is written
+after it, on what the spike found.
 
 | Task | Done when |
 |---|---|
-| 3.20 The command sandbox: `no_new_privs`, a clean environment, the node's process hidden, its data and secret files and the owner's secret stores unreadable; off with a reason where it cannot be set up or the node runs as root (R-CMD-3, ADR-0039); a spike on the owner's machine, Railway and a Pi first | From a command, the node's environment, database and `*_FILE` secrets cannot be read and `sudo` gains nothing; in a container without the kernel features the tool is not offered and the reason is reported |
+| 3.20 The command sandbox: `no_new_privs`, a clean environment, the node's environment and memory unreadable (not dumpable), its data and secret files and the owner's secret stores unreadable; off with a reason where it cannot be set up or the node runs as root (R-CMD-3, ADR-0039); a spike on the owner's machine, Railway and a Pi first | From a command, the node's environment, database and `*_FILE` secrets cannot be read and `sudo` gains nothing; in a container without the kernel features the tool is not offered and the reason is reported |
 | 3.21 `host.stats` and the node's own files: memory, load, disk, the sizes of the node's folders; the claude CLI work directory cleaned by age (R-CMD-5, R-CMD-8) | Works in a 128 MB container with `host.exec` off; the work directory stops growing |
 | 3.22 `host.exec`: argv without a shell, the class table with consequence lines in English, Russian and Ukrainian, output capped, redacted and tainting, journal, kill switch (R-CMD-1, 2, 6) | Read runs by itself; content, change and script ask with the fixed line; forbidden never runs, press or not |
 | 3.23 Long commands: past a short wait a command continues in the background and its completion resumes the conversation; time limit, process group, parallel cap (R-CMD-4) | A `du` over a large tree answers in the same conversation after the turn has ended |

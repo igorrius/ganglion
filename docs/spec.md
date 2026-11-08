@@ -775,7 +775,7 @@ undone with `git revert`.
 | Secret leakage | The model never sees secrets; modules get them via `secret.get` / env per manifest; secrets are redacted before the journal and logs, and the Bot API token is never logged | P1 |
 | A stranger messages the bot | `allowed` table with roles: the admin installs modules, others only ask; in M3b a `family` member gets conversation with no tools and no memory, and the family bot migration (M7) decides family access | P1 |
 | Diagnostics expose the node | `ganglion mcp` opens no port: it runs over stdio and relies on the platform's authentication; read access to the data directory is read access to all history | P1 |
-| A host command reads secrets or gains root | Commands run in a sandbox: no privilege gain, a clean environment, the node's process and secret files hidden; root and anything that starts a process outside the sandbox are forbidden; the tool is off where the sandbox cannot be set up (R-CMD-1–3, [ADR-0039](adr/0039-command-sandbox.md)) | P1 (M3d) |
+| A host command reads secrets or gains root | Commands run in a sandbox: no privilege gain, a clean environment, the node's environment, memory and secret files unreadable; root and anything that starts a process outside the sandbox are forbidden; the tool is off where the sandbox cannot be set up (R-CMD-1–3, [ADR-0039](adr/0039-command-sandbox.md)) | P1 (M3d) |
 | The node's own files fill the disk | Everything the node creates is accounted for (what, size, age) and cleaned by age or size (R-CMD-8) | P1 (M3d) |
 | Infinite loop | R-AGT-4 | P1 |
 | Exhausted limits | Regular work as reflexes with no model where it can be; a model out of limits cools down and the next tier takes over; usage counter in `turns` | P1 |
@@ -962,8 +962,9 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   Moving an entry towards read widens rights and is the owner's decision,
   in configuration the agent cannot edit.
 - **R-CMD-3.** Every command runs in a sandbox: it cannot gain privileges
-  (`no_new_privs`), gets a clean environment, cannot see the node's
-  process, and cannot read the node's data directory, its secret files,
+  (`no_new_privs`), gets a clean environment, cannot read the node's
+  environment or memory (the node marks itself not dumpable; `ps` still
+  lists it, as it lists every process, owner 2026-11-08), and cannot read the node's data directory, its secret files,
   `.env` and `.env.*` files in any folder, or a default list of the
   owner's secret stores. If the node cannot set
   this up, or runs as root, `host.exec` is not offered and the node says
@@ -1374,7 +1375,7 @@ fallback until the gate is passed.
 | Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles (conversation, writing tools, analysis) | For development, tiers: Sonnet for turns, Haiku for compaction and checks ([ADR-0047](adr/0047-sonnet-answers-during-development.md)). Short decisions and embeddings wait for a concrete task ("Models by purpose" in the "Not now" list). Opus when the agent writes skills or modules | When the agent starts writing skills or modules |
 | Where nodes live | Cloud hosting · Pi · home PC | Edge in the cloud or on a Pi, claude CLI worker on the owner's PC | The P1 monthly bill |
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
-| Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Proposed for host commands and skill scripts in [ADR-0039](adr/0039-command-sandbox.md): `no_new_privs`, a clean environment, Landlock and a PID namespace, fail closed | A spike in M3d on the owner's machine, Railway and a Pi |
+| Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Proposed for host commands and skill scripts in [ADR-0039](adr/0039-command-sandbox.md): `no_new_privs`, a clean environment, Landlock, the node not dumpable, fail closed | A spike in M3d on the owner's machine, Railway and a Pi |
 | How long ended sessions (episodes) are kept | Forever, searched by `memory.recall` (today: the newest 500 per chat) · a retention: sessions older than N days are dropped after consolidation has read them | A retention after consolidation (owner, 2026-11-03): nothing is dropped that consolidation has not read, so a fact the owner never confirmed is still turned into one or kept; what was said by chance fades | M7 task 7.2, with the nightly consolidation; N is chosen there |
 | Telemetry of edge nodes | Each edge to an OpenTelemetry collector over OTLP · Prometheus scrapes each edge · snapshots over the NATS bus, collected by the core | Decided by the owner (2026-11-03): over the bus, collected by the core, without JetStream for metrics (R-OBS-9). A collector needs one more link and one more service for every edge; the bus is already there. An outside collector can later be fed by the core | ADR at the start of P2, with the protocol |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
