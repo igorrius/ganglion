@@ -295,7 +295,7 @@ Expected: a table; record it. (The image's `ENTRYPOINT` holds with `-hold`; `--e
 runs it without, so `docker run` returns.) Run it again with `--user 0` to see root. If `docker` is
 not installed, skip and say so in the note.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/sandboxprobe go.mod go.sum
@@ -356,7 +356,7 @@ Pure code: no syscall, so every rule of the split is a unit test.
   - `func DenyList(home string, node NodeFiles, environ, extra []string) []string`
   - `func EnvFiles(roots []string, depth int, list Lister) []string`
 
-- [ ] **Step 1: Write the failing tests of the split**
+- [x] **Step 1: Write the failing tests of the split**
 
 ```go
 package sandbox
@@ -455,12 +455,12 @@ func TestGrantsFailOnAnUnlistableAncestor(t *testing.T) {
 
 Add `"strings"` to the test's imports.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./sandbox/ -run TestGrants`
 Expected: FAIL, `undefined: Grants`.
 
-- [ ] **Step 3: Write the split**
+- [x] **Step 3: Write the split**
 
 ```go
 // Package sandbox runs host commands and skill scripts so that they cannot
@@ -534,12 +534,12 @@ func under(p, dir string) bool {
 }
 ```
 
-- [ ] **Step 4: Run the split's tests**
+- [x] **Step 4: Run the split's tests**
 
 Run: `go test ./sandbox/ -run TestGrants`
 Expected: PASS.
 
-- [ ] **Step 5: Write the failing tests of the deny list**
+- [x] **Step 5: Write the failing tests of the deny list**
 
 ```go
 package sandbox
@@ -622,12 +622,12 @@ func TestEnvFilesFindsThemToADepth(t *testing.T) {
 }
 ```
 
-- [ ] **Step 6: Run them to see them fail**
+- [x] **Step 6: Run them to see them fail**
 
 Run: `go test ./sandbox/ -run 'TestDenyList|TestEnvFiles'`
 Expected: FAIL, `undefined: DenyList`.
 
-- [ ] **Step 7: Write the deny list** (use the depth task 2's checkpoint settled; 3 below)
+- [x] **Step 7: Write the deny list** (use the depth task 2's checkpoint settled; 3 below)
 
 ```go
 package sandbox
@@ -733,12 +733,12 @@ func EnvFiles(roots []string, depth int, list Lister) []string {
 Depth counts folders: `walk(root, 3)` reads the root and two levels below it. Adjust the test's
 expectation if task 2 settled another depth.
 
-- [ ] **Step 8: Run the package's tests and lint**
+- [x] **Step 8: Run the package's tests and lint**
 
 Run: `go test -race ./sandbox/ && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./sandbox/...`
 Expected: PASS; 0 issues.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add sandbox
