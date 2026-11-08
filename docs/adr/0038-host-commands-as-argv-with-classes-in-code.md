@@ -128,7 +128,8 @@ settled what the design left to the builder:
   the live one uses `go clean -cache` and folders the check makes in place
   of `docker image prune`. Changing this needs a new decision on ADR-0039.
 - **The kill switch is the cell `tools.host_exec`.** It is defined at
-  start; "off" stops new commands, and commands already running finish. An
+  start; "off" stops new commands, and commands already started or waiting
+  for a slot finish. An
   admin's `/commands on|off` sets it. `cells.set` refuses every `tools.*`
   cell, so the agent cannot widen its own rights. A global switch for every
   tool stays as R-POL-5 has it, for later.
@@ -141,6 +142,32 @@ settled what the design left to the builder:
   (moved under the data folder) and its leftovers in the temp folder.
   `host.stats` reports them, and the janitor removes what is past its age:
   24 hours for the CLI work folder and the temp leftovers.
+
+The class table grew during the build, past what the plan wrote down:
+
+- **Wrapper programs are forbidden, with the line `cmd.wrapper`.**
+  `timeout`, `nice`, `ionice`, `stdbuf`, `time`, `flock`, `chrt`, `taskset`,
+  `strace`, `ltrace`, `watch`, `script`, `unbuffer`, `expect`, `firejail`,
+  `bwrap`, `systemd-inhibit`, `dbus-run-session` and `busybox` run another
+  program from their arguments, each with its own grammar the table does not
+  read; the line says to run that program directly. This is a controller's
+  decision taken during the build, not the owner's: it is open for the
+  owner, who may want, say, `nice` or `timeout` classed by the program they
+  run instead.
+- **`env` and `find -exec` class the command they run.** Each is a script,
+  or the class of the command inside when that is more severe: `env sudo`
+  is forbidden as root, `find . -exec rm {} ;` a script. The most severe
+  class wins.
+- **`xargs` is forbidden, with the line `cmd.script_file`.** Its input, or
+  the file of `-a`, adds the arguments or picks the program and its script
+  (`xargs -I{} bash -c {}`), so the press cannot show what runs, the same
+  reason that forbids `bash x.sh`. A forbidden command inside it keeps its
+  own line.
+- **The table fails closed on what it cannot read exactly.** A short flag
+  in a cluster counts by each of its letters (`-rf` as `-r` and `-f`). A
+  long flag counts by any abbreviation getopt would take (`--fi` as
+  `--file`), the most severe match winning. A flag with an attached value
+  (`--pre=sh`, `-kfile`) counts as the flag, so a value never hides it.
 
 How a long command works:
 

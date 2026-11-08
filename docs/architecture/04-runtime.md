@@ -121,7 +121,8 @@ A host command still running after the short wait (20 s) does not hold its
 turn open either (R-CMD-4). The call answers "still running" and the turn
 ends with the command's key in the state, which keeps the plan open. The
 command goes on under the runner. Its end is put into the conversation's
-inbox once as a `command.done` event, and that event resumes the
+inbox once as a `command.done` event, by the runner's announce pass every
+30 s (not at the moment it ends), and that event resumes the
 conversation as a press does: the outcome is outside data, the model has
 its tools, and its calls run one level deeper. A command of a scheduled
 task resumes as a turn of that task, under its grant (ruling 7 of the M3d
@@ -152,7 +153,8 @@ sequenceDiagram
     A->>M: call with the result
     M-->>A: "it runs; I'll tell you"
     A->>Q: Complete(answer, Commands += key)
-    Note over R: the command ends; its row is "done"
+    Note over R: the command ends; its row is "done", not announced yet
+    Note over R: the announce pass, every 30 s
     R->>Q: Put(command.done, idemKey command:<key>:done)
     Q->>A: lease
     A->>R: Get(key): argv, outcome, principal, depth

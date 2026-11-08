@@ -106,9 +106,9 @@ read a denied file.
 - The file names in `~/.ssh`, `~/.gnupg`, the cloud CLI configs, the data
   folder and the workspace can reach the model, and the provider and the
   journal with it.
-- A press still guards every content command (ADR-0040): `cat`, `head`
+- A press still guards every content command (ADR-0038, R-CMD-2): `cat`, `head`
   and the scripts that could read what is granted ask first.
-- The self-test still reads a denied file, now with the list grants in
+- The self-test still tries to read a denied file and fails, now with the list grants in
   place, so a kernel where `READ_DIR` reached further would turn commands
   off.
 - A folder created later directly in a split folder stays unreadable, as

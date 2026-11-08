@@ -105,8 +105,15 @@ settled these:
   folded (R-POL-9 already says a plan does not fold). The edit after the
   press replaces the buttons with the ticked steps. A declined or expired
   plan folds like any question.
-- **`Call.Planned`** is filled by the agent from the plan store, never by
-  the model.
+- **`Call.Planned`** reports whether the conversation's approved plan
+  lists the command, argv and folder. The agent fills it from the plan
+  store, never the model.
+- **A command without a folder runs in home, and matches there.** Every
+  approval and grant is matched with `tool.Command.SameAs`: argv exact, and
+  the folders equal once "" is read as the node user's home. A plan step
+  without `dir` approves `host.exec` with `dir` set to home, and the
+  reverse; any other folder stays another command. The plan's message
+  shows the folder as the question does, home for a step without one.
 - **`DecisionPlanned`** is a new decision in the journal, for a call that
   ran under an approved plan.
 - **What runs at once.** A plan with no step that needs a press runs at
@@ -114,4 +121,4 @@ settled these:
   approved commands only also runs at once. Any other command that needs a
   press asks.
 - **`Spec.KeepsQuestion`** marks a tool whose question stays in the chat
-  as the record, so the transport does not fold it.
+  as the record, so the agent does not fold it.

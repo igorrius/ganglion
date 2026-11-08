@@ -974,10 +974,12 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   environment or memory (the node marks itself not dumpable; `ps` still
   lists it, as it lists every process, owner 2026-11-08), and cannot read
   the node's data directory, its secret files, `.env` and `.env.*` files
-  in any folder, or a default list of the owner's secret stores. A command may list a
-  folder that holds a denied path, so the names inside denied folders are visible but not their
-  contents (owner, 2026-11-08, [ADR-0057](adr/0057-commands-may-list-split-folders.md));
-  `GANGLION_SANDBOX_HIDE_NAMES=on` hides them too. Below Landlock ABI 9, which reaches socket files,
+  in any folder, or a default list of the owner's secret stores. A command may list
+  every folder on the machine: listing is granted on the folders the sandbox splits around a
+  denied path, and it reaches their whole tree, so the names inside denied folders are visible
+  but not their contents (owner, 2026-11-08,
+  [ADR-0057](adr/0057-commands-may-list-split-folders.md)); `GANGLION_SANDBOX_HIDE_NAMES=on`
+  hides them too. Below Landlock ABI 9, which reaches socket files,
   a command opens no Unix socket at all, so gpg-agent and the keyring are
   out of reach (`docker ps`, `systemctl --user` and `lpstat` with them);
   signals are not limited, so `kill` reaches the owner's processes
@@ -985,8 +987,11 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   owner adds paths with `GANGLION_SANDBOX_DENY`; `.env` files are found
   to three folders deep under home and the command's folder. If the node cannot set
   this up, or runs as root, `host.exec` is not offered and the node says
-  why. Docker's command-line tool reaches its daemon over a Unix socket,
-  so below Landlock ABI 9 Docker commands fail from the sandbox.
+  why.
+
+  Docker is one consequence of these rules: its command-line tool reaches
+  its daemon over a Unix socket, so below Landlock ABI 9 Docker commands
+  fail from the sandbox.
 - **R-CMD-4.** A command longer than a short wait continues in the
   background; its completion resumes the conversation with the result.
   Commands have a hard time limit, their own process group and a cap on
@@ -1439,8 +1444,8 @@ Ideas that come up along the way and are outside the current phase go here.
 Reviewed at each gate.
 
 - Classifier and learning in the router (P2 / P3).
-- A global kill switch for every tool. Docker from commands below
-  Landlock ABI 9.
+- A global kill switch for every tool.
+- Docker from commands below Landlock ABI 9.
 - Channels other than Telegram and MQTT; HTTP API; web UI.
 - Compiling flows into Home Assistant automations.
 - CBOR and microcontroller adapters.

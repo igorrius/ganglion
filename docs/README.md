@@ -319,7 +319,7 @@ Start here when coming back to the project.
     - the kill switch `tools.host_exec` and an admin's `/commands on|off`, with its line in `/status`;
     - commands may list the folders the sandbox splits; `GANGLION_SANDBOX_HIDE_NAMES=on` hides the names
       ([ADR-0057](adr/0057-commands-may-list-split-folders.md));
-    - scripted acceptance: chatlab scenarios 3 of 3, the end-to-end sandbox test
+    - scripted acceptance: seven mech-host chatlab scenarios, 3 of 3 runs each, the end-to-end sandbox test
       (`config/hostexec_accept_test.go`) and the task-grant test; the branch's reviews found gaps in the
       class table (awk options, `env`, `xargs`, `find -exec`) and each is closed with a test;
     - measured (`make memory`, `make crash-agent`, ADR-0056), against `/status`'s 46.4 MB binary and
@@ -327,11 +327,14 @@ Start here when coming back to the project.
       47.4 MB after 1,000 turns (peak 48.5); the agent with `host.exec df -h` in every turn through the
       real sandbox 45.1 MB idle, 50.7 MB after 1,000 turns (+3.3 MB over the tools run, a helper process
       per call); echo 39.2 and 44.0 MB; the agent without tools 45.2 and 48.9 MB; 50 `/metrics`
-      pictures 109 MB, the hostile page peak 111 MB, as before. `make crash-agent`: 200 kills, 157
-      answers, 0 duplicates, no message lost. The crash harness does not call `host.exec`, so the
+      pictures 109 MB, the hostile page peak 111 MB, as before. `make crash-agent`: 200 `kill -9`, no
+      message lost, no duplicate: 246 messages for the model in 150 groups (96 joined a running turn),
+      157 answers. The crash harness does not call `host.exec`, so the
       `host_jobs` restart path is covered by the runner's tests, not by it;
     - open: the owner's live check on the test bot is pending; ADR-0038 and ADR-0040 stay Proposed until
-      the owner accepts them; `make lab-faults` and a full lab run (`agent/prompt.go` changed) await the
+      the owner accepts them; wrapper programs (`timeout`, `nice`, `watch`, `busybox` and the rest) are
+      forbidden by a controller's decision taken during the build, which the owner may overturn
+      ([ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md)); `make lab-faults` and a full lab run (`agent/prompt.go` changed) await the
       owner's decision; Railway and a Pi are still to measure; Docker does not work from commands below
       Landlock ABI 9 (commands are classed and asked for as designed, then fail to reach the daemon).
   - **M3d, after `/status` (designed 2026-11-03):** host commands and plans
@@ -420,6 +423,46 @@ Start here when coming back to the project.
       - after a crash the last part of a split message may be sent again (at least once, as before);
       - `noteRef` reads the whole outbox body, attachment bytes included, to copy the text;
       - a tainted replied message with only a file has no "a message with a file" mark.
+    - M3d (host commands):
+      - the janitor's symlink test does not check the link itself is gone, nor a symlink in an old folder;
+      - an aged place with an empty prefix would empty its whole folder: no guard against such a place;
+      - `Sweep` does not check its context inside the loop; `Lstat` and `RemoveAll` are not one step;
+      - `host.stats` prints ages as Go durations (`24h0m0s`) and "1 files";
+      - the `/proc` parsers take NaN, Inf and negative numbers, and a duplicated meminfo line;
+      - `Disk` multiplies by `Bsize`, while statfs counts in `Frsize`; `mergeTemp` aliases its input;
+      - `ParseExec` takes trailing JSON and keys that differ only in case;
+      - `ParsePlan` has no step or reason limits of its own (plan.show's question now runs the store's);
+      - the timeout's error says 1..900 while 0 is taken; `python3 -c` imports modules from its folder;
+      - other interpreter names (`python3.12`, `ruby`) are change, not script from a file;
+      - `top -b` reads `~/.toprc`;
+      - `tar -cf host:/x` goes through rsh or ssh; `tar --remove-files` shows the archive line;
+      - `journalctl --cursor-file` writes a file; `docker image history --no-trunc` prints build commands as read;
+      - other wrappers (`setpriv`, `prlimit`, `numactl`, `cgexec`, `setarch`, `faketime`) are unknown, so change;
+      - `Show` passes graphic runes that look blank (U+3164, U+115F, U+2800, combining overlays);
+      - `date --rfc-3339=seconds` is over-classified as root; `mawk -W version` and `awk -vfoo=1` are forbidden;
+      - `gawk -o`, `-p` and `-d` write named files and are script, not create;
+      - a job's `Answer` may read done while `Done` is false; the time-limit test does not prove grandchildren die;
+      - the `host_jobs_open` partial index cannot serve `state != 'running'`; `ended` is not counted when the end fails;
+      - an exit 0 at the node's stop is stored as interrupted;
+      - `redact.String` has no pattern of its own for `sk-…`, `ghp_…` or bare tokens; a secret of 256+ bytes across a cut;
+      - `Ignored` runs up to 63 arguments × 5 s in turn; it stats the model's paths outside the sandbox;
+      - the agent's reason line is not escaped; the git-ignored warning misses `--file=path` and symlinks;
+      - a failed `/commands` write fails the turn; the `tools.*` abuse test covers only `tools.host_exec`;
+      - no test that `host.exec` closes with the real switch off; `commandGate` is not tested in `config`;
+      - a given-up background key stays up to 7 days and keeps the plan open (its approval still ends at its hour);
+      - `commandDone` checks neither the job's background flag nor its state; `commandAsTask` neither kind nor conversation;
+      - `/resume`'s running filter repeats the race; migration 007 has no ADR;
+      - the give-up apology for a person's `command.done` is in the default language;
+      - the class predicates differ (`!= Read` in the policy and `planAllowed`, `NeedsPress` elsewhere);
+      - a plan step's text is not marked as the agent's words in its question;
+      - the out-of-grant alert names the argv but not the folder; a task's summary drops the git-ignored warning;
+      - `sameJob` ignores the grant (older than M3d);
+      - a skill's copy is capped before it is copied; the skill abuse test skips silently without Landlock;
+      - `TMPDIR` is assumed outside the deny list; a failed start after `Begin` leaves its key begun;
+      - `mech-host-forbidden` counts two forbidden calls without telling `sudo` from `systemd-run`;
+      - the injection scenario's second facts repeat the first; the background scenario's second reply proves little;
+      - `cmd/run.go` compares `GANGLION_SANDBOX_HIDE_NAMES` with a literal `"on"`; a long doc line in `grants.go`;
+      - the Landlock write checks assert only a non-zero exit.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

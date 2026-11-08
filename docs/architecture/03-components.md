@@ -60,7 +60,7 @@ flowchart TB
     tools --> planapp
     planapp --> policies
     sched -- "grant: exact commands" --> policies
-    hostsw --> policies
+    hostsw -- "gates host.exec: offered, run" --> tools
     hostrun --> sandbox
     hostrun -- "command.done" --> inbox
     web --> html2md
