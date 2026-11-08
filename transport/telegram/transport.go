@@ -17,6 +17,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/backoff"
 	txt "github.com/igorrius/ganglion/internal/text"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/transport"
 )
 
@@ -56,6 +57,8 @@ type Transport struct {
 	commands    []transport.Command // listed in the command hints at start
 	files       fileCounter
 
+	health *Health // what /status shows of polling
+
 	mu     sync.Mutex
 	last   map[int64]int64 // chat → the newest incoming message id
 	groups map[int64]bool  // chats that are groups or supergroups
@@ -75,6 +78,7 @@ type config struct {
 	replyMode   ReplyMode
 	commands    []transport.Command
 	rich        bool
+	health      *Health
 }
 
 // Option configures a Transport.
@@ -107,6 +111,10 @@ func WithRichMessages(on bool) Option { return func(c *config) { c.rich = on } }
 // leaves the hints alone.
 func WithCommands(cmds []transport.Command) Option { return func(c *config) { c.commands = cmds } }
 
+// WithHealth sets where polling's health is kept for /status (R-OBS-11); the
+// default keeps it where nothing reads it.
+func WithHealth(h *Health) Option { return func(c *config) { c.health = h } }
+
 // WithLogger sets the logger; the default discards.
 func WithLogger(l *slog.Logger) Option { return func(c *config) { c.log = l } }
 
@@ -125,6 +133,9 @@ func New(token string, opts ...Option) (*Transport, error) {
 	if cfg.hc == nil {
 		cfg.hc = &http.Client{Timeout: cfg.pollTimeout + 10*time.Second}
 	}
+	if cfg.health == nil {
+		cfg.health = NewHealth(cfg.now)
+	}
 	return &Transport{
 		c:           newClient(cfg.baseURL, token, cfg.hc),
 		log:         cfg.log,
@@ -135,6 +146,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 		replyMode:   cfg.replyMode,
 		rich:        cfg.rich,
 		richCount:   newRichCounter(),
+		health:      cfg.health,
 		typingEvery: 4 * time.Second,
 		commands:    cfg.commands,
 		last:        map[int64]int64{},
@@ -177,6 +189,7 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 			continue
 		}
 		poll.Reset()
+		t.health.polledNow()
 		if offset, err = t.hand(ctx, sink, me.ID, ups, offset, sinkRetry); err != nil {
 			return err
 		}
@@ -237,9 +250,11 @@ func (t *Transport) onError(ctx context.Context, err error, b *backoff.Backoff) 
 		switch ae.Code {
 		case http.StatusConflict:
 			t.log.Error("telegram: 409, polling stopped", "err", err)
+			t.health.stoppedNow(texts.StatusReasonConflict)
 			return fmt.Errorf("%w: %s", ErrConflict, ae.Description)
 		case http.StatusUnauthorized:
 			t.log.Error("telegram: token rejected", "err", err)
+			t.health.stoppedNow(texts.StatusReasonUnauthorized)
 			return err
 		case http.StatusTooManyRequests:
 			d := max(ae.RetryAfter, time.Second)

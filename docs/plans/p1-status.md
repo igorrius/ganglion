@@ -586,8 +586,9 @@ last day: {n}`.
 `texts`, `05-code-map.md` (`transport/telegram --> status`).
 
 **Interfaces:**
-- Produces: `func (t *Transport) Status(ctx context.Context, s status.Scope) []status.Check`, `Name()`
-  `"telegram"`; in `config`, `type Watched []status.Source`, `TransportWatch() do.Provider[Watched]`
+- Produces (as built): `telegram.Health` with `NewHealth(now)`, `Status` and `Name()` `"telegram"`, given to the
+  transport with `WithHealth`, because the transport waits for the agent's command hints and the agent for its
+  sources; in `config`, `type Watched []status.Source`, `TransportWatch() do.Provider[Watched]`
   choosing `watchTelegram` or `watchNone`.
 
 Keys: `status.telegram` `Telegram: polled {time}`; `status.telegram_waiting` `Telegram: not polled yet`;
@@ -595,14 +596,14 @@ Keys: `status.telegram` `Telegram: polled {time}`; `status.telegram_waiting` `Te
 another poller or a webhook holds the bot`; `status.reason_unauthorized` `polling stopped: the token was
 refused`.
 
-- [ ] **Step 1: Write the failing tests** with `telegramtest`: after one poll the line is `OK` with its
+- [x] **Step 1: Write the failing tests** with `telegramtest`: after one poll the line is `OK` with its
   time; with the clock moved 3 minutes and no poll since, `Warn` `reason_poll_stale` "3 min"; after the
   fake answers `409`, `Fail` `reason_conflict` with `Since` the stop; after `401`, `Fail`
   `reason_unauthorized`. A quiet poll (no updates) counts as a poll.
 
-- [ ] **Step 2: Run** `go test ./transport/telegram/`. Expected: FAIL.
+- [x] **Step 2: Run** `go test ./transport/telegram/`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** `health.go` holds `type health struct{ mu sync.Mutex; polled, stopped
+- [x] **Step 3: Implement.** `health.go` holds `type health struct{ mu sync.Mutex; polled, stopped
   time.Time; stop texts.Key }`, a field of `Transport`. `Run` calls `t.health.polled = t.now()` after
   every `getUpdates` that returned no error, and `onError` records the stop for `409` and `401` before it
   returns. `Status` reads under the mutex; the stale bound is a constant `pollStale = 2 * time.Minute`.
@@ -610,9 +611,9 @@ refused`.
   `TelegramWatch()` returning `Watched{do.MustInvoke[*telegram.Transport](i)}`, the names in the
   constants block, registration in `Core`, and `sources = append(sources, do.MustInvoke[Watched](i)...)`.
 
-- [ ] **Step 4: Run** `go test -race ./transport/telegram/ ./config/`. Expected: PASS.
+- [x] **Step 4: Run** `go test -race ./transport/telegram/ ./config/`. Expected: PASS.
 
-- [ ] **Step 5: Commit** `telegram: /status shows the last poll and a stopped poller`.
+- [x] **Step 5: Commit** `telegram: /status shows the last poll and a stopped poller`.
 
 ### Task 6: The queues
 

@@ -36,8 +36,15 @@ func Telegram() do.Provider[*telegram.Transport] {
 	return func(i do.Injector) (*telegram.Transport, error) {
 		b := do.MustInvoke[Bootstrap](i)
 		return telegram.New(b.BotToken, telegram.WithBaseURL(b.BotAPIURL), telegram.WithLogger(do.MustInvoke[*slog.Logger](i)),
-			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)), telegram.WithRichMessages(b.TelegramRich), telegram.WithCommands(do.MustInvoke[[]transport.Command](i)))
+			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)), telegram.WithRichMessages(b.TelegramRich), telegram.WithCommands(do.MustInvoke[[]transport.Command](i)),
+			telegram.WithHealth(do.MustInvoke[*telegram.Health](i)))
 	}
+}
+
+// TelegramHealth provides what /status shows of Telegram's polling, kept apart
+// from the transport so the agent's sources need not wait for it.
+func TelegramHealth() do.Provider[*telegram.Health] {
+	return func(do.Injector) (*telegram.Health, error) { return telegram.NewHealth(time.Now), nil }
 }
 
 // CommandHints provides the commands the transports list for people.

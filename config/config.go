@@ -29,7 +29,7 @@ type ProcessStart time.Time
 var Core = do.Package(
 	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Languages()), do.Lazy(Texts()), do.Lazy(Admins()),
 	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(Modules()), do.Lazy(ModuleAdmin()), do.Lazy(HTML2MD()), do.Lazy(Fetcher()), do.Lazy(Read()), do.Lazy(Diagnostics()), do.Lazy(Skills()), do.Lazy(Plans()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(StatusSources()), do.Lazy(Agent()),
-	do.Lazy(Translator()), do.Lazy(Telegram()), do.Lazy(Reactor()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
+	do.Lazy(Translator()), do.Lazy(Telegram()), do.Lazy(TelegramHealth()), do.Lazy(Reactor()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
 	// Extension points: the interface, then each implementation under its name.
 	do.Lazy(Handler()), do.LazyNamed(handlerAgent, AgentHandler()), do.EagerNamed(handlerEcho, core.Handler(core.EchoHandler)),
 	do.Lazy(GiveUp()), do.LazyNamed(giveUpAgent, AgentGiveUp()), do.EagerNamed(giveUpNone, core.GiveUp(core.NoGiveUp)),
@@ -41,6 +41,7 @@ var Core = do.Package(
 	do.Lazy(JobSchedulers()), do.LazyNamed(schedulersAgent, AgentSchedulers()), do.EagerNamed(schedulersNone, Schedulers(nil)),
 	do.Lazy(Receivers()), do.LazyNamed(inboundTelegram, TelegramReceivers()), do.EagerNamed(inboundNone, Inbound(nil)),
 	do.Lazy(CommandHints()), do.LazyNamed(commandsAgent, AgentCommandHints()), do.EagerNamed(commandsNone, []transport.Command(nil)),
+	do.Lazy(TransportWatch()), do.LazyNamed(watchTelegram, TelegramWatch()), do.EagerNamed(watchNone, Watched(nil)),
 	// The search backends; Read picks one, or none.
 	do.LazyNamed(searchBrave, BraveSearch()), do.LazyNamed(searchDuckDuckGo, DuckDuckGoSearch()),
 )
@@ -96,6 +97,8 @@ const (
 	inboundNone        = "inbound.none"        // nothing brings messages in
 	commandsAgent      = "commands.agent"      // the agent's command table as command hints
 	commandsNone       = "commands.none"       // no command hints
+	watchTelegram      = "watch.telegram"      // Telegram's polling in /status
+	watchNone          = "watch.none"          // no transport in /status
 )
 
 // agentOn reports whether the settings turn the agent on: a model
