@@ -64,48 +64,101 @@ func every(e Entry, names ...string) map[string]rule {
 }
 
 // lookupFlag finds the entry a flag moves a command to. A flag matches whole
-// or as "--name=value"; a long flag also by a prefix of at least "--x", as
+// or as "--name=value"; a long flag also by any prefix of at least "--x", as
 // getopt takes an abbreviation; a short cluster ("-uf", "-ofile") by each of
 // its letters. Several matches give the most severe, so a flag is only ever
 // read up, never down.
 func lookupFlag(flags map[string]Entry, a string) (Entry, bool) {
-	name, _, _ := strings.Cut(a, "=")
-	if f, ok := flags[name]; ok {
-		return f, true
-	}
-	var best Entry
-	found := false
-	pick := func(f Entry) {
-		if !found || severity[f.Class] > severity[best.Class] ||
-			(severity[f.Class] == severity[best.Class] && f.Line < best.Line) {
-			best, found = f, true
-		}
+	e, found, _ := matchFlag(flags, nil, nil, a)
+	return e, found
+}
+
+// matchFlag is lookupFlag for options that take a value. takes always do
+// (the next argument when it is not attached); attached may have a value
+// attached ("-Iseconds"). In a cluster the letters stop at the first option
+// with a value, since the rest of the token is that value. skip says the
+// next argument is the value of an option, not a flag.
+func matchFlag(flags map[string]Entry, takes, attached []string, a string) (Entry, bool, bool) {
+	m := &matcher{flags: flags, takes: takes, attached: attached}
+	name, _, hasValue := strings.Cut(a, "=")
+	if f, ok := flags[name]; ok || slices.Contains(takes, name) || slices.Contains(attached, name) {
+		return f, ok, !hasValue && slices.Contains(takes, name)
 	}
 	switch {
 	case strings.HasPrefix(a, "--") && len(name) >= 3:
-		for k, f := range flags {
-			if strings.HasPrefix(k, "--") && strings.HasPrefix(k, name) {
-				pick(f)
-			}
-		}
+		m.long(name, hasValue)
 	case strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && len(a) > 2:
-		for _, r := range a[1:] {
-			if f, ok := flags["-"+string(r)]; ok {
-				pick(f)
-			}
+		m.cluster(a, hasValue)
+	}
+	return m.best, m.found, m.skip
+}
+
+// matcher collects the entries a token matches, keeping the most severe.
+type matcher struct {
+	flags       map[string]Entry
+	takes       []string
+	attached    []string
+	best        Entry
+	found, skip bool
+}
+
+func (m *matcher) pick(k string) {
+	f, ok := m.flags[k]
+	if !ok {
+		return
+	}
+	e := m.best
+	if !m.found || severity[f.Class] > severity[e.Class] ||
+		severity[f.Class] == severity[e.Class] && (loss(f) > loss(e) || loss(f) == loss(e) && f.Line < e.Line) {
+		m.best, m.found = f, true
+	}
+}
+
+// long matches an abbreviation of a long option.
+func (m *matcher) long(name string, hasValue bool) {
+	for _, k := range slices.Concat(slices.Collect(maps.Keys(m.flags)), m.takes) {
+		if strings.HasPrefix(k, "--") && strings.HasPrefix(k, name) {
+			m.pick(k)
+			m.skip = m.skip || !hasValue && slices.Contains(m.takes, k)
 		}
 	}
-	return best, found
+}
+
+// cluster matches the letters of a short cluster up to the first option that
+// takes a value.
+func (m *matcher) cluster(a string, hasValue bool) {
+	for i, r := range a[1:] {
+		k := "-" + string(r)
+		m.pick(k)
+		if slices.Contains(m.takes, k) {
+			m.skip = i+2 == len(a) && !hasValue
+			return
+		}
+		if slices.Contains(m.attached, k) {
+			return
+		}
+	}
 }
 
 // withFlags is base moved by any of flags (see lookupFlag). Every argument is
 // read, a lone "--" included: find takes its start points after it.
 func withFlags(base Entry, flags map[string]Entry) rule {
+	return withValues(base, flags, nil, nil)
+}
+
+// withValues is withFlags for a program whose options take values, so that a
+// value that looks like a flag ("date -d -2days") is not read as one, and the
+// letters of an attached value ("date -Iseconds") are not read as flags.
+func withValues(base Entry, flags map[string]Entry, takes, attached []string) rule {
 	return func(args []string) Entry {
 		e := base
-		for _, a := range args {
-			if f, ok := lookupFlag(flags, a); ok {
+		for i := 0; i < len(args); i++ {
+			f, ok, skip := matchFlag(flags, takes, attached, args[i])
+			if ok {
 				e = over(e, f)
+			}
+			if skip {
+				i++
 			}
 		}
 		return e
@@ -131,6 +184,20 @@ func subcommands(allowed []string, subs map[string]rule, other Entry) rule {
 			return other
 		}
 		return other
+	}
+}
+
+// dashed reads "--flag" as "-flag" for a program whose flag package takes both.
+func dashed(r rule) rule {
+	return func(args []string) Entry {
+		out := make([]string, len(args))
+		for i, a := range args {
+			if strings.HasPrefix(a, "--") && len(a) > 2 {
+				a = a[1:]
+			}
+			out[i] = a
+		}
+		return r(out)
 	}
 }
 
@@ -164,14 +231,22 @@ func inlineOnly(flags ...string) rule {
 	}
 }
 
-// awkFiles are the options of awk that load a program or a library.
-var awkFiles = []string{"-f", "-E", "-i", "-l", optFile, "--exec", "--include", "--load"}
+// awkFiles are the long options of awk that load a program or a library;
+// awkFileLetters are the short ones, which may sit anywhere in a cluster
+// ("-bf", "-nl").
+var (
+	awkFiles       = []string{"--file", "--exec", "--include", "--load"}
+	awkFileLetters = "fEil"
+)
 
 // awk is the program as an argument, unless an option names a file.
 func awk(args []string) Entry {
 	for _, a := range args {
+		if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.ContainsAny(a, awkFileLetters) {
+			return scriptFile
+		}
 		for _, p := range awkFiles {
-			if strings.HasPrefix(a, p) || longPrefix(a, p) {
+			if longPrefix(a, p) {
 				return scriptFile
 			}
 		}
@@ -179,11 +254,11 @@ func awk(args []string) Entry {
 	return script
 }
 
-// longPrefix reports whether a is an abbreviation (at least "--xy") of the
+// longPrefix reports whether a is an abbreviation (at least "--x") of the
 // long option opt.
 func longPrefix(a, opt string) bool {
 	name, _, _ := strings.Cut(a, "=")
-	return strings.HasPrefix(opt, "--") && strings.HasPrefix(name, "--") && len(name) >= 4 && strings.HasPrefix(opt, name)
+	return strings.HasPrefix(opt, "--") && strings.HasPrefix(name, "--") && len(name) >= 3 && strings.HasPrefix(opt, name)
 }
 
 // sed is the program as an argument, unless --file or a short cluster with f
@@ -334,15 +409,40 @@ func hostname(args []string) Entry {
 	return withFlags(read, map[string]Entry{"-F": root, optFile: root, "-b": root, "--boot": root})(args)
 }
 
-// uniq with two arguments that are not options writes the second as a file.
-func uniq(args []string) Entry {
+// positionals counts the arguments that are not options: "-" is one,
+// everything after "--" is, and the value of a valued option is not.
+func positionals(args, valued []string, cluster bool) int {
 	n := 0
-	for _, a := range args {
-		if !strings.HasPrefix(a, "-") {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			return n + len(args) - i - 1
+		case a == "-" || !strings.HasPrefix(a, "-"):
 			n++
+		case slices.Contains(valued, a):
+			i++
+		case cluster && !strings.HasPrefix(a, "--") && len(a) > 2 && slices.Contains(valued, "-"+a[len(a)-1:]):
+			i++
 		}
 	}
-	if n >= 2 {
+	return n
+}
+
+// uniq with two arguments that are not options writes the second as a file.
+func uniq(args []string) Entry {
+	valued := []string{"-f", "-s", "-w", "--skip-fields", "--skip-chars", "--check-chars"}
+	if positionals(args, valued, true) >= 2 {
+		return create
+	}
+	return content
+}
+
+// xxd never combines short options; -r writes a file back, and so does a
+// second file argument.
+func xxd(args []string) Entry {
+	valued := []string{"-g", "-groupsize", "-c", "-cols", "-l", "-len", "-s", "-seek", "-o", "-offset", "-n", "-name", "-R"}
+	if slices.Contains(args, "-r") || slices.Contains(args, "-revert") || positionals(args, valued, false) >= 2 {
 		return create
 	}
 	return content
@@ -418,17 +518,18 @@ var programs = map[string]rule{
 	"ps": ps, "top": top, "journalctl": journalctl, "systemctl": systemctl, "docker": docker,
 	"env": env, "awk": awk, "gawk": awk, "mawk": awk, "sed": sed, "hostname": hostname, "uniq": uniq,
 	"tar": tar, "zip": zip,
-	"go": subcommands(nil, map[string]rule{
+	"go": dashed(subcommands(nil, map[string]rule{
 		"version": fixed(read), "clean": fixed(goClean),
 		"env": withFlags(content, map[string]Entry{"-w": outside, "-u": outside}),
-	}, unknown),
+	}, unknown)),
 	"cargo": subcommands(nil, map[string]rule{"clean": fixed(cargoClean)}, unknown),
 	"bash":  inline("-c"), "sh": inline("-c"), "dash": inline("-c"), "zsh": inline("-c"), "ksh": inline("-c"),
 	"fish": inline("-c"), "python": inline("-c"), "python3": inline("-c"),
 	"node": inlineOnly("-e", "--eval", "-p", "--print"), "perl": inlineOnly("-e", "-E"),
-	"du":   withFlags(read, map[string]Entry{"--files0-from": content}),
-	"wc":   withFlags(read, map[string]Entry{"--files0-from": content}),
-	"date": withFlags(read, map[string]Entry{"-f": content, optFile: content, "-s": root, "--set": root}),
+	"du": withFlags(read, map[string]Entry{"--files0-from": content}),
+	"wc": withFlags(read, map[string]Entry{"--files0-from": content}),
+	"date": withValues(read, map[string]Entry{"-f": content, optFile: content, "-s": root, "--set": root},
+		[]string{"-d", "--date", "-r", "--reference", "-f", optFile, "-s", "--set"}, []string{"-I"}),
 	"file": withFlags(read, map[string]Entry{
 		"-f": content, "--files-from": content, "-C": create, "--compile": create, "-m": content, "--magic-file": content,
 	}),
@@ -436,7 +537,7 @@ var programs = map[string]rule{
 	"sort": withFlags(content, map[string]Entry{"-o": create, "--output": create, "--compress-program": script}),
 	"rg":   withFlags(content, map[string]Entry{"--pre": script}),
 	"less": withFlags(content, map[string]Entry{"--log-file": create, "-o": create, "-O": create, "--LOG-FILE": create}),
-	"xxd":  withFlags(content, map[string]Entry{"-r": create, "-revert": create}),
+	"xxd":  xxd,
 }
 
 // groups are the programs that share one entry whatever their arguments.

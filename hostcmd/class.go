@@ -38,10 +38,31 @@ type Entry struct {
 	Line  texts.Key
 }
 
-// over returns f when it is at least as severe as e: a flag says more of
-// a command than its program does.
+// lossy are the lines of commands that delete or cut what cannot be got back.
+var lossy = map[texts.Key]bool{
+	texts.CmdRemove: true, texts.CmdDockerVolumeRm: true, texts.CmdDockerRm: true, texts.CmdDockerSystemPrune: true,
+	texts.CmdJournalVacuum: true, texts.CmdTruncate: true, texts.CmdDockerRmi: true, texts.CmdDockerImagePrune: true,
+	texts.CmdDockerBuilderPrune: true, texts.CmdGoClean: true, texts.CmdCargoClean: true,
+}
+
+// loss ranks how much a line loses: volumes first, then any other deletion.
+func loss(e Entry) int {
+	switch {
+	case e.Line == texts.CmdDockerVolumeRm:
+		return 2
+	case lossy[e.Line]:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// over returns f when it is more severe than e, or as severe and not saying
+// less of what is lost: a flag says more of a command than its program does,
+// and a later flag never hides a deletion behind a milder line. Otherwise
+// the later one wins.
 func over(e, f Entry) Entry {
-	if severity[f.Class] >= severity[e.Class] {
+	if severity[f.Class] > severity[e.Class] || severity[f.Class] == severity[e.Class] && loss(f) >= loss(e) {
 		return f
 	}
 	return e
