@@ -231,56 +231,36 @@ func inlineOnly(flags ...string) rule {
 	}
 }
 
-// awkFiles are the long options of awk that load a program or a library;
-// awkFileLetters are the short ones, which may sit anywhere in a cluster
-// ("-bf", "-nl"); -W (gawk, mawk) takes any of them by name, so it is never
-// read further.
+// awkFiles are the long options of awk that load a program, a library or
+// debugger commands; awkFileLetters are the short ones. gawk's short options
+// take values in several ways (-v, -F, -e, and the optional attached values
+// of -d, -D, -L, -o, -p), so the grammar is not modelled: any single-dash
+// argument with one of these letters, anywhere in argv, names a file (fail
+// closed, ruling 1 of the M3d plan). -W (gawk, mawk) takes any of them by
+// name, so W is one of the letters.
 var (
-	awkFiles       = []string{"--file", "--exec", "--include", "--load"}
-	awkFileLetters = "fEilW"
+	awkFiles       = []string{"--file", "--exec", "--include", "--load", "--debug"}
+	awkFileLetters = "fEilWD"
 )
 
-// awk is the program as an argument, unless an option names a file or the
-// program loads one.
+// awk is the program as an argument, unless an option may name a file or the
+// program may load one. Any "@" counts as a directive: gawk accepts space or
+// a backslash-newline between "@" and include or load, and inline awk rarely
+// needs "@" otherwise.
 func awk(args []string) Entry {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if strings.Contains(a, "@include") || strings.Contains(a, "@load") {
+	for _, a := range args {
+		switch {
+		case strings.Contains(a, "@"):
 			return scriptFile
-		}
-		if !strings.HasPrefix(a, "-") {
-			continue
-		}
-		if strings.HasPrefix(a, "--") {
+		case strings.HasPrefix(a, "--"):
 			if slices.ContainsFunc(awkFiles, func(p string) bool { return longPrefix(a, p) }) {
 				return scriptFile
 			}
-			continue
-		}
-		file, skip := awkCluster(a)
-		if file {
+		case strings.HasPrefix(a, "-") && strings.ContainsAny(a[1:], awkFileLetters):
 			return scriptFile
-		}
-		if skip {
-			i++
 		}
 	}
 	return script
-}
-
-// awkCluster reads a short cluster of awk up to the first option with a
-// value (-v, -F: the rest of the token, or the next argument). It says
-// whether a letter names a file, and whether the next argument is a value.
-func awkCluster(a string) (file, skip bool) {
-	for i, r := range a[1:] {
-		switch {
-		case strings.ContainsRune(awkFileLetters, r):
-			return true, false
-		case r == 'v' || r == 'F':
-			return false, i+2 == len(a)
-		}
-	}
-	return false, false
 }
 
 // longPrefix reports whether a is an abbreviation (at least "--x") of the
