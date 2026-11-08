@@ -74,3 +74,5 @@ report.audit_flagged: "Nightly memory check. Facts checked: {facts}. Persona fil
 
 ask.language: "Write to you in {language}?"
 ask.language_no_file: "Switch to {language}? The bot's own buttons stay in English for now."
+
+status.no_answer: "{component}: no answer"

@@ -73,3 +73,5 @@ report.audit_flagged: "Нічна перевірка памʼяті. Перев�
 
 ask.language: "Писати до вас мовою {language}?"
 ask.language_no_file: "Перемкнутися на {language}? Кнопки бота поки що залишаться англійською."
+
+status.no_answer: "{component}: не відповів"

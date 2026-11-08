@@ -73,3 +73,5 @@ report.audit_flagged: "Ночная проверка памяти. Провер�
 
 ask.language: "Писать вам на языке {language}?"
 ask.language_no_file: "Переключиться на {language}? Кнопки бота пока останутся на английском."
+
+status.no_answer: "{component}: не ответил"

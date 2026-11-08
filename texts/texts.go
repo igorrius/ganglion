@@ -102,6 +102,8 @@ const (
 	SchedThisChat      Key = "sched.this_chat"
 	SchedNone          Key = "sched.none"
 	SchedStarted       Key = "sched.started"
+
+	StatusNoAnswer Key = "status.no_answer"
 )
 
 var allKeys = []Key{
@@ -111,6 +113,7 @@ var allKeys = []Key{
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
+	StatusNoAnswer,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.

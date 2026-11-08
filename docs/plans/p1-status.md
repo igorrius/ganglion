@@ -24,7 +24,7 @@ Read it with this plan.
 - All documentation, comments and doc comments are in English; [conventions](../conventions.md) apply.
 - Architecture docs change in the same commit as the code they describe (`05-code-map.md`, its
   dependency diagram included).
-- `status` imports nothing of ganglion but `texts`. Domain packages never import `samber/do`.
+- `status` imports nothing of ganglion but `texts` and `internal/clock`. Domain packages never import `samber/do`.
 - A reason is a `texts` key with values from closed sets, the configuration, numbers and times: never
   an error's text. A provider error kind (`turns.Attempt.Error`) is a closed set and may be shown.
 - Every new `texts` key has its English text in `texts/lang/en.yaml` and its Russian and Ukrainian ones
@@ -103,7 +103,7 @@ the dependency diagram with `status --> texts`).
 - The "no answer" line uses keys `texts.StatusNoAnswer` (`{component}: no answer`) added in this task,
   with its three translations.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
   ```go
   package status_test
@@ -190,9 +190,9 @@ the dependency diagram with `status --> texts`).
   `Duration(3*time.Hour+5*time.Minute)="3 h 5 min"`, `Duration(76*time.Hour)="3 d 4 h"`; `Clock` of a time
   today in `Europe/Kyiv` is `"12:40"`, of yesterday `"2026-11-07 12:40"`.
 
-- [ ] **Step 2: Run** `go test ./status/`. Expected: FAIL (package does not exist).
+- [x] **Step 2: Run** `go test ./status/`. Expected: FAIL (package does not exist).
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
   `status/status.go`:
 
@@ -291,9 +291,9 @@ the dependency diagram with `status --> texts`).
   `en.yaml` `status.no_answer: "{component}: no answer"`, `ru.yaml` `"{component}: не ответил"`,
   `uk.yaml` `"{component}: не відповів"`.
 
-- [ ] **Step 4: Run** `go test -race ./status/ ./texts/`. Expected: PASS.
+- [x] **Step 4: Run** `go test -race ./status/ ./texts/`. Expected: PASS.
 
-- [ ] **Step 5: Commit** `status: the entity, the source interface and Collect (R-OBS-11)`.
+- [x] **Step 5: Commit** `status: the entity, the source interface and Collect (R-OBS-11)`.
 
 ### Task 2: `/status` in the agent
 
