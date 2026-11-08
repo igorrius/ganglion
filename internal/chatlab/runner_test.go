@@ -298,8 +298,13 @@ func TestShippedScriptedScenariosPass(t *testing.T) {
 		t.Fatal(err)
 	}
 	var mine []Scenario
+	ready := sandboxReady()
 	for _, s := range all {
-		if s.Model == ModelScripted {
+		switch {
+		case s.Model != ModelScripted:
+		case runsCommands(s) && !ready:
+			t.Logf("%s: not run, the command sandbox is not ready on this machine", s.Name)
+		default:
 			mine = append(mine, s)
 		}
 	}

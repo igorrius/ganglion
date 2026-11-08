@@ -1,0 +1,13 @@
+diff --git a/policy/policy.go b/policy/policy.go
+index 7ba2a54..8b82d4e 100644
+--- a/policy/policy.go
++++ b/policy/policy.go
+@@ -544,7 +544,7 @@ func ruleHostExec(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisio
+ 	}
+ 	switch e := hostcmd.Classify(x.Command.Argv); {
+ 	case e.Class == hostcmd.Read:
+-		return tool.PolicyAuto, journal.DecisionAllowed, true
++		return confirm()
+ 	case c.Planned != nil && c.Planned(x.Command):
+ 		return tool.PolicyAuto, journal.DecisionPlanned, true
+ 	default:

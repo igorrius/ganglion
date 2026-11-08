@@ -133,6 +133,7 @@ type Facts struct {
 	NoJournal       []JournalFact `yaml:"no_journal"`
 	Questions       *int          `yaml:"questions"`        // messages showing an Approve button now
 	MessageReplaced string        `yaml:"message_replaced"` // replaced, no buttons, holds this text
+	Question        *Text         `yaml:"question"`         // the messages showing an Approve button now
 	Reply           *Text         `yaml:"reply"`            // the model's words since the last action
 	History         *Text         `yaml:"history"`          // the chat's stored history
 	Memory          *Text         `yaml:"memory"`           // files under memory/, not quarantine
@@ -334,7 +335,7 @@ func (st Step) check() error {
 }
 
 func (f *Facts) empty() bool {
-	return len(f.Journal) == 0 && len(f.NoJournal) == 0 && f.Questions == nil && f.MessageReplaced == "" &&
+	return len(f.Journal) == 0 && len(f.NoJournal) == 0 && f.Questions == nil && f.MessageReplaced == "" && f.Question == nil &&
 		f.Reply == nil && f.History == nil && f.Memory == nil && f.Files == nil && f.Jobs == nil && f.Taken == nil && f.Replies == nil &&
 		f.Tainted == nil
 }

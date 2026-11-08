@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-host-forbidden
+why: >-
+  R-CMD-2, design §10 checks 4 and 6: sudo, systemd-run and docker run never run, with no
+  question to press, and a plan that holds one is refused whole.
+covers:
+  - hostcmd/**
+  - policy/**
+  - tool/builtin/host.go
+  - tool/builtin/plan.go
+model: scripted
+script:
+  - {tool: host.exec, args: '{"argv":["sudo","true"],"reason":"needs root"}'}
+  - {tool: host.exec, args: '{"argv":["systemd-run","true"],"reason":"in a unit"}'}
+  - {tool: plan.show, args: '{"steps":[{"text":"Start a container","argv":["docker","run","alpine"],"reason":"to test"}]}'}
+  - {say: "None of these can run."}
+steps:
+  - say: "Run these as root and in a container"
+  - facts:
+      questions: 0
+      journal:
+        - {tool: host.exec, decision: forbidden, count: 2}
+        - {tool: plan.show, decision: forbidden, count: 1}
+      reply: {contains: "None of these"}

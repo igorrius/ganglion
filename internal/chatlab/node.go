@@ -385,8 +385,15 @@ func (n *Node) Advance(clock string, d time.Duration) error {
 	return nil
 }
 
+// busyQuery counts what the node has left to do: events in the inbox,
+// messages in the outbox, and background commands whose command.done event
+// the node has not put yet, which then resumes the conversation.
+const busyQuery = `SELECT (SELECT count(*) FROM inbox WHERE status = 'pending') +
+	(SELECT count(*) FROM outbox WHERE status = 'pending') +
+	(SELECT count(*) FROM host_jobs WHERE background = 1 AND announced = 0)`
+
 // Quiet waits until the node took the peer's last action and has nothing
-// left to do: inbox and outbox empty on three looks in a row.
+// left to do (busyQuery) on three looks in a row.
 func (n *Node) Quiet(ctx context.Context, limit time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
@@ -408,8 +415,7 @@ func (n *Node) Quiet(ctx context.Context, limit time.Duration) error {
 			continue
 		}
 		var left int
-		if err := n.db.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM inbox WHERE status = 'pending') +
-			(SELECT count(*) FROM outbox WHERE status = 'pending')`).Scan(&left); err != nil {
+		if err := n.db.QueryRowContext(ctx, busyQuery).Scan(&left); err != nil {
 			if ctx.Err() != nil {
 				return notQuiet
 			}

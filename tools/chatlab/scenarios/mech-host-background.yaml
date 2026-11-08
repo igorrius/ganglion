@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-host-background
+why: >-
+  R-CMD-4, design §10 check 1: a command past the short wait goes on, the turn ends saying it
+  runs, and its end resumes the same conversation with the result.
+covers:
+  - host/runner.go
+  - host/jobs.go
+  - agent/commands_done.go
+  - agent/resume.go
+  - event/**
+model: scripted
+script:
+  - {tool: host.exec, args: '{"argv":["sleep","4"],"reason":"a long measure"}'}
+  - {say: "It runs in the background."}
+  - {say: "The measure finished."}
+steps:
+  - say: "Measure it, it takes a while"
+  - facts:
+      reply: {contains: "background"}
+      history: {contains: "still running"}
+  - facts:
+      reply: {contains: "measure finished"}
+      history: {contains: "[command finished] sleep 4"}

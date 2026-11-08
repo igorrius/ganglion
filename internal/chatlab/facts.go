@@ -43,6 +43,7 @@ func Check(f Facts, v View) []string {
 	}) {
 		out = append(out, fmt.Sprintf("message_replaced: no edited message without buttons holds %q", f.MessageReplaced))
 	}
+	out = append(out, checkText("question", f.Question, words(openQuestions(v.Messages)))...)
 	out = append(out, checkText("reply", f.Reply, words(v.Last))...)
 	out = append(out, checkText("history", f.History, v.History)...)
 	memory := make([]string, 0, len(v.Memory))
@@ -68,14 +69,17 @@ func Check(f Facts, v View) []string {
 	return out
 }
 
-func questions(ms []Message) int {
-	n := 0
+func questions(ms []Message) int { return len(openQuestions(ms)) }
+
+// openQuestions are the messages showing an Approve button now.
+func openQuestions(ms []Message) []Message {
+	var out []Message
 	for _, m := range ms {
 		if slices.Contains(m.Buttons, approveLabel) {
-			n++
+			out = append(out, m)
 		}
 	}
-	return n
+	return out
 }
 
 func filesShown(ms []Message) int {

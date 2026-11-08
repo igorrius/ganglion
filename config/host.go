@@ -62,14 +62,19 @@ func Stats() do.Provider[*host.Stats] {
 
 // Runner provides the runner of host commands, in the sandbox.
 func Runner() do.Provider[*host.Runner] {
-	return func(i do.Injector) (*host.Runner, error) {
-		b := do.MustInvoke[Bootstrap](i)
-		values := redact.Values(b.SecretValues()...)
-		return host.NewRunner(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sandbox.Sandbox](i),
-			do.MustInvoke[*sqlqueue.Queue](i).Put, host.DefaultLimits(),
-			host.WithRedact(func(s string) string { return values(redact.String(s)) }),
-			host.WithRunnerLog(do.MustInvoke[*slog.Logger](i)))
-	}
+	return func(i do.Injector) (*host.Runner, error) { return newRunner(i, host.DefaultLimits()) }
+}
+
+// newRunner builds the runner of host commands with lim and opts.
+func newRunner(i do.Injector, lim host.Limits, opts ...host.RunnerOption) (*host.Runner, error) {
+	b := do.MustInvoke[Bootstrap](i)
+	values := redact.Values(b.SecretValues()...)
+	opts = append([]host.RunnerOption{
+		host.WithRedact(func(s string) string { return values(redact.String(s)) }),
+		host.WithRunnerLog(do.MustInvoke[*slog.Logger](i)),
+	}, opts...)
+	return host.NewRunner(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sandbox.Sandbox](i),
+		do.MustInvoke[*sqlqueue.Queue](i).Put, lim, opts...)
 }
 
 // Switch provides the kill switch of host.exec, its cell defined at start.

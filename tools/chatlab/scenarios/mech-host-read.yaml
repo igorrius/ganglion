@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-host-read
+why: >-
+  R-CMD-2, design §10 check 1: read commands run by themselves, with no question, even after
+  their output tainted the session; the output comes back as outside data.
+covers:
+  - hostcmd/**
+  - host/runner.go
+  - host/jobs.go
+  - tool/builtin/host.go
+  - policy/**
+model: scripted
+script:
+  - {tool: host.exec, args: '{"argv":["df","-h","/"],"reason":"free space"}'}
+  - {tool: host.exec, args: '{"argv":["du","-sh","/usr/bin"],"reason":"how big"}'}
+  - {say: "/ and /usr/bin measured."}
+steps:
+  - say: "Build me a tree of what takes space"
+  - facts:
+      questions: 0
+      journal:
+        - {tool: host.exec, decision: allowed, result_contains: "exit 0", count: 2}
+      tainted: true
+      reply: {contains: "measured"}

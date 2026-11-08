@@ -4633,13 +4633,13 @@ uses commands that are safe on the developer's machine (ruling 5): folders under
 | 9 Where the sandbox cannot be set up, `host.exec` is not offered, `host.stats` works, the reason shows | `config/run_test.go` (`TestHostStatsWithoutTheSandbox`); live, task 12 |
 | 10 Memory within the budget with the tool on | `make memory`, task 12 |
 
-- [ ] **Step 1: The lab's runner waits 2 s**
+- [x] **Step 1: The lab's runner waits 2 s**
 
   In `config/lab.go`, the lab node builds its runner with `Limits.Wait = 2 * time.Second`. The
   rest stays at `host.DefaultLimits()`. The lab's turn then shows a background command within a
   scenario's patience.
 
-- [ ] **Step 2: The scenarios**
+- [x] **Step 2: The scenarios**
 
 ```yaml
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
@@ -4764,7 +4764,7 @@ steps:
   node's own `command.done` turn, extend chatlab's quiet wait. It must also wait while the
   inbox holds an event for the conversation. Add a unit test there for it.
 
-- [ ] **Step 3: The sandbox end to end: `config/hostexec_accept_test.go`**
+- [x] **Step 3: The sandbox end to end: `config/hostexec_accept_test.go`**
 
   The test builds the real agent node with the real sandbox, through the same path as
   `TestMemoryAgentTools`'s node. It is skipped when the sandbox is not ready on this machine. It
@@ -4781,7 +4781,7 @@ steps:
   The secret values never appear in any output. `env` is refused by the policy; the test also
   asks the policy for it and expects `forbidden`.
 
-- [ ] **Step 4: The task grant: `agent/task_commands_test.go`**
+- [x] **Step 4: The task grant: `agent/task_commands_test.go`**
 
   With a fake runner and a scheduled task whose grant has `host.exec` and
   `[{argv: [docker, image, prune, -af]}]`, a scripted run calls that command and then
@@ -4791,7 +4791,7 @@ steps:
   - one alert reaches the admin, holding "docker rm x";
   - a second run on the same day adds no second alert (same IdemKey).
 
-- [ ] **Step 5: Seeded faults**
+- [x] **Step 5: Seeded faults**
 
   Add three faults to `scripts/lab-faults.sh`. Each must turn its scenario red:
   - `host-read-asks`: `ruleHostExec` returns confirm for read; `mech-host-read` fails;
@@ -4803,7 +4803,7 @@ steps:
 
   Commit first, then run `make lab-faults` only with the owner's go-ahead: it spends limits.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 go test ./... && make lint

@@ -267,6 +267,26 @@ func TestQuietLimit(t *testing.T) {
 	}
 }
 
+// A background command that has not ended, or ended and is not announced
+// yet, resumes the conversation later: the node is not quiet.
+func TestQuietWaitsForABackgroundCommand(t *testing.T) {
+	n := startScripted(t, Scenario{Name: "x", Script: []ScriptStep{{Say: "ok"}}})
+	sayQuiet(t, n, "hi")
+	if _, err := n.DB().Exec(`INSERT INTO host_jobs (key, conv, transport, principal, depth, argv, dir, state, background, started_ms)
+		VALUES ('t:1', 'telegram:42', 'telegram', 'telegram:user:42', 0, '["sleep","4"]', '/tmp', 'running', 1, 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Quiet(context.Background(), time.Second); err == nil {
+		t.Fatal("quiet while a background command runs")
+	}
+	if _, err := n.DB().Exec(`UPDATE host_jobs SET announced = 1 WHERE key = 't:1'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Quiet(context.Background(), quietLimit); err != nil {
+		t.Fatalf("an announced command keeps the node busy: %v", err)
+	}
+}
+
 // Run now shows its question by editing the pressed message, not by sending
 // one (found in review).
 func TestRunNowQuestionClosesItself(t *testing.T) {

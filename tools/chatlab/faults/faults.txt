@@ -10,3 +10,5 @@ addition-other-person mech-addition-boundaries
 addition-no-taint mech-addition-boundaries
 reply-origin-taint mech-reply-origin
 status-verdict mech-status
+host-read-asks mech-host-read
+host-plan-unchecked mech-host-outside-plan

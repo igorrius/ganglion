@@ -11,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/cells"
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/claudecli"
@@ -71,9 +72,51 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 	}, nil
 }
 
+// applyLabHousekeeping gives the lab its housekeepers: the journal's prune,
+// an expirer that looks every 250 ms, and the runner of host commands, which
+// waits labCommandWait and announces every labPass. The janitor stays out,
+// since it would clean the developer's own temporary folders, and so does the
+// translator, as before.
+func applyLabHousekeeping(i do.Injector) {
+	do.Override(i, func(i do.Injector) (*host.Runner, error) {
+		lim := host.DefaultLimits()
+		lim.Wait = labCommandWait
+		return newRunner(i, lim, host.WithRunnerClock(time.Now, labRunnerAfter(lim.Wait)))
+	})
+	do.Override(i, func(i do.Injector) (Housekeeping, error) {
+		logger := do.MustInvoke[*slog.Logger](i)
+		fast := func(time.Duration) <-chan time.Time { return time.After(250 * time.Millisecond) }
+		return Housekeeping{
+			journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: logger},
+			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger, pending.WithAfter(fast)),
+			do.MustInvoke[*host.Runner](i),
+		}, nil
+	})
+}
+
+// labCommandWait is how long a lab command call waits before its command goes
+// on in the background: short, so a scenario sees a background command
+// within its patience.
+const labCommandWait = 2 * time.Second
+
+// labPass is how often the lab's runner announces the background commands
+// that ended: soon, so their command.done turn follows within a step.
+const labPass = 250 * time.Millisecond
+
+// labRunnerAfter keeps a command call's wait and shortens the runner's other
+// wait, the pass between announcements, to labPass.
+func labRunnerAfter(wait time.Duration) func(time.Duration) <-chan time.Time {
+	return func(d time.Duration) <-chan time.Time {
+		if d != wait {
+			d = labPass
+		}
+		return time.After(d)
+	}
+}
+
 // applyLab replaces in i what differs from a node started by `ganglion run`,
 // and nothing else: the providers, the fetcher's way to the test pages, the
-// confirmations' clock with an expirer that looks every 250 ms, and a
+// confirmations' clock, the housekeepers (applyLabHousekeeping) and a
 // scheduler, with the agent's clock, that ticks only when told to.
 func applyLab(i do.Injector, o LabOptions) {
 	do.Override(i, func(i do.Injector) (map[string]provider.Provider, error) {
@@ -100,14 +143,7 @@ func applyLab(i do.Injector, o LabOptions) {
 	do.Override(i, func(i do.Injector) (*pending.Store, error) {
 		return pending.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*cells.Service](i), o.PendingNow, pending.DefaultTTL)
 	})
-	do.Override(i, func(i do.Injector) (Housekeeping, error) {
-		logger := do.MustInvoke[*slog.Logger](i)
-		fast := func(time.Duration) <-chan time.Time { return time.After(250 * time.Millisecond) }
-		return Housekeeping{
-			journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: logger},
-			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger, pending.WithAfter(fast)),
-		}, nil
-	})
+	applyLabHousekeeping(i)
 	// The model reads the time the scheduler goes by, or a reminder looks as
 	// if it fired early.
 	do.Override(i, func(i do.Injector) (*agent.Agent, error) {

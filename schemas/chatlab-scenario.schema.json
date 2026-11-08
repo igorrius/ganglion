@@ -159,6 +159,7 @@
         "no_journal": { "type": "array", "items": { "$ref": "#/$defs/journalFact" } },
         "questions": { "description": "Messages showing an Approve button now.", "type": "integer", "minimum": 0 },
         "message_replaced": { "description": "A message edited, with no buttons, holds this text.", "type": "string" },
+        "question": { "description": "The messages showing an Approve button now: the questions' text.", "$ref": "#/$defs/text" },
         "reply": { "$ref": "#/$defs/text" },
         "history": { "$ref": "#/$defs/text" },
         "memory": { "$ref": "#/$defs/text" },

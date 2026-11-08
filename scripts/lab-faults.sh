@@ -3,6 +3,12 @@
 # worktree of HEAD, and its scenario must come out red (exit 1). Then a real
 # judge must fail a wrong reply. The working tree is not touched, so commit
 # first. It spends subscription limits.
+#
+# The faults and their scenarios are listed in tools/chatlab/faults/faults.txt;
+# this script runs scenarios only. A fault that a Go test proves is left to that
+# test, which runs in every go test: host-forbidden-after-grant
+# (ruleCommandForbidden moved after ruleGrant in policy/policy.go) turns
+# TestForbiddenCommandBeatsAGrant red.
 set -u
 cd "$(git rev-parse --show-toplevel)" || exit 1
 base=$(mktemp -d)
