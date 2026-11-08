@@ -663,7 +663,8 @@ human); module install — tests + reviewer + admin.
   injection defence).
 - **R-POL-5.** Kill switches are switch cells per action/device plus a
   global one ([ADR-0014](adr/0014-state-cells.md)); toggled by a Telegram
-  command.
+  command. The first switch is `tools.host_exec`, set by an admin's
+  `/commands on|off`; the agent cannot set a `tools.*` cell.
 - **R-POL-6.** A session is **tainted** once external content enters it: a
   web page, a search result, a forwarded message (a quote of another
   message and a reply to a message in another chat count too: the
@@ -959,6 +960,12 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
     `docker exec`, `systemd-run`, `systemctl --user start` and `enable`,
     `crontab`, `at`).
 
+  A script runs only written out in the command (`bash -c`, `python3 -c`,
+  `awk` and `sed` with their program); an interpreter given a file or its
+  input is forbidden, since the press could not show it. `ps` and `top`
+  are read only with name-only columns. Docker runs only the subcommands
+  in the table.
+
   Moving an entry towards read widens rights and is the owner's decision,
   in configuration the agent cannot edit.
 - **R-CMD-3.** Every command runs in a sandbox: it cannot gain privileges
@@ -974,7 +981,8 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   owner adds paths with `GANGLION_SANDBOX_DENY`; `.env` files are found
   to three folders deep under home and the command's folder. If the node cannot set
   this up, or runs as root, `host.exec` is not offered and the node says
-  why.
+  why. Docker's command-line tool reaches its daemon over a Unix socket,
+  so below Landlock ABI 9 Docker commands fail from the sandbox.
 - **R-CMD-4.** A command longer than a short wait continues in the
   background; its completion resumes the conversation with the result.
   Commands have a hard time limit, their own process group and a cap on
@@ -996,6 +1004,9 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   listed commands, argument for argument, in this conversation, until the
   plan ends or expires. A command that needs a press and is not in the
   approved plan does not run: it gets its own confirmation or a new plan.
+  A command is its argv and its folder: approval of one is not approval of
+  the same argv elsewhere. The approved plan's question becomes the plan's
+  message.
 - **R-CMD-8.** The node accounts for everything it creates on disk (what,
   size, age) and cleans it by age or size; `host.stats` reports it. The
   claude CLI work directory is the first case.
@@ -1424,6 +1435,8 @@ Ideas that come up along the way and are outside the current phase go here.
 Reviewed at each gate.
 
 - Classifier and learning in the router (P2 / P3).
+- A global kill switch for every tool. Docker from commands below
+  Landlock ABI 9.
 - Channels other than Telegram and MQTT; HTTP API; web UI.
 - Compiling flows into Home Assistant automations.
 - CBOR and microcontroller adapters.

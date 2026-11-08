@@ -264,8 +264,8 @@ Design: [p1-m3d-host-commands-design.md](p1-m3d-host-commands-design.md)
 [ADR-0039](../adr/0039-command-sandbox.md),
 [ADR-0040](../adr/0040-plans-as-approvals.md) (Proposed). The
 sandbox spike (3.20) comes first, with its own plan:
-[p1-m3d-sandbox.md](p1-m3d-sandbox.md); the plan for 3.21–3.27 is written
-after it, on what the spike found.
+[p1-m3d-sandbox.md](p1-m3d-sandbox.md); the plan for 3.21–3.27 is
+[p1-m3d-commands.md](p1-m3d-commands.md).
 
 | Task | Done when |
 |---|---|

@@ -95,3 +95,23 @@ of what was done.
   narrow, typed patterns for specific commands, e.g. "these container ids
   from the listing just shown").
 - Other tools join plans.
+
+## Refined by the build (2026-11-08)
+
+The plan for tasks 3.21–3.27 ([p1-m3d-commands.md](../plans/p1-m3d-commands.md))
+settled these:
+
+- **The approved plan's question becomes the plan's message.** It is not
+  folded (R-POL-9 already says a plan does not fold). The edit after the
+  press replaces the buttons with the ticked steps. A declined or expired
+  plan folds like any question.
+- **`Call.Planned`** is filled by the agent from the plan store, never by
+  the model.
+- **`DecisionPlanned`** is a new decision in the journal, for a call that
+  ran under an approved plan.
+- **What runs at once.** A plan with no step that needs a press runs at
+  once and keeps the approved commands it still lists. A plan that lists
+  approved commands only also runs at once. Any other command that needs a
+  press asks.
+- **`Spec.KeepsQuestion`** marks a tool whose question stays in the chat
+  as the record, so the transport does not fold it.

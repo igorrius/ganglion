@@ -96,3 +96,59 @@ in force.
 - Users keep needing a command family the table does not cover well
   (then add entries, or a dedicated tool such as a Docker API client).
 - Tool placement (P2) moves commands to other nodes.
+
+## Refined by the build (2026-11-08)
+
+The plan for tasks 3.21–3.27 ([p1-m3d-commands.md](../plans/p1-m3d-commands.md))
+settled what the design left to the builder:
+
+- **Scripts are inline only.** `bash -c`, `sh -c`, `python3 -c`,
+  `node -e`, `perl -e`, and `awk` and `sed` with their program in argv are
+  script class: the press shows the whole script. An interpreter given a
+  file, a module or its input (`bash x.sh`, `python3 -m`, `awk -f`) is
+  forbidden, with a line saying to write the script out. Without this,
+  "the press shows the whole script" would not hold.
+- **A command is argv plus its folder.** Plans and grants approve
+  `{argv, dir}`: `rm -r build` in one folder is not `rm -r build` in
+  another.
+- **`ps` and `top` are read only with name-only columns.** `ps` with only
+  `-e`, `-A`, `--no-headers`, `-p`, `-u`, `-U`, `--sort` and `-o` over a
+  list of safe fields (`comm`, never `args`) is read. Anything else
+  (`aux`, `-f`, `e`) is content, since full command lines and environments
+  can hold secrets. `top` is read only as `-b` with `-n`.
+- **Docker runs only listed subcommands.** Any other is forbidden:
+  `docker run`, `exec`, `create`, `start`, `restart` and `compose up` start
+  processes outside the sandbox, and an unknown one might.
+- **Docker does not work from commands below Landlock ABI 9.** The CLI
+  talks to `/var/run/docker.sock`, a Unix socket the seccomp filter of
+  [ADR-0039](0039-command-sandbox.md) refuses (owner, 2026-11-08). On a
+  machine with ABI 7 Docker commands are classed, asked for and approved as
+  designed, and then fail with "cannot connect to the Docker daemon". The
+  scripted acceptance proves Docker's classes and grants with a fake runner;
+  the live one uses `go clean -cache` and folders the check makes in place
+  of `docker image prune`. Changing this needs a new decision on ADR-0039.
+- **The kill switch is the cell `tools.host_exec`.** It is defined at
+  start; "off" stops new commands, and commands already running finish. An
+  admin's `/commands on|off` sets it. `cells.set` refuses every `tools.*`
+  cell, so the agent cannot widen its own rights. A global switch for every
+  tool stays as R-POL-5 has it, for later.
+- **A long command in a scheduled run resumes the task under its own
+  grant.** The `command.done` event of a task's conversation reloads the
+  task and its grant, as the run did. Without a grant it would resume as an
+  ordinary turn.
+- **The node's places on disk are one list in `config`:** the database,
+  logs, workspace, modules, language files, the claude CLI work folder
+  (moved under the data folder) and its leftovers in the temp folder.
+  `host.stats` reports them, and the janitor removes what is past its age:
+  24 hours for the CLI work folder and the temp leftovers.
+
+How a long command works:
+
+- one `host_jobs` row per call key;
+- a `command.done` event put through the queue, like the expirer's
+  `tool.result`;
+- the agent's `State.Commands`, which keeps the plan open while a command
+  runs.
+
+What the journal stores of a command: argv and folder in its arguments;
+exit code, duration and output size in the head of its result.
