@@ -71,15 +71,46 @@ func over(e, f Entry) Entry {
 // rule classes a program's arguments (argv without the program).
 type rule func(args []string) Entry
 
+// nested classes the arguments of a program that runs another command from
+// them (env, xargs, find -exec); inner classes that command.
+type nested func(args []string, inner rule) Entry
+
 // Classify returns the class of argv. A program given by a path is change,
 // since the file there may be anything, unless its name is forbidden. An
 // unknown program is change (default deny). An empty argv is change; the
 // tool refuses it before.
 func Classify(argv []string) Entry {
+	c := classifier{seen: map[span]Entry{}}
+	return c.classify(argv)
+}
+
+// span is a stretch of one argv, by its first element and its length.
+type span struct {
+	first *string
+	n     int
+}
+
+// classifier remembers the class of each stretch of argv it has classed, so
+// that nested wrappers ("env env env ...") class each stretch once and the
+// work stays polynomial in the length of argv. A wrapper classes only
+// shorter stretches, so the recursion ends.
+type classifier struct{ seen map[span]Entry }
+
+func (c *classifier) classify(argv []string) Entry {
 	if len(argv) == 0 {
 		return unknown
 	}
-	r, known := table[filepath.Base(argv[0])]
+	k := span{&argv[0], len(argv)}
+	if e, ok := c.seen[k]; ok {
+		return e
+	}
+	e := c.class(argv)
+	c.seen[k] = e
+	return e
+}
+
+func (c *classifier) class(argv []string) Entry {
+	r, known := c.rule(filepath.Base(argv[0]))
 	if strings.ContainsRune(argv[0], '/') {
 		if known {
 			if e := r(argv[1:]); e.Class == Forbidden {
@@ -92,4 +123,23 @@ func Classify(argv []string) Entry {
 		return unknown
 	}
 	return r(argv[1:])
+}
+
+// rule finds the rule of a program; a wrapper's inner commands are classed
+// by c.
+func (c *classifier) rule(name string) (rule, bool) {
+	if w, ok := wrappers[name]; ok {
+		return func(args []string) Entry { return w(args, c.classify) }, true
+	}
+	r, ok := table[name]
+	return r, ok
+}
+
+// above returns f when it is more severe than e, otherwise e: the command a
+// wrapper runs can only move the wrapper up.
+func above(e, f Entry) Entry {
+	if severity[f.Class] > severity[e.Class] {
+		return f
+	}
+	return e
 }

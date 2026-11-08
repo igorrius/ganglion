@@ -253,7 +253,8 @@ func awk(args []string) Entry {
 		case strings.Contains(a, "@"):
 			return scriptFile
 		case strings.HasPrefix(a, "--"):
-			if slices.ContainsFunc(awkFiles, func(p string) bool { return longPrefix(a, p) }) {
+			// mawk compares long names ignoring case.
+			if lower := strings.ToLower(a); slices.ContainsFunc(awkFiles, func(p string) bool { return longPrefix(lower, p) }) {
 				return scriptFile
 			}
 		case strings.HasPrefix(a, "-") && strings.ContainsAny(a[1:], awkFileLetters):
@@ -285,15 +286,34 @@ func sed(args []string) Entry {
 }
 
 // env with a program runs it with an environment the agent chose: a
-// script; without one it prints every variable.
-func env(args []string) Entry {
+// script, or the class of the program when that is more severe; without one
+// it prints every variable. Which argument is the program depends on env's
+// options, so every suffix that starts at an argument that is not an option
+// or an assignment is classed (over-counting only moves it up). -S splits a
+// string into a command with env's own quoting and ${VAR} expansion, which
+// the table does not read: a wrapper.
+func env(args []string, inner rule) Entry {
+	e := envBase(args)
+	if e != script {
+		return e
+	}
+	for i, a := range args {
+		if !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
+			e = above(e, inner(args[i:]))
+		}
+	}
+	return e
+}
+
+// envBase is env's own class, from its options before the program.
+func envBase(args []string) Entry {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
 		case a == "-u" || a == "--unset" || a == "-C" || a == "--chdir":
 			i++
-		case a == "-S" || strings.HasPrefix(a, "--split-string"):
-			return script
+		case longPrefix(a, "--split-string") || !strings.HasPrefix(a, "--") && strings.HasPrefix(a, "-") && strings.Contains(a, "S"):
+			return wrapper
 		case strings.HasPrefix(a, "-") || strings.Contains(a, "="):
 		default:
 			return script
@@ -301,6 +321,49 @@ func env(args []string) Entry {
 	}
 	return allEnv
 }
+
+// xargs runs a command built from its arguments and its input: a script,
+// or the class of the command when that is more severe. Its options take
+// values, so every suffix that starts at an argument that is not an option
+// is classed.
+func xargs(args []string, inner rule) Entry {
+	e := script
+	for i, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			e = above(e, inner(args[i:]))
+		}
+	}
+	return e
+}
+
+// findExec are the actions of find that run a command.
+var findExec = []string{"-exec", "-execdir", "-ok", "-okdir"}
+
+var findFlags = withFlags(read, map[string]Entry{
+	"-delete": remove, "-exec": script, "-execdir": script, "-ok": script, "-okdir": script,
+	"-fprint": create, "-fprint0": create, "-fprintf": create, "-fls": create, "-files0-from": content,
+})
+
+// find is read unless an action moves it; the command of each -exec,
+// -execdir, -ok and -okdir (up to ";", or "+" right after "{}", as find
+// ends it) moves it further when it is more severe than a script.
+func find(args []string, inner rule) Entry {
+	e := findFlags(args)
+	for i, a := range args {
+		if !slices.Contains(findExec, a) {
+			continue
+		}
+		end := i + 1
+		for end < len(args) && args[end] != ";" && (args[end] != "+" || args[end-1] != "{}") {
+			end++
+		}
+		e = above(e, inner(args[i+1:end]))
+	}
+	return e
+}
+
+// wrappers are the programs that run another command from their arguments.
+var wrappers = map[string]nested{"env": env, "xargs": xargs, "find": find}
 
 // psFields are the columns that show no command line or environment.
 var psFields = []string{"pid", "ppid", "pgid", "user", "uid", "comm", "ucomm", "rss", "vsz", "pcpu", "%cpu", "pmem",
@@ -550,12 +613,8 @@ var docker = subcommands(nil, map[string]rule{
 
 // programs are the programs with a rule of their own.
 var programs = map[string]rule{
-	"find": withFlags(read, map[string]Entry{
-		"-delete": remove, "-exec": script, "-execdir": script, "-ok": script, "-okdir": script,
-		"-fprint": create, "-fprint0": create, "-fprintf": create, "-fls": create, "-files0-from": content,
-	}),
 	"ps": ps, "top": top, "journalctl": journalctl, "systemctl": systemctl, "docker": docker,
-	"env": env, "awk": awk, "gawk": awk, "mawk": awk, "sed": sed, "hostname": hostname, "uniq": uniq,
+	"awk": awk, "gawk": awk, "mawk": awk, "sed": sed, "hostname": hostname, "uniq": uniq,
 	"tar": tar, "zip": zip,
 	"go": dashed(subcommands(nil, map[string]rule{
 		"version": fixed(read), "clean": fixed(goClean),
@@ -596,7 +655,6 @@ var groups = []struct {
 	{archive, []string{"gzip", "gunzip", "unzip", "xz", "unxz", "zstd", "bzip2"}},
 	{truncate, []string{"truncate"}},
 	{network, []string{"curl", "wget"}},
-	{script, []string{"xargs"}},
 	{root, []string{"sudo", "su", "doas", "pkexec", "run0", "sg", "newgrp", "chroot"}},
 	{allEnv, []string{"printenv"}},
 	{wrapper, []string{"timeout", "nice", "ionice", "stdbuf", "time", "flock", "chrt", "taskset", "strace", "ltrace",

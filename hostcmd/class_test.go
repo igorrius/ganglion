@@ -304,11 +304,55 @@ func TestClassify(t *testing.T) {
 		{[]string{"gawk", "@\tload \"x\""}, Forbidden, texts.CmdScriptFile},
 		{[]string{"gawk", `@namespace "n"; BEGIN{}`}, Forbidden, texts.CmdScriptFile},
 		{[]string{"awk", "-v", "x=1", "{print x}", "-"}, Script, texts.CmdScript},
+		{[]string{"mawk", "--EXEC", "p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"mawk", "--Exec=p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"mawk", "--eX", "p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"gawk", "--FILE=p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"env", "gawk", "-f", "p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"env", "bash", "x.sh"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"xargs", "bash", "x.sh"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"find", ".", "-exec", "bash", "x.sh", ";"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"env", "sudo", "true"}, Forbidden, texts.CmdRoot},
+		{[]string{"xargs", "sudo", "true"}, Forbidden, texts.CmdRoot},
+		{[]string{"find", ".", "-exec", "sudo", "true", ";"}, Forbidden, texts.CmdRoot},
+		{[]string{"env", "env", "env", "sudo", "true"}, Forbidden, texts.CmdRoot},
+		{[]string{"env", "-u", "X", "FOO=1", "/usr/bin/sudo", "true"}, Forbidden, texts.CmdRoot},
+		{[]string{"xargs", "-n", "1", "sudo"}, Forbidden, texts.CmdRoot},
+		{[]string{"xargs", "-I", "{}", "env", "sudo", "{}"}, Forbidden, texts.CmdRoot},
+		{[]string{"find", ".", "-execdir", "echo", "{}", "+", "-ok", "sudo", "{}", ";"}, Forbidden, texts.CmdRoot},
+		{[]string{"find", ".", "-exec", "echo", "+", "sudo", ";"}, Script, texts.CmdScript},
+		{[]string{"find", ".", "-exec", "find", ".", "-exec", "sudo", ";", ";"}, Forbidden, texts.CmdRoot},
+		{[]string{"find", ".", "-delete", "-exec", "rm", "{}", ";"}, Script, texts.CmdScript},
+		{[]string{"env", "-S", "sudo true"}, Forbidden, texts.CmdWrapper},
+		{[]string{"env", "-iS", "sudo true"}, Forbidden, texts.CmdWrapper},
+		{[]string{"env", "--split-string=sudo true"}, Forbidden, texts.CmdWrapper},
+		{[]string{"env", "ls", "-S"}, Script, texts.CmdScript},
+		{[]string{"env", "FOO=1", "ls"}, Script, texts.CmdScript},
+		{[]string{"find", ".", "-exec", "rm", "{}", ";"}, Script, texts.CmdScript},
+		{[]string{"xargs", "rm"}, Script, texts.CmdScript},
+		{[]string{"xargs"}, Script, texts.CmdScript},
+		{[]string{"find", ".", "-name", "x", "-size", "+1M"}, Read, texts.CmdRead},
 	}
 	for _, c := range cases {
 		got := Classify(c.argv)
 		if got.Class != c.class || got.Line != c.line {
 			t.Errorf("Classify(%q) = %s %s, want %s %s", c.argv, got.Class, got.Line, c.class, c.line)
+		}
+	}
+}
+
+// TestNestedWrappersEnd checks that deep nests of wrappers are classed in
+// time and the command inside still counts: each stretch of argv is classed
+// once, so the work does not double with every wrapper.
+func TestNestedWrappersEnd(t *testing.T) {
+	for _, unit := range [][]string{{"env"}, {"xargs"}, {"xargs", "env"}, {"find", ".", "-exec"}, {"env", "xargs", "-n", "1"}} {
+		var argv []string
+		for range 200 {
+			argv = append(argv, unit...)
+		}
+		argv = append(argv, "sudo", "true", ";")
+		if got := Classify(argv); got != root {
+			t.Errorf("%d nested %q = %s %s, want forbidden root", 200, unit, got.Class, got.Line)
 		}
 	}
 }
