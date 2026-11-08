@@ -254,7 +254,7 @@ design and plan where it needed one. All but `/status` are closed.
 | 3.35 Fixed texts in the person's language ([design](p1-fixed-texts-language-design.md), [plan](p1-fixed-texts-language.md); 7.13, R-LANG-1..7, [ADR-0053](../adr/0053-fixed-texts-in-the-persons-language.md); closed 2026-11-06) | A reply follows Telegram's language on the test bot; the full lab passes |
 | 3.36 Telegram rich messages ([design](p1-rich-messages-design.md), [plan](p1-rich-messages.md); R-DLV-11, 12, [ADR-0054](../adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md); closed 2026-11-06) | A table fits a phone, a long report comes as one message, a refusal goes the ordinary way |
 | 3.37 Knowing which message a reply answers ([design](p1-reply-context-design.md), [plan](p1-reply-context.md); R-DLV-13, 14, [ADR-0055](../adr/0055-a-reply-carries-the-replied-messages-origin.md); closed 2026-11-07) | A reply to a weather answer is answered for the new city; the taint follows the replied message's origin |
-| 3.38 `/status` in Telegram: a verdict, then the node, the models, delivery and what is off, from sources each component registers ([design](p1-status-design.md); R-OBS-11) | Section 8 of the design holds; the owner reads it on the test bot |
+| 3.38 `/status` in Telegram: a verdict, then the node, the models, delivery and what is off, from sources each component registers ([design](p1-status-design.md), [plan](p1-status.md); R-OBS-11) | Section 8 of the design holds; the owner reads it on the test bot |
 
 #### M3d · Host commands and plans
 
