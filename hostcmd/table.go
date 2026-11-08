@@ -322,39 +322,55 @@ func envBase(args []string) Entry {
 	return allEnv
 }
 
-// xargs runs a command built from its arguments and its input: a script,
-// or the class of the command when that is more severe. Its options take
-// values, so every suffix that starts at an argument that is not an option
-// is classed.
+// xargs runs a command built from its arguments and its input: what it reads
+// (its input, or the file of -a) adds arguments or picks the program and its
+// script, so the press cannot show what runs. It is forbidden as a script from
+// input; a forbidden command inside it keeps its own line. Its options take
+// values, so every suffix that starts at an argument that is not an option is
+// classed.
 func xargs(args []string, inner rule) Entry {
-	e := script
 	for i, a := range args {
-		if !strings.HasPrefix(a, "-") {
-			e = above(e, inner(args[i:]))
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		if e := inner(args[i:]); e.Class == Forbidden {
+			return e
 		}
 	}
-	return e
+	return scriptFile
 }
 
+// The actions of find that run a command without asking, which "+" can end.
+const (
+	findRun    = "-exec"
+	findRunDir = "-execdir"
+)
+
 // findExec are the actions of find that run a command.
-var findExec = []string{"-exec", "-execdir", "-ok", "-okdir"}
+var findExec = []string{findRun, findRunDir, "-ok", "-okdir"}
 
 var findFlags = withFlags(read, map[string]Entry{
-	"-delete": remove, "-exec": script, "-execdir": script, "-ok": script, "-okdir": script,
+	"-delete": remove, findRun: script, findRunDir: script, "-ok": script, "-okdir": script,
 	"-fprint": create, "-fprint0": create, "-fprintf": create, "-fls": create, "-files0-from": content,
 })
 
+// findPlus are the actions "+" right after "{}" can end, as find has it;
+// -ok and -okdir run to ";" alone.
+var findPlus = []string{findRun, findRunDir}
+
 // find is read unless an action moves it; the command of each -exec,
-// -execdir, -ok and -okdir (up to ";", or "+" right after "{}", as find
-// ends it) moves it further when it is more severe than a script.
+// -execdir, -ok and -okdir (up to ";", or for -exec and -execdir "+" right
+// after "{}", as find ends them) moves it further when it is more severe than
+// a script.
 func find(args []string, inner rule) Entry {
 	e := findFlags(args)
 	for i, a := range args {
 		if !slices.Contains(findExec, a) {
 			continue
 		}
+		plus := slices.Contains(findPlus, a)
 		end := i + 1
-		for end < len(args) && args[end] != ";" && (args[end] != "+" || args[end-1] != "{}") {
+		for end < len(args) && args[end] != ";" && (!plus || args[end] != "+" || args[end-1] != "{}") {
 			end++
 		}
 		e = above(e, inner(args[i+1:end]))
@@ -568,9 +584,11 @@ func tar(args []string) Entry {
 // zipScript: -TT names the program that tests the archive.
 var zipScript = withFlags(archive, map[string]Entry{"--unzip-command": script})
 
+// zip is an archive, a script when -TT names the program that tests it, alone
+// ("-TTsh") or in a cluster ("-rTT").
 func zip(args []string) Entry {
 	for _, a := range args {
-		if strings.HasPrefix(a, "-TT") {
+		if !strings.HasPrefix(a, "--") && strings.HasPrefix(a, "-") && strings.Contains(a, "TT") {
 			return script
 		}
 	}
@@ -632,9 +650,11 @@ var programs = map[string]rule{
 	}),
 	"tree": withFlags(read, map[string]Entry{"-o": create, "-R": create, "--fromfile": content}),
 	"sort": withFlags(content, map[string]Entry{"-o": create, "--output": create, "--compress-program": script}),
-	"rg":   withFlags(content, map[string]Entry{"--pre": script}),
-	"less": withFlags(content, map[string]Entry{"--log-file": create, "-o": create, "-O": create, "--LOG-FILE": create}),
-	"xxd":  xxd,
+	"rg":   withFlags(content, map[string]Entry{"--pre": script, "--hostname-bin": script}),
+	// A lesskey file can set LESSOPEN, a program less runs on every file.
+	"less": withFlags(content, map[string]Entry{"--log-file": create, "-o": create, "-O": create, "--LOG-FILE": create,
+		"-k": script, "--lesskey-file": script, "--lesskey-src": script, "--lesskey-content": script}),
+	"xxd": xxd,
 }
 
 // groups are the programs that share one entry whatever their arguments.

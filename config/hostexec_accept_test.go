@@ -150,7 +150,7 @@ func TestACommandSeesOnlyTheAllowedEnvironment(t *testing.T) {
 	}
 	// LC_CTYPE is Python's own, set by its C-locale coercion (PEP 538), not
 	// passed in.
-	allowed := []string{"PATH", "HOME", "LANG", "TZ", "TERM", "LC_CTYPE"}
+	allowed := []string{"PATH", "HOME", "LANG", "TZ", "TERM", "GOTOOLCHAIN", "LC_CTYPE"}
 	var seen []string
 	for line := range strings.Lines(out) {
 		if k, ok := strings.CutPrefix(strings.TrimSpace(line), "VAR "); ok {

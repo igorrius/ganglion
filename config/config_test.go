@@ -299,3 +299,17 @@ func readyOf(s *sandbox.Sandbox) bool { ok, _ := s.Ready(); return ok }
 func hostSandboxReady() bool {
 	return readyOf(sandbox.New(selfImage, sandbox.Policy{}, sandbox.HostKernel(), time.Now()))
 }
+
+// A read go version must not download and run a toolchain a go.mod in the
+// command's folder names: commands get GOTOOLCHAIN=local, and the whole
+// environment is the fixed list.
+func TestCommandEnvIsFixedAndKeepsGoLocal(t *testing.T) {
+	want := []string{"PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/home/o", "LANG=C.UTF-8", "TZ=Europe/Kyiv", "TERM=dumb", "GOTOOLCHAIN=local"}
+	kyiv, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		t.Skip("no time zone data")
+	}
+	if got := commandEnv("/home/o/", kyiv); !slices.Equal(got, want) {
+		t.Fatalf("commandEnv = %q, want %q", got, want)
+	}
+}

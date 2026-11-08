@@ -58,6 +58,9 @@ func Sandbox() do.Provider[*sandbox.Sandbox] {
 }
 
 // commandEnv is the whole environment a command gets (M3d design, section 5).
+// GOTOOLCHAIN=local keeps go to the installed toolchain: a go.mod in the
+// command's folder could otherwise make even go version download and run
+// another one.
 func commandEnv(home string, tz *time.Location) []string {
 	if home == "" {
 		home = "/"
@@ -67,7 +70,7 @@ func commandEnv(home string, tz *time.Location) []string {
 		zone = tz.String()
 	}
 	return []string{"PATH=/usr/local/bin:/usr/bin:/bin", "HOME=" + filepath.Clean(home),
-		"LANG=C.UTF-8", "TZ=" + zone, "TERM=dumb"}
+		"LANG=C.UTF-8", "TZ=" + zone, "TERM=dumb", "GOTOOLCHAIN=local"}
 }
 
 // roots is where .env files are looked for besides a command's folder.
