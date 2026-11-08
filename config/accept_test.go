@@ -346,7 +346,7 @@ func (h *acceptNode) override(t *testing.T, cat rules.Catalog, r acceptRoute) {
 				out[p.Name] = claudecli.New(p.Name, claudecli.WithCommand(p.Command), claudecli.WithRelay(r.relay))
 				continue
 			}
-			out[p.Name] = providerFactories[p.Type](p, r.keys[p.Name])
+			out[p.Name] = providerFactories[p.Type](p, r.keys[p.Name], "")
 		}
 		return out, nil
 	})

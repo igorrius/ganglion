@@ -24,11 +24,11 @@ func TestDenyListHoldsTheNodesFilesAndSecrets(t *testing.T) {
 		}
 	}
 	node := NodeFiles{Binary: filepath.Join(dir, "bin/ganglion"), DB: filepath.Join(dir, "data/ganglion.db"),
-		LogDir: filepath.Join(dir, "data/logs"), ModulesDir: filepath.Join(dir, "data/modules"), Workspace: filepath.Join(dir, "ws")}
+		LogDir: filepath.Join(dir, "data/logs"), ModulesDir: filepath.Join(dir, "data/modules"), ClaudeDir: filepath.Join(dir, "elsewhere/claude"), Workspace: filepath.Join(dir, "ws")}
 	environ := []string{"PATH=/bin", "TELEGRAM_BOT_TOKEN_FILE=" + filepath.Join(dir, "keys/bot"), "X_FILE="}
 	got := DenyList(home, dir, node, environ, []string{filepath.Join(dir, "missing/later")})
 	for _, want := range []string{"bin/ganglion", "data", "ws", "keys/bot", "home/.ssh", "home/.netrc",
-		"home/.aws", "home/.bashrc", "home/.config/systemd", "missing/later"} {
+		"elsewhere/claude", "home/.aws", "home/.bashrc", "home/.config/systemd", "missing/later"} {
 		if !slices.Contains(got, filepath.Join(dir, want)) {
 			t.Errorf("%s is not denied; got %v", want, got)
 		}

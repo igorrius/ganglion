@@ -69,6 +69,7 @@ interfaces only; **planned** — not in the repository yet.
 | Measure modules (size, load, latency, RSS); a tool module with `-payload`, html2md with `-html` (`make bench-html2md`) | `tools/modbench` | done (P0); tool modules (P1 M3b task 8) | 10.1 | [0005](../adr/0005-wasm-on-wazero-for-modules.md), [0035](../adr/0035-web-reading.md) |
 | Run a module once (dev and acceptance tool) | `tools/modrun` | done (P0) | 10.1 | — |
 | What a host offers the command sandbox: Landlock's version, `no_new_privs`, a not-dumpable process, seccomp, the container, the cost of finding `.env` files; a container image for Railway (M3d task 3.20 spike) | `tools/sandboxprobe` | done (P1 M3d task 3.20) | 7.12 | [0039](../adr/0039-command-sandbox.md) |
+| The node's own places on disk (`Place`, `Measure`: files and bytes of a folder or of the entries with a name prefix, symlinks not followed, capped at 200,000 files) and the janitor (`Janitor`: at start and hourly, removes the entries of a place past its age, 24 hours for the claude CLI work folder `<data>/claude` and the `ganglion-*` leftovers in the temp folder; a symlink goes as the link; `ganglion.host.cleaned` bytes by place); the places list is built in `config` (`Places`) | `host` | done (P1 M3d task 3.21); host.stats (task 2), the runner (task 4) to come | 7.12 | [0039](../adr/0039-command-sandbox.md) |
 | State cells: switch, sensor, request (named by the caller with `AskAs`); service, watch, reconcile | `cells` | done (P1 M1); confirmations are request cells (P1 M3b task 4) | 8 | [0014](../adr/0014-state-cells.md) |
 | Cell stores | `cells` (`MemStore`), `cells/sqlstore`; suite `cells/storetest` | done (P1 M1) | 8 | [0014](../adr/0014-state-cells.md) |
 | Cell backends | `cells/virtual` (fault injection); suite `cells/cellstest` | done (P1 M1); `tuya` later | 8 | [0014](../adr/0014-state-cells.md) |
@@ -221,6 +222,9 @@ flowchart BT
     sandboxp["sandbox"] --> statusp
     sandboxp --> textsp
     configp --> sandboxp
+    hostp["host"]
+    configp --> hostp
+    hostp -.-> sandboxp
     configp --> procp
     accessp --> sqlitedb
     alertp["alert"] --> event
@@ -229,6 +233,9 @@ flowchart BT
     cmd --> secretsp["secrets"]
 ```
 
+- `host` imports `sandbox`, `event`, `sqlitedb`, `status`, `texts` and `cells`,
+  never `agent` or `policy` (today only the standard library and OpenTelemetry;
+  the dashed edge is planned, from the runner in task 4).
 - `event` and `pdk` are leaves: they import nothing from the project.
 - `internal/*` packages are helpers shared by several packages; they are
   not part of the library API and are left out of the diagram.

@@ -3,6 +3,7 @@
 # that is neither here, nor in a scenario's covers, nor shared. When a scenario comes
 # to depend on a file, move it to that scenario's covers.
 main.go
+host/**
 access/**
 agent/commands.go
 agent/config.go
@@ -31,6 +32,7 @@ config/agent.go
 config/bootstrap.go
 config/config.go
 config/delivery.go
+config/host.go
 config/memory.go
 config/storage.go
 config/web.go

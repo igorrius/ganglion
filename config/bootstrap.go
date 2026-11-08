@@ -36,6 +36,9 @@ type Bootstrap struct {
 	// ModulesDir is where module updates are stored: modules/ beside the
 	// database (ADR-0041).
 	ModulesDir string
+	// ClaudeDir is where the claude CLI runs: claude/ beside the database
+	// (R-CMD-8). Empty keeps a private temporary folder.
+	ClaudeDir string
 	// SandboxDeny is GANGLION_SANDBOX_DENY: paths the owner adds to what
 	// commands may neither read nor write (R-CMD-3).
 	SandboxDeny []string

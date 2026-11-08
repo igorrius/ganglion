@@ -267,14 +267,23 @@ func Router() do.Provider[router.Router] {
 	}
 }
 
+// claudeOptions adds the CLI's work folder to opts; an empty dir keeps the
+// private temporary folder (a test node).
+func claudeOptions(dir string, opts ...claudecli.Option) []claudecli.Option {
+	if dir == "" {
+		return opts
+	}
+	return append(opts, claudecli.WithWorkDir(dir))
+}
+
 // providerFactories build a model provider of each catalogue type from
 // its definition and its API key.
-var providerFactories = map[string]func(p rules.ProviderDef, key string) provider.Provider{
-	rules.TypeOpenAI: func(p rules.ProviderDef, key string) provider.Provider {
+var providerFactories = map[string]func(p rules.ProviderDef, key, claudeDir string) provider.Provider{
+	rules.TypeOpenAI: func(p rules.ProviderDef, key, _ string) provider.Provider {
 		return openai.New(p.Name, p.BaseURL, key)
 	},
-	rules.TypeClaudeCLI: func(p rules.ProviderDef, _ string) provider.Provider {
-		return claudecli.New(p.Name, claudecli.WithCommand(p.Command))
+	rules.TypeClaudeCLI: func(p rules.ProviderDef, _, claudeDir string) provider.Provider {
+		return claudecli.New(p.Name, claudeOptions(claudeDir, claudecli.WithCommand(p.Command))...)
 	},
 }
 
@@ -288,7 +297,7 @@ func Providers() do.Provider[map[string]provider.Provider] {
 			if !ok {
 				return nil, fmt.Errorf("config: provider %s: unknown type %q", p.Name, p.Type)
 			}
-			out[p.Name] = build(p, b.Agent.Keys[p.Name])
+			out[p.Name] = build(p, b.Agent.Keys[p.Name], b.ClaudeDir)
 		}
 		return out, nil
 	}

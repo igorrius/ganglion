@@ -8,6 +8,7 @@ import (
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/core"
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/outbox"
@@ -190,6 +191,7 @@ func AgentHousekeepers() do.Provider[Housekeeping] {
 		return Housekeeping{
 			journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: logger},
 			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger),
+			do.MustInvoke[*host.Janitor](i),
 			node.Named("translator", do.MustInvoke[*language.Translator](i).Run),
 		}, nil
 	}

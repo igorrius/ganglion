@@ -45,9 +45,10 @@ type Client struct {
 	// runs with tools holding every slot cannot starve it (ruling R36).
 	reserve chan struct{}
 
-	dirOnce sync.Once
-	dir     string
-	dirErr  error
+	fixedDir string // WithWorkDir; "" is a private temporary folder
+	dirOnce  sync.Once
+	dir      string
+	dirErr   error
 }
 
 var _ provider.Provider = (*Client)(nil)
@@ -90,11 +91,11 @@ func WithMaxConcurrent(n int) Option {
 	}
 }
 
-// WithWorkDir sets the directory the CLI runs in; the default is a private
-// temporary directory, so no project files or settings are picked up.
-func WithWorkDir(dir string) Option {
-	return func(c *Client) { c.dirOnce.Do(func() { c.dir = dir }) }
-}
+// WithWorkDir sets the folder the CLI runs in, made 0700 when first used;
+// the default is a private temporary folder, so no project files or
+// settings are picked up. The node passes one under its data folder, which
+// its places count and its janitor cleans (R-CMD-8).
+func WithWorkDir(dir string) Option { return func(c *Client) { c.fixedDir = dir } }
 
 // New returns a client named name.
 func New(name string, opts ...Option) *Client {
@@ -109,7 +110,13 @@ func New(name string, opts ...Option) *Client {
 func (c *Client) Name() string { return c.name }
 
 func (c *Client) workDir() (string, error) {
-	c.dirOnce.Do(func() { c.dir, c.dirErr = os.MkdirTemp("", "ganglion-claude-") })
+	c.dirOnce.Do(func() {
+		if c.fixedDir != "" {
+			c.dir, c.dirErr = c.fixedDir, os.MkdirAll(c.fixedDir, 0o700)
+			return
+		}
+		c.dir, c.dirErr = os.MkdirTemp("", "ganglion-claude-")
+	})
 	return c.dir, c.dirErr
 }
 

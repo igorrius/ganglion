@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider/providertest"
@@ -45,8 +47,8 @@ func TestCoreContainerBuildsAndShutsDown(t *testing.T) {
 	}{
 		"echo, no transport":  {components: 3},
 		"echo over Telegram":  {token: testToken, admin: "telegram:user:42", components: 4},
-		"agent over Telegram": {token: testToken, admin: "telegram:user:42", agent: true, components: 9},
-		"agent, no transport": {agent: true, components: 7},
+		"agent over Telegram": {token: testToken, admin: "telegram:user:42", agent: true, components: 10},
+		"agent, no transport": {agent: true, components: 8},
 	} {
 		t.Run(name, func(t *testing.T) {
 			b := testConfig(t)
@@ -124,11 +126,33 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 	for _, c := range comps {
 		names = append(names, c.Name())
 	}
-	for _, name := range []string{"sender", "loop", "prune", "prune-journal", "expire-pending", "scheduler"} {
+	for _, name := range []string{"sender", "loop", "prune", "prune-journal", "expire-pending", "scheduler", "janitor"} {
 		if !slices.Contains(names, name) {
 			t.Errorf("component %s is missing from %v", name, names)
 		}
 	}
+}
+
+// The places list has the claude work folder beside the database, with an
+// age, and the janitor is the same list's.
+func TestPlacesHoldTheClaudeFolderBesideTheDatabase(t *testing.T) {
+	b := agentConfig(t)
+	b.ClaudeDir = filepath.Join(filepath.Dir(b.DB), "claude")
+	i := New(context.Background(), b, slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	places, err := do.Invoke[[]host.Place](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range places {
+		if p.Name == host.PlaceClaude {
+			if p.Path != b.ClaudeDir || p.MaxAge != leftoverAge {
+				t.Fatalf("claude place = %+v", p)
+			}
+			return
+		}
+	}
+	t.Fatalf("no claude place in %+v", places)
 }
 
 // The policy the core wires allows a call one level deep (a scheduled

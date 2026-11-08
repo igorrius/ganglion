@@ -76,14 +76,15 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 // confirmations' clock with an expirer that looks every 250 ms, and a
 // scheduler, with the agent's clock, that ticks only when told to.
 func applyLab(i do.Injector, o LabOptions) {
-	do.Override(i, func(do.Injector) (map[string]provider.Provider, error) {
+	do.Override(i, func(i do.Injector) (map[string]provider.Provider, error) {
+		claudeDir := do.MustInvoke[Bootstrap](i).ClaudeDir
 		out := map[string]provider.Provider{}
 		for _, p := range o.Catalog.Providers {
 			var built provider.Provider
 			if p.Type == rules.TypeClaudeCLI {
-				built = claudecli.New(p.Name, claudecli.WithCommand(p.Command), claudecli.WithRelay(o.Relay))
+				built = claudecli.New(p.Name, claudeOptions(claudeDir, claudecli.WithCommand(p.Command), claudecli.WithRelay(o.Relay))...)
 			} else {
-				built = providerFactories[p.Type](p, o.Keys[p.Name])
+				built = providerFactories[p.Type](p, o.Keys[p.Name], claudeDir)
 			}
 			if o.Wrap != nil {
 				built = o.Wrap(built)

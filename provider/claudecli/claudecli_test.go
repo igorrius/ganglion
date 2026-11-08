@@ -399,3 +399,18 @@ func TestLiveClaude(t *testing.T) {
 	}
 	t.Logf("live answer %q, usage %+v", resp.Message.Content, resp.Usage)
 }
+
+func TestWorkDirIsMadePrivateWhenFirstUsed(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "data", "claude")
+	c, _ := fake(t, "ok", WithWorkDir(dir))
+	if _, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("mode = %v, want 0700", info.Mode().Perm())
+	}
+}
