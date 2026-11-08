@@ -1,6 +1,3 @@
-// Package sandbox runs host commands and skill scripts so that they cannot
-// gain privileges, see the node's variables, or read or write the node's data
-// and secret files and the owner's secret stores (R-CMD-3, ADR-0039).
 package sandbox
 
 import (

@@ -762,7 +762,7 @@ git commit -m "sandbox: what a command is denied, and the Landlock grants around
     builder `Sandbox.Command` (task 5) uses.
   - `type spec struct { Argv, Env []string; Dir string; Grants []Grant; ABI int; Try string }`
 
-- [ ] **Step 1: Write the test harness and the failing abuse tests**
+- [x] **Step 1: Write the test harness and the failing abuse tests**
 
 `sandbox/main_test.go`:
 
@@ -957,12 +957,12 @@ func TestAMissingProgramFailsBeforeRunning(t *testing.T) {
 
 Add `"errors"` to the imports.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./sandbox/ -run 'TestADenied|TestASymlink|TestAnAllowed|TestNoNewPrivs|TestTheEnvironment|TestSudo|TestAMissing'`
 Expected: FAIL, `undefined: Helper` / `undefined: command`.
 
-- [ ] **Step 3: Write the Landlock syscalls**
+- [x] **Step 3: Write the Landlock syscalls**
 
 ```go
 //go:build linux
@@ -1056,7 +1056,7 @@ func addRule(ruleset int, g Grant, handled uint64) error {
 `rights(1)` must equal `0x1FFF`; add `TestRightsByABI` checking 1 → `0x1FFF`, 2 → `0x3FFF`,
 3 → `0x7FFF`, 5 → `0xFFFF`.
 
-- [ ] **Step 4: Write the spec, the builder and the helper**
+- [x] **Step 4: Write the spec, the builder and the helper**
 
 In `sandbox/sandbox.go` (package doc moves here from `grants.go`):
 
@@ -1201,13 +1201,13 @@ func tryRead(path string) {
 Add a `sandbox/helper_other.go` (`//go:build !linux`) whose `Helper` prints "the sandbox is Linux
 only" and returns `exitSetup`.
 
-- [ ] **Step 5: Run the abuse tests**
+- [x] **Step 5: Run the abuse tests**
 
 Run: `go test -race ./sandbox/`
 Expected: PASS on the owner's machine (Landlock present); every helper test reports `SKIP` where
 there is none. `TestSudoGainsNothing` passes because `sudo` refuses under `no_new_privs`.
 
-- [ ] **Step 6: Lint, then commit**
+- [x] **Step 6: Lint, then commit**
 
 Run: `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./sandbox/...`
 Expected: 0 issues. A `gosec` note on `unsafe` or `exec` gets a `//nolint` with its reason, as
