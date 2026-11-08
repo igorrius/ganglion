@@ -233,25 +233,54 @@ func inlineOnly(flags ...string) rule {
 
 // awkFiles are the long options of awk that load a program or a library;
 // awkFileLetters are the short ones, which may sit anywhere in a cluster
-// ("-bf", "-nl").
+// ("-bf", "-nl"); -W (gawk, mawk) takes any of them by name, so it is never
+// read further.
 var (
 	awkFiles       = []string{"--file", "--exec", "--include", "--load"}
-	awkFileLetters = "fEil"
+	awkFileLetters = "fEilW"
 )
 
-// awk is the program as an argument, unless an option names a file.
+// awk is the program as an argument, unless an option names a file or the
+// program loads one.
 func awk(args []string) Entry {
-	for _, a := range args {
-		if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.ContainsAny(a, awkFileLetters) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.Contains(a, "@include") || strings.Contains(a, "@load") {
 			return scriptFile
 		}
-		for _, p := range awkFiles {
-			if longPrefix(a, p) {
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		if strings.HasPrefix(a, "--") {
+			if slices.ContainsFunc(awkFiles, func(p string) bool { return longPrefix(a, p) }) {
 				return scriptFile
 			}
+			continue
+		}
+		file, skip := awkCluster(a)
+		if file {
+			return scriptFile
+		}
+		if skip {
+			i++
 		}
 	}
 	return script
+}
+
+// awkCluster reads a short cluster of awk up to the first option with a
+// value (-v, -F: the rest of the token, or the next argument). It says
+// whether a letter names a file, and whether the next argument is a value.
+func awkCluster(a string) (file, skip bool) {
+	for i, r := range a[1:] {
+		switch {
+		case strings.ContainsRune(awkFileLetters, r):
+			return true, false
+		case r == 'v' || r == 'F':
+			return false, i+2 == len(a)
+		}
+	}
+	return false, false
 }
 
 // longPrefix reports whether a is an abbreviation (at least "--x") of the
@@ -410,12 +439,15 @@ func hostname(args []string) Entry {
 }
 
 // positionals counts the arguments that are not options: "-" is one,
-// everything after "--" is, and the value of a valued option is not.
-func positionals(args, valued []string, cluster bool) int {
+// everything after "--" is, and the value of a valued option is not. With
+// stopAtFirst every argument after the first positional is one too (xxd).
+func positionals(args, valued []string, cluster, stopAtFirst bool) int {
 	n := 0
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
+		case stopAtFirst && n > 0:
+			n++
 		case a == "--":
 			return n + len(args) - i - 1
 		case a == "-" || !strings.HasPrefix(a, "-"):
@@ -429,10 +461,37 @@ func positionals(args, valued []string, cluster bool) int {
 	return n
 }
 
+var (
+	dateFlags   = map[string]Entry{"-f": content, optFile: content, "-s": root, "--set": root}
+	dateTakes   = []string{"-d", "--date", "-r", "--reference", "-f", optFile, "-s", "--set"}
+	dateAttach  = []string{"-I"}
+	dateOptions = withValues(read, dateFlags, dateTakes, dateAttach)
+)
+
+// date reads the time; an operand that is not +FORMAT sets the clock.
+func date(args []string) Entry {
+	e := dateOptions(args)
+	flags := true
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case flags && a == "--":
+			flags = false
+		case flags && strings.HasPrefix(a, "-") && a != "-":
+			if _, _, skip := matchFlag(dateFlags, dateTakes, dateAttach, a); skip {
+				i++
+			}
+		case !strings.HasPrefix(a, "+"):
+			return over(e, root)
+		}
+	}
+	return e
+}
+
 // uniq with two arguments that are not options writes the second as a file.
 func uniq(args []string) Entry {
 	valued := []string{"-f", "-s", "-w", "--skip-fields", "--skip-chars", "--check-chars"}
-	if positionals(args, valued, true) >= 2 {
+	if positionals(args, valued, true, false) >= 2 {
 		return create
 	}
 	return content
@@ -442,7 +501,7 @@ func uniq(args []string) Entry {
 // second file argument.
 func xxd(args []string) Entry {
 	valued := []string{"-g", "-groupsize", "-c", "-cols", "-l", "-len", "-s", "-seek", "-o", "-offset", "-n", "-name", "-R"}
-	if slices.Contains(args, "-r") || slices.Contains(args, "-revert") || positionals(args, valued, false) >= 2 {
+	if slices.Contains(args, "-r") || slices.Contains(args, "-revert") || positionals(args, valued, false, true) >= 2 {
 		return create
 	}
 	return content
@@ -526,10 +585,9 @@ var programs = map[string]rule{
 	"bash":  inline("-c"), "sh": inline("-c"), "dash": inline("-c"), "zsh": inline("-c"), "ksh": inline("-c"),
 	"fish": inline("-c"), "python": inline("-c"), "python3": inline("-c"),
 	"node": inlineOnly("-e", "--eval", "-p", "--print"), "perl": inlineOnly("-e", "-E"),
-	"du": withFlags(read, map[string]Entry{"--files0-from": content}),
-	"wc": withFlags(read, map[string]Entry{"--files0-from": content}),
-	"date": withValues(read, map[string]Entry{"-f": content, optFile: content, "-s": root, "--set": root},
-		[]string{"-d", "--date", "-r", "--reference", "-f", optFile, "-s", "--set"}, []string{"-I"}),
+	"du":   withFlags(read, map[string]Entry{"--files0-from": content}),
+	"wc":   withFlags(read, map[string]Entry{"--files0-from": content}),
+	"date": date,
 	"file": withFlags(read, map[string]Entry{
 		"-f": content, "--files-from": content, "-C": create, "--compile": create, "-m": content, "--magic-file": content,
 	}),

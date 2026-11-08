@@ -263,6 +263,28 @@ func TestClassify(t *testing.T) {
 		{[]string{"docker", "compose", "down", "--rmi", "all", "-v"}, Change, texts.CmdDockerVolumeRm},
 		{[]string{"find", ".", "-delete", "-fprint", "x"}, Change, texts.CmdRemove},
 		{[]string{"find", ".", "-fprint", "x", "-delete"}, Change, texts.CmdRemove},
+		// review round 3
+		{[]string{"gawk", "-W", "exec", "p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"gawk", "-Wexec", "p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"gawk", "-We", "p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"gawk", "-W", "e", "p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"gawk", "-W", "file=p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"gawk", "-W", "include=p.awk", "BEGIN{}"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"mawk", "-bW", "x", "BEGIN{}"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"gawk", `@include "f.awk"; BEGIN{}`}, Forbidden, texts.CmdScriptFile},
+		{[]string{"gawk", `@load "x"; BEGIN{}`}, Forbidden, texts.CmdScriptFile},
+		{[]string{"xxd", "in", "-p"}, Change, texts.CmdCreate},
+		{[]string{"xxd", "in", "-c"}, Change, texts.CmdCreate},
+		{[]string{"xxd", "-p", "in"}, Content, texts.CmdContent},
+		{[]string{"date", "010100002030"}, Forbidden, texts.CmdRoot},
+		{[]string{"date", "+%s"}, Read, texts.CmdRead},
+		{[]string{"date", "-d", "tomorrow", "+%F"}, Read, texts.CmdRead},
+		{[]string{"date", "-u", "--", "x"}, Forbidden, texts.CmdRoot},
+		{[]string{"awk", "-vfoo=1", "{print}"}, Script, texts.CmdScript},
+		{[]string{"awk", "-F:", "{print $1}", "f"}, Script, texts.CmdScript},
+		{[]string{"awk", "-F", "f", "{print}"}, Script, texts.CmdScript},
+		{[]string{"awk", "-vx=1", "-f", "p.awk"}, Forbidden, texts.CmdScriptFile},
+		{[]string{"awk", "-F:", "-bf", "p.awk"}, Forbidden, texts.CmdScriptFile},
 	}
 	for _, c := range cases {
 		got := Classify(c.argv)
