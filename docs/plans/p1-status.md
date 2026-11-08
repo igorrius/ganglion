@@ -729,7 +729,7 @@ Keys: `status.jobs` `Jobs: {n}, next {time}`; `status.jobs_idle` `Jobs: {n}, not
 `tools/chatlab/scenarios/skills/bad-name/SKILL.md`, `tools/chatlab/faults/status-verdict.patch`. Modify
 `tools/chatlab/faults/faults.txt`.
 
-- [ ] **Step 1: Write the scenario.** `bad-name/SKILL.md` has `name: other-name`, so it is refused as
+- [x] **Step 1: Write the scenario.** `bad-name/SKILL.md` has `name: other-name`, so it is refused as
   `frontmatter`.
 
   ```yaml
@@ -744,27 +744,28 @@ Keys: `status.jobs` `Jobs: {n}, next {time}`; `status.jobs_idle` `Jobs: {n}, not
     - skills/status.go
   model: scripted
   skills: [skills/bad-name]
-  script: []
+  script:
+    - {say: Never asked; /status needs no model.}
   steps:
     - say: "/status"
     - facts:
         reply: {contains: "Needs a look: 1"}
         history: {not_contains: "/status"}
     - facts:
-        reply: {contains: "bad-name"}
+        reply: {contains: "Skill bad-name is not loaded"}
     - facts:
         reply: {contains: "frontmatter"}
     - facts:
         reply: {contains: "Delivery"}
   ```
 
-- [ ] **Step 2: Run** `make lab LAB=mech-status`. Expected: PASS, 3 of 3.
+- [x] **Step 2: Run** `make lab LAB=mech-status`. Expected: PASS, 3 of 3.
 
-- [ ] **Step 3: Seed the fault.** `status-verdict.patch` makes `status.Verdict` return `OK, 0` always;
-  add `status-verdict mech-status` to `faults.txt`. Run `make lab-faults`. Expected: `FAULT
-  status-verdict: red, as it must be`, and every other fault still red.
+- [x] **Step 3: Seed the fault.** `status-verdict.patch` makes `status.Verdict` return `OK, 0` always;
+  add `status-verdict mech-status` to `faults.txt`. Run it in a clean worktree as `scripts/lab-faults.sh` does. Done on 2026-11-08: red,
+  "does not hold \"Needs a look\"". The whole `make lab-faults` ends with a live judge, so it waits for the owner.
 
-- [ ] **Step 4: Commit** `chatlab: /status answers with its sections, and a broken verdict turns it red`.
+- [x] **Step 4: Commit** `chatlab: /status answers with its sections, and a broken verdict turns it red`.
 
 ### Task 10: Closing
 
