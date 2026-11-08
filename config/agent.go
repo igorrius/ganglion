@@ -22,6 +22,7 @@ import (
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/status"
@@ -208,7 +209,8 @@ func Skills() do.Provider[Skilled] {
 		if err != nil {
 			return Skilled{}, err
 		}
-		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg), runs), Problems: problems}, nil
+		box := do.MustInvoke[*sandbox.Sandbox](i)
+		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg, box), runs, sandboxGate{box}), Problems: problems}, nil
 	}
 }
 

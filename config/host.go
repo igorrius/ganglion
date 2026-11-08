@@ -79,13 +79,19 @@ func Switch() do.Provider[*host.Switch] {
 	}
 }
 
+// sandboxGate is open while the sandbox is on. Skill scripts run behind it
+// alone: the kill switch stops host.exec, not skills.
+type sandboxGate struct{ s *sandbox.Sandbox }
+
+func (g sandboxGate) Open() bool { ok, _ := g.s.Ready(); return ok }
+
 // commandGate is open while the sandbox is on and the kill switch is not off.
 type commandGate struct {
-	s  *sandbox.Sandbox
+	sandboxGate
 	sw *host.Switch
 }
 
-func (g commandGate) Open() bool { ok, _ := g.s.Ready(); return ok && g.sw.Open() }
+func (g commandGate) Open() bool { return g.sandboxGate.Open() && g.sw.Open() }
 
 // HostExec provides host.exec over the runner, in the node user's home.
 func HostExec() do.Provider[*builtin.HostExec] {
@@ -95,6 +101,6 @@ func HostExec() do.Provider[*builtin.HostExec] {
 		if err != nil {
 			home = "/"
 		}
-		return builtin.NewHostExec(do.MustInvoke[*host.Runner](i), host.NewIgnored(s), commandGate{s, do.MustInvoke[*host.Switch](i)}, home), nil
+		return builtin.NewHostExec(do.MustInvoke[*host.Runner](i), host.NewIgnored(s), commandGate{sandboxGate{s}, do.MustInvoke[*host.Switch](i)}, home), nil
 	}
 }
