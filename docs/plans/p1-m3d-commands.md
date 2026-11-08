@@ -171,13 +171,13 @@ in place; ADR-0039 is accepted and is not touched.
 - Modify: `docs/spec.md` (7.12, R-POL-5, "Not now"), `docs/adr/0038-host-commands-as-argv-with-classes-in-code.md`,
   `docs/adr/0040-plans-as-approvals.md`, `docs/plans/p1-all-in-one.md` (the M3d intro links this plan)
 
-- [ ] **Step 1: Branch**
+- [x] **Step 1: Branch**
 
 ```bash
 git switch master && git pull --ff-only && git switch -c m3d-commands
 ```
 
-- [ ] **Step 2: Spec 7.12**
+- [x] **Step 2: Spec 7.12**
 
   Add to R-CMD-2, after the forbidden list:
 
@@ -205,7 +205,7 @@ git switch master && git pull --ff-only && git switch -c m3d-commands
 
   > A global kill switch for every tool. Docker from commands below Landlock ABI 9.
 
-- [ ] **Step 3: ADR-0038, a section "Refined by the build (2026-11-08)"**
+- [x] **Step 3: ADR-0038, a section "Refined by the build (2026-11-08)"**
 
   List rulings 1–7 and 9 above as bullets with their reasons. Add the mechanism of a long command:
   - one `host_jobs` row per call key;
@@ -215,7 +215,7 @@ git switch master && git pull --ff-only && git switch -c m3d-commands
   Add one line: what the journal stores of a command. That is argv and folder in its arguments;
   exit code, duration and output size in the head of its result.
 
-- [ ] **Step 4: ADR-0040, the same section**
+- [x] **Step 4: ADR-0040, the same section**
 
   - Ruling 8.
   - `Call.Planned`, filled by the agent from the plan store.
@@ -225,10 +225,10 @@ git switch master && git pull --ff-only && git switch -c m3d-commands
     that needs a press asks.
   - `Spec.KeepsQuestion`.
 
-- [ ] **Step 5: Phase plan.** In `p1-all-in-one.md`, the M3d intro's "the plan for 3.21–3.27 is
+- [x] **Step 5: Phase plan.** In `p1-all-in-one.md`, the M3d intro's "the plan for 3.21–3.27 is
   written after it" becomes a link to this plan.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add docs/
@@ -261,7 +261,7 @@ folder nothing removes today, moves under the data folder.
   - `host.WithJanitorClock(now func() time.Time, after func(time.Duration) <-chan time.Time)`;
   - `config.Bootstrap.ClaudeDir`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 // host/places_test.go
@@ -388,12 +388,12 @@ func TestSweepRemovesASymlinkNotItsTarget(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./host/ -run 'TestMeasure|TestSweep' -v`
 Expected: FAIL, `package host` has no non-test Go files / undefined: `Measure`.
 
-- [ ] **Step 3: Write `host/places.go`**
+- [x] **Step 3: Write `host/places.go`**
 
 ```go
 // Package host is the node's machine: its own places on disk and their
@@ -496,7 +496,7 @@ func entries(p Place) []string {
 }
 ```
 
-- [ ] **Step 4: Write `host/janitor.go` and `host/telemetry.go`**
+- [x] **Step 4: Write `host/janitor.go` and `host/telemetry.go`**
 
 ```go
 package host
@@ -598,12 +598,12 @@ func (j *Janitor) Sweep(ctx context.Context) (removed int, bytes int64) {
   `unix.UtimesNanoAt(unix.AT_FDCWD, path, ts, unix.AT_SYMLINK_NOFOLLOW)`. Give the test a
   `_linux_test.go` twin, or a `runtime.GOOS` skip, so other systems still build.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `go test ./host/ -v`
 Expected: PASS.
 
-- [ ] **Step 6: Give the claude CLI a fixed work folder**
+- [x] **Step 6: Give the claude CLI a fixed work folder**
 
   In `provider/claudecli/claudecli.go`, replace the work-folder fields and `WithWorkDir`:
 
@@ -629,7 +629,7 @@ func (c *Client) workDir() (string, error) {
   Add the `fixedDir string` field. Existing tests that call `WithWorkDir` still pass; add one
   that the folder is made with `0700`.
 
-- [ ] **Step 7: `ClaudeDir` in the bootstrap, the sandbox and the CLI**
+- [x] **Step 7: `ClaudeDir` in the bootstrap, the sandbox and the CLI**
 
   - `config/bootstrap.go`: a field `ClaudeDir string`, documented as "where the claude CLI runs:
     `claude/` beside the database (R-CMD-8)".
@@ -640,7 +640,7 @@ func (c *Client) workDir() (string, error) {
   - `config/agent.go:277` and `config/lab.go:84`: `claudecli.New(..., claudecli.WithWorkDir(b.ClaudeDir))`
     when `b.ClaudeDir != ""`. A test node with an empty value keeps the temp folder.
 
-- [ ] **Step 8: `config/host.go`: the places and the janitor**
+- [x] **Step 8: `config/host.go`: the places and the janitor**
 
 ```go
 package config
@@ -697,7 +697,7 @@ func Janitor() do.Provider[*host.Janitor] {
   `AgentHousekeepers` in `config/delivery.go`. The places that hold every turn's state belong to
   the agent role, so the janitor runs where the agent runs.
 
-- [ ] **Step 9: A config test, the code map, commit**
+- [x] **Step 9: A config test, the code map, commit**
 
   - Add to `config/config_test.go`: the containers still build, and `[]host.Place` holds the
     claude place under the database's folder.
@@ -735,7 +735,7 @@ git commit -m "host: the node's places on disk and a janitor; the claude CLI wor
     with `builtin.StatsReader interface{ Read(ctx context.Context) host.Report }`;
   - `proc.Memory() (rss, peak int64, ok bool)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 // host/machine_test.go
@@ -808,12 +808,12 @@ func TestRenderOfAnOSWithoutProc(t *testing.T) {
   is not external, and that a call with an argument is refused by `tool.CheckArgs`, since the
   schema has an empty `properties`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./host/ ./tool/builtin/ -run 'Parse|Render|HostStats' -v`
 Expected: FAIL, undefined: `parseMeminfo`, `Render`, `NewHostStats`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
   `host/machine.go`, pure parsers over `/proc` bytes:
 
@@ -1086,12 +1086,12 @@ func (h *HostStats) Run(ctx context.Context, _ tool.Call) (tool.Result, error) {
   - Update the three tests that pin tool lists: `config/config_test.go:101`, `config/run_test.go:279`
     and `config/web_test.go:97`, where `host.stats` is LocalSafe.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `go test ./host/ ./status/... ./tool/builtin/ ./config/ && make lint`
 Expected: PASS.
 
-- [ ] **Step 5: The 128 MB check of 3.21's "done when"**
+- [x] **Step 5: The 128 MB check of 3.21's "done when"**
 
   Add `TestHostStatsWithoutTheSandbox` to `config/run_test.go`. It builds the agent node with a
   sandbox kernel fake that reports root (`sandbox.Root`), calls `host.stats` through the registry
@@ -1099,7 +1099,7 @@ Expected: PASS.
   - the answer has "Memory:";
   - `host.exec` is not offered (it comes in task 5, so add this assertion then).
 
-- [ ] **Step 6: Code map, commit**
+- [x] **Step 6: Code map, commit**
 
 ```bash
 git add host/ status/ tool/builtin/host.go tool/builtin/host_test.go config/ docs/architecture/05-code-map.md
@@ -1132,7 +1132,7 @@ git commit -m "host: host.stats — memory, load, disk and the node's own files,
   - `hostcmd.ErrArgs`;
   - the `texts.Cmd*` keys listed in step 3.
 
-- [ ] **Step 1: Write the failing table test**
+- [x] **Step 1: Write the failing table test**
 
   One row per entry and per flag that moves a class. This test is the review's map of the table:
   a new entry gets a row here or fails review.
@@ -1281,12 +1281,12 @@ func TestNeedsPress(t *testing.T) {
   `allEntries()` is a test helper in `class.go`'s package (in `export_test.go`) that walks every
   `Entry` variable of the table.
 
-- [ ] **Step 2: Run it to see it fail**
+- [x] **Step 2: Run it to see it fail**
 
 Run: `go test ./hostcmd/ -v`
 Expected: FAIL: the package does not exist; then, once keys exist, undefined: `Classify`.
 
-- [ ] **Step 3: The texts**
+- [x] **Step 3: The texts**
 
   Add the keys to `texts/texts.go` and to `allKeys`:
 
@@ -1436,7 +1436,7 @@ cmd.git_ignored: "git ігнорує цей файл у {repo}; у таких ф
 cmd.reason: "Причина зі слів агента: {reason}"
 ```
 
-- [ ] **Step 4: `tool.Command`**
+- [x] **Step 4: `tool.Command`**
 
   Add to `tool/tool.go`:
 
@@ -1457,7 +1457,7 @@ func (c Command) Equal(o Command) bool { return c.Dir == o.Dir && slices.Equal(c
 type CommandFunc func(cmd Command) bool
 ```
 
-- [ ] **Step 5: `hostcmd/class.go` and `hostcmd/table.go`**
+- [x] **Step 5: `hostcmd/class.go` and `hostcmd/table.go`**
 
 ```go
 // Package hostcmd is the class table of host commands (R-CMD-2, ADR-0038):
@@ -1832,7 +1832,7 @@ var table = func() map[string]rule {
   `rsync` is listed under move; it can also start `ssh` as its transport. Check this in review:
   the safer choice is `outside`, and if the reviewer agrees, move it there and add a test row.
 
-- [ ] **Step 6: `hostcmd/show.go` and `hostcmd/args.go`, with their tests**
+- [x] **Step 6: `hostcmd/show.go` and `hostcmd/args.go`, with their tests**
 
 ```go
 // hostcmd/show.go
@@ -2007,12 +2007,12 @@ func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
     - `ParsePlan` reads a string step and an object step;
     - a plan step with an unknown field, or with `dir` and no `argv`, is refused.
 
-- [ ] **Step 7: Run the tests**
+- [x] **Step 7: Run the tests**
 
 Run: `go test ./hostcmd/ ./texts/ ./tool/ && make lint`
 Expected: PASS, `TestShippedFilesMatchEnglish` included.
 
-- [ ] **Step 8: Code map, commit**
+- [x] **Step 8: Code map, commit**
 
   Add a row for `hostcmd` with its dependency rule ("imports `texts`, `tool`; pure").
 
@@ -2061,7 +2061,7 @@ sets `Wait` to `Max`, so nothing goes to the background yet.
     after func(time.Duration) <-chan time.Time)` and `host.WithRunnerLog(*slog.Logger)`;
   - `config.Bootstrap.SecretValues() []string`.
 
-- [ ] **Step 1: Move the process group helpers into `internal/procgroup`**
+- [x] **Step 1: Move the process group helpers into `internal/procgroup`**
 
 ```go
 //go:build unix
@@ -2108,7 +2108,7 @@ func Kill(cmd *exec.Cmd) {
   the starting thread ends. Use `t.Skip` off Linux. Use a context deadline for the wait, not a
   sleep.
 
-- [ ] **Step 2: Extra environment in `sandbox.Command`**
+- [x] **Step 2: Extra environment in `sandbox.Command`**
 
   Change the signature to `Command(ctx context.Context, argv []string, dir string, env ...string)`.
   The spec's `Env` is the policy's `Env` with each `KEY=VALUE` of `env` replacing the same key or
@@ -2120,7 +2120,7 @@ func Kill(cmd *exec.Cmd) {
 
   Update every caller; only tests call it today.
 
-- [ ] **Step 3: The event kind**
+- [x] **Step 3: The event kind**
 
   `event/event.go`:
 
@@ -2141,7 +2141,7 @@ type CommandDone struct {
 }
 ```
 
-- [ ] **Step 4: Write the failing runner tests**
+- [x] **Step 4: Write the failing runner tests**
 
   `host/fake_test.go` holds the fake `Starter`. It runs a real `/bin/sh -c` script outside any
   sandbox, which is enough to test the runner's own logic. The sandbox's own tests and task 11's
@@ -2385,12 +2385,12 @@ func TestAThirdCommandWaitsForASlot(t *testing.T) {
   first job is announced. Check `sqlitedb.Open`'s exact name and signature in `sqlitedb`; the
   tests above assume `Open(path) (*sql.DB, error)`.
 
-- [ ] **Step 5: Run them to see them fail**
+- [x] **Step 5: Run them to see them fail**
 
 Run: `go test ./host/ -run 'Exec|Once|Wait|Announced|Limit|Output|Restart|Slot' -v`
 Expected: FAIL, undefined: `NewRunner`.
 
-- [ ] **Step 6: The migration**
+- [x] **Step 6: The migration**
 
 ```sql
 -- One row per host command call (R-CMD-1, R-CMD-4, ADR-0038): the call key
@@ -2414,7 +2414,7 @@ CREATE TABLE host_jobs (
 CREATE INDEX host_jobs_open ON host_jobs (state, background, announced);
 ```
 
-- [ ] **Step 7: `host/capture.go`**
+- [x] **Step 7: `host/capture.go`**
 
 ```go
 package host
@@ -2477,7 +2477,7 @@ func (c *capture) text() (string, bool) {
   tail may cut a UTF-8 sequence. The test feeds Cyrillic text and checks that `strings.ToValidUTF8`,
   applied in `render` (step 8), leaves valid text.
 
-- [ ] **Step 8: `host/runner.go` and `host/jobs.go`**
+- [x] **Step 8: `host/runner.go` and `host/jobs.go`**
 
 ```go
 package host
@@ -2820,13 +2820,13 @@ func doneEvent(j Job, now time.Time) event.Event {
 
   Read them back in a test through the Prometheus text.
 
-- [ ] **Step 9: Run the tests**
+- [x] **Step 9: Run the tests**
 
 Run: `go test -race ./host/ ./internal/procgroup/ ./skills/ ./provider/claudecli/ ./sandbox/`
 Expected: PASS. The race detector matters here: the call and the command's goroutine meet only
 through the database and the `ended` channel.
 
-- [ ] **Step 10: Wire the runner**
+- [x] **Step 10: Wire the runner**
 
   - `config/bootstrap.go`:
 
@@ -2910,7 +2910,7 @@ git commit -m "host: the runner — commands once per key, in the sandbox, cappe
     `(*Ignored).Ignored(ctx, dir string, argv []string) (string, bool)`;
   - `texts.AskHostExec`.
 
-- [ ] **Step 1: Write the failing policy tests**
+- [x] **Step 1: Write the failing policy tests**
 
   Add to `policy/policy_test.go`, using its existing helpers for a spec and a call:
 
@@ -2973,12 +2973,12 @@ func TestForbiddenCommandBeatsAGrant(t *testing.T) {
   `tool.Grant.Commands` arrives in task 9. Until then, leave `TestForbiddenCommandBeatsAGrant`
   out, and add it in task 9.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./policy/ -run 'HostExec' -v`
 Expected: FAIL: "read runs" decides confirm (the side-effect rule), and `Planned` is undefined.
 
-- [ ] **Step 3: The call, the result, the journal**
+- [x] **Step 3: The call, the result, the journal**
 
   `tool/tool.go`, in `Call` after `KnownURL`:
 
@@ -3003,7 +3003,7 @@ Expected: FAIL: "read runs" decides confirm (the side-effect rule), and `Planned
   Add it wherever the decisions are listed. `agent/resume.go` `runApproved`: add `c.Approved = true`
   next to `c.Speak`.
 
-- [ ] **Step 4: The rules**
+- [x] **Step 4: The rules**
 
   In `policy/policy.go`:
 
@@ -3062,12 +3062,12 @@ var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleC
   `Middleware` passes `DecisionPlanned` through `PolicyAuto` to `run` unchanged; `pol` decides
   there, not `d`.
 
-- [ ] **Step 5: Run the policy tests**
+- [x] **Step 5: Run the policy tests**
 
 Run: `go test ./policy/ -v`
 Expected: PASS, the existing cases included.
 
-- [ ] **Step 6: The git-ignored warning (R-CMD-6)**
+- [x] **Step 6: The git-ignored warning (R-CMD-6)**
 
   `host/ignored.go`: for a content command, each argument that names an existing file is checked.
   Relative paths are resolved against `dir`. The checker walks up to the nearest `.git` entry and
@@ -3160,7 +3160,7 @@ func (g *Ignored) check(ctx context.Context, repo, path string) bool {
   - a path outside any repository is not;
   - a missing file is not.
 
-- [ ] **Step 7: Write the failing tool tests**
+- [x] **Step 7: Write the failing tool tests**
 
   In `tool/builtin/host_test.go`, use fakes of `Commander`, `Ignorer` and `Gate`:
 
@@ -3263,7 +3263,7 @@ func TestHostExecQuestionRefusesASecretInArgv(t *testing.T) {
   `ignoredAll` reports every file ignored in `repo`. `englishSpeaker` is the package's existing
   helper for an English `texts.Speaker`; use whichever helper the other question tests use.
 
-- [ ] **Step 8: The question texts**
+- [x] **Step 8: The question texts**
 
   `texts.AskHostExec Key = "ask.host_exec"`, with these texts:
   - en: `"Run this command?\n{command}\n{line}{warning}\n{reason}"`
@@ -3276,7 +3276,7 @@ func TestHostExecQuestionRefusesASecretInArgv(t *testing.T) {
   - ru: `"{command} в {dir}"`
   - uk: `"{command} у {dir}"`
 
-- [ ] **Step 9: `host.exec`**
+- [x] **Step 9: `host.exec`**
 
   Append to `tool/builtin/host.go`:
 
@@ -3435,7 +3435,7 @@ func (h *HostExec) questionVars(ctx context.Context, sp texts.Speaker, cmd tool.
   `whole` already refuses a question over `tool.MaxQuestionRunes`, and one that `redact.String`
   would change: an argv that holds a secret is never shown to be approved.
 
-- [ ] **Step 10: The agent records a background job**
+- [x] **Step 10: The agent records a background job**
 
   - `agent/state.go`: `State` gains `Commands []string // keys of host commands still running in
     the background (R-CMD-4)`, stored as `commands,omitempty` in `wireState`.
@@ -3445,7 +3445,7 @@ func (h *HostExec) questionVars(ctx context.Context, sp texts.Speaker, cmd tool.
     `a.d.Plans.Finish(rctx, t.event.Conv, len(t.state.Pending) > 0 || len(t.state.Commands) > 0)`.
   - Add a state round-trip test with `Commands`.
 
-- [ ] **Step 11: Wire `host.exec`**
+- [x] **Step 11: Wire `host.exec`**
 
   `config/host.go`:
 
@@ -3473,7 +3473,7 @@ func HostExec() do.Provider[*builtin.HostExec] {
   sandbox is ready, so assert both cases. Finish task 2's `TestHostStatsWithoutTheSandbox`: with
   a root kernel, `host.exec` is not offered.
 
-- [ ] **Step 12: Run everything, commit**
+- [x] **Step 12: Run everything, commit**
 
 Run: `go test ./... && make lint`
 Expected: PASS. `TestUngrantable`, in `tool/builtin/ungrantable_test.go`, may list which tools a
@@ -3507,7 +3507,7 @@ git commit -m "host.exec: argv in the sandbox, classed by the table; read runs, 
     `agent.NoSwitch`;
   - texts `reply.commands_on`, `reply.commands_off`, `reply.commands_usage` and `status.commands_off`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 // host/switch_test.go
@@ -3561,12 +3561,12 @@ func TestASwitchThatCannotBeReadIsOff(t *testing.T) {
   - `/commands` alone answers the state and the usage;
   - a non-admin gets `reply.not_available`, and the switch is untouched.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./host/ ./tool/builtin/ ./agent/ -run 'Switch|Commands|CellsSet' -v`
 Expected: FAIL, undefined: `NewSwitch`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // host/switch.go
@@ -3670,7 +3670,7 @@ func (s *Switch) Status(ctx context.Context, _ status.Scope) ([]status.Check, er
 | `reply.commands_usage` | Write /commands on or /commands off. | Напишите /commands on или /commands off. | Напишіть /commands on або /commands off. |
 | `status.commands_off` | Commands: switched off with /commands | Команды: выключены через /commands | Команди: вимкнено через /commands |
 
-- [ ] **Step 4: Run, document, commit**
+- [x] **Step 4: Run, document, commit**
 
 Run: `go test ./... && make lint`
 Expected: PASS.
@@ -3708,7 +3708,7 @@ git commit -m "host.exec: the kill switch tools.host_exec, /commands on|off, and
   - `(*Agent).asTask(ctx, t, j schedule.Job) error`;
   - texts `reply.command_late`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
   In `agent/commands_done_test.go`, use the package's existing harness, the one `resume_test.go`
   uses: a scripted provider, a fake store of confirmations, and a `State`. Add a fake `Commands`
@@ -3769,12 +3769,12 @@ func TestStaleCommandsAreDropped(t *testing.T) {
   `scripted`, `handle`, `replied`, `savedState`. Where the existing names differ, use theirs and
   keep the assertions.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./agent/ -run 'Command' -v`
 Expected: FAIL: the event kind is not decoded, and the turn ends without an answer.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
   `agent/agent.go`:
   - In `Deps`: `Commands Commands // host commands' outcomes (host.Runner); NoCommands when there
@@ -3935,7 +3935,7 @@ func (a *Agent) asTask(ctx context.Context, t *turn, j schedule.Job) error {
     said "until task 7", and the function too if nothing else needs it.
   - `config/agent.go`: `Deps.Commands: do.MustInvoke[*host.Runner](i)`.
 
-- [ ] **Step 4: Run the tests, the crash harness's unit part, commit**
+- [x] **Step 4: Run the tests, the crash harness's unit part, commit**
 
 Run: `go test ./agent/ ./config/ ./host/ && make lint`
 Expected: PASS.
@@ -4000,7 +4000,7 @@ How it works, in the order it happens:
   `CommandQuestions` has an unexported method, so only `*HostExec` in the same package can
   satisfy it. Keep it so: no outside type can word a command's question.
 
-- [ ] **Step 1: Write the failing plan store tests**
+- [x] **Step 1: Write the failing plan store tests**
 
 ```go
 func TestAnApprovedPlanTakesTheQuestionAsItsMessage(t *testing.T) {
@@ -4066,12 +4066,12 @@ func TestApprovalIsTheConversations(t *testing.T) {
   `approve(t, s, conv, argvs...)` is a test helper that calls `Show` with `Approved: true` and
   one step per argv. Write the hour test in full with `WithClock`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./plan/ -v`
 Expected: FAIL, the field `Command` and `Approved` are undefined.
 
-- [ ] **Step 3: The migration and the store**
+- [x] **Step 3: The migration and the store**
 
 ```sql
 -- A plan whose question was pressed (R-CMD-7, ADR-0040): its message is that
@@ -4159,7 +4159,7 @@ func (s *Store) showApproved(ctx context.Context, c tool.Call, p Plan, old row, 
     version key again, which the outbox stores once.
   - `plan` imports `hostcmd` and `tool/pending`. Check `go list -deps` for cycles.
 
-- [ ] **Step 4: The tool, its question, its spec**
+- [x] **Step 4: The tool, its question, its spec**
 
   `tool/tool.go`, in `Spec`:
 
@@ -4215,7 +4215,7 @@ func (t *planShow) Question(ctx context.Context, c tool.Call) (string, error) {
   - ru `"Выполнить этот план? Одно нажатие разрешает ровно перечисленные в нём команды, в этом чате, на час, и ничего больше.\n\n{plan}"`
   - uk `"Виконати цей план? Одне натискання дозволяє рівно перелічені в ньому команди, у цьому чаті, на годину, і нічого більше.\n\n{plan}"`
 
-- [ ] **Step 5: The policy rule**
+- [x] **Step 5: The policy rule**
 
 ```go
 // rulePlanShow asks for a plan with a command that needs a press and that the
@@ -4256,7 +4256,7 @@ func rulePlanShow(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisio
   - a plan with `docker run` is forbidden;
   - a plan in a task (`c.Grant` set) is still refused by the tool (`errPlanInTask`).
 
-- [ ] **Step 6: The agent**
+- [x] **Step 6: The agent**
 
   - `agent.Plans` gains `Approved(ctx, conv string) ([]tool.Command, error)`, and `NoPlans`
     approves nothing.
@@ -4298,7 +4298,7 @@ func (a *Agent) planned(ctx context.Context, conv string) tool.CommandFunc {
 
   `config/agent.go`: `builtin.NewPlanTools(do.MustInvoke[*plan.Store](i), do.MustInvoke[*builtin.HostExec](i))`.
 
-- [ ] **Step 7: Run everything, commit**
+- [x] **Step 7: Run everything, commit**
 
 Run: `go test ./... && make lint`
 Expected: PASS. ADR-0052's test that a plan has no button still holds: a plan shown without a
@@ -4511,7 +4511,7 @@ files and nothing else of the workspace.
   - `skills.ErrScriptsOff`;
   - the skill script tools are `tool.Gated`, through `builtin.NewSkillTools(set, run, begun, gate Gate)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 // skills/script_test.go
@@ -4542,12 +4542,12 @@ func TestScriptsAreOffWithTheSandbox(t *testing.T) {
   path in the test's data folder fails with "Permission denied". So does reading
   `/proc/<node pid>/environ`, and reading a `*_FILE` secret the test sets.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./skills/ -v`
 Expected: FAIL, `NewRunner` takes one argument.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
   In `skills/script.go`:
 
@@ -4587,7 +4587,7 @@ type Starter interface {
 
   `config/agent.go`: `skills.NewRunner(cfg, do.MustInvoke[*sandbox.Sandbox](i))`, and the gate.
 
-- [ ] **Step 4: Run, commit**
+- [x] **Step 4: Run, commit**
 
 Run: `go test ./... && make lint && make lab LAB=mech-skill-change && make lab LAB=mech-skill-read`
 Expected: PASS. The two scripted lab scenarios run real scripts through the real sandbox on the

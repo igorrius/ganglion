@@ -6,8 +6,11 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** M3d's plan for 3.21–3.27 (`host.stats`, `host.exec` with its class table, long
-  commands, plans, commands in task grants, skill scripts on the sandbox), on what the spike found.
+- **Next:** the owner's live check of M3d on the test bot (`make live-agent`, the eight steps in
+  [the plan](plans/p1-m3d-commands.md), Task 12), then the owner's acceptance of
+  [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md) and
+  [ADR-0040](adr/0040-plans-as-approvals.md), the decision on a full lab run, and the merge.
+  After that, M4.
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
   - 0.2 Deye reader in WASM on wazero: matched `deye.py` on the live API,
@@ -300,6 +303,37 @@ Start here when coming back to the project.
       before are out of reach of path rules; a `.env` deeper than three folders stays readable;
       Windows and macOS have no commands ("Not now");
     - the owner's look on the test bot: "✅ Command sandbox: ready, Landlock 7".
+  - **M3d, built and scripted-tested 2026-11-08 on branch `m3d-commands`; the owner's live check and
+    the ADR acceptance are pending** ([plan](plans/p1-m3d-commands.md),
+    [design](plans/p1-m3d-host-commands-design.md), spec 7.12, R-CMD-1…8):
+    - `host.stats`: memory, load, disk and the node's own files, with no subprocess; the node's places on
+      disk are one list in `config`, and a janitor removes what is past its age;
+    - `host.exec` as argv in the command sandbox, under the class table in code (`hostcmd`): read runs at
+      once, content, change and script ask with a fixed line in three languages, forbidden never runs, and
+      what the table cannot read moves up; output capped, redacted and outside content;
+    - a command past 20 s goes on in the background and its end resumes the conversation (a task's under
+      its grant); a command runs once per call key across a rerun and a restart;
+    - plans as approvals: one press on a plan approves exactly the commands it lists, in its conversation,
+      for an hour; commands in a task's grant, listed with their folders and lines;
+    - skill scripts run in the command sandbox, from a copy of their skill, and only while it is on;
+    - the kill switch `tools.host_exec` and an admin's `/commands on|off`, with its line in `/status`;
+    - commands may list the folders the sandbox splits; `GANGLION_SANDBOX_HIDE_NAMES=on` hides the names
+      ([ADR-0057](adr/0057-commands-may-list-split-folders.md));
+    - scripted acceptance: chatlab scenarios 3 of 3, the end-to-end sandbox test
+      (`config/hostexec_accept_test.go`) and the task-grant test; the branch's reviews found gaps in the
+      class table (awk options, `env`, `xargs`, `find -exec`) and each is closed with a test;
+    - measured (`make memory`, `make crash-agent`, ADR-0056), against `/status`'s 46.4 MB binary and
+      47–48 MB RSS and the sandbox's 44.7 MB: binary 47.0 MB (+0.6); the agent with tools 45.1 MB idle,
+      47.4 MB after 1,000 turns (peak 48.5); the agent with `host.exec df -h` in every turn through the
+      real sandbox 45.1 MB idle, 50.7 MB after 1,000 turns (+3.3 MB over the tools run, a helper process
+      per call); echo 39.2 and 44.0 MB; the agent without tools 45.2 and 48.9 MB; 50 `/metrics`
+      pictures 109 MB, the hostile page peak 111 MB, as before. `make crash-agent`: 200 kills, 157
+      answers, 0 duplicates, no message lost. The crash harness does not call `host.exec`, so the
+      `host_jobs` restart path is covered by the runner's tests, not by it;
+    - open: the owner's live check on the test bot is pending; ADR-0038 and ADR-0040 stay Proposed until
+      the owner accepts them; `make lab-faults` and a full lab run (`agent/prompt.go` changed) await the
+      owner's decision; Railway and a Pi are still to measure; Docker does not work from commands below
+      Landlock ABI 9 (commands are classed and asked for as designed, then fail to reach the daemon).
   - **M3d, after `/status` (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
