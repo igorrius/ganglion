@@ -8,17 +8,6 @@ import (
 	"time"
 )
 
-type fakeKernel struct {
-	euid     int
-	abi      int
-	abiErr   error
-	dumpable bool
-}
-
-func (k fakeKernel) Euid() int                 { return k.euid }
-func (k fakeKernel) LandlockABI() (int, error) { return k.abi, k.abiErr }
-func (k fakeKernel) Dumpable() (bool, error)   { return k.dumpable, nil }
-
 func TestNewIsOffForEachMissingPiece(t *testing.T) {
 	cases := map[string]struct {
 		k    fakeKernel

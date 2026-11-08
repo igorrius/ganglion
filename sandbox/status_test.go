@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"runtime"
 	"testing"
 	"time"
 
@@ -14,8 +15,12 @@ func TestStatusSaysWhyItIsOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reason := texts.StatusReasonSandboxRoot
+	if runtime.GOOS != "linux" {
+		reason = texts.StatusReasonSandboxNotLinux // checked before root
+	}
 	want := status.Check{Section: status.SectionProblems, State: status.Off, Line: texts.StatusSandboxOff,
-		Reason: texts.StatusReasonSandboxRoot, Since: time.Unix(0, 0)}
+		Reason: reason, Since: time.Unix(0, 0)}
 	if len(got) != 1 || got[0].Line != want.Line || got[0].State != want.State || got[0].Reason != want.Reason {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
