@@ -58,6 +58,7 @@ type Run struct {
 	LogDir         string
 	ModelsFile     string
 	Workspace      string
+	SandboxDeny    string
 	Languages      string
 	DailyBudgetUSD float64
 	ReactionAfter  time.Duration
@@ -99,6 +100,8 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 			Category: catAgent, Local: true, Sources: env("GANGLION_LANGUAGES"), Destination: &r.Languages, TakesFile: true},
 		&cli.StringFlag{Name: "workspace", Usage: "the agent's files (persona/*.md)", Value: "workspace", Category: catAgent,
 			Local: true, Sources: env("GANGLION_WORKSPACE"), Destination: &r.Workspace, TakesFile: true},
+		&cli.StringFlag{Name: "sandbox-deny", Usage: "more paths, colon-separated, that commands may neither read nor write",
+			Category: catAgent, Local: true, Sources: env("GANGLION_SANDBOX_DENY"), Destination: &r.SandboxDeny},
 		&cli.FloatFlag{Name: "daily-budget-usd", Usage: "paid smart models stop for the day after this spend", Value: 1.0,
 			Category: catAgent, Local: true, Sources: env("GANGLION_DAILY_BUDGET_USD"), Destination: &r.DailyBudgetUSD,
 			Validator: in("GANGLION_DAILY_BUDGET_USD", nonNegative[float64])},

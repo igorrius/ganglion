@@ -40,7 +40,7 @@ func newRootIO(in io.Reader, out, errOut io.Writer, start startFunc) *cli.Comman
 		Writer:    out,
 		ErrWriter: errOut,
 		Flags:     root.Flags(),
-		Commands:  []*cli.Command{runCommand(&root, out, start), versionCommand(out), relayCommand(in, out), mcpCommand(in, out)},
+		Commands:  []*cli.Command{runCommand(&root, out, start), versionCommand(out), relayCommand(in, out), mcpCommand(in, out), sandboxCommand()},
 		// Without a command: help, and a failure, so a supervisor still
 		// starting the command line from before `run` sees an error
 		// instead of a clean exit.

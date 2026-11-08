@@ -24,6 +24,7 @@ cmd/mcp.go
 cmd/relay.go
 cmd/root.go
 cmd/run.go
+cmd/sandbox.go
 cmd/version.go
 cmd/flags/**
 config/agent.go
@@ -101,3 +102,8 @@ language/telemetry.go
 texts/check.go
 texts/native.go
 texts/texts.go
+sandbox/grants.go
+sandbox/deny.go
+sandbox/sandbox.go
+sandbox/*_linux.go
+sandbox/*_other.go

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/buildinfo"
 	"github.com/igorrius/ganglion/node"
+	"github.com/igorrius/ganglion/sandbox"
 )
 
 // captured runs the command tree with a node runner that records what it
@@ -40,7 +42,7 @@ func clearEnv(t *testing.T) {
 		"GANGLION_METRICS_ADDR", "GANGLION_MODELS_FILE", "GANGLION_WORKSPACE", "GANGLION_DAILY_BUDGET_USD",
 		"GANGLION_DAILY_TURNS", "GANGLION_DAILY_TOKENS", "GANGLION_SESSION_IDLE", "GANGLION_TZ", "GANGLION_LOG_LEVEL",
 		"TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN_FILE", "OPENROUTER_API_KEY", "OPENROUTER_API_KEY_FILE",
-		"GANGLION_SEARCH", "BRAVE_API_KEY", "BRAVE_API_KEY_FILE"} {
+		"GANGLION_SEARCH", "BRAVE_API_KEY", "BRAVE_API_KEY_FILE", "GANGLION_SANDBOX_DENY"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("GANGLION_LOG_DIR", "off") // no logs/ beside the test's default ganglion.db
@@ -275,5 +277,29 @@ func TestLogDirOff(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "logs")); !os.IsNotExist(err) {
 		t.Fatalf("logs/ exists with --log-dir off: %v", err)
+	}
+}
+
+func TestSandboxDenyIsAListOfPaths(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("GANGLION_SANDBOX_DENY", "/a:/b")
+	b, _, _, err := captured(t, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"/a", "/b"}; !slices.Equal(b.SandboxDeny, want) {
+		t.Fatalf("SandboxDeny = %v, want %v", b.SandboxDeny, want)
+	}
+}
+
+// TestTheSandboxHelperIsHidden: nobody types `ganglion __sandbox`; the node
+// starts it for each command (ADR-0039).
+func TestTheSandboxHelperIsHidden(t *testing.T) {
+	_, _, out, err := captured(t, "--help")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, sandbox.HelperArg) {
+		t.Fatalf("the help lists the helper:\n%s", out)
 	}
 }

@@ -36,6 +36,9 @@ type Bootstrap struct {
 	// ModulesDir is where module updates are stored: modules/ beside the
 	// database (ADR-0041).
 	ModulesDir string
+	// SandboxDeny is GANGLION_SANDBOX_DENY: paths the owner adds to what
+	// commands may neither read nor write (R-CMD-3).
+	SandboxDeny []string
 	// Metrics draws the node's own metrics for metrics.show and /metrics
 	// (ADR-0045); the command line sets it from telemetry, nil leaves the
 	// tool out.

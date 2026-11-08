@@ -1523,7 +1523,7 @@ git commit -m "sandbox: checks at start and a self-test turn it off with a reaso
     (colon-separated paths).
   - a `*sandbox.Sandbox` in the injector, for 3.22 (`host.exec`) and 3.26 (skill scripts).
 
-- [ ] **Step 1: Texts.** Keys in `texts/texts.go` beside the other `status.*` keys:
+- [x] **Step 1: Texts.** Keys in `texts/texts.go` beside the other `status.*` keys:
 
 ```go
 	StatusSandboxReady          Key = "status.sandbox_ready"
@@ -1571,7 +1571,7 @@ status.reason_sandbox_dumpable: "пам'ять ноди відкрита її к
 status.reason_sandbox_self_test: "її самоперевірка не пройшла"
 ```
 
-- [ ] **Step 2: Write the failing status test**
+- [x] **Step 2: Write the failing status test**
 
 ```go
 package sandbox
@@ -1606,7 +1606,7 @@ func TestStatusReadyNamesTheABI(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run it to see it fail**, then write `sandbox/status.go`:
+- [x] **Step 3: Run it to see it fail**, then write `sandbox/status.go`:
 
 ```go
 package sandbox
@@ -1644,7 +1644,7 @@ func (s *Sandbox) Status(context.Context, status.Scope) ([]status.Check, error) 
 Run: `go test ./sandbox/ ./texts/`
 Expected: PASS (`TestShippedFilesMatchEnglish` included).
 
-- [ ] **Step 4: The hidden command.** `cmd/sandbox.go`:
+- [x] **Step 4: The hidden command.** `cmd/sandbox.go`:
 
 ```go
 package cmd
@@ -1685,7 +1685,7 @@ there, so it is the helper too:
 	}
 ```
 
-- [ ] **Step 5: The flag.** In `cmd/flags/flags.go`, beside `--workspace`:
+- [x] **Step 5: The flag.** In `cmd/flags/flags.go`, beside `--workspace`:
 
 ```go
 		&cli.StringFlag{Name: "sandbox-deny", Usage: "more paths, colon-separated, that commands may neither read nor write",
@@ -1703,7 +1703,7 @@ with `SandboxDeny string` in `flags.Run`; in `cmd/run.go`'s `bootstrap`,
 
 A `cmd_test.go` case: `GANGLION_SANDBOX_DENY=/a:/b` gives `[]string{"/a", "/b"}`.
 
-- [ ] **Step 6: The provider.** `config/sandbox.go`:
+- [x] **Step 6: The provider.** `config/sandbox.go`:
 
 ```go
 package config
@@ -1761,7 +1761,7 @@ injector: `Info("sandbox: commands are off", "reason", r)`
 (a `Reason.String()` from a fixed table: `not_linux`, `root`, `no_landlock`, `dumpable`,
 `self_test`; add it with a test).
 
-- [ ] **Step 7: Chatlab claims.** Add `sandbox/status.go` and `config/sandbox.go` to `mech-status`'s
+- [x] **Step 7: Chatlab claims.** Add `sandbox/status.go` and `config/sandbox.go` to `mech-status`'s
 `covers`; add `sandbox/grants.go`, `sandbox/deny.go`, `sandbox/sandbox.go`, `sandbox/*_linux.go`,
 `sandbox/*_other.go` and `cmd/sandbox.go` to `tools/chatlab/no-scenario.txt` (unit tests hold
 them).
@@ -1769,7 +1769,7 @@ them).
 Run: `go test ./internal/chatlab/ -run TestEveryProductionFileIsClaimed`
 Expected: PASS.
 
-- [ ] **Step 8: Everything, then the scenario**
+- [x] **Step 8: Everything, then the scenario**
 
 Run: `go test -race ./sandbox/ ./cmd/... ./config/ ./texts/ && go test ./... && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run && make lab LAB=mech-status`
 Expected: PASS; 0 issues; `mech-status` 3 of 3, its transcript has the line "Command sandbox:
@@ -1777,7 +1777,7 @@ ready, Landlock N" (chatlab's node is not root and is not dumpable only if chatl
 `hardenProcess`; if it does not, the line reads "off — the node's memory is open to its user",
 which is the truth there: note it in the commit and leave it).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add cmd config sandbox texts tools/chatlab

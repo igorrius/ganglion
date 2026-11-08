@@ -11,6 +11,8 @@ covers:
   - config/status.go
   - modstore/status.go
   - transport/telegram/health.go
+  - sandbox/status.go
+  - config/sandbox.go
 model: scripted
 skills: [skills/bad-name]
 script:

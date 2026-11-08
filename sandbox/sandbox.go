@@ -65,6 +65,15 @@ const (
 	SelfTestFailed
 )
 
+// reasonNames are the reasons in logs.
+var reasonNames = map[Reason]string{
+	Ready: "ready", NotLinux: "not_linux", Root: "root", NoLandlock: "no_landlock",
+	Dumpable: "dumpable", SelfTestFailed: "self_test",
+}
+
+// String is the reason's name in logs.
+func (r Reason) String() string { return reasonNames[r] }
+
 // ErrOff is Command on a sandbox that is off: the command does not run.
 var ErrOff = errors.New("sandbox: off")
 

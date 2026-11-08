@@ -93,6 +93,7 @@ func bootstrap(v flags.Run, src secrets.Source, readFile func(string) ([]byte, e
 	b := config.Bootstrap{DB: v.DB, Languages: v.Languages, BotAPIURL: v.TelegramAPIURL, Admin: v.Admin, MetricsAddr: v.MetricsAddr, TelegramReply: v.TelegramReply, TelegramRich: v.TelegramRich == "on",
 		ReactionAfter: v.ReactionAfter, ReactionDwell: v.ReactionDwell}
 	b.ModulesDir = filepath.Join(filepath.Dir(v.DB), "modules")
+	b.SandboxDeny = filepath.SplitList(v.SandboxDeny)
 	if dir, on := flags.LogDir(v.DB, v.LogDir); on {
 		b.LogDir = dir
 	}
