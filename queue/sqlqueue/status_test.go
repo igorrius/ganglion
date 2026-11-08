@@ -64,3 +64,15 @@ func TestStatusUndelivered(t *testing.T) {
 		t.Errorf("%+v", c)
 	}
 }
+
+// The message being handled, /status itself among them, does not wait.
+func TestStatusLeasedDoesNotWait(t *testing.T) {
+	f := setup(t)
+	inboxRow(t, f, "a", t0.Add(-2*time.Minute), "pending")
+	if _, err := f.db.Exec(`UPDATE inbox SET lease_token = 'x', lease_until_ms = ? WHERE id = 'a'`, t0.Add(time.Minute).UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if c := queueLine(t, f); c.State != status.OK || c.Vars["inbox"] != "0" {
+		t.Errorf("%+v", c)
+	}
+}

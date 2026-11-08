@@ -21,11 +21,12 @@ const (
 // Name implements status.Source.
 func (*Queue) Name() string { return "queues" }
 
-// Status implements status.Source (R-OBS-11): what waits in the inbox and the
-// outbox, how long the oldest has waited, and what was not delivered in a day.
+// Status implements status.Source (R-OBS-11): what waits in the inbox (a
+// message being handled, under its lease, does not wait) and the outbox, how long the oldest has waited, and what was not delivered in a day.
 func (q *Queue) Status(ctx context.Context, s status.Scope) []status.Check {
 	now := s.Now.UnixMilli()
-	in, inOldest, err := q.waiting(ctx, `SELECT count(*), MIN(at_ms) FROM inbox WHERE status = 'pending' AND at_ms <= ?`, now)
+	in, inOldest, err := q.waiting(ctx, `SELECT count(*), MIN(at_ms) FROM inbox
+		WHERE status = 'pending' AND at_ms <= ? AND lease_until_ms <= ?`, now, now)
 	if err != nil {
 		return []status.Check{silent()}
 	}
