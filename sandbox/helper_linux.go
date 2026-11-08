@@ -46,11 +46,11 @@ func helper() error {
 	if sp.Try != "" {
 		tryRead(sp.Try)
 	}
-	prog, err := exec.LookPath(sp.Argv[0]) // PATH is the spec's: the helper's environment is sp.Env
-	if err != nil {
+	if err := os.Chdir(sp.Dir); err != nil { // first, so ./script is found in its folder
 		return err
 	}
-	if err := os.Chdir(sp.Dir); err != nil {
+	prog, err := exec.LookPath(sp.Argv[0]) // PATH is the spec's: the helper's environment is sp.Env
+	if err != nil {
 		return err
 	}
 	return unix.Exec(prog, sp.Argv, sp.Env)

@@ -6,9 +6,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -162,6 +166,10 @@ func TestSudoGainsNothing(t *testing.T) {
 	if code == 0 || code == exitSetup {
 		t.Fatalf("sudo ran: %q", out)
 	}
+	// A password prompt would refuse too; the flag is what must refuse it.
+	if !strings.Contains(out, "no new privileges") && !strings.Contains(out, "effective uid is not 0") {
+		t.Fatalf("sudo refused for another reason than no_new_privs: %q", out)
+	}
 }
 
 func TestAMissingProgramFailsBeforeRunning(t *testing.T) {
@@ -184,7 +192,7 @@ func TestNewIsReadyWhereTheKernelHoldsIt(t *testing.T) {
 		t.Fatalf("not ready: %v", r)
 	}
 	dir, file := secretDir(t)
-	s = New(self, Policy{Deny: []string{dir}, Env: []string{"PATH=/usr/bin:/bin"}}, fakeKernel{euid: 1000, abi: abi}, time.Unix(0, 0))
+	s = New(self, Policy{Deny: func() []string { return []string{dir} }, Env: []string{"PATH=/usr/bin:/bin"}}, fakeKernel{euid: 1000, abi: abi}, time.Unix(0, 0))
 	cmd, err := s.Command(t.Context(), []string{"cat", file}, "/")
 	if err != nil {
 		t.Fatal(err)
@@ -192,4 +200,145 @@ func TestNewIsReadyWhereTheKernelHoldsIt(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err == nil || strings.Contains(string(out), "hunter2") {
 		t.Fatalf("read a denied file through Command: %v, %q", err, out)
 	}
+}
+
+// ready is a sandbox on this kernel that starts the helper from the
+// process's own image, as the node does; it skips without Landlock.
+func ready(t *testing.T, p Policy) *Sandbox {
+	t.Helper()
+	abi, err := landlockABI()
+	if err != nil {
+		t.Skipf("no Landlock here: %v", err)
+	}
+	if p.Env == nil {
+		p.Env = []string{"PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
+	}
+	s := New("/proc/self/exe", p, fakeKernel{euid: 1000, abi: abi}, time.Unix(0, 0))
+	if ok, r := s.Ready(); !ok {
+		t.Fatalf("not ready: %v", r)
+	}
+	return s
+}
+
+// output runs argv in dir through s and returns what it printed and its
+// exit code; a command that never ran fails the test.
+func output(t *testing.T, s *Sandbox, dir string, argv ...string) (string, int) {
+	t.Helper()
+	cmd, err := s.Command(t.Context(), argv, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := cmd.CombinedOutput()
+	Release(cmd)
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		return string(out), 0
+	case errors.As(err, &exit) && exit.ExitCode() != exitSetup:
+		return string(out), exit.ExitCode()
+	}
+	t.Fatalf("the command never ran: %v, %q", err, out)
+	return "", 0
+}
+
+// TestAPathCreatedAfterStartIsDenied: a secret store that appears after the
+// node started is denied too (a review's escape: ~/.aws made later).
+func TestAPathCreatedAfterStartIsDenied(t *testing.T) {
+	dir, _ := secretDir(t)
+	later := filepath.Join(dir, "later")
+	s := ready(t, Policy{Deny: func() []string { return DenyList("", "/", NodeFiles{}, nil, []string{later}) }})
+	if err := os.MkdirAll(later, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(later, "credentials"), []byte("hunter2"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, code := output(t, s, "/", "cat", filepath.Join(later, "credentials")); code == 0 || strings.Contains(out, "hunter2") {
+		t.Fatalf("read a secret created after start: exit %d, %q", code, out)
+	}
+}
+
+// TestAnEnvSymlinkIsDenied: a .env that points elsewhere denies its target.
+func TestAnEnvSymlinkIsDenied(t *testing.T) {
+	dir, file := secretDir(t)
+	work := filepath.Join(dir, "work")
+	if err := os.Mkdir(work, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(file, filepath.Join(work, ".env")); err != nil {
+		t.Fatal(err)
+	}
+	s := ready(t, Policy{EnvDepth: 2})
+	if out, code := output(t, s, work, "cat", ".env"); code == 0 || strings.Contains(out, "hunter2") {
+		t.Fatalf("read a .env through its symlink: exit %d, %q", code, out)
+	}
+}
+
+// TestARelativeProgramRunsInItsFolder: a skill's ./script is found in the
+// command's folder, not the helper's.
+func TestARelativeProgramRunsInItsFolder(t *testing.T) {
+	dir, _ := secretDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "run.sh"), []byte("#!/bin/sh\necho ran\n"), 0o700); err != nil { //nolint:gosec // a script the test runs
+		t.Fatal(err)
+	}
+	s := ready(t, Policy{})
+	if out, code := output(t, s, dir, "./run.sh"); code != 0 || !strings.Contains(out, "ran") {
+		t.Fatalf("./run.sh: exit %d, %q", code, out)
+	}
+}
+
+// TestAbstractSocketsAreScoped: a listener outside the sandbox on an
+// abstract Unix socket cannot be reached from inside (Landlock ABI 6).
+func TestAbstractSocketsAreScoped(t *testing.T) {
+	if abi, err := landlockABI(); err != nil || abi < 6 {
+		t.Skip("no Landlock scopes here")
+	}
+	name := "@ganglion-sandbox-test-" + strconv.Itoa(os.Getpid())
+	ln, err := net.Listen("unix", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_, _ = c.Write([]byte("SOCKSECRET"))
+			_ = c.Close()
+		}
+	}()
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := ready(t, Policy{Env: []string{"PATH=/usr/bin:/bin", connectEnv + "=" + name}})
+	out, _ := output(t, s, "/", self, "-test.run=^TestConnectFromInside$")
+	if strings.Contains(out, "SOCKSECRET") {
+		t.Fatalf("reached an abstract socket outside the sandbox: %q", out)
+	}
+	if !strings.Contains(out, "refused:") {
+		t.Fatalf("the probe inside did not run: %q", out)
+	}
+}
+
+// connectEnv names the socket TestConnectFromInside dials; it is set only
+// inside the sandbox, by TestAbstractSocketsAreScoped.
+const connectEnv = "GANGLION_SANDBOX_TEST_CONNECT"
+
+// TestConnectFromInside is the probe TestAbstractSocketsAreScoped runs in
+// the sandbox; on its own it skips.
+func TestConnectFromInside(t *testing.T) {
+	name := os.Getenv(connectEnv)
+	if name == "" {
+		t.Skip("runs only inside the sandbox")
+	}
+	c, err := net.Dial("unix", name)
+	if err != nil {
+		fmt.Println("refused:", err)
+		return
+	}
+	b, _ := io.ReadAll(c)
+	fmt.Println("got:", string(b))
 }

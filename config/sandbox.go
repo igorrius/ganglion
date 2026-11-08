@@ -10,6 +10,10 @@ import (
 	"github.com/samber/do/v2"
 )
 
+// selfImage is the running binary as the kernel holds it, whatever the
+// file at its path has become since.
+const selfImage = "/proc/self/exe"
+
 // envDepth is how deep the sandbox looks for .env files under the home
 // folder and a command's folder (the spike's note, M3d task 3.20).
 const envDepth = 3
@@ -20,25 +24,33 @@ const envDepth = 3
 func Sandbox() do.Provider[*sandbox.Sandbox] {
 	return func(i do.Injector) (*sandbox.Sandbox, error) {
 		b, start := do.MustInvoke[Bootstrap](i), time.Time(do.MustInvoke[ProcessStart](i))
-		self, err := os.Executable()
+		binary, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		cwd, err := os.Getwd()
 		if err != nil {
 			return nil, err
 		}
 		home, _ := os.UserHomeDir() // none: no home secrets to deny, and HOME=/
-		node := sandbox.NodeFiles{DB: b.DB, LogDir: b.LogDir, ModulesDir: b.ModulesDir,
+		node := sandbox.NodeFiles{Binary: binary, DB: b.DB, LogDir: b.LogDir, ModulesDir: b.ModulesDir,
 			Workspace: b.Agent.Workspace, Languages: b.Languages}
+		environ := os.Environ()
 		p := sandbox.Policy{
-			Deny:     sandbox.DenyList(home, node, os.Environ(), b.SandboxDeny),
+			Deny:     func() []string { return sandbox.DenyList(home, cwd, node, environ, b.SandboxDeny) },
 			Env:      commandEnv(home, b.Agent.TZ),
 			EnvRoots: roots(home),
 			EnvDepth: envDepth,
 		}
-		s := sandbox.New(self, p, sandbox.HostKernel(), start)
+		// The helper is this process's own image, not the path it came
+		// from: a command that replaced the file would otherwise run as the
+		// next helper, before any rule.
+		s := sandbox.New(selfImage, p, sandbox.HostKernel(), start)
 		log := do.MustInvoke[*slog.Logger](i)
 		if ok, r := s.Ready(); !ok {
 			log.Info("sandbox: commands are off", "reason", r.String())
 		} else {
-			log.Info("sandbox: ready", "denied", len(p.Deny))
+			log.Info("sandbox: ready", "denied", len(p.Deny()))
 		}
 		return s, nil
 	}

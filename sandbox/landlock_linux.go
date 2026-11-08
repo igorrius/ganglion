@@ -43,14 +43,23 @@ func rights(abi int) uint64 {
 	return r
 }
 
-// rulesetAttr is the part of struct landlock_ruleset_attr this package
-// sets; the kernel accepts the shorter size.
-type rulesetAttr struct{ handledAccessFS uint64 }
+// rulesetAttr is struct landlock_ruleset_attr up to its scopes (ABI 6); a
+// kernel that knows less accepts it while the fields it does not know are 0.
+type rulesetAttr struct{ handledAccessFS, handledAccessNet, scoped uint64 }
+
+// scopes is what the domain keeps to itself from ABI 6 on: abstract Unix
+// sockets, so a command cannot reach a listener outside the sandbox by name.
+func scopes(abi int) uint64 {
+	if abi < 6 {
+		return 0
+	}
+	return unix.LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET
+}
 
 // restrict confines the calling thread, and what it execs, to grants.
 func restrict(abi int, grants []Grant) error {
 	handled := rights(abi)
-	attr := rulesetAttr{handledAccessFS: handled}
+	attr := rulesetAttr{handledAccessFS: handled, scoped: scopes(abi)}
 	fd, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, uintptr(unsafe.Pointer(&attr)), unsafe.Sizeof(attr), 0)
 	if errno != 0 {
 		return fmt.Errorf("landlock_create_ruleset: %w", errno)

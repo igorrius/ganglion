@@ -86,10 +86,18 @@ type Kernel interface {
 
 // Policy is what every command is denied and the environment it gets.
 type Policy struct {
-	Deny     []string // DenyList
-	Env      []string // the whole environment, KEY=VALUE
-	EnvRoots []string // where .env files are looked for, besides the command's folder
+	Deny     func() []string // DenyList, built again for each command; nil denies nothing
+	Env      []string        // the whole environment, KEY=VALUE
+	EnvRoots []string        // where .env files are looked for, besides the command's folder
 	EnvDepth int
+}
+
+// denied is what the policy denies now.
+func (p Policy) denied() []string {
+	if p.Deny == nil {
+		return nil
+	}
+	return slices.Clone(p.Deny())
 }
 
 // Sandbox starts commands confined by its policy, or none when it is off.
@@ -173,7 +181,7 @@ func (s *Sandbox) Command(ctx context.Context, argv []string, dir string) (*exec
 	if s.reason != Ready {
 		return nil, ErrOff
 	}
-	deny := slices.Clone(s.policy.Deny)
+	deny := s.policy.denied()
 	for _, f := range EnvFiles(append([]string{dir}, s.policy.EnvRoots...), s.policy.EnvDepth, os.ReadDir) {
 		if resolved, err := filepath.EvalSymlinks(f); err == nil { // Landlock sees real paths
 			deny = append(deny, resolved)
