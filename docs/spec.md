@@ -885,6 +885,15 @@ undone with `git revert`.
   text and private data and which a message in a chat carries further; `turn.show`
   (R-OBS-7) is for those. A scheduled task runs in a conversation of its own, so `/last`
   in the chat does not show its runs.
+- **R-OBS-11.** `/status` shows an admin how the node is doing now, on one screen and with
+  no model (owner, 2026-11-08, [design](plans/p1-status-design.md)): a verdict first, then
+  the node (the full version of ganglion, uptime, memory, the database and log sizes), the
+  models (the ones the current session uses, each model's last answer and failure, the day
+  against the daily limits and its spend), delivery (Telegram's polling, the queues) and
+  what is off with its reason (skills, modules, failed turns, the scheduler). Every
+  component contributes its own lines through one interface, so a new one shows up without
+  a change to the command. A reason is a fixed text with parameters, never an error's text,
+  which can hold outside content. It joins no history.
 
 ### 7.10. Scheduler and reminders
 
@@ -1614,3 +1623,9 @@ Reviewed at each gate.
 - Managing the cloud a node runs in (Railway services, volumes, deploys)
   through that cloud's MCP server, with ganglion as an MCP client: P3 in
   the M3b and M3c design; earlier if the owner asks (owner, 2026-11-03).
+- `ganglion doctor`: a terminal command that checks a node's settings for
+  likely mistakes and misconfigurations, beside `ganglion mcp`; not in the
+  chat, where `/status` assumes the node runs (owner, 2026-11-08).
+- Choosing the model in the chat from the catalogue's models, per session;
+  `/status` already shows the session's model, so it needs no change then
+  (owner, 2026-11-08).
