@@ -36,6 +36,7 @@ const (
 	toolMemoryWrite  = "memory.write"
 	toolMemoryForget = "memory.forget"
 	toolHostExec     = "host.exec"
+	toolPlanShow     = "plan.show"
 )
 
 const (
@@ -280,8 +281,9 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 //  3. in a local-only session, a tool not declared LocalSafe: forbidden,
 //     whatever a grant says (ADR-0049);
 //  4. a forbidden tool: forbidden, whatever a grant says;
-//  5. a forbidden host command, or host.exec arguments the table cannot
-//     read: forbidden, before any grant, plan or press (R-CMD-2);
+//  5. a forbidden host command, in host.exec or in a step of plan.show, or
+//     host.exec arguments the table cannot read: forbidden, before any
+//     grant, plan or press (R-CMD-2);
 //  6. a scheduled task's call: outside its grant is out_of_grant, inside
 //     it is auto, even in a tainted session (R-POL-8); web.fetch is
 //     inside only on a granted host, message.send only to the task's own
@@ -293,15 +295,19 @@ func (p *Policy) outOfGrant(ctx context.Context, c tool.Call) (tool.Result, erro
 //  8. a host command by its class: read is auto, even in a tainted
 //     session; one the conversation's approved plan lists is planned; any
 //     other confirms (R-CMD-2, R-CMD-7);
-//  9. any other side effect: confirm;
-//  10. in a tainted session, a call with input to a tool that asks for it:
+//  9. a plan with a command that needs a press and that the conversation's
+//     approved plan does not list: confirm, and the plan is the question
+//     (R-CMD-7);
+//  10. any other side effect: confirm;
+//  11. in a tainted session, a call with input to a tool that asks for it:
 //     confirm (ADR-0049);
-//  11. message.send to another conversation: confirm;
-//  12. web.fetch of an address the owner or a search did not bring: confirm;
-//  13. the tool's own policy.
+//  12. message.send to another conversation: confirm;
+//  13. web.fetch of an address the owner or a search did not bring: confirm;
+//  14. the tool's own policy.
 //
 // An argument a rule needs that does not parse makes the call confirm,
-// never auto; host.exec's arguments that do not parse make it forbidden.
+// never auto; host.exec's arguments that do not parse make it forbidden,
+// plan.show's make it confirm.
 func Decide(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision) {
 	for _, r := range rules {
 		if pol, d, ok := r(maxDepth, s, c); ok {
@@ -316,7 +322,7 @@ type rule func(maxDepth int, s tool.Spec, c tool.Call) (tool.Policy, journal.Dec
 
 // rules are the rules of Decide, in order.
 var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleCommandForbidden, ruleGrant,
-	ruleMemoryWrite, ruleLanguageSet, ruleHostExec, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
+	ruleMemoryWrite, ruleLanguageSet, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -477,16 +483,28 @@ func ruleForbidden(_ int, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decisi
 }
 
 // ruleCommandForbidden refuses a forbidden host command before any grant, plan
-// or press can allow it (R-CMD-2), and an argv the table cannot read.
+// or press can allow it (R-CMD-2), and an argv the table cannot read; a plan
+// with a forbidden command in a step likewise. plan.show's steps that do not
+// parse are left to rulePlanShow.
 func ruleCommandForbidden(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
-	if s.Name != toolHostExec {
-		return "", "", false
-	}
-	x, err := hostcmd.ParseExec(c.Args)
-	if err != nil || hostcmd.Classify(x.Command.Argv).Class == hostcmd.Forbidden {
-		return forbidden()
+	switch s.Name {
+	case toolHostExec:
+		x, err := hostcmd.ParseExec(c.Args)
+		if err != nil || hostcmd.Classify(x.Command.Argv).Class == hostcmd.Forbidden {
+			return forbidden()
+		}
+	case toolPlanShow:
+		steps, err := hostcmd.ParsePlan(c.Args)
+		if err == nil && slices.ContainsFunc(steps, forbiddenStep) {
+			return forbidden()
+		}
 	}
 	return "", "", false
+}
+
+// forbiddenStep reports a plan step whose command never runs.
+func forbiddenStep(st hostcmd.PlanStep) bool {
+	return st.Command != nil && hostcmd.Classify(st.Command.Argv).Class == hostcmd.Forbidden
 }
 
 // ruleHostExec decides a host command by its class in the table: read runs by
@@ -508,6 +526,35 @@ func ruleHostExec(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decisio
 	default:
 		return confirm()
 	}
+}
+
+// rulePlanShow asks for a plan with a command that needs a press and that the
+// conversation's approved plan does not list; the plan is that question
+// (R-CMD-7). A forbidden command makes the whole plan forbidden.
+func rulePlanShow(_ int, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if s.Name != toolPlanShow {
+		return "", "", false
+	}
+	steps, err := hostcmd.ParsePlan(c.Args)
+	if err != nil {
+		return confirm()
+	}
+	ask := false
+	for _, st := range steps {
+		if st.Command == nil {
+			continue
+		}
+		switch e := hostcmd.Classify(st.Command.Argv); {
+		case e.Class == hostcmd.Forbidden:
+			return forbidden()
+		case e.Class != hostcmd.Read && (c.Planned == nil || !c.Planned(*st.Command)):
+			ask = true
+		}
+	}
+	if ask {
+		return confirm()
+	}
+	return "", "", false
 }
 
 func ruleSideEffect(_ int, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decision, bool) {

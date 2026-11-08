@@ -589,3 +589,87 @@ func TestDecideHostExec(t *testing.T) {
 		}
 	}
 }
+
+func planSpec() tool.Spec {
+	return tool.Spec{Name: "plan.show", Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true, KeepsQuestion: true}
+}
+
+func planCall(steps ...any) tool.Call {
+	args, _ := json.Marshal(map[string]any{"steps": steps})
+	return tool.Call{Name: "plan.show", Admin: true, Args: args}
+}
+
+func planStep(argv ...string) map[string]any {
+	return map[string]any{"text": "step", "argv": argv, "reason": "r"}
+}
+
+// R-CMD-7: a plan with a command that needs a press, which the
+// conversation's approved plan does not list, is asked as one question; a
+// forbidden command makes the whole plan forbidden.
+func TestDecidePlanShow(t *testing.T) {
+	planned := func(cmd tool.Command) bool { return cmd.Equal(tool.Command{Argv: []string{"go", "clean", "-cache"}}) }
+	cases := []struct {
+		name string
+		call tool.Call
+		pol  tool.Policy
+		d    journal.Decision
+	}{
+		{"words only run", planCall("a", "b"), tool.PolicyAuto, journal.DecisionAllowed},
+		{"a read command runs", planCall("a", planStep("df", "-h")), tool.PolicyAuto, journal.DecisionAllowed},
+		{"a read command runs tainted", func() tool.Call { c := planCall(planStep("df", "-h")); c.Tainted = true; return c }(),
+			tool.PolicyAuto, journal.DecisionAllowed},
+		{"a change asks", planCall("a", planStep("go", "clean", "-cache")), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"a content command asks", planCall(planStep("cat", "/etc/hosts")), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"planned runs", func() tool.Call { c := planCall(planStep("go", "clean", "-cache")); c.Planned = planned; return c }(),
+			tool.PolicyAuto, journal.DecisionAllowed},
+		{"planned and another asks", func() tool.Call {
+			c := planCall(planStep("go", "clean", "-cache"), planStep("cargo", "clean"))
+			c.Planned = planned
+			return c
+		}(), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"planned elsewhere asks", func() tool.Call {
+			c := planCall(map[string]any{"text": "x", "argv": []string{"go", "clean", "-cache"}, "dir": "/other"})
+			c.Planned = planned
+			return c
+		}(), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"docker run is forbidden", planCall("a", planStep("docker", "run", "x")), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"forbidden though planned", func() tool.Call {
+			c := planCall(planStep("sudo", "true"))
+			c.Planned = func(tool.Command) bool { return true }
+			return c
+		}(), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"steps that do not parse ask", tool.Call{Name: "plan.show", Admin: true, Args: json.RawMessage(`{"steps":[{"text":"x","argv":"rm -rf /"}]}`)},
+			tool.PolicyConfirm, journal.DecisionConfirm},
+		{"not in a local-only session", func() tool.Call { c := planCall("a"); c.LocalOnly = true; return c }(), tool.PolicyForbidden, journal.DecisionForbidden},
+	}
+	for _, c := range cases {
+		pol, d := policy.Decide(policy.DefaultMaxDepth, planSpec(), c.call)
+		if pol != c.pol || d != c.d {
+			t.Errorf("%s: %s %s, want %s %s", c.name, pol, d, c.pol, c.d)
+		}
+	}
+}
+
+// A plan in a scheduled run is decided by the grant (the tool then refuses
+// it: a task's conversation is no chat, errPlanInTask), but a forbidden
+// command in it is forbidden before any grant (review focus 2).
+func TestPlanInATask(t *testing.T) {
+	inGrant := &tool.Grant{Tools: []string{"plan.show"}}
+	for _, tc := range []struct {
+		name  string
+		grant *tool.Grant
+		step  map[string]any
+		pol   tool.Policy
+		d     journal.Decision
+	}{
+		{"outside the grant", &tool.Grant{Tools: []string{"web.search"}}, planStep("df", "-h"), tool.PolicyForbidden, journal.DecisionOutOfGrant},
+		{"inside the grant", inGrant, planStep("go", "clean", "-cache"), tool.PolicyAuto, journal.DecisionAllowed},
+		{"forbidden though granted", inGrant, planStep("sudo", "true"), tool.PolicyForbidden, journal.DecisionForbidden},
+	} {
+		c := planCall(tc.step)
+		c.Grant = tc.grant
+		if pol, d := policy.Decide(policy.DefaultMaxDepth, planSpec(), c); pol != tc.pol || d != tc.d {
+			t.Errorf("%s: %s %s, want %s %s", tc.name, pol, d, tc.pol, tc.d)
+		}
+	}
+}

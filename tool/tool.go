@@ -65,6 +65,10 @@ type Spec struct {
 	// the tool may reach the network, where the input would leave unseen
 	// (ADR-0049).
 	AskTaintedInput bool
+	// KeepsQuestion says the tool's approved run turns its question into its
+	// own message, edited in place (a plan, R-CMD-7): the agent does not fold it
+	// (R-POL-9).
+	KeepsQuestion bool
 }
 
 // Command is a host command as approved: its argv and the folder it runs in

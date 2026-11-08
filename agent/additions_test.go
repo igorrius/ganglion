@@ -1231,6 +1231,8 @@ func (p *planFinish) Finish(_ context.Context, conv string, kept bool) error {
 	return p.err
 }
 
+func (p *planFinish) Approved(context.Context, string) ([]tool.Command, error) { return nil, p.err }
+
 func TestTurnEndFinishesThePlan(t *testing.T) {
 	e := newAddEnv(t, Config{})
 	f := &planFinish{}

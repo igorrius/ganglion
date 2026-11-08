@@ -257,7 +257,21 @@ func (a *Agent) toolCall(ctx context.Context, t *turn, call provider.ToolCall) t
 	return tool.Call{
 		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Transport: t.transport, Principal: t.msg.From,
 		Admin: t.admin, Tainted: t.state.Tainted, LocalOnly: t.state.LocalOnly, Grant: t.grant, KnownURL: t.known.has, Depth: t.depth,
-		Speak: a.speaker(ctx, t), Name: call.Name, Args: call.Args,
+		Speak: a.speaker(ctx, t), Name: call.Name, Args: call.Args, Planned: a.planned(ctx, t.event.Conv),
+	}
+}
+
+// planned asks the conversation's approved plan, at the time of the call, so a
+// plan shown earlier in the same turn counts and a closed one does not. A plan
+// that cannot be read approves nothing.
+func (a *Agent) planned(ctx context.Context, conv string) tool.CommandFunc {
+	return func(cmd tool.Command) bool {
+		list, err := a.d.Plans.Approved(ctx, conv)
+		if err != nil {
+			a.log.Warn("agent: approved plan not read", "conv", conv, "err", err)
+			return false
+		}
+		return slices.ContainsFunc(list, cmd.Equal)
 	}
 }
 

@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
+	"github.com/igorrius/ganglion/hostcmd"
 	"github.com/igorrius/ganglion/plan"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -17,19 +21,34 @@ const (
 
 // Plans is the store of the conversations' plans (plan.Store).
 type Plans interface {
-	Show(ctx context.Context, c tool.Call, steps []string) error
+	Show(ctx context.Context, c tool.Call, steps []plan.Step) error
 	Step(ctx context.Context, conv string, n int, st plan.Status, note, outcome string) error
+	Approved(ctx context.Context, conv string) ([]tool.Command, error)
 }
 
-// errPlanInTask refuses a plan in a scheduled run, whose conversation is no chat.
-var errPlanInTask = errors.New("a scheduled run shows no plan")
+// CommandQuestions words a command's lines in a question (*HostExec). Its
+// method is unexported, so no type outside this package can word them: a plan
+// asks about a command exactly as host.exec does.
+type CommandQuestions interface {
+	questionVars(ctx context.Context, sp texts.Speaker, cmd tool.Command, reason string) texts.Vars
+}
 
-// NewPlanTools returns plan.show and plan.step (R-LIVE-8). They display and
-// approve nothing, so they read as read tools, for admins; they are not LocalSafe,
-// since the message leaves the node. The conversation is the call's: no argument
-// can name another.
-func NewPlanTools(p Plans) []tool.Handler {
-	return []tool.Handler{&planShow{p}, &planStep{p}}
+// Errors of plan.show.
+var (
+	// errPlanInTask refuses a plan in a scheduled run, whose conversation is no chat.
+	errPlanInTask = errors.New("a scheduled run shows no plan")
+	// errPlanUnapproved refuses a plan with a command that needs a press
+	// and has none: the policy asks first, so reaching here means a bug.
+	errPlanUnapproved = errors.New("this command needs the owner's press on the plan")
+)
+
+// NewPlanTools returns plan.show and plan.step (R-LIVE-8). They read as read
+// tools, for admins; they are not LocalSafe, since the message leaves the node.
+// The conversation is the call's: no argument can name another. A plan whose
+// steps carry commands that need a press is asked as one question, worded by
+// q, and its press approves exactly those commands (R-CMD-7).
+func NewPlanTools(p Plans, q CommandQuestions) []tool.Handler {
+	return []tool.Handler{&planShow{p: p, q: q}, &planStep{p}}
 }
 
 func planSpec(name, description, schema string) tool.Spec {
@@ -37,28 +56,88 @@ func planSpec(name, description, schema string) tool.Spec {
 		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true}
 }
 
-type planShow struct{ p Plans }
+type planShow struct {
+	p Plans
+	q CommandQuestions
+}
 
 func (*planShow) Spec() tool.Spec {
-	return planSpec(PlanShowTool,
-		"Show the person the steps of work with several steps, in plain words, as one message that is then edited as they go. Calling it again changes the same message. It approves nothing.",
-		`{"type":"object","properties":{"steps":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":20,"description":"The steps, in order, at most 200 characters each."}},"required":["steps"]}`)
+	s := planSpec(PlanShowTool,
+		"Show the person the steps of work with several steps, in plain words, as one message that is then edited as they go. "+
+			"Calling it again changes the same message. A step may carry the host command it runs (argv, dir, reason). "+
+			"If any command needs the person's press, the plan is asked as one question: one press approves exactly those "+
+			"commands, in this chat, for an hour.",
+		`{"type":"object","properties":{"steps":{"type":"array","items":{"anyOf":[{"type":"string","maxLength":200},`+
+			`{"type":"object","properties":{"text":{"type":"string"},"argv":{"type":"array","items":{"type":"string"},"maxItems":64},`+
+			`"dir":{"type":"string"},"reason":{"type":"string"}},"required":["text"],"additionalProperties":false}]},`+
+			`"minItems":1,"maxItems":20,"description":"The steps, in order, at most 200 characters each."}},"required":["steps"]}`)
+	s.KeepsQuestion = true
+	return s
 }
 
 func (t *planShow) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
-	var a struct {
-		Steps []string `json:"steps"`
-	}
-	if err := strictJSON(c.Args, &a); err != nil {
+	steps, err := hostcmd.ParsePlan(c.Args)
+	if err != nil {
 		return tool.Result{}, err
 	}
 	if c.Grant != nil {
 		return tool.Result{}, errPlanInTask
 	}
-	if err := t.p.Show(ctx, c, a.Steps); err != nil {
+	if err := planAllowed(c, steps); err != nil {
+		return tool.Result{}, err
+	}
+	shown := make([]plan.Step, len(steps))
+	for i, s := range steps {
+		shown[i] = plan.Step{Text: s.Text, Command: s.Command}
+	}
+	if err := t.p.Show(ctx, c, shown); err != nil {
 		return tool.Result{}, err
 	}
 	return tool.Result{Text: "shown"}, nil
+}
+
+// planAllowed checks again what the policy decided, as host.exec does: a
+// forbidden command never, a press included; a command that needs a press only
+// on the pressed plan, or when the conversation's approved plan lists it. Only
+// a read command needs neither: any other class fails closed.
+func planAllowed(c tool.Call, steps []hostcmd.PlanStep) error {
+	for i, s := range steps {
+		if s.Command == nil {
+			continue
+		}
+		switch cl := hostcmd.Classify(s.Command.Argv).Class; {
+		case cl == hostcmd.Forbidden:
+			return fmt.Errorf("plan.show: step %d: %s never runs: %w", i+1, hostcmd.Show(s.Command.Argv), tool.ErrForbidden)
+		case cl == hostcmd.Read || c.Approved:
+		case c.Planned != nil && c.Planned(*s.Command):
+		default:
+			return fmt.Errorf("plan.show: step %d: %w", i+1, errPlanUnapproved)
+		}
+	}
+	return nil
+}
+
+// Question implements tool.Questioner: the plan as the person will approve it,
+// each command with its folder, and one that needs a press with its fixed line
+// and the agent's reason apart (R-CMD-6), in one question that must show whole.
+func (t *planShow) Question(ctx context.Context, c tool.Call) (string, error) {
+	steps, err := hostcmd.ParsePlan(c.Args)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	for i, s := range steps {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, strings.Join(strings.Fields(s.Text), " "))
+		if s.Command == nil {
+			continue
+		}
+		v := t.q.questionVars(ctx, c.Speak, *s.Command, s.Reason)
+		fmt.Fprintf(&b, "    %s\n", v["command"])
+		if hostcmd.Classify(s.Command.Argv).Class.NeedsPress() {
+			fmt.Fprintf(&b, "    %s%s\n    %s\n", v["line"], strings.ReplaceAll(v["warning"], "\n", "\n    "), v["reason"])
+		}
+	}
+	return whole(PlanShowTool, c.Speak.Text(texts.AskPlan, texts.Vars{"plan": strings.TrimRight(b.String(), "\n")}))
 }
 
 type planStep struct{ p Plans }

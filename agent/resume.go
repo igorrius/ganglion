@@ -178,7 +178,8 @@ func (t *turn) note(text string) {
 
 // confirmed acknowledges the press, runs an approved call or declines a
 // denied one, stores the outcome, folds the question and resumes the
-// conversation with it. A
+// conversation with it. An approved plan's question is not folded: its run
+// made it the plan's message (Spec.KeepsQuestion). A
 // rerun (the outcome is stored) does not run the call again. A call the
 // conversation does not wait for (a quick action asked it, or the
 // session moved on) is closed without a model turn.
@@ -186,9 +187,13 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 	if err := a.setAdmin(ctx, t); err != nil {
 		return err
 	}
-	if action == pending.ActionApprove {
+	keeps := action == pending.ActionApprove && a.keepsQuestion(it.Tool)
+	switch {
+	case keeps: // the approved run's own edit follows at once
+		a.acknowledge(ctx, t, texts.ToastApproved, "", "")
+	case action == pending.ActionApprove:
 		a.acknowledge(ctx, t, texts.ToastApproved, it.Question, a.say(ctx, t, texts.LineRunning, nil))
-	} else {
+	default:
 		a.acknowledge(ctx, t, texts.ToastDeclined, it.Question, a.stamped(a.say(ctx, t, texts.LineDeclined, nil), it.Answered))
 	}
 	o, err := a.decide(ctx, t, it, action)
@@ -200,13 +205,25 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 		line = approvedLine(o.Failed)
 	}
 	// The call's messages, then the question with how it ended (ruling
-	// R40); again on a rerun: the outbox keeps one per key.
+	// R40); again on a rerun: the outbox keeps one per key. A question the
+	// approved run made its own message stays as that run left it, unless the
+	// run failed and left the buttons.
 	t.out = append(t.out, o.Out...)
-	t.editWith(pending.QuickEdit{Text: a.stamped(a.say(ctx, t, line, nil), it.Answered), Folded: it.Question})
+	if !keeps || o.Failed {
+		t.editWith(pending.QuickEdit{Text: a.stamped(a.say(ctx, t, line, nil), it.Answered), Folded: it.Question})
+	}
 	if !slices.Contains(t.state.Pending, it.ID) {
 		return nil
 	}
 	return a.continueWith(ctx, t, it, o)
+}
+
+// keepsQuestion reports whether the tool's approved run makes its question
+// its own message (a plan, ruling 8 of the M3d commands plan): it is not
+// folded. An unknown tool folds as any.
+func (a *Agent) keepsQuestion(name string) bool {
+	h, ok := a.d.Tools.Lookup(name)
+	return ok && h.Spec().KeepsQuestion
 }
 
 // decide runs or declines the call, through the journal and without the
@@ -248,8 +265,9 @@ func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pendi
 	c := it.Call()
 	c.Admin, c.Tainted = t.admin, it.Tainted || t.state.Tainted
 	// The owner pressed Approve on this call: a tool that never runs
-	// unapproved reads it (ADR-0040).
-	c.Speak, c.Approved = a.speaker(ctx, t), true
+	// unapproved reads it (ADR-0040). The approved plan is asked too, so a
+	// pressed plan keeps what it still lists.
+	c.Speak, c.Approved, c.Planned = a.speaker(ctx, t), true, a.planned(ctx, it.Conv)
 	c.KnownURL = knownURLs(t.state.Messages).has
 	if o, refused := a.refuseBadArgs(ctx, c); refused {
 		return o

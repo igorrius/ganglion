@@ -13,7 +13,7 @@ import (
 // run a forbidden command (R-CMD-2).
 func TestRulesRunInOrder(t *testing.T) {
 	want := []string{"ruleDepth", "ruleAdminOnly", "ruleLocalOnly", "ruleForbidden", "ruleCommandForbidden", "ruleGrant",
-		"ruleMemoryWrite", "ruleLanguageSet", "ruleHostExec", "ruleSideEffect", "ruleTaintedInput", "ruleMessageSend", "ruleWebFetch"}
+		"ruleMemoryWrite", "ruleLanguageSet", "ruleHostExec", "rulePlanShow", "ruleSideEffect", "ruleTaintedInput", "ruleMessageSend", "ruleWebFetch"}
 	got := make([]string, 0, len(rules))
 	for _, r := range rules {
 		name := runtime.FuncForPC(reflect.ValueOf(r).Pointer()).Name()

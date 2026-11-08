@@ -1,6 +1,8 @@
 // Package plan shows a person the steps of the work under way: one message per
 // conversation, sent during the turn and edited in place (R-LIVE-8, ADR-0052).
-// It displays and approves nothing: policies decide per call. A plan is
+// A plan shown through a pressed question approves exactly the commands its
+// steps list, in its conversation, until it closes or an hour after the press
+// (R-CMD-7, ADR-0040); the policy and host.exec read that. A plan is
 // progress, not the reply, so it enters the outbox at once, outside the turn's
 // transaction (R-DLV-4), and it belongs to the conversation, so it outlives a
 // press's new turn. A conversation has one turn at a time (R-AGT-1), so one
@@ -15,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -22,8 +25,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/hostcmd"
+	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/pending"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -66,11 +73,15 @@ var (
 	ErrNoPlan = errors.New("plan: no active plan in this conversation")
 )
 
-// Step is one line of a plan.
+// Step is one line of a plan, and the host command it runs, if any.
 type Step struct {
-	Text   string `json:"text"`
-	Status Status `json:"status"`
-	Note   string `json:"note,omitempty"`
+	Text    string        `json:"text"`
+	Status  Status        `json:"status"`
+	Note    string        `json:"note,omitempty"`
+	Command *tool.Command `json:"command,omitempty"`
+	// Line is Command as the person reads it, in their language. Show writes
+	// it from Command, so a caller's value never reaches the chat.
+	Line string `json:"line,omitempty"`
 }
 
 // Plan is what a person sees, and where it goes.
@@ -87,6 +98,9 @@ func Render(p Plan) string {
 		line := marks[s.Status] + " " + strconv.Itoa(i+1) + ". " + s.Text
 		if s.Note != "" {
 			line += ": " + s.Note
+		}
+		if s.Line != "" {
+			line += "\n    " + s.Line
 		}
 		lines = append(lines, line)
 	}
@@ -145,7 +159,10 @@ func New(ctx context.Context, db *sql.DB, box Outbox, opts ...Option) (*Store, e
 // row is a stored plan.
 type row struct {
 	conv, idem string
+	msgKey     string // the question the plan was approved through; "" is its first message
 	plan       Plan
+	approved   []tool.Command
+	approvedAt time.Time
 	version    int
 	active     bool
 	dirty      bool
@@ -156,11 +173,23 @@ type row struct {
 // showKey is the first message's key, and the plan's way to find it.
 func showKey(idem string) string { return "plan:" + idem + ":show" }
 
-// Show shows the steps: a new message, or a change of the plan already active in
-// the conversation, whichever call or run shows it. The message is stored first
-// under a key from the call, so a crash in between shows it once.
-func (s *Store) Show(ctx context.Context, c tool.Call, steps []string) error {
-	p, err := newPlan(c.Transport, steps)
+// messageKey is the key of the message the plan edits: its first message, or
+// the question it was approved through.
+func (r row) messageKey() string {
+	if r.msgKey != "" {
+		return r.msgKey
+	}
+	return showKey(r.idem)
+}
+
+// Show shows the steps. A call the owner approved (its question was this
+// plan) makes the plan anew with that question as its message and approves the
+// commands that need a press; any other call shows them on the active plan or a
+// new message and keeps only the approved commands the new steps still list
+// (R-CMD-7, ADR-0040). A new message is stored first under a key from the call,
+// so a crash in between shows it once.
+func (s *Store) Show(ctx context.Context, c tool.Call, steps []Step) error {
+	p, err := newPlan(c.Speak, c.Transport, steps)
 	if err != nil {
 		return err
 	}
@@ -169,8 +198,11 @@ func (s *Store) Show(ctx context.Context, c tool.Call, steps []string) error {
 	if err != nil {
 		return err
 	}
+	if c.Approved {
+		return s.showApproved(ctx, c, p, r, found, now)
+	}
 	if found {
-		r.plan = p
+		r.plan, r.approved = p, stillListed(r.approved, p)
 		return s.changed(ctx, r, now)
 	}
 	r = row{conv: c.Conv, idem: c.Key(), plan: p, version: 1, active: true, lastEdit: now}
@@ -181,19 +213,74 @@ func (s *Store) Show(ctx context.Context, c tool.Call, steps []string) error {
 	return s.save(ctx, r, now)
 }
 
+// showApproved closes a plan shown before, then makes this one on the pressed
+// question. A rerun of the same call finds its own row and stores the same
+// edit again, which the outbox keeps once.
+func (s *Store) showApproved(ctx context.Context, c tool.Call, p Plan, old row, found bool, now time.Time) error {
+	if found && old.idem != c.Key() {
+		if err := s.close(ctx, old, now); err != nil {
+			return err
+		}
+	}
+	r := row{conv: c.Conv, idem: c.Key(), msgKey: c.Key() + pending.QuestionKeySuffix, plan: p, version: 1, active: true,
+		approved: needPress(p), approvedAt: now}
+	return s.flush(ctx, r, now, true)
+}
+
+// needPress lists the plan's commands that need the owner's press: the ones
+// its approval is for.
+func needPress(p Plan) []tool.Command {
+	var out []tool.Command
+	for _, st := range p.Steps {
+		if st.Command != nil && hostcmd.Classify(st.Command.Argv).Class.NeedsPress() {
+			out = append(out, *st.Command)
+		}
+	}
+	return out
+}
+
+// stillListed keeps the approved commands that p still lists, argv and folder
+// alike: a new plan approves nothing new.
+func stillListed(approved []tool.Command, p Plan) []tool.Command {
+	return slices.DeleteFunc(slices.Clone(approved), func(a tool.Command) bool {
+		return !slices.ContainsFunc(p.Steps, func(st Step) bool { return st.Command != nil && st.Command.Equal(a) })
+	})
+}
+
+// Approved returns the commands the conversation's approved plan lists: none
+// when it has no active plan, its plan was not approved, or the press was more
+// than TTL ago, however the plan moved since (R-CMD-7). A clock behind the
+// press approves nothing either.
+func (s *Store) Approved(ctx context.Context, conv string) ([]tool.Command, error) {
+	now := s.now()
+	r, found, err := s.load(ctx, conv, now)
+	if err != nil || !found {
+		return nil, err
+	}
+	if age := now.Sub(r.approvedAt); age < 0 || age > TTL {
+		return nil, nil
+	}
+	return slices.Clone(r.approved), nil
+}
+
 // newPlan checks the steps and makes a plan with the first one running. A step
-// is one line: a line break in it becomes a space.
-func newPlan(transport string, steps []string) (Plan, error) {
+// is one line: a line break in it becomes a space. A command step's command is
+// written out for sp's person, and counts within the plan's size.
+func newPlan(sp texts.Speaker, transport string, steps []Step) (Plan, error) {
 	if len(steps) == 0 || len(steps) > maxSteps {
 		return Plan{}, fmt.Errorf("%w: a plan has 1 to %d steps, this one %d", ErrLimit, maxSteps, len(steps))
 	}
 	p := Plan{Transport: transport, Steps: make([]Step, len(steps))}
-	for i, text := range steps {
-		text = oneLine(text)
+	for i, st := range steps {
+		text := oneLine(st.Text)
 		if text == "" || utf8.RuneCountInString(text) > maxLineRunes {
 			return Plan{}, fmt.Errorf("%w: step %d must have 1 to %d characters", ErrLimit, i+1, maxLineRunes)
 		}
 		p.Steps[i] = Step{Text: text, Status: Waiting}
+		if st.Command != nil {
+			cmd := tool.Command{Argv: slices.Clone(st.Command.Argv), Dir: st.Command.Dir}
+			p.Steps[i].Command, p.Steps[i].Line = &cmd, commandLine(sp, cmd)
+		}
 	}
 	p.Steps[0].Status = Running
 	if units := len(utf16.Encode([]rune(Render(p)))); units > maxTextUnits {
@@ -203,6 +290,17 @@ func newPlan(transport string, steps []string) (Plan, error) {
 }
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// commandLine is cmd as a person reads it under its step: written by
+// hostcmd.Show in a code span a backtick cannot end, as a command's question
+// shows it, with its folder when it has one.
+func commandLine(sp texts.Speaker, cmd tool.Command) string {
+	line := text.CodeSpan(hostcmd.Show(cmd.Argv))
+	if cmd.Dir == "" {
+		return line
+	}
+	return sp.Text(texts.CmdIn, texts.Vars{"command": line, "dir": text.CodeSpan(hostcmd.Show([]string{cmd.Dir}))})
+}
 
 // closeUpTo marks what the end of step n means for the others: the lines before
 // it that nobody closed are behind it, and the next one starts. A model often
@@ -260,11 +358,22 @@ func (s *Store) Finish(ctx context.Context, conv string, kept bool) error {
 		return err
 	}
 	if !kept {
-		r.active = false
-		for i, st := range r.plan.Steps {
-			if st.Status == Waiting || st.Status == Running {
-				r.plan.Steps[i].Status, r.dirty = Skipped, true
-			}
+		return s.close(ctx, r, now)
+	}
+	if !r.dirty {
+		return s.save(ctx, r, now)
+	}
+	r.version++
+	return s.flush(ctx, r, now, true)
+}
+
+// close ends the plan: lines not finished become ⏭, what changed goes out now,
+// and it approves nothing more.
+func (s *Store) close(ctx context.Context, r row, now time.Time) error {
+	r.active, r.approved = false, nil
+	for i, st := range r.plan.Steps {
+		if st.Status == Waiting || st.Status == Running {
+			r.plan.Steps[i].Status, r.dirty = Skipped, true
 		}
 	}
 	if !r.dirty {
@@ -291,7 +400,7 @@ func (s *Store) flush(ctx context.Context, r row, now time.Time, final bool) err
 		return s.save(ctx, r, now)
 	}
 	key := "plan:" + r.idem + ":v" + strconv.Itoa(r.version)
-	m := event.Outgoing{IdemKey: key, Transport: r.plan.Transport, Conv: r.conv, Text: Render(r.plan), EditOf: showKey(r.idem)}
+	m := event.Outgoing{IdemKey: key, Transport: r.plan.Transport, Conv: r.conv, Text: Render(r.plan), EditOf: r.messageKey()}
 	if err := s.box.Enqueue(ctx, m); err != nil {
 		return fmt.Errorf("plan: edit: %w", err)
 	}
@@ -304,12 +413,13 @@ func (s *Store) flush(ctx context.Context, r row, now time.Time, final bool) err
 func (s *Store) load(ctx context.Context, conv string, now time.Time) (row, bool, error) {
 	r := row{conv: conv}
 	var (
-		raw                string
-		active, dirty      int
-		lastEdit, updateMS int64
+		raw, approved                  string
+		active, dirty                  int
+		lastEdit, updateMS, approvedMS int64
 	)
-	err := s.db.QueryRowContext(ctx, `SELECT idem_key, steps, version, active, dirty, last_edit_ms, updated_ms FROM plans WHERE conv = ?`, conv).
-		Scan(&r.idem, &raw, &r.version, &active, &dirty, &lastEdit, &updateMS)
+	err := s.db.QueryRowContext(ctx, `SELECT idem_key, message_key, steps, approved, approved_ms, version, active, dirty, last_edit_ms, updated_ms
+		FROM plans WHERE conv = ?`, conv).
+		Scan(&r.idem, &r.msgKey, &raw, &approved, &approvedMS, &r.version, &active, &dirty, &lastEdit, &updateMS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row{}, false, nil
 	}
@@ -323,6 +433,12 @@ func (s *Store) load(ctx context.Context, conv string, now time.Time) (row, bool
 	if err := json.Unmarshal([]byte(raw), &r.plan); err != nil {
 		return row{}, false, fmt.Errorf("plan: load: %w", err)
 	}
+	if err := json.Unmarshal([]byte(approved), &r.approved); err != nil {
+		return row{}, false, fmt.Errorf("plan: load: %w", err)
+	}
+	if approvedMS != 0 {
+		r.approvedAt = time.UnixMilli(approvedMS)
+	}
 	return r, true, nil
 }
 
@@ -333,14 +449,29 @@ func (s *Store) save(ctx context.Context, r row, now time.Time) error {
 	if err != nil {
 		return fmt.Errorf("plan: save: %w", err)
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO plans (conv, idem_key, steps, version, active, dirty, last_edit_ms, updated_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (conv) DO UPDATE SET idem_key = excluded.idem_key, steps = excluded.steps, version = excluded.version,
-		  active = excluded.active, dirty = excluded.dirty, last_edit_ms = excluded.last_edit_ms, updated_ms = excluded.updated_ms`,
-		r.conv, r.idem, string(raw), r.version, boolInt(r.active), boolInt(r.dirty), r.lastEdit.UnixMilli(), now.UnixMilli()); err != nil {
+	approved, err := json.Marshal(append([]tool.Command{}, r.approved...))
+	if err != nil {
+		return fmt.Errorf("plan: save: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO plans (conv, idem_key, message_key, steps, approved, approved_ms, version, active, dirty,
+		  last_edit_ms, updated_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (conv) DO UPDATE SET idem_key = excluded.idem_key, message_key = excluded.message_key, steps = excluded.steps,
+		  approved = excluded.approved, approved_ms = excluded.approved_ms, version = excluded.version, active = excluded.active,
+		  dirty = excluded.dirty, last_edit_ms = excluded.last_edit_ms, updated_ms = excluded.updated_ms`,
+		r.conv, r.idem, r.msgKey, string(raw), string(approved), unixMilli(r.approvedAt), r.version, boolInt(r.active), boolInt(r.dirty),
+		r.lastEdit.UnixMilli(), now.UnixMilli()); err != nil {
 		return fmt.Errorf("plan: save: %w", err)
 	}
 	return nil
+}
+
+// unixMilli is t in Unix milliseconds, 0 for the zero time (no press).
+func unixMilli(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMilli()
 }
 
 func boolInt(b bool) int {

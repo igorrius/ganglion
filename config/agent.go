@@ -166,7 +166,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewHostStats(do.MustInvoke[*host.Stats](i)),
 		do.MustInvoke[*builtin.HostExec](i),
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
-		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i)),
+		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i), do.MustInvoke[*builtin.HostExec](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
 		metricsTools(do.MustInvoke[Bootstrap](i)))...)
 }

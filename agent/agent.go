@@ -145,16 +145,23 @@ func (NoLanguages) NoticeFor(context.Context, string, texts.Lang, string) (bool,
 	return false, nil
 }
 
-// Plans is the end of a turn for a conversation's plan (plan.Store).
+// Plans is the end of a turn for a conversation's plan, and the commands its
+// approved plan lists (plan.Store).
 type Plans interface {
 	Finish(ctx context.Context, conv string, kept bool) error
+	// Approved lists the commands the conversation's approved plan lets run
+	// without another press (R-CMD-7).
+	Approved(ctx context.Context, conv string) ([]tool.Command, error)
 }
 
-// NoPlans is the Plans of an agent with no plan tools.
+// NoPlans is the Plans of an agent with no plan tools; it approves nothing.
 type NoPlans struct{}
 
 // Finish implements Plans.
 func (NoPlans) Finish(context.Context, string, bool) error { return nil }
+
+// Approved implements Plans.
+func (NoPlans) Approved(context.Context, string) ([]tool.Command, error) { return nil, nil }
 
 // StatusFunc hears where the work on a person's message stands.
 type StatusFunc func(event.Status)

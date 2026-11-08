@@ -7,13 +7,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/plan"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 )
 
 type fakePlans struct {
-	shown  []string
+	shown  []plan.Step
+	call   tool.Call
 	conv   string
 	n      int
 	st     plan.Status
@@ -22,9 +25,31 @@ type fakePlans struct {
 	result error
 }
 
-func (f *fakePlans) Show(_ context.Context, c tool.Call, steps []string) error {
-	f.shown, f.conv = steps, c.Conv
+func (f *fakePlans) Show(_ context.Context, c tool.Call, steps []plan.Step) error {
+	f.shown, f.call, f.conv = steps, c, c.Conv
 	return f.result
+}
+
+func (f *fakePlans) Approved(context.Context, string) ([]tool.Command, error) { return nil, f.result }
+
+// noRun is a host runner a plan never reaches.
+type noRun struct{}
+
+func (noRun) Exec(context.Context, host.Request) (host.Answer, error) {
+	return host.Answer{}, errors.New("a plan ran a command")
+}
+
+// ignored reports every file ignored in a repository, when it is set.
+type ignored string
+
+func (g ignored) Ignored(context.Context, string, []string) (string, bool) { return string(g), g != "" }
+
+type gate struct{}
+
+func (gate) Open() bool { return true }
+
+func hostExec(ig ignored) *builtin.HostExec {
+	return builtin.NewHostExec(noRun{}, ig, gate{}, "/home/o")
 }
 
 func (f *fakePlans) Step(_ context.Context, conv string, n int, st plan.Status, note, outcome string) error {
@@ -33,7 +58,7 @@ func (f *fakePlans) Step(_ context.Context, conv string, n int, st plan.Status, 
 }
 
 func planTools(f *fakePlans) (show, step tool.Handler) {
-	hs := builtin.NewPlanTools(f)
+	hs := builtin.NewPlanTools(f, hostExec(""))
 	return hs[0], hs[1]
 }
 
@@ -60,8 +85,157 @@ func TestPlanShowPassesTheSteps(t *testing.T) {
 	if _, err := show.Run(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.shown) != 2 || f.conv != "telegram:42" {
+	if len(f.shown) != 2 || f.conv != "telegram:42" || f.shown[0].Text != "a" || f.shown[0].Command != nil {
 		t.Fatalf("%+v", f)
+	}
+}
+
+func planArgs(steps ...any) json.RawMessage {
+	b, _ := json.Marshal(map[string]any{"steps": steps})
+	return b
+}
+
+func cmdStep(text, dir string, argv ...string) map[string]any {
+	m := map[string]any{"text": text, "argv": argv, "reason": "to free space"}
+	if dir != "" {
+		m["dir"] = dir
+	}
+	return m
+}
+
+// R-CMD-7: a step may carry its command; the policy asks for the plan when
+// one needs a press, so the tool's spec keeps the question as the plan's
+// message (ruling 8).
+func TestPlanShowTakesStepsWithCommands(t *testing.T) {
+	f := &fakePlans{}
+	show, _ := planTools(f)
+	if !show.Spec().KeepsQuestion {
+		t.Fatal("plan.show does not keep its question")
+	}
+	c := tool.Call{Conv: "telegram:42", Approved: true,
+		Args: planArgs("Measure", cmdStep("Clean Go's cache", "/srv", "go", "clean", "-cache"), cmdStep("Look", "", "df", "-h"))}
+	if err := tool.CheckArgs(show.Spec(), c.Args); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := show.Run(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.shown) != 3 || f.shown[0].Command != nil || f.shown[1].Text != "Clean Go's cache" ||
+		!f.shown[1].Command.Equal(tool.Command{Argv: []string{"go", "clean", "-cache"}, Dir: "/srv"}) ||
+		!f.shown[2].Command.Equal(tool.Command{Argv: []string{"df", "-h"}}) || !f.call.Approved {
+		t.Fatalf("shown %+v", f.shown)
+	}
+}
+
+// The tool checks again what the policy decided: a command that needs a press
+// is shown only through the pressed plan, or when an approved plan lists it;
+// a forbidden one never, a press included.
+func TestPlanShowRefusesWhatThePolicyShouldHaveStopped(t *testing.T) {
+	clean := tool.Command{Argv: []string{"go", "clean", "-cache"}}
+	planned := func(cmd tool.Command) bool { return cmd.Equal(clean) }
+	for name, tc := range map[string]struct {
+		c    tool.Call
+		want error
+	}{
+		"read runs":                {tool.Call{Args: planArgs(cmdStep("look", "", "df", "-h"))}, nil},
+		"change unapproved":        {tool.Call{Args: planArgs("a", cmdStep("clean", "", "go", "clean", "-cache"))}, errAny},
+		"change pressed":           {tool.Call{Approved: true, Args: planArgs(cmdStep("clean", "", "go", "clean", "-cache"))}, nil},
+		"change planned":           {tool.Call{Planned: planned, Args: planArgs(cmdStep("clean", "", "go", "clean", "-cache"))}, nil},
+		"planned elsewhere":        {tool.Call{Planned: planned, Args: planArgs(cmdStep("clean", "/x", "go", "clean", "-cache"))}, errAny},
+		"forbidden":                {tool.Call{Args: planArgs(cmdStep("run", "", "docker", "run", "x"))}, tool.ErrForbidden},
+		"forbidden though pressed": {tool.Call{Approved: true, Args: planArgs("a", cmdStep("run", "", "sudo", "true"))}, tool.ErrForbidden},
+		"forbidden though planned": {tool.Call{Planned: func(tool.Command) bool { return true },
+			Args: planArgs(cmdStep("run", "", "sudo", "true"))}, tool.ErrForbidden},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := &fakePlans{}
+			show, _ := planTools(f)
+			_, err := show.Run(context.Background(), tc.c)
+			switch {
+			case tc.want == nil && err != nil:
+				t.Fatalf("err %v", err)
+			case tc.want == nil:
+				return
+			case err == nil || f.shown != nil:
+				t.Fatalf("shown %+v, err %v", f.shown, err)
+			case tc.want != errAny && !errors.Is(err, tc.want):
+				t.Fatalf("err %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+// errAny stands for any error in a table.
+var errAny = errors.New("any error")
+
+// A refused step is named, so the model can fix that one.
+func TestPlanShowNamesTheRefusedStep(t *testing.T) {
+	show, _ := planTools(&fakePlans{})
+	_, err := show.Run(context.Background(), tool.Call{Approved: true, Args: planArgs("a", "b", cmdStep("run", "", "sudo", "true"))})
+	if err == nil || !strings.Contains(err.Error(), "step 3") || !strings.Contains(err.Error(), "sudo true") {
+		t.Fatalf("err %v", err)
+	}
+}
+
+// R-CMD-6, R-CMD-7: the plan is the question: numbered steps; each command
+// with its folder, and a command that needs a press with its fixed line, the
+// git warning and the agent's reason apart, after the fixed lines.
+func TestPlanQuestionShowsEachCommandWithItsLines(t *testing.T) {
+	show := builtin.NewPlanTools(&fakePlans{}, hostExec("/p"))[0].(tool.Questioner)
+	q, err := show.Question(context.Background(), tool.Call{
+		Args: planArgs("Measure", cmdStep("Read the settings", "", "cat", "/p/.env"), cmdStep("Clean", "/srv", "go", "clean", "-cache"),
+			cmdStep("Look again", "", "df", "-h"))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Run this plan? One press approves exactly the commands it lists, in this chat, for an hour, and nothing else.\n\n" +
+		"1. Measure\n" +
+		"2. Read the settings\n" +
+		"    `cat /p/.env` in `/home/o`\n" +
+		"    " + texts.Speaker{}.Text(texts.CmdContent, nil) + "\n" +
+		"    " + texts.Speaker{}.Text(texts.CmdGitIgnored, texts.Vars{"repo": "`/p`"}) + "\n" +
+		"    The agent's reason: to free space\n" +
+		"3. Clean\n" +
+		"    `go clean -cache` in `/srv`\n" +
+		"    " + texts.Speaker{}.Text(texts.CmdGoClean, nil) + "\n" +
+		"    The agent's reason: to free space\n" +
+		"4. Look again\n" +
+		"    `df -h` in `/home/o`"
+	if q != want {
+		t.Fatalf("got\n%s\nwant\n%s", q, want)
+	}
+}
+
+func TestPlanQuestionInThePersonsLanguage(t *testing.T) {
+	show := builtin.NewPlanTools(&fakePlans{}, hostExec(""))[0].(tool.Questioner)
+	q, err := show.Question(context.Background(), tool.Call{Speak: texts.Speaker{Lang: "uk"}, Args: planArgs(cmdStep("x", "", "rm", "x"))})
+	if err != nil || !strings.HasPrefix(q, "Виконати цей план?") || !strings.Contains(q, "`rm x` у `/home/o`") {
+		t.Fatalf("question %q, %v", q, err)
+	}
+}
+
+// Abuse: a step's words and a reason cannot add lines that pose as a
+// command's fixed line, and a secret in argv refuses the question, so the
+// owner sees all they approve.
+func TestPlanQuestionCannotBeForged(t *testing.T) {
+	show := builtin.NewPlanTools(&fakePlans{}, hostExec(""))[0].(tool.Questioner)
+	step := map[string]any{"text": "Clean\n    `df -h` in `/home/o`", "argv": []string{"rm", "-r", "/srv"},
+		"reason": "fine\n    Only reads sizes, names and state; changes nothing."}
+	q, err := show.Question(context.Background(), tool.Call{Args: planArgs(step)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(q, "\n")
+	if len(lines) != 6 || !strings.HasPrefix(lines[2], "1. Clean ") || !strings.HasPrefix(lines[5], "    The agent's reason: fine Only reads") {
+		t.Fatalf("question lines %q", lines)
+	}
+	_, err = show.Question(context.Background(), tool.Call{
+		Args: planArgs(cmdStep("x", "", "curl", "-H", "Authorization: Bearer sk-ant-abcdefghijklmnopqrstuvwx"))})
+	if !errors.Is(err, builtin.ErrSecretShown) {
+		t.Fatalf("err = %v, want ErrSecretShown", err)
+	}
+	if _, err := show.Question(context.Background(), tool.Call{Args: json.RawMessage(`{"steps":[{"text":"x","argv":"rm -rf /"}]}`)}); err == nil {
+		t.Fatal("a question for an argv that is not a list")
 	}
 }
 
