@@ -3,6 +3,7 @@ package config
 import (
 	"time"
 
+	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/status/proc"
 	"github.com/igorrius/ganglion/transport/telegram"
@@ -18,6 +19,7 @@ func StatusSources() do.Provider[[]status.Source] {
 		sources := []status.Source{
 			proc.New(time.Time(do.MustInvoke[ProcessStart](i)), proc.Files{DB: b.DB, Logs: b.LogDir}),
 			do.MustInvoke[*turns.Log](i),
+			do.MustInvoke[*sqlqueue.Queue](i),
 		}
 		return append(sources, do.MustInvoke[Watched](i)...), nil
 	}

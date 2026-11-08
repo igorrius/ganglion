@@ -627,21 +627,21 @@ refused`.
 Keys: `status.queues` `Inbox: {inbox} waiting; outbox: {outbox} waiting`; `status.reason_queue_old` `the
 oldest has waited {for}`; `status.reason_undelivered` `{n} undelivered in the last day`.
 
-- [ ] **Step 1: Write the failing tests:** an empty queue is `OK` "0 waiting"; an inbox row pending
+- [x] **Step 1: Write the failing tests:** an empty queue is `OK` "0 waiting"; an inbox row pending
   since 2 minutes is `Warn` `reason_queue_old` "2 min"; an inbox row whose `at_ms` is in the future is
   not waiting; an outbox row `failed` with `done_ms` within a day is `Warn` `reason_undelivered` "1";
   one failed two days ago is not counted.
 
-- [ ] **Step 2: Run** `go test ./queue/sqlqueue/`. Expected: FAIL.
+- [x] **Step 2: Run** `go test ./queue/sqlqueue/`. Expected: FAIL.
 
-- [ ] **Step 3: Implement** one line in `SectionDelivery`: counts of `inbox` with `status = 'pending' AND
+- [x] **Step 3: Implement** one line in `SectionDelivery`: counts of `inbox` with `status = 'pending' AND
   at_ms <= now` and of `outbox` with `status = 'pending'`; the oldest of each (`at_ms`, `created_ms`); the
   failed count with `done_ms >= now - 24h`. `Warn` past `queueOld = time.Minute` or with any failed.
   Append the queue to the sources in `config/status.go`.
 
-- [ ] **Step 4: Run** `go test -race ./queue/sqlqueue/ ./config/`. Expected: PASS.
+- [x] **Step 4: Run** `go test -race ./queue/sqlqueue/ ./config/`. Expected: PASS.
 
-- [ ] **Step 5: Commit** `sqlqueue: /status shows what waits and what was not delivered`.
+- [x] **Step 5: Commit** `sqlqueue: /status shows what waits and what was not delivered`.
 
 ### Task 7: Skills not loaded, modules fallen back
 
