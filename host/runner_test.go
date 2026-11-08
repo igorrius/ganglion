@@ -435,3 +435,58 @@ type offStarter struct{}
 func (offStarter) Command(context.Context, []string, string, ...string) (*exec.Cmd, error) {
 	return nil, errSandboxOff
 }
+
+// A rerun of a key whose command ended in the background is not told its
+// end: the event told it, and each end is told once (Review Focus 5).
+func TestARerunOfAnAnnouncedJobIsNotDone(t *testing.T) {
+	box, g, sh := &inbox{}, newGate(), &shell{}
+	r := newRunner(t, sh, box, g)
+	opened := openWait(g)
+	if a, err := r.Exec(t.Context(), req("t:11", "sleep", "0.3;", "echo", "late")); err != nil || a.Done {
+		t.Fatalf("answer = %+v, %v; want running", a, err)
+	}
+	<-opened
+	drive(t, g, box, 1)
+	a, err := r.Exec(t.Context(), req("t:11", "ignored"))
+	if err != nil || a.Done || a.Job.State != JobDone || sh.started() != 1 {
+		t.Fatalf("rerun = %+v, %v, started %d; want not done, from the stored row", a, err, sh.started())
+	}
+}
+
+// secret is a token the tests' redactor knows, 46 characters long.
+const secret = "tok-0123456789abcdefghijklmnopqrstuvwxyzABCDEF"
+
+// hideSecret is the tests' redactor.
+func hideSecret(s string) string { return strings.ReplaceAll(s, secret, "[redacted]") }
+
+// noPartOf fails when any 6 characters of secret appear in text.
+func noPartOf(t *testing.T, text string) {
+	t.Helper()
+	for i := 0; i+6 <= len(secret); i++ {
+		if strings.Contains(text, secret[i:i+6]) {
+			t.Fatalf("%q of the secret reached the text: %q", secret[i:i+6], text)
+		}
+	}
+}
+
+// straddling is output with a secret across the end of the kept head and
+// another across the start of the kept tail.
+func straddling(head, tail int) string {
+	return strings.Repeat("x", head-20) + secret + strings.Repeat("y", 1000) + secret + strings.Repeat("z", tail-26)
+}
+
+// A secret the cut goes through is hidden whole before the cut, so not even
+// a part of it reaches the model.
+func TestASecretAcrossTheCutIsHiddenWhole(t *testing.T) {
+	lim := Limits{Wait: time.Minute, Max: time.Minute, Parallel: 1, Head: 64, Tail: 64}
+	r, err := NewRunner(t.Context(), openDB(t), &shell{}, (&inbox{}).put, lim, WithRedact(hideSecret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start(t, r)
+	a, err := r.Exec(t.Context(), req("t:12", "printf", "%s", straddling(64, 64)))
+	if err != nil || !strings.Contains(a.Job.Text, "the middle left out") {
+		t.Fatalf("answer = %+v, %v", a, err)
+	}
+	noPartOf(t, a.Job.Text)
+}

@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os/exec"
-	"strings"
 	"sync"
 	"time"
 
@@ -94,9 +93,10 @@ type Job struct {
 	Started, Ended                  time.Time
 }
 
-// Answer is what a call gets: the job, and whether it ended in the call.
-// A job that did not end in its call ends as a command.done event, so each
-// end is told once: here or there.
+// Answer is what a call gets: the job, and whether its end is told here.
+// A job whose end is not told here ends as a command.done event, so each
+// end is told once: here or there. Callers branch on Done only: a not-Done
+// answer's Job may already read done, when it ended in the background.
 type Answer struct {
 	Job  Job
 	Done bool
@@ -257,13 +257,14 @@ func (r *Runner) context(ctx context.Context) (context.Context, error) {
 }
 
 // seen answers a key that has a row: done or interrupted, or still running,
-// which its call learns as running in the background.
+// which its call learns as running in the background. A row that ended in
+// the background is not done: its event tells the end.
 func (r *Runner) seen(ctx context.Context, j Job, err error) (Answer, error) {
 	if err != nil {
 		return Answer{}, err
 	}
 	if j.State != JobRunning {
-		return Answer{Job: j, Done: true}, nil
+		return Answer{Job: j, Done: !j.Background}, nil
 	}
 	return r.detach(ctx, j.Key, nil)
 }
@@ -346,7 +347,7 @@ func (r *Runner) runOne(base context.Context, q Request) (string, outcome) {
 
 // render is the text the model reads of an ended command: a first line of
 // how it ended and the size of its output, then the output, valid UTF-8 and
-// redacted.
+// redacted (capture.text).
 func (r *Runner) render(ctx context.Context, cmd *exec.Cmd, err error, limit, took time.Duration, out *capture) (string, outcome) {
 	code := -1
 	if cmd.ProcessState != nil {
@@ -366,10 +367,10 @@ func (r *Runner) render(ctx context.Context, cmd *exec.Cmd, err error, limit, to
 	default:
 		head, how = fmt.Sprintf("exit %d after %s", code, took.Round(time.Millisecond)), outcomeFailed
 	}
-	text, cut := out.text()
+	text, cut := out.text(r.hide)
 	head += fmt.Sprintf("; %d bytes of output", out.size())
 	if cut {
 		head += ", the middle left out"
 	}
-	return head + "\n" + r.hide(strings.ToValidUTF8(text, "")), how
+	return head + "\n" + text, how
 }

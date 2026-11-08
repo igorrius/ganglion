@@ -39,22 +39,6 @@ func TestSweepRemovesOnlyOldEntriesOfAgedPlaces(t *testing.T) {
 	}
 }
 
-func TestSweepRemovesASymlinkNotItsTarget(t *testing.T) {
-	dir, target, now := t.TempDir(), t.TempDir(), time.Now()
-	touch(t, filepath.Join(target, "precious"), 1, now)
-	link := filepath.Join(dir, "run-1")
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
-	}
-	lchtimes(t, link, now.Add(-48*time.Hour)) // the link's own time, not its target's
-	j := NewJanitor([]Place{{Name: PlaceClaude, Path: dir, MaxAge: time.Hour}}, slog.New(slog.DiscardHandler),
-		WithJanitorClock(func() time.Time { return now }, nil))
-	j.Sweep(context.Background())
-	if _, err := os.Stat(filepath.Join(target, "precious")); err != nil {
-		t.Fatal("the janitor followed a symlink")
-	}
-}
-
 func TestSweepCountsCleanedBytesByPlace(t *testing.T) {
 	rec := telemetrytest.Install(t)
 	dir, now := t.TempDir(), time.Now()

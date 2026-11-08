@@ -2,21 +2,30 @@ package host
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 )
+
+// edge is how many bytes capture keeps past each cut, so a secret the cut
+// goes through is hidden whole before the cut: a secret is shorter than this.
+const edge = 256
 
 // capture keeps the first head and the last tail bytes of a command's
 // output, and counts all of it: enough for the model to see how it began
 // and how it ended, never a flood (R-CMD-1). Stdout and stderr share it, so
-// their lines stay in the order they came.
+// their lines stay in the order they came. It keeps edge bytes more on each
+// side, which text hides with the rest and then cuts off.
 type capture struct {
-	mu         sync.Mutex
-	head, tail []byte
-	maxH, maxT int
-	total      int64
+	mu           sync.Mutex
+	head, tail   []byte
+	keepH, keepT int // what the model reads of each side
+	maxH, maxT   int // what is kept: the above and an edge
+	total        int64
 }
 
-func newCapture(head, tail int) *capture { return &capture{maxH: head, maxT: tail} }
+func newCapture(head, tail int) *capture {
+	return &capture{keepH: head, keepT: tail, maxH: head + edge, maxT: tail + edge}
+}
 
 // Write implements io.Writer; it never fails, so the command never blocks.
 func (c *capture) Write(p []byte) (int, error) {
@@ -37,19 +46,31 @@ func (c *capture) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// text is the kept output, with a mark where the middle was left out.
-func (c *capture) text() (string, bool) {
+// text is the kept output, valid UTF-8 and hidden, with a mark where the
+// middle was left out. Each side is hidden with its edge before it is cut,
+// so a secret across a cut is hidden whole; a cut through a hidden mark
+// shows only the mark's part.
+func (c *capture) text(hide func(string) string) (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	tail := c.tail
-	if len(tail) > c.maxT {
-		tail = tail[len(tail)-c.maxT:]
+	if c.total <= int64(c.keepH+c.keepT) {
+		return hide(strings.ToValidUTF8(string(c.head)+string(c.tail), "")), false
 	}
-	kept := int64(len(c.head) + len(tail))
-	if kept == c.total {
-		return string(c.head) + string(tail), false
+	head := hide(strings.ToValidUTF8(string(c.head), ""))
+	head = strings.ToValidUTF8(head[:min(len(head), c.keepH)], "")
+	tail := hide(strings.ToValidUTF8(string(c.tailEdge()), ""))
+	tail = strings.ToValidUTF8(tail[max(0, len(tail)-c.keepT):], "")
+	return fmt.Sprintf("%s\n… %d bytes left out …\n%s", head, c.total-int64(c.keepH+c.keepT), tail), true
+}
+
+// tailEdge is the last maxT bytes of the output. While nothing was dropped
+// they may begin in the head.
+func (c *capture) tailEdge() []byte {
+	all := c.tail
+	if int64(len(c.head)+len(c.tail)) == c.total {
+		all = append(append([]byte(nil), c.head...), c.tail...)
 	}
-	return fmt.Sprintf("%s\n… %d bytes left out …\n%s", c.head, c.total-kept, tail), true
+	return all[max(0, len(all)-c.maxT):]
 }
 
 // size is how many bytes the command wrote in all.
