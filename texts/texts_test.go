@@ -331,3 +331,20 @@ func TestEscape(t *testing.T) {
 		t.Fatalf("Escape = %q", got)
 	}
 }
+
+func TestCommandLinesAreApprovalTextsInsideAQuestion(t *testing.T) {
+	for _, k := range Keys() {
+		if !strings.HasPrefix(string(k), "cmd.") {
+			continue
+		}
+		if !IsApproval(k) {
+			t.Errorf("%s is not an approval text", k)
+		}
+		if limit(k) != limitInQuestion {
+			t.Errorf("%s: limit %d, want %d", k, limit(k), limitInQuestion)
+		}
+	}
+	if !IsApproval(CmdRead) || limit(CmdGoClean) != 300 {
+		t.Error("cmd keys")
+	}
+}

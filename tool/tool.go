@@ -67,6 +67,21 @@ type Spec struct {
 	AskTaintedInput bool
 }
 
+// Command is a host command as approved: its argv and the folder it runs in
+// ("" is the node user's home). Plans and grants approve commands, never
+// patterns (ADR-0040): the same argv in another folder is another command.
+type Command struct {
+	Argv []string `json:"argv"`
+	Dir  string   `json:"dir,omitempty"`
+}
+
+// Equal reports whether o is the same command, argument for argument.
+func (c Command) Equal(o Command) bool { return c.Dir == o.Dir && slices.Equal(c.Argv, o.Argv) }
+
+// CommandFunc reports whether a command is approved in the call's
+// conversation (an approved plan lists it, R-CMD-7).
+type CommandFunc func(cmd Command) bool
+
 // TaskConvPrefix starts the conversation of a scheduled task's turns,
 // "task:<job id>": its history is the task's earlier runs, and the
 // policy finds the task of a call outside its grant by it (R-POL-8).

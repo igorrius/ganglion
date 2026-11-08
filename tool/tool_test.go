@@ -222,3 +222,13 @@ func TestStripExternal(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandEqual(t *testing.T) {
+	a := tool.Command{Argv: []string{"rm", "-r", "x"}, Dir: "/a"}
+	if !a.Equal(tool.Command{Argv: []string{"rm", "-r", "x"}, Dir: "/a"}) {
+		t.Error("same command")
+	}
+	if a.Equal(tool.Command{Argv: []string{"rm", "-r", "x"}, Dir: "/b"}) || a.Equal(tool.Command{Argv: []string{"rm", "-r"}, Dir: "/a"}) {
+		t.Error("another folder or argv is another command")
+	}
+}

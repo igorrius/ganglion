@@ -165,6 +165,38 @@ const (
 	StatusReasonSandboxLandlock  Key = "status.reason_sandbox_landlock"
 	StatusReasonSandboxDumpable  Key = "status.reason_sandbox_dumpable"
 	StatusReasonSandboxSelfTest  Key = "status.reason_sandbox_self_test"
+
+	CmdRead               Key = "cmd.read"
+	CmdContent            Key = "cmd.content"
+	CmdUnknown            Key = "cmd.unknown"
+	CmdPath               Key = "cmd.path"
+	CmdScript             Key = "cmd.script"
+	CmdRoot               Key = "cmd.root"
+	CmdOutside            Key = "cmd.outside"
+	CmdAllEnv             Key = "cmd.all_env"
+	CmdScriptFile         Key = "cmd.script_file"
+	CmdDockerOther        Key = "cmd.docker_other"
+	CmdRemove             Key = "cmd.remove"
+	CmdMove               Key = "cmd.move"
+	CmdCreate             Key = "cmd.create"
+	CmdPerms              Key = "cmd.perms"
+	CmdKill               Key = "cmd.kill"
+	CmdArchive            Key = "cmd.archive"
+	CmdTruncate           Key = "cmd.truncate"
+	CmdNetwork            Key = "cmd.network"
+	CmdGoClean            Key = "cmd.go_clean"
+	CmdCargoClean         Key = "cmd.cargo_clean"
+	CmdDockerImagePrune   Key = "cmd.docker_image_prune"
+	CmdDockerRmi          Key = "cmd.docker_rmi"
+	CmdDockerBuilderPrune Key = "cmd.docker_builder_prune"
+	CmdDockerRm           Key = "cmd.docker_rm"
+	CmdDockerStop         Key = "cmd.docker_stop"
+	CmdDockerVolumeRm     Key = "cmd.docker_volume_rm"
+	CmdDockerSystemPrune  Key = "cmd.docker_system_prune"
+	CmdSystemctlStop      Key = "cmd.systemctl_stop"
+	CmdJournalVacuum      Key = "cmd.journal_vacuum"
+	CmdGitIgnored         Key = "cmd.git_ignored"
+	CmdReason             Key = "cmd.reason"
 )
 
 var allKeys = []Key{
@@ -175,6 +207,7 @@ var allKeys = []Key{
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, SchedSummaryReminder, SchedSummaryTask, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, StatusModuleFallback, StatusReasonModuleFailed, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled, StatusUnitDay, StatusUnitHour, StatusUnitMin, StatusUnitSec, StatusSandboxReady, StatusSandboxOff, StatusReasonSandboxNotLinux, StatusReasonSandboxRoot, StatusReasonSandboxLandlock, StatusReasonSandboxDumpable, StatusReasonSandboxSelfTest,
+	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.
@@ -205,7 +238,7 @@ func limit(k Key) int {
 		return limitButton
 	case strings.HasPrefix(string(k), "ask."):
 		return limitQuestion
-	case strings.HasPrefix(string(k), "sched."):
+	case strings.HasPrefix(string(k), "sched."), strings.HasPrefix(string(k), "cmd."):
 		return limitInQuestion
 	default:
 		return limitMessage
@@ -220,7 +253,7 @@ func IsApproval(k Key) bool {
 		SchedOnce, SchedEvery, SchedEveryNext, SchedThisChat, SchedNone:
 		return true
 	default:
-		return strings.HasPrefix(string(k), "ask.")
+		return strings.HasPrefix(string(k), "ask.") || strings.HasPrefix(string(k), "cmd.")
 	}
 }
 
