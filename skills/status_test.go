@@ -46,8 +46,8 @@ func TestProblemKinds(t *testing.T) {
 func TestRefusedStatus(t *testing.T) {
 	since := time.Date(2026, 11, 8, 9, 15, 0, 0, time.UTC)
 	r := Refused{Loaded: 3, Since: since, Problems: []Problem{{Skill: "rates", Reason: "script.run \"x\" is not executable", Kind: ProblemScript}}}
-	cs := r.Status(t.Context(), status.Scope{Now: since.Add(time.Hour)})
-	if len(cs) != 2 {
+	cs, err := r.Status(t.Context(), status.Scope{Now: since.Add(time.Hour)})
+	if err != nil || len(cs) != 2 {
 		t.Fatalf("lines %+v", cs)
 	}
 	if c := cs[0]; c.State != status.OK || c.Line != texts.StatusSkills || c.Vars["n"] != "3" {

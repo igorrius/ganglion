@@ -22,7 +22,11 @@ func scope() status.Scope {
 func lines(t *testing.T, src *Source) map[texts.Key]status.Check {
 	t.Helper()
 	out := map[texts.Key]status.Check{}
-	for _, c := range src.Status(t.Context(), scope()) {
+	cs, err := src.Status(t.Context(), scope())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cs {
 		if c.Section != status.SectionNode {
 			t.Errorf("%s in %s", c.Line, c.Section)
 		}

@@ -26,3 +26,5 @@ steps:
       reply: {contains: "frontmatter"}
   - facts:
       reply: {contains: "Delivery"}
+  - facts:
+      reply: {contains: "Telegram: polled"}

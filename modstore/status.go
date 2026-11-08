@@ -29,7 +29,7 @@ func (*Store) Name() string { return "modules" }
 // Status implements status.Source (R-OBS-11): one line for each module whose
 // stored version failed its check at start; none when every module runs as
 // chosen.
-func (s *Store) Status(context.Context, status.Scope) []status.Check {
+func (s *Store) Status(context.Context, status.Scope) ([]status.Check, error) {
 	s.activeMu.Lock()
 	defer s.activeMu.Unlock()
 	names := make([]string, 0, len(s.fellBack))
@@ -43,5 +43,5 @@ func (s *Store) Status(context.Context, status.Scope) []status.Check {
 		out = append(out, status.Check{Section: status.SectionProblems, State: status.Warn, Line: texts.StatusModuleFallback,
 			Reason: texts.StatusReasonModuleFailed, Vars: texts.Vars{"module": m, "version": f.version}, Since: f.at})
 	}
-	return out
+	return out, nil
 }

@@ -15,8 +15,8 @@ func fixedClock() time.Time { return healthStart }
 
 func line(t *testing.T, h *Health, now time.Time) status.Check {
 	t.Helper()
-	cs := h.Status(t.Context(), status.Scope{Now: now, Location: time.UTC})
-	if len(cs) != 1 || cs[0].Section != status.SectionDelivery {
+	cs, err := h.Status(t.Context(), status.Scope{Now: now, Location: time.UTC})
+	if err != nil || len(cs) != 1 || cs[0].Section != status.SectionDelivery {
 		t.Fatalf("lines %+v", cs)
 	}
 	return cs[0]

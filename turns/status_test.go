@@ -27,7 +27,7 @@ func clock(h, m int) time.Time { return time.Date(2026, 11, 8, h, m, 0, 0, time.
 func byModel(t *testing.T, l *turns.Log) map[string]status.Check {
 	t.Helper()
 	out := map[string]status.Check{}
-	for _, c := range l.Status(t.Context(), scope()) {
+	for _, c := range mustStatus(t, l) {
 		if c.Section == status.SectionModels {
 			out[c.Vars["model"]] = c
 		}
@@ -72,7 +72,7 @@ func TestStatusFailedTurns(t *testing.T) {
 	record(t, l, "4", clock(11, 30), turns.OutcomeOK)
 	record(t, l, "old", now.Add(-25*time.Hour), turns.OutcomeError)
 	var failed status.Check
-	for _, c := range l.Status(t.Context(), scope()) {
+	for _, c := range mustStatus(t, l) {
 		if c.Line == texts.StatusTurnsFailed {
 			failed = c
 		}
@@ -81,9 +81,18 @@ func TestStatusFailedTurns(t *testing.T) {
 		t.Errorf("failed: %+v", failed)
 	}
 	l = newLog(t)
-	for _, c := range l.Status(t.Context(), scope()) {
+	for _, c := range mustStatus(t, l) {
 		if c.Line == texts.StatusTurnsFailed && (c.State != status.OK || c.Vars["n"] != "0") {
 			t.Errorf("none: %+v", c)
 		}
 	}
+}
+
+func mustStatus(t *testing.T, l *turns.Log) []status.Check {
+	t.Helper()
+	cs, err := l.Status(t.Context(), scope())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cs
 }

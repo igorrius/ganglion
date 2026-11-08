@@ -17,8 +17,10 @@ type fakeSource struct {
 	checks []status.Check
 }
 
-func (f fakeSource) Name() string                                        { return f.name }
-func (f fakeSource) Status(context.Context, status.Scope) []status.Check { return f.checks }
+func (f fakeSource) Name() string { return f.name }
+func (f fakeSource) Status(context.Context, status.Scope) ([]status.Check, error) {
+	return f.checks, nil
+}
 
 // statusEnv is the test env with the given sources.
 func statusEnv(t *testing.T, cfg Config, srcs ...status.Source) *env {
@@ -138,5 +140,21 @@ func TestOfLimit(t *testing.T) {
 	}
 	if got := ofLimit(9, 10); got != "9/10" {
 		t.Errorf("on: %q", got)
+	}
+}
+
+// Review: a turn that compacted its history has the cheap model's attempt last
+// in its route; that is not a fallback.
+func TestStatusCompactionIsNoFallback(t *testing.T) {
+	e := statusEnv(t, Config{HistoryTokens: 10, KeepRecent: 2})
+	e.turn(t, message(owner, "Igor", strings.Repeat("a ", 50)))
+	e.smart.push(say("ok"))
+	e.cheap.push(say("Summary."))
+	e.turn(t, message(owner, "Igor", "next"))
+	if st := e.state(t); st.Summary == "" {
+		t.Fatal("no compaction ran")
+	}
+	if reply := statusReply(t, e); strings.Contains(reply, "answered by") || !strings.HasPrefix(reply, "✅") {
+		t.Errorf("reply:\n%s", reply)
 	}
 }

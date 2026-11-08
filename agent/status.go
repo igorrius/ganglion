@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -45,7 +44,7 @@ func (a *Agent) showStatus(ctx context.Context, t *turn, _ string) error {
 		return nil
 	}
 	s := status.Scope{Conv: t.event.Conv, Principal: t.msg.From, Now: t.now, Location: a.cfg.Location}
-	checks := append(a.ownStatus(ctx, t, s), status.Collect(ctx, s, a.d.StatusSources, statusTimeout)...)
+	checks := append(a.ownStatus(ctx, t, s), status.Collect(ctx, s, a.d.StatusSources, statusTimeout, a.log)...)
 	t.reply(renderStatus(status.Order(checks), a.speaker(ctx, t), s))
 	return nil
 }
@@ -75,7 +74,9 @@ func (a *Agent) sessionLine(ctx context.Context, t *turn) status.Check {
 	return c
 }
 
-// lastAnsweredBy is the model that answered conv's last turn; "" for none or when it cannot be read.
+// lastAnsweredBy is the model that answered conv's last turn: its first successful attempt, since a
+// compaction after the answer adds its own attempts to the same route. "" for none or when it cannot
+// be read.
 func (a *Agent) lastAnsweredBy(ctx context.Context, conv string) string {
 	last, err := a.d.Turns.Last(ctx, conv)
 	if err != nil {
@@ -84,7 +85,7 @@ func (a *Agent) lastAnsweredBy(ctx context.Context, conv string) string {
 		}
 		return ""
 	}
-	for _, at := range slices.Backward(last.Route) {
+	for _, at := range last.Route {
 		if at.Error == "" {
 			return at.Model
 		}
@@ -96,13 +97,13 @@ func (a *Agent) lastAnsweredBy(ctx context.Context, conv string) string {
 func (a *Agent) dayLine(ctx context.Context, t *turn, s status.Scope) status.Check {
 	start := clock.DayStart(s.Now, a.cfg.Location)
 	mine, err := a.d.Turns.Totals(ctx, start, t.msg.From, "")
-	if err != nil {
+	var all turns.Totals
+	if err == nil {
+		all, err = a.d.Turns.Totals(ctx, start, "", "")
+	}
+	if err != nil { // no line rather than a spend of $0.00 that is not known
 		a.log.Warn("agent: /status: totals unreadable", "err", err)
 		return status.Check{Section: status.SectionModels, State: status.Warn, Line: texts.StatusNoAnswer, Vars: texts.Vars{"component": turnsSource}}
-	}
-	all, err := a.d.Turns.Totals(ctx, start, "", "")
-	if err != nil {
-		a.log.Warn("agent: /status: totals unreadable", "err", err)
 	}
 	c := status.Check{Section: status.SectionModels, State: status.OK, Line: texts.StatusDay, Vars: texts.Vars{
 		"turns": ofLimit(mine.Turns, a.cfg.DailyTurns), "tokens": ofLimit(mine.Tokens, a.cfg.DailyTokens),

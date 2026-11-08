@@ -2,6 +2,7 @@ package turns
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -33,22 +34,23 @@ func (*Log) Name() string { return "turns" }
 
 // Status implements status.Source (R-OBS-11): each model's last answer and
 // failure in the last week, and the turns that failed in the last day. A
-// model warns when its last call failed; every model so is a failure.
-func (l *Log) Status(ctx context.Context, s status.Scope) []status.Check {
-	seen, err := l.ModelsSeen(ctx, s.Now.Add(-modelsSeen))
-	if err != nil {
-		return []status.Check{noAnswer(status.SectionModels)}
+// model warns when its last call failed; every model so is a failure. Each
+// part is read on its own, so one failing keeps the other.
+func (l *Log) Status(ctx context.Context, s status.Scope) ([]status.Check, error) {
+	var out []status.Check
+	seen, errSeen := l.ModelsSeen(ctx, s.Now.Add(-modelsSeen))
+	if errSeen == nil {
+		out = modelLines(seen, s)
 	}
-	out := modelLines(seen, s)
-	n, err := l.failedSince(ctx, s.Now.Add(-failedSeen))
-	if err != nil {
-		return append(out, noAnswer(status.SectionProblems))
+	n, errFailed := l.failedSince(ctx, s.Now.Add(-failedSeen))
+	if errFailed == nil {
+		c := status.Check{Section: status.SectionProblems, State: status.OK, Line: texts.StatusTurnsFailed, Vars: texts.Vars{"n": strconv.Itoa(n)}}
+		if n > 0 {
+			c.State = status.Warn
+		}
+		out = append(out, c)
 	}
-	c := status.Check{Section: status.SectionProblems, State: status.OK, Line: texts.StatusTurnsFailed, Vars: texts.Vars{"n": strconv.Itoa(n)}}
-	if n > 0 {
-		c.State = status.Warn
-	}
-	return append(out, c)
+	return out, errors.Join(errSeen, errFailed)
 }
 
 // modelLines are the models' lines, in the order seen.
@@ -75,10 +77,6 @@ func modelLines(seen []ModelSeen, s status.Scope) []status.Check {
 		out = append(out, c)
 	}
 	return out
-}
-
-func noAnswer(sec status.Section) status.Check {
-	return status.Check{Section: sec, State: status.Warn, Line: texts.StatusNoAnswer, Vars: texts.Vars{"component": "turns"}}
 }
 
 // ModelsSeen returns each model's last answer and last failure in the turns

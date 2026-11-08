@@ -29,12 +29,12 @@ func (Refused) Name() string { return "skills" }
 
 // Status implements status.Source: how many skills are loaded, then each that
 // is not with the kind of rule it broke, never the loader's text.
-func (r Refused) Status(context.Context, status.Scope) []status.Check {
+func (r Refused) Status(context.Context, status.Scope) ([]status.Check, error) {
 	out := []status.Check{{Section: status.SectionProblems, State: status.OK, Line: texts.StatusSkills,
 		Vars: texts.Vars{"n": strconv.Itoa(r.Loaded)}}}
 	for _, p := range r.Problems {
 		out = append(out, status.Check{Section: status.SectionProblems, State: status.Warn, Line: texts.StatusSkillRefused,
 			Reason: kindReasons[p.Kind], Vars: texts.Vars{"skill": p.Skill}, Since: r.Since})
 	}
-	return out
+	return out, nil
 }

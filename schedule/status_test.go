@@ -13,8 +13,8 @@ import (
 // jobsLine is the scheduler's one line at e's clock.
 func (e *env) jobsLine(t *testing.T) status.Check {
 	t.Helper()
-	cs := e.sched.Status(context.Background(), status.Scope{Now: e.now, Location: e.loc})
-	if len(cs) != 1 || cs[0].Section != status.SectionProblems {
+	cs, err := e.sched.Status(context.Background(), status.Scope{Now: e.now, Location: e.loc})
+	if err != nil || len(cs) != 1 || cs[0].Section != status.SectionProblems {
 		t.Fatalf("lines %+v", cs)
 	}
 	return cs[0]
@@ -70,5 +70,14 @@ func TestStatusStalledTicks(t *testing.T) {
 	c := e.jobsLine(t)
 	if c.State != status.Warn || c.Reason != texts.StatusReasonSchedStalled || c.Vars["for"] != "3 min" {
 		t.Errorf("stalled: %+v", c)
+	}
+}
+
+// Review: a one-time job past its time, not yet put, shows the next tick, not a time gone.
+func TestStatusOverdueReminderIsNotInThePast(t *testing.T) {
+	e := newEnv(t)
+	e.create(t, reminder("late", t0.Add(-time.Hour)))
+	if c := e.jobsLine(t); c.Line != texts.StatusJobs || c.Vars["time"] != "10:00" {
+		t.Errorf("%+v", c)
 	}
 }

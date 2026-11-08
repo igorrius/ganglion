@@ -48,11 +48,10 @@ func (h *health) put(lag time.Duration) {
 
 // Status implements status.Source (R-OBS-11): the jobs, the next run, and a
 // tick that fails, stalls or put its last run late.
-func (s *Scheduler) Status(ctx context.Context, sc status.Scope) []status.Check {
+func (s *Scheduler) Status(ctx context.Context, sc status.Scope) ([]status.Check, error) {
 	jobs, err := s.st.active(ctx)
 	if err != nil {
-		return []status.Check{{Section: status.SectionProblems, State: status.Warn, Line: texts.StatusNoAnswer,
-			Vars: texts.Vars{"component": s.Name()}}}
+		return nil, err
 	}
 	c := status.Check{Section: status.SectionProblems, State: status.OK, Line: texts.StatusJobsNone}
 	if len(jobs) > 0 {
@@ -61,7 +60,7 @@ func (s *Scheduler) Status(ctx context.Context, sc status.Scope) []status.Check 
 			c.Line, c.Vars["time"] = texts.StatusJobs, status.Clock(next, sc)
 		}
 	}
-	return []status.Check{s.h.judge(c, sc.Now)}
+	return []status.Check{s.h.judge(c, sc.Now)}, nil
 }
 
 // judge puts the tick's trouble, if any, on c.
@@ -101,7 +100,7 @@ func (s *Scheduler) next(jobs []activeJob, now time.Time) time.Time {
 func (s *Scheduler) nextOf(a activeJob, now time.Time) time.Time {
 	if a.Cron == "" {
 		if a.last.IsZero() {
-			return a.At
+			return later(a.At, now) // a time gone runs at the next tick
 		}
 		return time.Time{}
 	}
@@ -110,4 +109,12 @@ func (s *Scheduler) nextOf(a activeJob, now time.Time) time.Time {
 		return time.Time{}
 	}
 	return spec.Next(now, s.loc)
+}
+
+// later is the later of two times.
+func later(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }

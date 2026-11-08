@@ -11,8 +11,8 @@ import (
 // queueLine is the queues' one line at f's clock.
 func queueLine(t *testing.T, f fixture) status.Check {
 	t.Helper()
-	cs := f.q.Status(t.Context(), status.Scope{Now: f.clock.Now(), Location: time.UTC})
-	if len(cs) != 1 || cs[0].Section != status.SectionDelivery || cs[0].Line != texts.StatusQueues {
+	cs, err := f.q.Status(t.Context(), status.Scope{Now: f.clock.Now(), Location: time.UTC})
+	if err != nil || len(cs) != 1 || cs[0].Section != status.SectionDelivery || cs[0].Line != texts.StatusQueues {
 		t.Fatalf("lines %+v", cs)
 	}
 	return cs[0]

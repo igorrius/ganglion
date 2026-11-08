@@ -250,6 +250,7 @@ func (s *Store) swap(module, source string, tool runner.Swappable) {
 	_ = s.tools[module].Swap(tool) // refused only after Shutdown, when nothing calls it
 	s.activeMu.Lock()
 	s.active[module] = source
+	delete(s.fellBack, module) // a version chosen since the start runs now
 	s.activeMu.Unlock()
 }
 

@@ -46,7 +46,7 @@ func (*Health) Name() string { return Name }
 
 // Status implements status.Source: polls count, not messages, so a quiet chat
 // is no warning.
-func (h *Health) Status(_ context.Context, s status.Scope) []status.Check {
+func (h *Health) Status(_ context.Context, s status.Scope) ([]status.Check, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	c := status.Check{Section: status.SectionDelivery, State: status.OK, Line: texts.StatusTelegram}
@@ -62,5 +62,5 @@ func (h *Health) Status(_ context.Context, s status.Scope) []status.Check {
 	if h.stop != "" {
 		c.State, c.Reason, c.Since = status.Fail, h.stop, h.stopped
 	}
-	return []status.Check{c}
+	return []status.Check{c}, nil
 }
