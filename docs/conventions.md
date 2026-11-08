@@ -211,6 +211,7 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Alerts to every admin's private chat | `alert` |
 | Principal → private conversation | the transport (`telegram.PrivateConv`) |
 | Secrets from the environment and `*_FILE` | `secrets` |
+| Making the process not dumpable, so its `/proc` files are shut to its user's other processes (the node, chatlab, tests) | `sandbox.Harden`, `sandbox.SetDumpable` |
 | Version, commit, toolchain of this binary | `internal/buildinfo` |
 | Comparing web addresses (lower-case host, an internationalised host in punycode, no fragment, no default port); finding them in text (`Find`, the one URL pattern), defanging text (`Defang`) | `internal/urlnorm` |
 | Checking a call's arguments against the tool's declared parameters | `tool.CheckArgs` |

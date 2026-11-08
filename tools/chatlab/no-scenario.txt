@@ -22,7 +22,6 @@ cells/memstore.go
 cells/request.go
 cells/service.go
 cells/sqlstore/**
-cmd/harden_linux.go
 cmd/mcp.go
 cmd/relay.go
 cmd/root.go
@@ -111,5 +110,6 @@ texts/texts.go
 sandbox/grants.go
 sandbox/deny.go
 sandbox/sandbox.go
+sandbox/harden.go
 sandbox/*_linux.go
 sandbox/*_other.go

@@ -9,22 +9,26 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 
+	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/samber/do/v2"
 )
 
-// notDumpable does what the node's start does (cmd.hardenProcess): the sandbox
-// is off for a dumpable process, whose environ another process could read.
+// notDumpable does what the node's start does (sandbox.Harden): the sandbox
+// is off for a dumpable process, whose environ another process could read. It
+// puts back what the process had.
 func notDumpable(t *testing.T) {
 	t.Helper()
-	set := func(v uintptr) {
-		_, _, _ = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_DUMPABLE, v, 0)
+	was, err := sandbox.HostKernel().Dumpable()
+	if err != nil {
+		t.Fatal(err)
 	}
-	set(0)
-	t.Cleanup(func() { set(1) })
+	if err := sandbox.Harden(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sandbox.SetDumpable(was) })
 }
 
 // 3.26, abuse test (conventions, section 11): a skill script runs inside the

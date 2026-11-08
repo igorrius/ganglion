@@ -255,3 +255,66 @@ func TestAScriptRefusedBySandboxSaysSo(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// flaky is a sandbox that is off for its first runs and unconfined after.
+type flaky struct{ off int }
+
+func (f *flaky) Command(ctx context.Context, argv []string, dir string, env ...string) (*exec.Cmd, error) {
+	if f.off > 0 {
+		f.off--
+		return nil, sandbox.ErrOff
+	}
+	return unconfined{}.Command(ctx, argv, dir, env...)
+}
+
+// A change script that failed before its process started did not start: the
+// same call can be tried again and runs.
+func TestChangeScriptThatNeverStartedCanBeRetried(t *testing.T) {
+	hs := byName(builtin.NewSkillTools(skillSet(t), skills.NewRunner(skills.DefaultRunConfig(), &flaky{off: 1}), fakeRuns{}, gate{}))
+	c := call("skill.clean_cache", `{"input":"x"}`)
+	if _, err := hs["skill.clean_cache"].Run(context.Background(), c); err == nil || !strings.Contains(err.Error(), "sandbox is off") {
+		t.Fatalf("first run: %v", err)
+	}
+	if res, err := hs["skill.clean_cache"].Run(context.Background(), c); err != nil || res.Text != "x done\n" {
+		t.Fatalf("the retry: %+v, %v", res, err)
+	}
+}
+
+// The same when the skill's folder was too big to copy.
+func TestChangeScriptTooBigToCopyCanBeRetried(t *testing.T) {
+	set := skillSet(t)
+	sk, _ := set.Get("clean-cache")
+	big := filepath.Join(sk.Dir, "big.bin")
+	if err := os.WriteFile(big, make([]byte, 5<<20), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hs := byName(builtin.NewSkillTools(set, skills.NewRunner(skills.DefaultRunConfig(), unconfined{}), fakeRuns{}, gate{}))
+	c := call("skill.clean_cache", `{"input":"x"}`)
+	if _, err := hs["skill.clean_cache"].Run(context.Background(), c); err == nil || strings.Contains(err.Error(), "not run again") {
+		t.Fatalf("first run: %v", err)
+	}
+	if err := os.Remove(big); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := hs["skill.clean_cache"].Run(context.Background(), c); err != nil || res.Text != "x done\n" {
+		t.Fatalf("the retry: %+v, %v", res, err)
+	}
+}
+
+// A change script that started (and failed, as a crash would leave it) is
+// still not run again for the same call.
+func TestChangeScriptThatStartedIsNotRetried(t *testing.T) {
+	set := skillSet(t)
+	sk, _ := set.Get("clean-cache")
+	if err := os.WriteFile(filepath.Join(sk.Dir, "run.sh"), []byte("#!/bin/sh\nexit 7\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	hs := byName(builtin.NewSkillTools(set, skills.NewRunner(skills.DefaultRunConfig(), unconfined{}), fakeRuns{}, gate{}))
+	c := call("skill.clean_cache", `{"input":"x"}`)
+	if res, err := hs["skill.clean_cache"].Run(context.Background(), c); err != nil || !strings.Contains(res.Text, "exit 7") {
+		t.Fatalf("first run: %+v, %v", res, err)
+	}
+	if _, err := hs["skill.clean_cache"].Run(context.Background(), c); err == nil || !strings.Contains(err.Error(), "not run again") {
+		t.Fatalf("the rerun: %v", err)
+	}
+}

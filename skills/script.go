@@ -92,14 +92,29 @@ type Output struct {
 	Exit           int
 }
 
-// ErrTimeout is a script that ran past its timeout and was killed. Under PID 1 without an init, the
-// children killed after a run stay zombies: run the node under one.
+// ErrTimeout is a script that ran past its timeout and was killed. Under PID 1
+// without an init, the children killed after a run stay zombies: run the node
+// under one.
 var ErrTimeout = errors.New("skills: the script ran past its timeout and was stopped")
+
+// ErrAlreadyBegun is a run whose begin hook said the call started before: the
+// script is not started again.
+var ErrAlreadyBegun = errors.New("skills: this call already started the script")
 
 // Run runs sk's script with input on stdin. A non-zero exit is an
 // Output, not an error; errors are a refused input, a script that could
 // not start, and the timeout.
 func (r *Runner) Run(ctx context.Context, sk Skill, input []byte) (Output, error) {
+	return r.RunOnce(ctx, sk, input, nil)
+}
+
+// RunOnce is Run with a hook called after everything that can fail before
+// the script exists (the copy, the confined command) and right before it
+// starts. begin reports whether this call is the first to get this far; when
+// it is not, the script does not start and the error is ErrAlreadyBegun. So a
+// run that fails before the script starts leaves nothing recorded, and one
+// that started is never run again. A nil begin is Run.
+func (r *Runner) RunOnce(ctx context.Context, sk Skill, input []byte, begin func(context.Context) (bool, error)) (Output, error) {
 	if sk.Script == nil || sk.Dir == "" {
 		return Output{}, fmt.Errorf("skills: %s has no script", sk.Name)
 	}
@@ -127,7 +142,7 @@ func (r *Runner) Run(ctx context.Context, sk Skill, input []byte) (Output, error
 		return Output{}, fmt.Errorf("skills: %s: %w", sk.Name, err)
 	}
 	stdout, stderr := &capped{max: r.cfg.MaxOut}, &capped{max: r.cfg.MaxErr}
-	err = startAndWait(cmd, input, stdout, stderr)
+	err = startAndWait(ctx, cmd, input, stdout, stderr, begin)
 	out := Output{Stdout: stdout.b.String(), Stderr: stderr.b.String(), Truncated: stdout.cut}
 	var exit *exec.ExitError
 	switch {
@@ -148,10 +163,20 @@ func (r *Runner) Run(ctx context.Context, sk Skill, input []byte) (Output, error
 
 // startAndWait runs cmd with input on stdin and the capped outputs, in a
 // process group of its own, then kills what is left of the group.
-func startAndWait(cmd *exec.Cmd, input []byte, stdout, stderr *capped) error {
+func startAndWait(ctx context.Context, cmd *exec.Cmd, input []byte, stdout, stderr *capped, begin func(context.Context) (bool, error)) error {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = bytes.NewReader(input), stdout, stderr
 	cmd.WaitDelay = time.Second
 	procgroup.Own(cmd)
+	if begin != nil {
+		first, err := begin(ctx)
+		if err == nil && !first {
+			err = ErrAlreadyBegun
+		}
+		if err != nil {
+			sandbox.Release(cmd)
+			return err
+		}
+	}
 	err := cmd.Start()
 	sandbox.Release(cmd)
 	if err == nil {

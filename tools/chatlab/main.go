@@ -42,7 +42,10 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == sandbox.HelperArg { // the node here is this binary, so is the helper
 		os.Exit(sandbox.Helper())
 	}
-	harden()
+	if err := sandbox.Harden(); err != nil {
+		fmt.Fprintln(os.Stderr, "chatlab: the process stays dumpable, so the sandbox is off:", err)
+		os.Exit(1)
+	}
 	chatlab.ScrubEnvironment()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	code := run(ctx, os.Args[1:])

@@ -18,6 +18,7 @@ import (
 	"github.com/igorrius/ganglion/logfile"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/secrets"
 	"github.com/igorrius/ganglion/telemetry"
 	"github.com/urfave/cli/v3"
@@ -48,7 +49,7 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 			}
 			defer closeLogs()
 			logger = logger.With("version", in.Version, "commit", shortCommit(in))
-			if err := hardenProcess(); err != nil {
+			if err := sandbox.Harden(); err != nil {
 				logger.Warn("node: a script can read this process's environment from /proc", "err", err)
 			}
 			tel, stop := startTelemetry(ctx, b.MetricsAddr, in, logger)
