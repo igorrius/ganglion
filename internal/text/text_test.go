@@ -19,3 +19,16 @@ func TestTruncateCountsRunes(t *testing.T) {
 		}
 	}
 }
+
+func TestCodeSpanFencesPastEveryBacktick(t *testing.T) {
+	for s, want := range map[string]string{
+		"ls -l":  "`ls -l`",
+		"a`b":    "`` a`b ``",
+		"``x`":   "``` ``x` ```",
+		"`a` b`": "`` `a` b` ``",
+	} {
+		if got := CodeSpan(s); got != want {
+			t.Errorf("CodeSpan(%q) = %q, want %q", s, got, want)
+		}
+	}
+}

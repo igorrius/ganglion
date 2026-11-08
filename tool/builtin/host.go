@@ -9,6 +9,7 @@ import (
 
 	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/hostcmd"
+	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
@@ -139,11 +140,17 @@ func (h *HostExec) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 // allowed checks again what the policy decided: forbidden never; a command
 // that needs a press only pressed, planned or granted.
 func (h *HostExec) allowed(c tool.Call, cmd tool.Command) error {
-	e := hostcmd.Classify(cmd.Argv)
+	return h.allowedAs(hostcmd.Classify(cmd.Argv).Class, c, cmd)
+}
+
+// allowedAs is allowed for a command of class cl. Only a read command runs
+// without a press: any other class, one this check does not know included,
+// fails closed and needs one.
+func (h *HostExec) allowedAs(cl hostcmd.Class, c tool.Call, cmd tool.Command) error {
 	switch {
-	case e.Class == hostcmd.Forbidden:
+	case cl == hostcmd.Forbidden:
 		return fmt.Errorf("host.exec: %s never runs: %w", hostcmd.Show(cmd.Argv), tool.ErrForbidden)
-	case !e.Class.NeedsPress() || c.Approved:
+	case cl == hostcmd.Read || c.Approved:
 		return nil
 	case c.Planned != nil && c.Planned(cmd):
 		return nil
@@ -197,4 +204,4 @@ func (h *HostExec) questionVars(ctx context.Context, sp texts.Speaker, cmd tool.
 // shown is argv as a person reads it in a question: written by hostcmd.Show,
 // so a character that hides text is escaped and a space cannot split an
 // argument, in one code span that a backtick cannot end early.
-func shown(argv ...string) string { return codeSpan(hostcmd.Show(argv)) }
+func shown(argv ...string) string { return text.CodeSpan(hostcmd.Show(argv)) }

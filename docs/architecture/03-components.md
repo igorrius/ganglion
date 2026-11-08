@@ -26,6 +26,7 @@ flowchart TB
     memory["Memory<br/>memory/*.md in git,<br/>quarantine, recall, audit"]
     guard["Clean-context check<br/>cheap model, no history, no tools"]
     sched["Scheduler<br/>crons, catch-up;<br/>reminders, tasks with grants"]
+    hostrun["Host command runner<br/>host.exec in the sandbox, once per key;<br/>past 20 s in the background"]
     outbox[("Outbox")]
     sender["Outbox sender<br/>retries, 429 retry_after"]
     turns[("turns<br/>trace, cost")]
@@ -47,6 +48,8 @@ flowchart TB
     guard --> router
     tools --> sched
     tools --> web
+    tools --> hostrun
+    hostrun -- "command.done" --> inbox
     web --> html2md
     loop --> outbox
     loop --> turns
@@ -73,6 +76,7 @@ flowchart TB
 | Memory | Facts in git with where they came from; the index in an admin's system prompt; recall over facts and archived sessions; nightly consolidation (M7) later | R-MEM-1…5 |
 | Clean-context check | Checks every memory write, and on schedule stored facts and the persona, with a cheap model that sees only the text; fails closed into quarantine | R-POL-7 |
 | Scheduler | Crons in the node's zone with catch-up after downtime; reminders and agent tasks with grants, each task in its own conversation | R-SCH-1, R-SCH-2, R-POL-8 |
+| Host command runner | Runs `host.exec` commands in the sandbox once per call key; one still running after 20 s goes on, and its end comes back as a `command.done` event that resumes its conversation (a task's under its grant) | R-CMD-1, R-CMD-4 |
 | Web reader | `web.fetch` on public addresses only (checked on every connection, redirects included, a task kept to its granted hosts) within size and time limits; `web.search` through Brave or DuckDuckGo; remote text only as outside content | R-WEB-1…3 |
 | html2md module | Turns a page into Markdown in the WASM sandbox, granted nothing; replaced without a core release | R-WEB-1 |
 | turns | Trace and cost of every turn | R-AGT-5 |

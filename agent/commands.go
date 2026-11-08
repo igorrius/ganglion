@@ -165,7 +165,9 @@ func (a *Agent) listSessions(ctx context.Context, t *turn, _ string) error {
 
 // resumeSession brings back session number arg of /sessions, archiving
 // the current one. Calls it was waiting for that are answered or expired
-// since are dropped from its pending list.
+// since are dropped from its pending list, and commands that ended since
+// from its commands: their end was told as late while it was archived
+// (R-CMD-4).
 func (a *Agent) resumeSession(ctx context.Context, t *turn, arg string) error {
 	list, err := a.d.Archive.List(ctx, t.event.Conv, sessionsShown, t.state.Session)
 	if err != nil {
@@ -187,6 +189,11 @@ func (a *Agent) resumeSession(ctx context.Context, t *turn, arg string) error {
 	}
 	if chosen.Pending, err = a.d.Pending.Waiting(ctx, chosen.Pending); err != nil {
 		return err
+	}
+	if len(chosen.Commands) > 0 {
+		if chosen.Commands, err = a.d.Commands.Running(ctx, chosen.Commands); err != nil {
+			return err
+		}
 	}
 	chosen.Last = t.now
 	t.state = chosen

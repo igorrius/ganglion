@@ -96,6 +96,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		SystemJobs:    do.MustInvoke[Remembering](i).Jobs,
 		Modules:       do.MustInvoke[agent.Modules](i),
 		Switch:        do.MustInvoke[*host.Switch](i),
+		Commands:      do.MustInvoke[*host.Runner](i),
 		Skills:        do.MustInvoke[Skilled](i).Set,
 		StatusSources: do.MustInvoke[[]status.Source](i),
 		Log:           do.MustInvoke[*slog.Logger](i),

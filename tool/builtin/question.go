@@ -51,24 +51,3 @@ func whole(name, q string) (string, error) {
 func oneLine(s string) string {
 	return text.Truncate(strings.Join(strings.Fields(s), " "), maxNameRunes)
 }
-
-// codeSpan is s as one Markdown code span that shows s exactly: fenced by
-// more backticks than the longest run in s, so a backtick inside cannot end
-// the span early and let what follows render as Markdown (a link would hide
-// its target). The spaces inside a longer fence are the ones Markdown drops.
-func codeSpan(s string) string {
-	longest, run := 0, 0
-	for _, r := range s {
-		if r != '`' {
-			run = 0
-			continue
-		}
-		run++
-		longest = max(longest, run)
-	}
-	if longest == 0 {
-		return "`" + s + "`"
-	}
-	fence := strings.Repeat("`", longest+1)
-	return fence + " " + s + " " + fence
-}

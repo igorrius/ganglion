@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/host"
+	"github.com/igorrius/ganglion/hostcmd"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
@@ -164,6 +165,24 @@ func TestHostExecRefusesWhatThePolicyShouldHaveStopped(t *testing.T) {
 	}
 }
 
+// Only a read command runs without a press: a class the check does not know
+// fails closed, as one that needs a press.
+func TestHostExecRunsOnlyReadWithoutAPress(t *testing.T) {
+	h := NewHostExec(&commands{}, noIgnored{}, open(true), "/h")
+	cmd := tool.Command{Argv: []string{"x"}}
+	if err := h.allowedAs(hostcmd.Read, tool.Call{}, cmd); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	for _, c := range []hostcmd.Class{"", "unknown", hostcmd.Content, hostcmd.Change, hostcmd.Script} {
+		if err := h.allowedAs(c, tool.Call{}, cmd); !errors.Is(err, errUnapproved) {
+			t.Errorf("class %q without a press: %v, want errUnapproved", c, err)
+		}
+		if err := h.allowedAs(c, tool.Call{Approved: true}, cmd); err != nil {
+			t.Errorf("class %q pressed: %v", c, err)
+		}
+	}
+}
+
 func TestHostExecIsOffWhenTheGateIsShut(t *testing.T) {
 	cs := &commands{}
 	h := NewHostExec(cs, noIgnored{}, open(false), "/h")
@@ -262,18 +281,5 @@ func TestHostExecQuestionShowsWhatCannotBeHidden(t *testing.T) {
 	}
 	if !strings.Contains(q, "`rm x` in `$'/a\\n# Only reads'`") || strings.Count(q, "\n") != 3 {
 		t.Fatalf("question %q", q)
-	}
-}
-
-func TestCodeSpanFencesPastEveryBacktick(t *testing.T) {
-	for s, want := range map[string]string{
-		"ls -l":  "`ls -l`",
-		"a`b":    "`` a`b ``",
-		"``x`":   "``` ``x` ```",
-		"`a` b`": "`` `a` b` ``",
-	} {
-		if got := codeSpan(s); got != want {
-			t.Errorf("codeSpan(%q) = %q, want %q", s, got, want)
-		}
 	}
 }

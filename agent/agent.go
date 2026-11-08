@@ -109,6 +109,9 @@ type Deps struct {
 	// Switch is host.exec's kill switch, set by an admin's /commands (R-POL-5);
 	// NoSwitch when unset.
 	Switch Switch
+	// Commands are host commands' outcomes (host.Runner), read when one
+	// that went on in the background ends (R-CMD-4); NoCommands when unset.
+	Commands Commands
 	// StatusSources are the components /status asks (R-OBS-11); none when unset.
 	StatusSources []status.Source
 	Now           func() time.Time
@@ -196,6 +199,9 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Switch == nil {
 		d.Switch = NoSwitch{}
 	}
+	if d.Commands == nil {
+		d.Commands = NoCommands{}
+	}
 	if d.Plans == nil {
 		d.Plans = NoPlans{}
 	}
@@ -212,7 +218,7 @@ func New(cfg Config, d Deps) *Agent {
 		cfg.Location = time.UTC
 	}
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
-	a.stages = []stage{a.resume, a.scheduled, a.dropStalePending, a.idle, a.command, a.limits, a.answer, a.compactHistory}
+	a.stages = []stage{a.resume, a.scheduled, a.dropStale, a.idle, a.command, a.limits, a.answer, a.compactHistory}
 	a.commands = map[string]command{}
 	for _, c := range a.commandTable() {
 		a.commands[c.word] = c.run
@@ -223,8 +229,8 @@ func New(cfg Config, d Deps) *Agent {
 
 // Handle implements core.Handler: it runs the turn's stages and returns
 // the replies and the new state. It answers text messages, button
-// presses, the expiry of pending calls and scheduled jobs; other events
-// are left alone.
+// presses, the expiry of pending calls, scheduled jobs and the end of host
+// commands that went on in the background; other events are left alone.
 func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
 	t, ok, err := a.begin(ctx, e)
 	if err != nil || !ok {
@@ -260,6 +266,9 @@ var payloads = map[event.Kind]func(t *turn) bool{
 	},
 	event.KindSchedule: func(t *turn) bool {
 		return json.Unmarshal(t.event.Payload, &t.schedule) == nil && t.schedule.Job != ""
+	},
+	event.KindCommandDone: func(t *turn) bool {
+		return json.Unmarshal(t.event.Payload, &t.command) == nil && t.command.Key != ""
 	},
 }
 

@@ -484,17 +484,19 @@ func TestSpentSiblingIsNotARerun(t *testing.T) {
 }
 
 // The whole outcome is stored, so a rerun can give back what the first
-// run produced: the messages and whether the text is outside content.
+// run produced: the messages, whether the text is outside content, and the
+// host command it left in the background.
 func TestFinishStoresTheOutcome(t *testing.T) {
 	f := newFixture(t)
 	id, _ := f.ask(t, 1)
 	ctx := context.Background()
 	out := []event.Outgoing{{IdemKey: "01TURN:1:send", Transport: "telegram", Conv: "telegram:7", Text: "hi"}}
-	if err := f.s.Finish(ctx, id, pending.Outcome{Result: "page", External: true, Out: out}); err != nil {
+	if err := f.s.Finish(ctx, id, pending.Outcome{Result: "page", External: true, Out: out, Job: "01TURN:1"}); err != nil {
 		t.Fatal(err)
 	}
 	it, err := f.s.Get(ctx, id)
-	if err != nil || it.Status != pending.StatusDone || it.Result != "page" || !it.External || len(it.Out) != 1 || it.Out[0].IdemKey != "01TURN:1:send" {
+	if err != nil || it.Status != pending.StatusDone || it.Result != "page" || !it.External || len(it.Out) != 1 || it.Out[0].IdemKey != "01TURN:1:send" ||
+		it.Job != "01TURN:1" {
 		t.Fatalf("item %+v, %v", it, err)
 	}
 	if err := f.s.Finish(ctx, "nope", pending.Outcome{}); !errors.Is(err, pending.ErrNotFound) {

@@ -7,6 +7,7 @@ host/**
 hostcmd/**
 access/**
 agent/commands.go
+agent/commands_done.go
 agent/config.go
 agent/limits.go
 agent/model.go

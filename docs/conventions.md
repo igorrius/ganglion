@@ -204,6 +204,7 @@ Before writing a helper, look for it. These exist and are the only copies:
 |---|---|
 | Backoff with jitter | `internal/backoff` |
 | Truncating text by runes | `internal/text` |
+| A Markdown code span that shows its text exactly, past any backtick inside | `text.CodeSpan` (`internal/text`) |
 | Rendering history as a plain transcript | `internal/transcript` |
 | Start of the day in a location | `internal/clock` |
 | Cost of a call at catalogue prices | `router.Candidate.Cost` |

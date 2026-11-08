@@ -115,6 +115,56 @@ sequenceDiagram
     Note over D,Q: unanswered: the expirer puts tool.result every 30 s, same resume with "expired"; the question closes itself, found by its outbox ref
 ```
 
+## A long host command (P1)
+
+A host command still running after the short wait (20 s) does not hold its
+turn open either (R-CMD-4). The call answers "still running" and the turn
+ends with the command's key in the state, which keeps the plan open. The
+command goes on under the runner. Its end is put into the conversation's
+inbox once as a `command.done` event, and that event resumes the
+conversation as a press does: the outcome is outside data, the model has
+its tools, and its calls run one level deeper. A command of a scheduled
+task resumes as a turn of that task, under its grant (ruling 7 of the M3d
+plan). The session may have moved on by then (`/new`, or the idle cut).
+Then the conversation gets one fixed line, without a model, and the output
+stays out of the new session. A call whose context ends while it waits
+(the turn's clock) leaves its command in the background the same way.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Person
+    participant Q as Inbox / outbox
+    participant A as Agent
+    participant M as Model
+    participant X as host.exec
+    participant R as Runner
+
+    P->>Q: "how big is ~/project?"
+    Q->>A: lease
+    A->>M: call
+    M-->>A: host.exec du -sh ~/project
+    A->>X: call (key turn_id + n)
+    X->>R: Exec: row "running", command in the sandbox
+    Note over X,R: 20 s pass, or the call's context ends
+    R-->>X: not done: background
+    X-->>A: "still running", Job = key
+    A->>M: call with the result
+    M-->>A: "it runs; I'll tell you"
+    A->>Q: Complete(answer, Commands += key)
+    Note over R: the command ends; its row is "done"
+    R->>Q: Put(command.done, idemKey command:<key>:done)
+    Q->>A: lease
+    A->>R: Get(key): argv, outcome, principal, depth
+    alt the session lists the key
+        A->>M: "[command finished] du -sh ~/project: <external>…</external>", with tools
+        M-->>A: "~/project is 2.1 GiB"
+        A->>Q: Complete(answer, Commands -= key, tainted)
+    else the session moved on
+        A->>Q: Complete("The command … finished after this conversation moved on.")
+    end
+```
+
 ## Module tick and escalation (P0–P1)
 
 The Deye monitor as a reflex: no model in the normal path.

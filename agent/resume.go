@@ -42,31 +42,34 @@ const (
 // Lines that say how a question ended, above its folded text (R-POL-9).
 const ()
 
-// resume handles a press of a button and the expiry of a pending call,
-// and ends the turn; a message goes on to the next stages (ADR-0032).
+// resume handles a press of a button, the expiry of a pending call and the
+// end of a host command in the background, and ends the turn; a message
+// goes on to the next stages (ADR-0032, R-CMD-4).
 func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 	switch t.event.Kind {
 	case event.KindDecision:
 		return true, a.pressed(ctx, t)
 	case event.KindToolResult:
 		return true, a.expired(ctx, t)
+	case event.KindCommandDone:
+		return true, a.commandDone(ctx, t)
 	default: // event.KindMessage, event.KindSchedule
 		return false, nil
 	}
 }
 
-// dropStalePending forgets pending ids whose calls no longer wait: they
-// were answered, expired, or belong to a store that lost them.
-func (a *Agent) dropStalePending(ctx context.Context, t *turn) (bool, error) {
-	if len(t.state.Pending) == 0 {
-		return false, nil
+// dropStale forgets pending ids whose calls no longer wait (they were
+// answered, expired, or belong to a store that lost them) and commands
+// whose end is not to be told any more.
+func (a *Agent) dropStale(ctx context.Context, t *turn) (bool, error) {
+	if len(t.state.Pending) > 0 {
+		ids, err := a.d.Pending.Waiting(ctx, t.state.Pending)
+		if err != nil {
+			return false, fmt.Errorf("agent: pending calls: %w", err)
+		}
+		t.state.Pending = ids
 	}
-	ids, err := a.d.Pending.Waiting(ctx, t.state.Pending)
-	if err != nil {
-		return false, fmt.Errorf("agent: pending calls: %w", err)
-	}
-	t.state.Pending = ids
-	return false, nil
+	return false, a.dropStaleCommands(ctx, t)
 }
 
 // pressed handles a press: a refused one gets a toast saying why and at
@@ -235,7 +238,8 @@ func (a *Agent) decide(ctx context.Context, t *turn, it pending.Item, action str
 // stored is the outcome of a done call as the first run stored it; the
 // tool's spec still marks outside content when the call ran.
 func (a *Agent) stored(it pending.Item, ran bool) pending.Outcome {
-	return pending.Outcome{Result: it.Result, External: it.External || ran && a.external(it.Tool, false), Failed: it.Failed, Out: it.Out}
+	return pending.Outcome{Result: it.Result, External: it.External || ran && a.external(it.Tool, false), Failed: it.Failed, Out: it.Out,
+		Job: it.Job}
 }
 
 // runApproved runs the stored call as it was asked, with its original key
@@ -255,7 +259,7 @@ func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pendi
 		// A failed call can still carry messages, as in runTool.
 		return pending.Outcome{Result: errorPrefix + err.Error(), Failed: true, Out: res.Out}
 	}
-	return pending.Outcome{Result: res.Text, External: a.external(it.Tool, res.External), Out: res.Out}
+	return pending.Outcome{Result: res.Text, External: a.external(it.Tool, res.External), Out: res.Out, Job: res.Job}
 }
 
 // settle records a call that does not run, with decision d, and returns
@@ -373,10 +377,15 @@ func (a *Agent) closeExpired(ctx context.Context, t *turn, it pending.Item) {
 //
 // The resumed turn passes the daily limit as a message does; over it the
 // note joins the history without a model turn. Its calls run one level
-// deeper than the resumed call (R-AGT-4, ruling R33).
+// deeper than the resumed call (R-AGT-4, ruling R33). A call that left a
+// host command in the background lists it, once, so its end resumes the
+// conversation in turn (R-CMD-4).
 func (a *Agent) continueWith(ctx context.Context, t *turn, it pending.Item, o pending.Outcome) error {
 	t.record.Outcome = turns.OutcomeOK
 	t.state.Pending = slices.DeleteFunc(slices.Clone(t.state.Pending), func(id string) bool { return id == it.ID })
+	if o.Job != "" && !slices.Contains(t.state.Commands, o.Job) {
+		t.state.Commands = append(slices.Clone(t.state.Commands), o.Job)
+	}
 	text := o.Result
 	if o.External {
 		t.state.Tainted = true

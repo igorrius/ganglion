@@ -71,11 +71,8 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 		t.reply(j.Text)
 		return true, a.noteReminder(ctx, t, j)
 	case schedule.KindTask:
-		t.made = event.OriginTask
-		g := j.Grant
-		t.grant, t.replyConv = &g, g.ReplyTo
 		t.record.Outcome = turns.OutcomeOK
-		return false, a.setRecipient(ctx, t, j.Owner)
+		return false, a.asTask(ctx, t, j)
 	case schedule.KindSystem:
 		t.made, t.replyConv = event.OriginSystem, j.Conv
 		return true, a.system(ctx, t, j)
@@ -83,6 +80,16 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 		a.log.Warn("agent: scheduled job of an unknown kind", "job", j.ID, "kind", j.Kind)
 		return true, nil
 	}
+}
+
+// asTask makes t a turn of task j: its owner as the principal, its transport,
+// its grant on every call and its reply target, and the name of who receives it.
+func (a *Agent) asTask(ctx context.Context, t *turn, j schedule.Job) error {
+	t.msg = event.Message{From: j.Owner, Name: taskSpeaker, Text: j.Text}
+	t.record.Principal, t.transport, t.made = j.Owner, j.Transport, event.OriginTask
+	g := j.Grant
+	t.grant, t.replyConv = &g, g.ReplyTo
+	return a.setRecipient(ctx, t, j.Owner)
 }
 
 // noteReminder adds a "[reminder]" note of the sent reminder to the

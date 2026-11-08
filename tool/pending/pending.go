@@ -98,6 +98,7 @@ type Item struct {
 	Depth                                  int              // the call's depth (R-AGT-4); its resumed turn runs one deeper
 	Answered                               time.Time        // when a press answered it; zero when none did, or before this was stored
 	Out                                    []event.Outgoing // messages the call produced
+	Job                                    string           // a host command the call left in the background; "" when none
 }
 
 // Outcome is how a call ended: what the model reads and what the call
@@ -107,6 +108,7 @@ type Outcome struct {
 	External bool
 	Failed   bool // the call ran and returned an error; Result is the error as the model reads it
 	Out      []event.Outgoing
+	Job      string // the key of a host command still running in the background (tool.Result.Job)
 }
 
 // Call rebuilds the stored call with its original turn and number, so its
@@ -401,8 +403,8 @@ func (s *Store) Finish(ctx context.Context, id string, o Outcome) error {
 		}
 		out = string(b)
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE pending_calls SET status = ?, result = ?, external = ?, failed = ?, out = ? WHERE id = ?`,
-		string(StatusDone), o.Result, o.External, o.Failed, out, id)
+	res, err := s.db.ExecContext(ctx, `UPDATE pending_calls SET status = ?, result = ?, external = ?, failed = ?, out = ?, job = ? WHERE id = ?`,
+		string(StatusDone), o.Result, o.External, o.Failed, out, o.Job, id)
 	if err != nil {
 		return fmt.Errorf("pending: finish %s: %w", id, err)
 	}
@@ -480,7 +482,7 @@ func (s *Store) ExpireDue(ctx context.Context) ([]Item, error) {
 	return out, rows.Err()
 }
 
-const itemColumns = `id, conv, transport, principal, turn_id, n, tool, args, question, status, expires_ms, result, external, failed, out, tainted, depth, answered_ms`
+const itemColumns = `id, conv, transport, principal, turn_id, n, tool, args, question, status, expires_ms, result, external, failed, out, tainted, depth, answered_ms, job`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -489,7 +491,7 @@ func scanItem(r scanner) (Item, error) {
 	var args, status, out string
 	var expires, answered int64
 	if err := r.Scan(&it.ID, &it.Conv, &it.Transport, &it.Principal, &it.TurnID, &it.N, &it.Tool, &args, &it.Question,
-		&status, &expires, &it.Result, &it.External, &it.Failed, &out, &it.Tainted, &it.Depth, &answered); err != nil {
+		&status, &expires, &it.Result, &it.External, &it.Failed, &out, &it.Tainted, &it.Depth, &answered, &it.Job); err != nil {
 		return Item{}, err
 	}
 	if out != "" {

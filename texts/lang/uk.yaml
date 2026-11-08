@@ -32,6 +32,7 @@ reply.not_available: Ця команда вам недоступна.
 reply.commands_on: Команди ввімкнено.
 reply.commands_off: Команди вимкнено. /commands on вмикає їх знову.
 reply.commands_usage: Напишіть /commands on або /commands off.
+reply.command_late: Команда {command} завершилася, коли розмова вже пішла далі.
 
 button.details: "Докладніше"
 button.delete: "Видалити"
