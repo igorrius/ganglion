@@ -67,17 +67,17 @@ spec principle 8, R-POL-5, spec 8.2 (manual override).
   — applies `NNN_*.sql` files in numeric order, each in its own transaction,
   recording `(component, version)` in `schema_migrations`.
 
-- [ ] **Step 1: Write failing tests** — `TestOpenSetsWAL` (file DB reports
+- [x] **Step 1: Write failing tests** — `TestOpenSetsWAL` (file DB reports
   `wal`), `TestMigrateAppliesInOrderOnce` (two files create a table then add
   a column; a second `Migrate` is a no-op), `TestMigrateComponentsAreIndependent`
   (`a` and `b` both have `001_*.sql`), `TestMigrateFailedFileRollsBack`
   (a broken `002` leaves version 1 recorded and no partial schema),
   `TestMigrateRejectsBadNames` (`x.sql`, `1_a.txt`).
-- [ ] **Step 2: Run** `go test ./sqlitedb/` — FAIL (undefined).
-- [ ] **Step 3: Implement** `Open` and `Migrate`; write ADR-0016 (own
+- [x] **Step 2: Run** `go test ./sqlitedb/` — FAIL (undefined).
+- [x] **Step 3: Implement** `Open` and `Migrate`; write ADR-0016 (own
   migrator vs goose: a few dozen lines, no dependency, per-component).
-- [ ] **Step 4: Run** `go test -race ./sqlitedb/` — PASS.
-- [ ] **Step 5: Commit** `sqlitedb: open with WAL and per-component migrations`.
+- [x] **Step 4: Run** `go test -race ./sqlitedb/` — PASS.
+- [x] **Step 5: Commit** `sqlitedb: open with WAL and per-component migrations`.
 
 ### Task 2: cell model, `Store` interface, `MemStore`, store conformance suite
 
@@ -124,18 +124,18 @@ spec principle 8, R-POL-5, spec 8.2 (manual override).
   func NewMemStore() *MemStore
   func storetest.Run(t *testing.T, newStore func(t *testing.T) cells.Store)
   ```
-- [ ] **Step 1: Write the suite** `storetest.Run` with subtests: create and
+- [x] **Step 1: Write the suite** `storetest.Run` with subtests: create and
   get; create twice → `ErrExists`; get missing → `ErrNotFound`; update bumps
   the version and returns a change with a larger `Seq`; update with a stale
   `prevVersion` → `ErrConflict` and nothing stored; `ChangesSince` returns
   changes in order across cells and respects `limit`; `History` newest first;
   `PendingRequestsBefore` returns only pending requests due by `t`; `List`
   sorted. `memstore_test.go` calls `storetest.Run` with `NewMemStore`.
-- [ ] **Step 2: Run** `go test ./cells/...` — FAIL.
-- [ ] **Step 3: Implement** the model and `MemStore` (mutex, map, slice of
+- [x] **Step 2: Run** `go test ./cells/...` — FAIL.
+- [x] **Step 3: Implement** the model and `MemStore` (mutex, map, slice of
   changes). Request status is read from `Reported` (`{"status":"pending",…}`).
-- [ ] **Step 4: Run** `go test -race ./cells/...` — PASS.
-- [ ] **Step 5: Commit** `cells: model, Store interface, in-memory store and store suite`.
+- [x] **Step 4: Run** `go test -race ./cells/...` — PASS.
+- [x] **Step 5: Commit** `cells: model, Store interface, in-memory store and store suite`.
 
 ### Task 3: SQLite store
 
@@ -150,14 +150,14 @@ spec principle 8, R-POL-5, spec 8.2 (manual override).
   reported, reported_cause, version, updated_ms, expires_ms)` and
   `cell_changes(seq INTEGER PRIMARY KEY AUTOINCREMENT, cell_id, version, field,
   value, cause, source, at_ms)`, index on `(cell_id, seq)`.
-- [ ] **Step 1: Write failing tests** — `storetest.Run` on a temp-file DB;
+- [x] **Step 1: Write failing tests** — `storetest.Run` on a temp-file DB;
   `TestReopenKeepsState` (close, reopen, same cell and history).
-- [ ] **Step 2: Run** `go test ./cells/sqlstore/` — FAIL.
-- [ ] **Step 3: Implement**; `Update` uses one transaction:
+- [x] **Step 2: Run** `go test ./cells/sqlstore/` — FAIL.
+- [x] **Step 3: Implement**; `Update` uses one transaction:
   `UPDATE … WHERE id=? AND version=?` (0 rows → `ErrConflict`) then
   `INSERT INTO cell_changes`.
-- [ ] **Step 4: Run** `go test -race ./cells/sqlstore/` — PASS.
-- [ ] **Step 5: Commit** `cells/sqlstore: SQLite store passing the store suite`.
+- [x] **Step 4: Run** `go test -race ./cells/sqlstore/` — PASS.
+- [x] **Step 5: Commit** `cells/sqlstore: SQLite store passing the store suite`.
 
 ### Task 4: `Service` — switches, sensors, history, watch
 
@@ -180,7 +180,7 @@ spec principle 8, R-POL-5, spec 8.2 (manual override).
   func (c Cell) Manual() bool                                                     // !InSync() && ReportedCause == CauseExternal
   var ErrWrongKind, ErrInvalidValue, ErrInvalidID error
   ```
-- [ ] **Step 1: Write failing tests** — `TestDefineIsIdempotent`;
+- [x] **Step 1: Write failing tests** — `TestDefineIsIdempotent`;
   `TestDefineRejectsBadID`; `TestSwitchAcceptsOnlyOnOff` (`"on"`, `"off"` ok,
   `true` → `ErrInvalidValue`); `TestSensorRejectsDesired` (`ErrWrongKind`);
   `TestSetDesiredWithStaleVersionConflicts`; `TestReportedCauseAndManual`
@@ -189,13 +189,13 @@ spec principle 8, R-POL-5, spec 8.2 (manual override).
   made before `Watch(ctx, 0)` arrive first, a fourth arrives live, in `Seq`
   order); `TestWatchFromSeqSkipsOlder`; `TestSlowWatcherLosesNothing`
   (200 changes while the reader sleeps; all arrive in order).
-- [ ] **Step 2: Run** `go test ./cells/` — FAIL.
-- [ ] **Step 3: Implement**. `Watch`: one goroutine per watcher reads
+- [x] **Step 2: Run** `go test ./cells/` — FAIL.
+- [x] **Step 3: Implement**. `Watch`: one goroutine per watcher reads
   `ChangesSince` in pages of 100 and waits on a notification channel the
   service signals after each successful write (store is the source of truth;
   the signal is only a wake-up).
-- [ ] **Step 4: Run** `go test -race ./cells/` — PASS.
-- [ ] **Step 5: Commit** `cells: service with kind rules, versioning and lossless watch`.
+- [x] **Step 4: Run** `go test -race ./cells/` — PASS.
+- [x] **Step 5: Commit** `cells: service with kind rules, versioning and lossless watch`.
 
 ### Task 5: requests — ask, answer, expire
 
@@ -213,16 +213,16 @@ spec principle 8, R-POL-5, spec 8.2 (manual override).
   func DecisionOf(c Cell) (Decision, error)
   var ErrDecided error
   ```
-- [ ] **Step 1: Write failing tests** — `TestAskCreatesPendingRequest`
+- [x] **Step 1: Write failing tests** — `TestAskCreatesPendingRequest`
   (unique ID, `Expires` = now + ttl); `TestAnswerApproves`;
   `TestAnswerTwiceIsRejected` (`ErrDecided`); `TestAnswerAfterTTLExpires`
   (clock moved past `Expires`: result status `expired`, error `ErrDecided`);
   `TestExpireDueMarksOnlyDue` (two requests, one due).
-- [ ] **Step 2: Run** `go test ./cells/` — FAIL.
-- [ ] **Step 3: Implement** on top of `Store.Update` and
+- [x] **Step 2: Run** `go test ./cells/` — FAIL.
+- [x] **Step 3: Implement** on top of `Store.Update` and
   `PendingRequestsBefore`.
-- [ ] **Step 4: Run** `go test -race ./cells/` — PASS.
-- [ ] **Step 5: Commit** `cells: confirmation requests with ttl`.
+- [x] **Step 4: Run** `go test -race ./cells/` — PASS.
+- [x] **Step 5: Commit** `cells: confirmation requests with ttl`.
 
 ### Task 6: backends — `virtual` with fault injection, reconcile, backend suite
 
@@ -246,17 +246,17 @@ spec principle 8, R-POL-5, spec 8.2 (manual override).
   `SetDesired` on a switch with a backend calls `Apply` after the desired
   change is stored; an `Apply` error is stored as an `"error"` change (the
   cell stays out of sync) and returned.
-- [ ] **Step 1: Write failing tests** — suite `cellstest.Run`: apply makes
+- [x] **Step 1: Write failing tests** — suite `cellstest.Run`: apply makes
   the cell in sync with cause `commanded`; with a delay, in sync only after
   the delay; `FailNext` → error change recorded, cell out of sync, next apply
   succeeds; `Flip` → `Manual()` true. `TestLateCommandedReportIsNotManual`
   (desired on→off while a delayed report of "on" is in flight: not
   `Manual()`). `TestReconcileReappliesAfterCrash` (desired stored, backend
   not called; `Reconcile` brings it in sync; a `Manual()` cell is left alone).
-- [ ] **Step 2: Run** `go test ./cells/...` — FAIL.
-- [ ] **Step 3: Implement**.
-- [ ] **Step 4: Run** `go test -race ./cells/...` — PASS.
-- [ ] **Step 5: Commit** `cells: backends, virtual backend with fault injection, reconcile`.
+- [x] **Step 2: Run** `go test ./cells/...` — FAIL.
+- [x] **Step 3: Implement**.
+- [x] **Step 4: Run** `go test -race ./cells/...` — PASS.
+- [x] **Step 5: Commit** `cells: backends, virtual backend with fault injection, reconcile`.
 
 ### Task 7: memory check and docs
 
@@ -264,12 +264,12 @@ spec principle 8, R-POL-5, spec 8.2 (manual override).
 - Modify: `docs/architecture/05-code-map.md`, `docs/README.md`,
   `docs/plans/p1-all-in-one.md` (tick M1), `go.mod`
 
-- [ ] **Step 1:** Measure: a throwaway program (scratch, not committed)
+- [x] **Step 1:** Measure: a throwaway program (scratch, not committed)
   opens a file DB, defines 50 cells and makes 10,000 changes; record RSS
   peak and the size of a `ganglion`-like binary with SQLite linked; must stay
   well inside 128 MB.
-- [ ] **Step 2:** `make check` and `GOOS=wasip1` lint stay green.
-- [ ] **Step 3:** Update the code map (`sqlitedb`, `cells`, `cells/sqlstore`,
+- [x] **Step 2:** `make check` and `GOOS=wasip1` lint stay green.
+- [x] **Step 3:** Update the code map (`sqlitedb`, `cells`, `cells/sqlstore`,
   `cells/virtual`, `cells/storetest`, `cells/cellstest`), mark M1 done in the
   phase plan with the measured numbers, update "Where we are".
-- [ ] **Step 4: Commit** `docs: M1 state cells done`.
+- [x] **Step 4: Commit** `docs: M1 state cells done`.

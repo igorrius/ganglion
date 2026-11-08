@@ -346,5 +346,5 @@ Spec principle 9.
 - An ADR, Proposed. It compares a connector over the fake Bot API (chosen),
   a loopback transport that skips the adapter, and a real Telegram client (the
   owner ruled it out).
-- A row in the phase plan, task 3.20 in M3c. M3c closes after it.
+- A row in the phase plan, task 3.31 in M3c (3.20 when written; renumbered because M3d holds 3.20). M3c closes after it.
 - The code map, and `docs/README.md`: how to run a lab.

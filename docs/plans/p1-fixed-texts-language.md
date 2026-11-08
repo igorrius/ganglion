@@ -378,15 +378,17 @@ Reviewer's gate: a model's output becomes text on buttons.
 
 **Files:** Modify `docs/README.md`, this plan.
 
-- [ ] **Step 1: Measure** with `make memory`, and record the binary and RSS against 48.0 MB and 43.9 MB.
-- [ ] **Step 2: Run** `make test`, `make lint`, and `make lab` for what changed. Ask the owner
+- [x] **Step 1: Measure** with `make memory`, and record the binary and RSS against 48.0 MB and 43.9 MB.
+- [x] **Step 2: Run** `make test`, `make lint`, and `make lab` for what changed. Ask the owner
   before any full run.
-- [ ] **Step 3: Request a whole-branch review** with superpowers:requesting-code-review.
+- [x] **Step 3: Request a whole-branch review** with superpowers:requesting-code-review.
 - [ ] **Step 4: The owner's look on the test bot:**
   - a Telegram set to Ukrainian, then to English;
   - "write in Russian" spoken in a chat;
   - a language with no file, reading the notice;
   - after reading a page, the question in two languages.
-- [ ] **Step 5: Ask the owner** to accept ADR-0053.
-- [ ] **Step 6: Update "Where we are"** in `docs/README.md`, with deferred minors in this plan's closing notes.
-- [ ] **Step 7: Commit** `docs: fixed texts in the person's language done`.
+  Seen on 2026-11-06: a reply follows Telegram's language. Not seen live yet: "write in Russian"
+  spoken in a chat and a machine-translated language; chatlab's `language-switch` covers the first.
+- [x] **Step 5: Ask the owner** to accept ADR-0053.
+- [x] **Step 6: Update "Where we are"** in `docs/README.md`, with deferred minors in this plan's closing notes.
+- [x] **Step 7: Commit** `docs: fixed texts in the person's language done`.

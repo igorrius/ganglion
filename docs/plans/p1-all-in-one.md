@@ -67,12 +67,13 @@ pinned by a test in the task that owns the code.
 | # | Milestone | Delivers | Estimate |
 |---|---|---|---|
 | M1 | State cells — **done** ([plan](p1-m1-cells.md)) | Switch, sensor and request cells; `virtual` backend with fault injection; SQLite store | 0.5 weekend |
-| M2 | Delivery and Telegram | Inbox/outbox, outbox sender, Telegram transport; crash-tested echo bot | 1 weekend |
-| M3 | **The agent**, in three parts: M3a talks — **done** ([plan](p1-m3a-talking-agent.md)); M3b and M3c below ([design](p1-m3b-m3c-design.md)) | History, actors, provider, router, agent loop; a talking agent on the test bot | 1–1.5 weekends (M3a) |
+| M2 | Delivery and Telegram — **done** ([plan](p1-m2-delivery-telegram.md)) | Inbox/outbox, outbox sender, Telegram transport; crash-tested echo bot | 1 weekend |
+| M3a | **The agent** talks — **done** ([plan](p1-m3a-talking-agent.md)); M3b and M3c below ([design](p1-m3b-m3c-design.md)) | History, actors, provider, router, agent loop; a talking agent on the test bot | 1–1.5 weekends (M3a) |
 | M3r | Refactoring before M3b — **done** ([plan](p1-refactor.md)) | Go conventions and lint guardrails, the agent as a stage pipeline, `config` with `samber/do`, `ganglion run` on urfave/cli; no behaviour change | 0.25 weekend |
 | M3b | **The agent works with the world** — **done** ([plan](p1-m3b-agent-world.md)) | Tools under policies and the security baseline, confirmations and quick actions on buttons, the scheduler with reminders and scheduled agent tasks, memory, web reading, the tool-call journal, tools for the claude CLI over MCP | over 1 weekend |
 | M3c | Modules, skills, diagnostics — **done** ([plan](p1-m3c-modules-skills-diagnostics.md)) | Module update and rollback, skills, attachments, logs on disk, `ganglion mcp`, the 3.8 acceptance | about 1 weekend |
 | M3 live | Live turns — **done** ([plan](p1-live-turns.md)) | Additions join a running turn, status reactions, a plan shown during the turn | |
+| M3 more | After using the bot — **done** except `/status` | A closed question folds, `/last`, fixed texts in the person's language, rich messages, replies that know what they answer, `/status` | |
 | M3d | Host commands and plans ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
 | M4 | Reflexes: runner and Deye | Config, modules on cron writing sensor cells, exposed to the agent as tools (the scheduler and the first module-as-tool path come from M3b); deployed next to the current bot | 0.5 weekend |
 | M5 | Load-shedding flow | The 8.1 state machine on `virtual` load cells; Telegram notifier; shadow week | 0.5 weekend |
@@ -93,11 +94,13 @@ flowchart LR
     M2["M2 Delivery + Telegram"] --> M3
     M3 --> M3B["M3b Agent works with the world"]
     M3B --> M3C["M3c Modules, skills, diagnostics"]
+    M3C --> M3L["M3 live turns"]
+    M3L --> M3M["M3 more: after using the bot"]
     M1 --> M4["M4 Runner + Deye"]
     M3B --> M4
     M4 --> M5["M5 Load-shedding flow"]
     M2 --> M5
-    M3C --> M3D["M3d Host commands and plans"]
+    M3M --> M3D["M3d Host commands and plans"]
     M3D --> M6["M6 Agent reconfigures"]
     M5 --> M6
     M6 --> M7["M7 Migration"]
@@ -178,7 +181,7 @@ Closed 2026-11-02 after the live run on the test bot.
 
 Plan: [p1-m3b-agent-world.md](p1-m3b-agent-world.md); design sections 4
 and 5. Security baseline:
-[ADR-0031](../adr/0031-agent-security-baseline.md) (Proposed).
+[ADR-0031](../adr/0031-agent-security-baseline.md).
 
 | Task | Done when |
 |---|---|
@@ -203,7 +206,7 @@ and [ADR-0046](../adr/0046-a-restart-is-not-a-failed-attempt.md), from the
 crash harness.
 
 The scripted acceptance and the crash harness pass (2026-11-04). The owner's
-manual live run gave way to chatlab, task 3.20, built ([design](p1-m3c-chatlab-design.md),
+manual live run gave way to chatlab, task 3.31, built ([design](p1-m3c-chatlab-design.md),
 [plan](p1-m3c-chatlab.md), [ADR-0048](../adr/0048-chatlab-over-the-fake-bot-api.md)).
 M3c closed on 2026-11-05, after chatlab, the owner's look at the messages in
 Telegram and the first `html2md` tag. One check of 3.15 is deferred: `/modules
@@ -220,7 +223,8 @@ answers 404.
 | 3.18 `ganglion mcp`: read-only diagnostics over stdio (R-OBS-7) | Claude Code diagnoses a seeded fault through `ganglion mcp`, locally and in a local container |
 | 3.19 A file or picture sent to the agent is noticed: the transport passes its name, type and size beside the caption, and the agent says it cannot open it yet (R-DLV-10) | A PDF with a caption reaches the model as the caption plus a "file came" note; nothing is dropped silently |
 | 3.8 End to end on the test bot: message → inbox → model → tools → outbox → reply, under the M2 crash harness | 10.2 acceptance for turns |
-| 3.20 Chatlab: the agent tested by talking to it, over the fake Bot API | Section 8 of the [design](p1-m3c-chatlab-design.md) holds: the checks the owner could not run pass through `chatlab run` or report what is wrong; seeded faults turn their scenarios red; the language problem has a baseline, a fix and a result; `TestLabStaysOutOfTheBinary` passes |
+| 3.31 Chatlab: the agent tested by talking to it, over the fake Bot API (numbered 3.20 until 2026-11-08, when that number turned out to be M3d's sandbox, which accepted ADRs cite) | Section 8 of the [design](p1-m3c-chatlab-design.md) holds: the checks the owner could not run pass through `chatlab run` or report what is wrong; seeded faults turn their scenarios red; the language problem has a baseline, a fix and a result; `TestLabStaysOutOfTheBinary` passes |
+| 3.32 Three gaps where outside text and private data cross, closed before the repository opens (2026-11-05, [ADR-0049](../adr/0049-three-gaps-where-outside-text-and-private-data-cross.md)): a read script given input asks in a tainted session; a local-only session refuses every tool not declared to keep its data on the node; `ganglion mcp` marks its results as data | Tests for each gap; ADR-0049 accepted |
 
 #### M3 · Live turns — done
 
@@ -236,6 +240,20 @@ Closed on 2026-11-05. Before M3d. Design: [p1-live-turns-design.md](p1-live-turn
 | 3.29 Status reactions: work that takes long shows one, an addition shows 👌 (R-LIVE-7, ADR-0051) | A quick answer makes no API call; a refusal or a `429` delays no message; a stranger gets none; the owner settles the threshold live |
 | 3.30 The plan's display: `plan.show` and `plan.step`, one message edited during the turn (R-LIVE-8, ADR-0052) | A task with three steps shows one plan with edits before the final reply; a parked plan survives until the press; no button appears |
 
+#### M3 · More, after using the bot
+
+Small pieces the owner asked for after living with the bot, each with its own
+design and plan where it needed one. All but `/status` are closed.
+
+| Task | Done when |
+|---|---|
+| 3.33 A closed question folds: one line with the decision and its time, the question under it in a collapsed quote (R-POL-9; closed 2026-11-06) | The owner sees a folded question on the test bot |
+| 3.34 `/last`: an admin's plain summary of the conversation's last turn, with no model (R-OBS-10; closed 2026-11-06) | The owner reads it after a live turn that called tools; arguments and results never shown |
+| 3.35 Fixed texts in the person's language ([design](p1-fixed-texts-language-design.md), [plan](p1-fixed-texts-language.md); 7.13, R-LANG-1..7, [ADR-0053](../adr/0053-fixed-texts-in-the-persons-language.md); closed 2026-11-06) | A reply follows Telegram's language on the test bot; the full lab passes |
+| 3.36 Telegram rich messages ([design](p1-rich-messages-design.md), [plan](p1-rich-messages.md); R-DLV-11, 12, [ADR-0054](../adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md); closed 2026-11-06) | A table fits a phone, a long report comes as one message, a refusal goes the ordinary way |
+| 3.37 Knowing which message a reply answers ([design](p1-reply-context-design.md), [plan](p1-reply-context.md); R-DLV-13, 14, [ADR-0055](../adr/0055-a-reply-carries-the-replied-messages-origin.md); closed 2026-11-07) | A reply to a weather answer is answered for the new city; the taint follows the replied message's origin |
+| 3.38 `/status` in Telegram (designed next) | Set by its design |
+
 #### M3d · Host commands and plans
 
 Design: [p1-m3d-host-commands-design.md](p1-m3d-host-commands-design.md)
@@ -243,7 +261,8 @@ Design: [p1-m3d-host-commands-design.md](p1-m3d-host-commands-design.md)
 [ADR-0038](../adr/0038-host-commands-as-argv-with-classes-in-code.md),
 [ADR-0039](../adr/0039-command-sandbox.md),
 [ADR-0040](../adr/0040-plans-as-approvals.md) (Proposed). The
-step-by-step plan is written after M3c.
+step-by-step plan is written when M3d starts, after `/status` (3.38); the
+sandbox spike (3.20) comes first.
 
 | Task | Done when |
 |---|---|
@@ -307,7 +326,7 @@ starting point, not a decision.
 | D-2 | Telegram client: own minimal Bot API client, or a library | Decided: own ([ADR-0018](../adr/0018-own-telegram-bot-api-client.md)) | M2 |
 | D-5 | Sandbox for level-2 scripts | M3c: subprocess, environment allowlist, timeout; M3d: the command sandbox of [ADR-0039](../adr/0039-command-sandbox.md) (Proposed), which skill scripts move onto (spec 11) | M3c, M3d |
 | D-6 | First cloud model for routine turns | Chosen on cost and quality of real turns (spec 11) | M3 |
-| D-7 | Git for memory and config: the `git` binary or go-git | The binary: smaller process (principle 8); measured in [ADR-0033](../adr/0033-memory-in-the-workspace-git-with-the-git-binary.md) (Proposed) | M3b |
+| D-7 | Git for memory and config: the `git` binary or go-git | The binary: smaller process (principle 8); decided in [ADR-0033](../adr/0033-memory-in-the-workspace-git-with-the-git-binary.md) | M3b |
 | D-3 | Node config and secrets | YAML, like manifests (ADR-0012), for the node config. Requirements: (1) three kinds of data — bootstrap (data directory, roles) from flags or environment; node config (chats, cells, modules, policies) as YAML in a git repo that the agent changes only with approval (M6); secrets never in the YAML; (2) secrets come through one secret-source interface: environment and `*_FILE` files (Docker and Kubernetes secrets) in P1, an encrypted store later; the runner's `secret.get` reads from it; (3) the same binary works on Railway, in Docker or Kubernetes and as a local install | M4 |
 | D-4 | The flow as a WASM module with cell host functions, or native Go | WASM module: it is the project's core hypothesis | M5 |
 

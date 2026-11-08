@@ -1,6 +1,6 @@
 # ADR-0033: Keep memory as Markdown files in the workspace's git repository, driven by the `git` binary
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.7](../spec.md#77-memory) (R-MEM-3–5), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-7), principle 8 (a node fits in 128 MB); decision D-7 of the [phase plan](../plans/p1-all-in-one.md); design section 5.4 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md#54-memory-spec-task-35)); follows the M3b note of [ADR-0024](0024-persona-as-workspace-files.md)

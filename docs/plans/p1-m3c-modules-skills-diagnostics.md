@@ -904,7 +904,7 @@ Two repositories: promtop first, then ganglion.
   after 1,000 turns and after 50 `/metrics` calls, against M3b's
   numbers. Write them into `docs/README.md`.
 - [x] **Step 5: Live on the test bot** (`make live-agent`, the owner).
-  Replaced on 2026-11-04 by chatlab ([plan](p1-m3c-chatlab.md), task 3.20), which
+  Replaced on 2026-11-04 by chatlab ([plan](p1-m3c-chatlab.md), task 3.31), which
   runs these checks over the fake Bot API. The owner looked at the messages in
   Telegram on 2026-11-05. `/modules update` and `rollback` are deferred until the
   repository opens (task 7, step 5).

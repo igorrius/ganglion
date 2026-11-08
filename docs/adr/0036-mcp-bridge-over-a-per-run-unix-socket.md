@@ -1,6 +1,6 @@
 # ADR-0036: Give CLI providers the agent's tools over MCP on a per-run Unix socket with a token
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.4](../spec.md#74-providers-and-model-access) (R-PRV-4, R-PRV-6), design section 5.7 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md#57-tools-for-the-claude-cli-the-mcp-bridge-owner)); [ADR-0021](0021-providers-chosen-by-the-operator-claude-cli-included.md) (the claude CLI as a provider), [ADR-0022](0022-haiku-first-during-development.md) (Haiku through the CLI first), [ADR-0031](0031-agent-security-baseline.md) (the security baseline), [ADR-0037](0037-own-minimal-mcp-server.md) (the server code)

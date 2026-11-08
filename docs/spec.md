@@ -485,9 +485,9 @@ model:
 
   The transport is a per-run Unix socket with a token, reached through
   a hidden `ganglion mcp-relay`
-  ([ADR-0036](adr/0036-mcp-bridge-over-a-per-run-unix-socket.md),
-  Proposed), served by an own minimal MCP server
-  ([ADR-0037](adr/0037-own-minimal-mcp-server.md), Proposed).
+  ([ADR-0036](adr/0036-mcp-bridge-over-a-per-run-unix-socket.md)),
+  served by an own minimal MCP server
+  ([ADR-0037](adr/0037-own-minimal-mcp-server.md)).
 
 Rules for access to Anthropic models (per
 [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance),
@@ -715,7 +715,7 @@ human); module install — tests + reviewer + admin.
   A plan (R-LIVE-8) and a message with quick actions do not fold (owner, 2026-11-05).
 
 The rest of the baseline is in
-[ADR-0031](adr/0031-agent-security-baseline.md) (Proposed): no data out
+[ADR-0031](adr/0031-agent-security-baseline.md): no data out
 without confirmation (R-WEB-2), secrets redacted before any journal or
 log, least privilege, every decision journalled (R-OBS-5), and tools,
 memory and scheduled tasks for admins only in M3b; the family bot
@@ -844,14 +844,6 @@ undone with `git revert`.
   group (`ganglion`, `runtime`, `process`) keeps that section, and any
   other word is a filter over the metric names (a substring, or globs
   with `*`).
-- **R-OBS-10.** `/last` shows an admin what the last turn of this conversation did,
-  in plain words and with no model (owner, 2026-11-05): when and how long, how it ended
-  and why, the models tried, the steps, each tool call and how it was decided, the messages
-  that joined it (R-LIVE-1), tokens and cost. Commands are not turns here. It joins no
-  history. It names tools and never shows their arguments or results, which hold outside
-  text and private data and which a message in a chat carries further; `turn.show`
-  (R-OBS-7) is for those. A scheduled task runs in a conversation of its own, so `/last`
-  in the chat does not show its runs.
 - **R-OBS-9.** In a network (P2) the core collects the telemetry of every
   node over the bus (owner, 2026-11-03). An edge dials out and opens no
   port, so nothing can scrape its `/metrics`.
@@ -873,8 +865,18 @@ undone with `git revert`.
     closed sets.
   - **Outside collectors.** Forwarding to an outside collector (OTLP, a
     Prometheus remote write) is a later feature of the core. It is not a
-    second path from each edge: the bus stays the only link an edge needs. Only what is safe to collect: no content, no identifiers
-  of people or conversations, and label values from closed sets.
+    second path from each edge: the bus stays the only link an edge needs.
+  - **What is collected.** Only what is safe to collect: no content, no
+    identifiers of people or conversations, and label values from closed
+    sets.
+- **R-OBS-10.** `/last` shows an admin what the last turn of this conversation did,
+  in plain words and with no model (owner, 2026-11-05): when and how long, how it ended
+  and why, the models tried, the steps, each tool call and how it was decided, the messages
+  that joined it (R-LIVE-1), tokens and cost. Commands are not turns here. It joins no
+  history. It names tools and never shows their arguments or results, which hold outside
+  text and private data and which a message in a chat carries further; `turn.show`
+  (R-OBS-7) is for those. A scheduled task runs in a conversation of its own, so `/last`
+  in the chat does not show its runs.
 
 ### 7.10. Scheduler and reminders
 
@@ -1314,8 +1316,13 @@ milestone is split into M3a (talks), M3b (works with the world: tools,
 policies, memory, the scheduler, web reading, the MCP bridge) and M3c
 (module updates, skills, attachments, logs on disk, `ganglion mcp`), as
 the [M3b and M3c design](plans/p1-m3b-m3c-design.md) sets out; the
-scheduler moves from M4 to M3b. M3d (host commands and plans, 7.12)
-follows M3c ([M3d design](plans/p1-m3d-host-commands-design.md),
+scheduler moves from M4 to M3b. Between M3c and M3d came live turns
+(R-LIVE) and smaller additions the owner asked for after using the bot: a
+closed question that folds (R-POL-9), `/last` (R-OBS-10), fixed texts in
+the person's language (7.13), Telegram rich messages (R-DLV-11, 12),
+knowing which message a reply answers (R-DLV-13, 14) and `/status`. M3d
+(host commands and plans, 7.12) follows them
+([M3d design](plans/p1-m3d-host-commands-design.md),
 [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md)).
 
 Acceptance:

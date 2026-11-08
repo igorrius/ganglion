@@ -6,6 +6,8 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
+- **Next:** `/status` in Telegram (task 3.38), then M3d: its step-by-step plan, starting with
+  the sandbox spike (3.20) on the owner's machine, Railway and a Pi.
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
   - 0.2 Deye reader in WASM on wazero: matched `deye.py` on the live API,
@@ -34,7 +36,7 @@ Start here when coming back to the project.
     test bot. Decisions: [ADR-0018](adr/0018-own-telegram-bot-api-client.md)
     (own Bot API client), [ADR-0019](adr/0019-release-leases-at-core-start.md)
     (leases released at core start, database lock).
-  - M3a, the talking agent, built — `provider/openai`, `provider/claudecli`,
+  - M3a, the talking agent, done — `provider/openai`, `provider/claudecli`,
     `router/rules`, `turns`, `agent`, core workers
     ([plan](plans/p1-m3a-talking-agent.md)). The bot answers through
     models the operator lists in a catalogue: Haiku through the claude CLI
@@ -77,52 +79,53 @@ Start here when coming back to the project.
       the root, development tools in `tools/`
       ([ADR-0029](adr/0029-urfave-cli-for-commands-and-bootstrap-flags.md));
     - 34 MB on disk, 35 MB RSS after 1,000 agent turns.
-- **Done:** M3b, the agent works with the world
-  ([plan](plans/p1-m3b-agent-world.md)), merged 2026-11-03. **M3b: acceptance scripted
-  (2026-11-03); the owner's first live run on the test bot (2026-11-03)
-  found seven issues, all fixed (rulings R38–R46): no second question
-  for a call already waiting, "Open this page?" for `web.fetch`, a toast
-  and a status line on every press before its action runs, task runs
-  told their answer is delivered, button actions noted in the history,
-  command hints in English, Russian and Ukrainian; JS-rendered pages and
-  the bot's language went to "Not now"; a `/tasks` command lists the
-  jobs. The owner merged it and checks these mechanics in detail at the
-  start of the next session.**
-  `make accept` runs
-  the acceptance (rates, memory, injection, expiry) against the real
-  core with real models and the real web, the fake Bot API playing the
-  owner, once with Haiku through the claude CLI and once with DeepSeek
-  V4.1 Flash on OpenRouter; both pass. The owner repeats it by hand on
-  the test bot with `make live-agent`. Measured (`make memory`): the
-  binary is 41.9 MB; the node idles at 32 MB RSS and is at 39 MB (peak
-  40 MB) after 1,000 turns that each call a tool; one hostile 1 MiB
-  page through `web.fetch` and `html2md` peaks the node at 99 MB,
-  under the 128 MB budget. The rest of M3 is split in two by
-  the [M3b and M3c design](plans/p1-m3b-m3c-design.md), recorded in the
-  [phase plan](plans/p1-all-in-one.md#m3--the-agent-spec-7274-76-77) and
-  the [spec](spec.md#102-p1--all-in-one--scope-and-acceptance):
-  - **M3b:**
-    - tools under policies and a security baseline
-      ([ADR-0031](adr/0031-agent-security-baseline.md), Proposed;
-      [research](research/2026-11-02-agent-security-baseline.md));
-    - confirmations and quick actions on buttons;
-    - the scheduler with reminders and scheduled agent tasks, moved up
-      from M4;
-    - memory with a clean-context check
-      ([ADR-0033](adr/0033-memory-in-the-workspace-git-with-the-git-binary.md),
-      [ADR-0034](adr/0034-clean-context-guard.md), Proposed);
-    - reading the web (`web.fetch` with an `html2md` WASM module in
-      Rust, `web.search` through Brave or DuckDuckGo;
-      [ADR-0035](adr/0035-web-reading.md), Proposed);
-    - the tool-call journal;
-    - the same tools for the claude CLI through an MCP bridge on a
-      per-run Unix socket
-      ([ADR-0036](adr/0036-mcp-bridge-over-a-per-run-unix-socket.md),
-      [ADR-0037](adr/0037-own-minimal-mcp-server.md), Proposed);
-    - carried from M3a: the first-run introduction that writes the persona
-      ([ADR-0024](adr/0024-persona-as-workspace-files.md)), the current
-      time in the last user message, the depth limit (R-AGT-4) and tool
-      placement (R-RTR-3).
+  - M3b, the agent works with the world, done
+    ([plan](plans/p1-m3b-agent-world.md)), merged 2026-11-03. The rest of
+    M3 is split in two by the [M3b and M3c design](plans/p1-m3b-m3c-design.md),
+    recorded in the [phase plan](plans/p1-all-in-one.md#m3--the-agent-spec-7274-76-77)
+    and the [spec](spec.md#102-p1--all-in-one--scope-and-acceptance).
+    - **What it brought:**
+      - tools under policies and a security baseline
+        ([ADR-0031](adr/0031-agent-security-baseline.md);
+        [research](research/2026-11-02-agent-security-baseline.md));
+      - confirmations and quick actions on buttons
+        ([ADR-0032](adr/0032-buttons-and-resume.md));
+      - the scheduler with reminders and scheduled agent tasks, moved up
+        from M4;
+      - memory with a clean-context check
+        ([ADR-0033](adr/0033-memory-in-the-workspace-git-with-the-git-binary.md),
+        [ADR-0034](adr/0034-clean-context-guard.md));
+      - reading the web (`web.fetch` with an `html2md` WASM module in
+        Rust, `web.search` through Brave or DuckDuckGo;
+        [ADR-0035](adr/0035-web-reading.md));
+      - the tool-call journal;
+      - the same tools for the claude CLI through an MCP bridge on a
+        per-run Unix socket
+        ([ADR-0036](adr/0036-mcp-bridge-over-a-per-run-unix-socket.md),
+        [ADR-0037](adr/0037-own-minimal-mcp-server.md));
+      - carried from M3a: the first-run introduction that writes the persona
+        ([ADR-0024](adr/0024-persona-as-workspace-files.md)), the current
+        time in the last user message, the depth limit (R-AGT-4) and tool
+        placement (R-RTR-3).
+    - **Acceptance (2026-11-03):** `make accept` runs the acceptance
+      (rates, memory, injection, expiry) against the real core with real
+      models and the real web, the fake Bot API playing the owner; it
+      passes on both routes. The owner repeats it by hand on the test bot
+      with `make live-agent`.
+    - **The owner's first live run (2026-11-03)** found seven issues, all
+      fixed (rulings R38–R46): no second question for a call already
+      waiting, "Open this page?" for `web.fetch`, a toast and a status line
+      on every press before its action runs, task runs told their answer
+      is delivered, button actions noted in the history, command hints in
+      English, Russian and Ukrainian; a `/tasks` command lists the jobs.
+      JS-rendered pages went to "Not now"; the bot's language came later
+      as fixed texts (3.35). A detailed look at these mechanics was planned
+      for the next session; chatlab's scenarios have covered some of them
+      since (R38's check among its seeded faults).
+    - **Measured (`make memory`):** the binary is 41.9 MB; the node idles
+      at 32 MB RSS and is at 39 MB (peak 40 MB) after 1,000 turns that each
+      call a tool; one hostile 1 MiB page through `web.fetch` and `html2md`
+      peaks the node at 99 MB, under the 128 MB budget.
   - **M3c, done (closed 2026-11-05)**
     ([plan](plans/p1-m3c-modules-skills-diagnostics.md)): module update
     and rollback, skills, attachments and the metrics picture in
@@ -154,7 +157,7 @@ Start here when coming back to the project.
       turns and Haiku for compaction and checks
       ([ADR-0047](adr/0047-sonnet-answers-during-development.md)).
       `make accept` passes on it, and runs only the claude CLI route by default.
-    - **Chatlab (task 3.20, [ADR-0048](adr/0048-chatlab-over-the-fake-bot-api.md)):** the developer runs the checks the owner could not run by hand:
+    - **Chatlab (task 3.31, [ADR-0048](adr/0048-chatlab-over-the-fake-bot-api.md)):** the developer runs the checks the owner could not run by hand:
       a channel-neutral peer talks to a real core over the fake Bot API, facts and
       a judge decide, and a table shows n of n. `bin/chatlab start`, `say`, `press`,
       `advance`, `show` and `stop` hold a conversation from the shell.
@@ -182,6 +185,10 @@ Start here when coming back to the project.
         47,727,550 bytes against 47,735,838 before the lab's commits.
     - **The owner's look in Telegram (2026-11-05):** the `/metrics` picture reads
       once zoomed, the buttons respond, and the notice of a file arrives.
+  - **Three gaps closed before the repository opens (task 3.32, 2026-11-05,
+    [ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md)):** a read script given input asks in a tainted session; a local-only
+    session refuses every tool not declared to keep its data on the node; `ganglion
+    mcp` marks its results as data.
   - **Live turns, done (closed 2026-11-05)** ([plan](plans/p1-live-turns.md),
     [ADR-0050](adr/0050-additions-join-a-running-turn.md),
     [ADR-0051](adr/0051-status-reactions-outside-the-outbox.md),
@@ -194,24 +201,25 @@ Start here when coming back to the project.
       ([when it shows](research/2026-11-05-when-a-plan-shows.md));
     - 1,000 `kill -9` with no message lost, 43.9 MB RSS after 1,000 turns, a 48.0 MB binary;
     - the owner checked it live on the test bot: reactions, additions and the plan.
-    - The full chatlab run after the prompt's change is deferred by the owner until after
-      the next feature; `task-report` and `task-selection` have their first verdict then.
-  - **A closed question folds (2026-11-05, R-POL-9):** one line with the decision and its
+    - The full chatlab run after the prompt's change was deferred by the owner until after
+      the next feature; it ran with fixed texts (2026-11-06) and gave `task-report` and
+      `task-selection` their first verdict.
+  - **A closed question folds (task 3.33, 2026-11-05, R-POL-9):** one line with the decision and its
     time, and the question under it in a collapsed quote; the owner saw it on the test bot
     (2026-11-06).
-  - **`/last` (2026-11-05, R-OBS-10):** an admin's plain summary of the conversation's last
+  - **`/last` (task 3.34, 2026-11-05, R-OBS-10):** an admin's plain summary of the conversation's last
     turn, with no model: time, outcome, models, steps, tools and how each was decided, the
     messages that joined, tokens and cost. Tools are named, their arguments and results
     never shown. The owner checked it on a live turn that read the agent's logs (2026-11-06).
-  - **Fixed texts in the person's language, built on branch `fixed-texts-language`**
-    ([plan](plans/p1-fixed-texts-language.md),
-    [ADR-0053](adr/0053-fixed-texts-in-the-persons-language.md)): tests and reviews pass. The owner saw
+  - **Fixed texts in the person's language (task 3.35), closed 2026-11-06**
+    ([design](plans/p1-fixed-texts-language-design.md), [plan](plans/p1-fixed-texts-language.md),
+    [ADR-0053](adr/0053-fixed-texts-in-the-persons-language.md), Accepted; spec 7.13): tests and reviews pass. The owner saw
     a reply follow Telegram's language on the test bot (2026-11-06); a spoken switch and a machine
     translation have not been seen live yet. The full lab passed 32 of 32 on 2026-11-06, for 1,454,519
     tokens, including the first verdicts of `task-report` and `task-selection`. 46.0 MB binary, 44.9 MB RSS after 1,000 turns. The
     `/metrics` memory test (`make memory`) is noisy and goes over its 128 MB line on `master` too: peaks
     of 122 to 134 MB on both, so it does not separate them.
-  - **Telegram Rich Messages, closed 2026-11-06**
+  - **Telegram Rich Messages (task 3.36), closed 2026-11-06**
     ([design](plans/p1-rich-messages-design.md), [plan](plans/p1-rich-messages.md),
     [ADR-0054](adr/0054-structured-replies-as-rich-blocks-the-transport-builds.md), Accepted): a message with a
     table or at least two headings goes out as a rich message from an allowlist of blocks, a refusal goes the
@@ -220,8 +228,8 @@ Start here when coming back to the project.
     turns. The owner's look on the test bot (2026-11-06): the table fits a phone, the long report comes as one message,
     a reply works, a tree of links keeps its levels and links in both kinds of message, and the bot's own rich answer
     forwarded back is read and taints the session. Telegram refused nothing. An empty table cell has not been seen
-    live; a refusal of it would go the ordinary way. Next: `/status`.
-  - **Knowing which message a reply answers, closed 2026-11-07**
+    live; a refusal of it would go the ordinary way.
+  - **Knowing which message a reply answers (task 3.37), closed 2026-11-07**
     ([design](plans/p1-reply-context-design.md), [plan](plans/p1-reply-context.md),
     [ADR-0055](adr/0055-a-reply-carries-the-replied-messages-origin.md), Accepted; R-DLV-13, R-DLV-14):
     - a reply to the bot's messages or the owner's own, up to 90 days old, tells the agent what it answers:
@@ -246,7 +254,7 @@ Start here when coming back to the project.
       which is its own rule. Seen on the way: two presses for two currency pages and a third for the same
       weather site with another city (in "Not now", security first); the first-run introduction did not
       run because the workspace was copied from the example persona.
-  - **M3d, after M3c (designed 2026-11-03):** host commands and plans
+  - **M3d, after `/status` (designed 2026-11-03):** host commands and plans
     ([design](plans/p1-m3d-host-commands-design.md), spec 7.12):
     `host.exec` as argv under a class table in code, in a sandbox that
     fails closed; `host.stats`; a plan message whose one press approves
@@ -283,6 +291,22 @@ Start here when coming back to the project.
       uncommitted; a Telegram display name can read like the owner's in
       the speaker prefix; an approved page is capped like a tool result
       while an auto-allowed one is not.
+    - M3c: an admin alert at start when a stored module falls back or a
+      skill is not loaded (both are logged and visible otherwise); pin the
+      GitHub Actions by commit SHA in `modules-release.yml`; prune old
+      failed `module_versions` rows; `/modules update` blocks its turn up
+      to about 60 s plus the self-test; a script outlives a killed node, and
+      its temp dir stays; log files past their age stay until the next
+      rotation or start; a failed reopen stops disk logs until a restart;
+      "no release found" covers a channel that cannot be read and a release
+      for a newer core; `metrics.show` does not check the attachment cap
+      itself; a stored module shadows a newer built-in with no word of it;
+      an album costs one model turn per photo; a script's stdout is not
+      redacted as its stderr is; ADR-0041's host list omits
+      `release-assets.githubusercontent.com`; the `/metrics` picture cannot be
+      read without zooming, on a phone or on a desktop, so a short summary could
+      come first; a file sent with no text is answered in English, since the
+      message gives no language to follow.
     - Rich Messages:
       - rich blocks Telegram may refuse, which then go the ordinary way: an empty list item or quote, an empty
         link or heading, a link inside a link (a badge); the fake accepts them;
@@ -306,26 +330,6 @@ Start here when coming back to the project.
       - after a crash the last part of a split message may be sent again (at least once, as before);
       - `noteRef` reads the whole outbox body, attachment bytes included, to copy the text;
       - a tainted replied message with only a file has no "a message with a file" mark.
-    - M3c: an admin alert at start when a stored module falls back or a
-      skill is not loaded (both are logged and visible otherwise); pin the
-      GitHub Actions by commit SHA in `modules-release.yml`; prune old
-      failed `module_versions` rows; `/modules update` blocks its turn up
-      to about 60 s plus the self-test; a script outlives a killed node, and
-      its temp dir stays; log files past their age stay until the next
-      rotation or start; a failed reopen stops disk logs until a restart;
-      "no release found" covers a channel that cannot be read and a release
-      for a newer core; `metrics.show` does not check the attachment cap
-      itself; a stored module shadows a newer built-in with no word of it;
-      an album costs one model turn per photo; a script's stdout is not
-      redacted as its stderr is; ADR-0041's host list omits
-      `release-assets.githubusercontent.com`; the `/metrics` picture cannot be
-      read without zooming, on a phone or on a desktop, so a short summary could
-      come first; a file sent with no text is answered in English, since the
-      message gives no language to follow.
-  - **Three gaps closed before the repository opens (2026-11-05,
-    [ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md)):** a read script given input asks in a tainted session; a local-only
-    session refuses every tool not declared to keep its data on the node; `ganglion
-    mcp` marks its results as data.
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)
 
 Update this block when a task or phase closes.

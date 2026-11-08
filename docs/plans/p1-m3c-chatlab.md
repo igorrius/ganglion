@@ -798,7 +798,7 @@ Expected: lint, tests and build pass; the table is what the owner receives.
 
 - [x] **Step 5: Update the documents**
 
-`docs/README.md`: how to run a lab, chatlab's results, and the owner's remaining live list: the look on a phone, and `/modules update` and `rollback` after the first tag. Code map rows for `internal/chatlab` and `tools/chatlab`. Tick 3.20. In the M3c plan, mark task 9 step 5 as done through chatlab, except that list.
+`docs/README.md`: how to run a lab, chatlab's results, and the owner's remaining live list: the look on a phone, and `/modules update` and `rollback` after the first tag. Code map rows for `internal/chatlab` and `tools/chatlab`. Tick 3.31 (then numbered 3.20). In the M3c plan, mark task 9 step 5 as done through chatlab, except that list.
 
 - [x] **Step 6: Commit**
 

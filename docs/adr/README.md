@@ -36,13 +36,13 @@ considered, how they compare, the decision and its consequences. See
 | [0028](0028-samber-do-composition-root-in-config.md) | Assemble the node in a `config` package of `samber/do` providers | Accepted | 2026-11-02 |
 | [0029](0029-urfave-cli-for-commands-and-bootstrap-flags.md) | Use urfave/cli v3 for commands and bootstrap flags, with `main.go` at the root and the command tree in `cmd` | Accepted | 2026-11-02 |
 | [0030](0030-mustinvoke-inside-providers.md) | Take dependencies with do.MustInvoke inside providers (supersedes the `Must*` rule of ADR-0028) | Accepted | 2026-11-02 |
-| [0031](0031-agent-security-baseline.md) | Adopt a security baseline for the agent: rules in code, session-wide taint, a clean-context check and grants for scheduled tasks | Proposed | 2026-11-02 |
-| [0032](0032-buttons-and-resume.md) | Answer confirmations with one-time buttons and resume the conversation with a new event | Proposed | 2026-11-03 |
-| [0033](0033-memory-in-the-workspace-git-with-the-git-binary.md) | Keep memory as Markdown files in the workspace's git repository, driven by the `git` binary (D-7) | Proposed | 2026-11-03 |
-| [0034](0034-clean-context-guard.md) | Check every memory write with a cheap model in a clean context, failing closed | Proposed | 2026-11-03 |
-| [0035](0035-web-reading.md) | Read pages through an html2md WASM module in Rust; search with Brave or DuckDuckGo | Proposed | 2026-11-03 |
-| [0036](0036-mcp-bridge-over-a-per-run-unix-socket.md) | Give CLI providers the agent's tools over MCP on a per-run Unix socket with a token | Proposed | 2026-11-03 |
-| [0037](0037-own-minimal-mcp-server.md) | Write a minimal MCP server of our own instead of using the official Go SDK | Proposed | 2026-11-03 |
+| [0031](0031-agent-security-baseline.md) | Adopt a security baseline for the agent: rules in code, session-wide taint, a clean-context check and grants for scheduled tasks | Accepted | 2026-11-02 |
+| [0032](0032-buttons-and-resume.md) | Answer confirmations with one-time buttons and resume the conversation with a new event | Accepted | 2026-11-03 |
+| [0033](0033-memory-in-the-workspace-git-with-the-git-binary.md) | Keep memory as Markdown files in the workspace's git repository, driven by the `git` binary (D-7) | Accepted | 2026-11-03 |
+| [0034](0034-clean-context-guard.md) | Check every memory write with a cheap model in a clean context, failing closed | Accepted | 2026-11-03 |
+| [0035](0035-web-reading.md) | Read pages through an html2md WASM module in Rust; search with Brave or DuckDuckGo | Accepted | 2026-11-03 |
+| [0036](0036-mcp-bridge-over-a-per-run-unix-socket.md) | Give CLI providers the agent's tools over MCP on a per-run Unix socket with a token | Accepted | 2026-11-03 |
+| [0037](0037-own-minimal-mcp-server.md) | Write a minimal MCP server of our own instead of using the official Go SDK | Accepted | 2026-11-03 |
 | [0038](0038-host-commands-as-argv-with-classes-in-code.md) | Give the agent host commands as argv, classed by a table in code, in a milestone M3d | Proposed | 2026-11-03 |
 | [0039](0039-command-sandbox.md) | Run host commands and skill scripts in a sandbox that fails closed | Proposed | 2026-11-03 |
 | [0040](0040-plans-as-approvals.md) | Let one press on a plan approve exactly the commands it lists | Proposed | 2026-11-03 |
