@@ -68,11 +68,7 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 // redact.String. The disk comes first, so a line on stdout is already in
 // the file when a kill -9 lands.
 func newLogger(out io.Writer, level slog.Level, b config.Bootstrap) (*slog.Logger, func(), error) {
-	secrets := []string{b.BotToken, b.Agent.BraveKey}
-	for _, k := range b.Agent.Keys {
-		secrets = append(secrets, k)
-	}
-	values := redact.Values(secrets...)
+	values := redact.Values(b.SecretValues()...)
 	hide := func(s string) string { return values(redact.String(s)) }
 	opts := &slog.HandlerOptions{Level: level}
 	wrap := func(h slog.Handler) slog.Handler { return telemetry.LogHandler(telemetry.RedactHandler(h, hide)) }

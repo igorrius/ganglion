@@ -47,8 +47,8 @@ func TestCoreContainerBuildsAndShutsDown(t *testing.T) {
 	}{
 		"echo, no transport":  {components: 3},
 		"echo over Telegram":  {token: testToken, admin: "telegram:user:42", components: 4},
-		"agent over Telegram": {token: testToken, admin: "telegram:user:42", agent: true, components: 10},
-		"agent, no transport": {agent: true, components: 8},
+		"agent over Telegram": {token: testToken, admin: "telegram:user:42", agent: true, components: 11},
+		"agent, no transport": {agent: true, components: 9},
 	} {
 		t.Run(name, func(t *testing.T) {
 			b := testConfig(t)
@@ -268,5 +268,15 @@ func TestScheduleSpecsLookupAfterTheBuild(t *testing.T) {
 	}
 	if s, ok := sc.Specs("web.fetch"); !ok || s.Name != "web.fetch" {
 		t.Fatalf("Specs(web.fetch) = %+v, %v", s, ok)
+	}
+}
+
+// The logger and the runner hide the same secrets: one list.
+func TestSecretValuesListsEverySecretTheNodeRead(t *testing.T) {
+	b := Bootstrap{BotToken: "tok", Agent: AgentSettings{BraveKey: "brave", Keys: map[string]string{"a": "k1", "b": "k2"}}}
+	got := b.SecretValues()
+	slices.Sort(got)
+	if want := []string{"brave", "k1", "k2", "tok"}; !slices.Equal(got, want) {
+		t.Fatalf("SecretValues = %q, want %q", got, want)
 	}
 }

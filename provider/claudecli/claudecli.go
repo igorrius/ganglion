@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/internal/buildinfo"
+	"github.com/igorrius/ganglion/internal/procgroup"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/mcp"
@@ -298,7 +299,7 @@ func (c *Client) run(ctx context.Context, dir string, args []string, stdin strin
 	cmd.Stdin = strings.NewReader(stdin) // never argv: argv shows in ps
 	cmd.Stdout, cmd.Stderr = &stdout, &limited{b: &stderr, n: 4096}
 	cmd.WaitDelay = 2 * time.Second
-	ownGroup(cmd)
+	procgroup.Own(cmd)
 	err = cmd.Run()
 	return stdout, stderr, err
 }

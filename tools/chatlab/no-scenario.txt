@@ -45,6 +45,7 @@ internal/backoff/**
 internal/buckets/**
 internal/buildinfo/**
 internal/clock/**
+internal/procgroup/**
 internal/redact/**
 internal/text/**
 internal/transcript/**

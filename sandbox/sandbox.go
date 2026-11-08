@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -176,8 +177,9 @@ func (s *Sandbox) Ready() (bool, Reason) { return s.reason == Ready, s.reason }
 // Command is argv run in dir inside the sandbox: the caller sets stdio, a
 // process group and the time limit, starts it, and calls Release after
 // Start. The .env files under dir and the policy's roots are
-// denied with the rest.
-func (s *Sandbox) Command(ctx context.Context, argv []string, dir string) (*exec.Cmd, error) {
+// denied with the rest. Each KEY=VALUE of env replaces the policy's value
+// of that key or is added after it; an entry without "=" is dropped.
+func (s *Sandbox) Command(ctx context.Context, argv []string, dir string, env ...string) (*exec.Cmd, error) {
 	if s.reason != Ready {
 		return nil, ErrOff
 	}
@@ -191,7 +193,27 @@ func (s *Sandbox) Command(ctx context.Context, argv []string, dir string) (*exec
 	if err != nil {
 		return nil, err
 	}
-	return command(ctx, s.self, spec{Argv: argv, Env: s.policy.Env, Dir: dir, Grants: grants, ABI: s.abi})
+	return command(ctx, s.self, spec{Argv: argv, Env: mergeEnv(s.policy.Env, env), Dir: dir, Grants: grants, ABI: s.abi})
+}
+
+// mergeEnv is base with each KEY=VALUE of extra replacing the same key in
+// place or added at the end; an entry without a key and "=" is dropped.
+// base is not changed.
+func mergeEnv(base, extra []string) []string {
+	out := slices.Clone(base)
+	for _, e := range extra {
+		k, _, ok := strings.Cut(e, "=")
+		if !ok || k == "" {
+			continue
+		}
+		i := slices.IndexFunc(out, func(b string) bool { return strings.HasPrefix(b, k+"=") })
+		if i < 0 {
+			out = append(out, e)
+			continue
+		}
+		out[i] = e
+	}
+	return out
 }
 
 // Release closes the spec file a started command no longer needs.

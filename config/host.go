@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/host"
+	"github.com/igorrius/ganglion/internal/redact"
+	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/sandbox"
 	"github.com/samber/do/v2"
 )
 
@@ -52,5 +55,25 @@ func Stats() do.Provider[*host.Stats] {
 	return func(i do.Injector) (*host.Stats, error) {
 		b := do.MustInvoke[Bootstrap](i)
 		return host.NewStats(do.MustInvoke[[]host.Place](i), filepath.Dir(b.DB)), nil
+	}
+}
+
+// commandLimits are the runner's limits. Until long commands resume their
+// conversation (M3d task 7), a call waits for its command to the end.
+func commandLimits() host.Limits {
+	lim := host.DefaultLimits()
+	lim.Wait = lim.Max
+	return lim
+}
+
+// Runner provides the runner of host commands, in the sandbox.
+func Runner() do.Provider[*host.Runner] {
+	return func(i do.Injector) (*host.Runner, error) {
+		b := do.MustInvoke[Bootstrap](i)
+		values := redact.Values(b.SecretValues()...)
+		return host.NewRunner(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sandbox.Sandbox](i),
+			do.MustInvoke[*sqlqueue.Queue](i).Put, commandLimits(),
+			host.WithRedact(func(s string) string { return values(redact.String(s)) }),
+			host.WithRunnerLog(do.MustInvoke[*slog.Logger](i)))
 	}
 }

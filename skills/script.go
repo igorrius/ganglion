@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/igorrius/ganglion/internal/procgroup"
 )
 
 // RunConfig bounds a script run.
@@ -71,9 +73,9 @@ func (r *Runner) Run(ctx context.Context, sk Skill, input []byte) (Output, error
 	stdout, stderr := &capped{max: r.cfg.MaxOut}, &capped{max: r.cfg.MaxErr}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.WaitDelay = time.Second
-	ownGroup(cmd)
+	procgroup.Own(cmd)
 	err = cmd.Run()
-	killGroup(cmd) // children that outlived the script
+	procgroup.Kill(cmd) // children that outlived the script
 	out := Output{Stdout: stdout.b.String(), Stderr: stderr.b.String(), Truncated: stdout.cut}
 	var exit *exec.ExitError
 	switch {

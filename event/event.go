@@ -25,6 +25,10 @@ const (
 	// KindSchedule is a scheduled job's time: a reminder to send or a
 	// task to run (spec 7.10); its payload is a Schedule.
 	KindSchedule Kind = "schedule"
+	// KindCommandDone is the end of a host command that went on in the
+	// background after its call returned (R-CMD-4); its payload is a
+	// CommandDone.
+	KindCommandDone Kind = "command.done"
 )
 
 // Event is the single input from any transport: a chat message, a sensor

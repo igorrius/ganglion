@@ -48,6 +48,16 @@ type Bootstrap struct {
 	Metrics builtin.MetricsRenderer
 }
 
+// SecretValues are the secret values the node read, which logs and command
+// output hide exactly (redact.Values).
+func (b Bootstrap) SecretValues() []string {
+	out := []string{b.BotToken, b.Agent.BraveKey}
+	for _, k := range b.Agent.Keys {
+		out = append(out, k)
+	}
+	return out
+}
+
 // AgentSettings turns the agent on. Without a catalogue the core echoes, as
 // in M2.
 type AgentSettings struct {
