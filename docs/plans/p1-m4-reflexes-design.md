@@ -202,7 +202,10 @@ models:
 - **The purposes are a fixed list in code:** `chat` (turns and scheduled
   agent tasks), `check` (short yes/no decisions such as the clean-context
   check), `compact` (history compaction), `code` (writing modules and
-  skills). An unknown purpose fails the start. Every place that calls a
+  skills); `translate` (fixed texts into a language with no file,
+  R-LANG-5) was added when the plan found that caller. An unknown purpose
+  fails the start; `check`, `compact` and `translate` use `chat`'s list
+  when absent, `code` has no default. Every place that calls a
   model names its purpose.
 - **The order is the preference.** The next entry is taken when one is
   out of limits, answers 429 or times out; cooling and limits work as

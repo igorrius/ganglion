@@ -83,8 +83,12 @@ models:
 
 - **The purposes are fixed in code:** `chat` (turns and scheduled agent
   tasks), `check` (short yes/no decisions such as the clean-context
-  check), `compact` (history compaction), `code` (writing modules and
-  skills). An unknown purpose fails the start.
+  check), `compact` (history compaction), `translate` (fixed texts into a
+  language with no file, R-LANG-5; found by the M4a plan), `code`
+  (writing modules and skills). An unknown purpose fails the start.
+  `check`, `compact` and `translate` use `chat`'s list when absent.
+- **The budget:** over the daily budget, `chat` keeps free and local
+  models only; the other purposes are housekeeping and are not cut.
 - **The order is the preference.** The next entry is taken when one is out
   of limits, answers 429 or times out; cooling and limits work as today.
 - **`check` keeps a fallback:** ADR-0047's clean-context check fell back
@@ -92,10 +96,9 @@ models:
   purpose whose list is used up fails closed, as today.
 - **`effort` is optional.** It is passed to providers that take one
   (`reasoning_effort` on OpenAI-compatible APIs). A provider that cannot
-  take an effort set in the file fails the start. Whether the claude CLI
-  takes one is checked while building M4; if it cannot, the example files
-  drop `effort` from its models, and an effort set on it still fails the
-  start.
+  take an effort set in the file fails the start. The claude CLI takes
+  `--effort` with `low`, `medium`, `high`, `xhigh`, `max` (checked on
+  2.1.319); OpenAI-compatible APIs take `low`, `medium`, `high`.
 - **`code` is checked but unused until P3.** Without it, P3 answers "no
   model to write code" instead of picking one.
 - **A skill's frontmatter `tier` becomes `purpose`.**
@@ -143,5 +146,5 @@ rewritten; this ADR changes how its practice is expressed, and its
 ## Revisit when
 
 - P3: the `code` purpose is used and measured.
-- A use fits none of the four purposes (embeddings, vision, a classifier).
+- A use fits none of the five purposes (embeddings, vision, a classifier).
 - The router learns from outcomes (layer 5) and the order should adapt.

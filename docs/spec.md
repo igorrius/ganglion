@@ -464,8 +464,11 @@ model:
   once, then for each purpose an ordered list of `{model, effort}`:
   `chat` (turns and scheduled agent tasks), `check` (short yes/no
   decisions such as the clean-context check), `compact` (history
-  compaction), `code` (writing modules and skills, used from P3). The
-  purposes are a fixed list in code; an unknown one fails the start. The
+  compaction), `translate` (fixed texts into a language with no file,
+  R-LANG-5), `code` (writing modules and skills, used from P3). The
+  purposes are a fixed list in code; an unknown one fails the start.
+  `check`, `compact` and `translate` use `chat`'s list when absent; `code`
+  has no default. The
   order is the preference; the next entry is taken on an exhausted limit,
   429 or a timeout. `effort` is passed to providers that take one; a
   provider that cannot take an effort set in the config fails the start.

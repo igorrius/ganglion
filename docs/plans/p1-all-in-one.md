@@ -281,8 +281,9 @@ sandbox spike (3.20) comes first, with its own plan:
 Redesigned in the owner's brainstorm of 2026-11-09: Deye is a module of
 the owner's system that the agent builds and installs, not a part of the
 agent; load shedding and the two-week clock left P1
-([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)). The step-by-step plan
-is [p1-m4-reflexes.md](p1-m4-reflexes.md).
+([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)). The step-by-step plans
+are [p1-m4a-config.md](p1-m4a-config.md) (4.1, 4.2) and `p1-m4b-modules.md`
+(4.3–4.8, written when M4a is done).
 
 | Task | Done when |
 |---|---|
