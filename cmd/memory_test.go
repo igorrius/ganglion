@@ -93,6 +93,53 @@ func TestMemoryAgentTools(t *testing.T) {
 		"GANGLION_DAILY_TOKENS=0", "GANGLION_SEARCH=off"}, answers)
 }
 
+// TestMemoryAgentHostExec measures the agent when every turn's tool is
+// `host.exec df -h` through the real command sandbox: a helper process per
+// call and the output captured (M3d, Task 12). It skips where the sandbox is
+// not ready, which shows as a first result without df's header.
+func TestMemoryAgentHostExec(t *testing.T) {
+	if os.Getenv("GANGLION_MEASURE") == "" {
+		t.Skip("set GANGLION_MEASURE=1 (make memory)")
+	}
+	model := providertest.NewServer(t, "sk-measure")
+	var turn atomic.Int64
+	var notReady atomic.Bool
+	model.Respond(func(r providertest.Request) providertest.Answer {
+		last := r.Messages[len(r.Messages)-1]
+		switch {
+		case len(r.Tools) == 0: // compaction
+			return providertest.Answer{Text: "summary"}
+		case last["role"] == "tool":
+			if c, _ := last["content"].(string); !strings.Contains(c, "Filesystem") {
+				notReady.Store(true)
+			}
+			return providertest.Answer{Text: "answer " + strconv.FormatInt(turn.Load(), 10)}
+		}
+		turn.Add(1)
+		return providertest.Answer{Tool: "host.exec", Args: `{"argv":["df","-h"],"reason":"measure"}`}
+	})
+	catalog := filepath.Join(t.TempDir(), "models.yaml")
+	yaml := "providers:\n  - {name: fake, type: openai, base_url: " + model.URL() + ", key_env: FAKE_KEY}\n" +
+		"models:\n  - {provider: fake, name: m, tier: smart, tools: true, context: 64000}\n"
+	if err := os.WriteFile(catalog, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	answers := func(sent []telegramtest.Outgoing) int {
+		if notReady.Load() {
+			t.Skip("the command sandbox is not ready on this machine: host.exec df -h gave no table")
+		}
+		n := 0
+		for _, s := range sent {
+			if strings.HasPrefix(s.Text, "answer ") {
+				n++
+			}
+		}
+		return n
+	}
+	measure(t, "agent with host.exec", []string{"GANGLION_MODELS_FILE=" + catalog, "FAKE_KEY=sk-measure", "GANGLION_DAILY_TURNS=0",
+		"GANGLION_DAILY_TOKENS=0", "GANGLION_SEARCH=off"}, answers)
+}
+
 // TestMemoryMetrics measures the picture: RSS and peak after 50 /metrics
 // calls, each rendering the dashboard's history to a PNG (M3c, task 9).
 func TestMemoryMetrics(t *testing.T) {

@@ -65,7 +65,44 @@ type Spec struct {
 	// the tool may reach the network, where the input would leave unseen
 	// (ADR-0049).
 	AskTaintedInput bool
+	// KeepsQuestion says the tool's approved run turns its question into its
+	// own message, edited in place (a plan, R-CMD-7): the agent does not fold it
+	// (R-POL-9).
+	KeepsQuestion bool
 }
+
+// Command is a host command as approved: its argv and the folder it runs in
+// ("" is the node user's home). Plans and grants approve commands, never
+// patterns (ADR-0040): the same argv in another folder is another command.
+type Command struct {
+	Argv []string `json:"argv"`
+	Dir  string   `json:"dir,omitempty"`
+}
+
+// Equal reports whether o is the same command, argument for argument and
+// folder as written. An approval or a grant is matched with SameAs instead.
+func (c Command) Equal(o Command) bool { return c.Dir == o.Dir && slices.Equal(c.Argv, o.Argv) }
+
+// SameAs reports whether o is the same command as c where it runs: argv
+// exact, and the folders equal once "" is read as home, the node user's home
+// that a command without dir runs in. Every approval and grant is matched
+// with it, so a plan step without dir approves host.exec with dir set to home
+// and the reverse, while any other folder stays another command (ADR-0040).
+func (c Command) SameAs(o Command, home string) bool {
+	return runsIn(c.Dir, home) == runsIn(o.Dir, home) && slices.Equal(c.Argv, o.Argv)
+}
+
+// runsIn is the folder dir names, with "" as home.
+func runsIn(dir, home string) string {
+	if dir == "" {
+		return home
+	}
+	return dir
+}
+
+// CommandFunc reports whether a command is approved in the call's
+// conversation (an approved plan lists it, R-CMD-7).
+type CommandFunc func(cmd Command) bool
 
 // TaskConvPrefix starts the conversation of a scheduled task's turns,
 // "task:<job id>": its history is the task's earlier runs, and the
@@ -78,6 +115,9 @@ type Grant struct {
 	Tools   []string `json:"tools"`
 	Hosts   []string `json:"hosts"`
 	ReplyTo string   `json:"reply_to"`
+	// Commands are the exact host commands the runs may execute that need a
+	// press; read commands run whenever host.exec is granted (R-POL-8, ADR-0040).
+	Commands []Command `json:"commands,omitempty"`
 }
 
 // URLFunc reports whether an address is known: it came from the owner's
@@ -97,6 +137,12 @@ type Call struct {
 	Grant     *Grant // non-nil only in a scheduled task's turn
 	Depth     int    // R-AGT-4
 	KnownURL  URLFunc
+	// Planned reports whether the conversation's approved plan lists a host
+	// command (R-CMD-7); nil approves nothing.
+	Planned CommandFunc
+	// Approved is set only when the agent runs a call the owner pressed
+	// Approve on: a tool that must never run unapproved checks it (ADR-0040).
+	Approved bool
 	// Speak writes what the person reads in their language (R-LANG-2); a
 	// tool's result and errors stay in English, since a model reads them.
 	Speak texts.Speaker
@@ -113,6 +159,9 @@ type Result struct {
 	Text     string
 	External bool   // the text is outside content: the session becomes tainted and the text is wrapped as data
 	Pending  string // non-empty: the id of a call awaiting confirmation; Text says so
+	// Job is a host command still running in the background; its end
+	// resumes the conversation (R-CMD-4). Text says so.
+	Job string
 	// Out are the messages the tool produces; the agent sends them with the
 	// turn's replies. They are delivered even when the call returns an
 	// error, so a tool must not return both unless it means to: the

@@ -56,7 +56,7 @@ type Source struct {
 
 // New returns the lines of a process that started at start.
 func New(start time.Time, files Files, opts ...Option) *Source {
-	s := &Source{start: start, files: files, build: buildinfo.Read(), memory: procMemory, limit: softLimit}
+	s := &Source{start: start, files: files, build: buildinfo.Read(), memory: Memory, limit: softLimit}
 	for _, o := range opts {
 		o(s)
 	}
@@ -145,8 +145,8 @@ func dirSize(dir string) int64 {
 	return n
 }
 
-// procMemory reads this process's VmRSS and VmHWM.
-func procMemory() (int64, int64, bool) {
+// Memory reads this process's VmRSS and VmHWM.
+func Memory() (int64, int64, bool) {
 	b, err := os.ReadFile("/proc/self/status")
 	if err != nil {
 		return 0, 0, false

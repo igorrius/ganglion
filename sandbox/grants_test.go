@@ -20,6 +20,10 @@ func tree(t *testing.T, m fstest.MapFS) Lister {
 	}
 }
 
+// hidden is Grants' hideNames for the tests of the grants that reach
+// contents: with it no list grant is added, as before ADR-0057.
+const hidden = true
+
 func paths(gs []Grant) []string {
 	out := make([]string, 0, len(gs))
 	for _, g := range gs {
@@ -30,7 +34,7 @@ func paths(gs []Grant) []string {
 }
 
 func TestGrantsWithoutDenyIsTheRoot(t *testing.T) {
-	got, err := Grants(nil, tree(t, fstest.MapFS{"etc/hosts": {}}))
+	got, err := Grants(nil, tree(t, fstest.MapFS{"etc/hosts": {}}), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +48,7 @@ func TestGrantsSplitAroundADeniedFolder(t *testing.T) {
 		"etc/hosts": {}, "home/u/.ssh/id": {}, "home/u/code/a.go": {}, "home/u/notes.txt": {},
 		"home/v/x": {},
 	}
-	got, err := Grants([]string{"/home/u/.ssh"}, tree(t, m))
+	got, err := Grants([]string{"/home/u/.ssh"}, tree(t, m), hidden)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +69,7 @@ func TestGrantsNeverGrantASymlink(t *testing.T) {
 		"home/u/keys":    {Mode: fs.ModeSymlink, Data: []byte("/home/u/.ssh")},
 		"home/u/a.txt":   {},
 	}
-	got, err := Grants([]string{"/home/u/.ssh"}, tree(t, m))
+	got, err := Grants([]string{"/home/u/.ssh"}, tree(t, m), hidden)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +80,7 @@ func TestGrantsNeverGrantASymlink(t *testing.T) {
 
 func TestGrantsDenyAFile(t *testing.T) {
 	m := fstest.MapFS{"srv/app/ganglion.db": {}, "srv/app/ganglion": {}}
-	got, err := Grants([]string{"/srv/app/ganglion.db"}, tree(t, m))
+	got, err := Grants([]string{"/srv/app/ganglion.db"}, tree(t, m), hidden)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +91,82 @@ func TestGrantsDenyAFile(t *testing.T) {
 
 func TestGrantsFailOnAnUnlistableAncestor(t *testing.T) {
 	list := func(string) ([]fs.DirEntry, error) { return nil, fs.ErrPermission }
-	if _, err := Grants([]string{"/home/u/.ssh"}, list); err == nil {
+	if _, err := Grants([]string{"/home/u/.ssh"}, list, false); err == nil {
 		t.Fatal("an ancestor that cannot be listed must fail the command, not grant it whole")
+	}
+}
+
+// home is a machine whose home holds a secret store and other entries.
+var home = fstest.MapFS{
+	"etc/hosts": {}, "home/o/.ssh/id_ed25519": {}, "home/o/code/a.go": {}, "home/o/notes.txt": {}, "home/v/x": {},
+}
+
+// lists is the paths of gs's list grants, sorted; it fails the test on a
+// list grant that is not a folder.
+func lists(t *testing.T, gs []Grant) []string {
+	t.Helper()
+	var out []string
+	for _, g := range gs {
+		if g.List {
+			if !g.Dir {
+				t.Errorf("a list grant on a file: %+v", g)
+			}
+			out = append(out, g.Path)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// ADR-0057: each folder split around a denied path may be listed, and the
+// grants that reach contents stay the ones of hidden names.
+func TestGrantsListTheSplitFolders(t *testing.T) {
+	got, err := Grants([]string{"/home/o/.ssh"}, tree(t, home), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"/", "/home", "/home/o"}; !slices.Equal(lists(t, got), want) {
+		t.Fatalf("list grants %v, want %v", lists(t, got), want)
+	}
+	golden, err := Grants([]string{"/home/o/.ssh"}, tree(t, home), hidden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rest := slices.DeleteFunc(slices.Clone(got), func(g Grant) bool { return g.List })
+	slices.SortFunc(rest, func(a, b Grant) int { return strings.Compare(a.Path, b.Path) })
+	slices.SortFunc(golden, func(a, b Grant) int { return strings.Compare(a.Path, b.Path) })
+	if !slices.Equal(rest, golden) {
+		t.Fatalf("the other grants %v, want those of hidden names %v", rest, golden)
+	}
+}
+
+func TestGrantsWithHiddenNamesListNothing(t *testing.T) {
+	got, err := Grants([]string{"/home/o/.ssh"}, tree(t, home), hidden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l := lists(t, got); len(l) != 0 {
+		t.Fatalf("list grants with hidden names: %v", l)
+	}
+	if want := []string{"/etc", "/home/o/code", "/home/o/notes.txt", "/home/v"}; !slices.Equal(paths(got), want) {
+		t.Fatalf("got %v, want %v", paths(got), want)
+	}
+}
+
+// A denied folder is never granted, not even its listing: its names are
+// reached through its parent's list grant only.
+func TestGrantsNeverListADeniedFolder(t *testing.T) {
+	m := fstest.MapFS{"home/o/.ssh/keys/id": {}, "home/o/.ssh/config": {}, "home/o/a.txt": {}, "data/ganglion.db": {}}
+	deny := []string{"/home/o/.ssh", "/home/o/.ssh/keys", "/data", "/"}
+	for _, d := range [][]string{deny[:3], deny} {
+		got, err := Grants(d, tree(t, m), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, g := range got {
+			if slices.Contains(d, g.Path) || slices.ContainsFunc(d, func(x string) bool { return under(g.Path, x) }) {
+				t.Errorf("deny %v granted %+v", d, g)
+			}
+		}
 	}
 }

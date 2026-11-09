@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -90,6 +91,10 @@ type Policy struct {
 	Env      []string        // the whole environment, KEY=VALUE
 	EnvRoots []string        // where .env files are looked for, besides the command's folder
 	EnvDepth int
+	// HideNames keeps the folders split around a denied path unlisted, so
+	// the names inside denied folders stay hidden too
+	// (GANGLION_SANDBOX_HIDE_NAMES, ADR-0057).
+	HideNames bool
 }
 
 // denied is what the policy denies now.
@@ -155,7 +160,7 @@ func (s *Sandbox) selfTest() bool {
 	if err != nil {
 		return false
 	}
-	grants, err := Grants([]string{resolved}, os.ReadDir)
+	grants, err := Grants([]string{resolved}, os.ReadDir, s.policy.HideNames)
 	if err != nil {
 		return false
 	}
@@ -176,8 +181,9 @@ func (s *Sandbox) Ready() (bool, Reason) { return s.reason == Ready, s.reason }
 // Command is argv run in dir inside the sandbox: the caller sets stdio, a
 // process group and the time limit, starts it, and calls Release after
 // Start. The .env files under dir and the policy's roots are
-// denied with the rest.
-func (s *Sandbox) Command(ctx context.Context, argv []string, dir string) (*exec.Cmd, error) {
+// denied with the rest. Each KEY=VALUE of env replaces the policy's value
+// of that key or is added after it; an entry without "=" is dropped.
+func (s *Sandbox) Command(ctx context.Context, argv []string, dir string, env ...string) (*exec.Cmd, error) {
 	if s.reason != Ready {
 		return nil, ErrOff
 	}
@@ -187,11 +193,31 @@ func (s *Sandbox) Command(ctx context.Context, argv []string, dir string) (*exec
 			deny = append(deny, resolved)
 		}
 	}
-	grants, err := Grants(deny, os.ReadDir)
+	grants, err := Grants(deny, os.ReadDir, s.policy.HideNames)
 	if err != nil {
 		return nil, err
 	}
-	return command(ctx, s.self, spec{Argv: argv, Env: s.policy.Env, Dir: dir, Grants: grants, ABI: s.abi})
+	return command(ctx, s.self, spec{Argv: argv, Env: mergeEnv(s.policy.Env, env), Dir: dir, Grants: grants, ABI: s.abi})
+}
+
+// mergeEnv is base with each KEY=VALUE of extra replacing the same key in
+// place or added at the end; an entry without a key and "=" is dropped.
+// base is not changed.
+func mergeEnv(base, extra []string) []string {
+	out := slices.Clone(base)
+	for _, e := range extra {
+		k, _, ok := strings.Cut(e, "=")
+		if !ok || k == "" {
+			continue
+		}
+		i := slices.IndexFunc(out, func(b string) bool { return strings.HasPrefix(b, k+"=") })
+		if i < 0 {
+			out = append(out, e)
+			continue
+		}
+		out[i] = e
+	}
+	return out
 }
 
 // Release closes the spec file a started command no longer needs.

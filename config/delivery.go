@@ -8,6 +8,7 @@ import (
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/core"
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/outbox"
@@ -182,14 +183,17 @@ func Housekeepers() do.Provider[Housekeeping] {
 	return choose[Housekeeping](agentOn, housekeepingAgent, housekeepingNone)
 }
 
-// AgentHousekeepers provides the daily prune of the tool-call journal and
-// the expiry of unanswered confirmations.
+// AgentHousekeepers provides the daily prune of the tool-call journal, the
+// expiry of unanswered confirmations, the janitor, the translator and the
+// runner of host commands, which lives where the agent does.
 func AgentHousekeepers() do.Provider[Housekeeping] {
 	return func(i do.Injector) (Housekeeping, error) {
 		logger := do.MustInvoke[*slog.Logger](i)
 		return Housekeeping{
 			journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: logger},
 			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger),
+			do.MustInvoke[*host.Janitor](i),
+			do.MustInvoke[*host.Runner](i),
 			node.Named("translator", do.MustInvoke[*language.Translator](i).Run),
 		}, nil
 	}

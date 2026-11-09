@@ -36,13 +36,30 @@ type Bootstrap struct {
 	// ModulesDir is where module updates are stored: modules/ beside the
 	// database (ADR-0041).
 	ModulesDir string
+	// ClaudeDir is where the claude CLI runs: claude/ beside the database
+	// (R-CMD-8). Empty keeps a private temporary folder.
+	ClaudeDir string
 	// SandboxDeny is GANGLION_SANDBOX_DENY: paths the owner adds to what
 	// commands may neither read nor write (R-CMD-3).
 	SandboxDeny []string
+	// SandboxHideNames is GANGLION_SANDBOX_HIDE_NAMES=on: commands may not
+	// list the folders the sandbox splits, so the names inside denied
+	// folders stay hidden too (ADR-0057). Off by default.
+	SandboxHideNames bool
 	// Metrics draws the node's own metrics for metrics.show and /metrics
 	// (ADR-0045); the command line sets it from telemetry, nil leaves the
 	// tool out.
 	Metrics builtin.MetricsRenderer
+}
+
+// SecretValues are the secret values the node read, which logs and command
+// output hide exactly (redact.Values).
+func (b Bootstrap) SecretValues() []string {
+	out := []string{b.BotToken, b.Agent.BraveKey}
+	for _, k := range b.Agent.Keys {
+		out = append(out, k)
+	}
+	return out
 }
 
 // AgentSettings turns the agent on. Without a catalogue the core echoes, as

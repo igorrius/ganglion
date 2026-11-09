@@ -1,6 +1,6 @@
 # ADR-0040: Let one press on a plan approve exactly the commands it lists
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-09)
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-6, 7), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-2, 4, 6, 8); [M3d design](../plans/p1-m3d-host-commands-design.md) section 7; [ADR-0032](0032-buttons-and-resume.md) (buttons and resume), [ADR-0038](0038-host-commands-as-argv-with-classes-in-code.md)
@@ -95,3 +95,30 @@ of what was done.
   narrow, typed patterns for specific commands, e.g. "these container ids
   from the listing just shown").
 - Other tools join plans.
+
+## Refined by the build (2026-11-08)
+
+The plan for tasks 3.21–3.27 ([p1-m3d-commands.md](../plans/p1-m3d-commands.md))
+settled these:
+
+- **The approved plan's question becomes the plan's message.** It is not
+  folded (R-POL-9 already says a plan does not fold). The edit after the
+  press replaces the buttons with the ticked steps. A declined or expired
+  plan folds like any question.
+- **`Call.Planned`** reports whether the conversation's approved plan
+  lists the command, argv and folder. The agent fills it from the plan
+  store, never the model.
+- **A command without a folder runs in home, and matches there.** Every
+  approval and grant is matched with `tool.Command.SameAs`: argv exact, and
+  the folders equal once "" is read as the node user's home. A plan step
+  without `dir` approves `host.exec` with `dir` set to home, and the
+  reverse; any other folder stays another command. The plan's message
+  shows the folder as the question does, home for a step without one.
+- **`DecisionPlanned`** is a new decision in the journal, for a call that
+  ran under an approved plan.
+- **What runs at once.** A plan with no step that needs a press runs at
+  once and keeps the approved commands it still lists. A plan that lists
+  approved commands only also runs at once. Any other command that needs a
+  press asks.
+- **`Spec.KeepsQuestion`** marks a tool whose question stays in the chat
+  as the record, so the agent does not fold it.

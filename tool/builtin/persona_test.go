@@ -99,7 +99,7 @@ func TestProposeNeedsConfirm(t *testing.T) {
 		t.Fatalf("spec %+v", s)
 	}
 	c := propose(persona)
-	if pol, d := policy.Decide(policy.DefaultMaxDepth, s, c); pol != tool.PolicyConfirm || d != journal.DecisionConfirm {
+	if pol, d := policy.Decide(policy.DefaultConfig(), s, c); pol != tool.PolicyConfirm || d != journal.DecisionConfirm {
 		t.Fatalf("an untainted admin's call is %s/%s, want confirm", pol, d)
 	}
 	q, err := e.tool.(tool.Questioner).Question(context.Background(), c)

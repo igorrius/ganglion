@@ -293,7 +293,7 @@ func TestKnownAddressMayStay(t *testing.T) {
 // Review of task 7: these reach an approval question inside an ask.* text, so padding one could push
 // the real action past the policy's cut.
 func TestTextsInsideAQuestionAreApprovalTexts(t *testing.T) {
-	for _, k := range []Key{SchedSummaryTask, SchedSummaryReminder, SchedOnce, SchedEvery, SchedEveryNext,
+	for _, k := range []Key{SchedSummaryTask, SchedSummaryCommands, SchedSummaryReminder, SchedOnce, SchedEvery, SchedEveryNext,
 		SchedThisChat, SchedNone, ButtonDelete, ButtonRunNow} {
 		if !IsApproval(k) {
 			t.Errorf("%s", k)
@@ -329,5 +329,22 @@ func TestSentTextsAreCounted(t *testing.T) {
 func TestEscape(t *testing.T) {
 	if got := Escape("my_skill [x]"); got != `my\_skill \[x\]` {
 		t.Fatalf("Escape = %q", got)
+	}
+}
+
+func TestCommandLinesAreApprovalTextsInsideAQuestion(t *testing.T) {
+	for _, k := range Keys() {
+		if !strings.HasPrefix(string(k), "cmd.") {
+			continue
+		}
+		if !IsApproval(k) {
+			t.Errorf("%s is not an approval text", k)
+		}
+		if limit(k) != limitInQuestion {
+			t.Errorf("%s: limit %d, want %d", k, limit(k), limitInQuestion)
+		}
+	}
+	if !IsApproval(CmdRead) || limit(CmdGoClean) != 300 {
+		t.Error("cmd keys")
 	}
 }

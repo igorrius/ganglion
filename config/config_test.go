@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -15,10 +16,12 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
@@ -45,8 +48,8 @@ func TestCoreContainerBuildsAndShutsDown(t *testing.T) {
 	}{
 		"echo, no transport":  {components: 3},
 		"echo over Telegram":  {token: testToken, admin: "telegram:user:42", components: 4},
-		"agent over Telegram": {token: testToken, admin: "telegram:user:42", agent: true, components: 9},
-		"agent, no transport": {agent: true, components: 7},
+		"agent over Telegram": {token: testToken, admin: "telegram:user:42", agent: true, components: 11},
+		"agent, no transport": {agent: true, components: 9},
 	} {
 		t.Run(name, func(t *testing.T) {
 			b := testConfig(t)
@@ -98,10 +101,19 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"cells.get", "cells.set", "message.send", "plan.show", "plan.step", "schedule.create", "schedule.delete", "schedule.list",
-		"schedule.run_now", "web.fetch", "web.search", "logs.search", "journal.search", "turns.failed", "skill.read", "language.set"}
+	want := []string{"cells.get", "cells.set", "host.exec", "host.stats", "message.send", "plan.show", "plan.step", "schedule.create", "schedule.delete",
+		"schedule.list", "schedule.run_now", "web.fetch", "web.search", "logs.search", "journal.search", "turns.failed", "skill.read", "language.set"}
 	if _, err := exec.LookPath("git"); err == nil {
 		want = append(want, "memory.audit", "memory.forget", "memory.read", "memory.recall", "memory.write", "persona.propose")
+	}
+	// host.exec is registered always and on offer only while the sandbox is
+	// ready (R-CMD-1, R-CMD-3).
+	offered, ready := len(want), readyOf(do.MustInvoke[*sandbox.Sandbox](i))
+	if !ready {
+		offered--
+	}
+	if reg.Offered("host.exec", true) != ready {
+		t.Errorf("host.exec offered %v, the sandbox ready %v", !ready, ready)
 	}
 	for _, name := range want {
 		s, ok := reg.Spec(name)
@@ -113,8 +125,8 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 			t.Errorf("%s is offered to everyone", name)
 		}
 	}
-	if got := len(reg.Specs(true)); got != len(want) {
-		t.Errorf("%d tools on offer to an admin, want %d", got, len(want))
+	if got := len(reg.Specs(true)); got != offered {
+		t.Errorf("%d tools on offer to an admin, want %d", got, offered)
 	}
 	comps, err := do.Invoke[[]node.Component](i)
 	if err != nil {
@@ -124,11 +136,33 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 	for _, c := range comps {
 		names = append(names, c.Name())
 	}
-	for _, name := range []string{"sender", "loop", "prune", "prune-journal", "expire-pending", "scheduler"} {
+	for _, name := range []string{"sender", "loop", "prune", "prune-journal", "expire-pending", "scheduler", "janitor"} {
 		if !slices.Contains(names, name) {
 			t.Errorf("component %s is missing from %v", name, names)
 		}
 	}
+}
+
+// The places list has the claude work folder beside the database, with an
+// age, and the janitor is the same list's.
+func TestPlacesHoldTheClaudeFolderBesideTheDatabase(t *testing.T) {
+	b := agentConfig(t)
+	b.ClaudeDir = filepath.Join(filepath.Dir(b.DB), "claude")
+	i := New(context.Background(), b, slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	places, err := do.Invoke[[]host.Place](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range places {
+		if p.Name == host.PlaceClaude {
+			if p.Path != b.ClaudeDir || p.MaxAge != leftoverAge {
+				t.Fatalf("claude place = %+v", p)
+			}
+			return
+		}
+	}
+	t.Fatalf("no claude place in %+v", places)
 }
 
 // The policy the core wires allows a call one level deep (a scheduled
@@ -244,5 +278,38 @@ func TestScheduleSpecsLookupAfterTheBuild(t *testing.T) {
 	}
 	if s, ok := sc.Specs("web.fetch"); !ok || s.Name != "web.fetch" {
 		t.Fatalf("Specs(web.fetch) = %+v, %v", s, ok)
+	}
+}
+
+// The logger and the runner hide the same secrets: one list.
+func TestSecretValuesListsEverySecretTheNodeRead(t *testing.T) {
+	b := Bootstrap{BotToken: "tok", Agent: AgentSettings{BraveKey: "brave", Keys: map[string]string{"a": "k1", "b": "k2"}}}
+	got := b.SecretValues()
+	slices.Sort(got)
+	if want := []string{"brave", "k1", "k2", "tok"}; !slices.Equal(got, want) {
+		t.Fatalf("SecretValues = %q, want %q", got, want)
+	}
+}
+
+// readyOf reports whether s runs commands.
+func readyOf(s *sandbox.Sandbox) bool { ok, _ := s.Ready(); return ok }
+
+// hostSandboxReady reports whether a node started by this test would have
+// its sandbox ready: the same checks, on this kernel.
+func hostSandboxReady() bool {
+	return readyOf(sandbox.New(selfImage, sandbox.Policy{}, sandbox.HostKernel(), time.Now()))
+}
+
+// A read go version must not download and run a toolchain a go.mod in the
+// command's folder names: commands get GOTOOLCHAIN=local, and the whole
+// environment is the fixed list.
+func TestCommandEnvIsFixedAndKeepsGoLocal(t *testing.T) {
+	want := []string{"PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/home/o", "LANG=C.UTF-8", "TZ=Europe/Kyiv", "TERM=dumb", "GOTOOLCHAIN=local"}
+	kyiv, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		t.Skip("no time zone data")
+	}
+	if got := commandEnv("/home/o/", kyiv); !slices.Equal(got, want) {
+		t.Fatalf("commandEnv = %q, want %q", got, want)
 	}
 }

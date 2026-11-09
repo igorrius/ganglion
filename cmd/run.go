@@ -18,6 +18,7 @@ import (
 	"github.com/igorrius/ganglion/logfile"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/secrets"
 	"github.com/igorrius/ganglion/telemetry"
 	"github.com/urfave/cli/v3"
@@ -48,7 +49,7 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 			}
 			defer closeLogs()
 			logger = logger.With("version", in.Version, "commit", shortCommit(in))
-			if err := hardenProcess(); err != nil {
+			if err := sandbox.Harden(); err != nil {
 				logger.Warn("node: a script can read this process's environment from /proc", "err", err)
 			}
 			tel, stop := startTelemetry(ctx, b.MetricsAddr, in, logger)
@@ -68,11 +69,7 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 // redact.String. The disk comes first, so a line on stdout is already in
 // the file when a kill -9 lands.
 func newLogger(out io.Writer, level slog.Level, b config.Bootstrap) (*slog.Logger, func(), error) {
-	secrets := []string{b.BotToken, b.Agent.BraveKey}
-	for _, k := range b.Agent.Keys {
-		secrets = append(secrets, k)
-	}
-	values := redact.Values(secrets...)
+	values := redact.Values(b.SecretValues()...)
 	hide := func(s string) string { return values(redact.String(s)) }
 	opts := &slog.HandlerOptions{Level: level}
 	wrap := func(h slog.Handler) slog.Handler { return telemetry.LogHandler(telemetry.RedactHandler(h, hide)) }
@@ -93,11 +90,17 @@ func bootstrap(v flags.Run, src secrets.Source, readFile func(string) ([]byte, e
 	b := config.Bootstrap{DB: v.DB, Languages: v.Languages, BotAPIURL: v.TelegramAPIURL, Admin: v.Admin, MetricsAddr: v.MetricsAddr, TelegramReply: v.TelegramReply, TelegramRich: v.TelegramRich == "on",
 		ReactionAfter: v.ReactionAfter, ReactionDwell: v.ReactionDwell}
 	b.ModulesDir = filepath.Join(filepath.Dir(v.DB), "modules")
+	// Absolute: the CLI runs inside it, and the sandbox, the janitor and
+	// host.stats must all name the same folder.
+	var err error
+	if b.ClaudeDir, err = filepath.Abs(filepath.Join(filepath.Dir(v.DB), "claude")); err != nil {
+		return config.Bootstrap{}, err
+	}
 	b.SandboxDeny = filepath.SplitList(v.SandboxDeny)
+	b.SandboxHideNames = v.SandboxHideNames == "on"
 	if dir, on := flags.LogDir(v.DB, v.LogDir); on {
 		b.LogDir = dir
 	}
-	var err error
 	if b.BotToken, err = src.Secret("TELEGRAM_BOT_TOKEN"); err != nil {
 		return config.Bootstrap{}, err
 	}

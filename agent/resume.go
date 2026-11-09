@@ -42,31 +42,34 @@ const (
 // Lines that say how a question ended, above its folded text (R-POL-9).
 const ()
 
-// resume handles a press of a button and the expiry of a pending call,
-// and ends the turn; a message goes on to the next stages (ADR-0032).
+// resume handles a press of a button, the expiry of a pending call and the
+// end of a host command in the background, and ends the turn; a message
+// goes on to the next stages (ADR-0032, R-CMD-4).
 func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 	switch t.event.Kind {
 	case event.KindDecision:
 		return true, a.pressed(ctx, t)
 	case event.KindToolResult:
 		return true, a.expired(ctx, t)
+	case event.KindCommandDone:
+		return true, a.commandDone(ctx, t)
 	default: // event.KindMessage, event.KindSchedule
 		return false, nil
 	}
 }
 
-// dropStalePending forgets pending ids whose calls no longer wait: they
-// were answered, expired, or belong to a store that lost them.
-func (a *Agent) dropStalePending(ctx context.Context, t *turn) (bool, error) {
-	if len(t.state.Pending) == 0 {
-		return false, nil
+// dropStale forgets pending ids whose calls no longer wait (they were
+// answered, expired, or belong to a store that lost them) and commands
+// whose end is not to be told any more.
+func (a *Agent) dropStale(ctx context.Context, t *turn) (bool, error) {
+	if len(t.state.Pending) > 0 {
+		ids, err := a.d.Pending.Waiting(ctx, t.state.Pending)
+		if err != nil {
+			return false, fmt.Errorf("agent: pending calls: %w", err)
+		}
+		t.state.Pending = ids
 	}
-	ids, err := a.d.Pending.Waiting(ctx, t.state.Pending)
-	if err != nil {
-		return false, fmt.Errorf("agent: pending calls: %w", err)
-	}
-	t.state.Pending = ids
-	return false, nil
+	return false, a.dropStaleCommands(ctx, t)
 }
 
 // pressed handles a press: a refused one gets a toast saying why and at
@@ -175,7 +178,8 @@ func (t *turn) note(text string) {
 
 // confirmed acknowledges the press, runs an approved call or declines a
 // denied one, stores the outcome, folds the question and resumes the
-// conversation with it. A
+// conversation with it. An approved plan's question is not folded: its run
+// made it the plan's message (Spec.KeepsQuestion). A
 // rerun (the outcome is stored) does not run the call again. A call the
 // conversation does not wait for (a quick action asked it, or the
 // session moved on) is closed without a model turn.
@@ -183,9 +187,13 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 	if err := a.setAdmin(ctx, t); err != nil {
 		return err
 	}
-	if action == pending.ActionApprove {
+	keeps := action == pending.ActionApprove && a.keepsQuestion(it.Tool)
+	switch {
+	case keeps: // the approved run's own edit follows at once
+		a.acknowledge(ctx, t, texts.ToastApproved, "", "")
+	case action == pending.ActionApprove:
 		a.acknowledge(ctx, t, texts.ToastApproved, it.Question, a.say(ctx, t, texts.LineRunning, nil))
-	} else {
+	default:
 		a.acknowledge(ctx, t, texts.ToastDeclined, it.Question, a.stamped(a.say(ctx, t, texts.LineDeclined, nil), it.Answered))
 	}
 	o, err := a.decide(ctx, t, it, action)
@@ -197,13 +205,25 @@ func (a *Agent) confirmed(ctx context.Context, t *turn, it pending.Item, action 
 		line = approvedLine(o.Failed)
 	}
 	// The call's messages, then the question with how it ended (ruling
-	// R40); again on a rerun: the outbox keeps one per key.
+	// R40); again on a rerun: the outbox keeps one per key. A question the
+	// approved run made its own message stays as that run left it, unless the
+	// run failed and left the buttons.
 	t.out = append(t.out, o.Out...)
-	t.editWith(pending.QuickEdit{Text: a.stamped(a.say(ctx, t, line, nil), it.Answered), Folded: it.Question})
+	if !keeps || o.Failed {
+		t.editWith(pending.QuickEdit{Text: a.stamped(a.say(ctx, t, line, nil), it.Answered), Folded: it.Question})
+	}
 	if !slices.Contains(t.state.Pending, it.ID) {
 		return nil
 	}
 	return a.continueWith(ctx, t, it, o)
+}
+
+// keepsQuestion reports whether the tool's approved run makes its question
+// its own message (a plan, ruling 8 of the M3d commands plan): it is not
+// folded. An unknown tool folds as any.
+func (a *Agent) keepsQuestion(name string) bool {
+	h, ok := a.d.Tools.Lookup(name)
+	return ok && h.Spec().KeepsQuestion
 }
 
 // decide runs or declines the call, through the journal and without the
@@ -235,7 +255,8 @@ func (a *Agent) decide(ctx context.Context, t *turn, it pending.Item, action str
 // stored is the outcome of a done call as the first run stored it; the
 // tool's spec still marks outside content when the call ran.
 func (a *Agent) stored(it pending.Item, ran bool) pending.Outcome {
-	return pending.Outcome{Result: it.Result, External: it.External || ran && a.external(it.Tool, false), Failed: it.Failed, Out: it.Out}
+	return pending.Outcome{Result: it.Result, External: it.External || ran && a.external(it.Tool, false), Failed: it.Failed, Out: it.Out,
+		Job: it.Job}
 }
 
 // runApproved runs the stored call as it was asked, with its original key
@@ -243,7 +264,10 @@ func (a *Agent) stored(it pending.Item, ran bool) pending.Outcome {
 func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pending.Outcome {
 	c := it.Call()
 	c.Admin, c.Tainted = t.admin, it.Tainted || t.state.Tainted
-	c.Speak = a.speaker(ctx, t)
+	// The owner pressed Approve on this call: a tool that never runs
+	// unapproved reads it (ADR-0040). The approved plan is asked too, so a
+	// pressed plan keeps what it still lists.
+	c.Speak, c.Approved, c.Planned = a.speaker(ctx, t), true, a.planned(ctx, it.Conv)
 	c.KnownURL = knownURLs(t.state.Messages).has
 	if o, refused := a.refuseBadArgs(ctx, c); refused {
 		return o
@@ -253,7 +277,7 @@ func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pendi
 		// A failed call can still carry messages, as in runTool.
 		return pending.Outcome{Result: errorPrefix + err.Error(), Failed: true, Out: res.Out}
 	}
-	return pending.Outcome{Result: res.Text, External: a.external(it.Tool, res.External), Out: res.Out}
+	return pending.Outcome{Result: res.Text, External: a.external(it.Tool, res.External), Out: res.Out, Job: res.Job}
 }
 
 // settle records a call that does not run, with decision d, and returns
@@ -371,10 +395,15 @@ func (a *Agent) closeExpired(ctx context.Context, t *turn, it pending.Item) {
 //
 // The resumed turn passes the daily limit as a message does; over it the
 // note joins the history without a model turn. Its calls run one level
-// deeper than the resumed call (R-AGT-4, ruling R33).
+// deeper than the resumed call (R-AGT-4, ruling R33). A call that left a
+// host command in the background lists it, once, so its end resumes the
+// conversation in turn (R-CMD-4).
 func (a *Agent) continueWith(ctx context.Context, t *turn, it pending.Item, o pending.Outcome) error {
 	t.record.Outcome = turns.OutcomeOK
 	t.state.Pending = slices.DeleteFunc(slices.Clone(t.state.Pending), func(id string) bool { return id == it.ID })
+	if o.Job != "" && !slices.Contains(t.state.Commands, o.Job) {
+		t.state.Commands = append(slices.Clone(t.state.Commands), o.Job)
+	}
 	text := o.Result
 	if o.External {
 		t.state.Tainted = true

@@ -6,6 +6,9 @@ why: >-
   with the kind of rule it broke.
 covers:
   - agent/status.go
+  - agent/commands.go
+  - agent/switch.go
+  - host/switch.go
   - status/**
   - skills/status.go
   - config/status.go

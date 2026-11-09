@@ -41,9 +41,11 @@ type turn struct {
 	known   urlSet // addresses the sender gave or a search returned
 	// decision is the press of a KindDecision event; toolResult the
 	// pending call of a KindToolResult event; schedule the job of a
-	// KindSchedule event.
+	// KindSchedule event; command the host command of a KindCommandDone
+	// event.
 	decision   event.Decision
 	toolResult event.ToolResult
+	command    event.CommandDone
 	schedule   event.Schedule
 	// transport and replyConv are where the answer goes: the event's
 	// source and conversation, or for a scheduled job its owner's

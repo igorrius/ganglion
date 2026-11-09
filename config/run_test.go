@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -15,11 +16,15 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/node"
+	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
+	"github.com/samber/do/v2"
 )
 
 const testToken = "7001:test-secret"
@@ -275,11 +280,15 @@ func TestAgentOverTelegram(t *testing.T) {
 	for _, tl := range reqs[0].Tools {
 		offered = append(offered, tl["function"].(map[string]any)["name"].(string))
 	}
-	want := "cells.get,cells.set,journal.search,language.set,logs.search,memory.audit,memory.forget,memory.read,memory.recall,memory.write," +
+	want := "cells.get,cells.set,host.stats,journal.search,language.set,logs.search,memory.audit,memory.forget,memory.read,memory.recall,memory.write," +
 		"message.send,persona.propose,plan.show,plan.step,schedule.create,schedule.delete,schedule.list,schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
 	if _, err := exec.LookPath("git"); err != nil {
-		want = "cells.get,cells.set,journal.search,language.set,logs.search,message.send,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
+		want = "cells.get,cells.set,host.stats,journal.search,language.set,logs.search,message.send,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
 			"schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
+	}
+	// host.exec is on offer only where the sandbox is ready (R-CMD-1).
+	if hostSandboxReady() {
+		want = strings.Replace(want, "cells.set,", "cells.set,host.exec,", 1)
 	}
 	if got := strings.Join(offered, ","); got != want {
 		t.Fatalf("the admin was offered %q", got)
@@ -374,5 +383,49 @@ func TestPressFeedbackOrderOverTelegram(t *testing.T) {
 	eventually(t, "the second toast", func() bool { return len(fake.Toasts()) == 2 })
 	if got := fake.Toasts()[1].Text; got != "Already handled." || len(fake.Sent()) != 4 {
 		t.Fatalf("second press: toast %q, sent %d", got, len(fake.Sent()))
+	}
+}
+
+// rootKernel is a kernel that runs as root, so the sandbox is off.
+type rootKernel struct{}
+
+func (rootKernel) Euid() int                 { return 0 }
+func (rootKernel) LandlockABI() (int, error) { return 0, nil }
+func (rootKernel) Dumpable() (bool, error)   { return false, nil }
+
+// R-CMD-5: with the sandbox off, a node of 128 MB still tells its admin the
+// machine's numbers, since host.stats starts no subprocess.
+func TestHostStatsWithoutTheSandbox(t *testing.T) {
+	i := New(context.Background(), agentConfig(t), slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	do.OverrideValue(i, sandbox.New("/nonexistent", sandbox.Policy{}, rootKernel{}, time.Now()))
+	reg, err := do.Invoke[*tool.Registry](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := do.Invoke[*policy.Policy](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := p.Middleware()(reg.Run)
+	c := tool.Call{TurnID: "01EV1", N: 1, Conv: "telegram:42", Transport: "telegram", Principal: "telegram:user:42", Admin: true,
+		Name: "host.stats", Args: json.RawMessage(`{}`)}
+	res, err := run(context.Background(), c)
+	// Memory and load come from /proc, so off Linux the answer says they are not known.
+	want := "Machine memory and load: not known here"
+	if runtime.GOOS == "linux" {
+		want = "Memory:"
+	}
+	if err != nil || !strings.Contains(res.Text, want) || !strings.Contains(res.Text, "The node's own files:") {
+		t.Fatalf("host.stats: %+v, %v; want %q", res, err, want)
+	}
+	// R-CMD-3, fail closed: with the sandbox off host.exec is not offered,
+	// and a call the model makes up for it anyway runs nothing.
+	if reg.Offered("host.exec", true) {
+		t.Fatal("host.exec is offered with the sandbox off")
+	}
+	c.N, c.Name, c.Args = 2, "host.exec", json.RawMessage(`{"argv":["df","-h"],"reason":"space"}`)
+	if res, err := run(context.Background(), c); err == nil || !strings.Contains(err.Error(), "commands are off") {
+		t.Fatalf("host.exec with the sandbox off: %+v, %v", res, err)
 	}
 }

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/internal/buildinfo"
+	"github.com/igorrius/ganglion/internal/procgroup"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/mcp"
@@ -45,9 +46,10 @@ type Client struct {
 	// runs with tools holding every slot cannot starve it (ruling R36).
 	reserve chan struct{}
 
-	dirOnce sync.Once
-	dir     string
-	dirErr  error
+	fixedDir string // WithWorkDir; "" is a private temporary folder
+	dirOnce  sync.Once
+	dir      string
+	dirErr   error
 }
 
 var _ provider.Provider = (*Client)(nil)
@@ -90,11 +92,11 @@ func WithMaxConcurrent(n int) Option {
 	}
 }
 
-// WithWorkDir sets the directory the CLI runs in; the default is a private
-// temporary directory, so no project files or settings are picked up.
-func WithWorkDir(dir string) Option {
-	return func(c *Client) { c.dirOnce.Do(func() { c.dir = dir }) }
-}
+// WithWorkDir sets the folder the CLI runs in, made 0700 when first used;
+// the default is a private temporary folder, so no project files or
+// settings are picked up. The node passes one under its data folder, which
+// its places count and its janitor cleans (R-CMD-8).
+func WithWorkDir(dir string) Option { return func(c *Client) { c.fixedDir = dir } }
 
 // New returns a client named name.
 func New(name string, opts ...Option) *Client {
@@ -109,7 +111,17 @@ func New(name string, opts ...Option) *Client {
 func (c *Client) Name() string { return c.name }
 
 func (c *Client) workDir() (string, error) {
-	c.dirOnce.Do(func() { c.dir, c.dirErr = os.MkdirTemp("", "ganglion-claude-") })
+	c.dirOnce.Do(func() {
+		if c.fixedDir != "" {
+			// Absolute, because the CLI runs inside this folder and would
+			// resolve a relative prompt file path from there.
+			if c.dir, c.dirErr = filepath.Abs(c.fixedDir); c.dirErr == nil {
+				c.dirErr = os.MkdirAll(c.dir, 0o700)
+			}
+			return
+		}
+		c.dir, c.dirErr = os.MkdirTemp("", "ganglion-claude-")
+	})
 	return c.dir, c.dirErr
 }
 
@@ -291,7 +303,7 @@ func (c *Client) run(ctx context.Context, dir string, args []string, stdin strin
 	cmd.Stdin = strings.NewReader(stdin) // never argv: argv shows in ps
 	cmd.Stdout, cmd.Stderr = &stdout, &limited{b: &stderr, n: 4096}
 	cmd.WaitDelay = 2 * time.Second
-	ownGroup(cmd)
+	procgroup.Own(cmd)
 	err = cmd.Run()
 	return stdout, stderr, err
 }

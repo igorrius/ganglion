@@ -261,3 +261,31 @@ func TestTaskRunLineWithoutAName(t *testing.T) {
 		t.Fatalf("the task run read %q", got)
 	}
 }
+
+// A task run is told its grant's commands exactly, folder and all (home for
+// one without dir), so the model repeats them as approved; a grant without
+// commands adds no line.
+func TestTaskRunIsToldItsGrantsCommands(t *testing.T) {
+	e := newConfirmEnv(t, newClock())
+	e.a = New(overDefaults(Config{Home: "/home/o"}), e.deps)
+	j := rates()
+	j.Grant.Tools = append(j.Grant.Tools, "host.exec")
+	j.Grant.Commands = []tool.Command{{Argv: []string{"go", "clean", "-cache"}}, {Argv: []string{"rm", "-r", "build"}, Dir: "/srv/a"}}
+	e.jobs[j.ID] = j
+	e.smart.push(say("done"))
+	e.turn(t, fired(j))
+	want := "[the commands this task's grant lists, which host.exec runs only with exactly this argv and dir: " +
+		"`go clean -cache` in `/home/o`; `rm -r build` in `/srv/a`]"
+	if got := lastUserRaw(e.smart.requests()[0]); !strings.Contains(got, "\n"+want) {
+		t.Fatalf("the task run read %q", got)
+	}
+	j2 := rates()
+	j2.ID = "j2"
+	e.jobs[j2.ID] = j2
+	e.smart.push(say("USD 41.2"))
+	e.turn(t, fired(j2))
+	reqs := e.smart.requests()
+	if got := lastUserRaw(reqs[len(reqs)-1]); strings.Contains(got, "grant lists") {
+		t.Fatalf("a task without commands read %q", got)
+	}
+}

@@ -1231,6 +1231,8 @@ func (p *planFinish) Finish(_ context.Context, conv string, kept bool) error {
 	return p.err
 }
 
+func (p *planFinish) Approved(context.Context, string) ([]tool.Command, error) { return nil, p.err }
+
 func TestTurnEndFinishesThePlan(t *testing.T) {
 	e := newAddEnv(t, Config{})
 	f := &planFinish{}
@@ -1250,6 +1252,24 @@ func TestParkedCallKeepsThePlan(t *testing.T) {
 	c.deps.Plans = f
 	c.a = New(overDefaults(Config{}), c.deps)
 	c.ask(t, "schedule.create")
+	if !slices.Equal(f.kept, []bool{true}) {
+		t.Fatalf("kept %v", f.kept)
+	}
+}
+
+// R-CMD-4: a command that goes on in the background is listed once in the
+// state, and the plan stays open while it runs.
+func TestBackgroundCommandKeepsThePlan(t *testing.T) {
+	cmd := &fakeTool{name: "host.exec", result: tool.Result{Text: "still running", External: true, Job: "k:1"}}
+	e := newEnv(t, Config{}, registry(t, cmd))
+	f := &planFinish{}
+	e.deps.Plans = f
+	e.a = New(overDefaults(Config{}), e.deps)
+	e.smart.push(callTools("host.exec", "host.exec"), say("it runs"))
+	e.turn(t, message(owner, "Igor", "clean the cache"))
+	if st := e.state(t); !slices.Equal(st.Commands, []string{"k:1"}) {
+		t.Fatalf("commands %v", st.Commands)
+	}
 	if !slices.Equal(f.kept, []bool{true}) {
 		t.Fatalf("kept %v", f.kept)
 	}

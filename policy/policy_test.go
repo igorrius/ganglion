@@ -123,7 +123,7 @@ func TestDecide(t *testing.T) {
 		{"unknown policy fails closed", spec("x", tool.ClassRead, "weird"), base(), tool.PolicyForbidden, journal.DecisionForbidden},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			pol, dec := policy.Decide(policy.DefaultMaxDepth, tc.s, tc.c)
+			pol, dec := policy.Decide(policy.DefaultConfig(), tc.s, tc.c)
 			if pol != tc.pol || dec != tc.dec {
 				t.Fatalf("Decide = %s, %s; want %s, %s", pol, dec, tc.pol, tc.dec)
 			}
@@ -484,7 +484,7 @@ func TestTaintedInputAsks(t *testing.T) {
 		{"a tool that does not ask", plain, tainted(`{"input":"data"}`), tool.PolicyAuto},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if pol, _ := policy.Decide(policy.DefaultMaxDepth, tc.s, tc.c); pol != tc.pol {
+			if pol, _ := policy.Decide(policy.DefaultConfig(), tc.s, tc.c); pol != tc.pol {
 				t.Fatalf("Decide = %s, want %s", pol, tc.pol)
 			}
 		})
@@ -512,7 +512,7 @@ func TestLocalOnlyRefusesATool(t *testing.T) {
 		{"another session", leaves, base(), tool.PolicyAuto, journal.DecisionAllowed},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if pol, dec := policy.Decide(policy.DefaultMaxDepth, tc.s, tc.c); pol != tc.pol || dec != tc.dec {
+			if pol, dec := policy.Decide(policy.DefaultConfig(), tc.s, tc.c); pol != tc.pol || dec != tc.dec {
 				t.Fatalf("Decide = %s, %s; want %s, %s", pol, dec, tc.pol, tc.dec)
 			}
 		})
@@ -530,5 +530,288 @@ func TestLocalOnlyRefusalSaysWhy(t *testing.T) {
 	}
 	if h.calls != 0 {
 		t.Fatal("the tool ran")
+	}
+}
+
+func execSpec() tool.Spec {
+	return tool.Spec{Name: "host.exec", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm, AdminOnly: true}
+}
+
+func execCall(argv ...string) tool.Call {
+	args, _ := json.Marshal(map[string]any{"argv": argv, "reason": "r"})
+	return tool.Call{Name: "host.exec", Admin: true, Args: args}
+}
+
+// R-CMD-2, R-CMD-7: a host command is decided by its class in the table, and
+// a forbidden one never runs, whatever else holds.
+func TestDecideHostExec(t *testing.T) {
+	planned := func(cmd tool.Command) bool { return cmd.Equal(tool.Command{Argv: []string{"go", "clean", "-cache"}}) }
+	cases := []struct {
+		name string
+		call tool.Call
+		pol  tool.Policy
+		d    journal.Decision
+	}{
+		{"read runs", execCall("df", "-h"), tool.PolicyAuto, journal.DecisionAllowed},
+		{"read runs tainted", func() tool.Call { c := execCall("du", "-sh", "/x"); c.Tainted = true; return c }(), tool.PolicyAuto, journal.DecisionAllowed},
+		{"content asks", execCall("cat", "/etc/hosts"), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"content asks tainted", func() tool.Call { c := execCall("cat", "/etc/hosts"); c.Tainted = true; return c }(), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"change asks", execCall("rm", "-r", "/tmp/x"), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"script asks", execCall("bash", "-c", "true"), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"forbidden never", execCall("sudo", "true"), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"planned runs", func() tool.Call { c := execCall("go", "clean", "-cache"); c.Planned = planned; return c }(), tool.PolicyAuto, journal.DecisionPlanned},
+		{"planned elsewhere asks", func() tool.Call {
+			args, _ := json.Marshal(map[string]any{"argv": []string{"go", "clean", "-cache"}, "dir": "/other", "reason": "r"})
+			c := execCall()
+			c.Args, c.Planned = args, planned
+			return c
+		}(), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"not in the plan asks", func() tool.Call { c := execCall("docker", "rm", "x"); c.Planned = planned; return c }(), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"forbidden though planned", func() tool.Call {
+			c := execCall("sudo", "true")
+			c.Planned = func(tool.Command) bool { return true }
+			return c
+		}(), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"forbidden though granted", func() tool.Call {
+			c := execCall("sudo", "true")
+			c.Grant = &tool.Grant{Tools: []string{"host.exec"}}
+			return c
+		}(), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"unparsed argv is forbidden", tool.Call{Name: "host.exec", Admin: true, Args: json.RawMessage(`{"argv":"rm -rf /","reason":"r"}`)}, tool.PolicyForbidden, journal.DecisionForbidden},
+		{"empty argv is forbidden", execCall(), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"not for a non-admin", func() tool.Call { c := execCall("df"); c.Admin = false; return c }(), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"not in a local-only session", func() tool.Call { c := execCall("df"); c.LocalOnly = true; return c }(), tool.PolicyForbidden, journal.DecisionForbidden},
+	}
+	for _, c := range cases {
+		pol, d := policy.Decide(policy.DefaultConfig(), execSpec(), c.call)
+		if pol != c.pol || d != c.d {
+			t.Errorf("%s: %s %s, want %s %s", c.name, pol, d, c.pol, c.d)
+		}
+	}
+}
+
+func planSpec() tool.Spec {
+	return tool.Spec{Name: "plan.show", Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true, KeepsQuestion: true}
+}
+
+func planCall(steps ...any) tool.Call {
+	args, _ := json.Marshal(map[string]any{"steps": steps})
+	return tool.Call{Name: "plan.show", Admin: true, Args: args}
+}
+
+func planStep(argv ...string) map[string]any {
+	return map[string]any{"text": "step", "argv": argv, "reason": "r"}
+}
+
+// R-CMD-7: a plan with a command that needs a press, which the
+// conversation's approved plan does not list, is asked as one question; a
+// forbidden command makes the whole plan forbidden.
+func TestDecidePlanShow(t *testing.T) {
+	planned := func(cmd tool.Command) bool { return cmd.Equal(tool.Command{Argv: []string{"go", "clean", "-cache"}}) }
+	cases := []struct {
+		name string
+		call tool.Call
+		pol  tool.Policy
+		d    journal.Decision
+	}{
+		{"words only run", planCall("a", "b"), tool.PolicyAuto, journal.DecisionAllowed},
+		{"a read command runs", planCall("a", planStep("df", "-h")), tool.PolicyAuto, journal.DecisionAllowed},
+		{"a read command runs tainted", func() tool.Call { c := planCall(planStep("df", "-h")); c.Tainted = true; return c }(),
+			tool.PolicyAuto, journal.DecisionAllowed},
+		{"a change asks", planCall("a", planStep("go", "clean", "-cache")), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"a content command asks", planCall(planStep("cat", "/etc/hosts")), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"planned runs", func() tool.Call { c := planCall(planStep("go", "clean", "-cache")); c.Planned = planned; return c }(),
+			tool.PolicyAuto, journal.DecisionAllowed},
+		{"planned and another asks", func() tool.Call {
+			c := planCall(planStep("go", "clean", "-cache"), planStep("cargo", "clean"))
+			c.Planned = planned
+			return c
+		}(), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"planned elsewhere asks", func() tool.Call {
+			c := planCall(map[string]any{"text": "x", "argv": []string{"go", "clean", "-cache"}, "dir": "/other"})
+			c.Planned = planned
+			return c
+		}(), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"docker run is forbidden", planCall("a", planStep("docker", "run", "x")), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"forbidden though planned", func() tool.Call {
+			c := planCall(planStep("sudo", "true"))
+			c.Planned = func(tool.Command) bool { return true }
+			return c
+		}(), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"steps that do not parse ask", tool.Call{Name: "plan.show", Admin: true, Args: json.RawMessage(`{"steps":[{"text":"x","argv":"rm -rf /"}]}`)},
+			tool.PolicyConfirm, journal.DecisionConfirm},
+		{"not in a local-only session", func() tool.Call { c := planCall("a"); c.LocalOnly = true; return c }(), tool.PolicyForbidden, journal.DecisionForbidden},
+	}
+	for _, c := range cases {
+		pol, d := policy.Decide(policy.DefaultConfig(), planSpec(), c.call)
+		if pol != c.pol || d != c.d {
+			t.Errorf("%s: %s %s, want %s %s", c.name, pol, d, c.pol, c.d)
+		}
+	}
+}
+
+// A plan in a scheduled run is decided by the grant (the tool then refuses
+// it: a task's conversation is no chat, errPlanInTask), but a forbidden
+// command in it is forbidden before any grant (review focus 2).
+func TestPlanInATask(t *testing.T) {
+	inGrant := &tool.Grant{Tools: []string{"plan.show"}}
+	for _, tc := range []struct {
+		name  string
+		grant *tool.Grant
+		step  map[string]any
+		pol   tool.Policy
+		d     journal.Decision
+	}{
+		{"outside the grant", &tool.Grant{Tools: []string{"web.search"}}, planStep("df", "-h"), tool.PolicyForbidden, journal.DecisionOutOfGrant},
+		{"inside the grant", inGrant, planStep("go", "clean", "-cache"), tool.PolicyAuto, journal.DecisionAllowed},
+		{"forbidden though granted", inGrant, planStep("sudo", "true"), tool.PolicyForbidden, journal.DecisionForbidden},
+	} {
+		c := planCall(tc.step)
+		c.Grant = tc.grant
+		if pol, d := policy.Decide(policy.DefaultConfig(), planSpec(), c); pol != tc.pol || d != tc.d {
+			t.Errorf("%s: %s %s, want %s %s", tc.name, pol, d, tc.pol, tc.d)
+		}
+	}
+}
+
+// R-POL-8: a task runs a read command whenever host.exec is granted and any
+// other only as listed, argv exact; a forbidden one never runs.
+func TestCommandsInAGrant(t *testing.T) {
+	g := &tool.Grant{Tools: []string{"host.exec"}, Commands: []tool.Command{{Argv: []string{"docker", "image", "prune", "-af"}}}}
+	cases := []struct {
+		argv []string
+		pol  tool.Policy
+		d    journal.Decision
+	}{
+		{[]string{"docker", "image", "prune", "-af"}, tool.PolicyAuto, journal.DecisionAllowed},
+		{[]string{"docker", "system", "df"}, tool.PolicyAuto, journal.DecisionAllowed}, // read needs no listing
+		{[]string{"docker", "rm", "x"}, tool.PolicyForbidden, journal.DecisionOutOfGrant},
+		{[]string{"docker", "image", "prune", "-a"}, tool.PolicyForbidden, journal.DecisionOutOfGrant}, // not the same argv
+		{[]string{"docker", "run", "x"}, tool.PolicyForbidden, journal.DecisionForbidden},
+	}
+	for _, c := range cases {
+		call := execCall(c.argv...)
+		call.Grant = g
+		call.Tainted = true // a run's own reads taint it; the grant still holds (R-POL-8)
+		if pol, d := policy.Decide(policy.DefaultConfig(), execSpec(), call); pol != c.pol || d != c.d {
+			t.Errorf("%v: %s %s, want %s %s", c.argv, pol, d, c.pol, c.d)
+		}
+	}
+}
+
+// The folder is part of the command: the same argv elsewhere is not granted.
+func TestACommandInAnotherFolderIsOutsideTheGrant(t *testing.T) {
+	g := &tool.Grant{Tools: []string{"host.exec"}, Commands: []tool.Command{{Argv: []string{"rm", "-r", "build"}, Dir: "/srv/a"}}}
+	for dir, want := range map[string]journal.Decision{"/srv/a": journal.DecisionAllowed, "/srv/b": journal.DecisionOutOfGrant, "": journal.DecisionOutOfGrant} {
+		args, _ := json.Marshal(map[string]any{"argv": []string{"rm", "-r", "build"}, "dir": dir, "reason": "r"})
+		call := tool.Call{Name: "host.exec", Admin: true, Args: args, Grant: g}
+		if _, d := policy.Decide(policy.DefaultConfig(), execSpec(), call); d != want {
+			t.Errorf("dir %q: %s, want %s", dir, d, want)
+		}
+	}
+}
+
+// A command without dir runs in home: a grant without a folder covers the call
+// with dir set to home, and the reverse; any other folder stays outside.
+func TestAGrantReadsNoFolderAsHome(t *testing.T) {
+	cfg := policy.DefaultConfig()
+	cfg.Home = "/home/o"
+	for _, c := range []struct {
+		grantDir, callDir string
+		want              journal.Decision
+	}{
+		{"", "/home/o", journal.DecisionAllowed},
+		{"/home/o", "", journal.DecisionAllowed},
+		{"", "", journal.DecisionAllowed},
+		{"", "/srv", journal.DecisionOutOfGrant},
+		{"/home/o", "/home/o/x", journal.DecisionOutOfGrant},
+	} {
+		g := &tool.Grant{Tools: []string{"host.exec"}, Commands: []tool.Command{{Argv: []string{"rm", "-r", "build"}, Dir: c.grantDir}}}
+		args, _ := json.Marshal(map[string]any{"argv": []string{"rm", "-r", "build"}, "dir": c.callDir, "reason": "r"})
+		call := tool.Call{Name: "host.exec", Admin: true, Args: args, Grant: g}
+		if _, d := policy.Decide(cfg, execSpec(), call); d != c.want {
+			t.Errorf("grant dir %q, call dir %q: %s, want %s", c.grantDir, c.callDir, d, c.want)
+		}
+	}
+}
+
+// R-CMD-2: a forbidden command never runs, whatever the grant lists.
+func TestForbiddenCommandBeatsAGrant(t *testing.T) {
+	g := &tool.Grant{Tools: []string{"host.exec"}, Commands: []tool.Command{{Argv: []string{"sudo", "true"}}, {Argv: []string{"docker", "run", "x"}}}}
+	for _, argv := range [][]string{{"sudo", "true"}, {"docker", "run", "x"}} {
+		call := execCall(argv...)
+		call.Grant = g
+		if pol, d := policy.Decide(policy.DefaultConfig(), execSpec(), call); pol != tool.PolicyForbidden || d != journal.DecisionForbidden {
+			t.Errorf("%v: %s %s", argv, pol, d)
+		}
+	}
+}
+
+// R-POL-8: a command outside the grant is refused, the alert names it, and a
+// second call the same day makes the same notice.
+func TestACommandOutsideTheGrantAlertsOnceAndNamesIt(t *testing.T) {
+	s := execSpec()
+	s.InputSchema = json.RawMessage(`{"type":"object","properties":{"argv":{"type":"array"},"reason":{"type":"string"}}}`)
+	h := &counter{s: s}
+	now := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	run := chain(t, h, &fakeAsker{}, policy.WithAlerts(grantAlerts()), policy.WithClock(func() time.Time { return now }, time.UTC))
+	var keys []string
+	for _, argv := range [][]string{{"rm", "-r", "x"}, {"mv", "a", "b"}} {
+		c := execCall(argv...)
+		c.Conv = "task:J7"
+		c.Grant = &tool.Grant{Tools: []string{"host.exec"}}
+		res, err := run(context.Background(), c)
+		if !errors.Is(err, tool.ErrOutOfGrant) || len(res.Out) != 1 {
+			t.Fatalf("%v: %+v, %v", argv, res, err)
+		}
+		if argv[0] == "rm" && !strings.Contains(res.Out[0].Text, "rm -r x") {
+			t.Errorf("the alert does not name the command: %q", res.Out[0].Text)
+		}
+		keys = append(keys, res.Out[0].IdemKey)
+	}
+	if keys[0] != keys[1] || keys[0] != "alert:grant:J7:2026-11-03:telegram:user:1" {
+		t.Fatalf("keys %v", keys)
+	}
+	if h.calls != 0 {
+		t.Fatalf("the tool ran %d times", h.calls)
+	}
+}
+
+// The argv of a run that may be tainted reaches an admin's alert only inside a
+// code span, so page-supplied Markdown cannot become a link or formatting.
+func TestTheAlertShowsTheCommandInACodeSpan(t *testing.T) {
+	s := execSpec()
+	s.InputSchema = json.RawMessage(`{"type":"object","properties":{"argv":{"type":"array"},"reason":{"type":"string"}}}`)
+	run := chain(t, &counter{s: s}, &fakeAsker{}, policy.WithAlerts(grantAlerts()))
+	c := execCall("rm", "[Open](https://evil.example)", "_x_")
+	c.Conv = "task:J7"
+	c.Grant = &tool.Grant{Tools: []string{"host.exec"}}
+	res, err := run(context.Background(), c)
+	if !errors.Is(err, tool.ErrOutOfGrant) || len(res.Out) != 1 {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	span := "`" + "rm '[Open](https://evil.example)' _x_" + "`"
+	got := res.Out[0].Text
+	if !strings.Contains(got, span) || strings.Contains(strings.Replace(got, span, "", 1), "[Open](") {
+		t.Fatalf("alert %q, want the command in %s and nowhere else", got, span)
+	}
+}
+
+// The alert hides the node's own secret values, which no pattern of
+// redact.String knows, as the runner's output does.
+func TestTheAlertHidesTheNodesSecretValues(t *testing.T) {
+	s := execSpec()
+	s.InputSchema = json.RawMessage(`{"type":"object","properties":{"argv":{"type":"array"},"reason":{"type":"string"}}}`)
+	hide := func(v string) string { return strings.ReplaceAll(v, "plainvalue123", "[redacted]") }
+	run := chain(t, &counter{s: s}, &fakeAsker{}, policy.WithAlerts(grantAlerts()), policy.WithRedact(hide))
+	c := execCall("curl", "-H", "X-Key: plainvalue123", "https://x.example")
+	c.Conv = "task:J7"
+	c.Grant = &tool.Grant{Tools: []string{"host.exec"}}
+	res, err := run(context.Background(), c)
+	if !errors.Is(err, tool.ErrOutOfGrant) || len(res.Out) != 1 {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	if got := res.Out[0].Text; strings.Contains(got, "plainvalue123") || !strings.Contains(got, "[redacted]") {
+		t.Fatalf("alert %q shows the node's secret", got)
 	}
 }

@@ -246,6 +246,9 @@ func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) 
 	if result.Pending != "" && !slices.Contains(t.state.Pending, result.Pending) {
 		t.state.Pending = append(t.state.Pending, result.Pending)
 	}
+	if result.Job != "" && !slices.Contains(t.state.Commands, result.Job) {
+		t.state.Commands = append(t.state.Commands, result.Job)
+	}
 	return text, nil
 }
 
@@ -254,7 +257,22 @@ func (a *Agent) toolCall(ctx context.Context, t *turn, call provider.ToolCall) t
 	return tool.Call{
 		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Transport: t.transport, Principal: t.msg.From,
 		Admin: t.admin, Tainted: t.state.Tainted, LocalOnly: t.state.LocalOnly, Grant: t.grant, KnownURL: t.known.has, Depth: t.depth,
-		Speak: a.speaker(ctx, t), Name: call.Name, Args: call.Args,
+		Speak: a.speaker(ctx, t), Name: call.Name, Args: call.Args, Planned: a.planned(ctx, t.event.Conv),
+	}
+}
+
+// planned asks the conversation's approved plan, at the time of the call, so a
+// plan shown earlier in the same turn counts and a closed one does not. A
+// command matches argv exact and in the same folder, "" read as home on both
+// sides. A plan that cannot be read approves nothing.
+func (a *Agent) planned(ctx context.Context, conv string) tool.CommandFunc {
+	return func(cmd tool.Command) bool {
+		list, err := a.d.Plans.Approved(ctx, conv)
+		if err != nil {
+			a.log.Warn("agent: approved plan not read", "conv", conv, "err", err)
+			return false
+		}
+		return slices.ContainsFunc(list, func(p tool.Command) bool { return p.SameAs(cmd, a.cfg.Home) })
 	}
 }
 

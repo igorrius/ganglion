@@ -110,7 +110,7 @@ func (s Scheduling) details(ctx context.Context, p pending.QuickPress) (pending.
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}
-	return pending.QuickEdit{Text: s.detailsText(p.Speak, j, p.Button.Conv), Buttons: buttons}, nil
+	return pending.QuickEdit{Text: s.detailsText(ctx, p.Speak, j, p.Button.Conv), Buttons: buttons}, nil
 }
 
 // deleteByButton deletes the job at once: the press is the owner's own
@@ -212,7 +212,7 @@ func (s Scheduling) askRunNow(ctx context.Context, p pending.QuickPress, j sched
 	}
 	c := tool.Call{Speak: p.Speak, TurnID: p.Button.ID, N: 1, Conv: p.Button.Conv, Transport: p.Transport, Principal: p.Button.Principal,
 		Name: ActionRunNow, Args: args}
-	id, err := s.Buttons.Ask(ctx, c, redact.String(p.Speak.Text(texts.AskRunNow, texts.Vars{varSummary: s.summary(p.Speak, j, p.Button.Conv)})))
+	id, err := s.Buttons.Ask(ctx, c, redact.String(p.Speak.Text(texts.AskRunNow, texts.Vars{varSummary: s.summary(ctx, p.Speak, j, p.Button.Conv)})))
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}
@@ -277,12 +277,27 @@ func (s Scheduling) next(j schedule.Job) string {
 // summary is what a job does, line by line: the text, the schedule, and
 // for a task its grant and who receives the answer. here is the
 // conversation it is shown in.
-func (s Scheduling) summary(sp texts.Speaker, j schedule.Job, here string) string {
+func (s Scheduling) summary(ctx context.Context, sp texts.Speaker, j schedule.Job, here string) string {
 	if j.Kind != schedule.KindTask {
 		return sp.Text(texts.SchedSummaryReminder, texts.Vars{varText: shownText(sp, j), varTiming: s.timing(sp, j), varTarget: replyTarget(sp, j.Conv, here)})
 	}
-	return sp.Text(texts.SchedSummaryTask, texts.Vars{varText: shownText(sp, j), varTiming: s.timing(sp, j),
+	out := sp.Text(texts.SchedSummaryTask, texts.Vars{varText: shownText(sp, j), varTiming: s.timing(sp, j),
 		"tools": orNone(sp, j.Grant.Tools), "hosts": orNone(sp, j.Grant.Hosts), varTarget: replyTarget(sp, j.Grant.ReplyTo, here)})
+	if len(j.Grant.Commands) > 0 {
+		out += "\n" + sp.Text(texts.SchedSummaryCommands, texts.Vars{"commands": s.commandLines(ctx, sp, j.Grant.Commands)})
+	}
+	return out
+}
+
+// commandLines lists a grant's commands, one per line, each with the fixed
+// line of its class, worded as host.exec's own question words it.
+func (s Scheduling) commandLines(ctx context.Context, sp texts.Speaker, cmds []tool.Command) string {
+	lines := make([]string, len(cmds))
+	for i, cmd := range cmds {
+		v := s.Commands.questionVars(ctx, sp, cmd, "")
+		lines[i] = "- " + v["command"] + " — " + v["line"]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // entry is a job's message in a list.
@@ -293,8 +308,8 @@ func (s Scheduling) entry(sp texts.Speaker, j schedule.Job) string {
 }
 
 // detailsText is all of a job.
-func (s Scheduling) detailsText(sp texts.Speaker, j schedule.Job, here string) string {
-	return sp.Text(texts.SchedDetails, texts.Vars{"title": s.title(sp, j), "id": j.ID, varSummary: s.summary(sp, j, here),
+func (s Scheduling) detailsText(ctx context.Context, sp texts.Speaker, j schedule.Job, here string) string {
+	return sp.Text(texts.SchedDetails, texts.Vars{"title": s.title(sp, j), "id": j.ID, varSummary: s.summary(ctx, sp, j, here),
 		"next": orDash(s.next(j)), "created": j.Created.In(s.Loc).Format(timeLayout)})
 }
 

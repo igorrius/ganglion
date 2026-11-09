@@ -13,7 +13,7 @@ flowchart LR
     mqttdev["MQTT devices<br/>P2"]
 
     subgraph corerole["core role"]
-        corep["Core<br/>agent loop, router, policies,<br/>scheduler, tool registry,<br/>html2md module"]
+        corep["Core<br/>agent loop, router, policies,<br/>scheduler, tool registry,<br/>html2md module,<br/>host commands in the sandbox"]
         sqlite[("SQLite<br/>inbox, outbox, history, turns,<br/>jobs, cron_runs, tool_calls,<br/>pending calls, allowed")]
         memrepo[("Git repo<br/>memory/*.md, persona/*.md, skills")]
     end
@@ -50,7 +50,7 @@ flowchart LR
 
 | Container | Holds | Technology | Phase |
 |---|---|---|---|
-| Core | Agent loop, router, policies, scheduler, tool registry, Telegram transport; the `html2md` module that turns fetched HTML into Markdown | Go; the module in Rust on wazero, embedded in the binary (ADR-0035) | P1 |
+| Core | Agent loop, router, policies, scheduler, tool registry, Telegram transport; host commands (`host.exec`, `host.stats`) run by the node's own helper process in a Landlock and seccomp sandbox (ADR-0039); the `html2md` module that turns fetched HTML into Markdown | Go; the module in Rust on wazero, embedded in the binary (ADR-0035) | P1 |
 | SQLite | Inbox/outbox, conversation history, `turns`, scheduled jobs and `cron_runs`, the tool-call journal `tool_calls`, calls awaiting confirmation and their buttons, `allowed` | modernc.org/sqlite, WAL | P1 |
 | Memory repo | `memory/*.md` (facts; held-back ones under `memory/quarantine/`), `persona/*.md`, skills; later embeddings | git, the `git` binary (ADR-0033) | P1 (files), P2 (embeddings) |
 | Runner | Module runtime, local policies, offline scheduler | wazero, embedded NATS in P2 | P0 (spike), P1 |

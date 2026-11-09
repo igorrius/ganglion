@@ -32,8 +32,9 @@ var homeAutorun = []string{
 var skipped = []string{".git", "node_modules", ".cache", ".cargo", ".rustup", "go"}
 
 // NodeFiles are the node's own files: its binary, data, logs, modules and
-// workspace.
-type NodeFiles struct{ Binary, DB, LogDir, ModulesDir, Workspace, Languages string }
+// the claude CLI work folder (its prompts and, during a call, the MCP
+// bridge socket) and workspace.
+type NodeFiles struct{ Binary, DB, LogDir, ModulesDir, ClaudeDir, Workspace, Languages string }
 
 // HomeSecrets is the default list under home: the secret stores and the
 // files that run at the owner's next login; none when home is unknown.
@@ -60,7 +61,7 @@ func HomeSecrets(home string) []string {
 // became a symlink is followed.
 func DenyList(home, cwd string, node NodeFiles, environ, extra []string) []string {
 	raw := slices.Concat([]string{node.Binary}, dataFiles(node.DB, cwd, home),
-		[]string{node.LogDir, node.ModulesDir, node.Workspace, node.Languages})
+		[]string{node.LogDir, node.ModulesDir, node.ClaudeDir, node.Workspace, node.Languages})
 	for _, kv := range environ {
 		if name, v, ok := strings.Cut(kv, "="); ok && strings.HasSuffix(name, "_FILE") && v != "" {
 			raw = append(raw, v)

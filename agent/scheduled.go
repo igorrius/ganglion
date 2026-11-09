@@ -7,9 +7,11 @@ import (
 	"strings"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/hostcmd"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/internal/transcript"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -71,11 +73,8 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 		t.reply(j.Text)
 		return true, a.noteReminder(ctx, t, j)
 	case schedule.KindTask:
-		t.made = event.OriginTask
-		g := j.Grant
-		t.grant, t.replyConv = &g, g.ReplyTo
 		t.record.Outcome = turns.OutcomeOK
-		return false, a.setRecipient(ctx, t, j.Owner)
+		return false, a.asTask(ctx, t, j)
 	case schedule.KindSystem:
 		t.made, t.replyConv = event.OriginSystem, j.Conv
 		return true, a.system(ctx, t, j)
@@ -83,6 +82,16 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 		a.log.Warn("agent: scheduled job of an unknown kind", "job", j.ID, "kind", j.Kind)
 		return true, nil
 	}
+}
+
+// asTask makes t a turn of task j: its owner as the principal, its transport,
+// its grant on every call and its reply target, and the name of who receives it.
+func (a *Agent) asTask(ctx context.Context, t *turn, j schedule.Job) error {
+	t.msg = event.Message{From: j.Owner, Name: taskSpeaker, Text: j.Text}
+	t.record.Principal, t.transport, t.made = j.Owner, j.Transport, event.OriginTask
+	g := j.Grant
+	t.grant, t.replyConv = &g, g.ReplyTo
+	return a.setRecipient(ctx, t, j.Owner)
 }
 
 // noteReminder adds a "[reminder]" note of the sent reminder to the
@@ -120,6 +129,29 @@ func (a *Agent) system(ctx context.Context, t *turn, j schedule.Job) error {
 	}
 	t.reply(report)
 	return nil
+}
+
+// grantCommandsLine tells a task run the exact commands its grant lists, so
+// the model repeats them as approved: a command that needs a press runs in a
+// task only with its argv and folder exact (R-POL-8).
+const grantCommandsLine = "[the commands this task's grant lists, which host.exec runs only with exactly this argv and dir: %s]"
+
+// grantCommands is the grant line of a task run, or "" when its grant lists
+// no command: each command as hostcmd.Show writes it, in its folder, home for
+// one without dir, each in a code span a backtick cannot end.
+func grantCommands(g *tool.Grant, home string) string {
+	if g == nil || len(g.Commands) == 0 {
+		return ""
+	}
+	cmds := make([]string, len(g.Commands))
+	for i, c := range g.Commands {
+		dir := c.Dir
+		if dir == "" {
+			dir = home
+		}
+		cmds[i] = text.CodeSpan(hostcmd.Show(c.Argv)) + " in " + text.CodeSpan(hostcmd.Show([]string{dir}))
+	}
+	return fmt.Sprintf(grantCommandsLine, strings.Join(cmds, "; "))
 }
 
 // setRecipient names the owner who receives a task run's answer, on one

@@ -48,26 +48,27 @@ func (r *Root) Level() slog.Level {
 
 // Run holds the flags of `ganglion run`.
 type Run struct {
-	Roles          string
-	DB             string
-	Admin          string
-	TelegramAPIURL string
-	TelegramReply  string
-	TelegramRich   string
-	MetricsAddr    string
-	LogDir         string
-	ModelsFile     string
-	Workspace      string
-	SandboxDeny    string
-	Languages      string
-	DailyBudgetUSD float64
-	ReactionAfter  time.Duration
-	ReactionDwell  time.Duration
-	DailyTurns     int
-	DailyTokens    int
-	SessionIdle    string
-	TZ             string
-	Search         string
+	Roles            string
+	DB               string
+	Admin            string
+	TelegramAPIURL   string
+	TelegramReply    string
+	TelegramRich     string
+	MetricsAddr      string
+	LogDir           string
+	ModelsFile       string
+	Workspace        string
+	SandboxDeny      string
+	SandboxHideNames string
+	Languages        string
+	DailyBudgetUSD   float64
+	ReactionAfter    time.Duration
+	ReactionDwell    time.Duration
+	DailyTurns       int
+	DailyTokens      int
+	SessionIdle      string
+	TZ               string
+	Search           string
 }
 
 // Flags returns the flags of `ganglion run` bound to r. Defaults that the
@@ -83,10 +84,10 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 			Local: true, Sources: env("TELEGRAM_API_URL"), Destination: &r.TelegramAPIURL},
 		&cli.StringFlag{Name: "telegram-reply", Usage: "when answers quote the person's message: auto, always or off (ADR-0025)",
 			Value: "auto", Category: catTelegram, Local: true, Sources: env("GANGLION_TELEGRAM_REPLY"), Destination: &r.TelegramReply,
-			Validator: in("GANGLION_TELEGRAM_REPLY", oneOf("auto", "always", "off"))},
+			Validator: in("GANGLION_TELEGRAM_REPLY", oneOf("auto", "always", off))},
 		&cli.StringFlag{Name: "telegram-rich", Usage: "send a message with a table or two headings as a rich message: on or off (ADR-0054)",
-			Value: "on", Category: catTelegram, Local: true, Sources: env("GANGLION_TELEGRAM_RICH"), Destination: &r.TelegramRich,
-			Validator: in("GANGLION_TELEGRAM_RICH", oneOf("on", "off"))},
+			Value: on, Category: catTelegram, Local: true, Sources: env("GANGLION_TELEGRAM_RICH"), Destination: &r.TelegramRich,
+			Validator: in("GANGLION_TELEGRAM_RICH", oneOf(on, off))},
 		&cli.DurationFlag{Name: "reaction-after", Usage: "work takes this long before a reaction shows it; 0 = off (ADR-0051)", Value: 8 * time.Second,
 			Category: catTelegram, Local: true, Sources: env("GANGLION_REACTION_AFTER"), Destination: &r.ReactionAfter},
 		&cli.DurationFlag{Name: "reaction-dwell", Usage: "a reaction stays at least this long before the next", Value: 3 * time.Second,
@@ -102,6 +103,9 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 			Local: true, Sources: env("GANGLION_WORKSPACE"), Destination: &r.Workspace, TakesFile: true},
 		&cli.StringFlag{Name: "sandbox-deny", Usage: "more paths, colon-separated, that commands may neither read nor write",
 			Category: catAgent, Local: true, Sources: env("GANGLION_SANDBOX_DENY"), Destination: &r.SandboxDeny},
+		&cli.StringFlag{Name: "sandbox-hide-names", Usage: "keep commands from listing the folders that hold a denied path: on or off (ADR-0057)",
+			Value: off, Category: catAgent, Local: true, Sources: env("GANGLION_SANDBOX_HIDE_NAMES"), Destination: &r.SandboxHideNames,
+			Validator: in("GANGLION_SANDBOX_HIDE_NAMES", oneOf(on, off))},
 		&cli.FloatFlag{Name: "daily-budget-usd", Usage: "paid smart models stop for the day after this spend", Value: 1.0,
 			Category: catAgent, Local: true, Sources: env("GANGLION_DAILY_BUDGET_USD"), Destination: &r.DailyBudgetUSD,
 			Validator: in("GANGLION_DAILY_BUDGET_USD", nonNegative[float64])},
@@ -117,9 +121,15 @@ func (r *Run) Flags(dailyTurns, dailyTokens int, idle time.Duration) []cli.Flag 
 			Validator: in("GANGLION_TZ", func(v string) error { _, err := time.LoadLocation(v); return err })},
 		&cli.StringFlag{Name: "search", Usage: "web.search: auto (Brave with BRAVE_API_KEY, else DuckDuckGo) or off (ADR-0035)",
 			Value: "auto", Category: catAgent, Local: true, Sources: env("GANGLION_SEARCH"), Destination: &r.Search,
-			Validator: in("GANGLION_SEARCH", oneOf("auto", "off"))},
+			Validator: in("GANGLION_SEARCH", oneOf("auto", off))},
 	}
 }
+
+// on and off are the two values of a setting that is on or off.
+const (
+	on  = "on"
+	off = "off"
+)
 
 // decimal reads integers in base 10, as before the flags: 050 is fifty,
 // not octal forty.
@@ -127,7 +137,7 @@ var decimal = cli.IntegerConfig{Base: 10}
 
 // Idle parses --session-idle: a positive duration, or "off" (0).
 func Idle(v string) (time.Duration, error) {
-	if v == "off" {
+	if v == off {
 		return 0, nil
 	}
 	d, err := time.ParseDuration(v)
@@ -214,7 +224,7 @@ func LogDirFlag(dst *string) cli.Flag {
 // off (false) for "off".
 func LogDir(db, v string) (string, bool) {
 	switch v {
-	case "off":
+	case off:
 		return "", false
 	case "":
 		return filepath.Join(filepath.Dir(db), "logs"), true

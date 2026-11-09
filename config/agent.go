@@ -12,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/diag"
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/plan"
 	"github.com/igorrius/ganglion/policy"
@@ -21,6 +22,7 @@ import (
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/status"
@@ -65,6 +67,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 	b := do.MustInvoke[Bootstrap](i)
 	cfg := agent.DefaultConfig()
 	cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
+	cfg.Home = commandHome()
 	return cfg, agent.Deps{
 		States:    do.MustInvoke[*sqlqueue.Queue](i),
 		Languages: do.MustInvoke[*language.Store](i),
@@ -94,19 +97,25 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Facts:         do.MustInvoke[Remembering](i).Facts,
 		SystemJobs:    do.MustInvoke[Remembering](i).Jobs,
 		Modules:       do.MustInvoke[agent.Modules](i),
+		Switch:        do.MustInvoke[*host.Switch](i),
+		Commands:      do.MustInvoke[*host.Runner](i),
 		Skills:        do.MustInvoke[Skilled](i).Set,
 		StatusSources: do.MustInvoke[[]status.Source](i),
 		Log:           do.MustInvoke[*slog.Logger](i),
 	}
 }
 
-// Policy provides the tool policy: the default settings, alerts to the
-// admins, the node's calendar day.
+// Policy provides the tool policy: the default settings with the node user's
+// home, alerts to the admins without the node's secrets, the node's calendar
+// day.
 func Policy() do.Provider[*policy.Policy] {
 	return func(i do.Injector) (*policy.Policy, error) {
 		b := do.MustInvoke[Bootstrap](i)
-		return policy.New(policy.DefaultConfig(), do.MustInvoke[*tool.Registry](i), do.MustInvoke[policy.Asker](i),
+		cfg := policy.DefaultConfig()
+		cfg.Home = commandHome()
+		return policy.New(cfg, do.MustInvoke[*tool.Registry](i), do.MustInvoke[policy.Asker](i),
 			policy.WithAlerts(do.MustInvoke[alert.Admins](i)),
+			policy.WithRedact(secretRedact(b)),
 			policy.WithClock(time.Now, b.Agent.TZ),
 			policy.WithLogger(do.MustInvoke[*slog.Logger](i))), nil
 	}
@@ -127,7 +136,7 @@ func IsAdmin() do.Provider[agent.AdminFunc] {
 // Plans provides the conversations' plans.
 func Plans() do.Provider[*plan.Store] {
 	return func(i do.Injector) (*plan.Store, error) {
-		return plan.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sqlqueue.Queue](i))
+		return plan.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sqlqueue.Queue](i), plan.WithHome(commandHome()))
 	}
 }
 
@@ -160,8 +169,10 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewLanguageSet(do.MustInvoke[*language.Store](i)),
+		builtin.NewHostStats(do.MustInvoke[*host.Stats](i)),
+		do.MustInvoke[*builtin.HostExec](i),
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
-		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i)),
+		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i), do.MustInvoke[*builtin.HostExec](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
 		metricsTools(do.MustInvoke[Bootstrap](i)))...)
 }
@@ -203,7 +214,8 @@ func Skills() do.Provider[Skilled] {
 		if err != nil {
 			return Skilled{}, err
 		}
-		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg), runs), Problems: problems}, nil
+		box := do.MustInvoke[*sandbox.Sandbox](i)
+		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg, box), runs, sandboxGate{box}), Problems: problems}, nil
 	}
 }
 
@@ -234,13 +246,14 @@ func Scheduling() do.Provider[builtin.Scheduling] {
 	return func(i do.Injector) (builtin.Scheduling, error) {
 		root := i.RootScope()
 		return builtin.Scheduling{
-			Jobs:    do.MustInvoke[*schedule.Store](i),
-			Runner:  do.MustInvoke[*schedule.Scheduler](i),
-			Specs:   func(name string) (tool.Spec, bool) { return do.MustInvoke[*tool.Registry](root).Spec(name) },
-			Buttons: do.MustInvoke[*pending.Store](i),
-			Convs:   do.MustInvoke[builtin.Convs](i),
-			Loc:     do.MustInvoke[Bootstrap](i).Agent.TZ,
-			Now:     time.Now,
+			Jobs:     do.MustInvoke[*schedule.Store](i),
+			Runner:   do.MustInvoke[*schedule.Scheduler](i),
+			Specs:    func(name string) (tool.Spec, bool) { return do.MustInvoke[*tool.Registry](root).Spec(name) },
+			Buttons:  do.MustInvoke[*pending.Store](i),
+			Convs:    do.MustInvoke[builtin.Convs](i),
+			Commands: do.MustInvoke[*builtin.HostExec](i),
+			Loc:      do.MustInvoke[Bootstrap](i).Agent.TZ,
+			Now:      time.Now,
 		}, nil
 	}
 }
@@ -267,14 +280,23 @@ func Router() do.Provider[router.Router] {
 	}
 }
 
+// claudeOptions adds the CLI's work folder to opts; an empty dir keeps the
+// private temporary folder (a test node).
+func claudeOptions(dir string, opts ...claudecli.Option) []claudecli.Option {
+	if dir == "" {
+		return opts
+	}
+	return append(opts, claudecli.WithWorkDir(dir))
+}
+
 // providerFactories build a model provider of each catalogue type from
 // its definition and its API key.
-var providerFactories = map[string]func(p rules.ProviderDef, key string) provider.Provider{
-	rules.TypeOpenAI: func(p rules.ProviderDef, key string) provider.Provider {
+var providerFactories = map[string]func(p rules.ProviderDef, key, claudeDir string) provider.Provider{
+	rules.TypeOpenAI: func(p rules.ProviderDef, key, _ string) provider.Provider {
 		return openai.New(p.Name, p.BaseURL, key)
 	},
-	rules.TypeClaudeCLI: func(p rules.ProviderDef, _ string) provider.Provider {
-		return claudecli.New(p.Name, claudecli.WithCommand(p.Command))
+	rules.TypeClaudeCLI: func(p rules.ProviderDef, _, claudeDir string) provider.Provider {
+		return claudecli.New(p.Name, claudeOptions(claudeDir, claudecli.WithCommand(p.Command))...)
 	},
 }
 
@@ -288,7 +310,7 @@ func Providers() do.Provider[map[string]provider.Provider] {
 			if !ok {
 				return nil, fmt.Errorf("config: provider %s: unknown type %q", p.Name, p.Type)
 			}
-			out[p.Name] = build(p, b.Agent.Keys[p.Name])
+			out[p.Name] = build(p, b.Agent.Keys[p.Name], b.ClaudeDir)
 		}
 		return out, nil
 	}

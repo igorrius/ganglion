@@ -3,6 +3,14 @@
 # that is neither here, nor in a scenario's covers, nor shared. When a scenario comes
 # to depend on a file, move it to that scenario's covers.
 main.go
+host/capture.go
+host/ignored.go
+host/janitor.go
+host/machine*.go
+host/places.go
+host/stats.go
+host/switch.go
+host/telemetry.go
 access/**
 agent/commands.go
 agent/config.go
@@ -19,7 +27,6 @@ cells/memstore.go
 cells/request.go
 cells/service.go
 cells/sqlstore/**
-cmd/harden_linux.go
 cmd/mcp.go
 cmd/relay.go
 cmd/root.go
@@ -31,18 +38,19 @@ config/agent.go
 config/bootstrap.go
 config/config.go
 config/delivery.go
+config/host.go
 config/memory.go
 config/storage.go
 config/web.go
 core/**
 diag/**
-event/**
 gitrepo/**
 guard/**
 internal/backoff/**
 internal/buckets/**
 internal/buildinfo/**
 internal/clock/**
+internal/procgroup/**
 internal/redact/**
 internal/text/**
 internal/transcript/**
@@ -105,5 +113,6 @@ texts/texts.go
 sandbox/grants.go
 sandbox/deny.go
 sandbox/sandbox.go
+sandbox/harden.go
 sandbox/*_linux.go
 sandbox/*_other.go

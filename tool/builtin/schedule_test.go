@@ -13,6 +13,7 @@ import (
 
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/schedule"
@@ -53,6 +54,19 @@ type schedEnv struct {
 	specs   map[string]tool.Spec
 }
 
+// noCommands, noIgnored and open are a HostExec that is only asked to word commands.
+type noCommands struct{}
+
+func (noCommands) Exec(context.Context, host.Request) (host.Answer, error) { return host.Answer{}, nil }
+
+type noIgnored struct{}
+
+func (noIgnored) Ignored(context.Context, string, []string) (string, bool) { return "", false }
+
+type open struct{}
+
+func (open) Open() bool { return true }
+
 func newSchedEnv(t *testing.T) *schedEnv {
 	t.Helper()
 	ctx := context.Background()
@@ -78,6 +92,7 @@ func newSchedEnv(t *testing.T) *schedEnv {
 		"web.fetch":    {Name: "web.fetch", Class: tool.ClassExternal, Policy: tool.PolicyAuto},
 		"message.send": {Name: "message.send", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm},
 		"cells.get":    {Name: "cells.get", Class: tool.ClassRead, Policy: tool.PolicyAuto},
+		"host.exec":    {Name: "host.exec", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm},
 		"shell.exec":   {Name: "shell.exec", Class: tool.ClassSideEffect, Policy: tool.PolicyForbidden},
 		// Registered and not forbidden, yet never in a grant.
 		"memory.write":    {Name: "memory.write", Class: tool.ClassSideEffect, Policy: tool.PolicyAuto},
@@ -92,6 +107,8 @@ func newSchedEnv(t *testing.T) *schedEnv {
 		Convs:   convs(),
 		Loc:     kyiv,
 		Now:     now,
+		// The words of a command are host.exec's own.
+		Commands: builtin.NewHostExec(noCommands{}, noIgnored{}, open{}, "/home/o"),
 	}
 	return e
 }
@@ -560,5 +577,81 @@ func TestScheduleCreateAsksForTheLanguage(t *testing.T) {
 	d := builtin.NewScheduleCreate(builtin.Scheduling{}).Spec().Description
 	if !strings.Contains(d, "in the language the person is using") || !strings.Contains(d, "which language the answer is to be in") {
 		t.Fatalf("description %q", d)
+	}
+}
+
+const pruneArgs = `{"kind":"task","cron":"0 3 * * *","text":"clean the docker images",` +
+	`"grant":{"tools":["host.exec"],"commands":[{"argv":["docker","image","prune","-af"]}]}}`
+
+// R-POL-8: the creation question lists the commands with their fixed lines.
+func TestScheduleCreateQuestionListsTheCommands(t *testing.T) {
+	e := newSchedEnv(t)
+	q, err := builtin.NewScheduleCreate(e.sc).Question(context.Background(), call("schedule.create", pruneArgs))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Commands the runs may execute", "docker image prune -af", "/home/o", "host.exec"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("the question lacks %q:\n%s", want, q)
+		}
+	}
+	res, err := builtin.NewScheduleCreate(e.sc).Run(context.Background(), call("schedule.create", pruneArgs))
+	if err != nil {
+		t.Fatal(err, res)
+	}
+	list, _ := e.jobs.List(context.Background(), me)
+	if len(list) != 1 || len(list[0].Grant.Commands) != 1 || !slices.Equal(list[0].Grant.Commands[0].Argv, []string{"docker", "image", "prune", "-af"}) {
+		t.Fatalf("job %+v", list)
+	}
+}
+
+func TestScheduleCreateRefusesBadCommands(t *testing.T) {
+	e := newSchedEnv(t)
+	for name, c := range map[string]struct{ args, want string }{
+		"commands without host.exec": {`{"kind":"task","cron":"0 3 * * *","text":"x","grant":{"tools":["cells.get"],"commands":[{"argv":["df"]}]}}`, "need host.exec"},
+		"a forbidden command":        {`{"kind":"task","cron":"0 3 * * *","text":"x","grant":{"tools":["host.exec"],"commands":[{"argv":["sudo","true"]}]}}`, "sudo true"},
+		"a relative folder":          {`{"kind":"task","cron":"0 3 * * *","text":"x","grant":{"tools":["host.exec"],"commands":[{"argv":["df"],"dir":"rel/dir"}]}}`, "dir"},
+		"an empty argv":              {`{"kind":"task","cron":"0 3 * * *","text":"x","grant":{"tools":["host.exec"],"commands":[{"argv":[]}]}}`, "argv"},
+		"too many":                   {manyCommands(21), "at most 20"},
+		"a reminder with commands":   {`{"kind":"reminder","cron":"0 3 * * *","text":"x","grant":{"commands":[{"argv":["df"]}]}}`, "no grant"},
+	} {
+		_, err := builtin.NewScheduleCreate(e.sc).Question(context.Background(), call("schedule.create", c.args))
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", name, err, c.want)
+		}
+	}
+}
+
+func manyCommands(n int) string {
+	var cmds []string
+	for range n {
+		cmds = append(cmds, `{"argv":["df"]}`)
+	}
+	return `{"kind":"task","cron":"0 3 * * *","text":"x","grant":{"tools":["host.exec"],"commands":[` + strings.Join(cmds, ",") + `]}}`
+}
+
+// The details, Run now and the delete question show the commands too.
+func TestCommandsShowWhereAJobIsShown(t *testing.T) {
+	e := newSchedEnv(t)
+	ctx := context.Background()
+	j := rates("j9")
+	j.Grant = tool.Grant{Tools: []string{"host.exec"}, ReplyTo: "telegram:42", Commands: []tool.Command{{Argv: []string{"docker", "image", "prune", "-af"}, Dir: "/srv/x"}}}
+	e.add(t, j)
+	res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit := e.pressAs(t, res.Out[0].Buttons[0])
+	if !strings.Contains(edit.Text, "docker image prune -af") || !strings.Contains(edit.Text, "/srv/x") {
+		t.Fatalf("details lack the command:\n%s", edit.Text)
+	}
+	// host.exec is a side-effect tool, so Run now asks, and the question lists the command.
+	edit = e.pressAs(t, res.Out[0].Buttons[2])
+	if labels(edit.Buttons) != "Approve,Deny" || len(e.q.events) != 0 || !strings.Contains(edit.Text, "docker image prune -af") {
+		t.Fatalf("run now %+v, events %d", edit, len(e.q.events))
+	}
+	q, err := builtin.NewScheduleDelete(e.sc).Question(ctx, call("schedule.delete", `{"id":"j9"}`))
+	if err != nil || !strings.Contains(q, "docker image prune -af") {
+		t.Fatalf("delete question %q, %v", q, err)
 	}
 }

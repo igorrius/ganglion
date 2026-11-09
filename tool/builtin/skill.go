@@ -24,8 +24,10 @@ import (
 const SkillReadTool = "skill.read"
 
 // NewSkillTools gives the agent skill.read and one tool per script skill
-// (R-RTR-5, ADR-0042), all for admins only.
-func NewSkillTools(set skills.Set, run *skills.Runner, begun ScriptRuns) []tool.Handler {
+// (R-RTR-5, ADR-0042), all for admins only. A script's tool is on offer only
+// while gate is open (the command sandbox is on, ADR-0039); a skill without
+// a script needs no sandbox.
+func NewSkillTools(set skills.Set, run *skills.Runner, begun ScriptRuns, gate Gate) []tool.Handler {
 	m := otel.Meter("ganglion/skills")
 	runs, _ := m.Int64Counter("ganglion.skill.runs", metric.WithDescription("Skill script runs, by skill and result."))
 	dur, _ := m.Float64Histogram("ganglion.skill.run.duration", metric.WithUnit("s"), buckets.Seconds,
@@ -33,7 +35,7 @@ func NewSkillTools(set skills.Set, run *skills.Runner, begun ScriptRuns) []tool.
 	out := []tool.Handler{&skillRead{set: set}}
 	for _, name := range set.Names() {
 		if sk, _ := set.Get(name); sk.Script != nil {
-			out = append(out, &skillScript{sk: sk, run: run, begun: begun, runs: runs, dur: dur})
+			out = append(out, &skillScript{sk: sk, run: run, begun: begun, gate: gate, runs: runs, dur: dur})
 		}
 	}
 	return out
@@ -77,9 +79,14 @@ type skillScript struct {
 	sk    skills.Skill
 	run   *skills.Runner
 	begun ScriptRuns
+	gate  Gate
 	runs  metric.Int64Counter
 	dur   metric.Float64Histogram
 }
+
+// Offered implements tool.Gated: a script is on offer only while the sandbox
+// is on.
+func (s *skillScript) Offered() bool { return s.gate.Open() }
 
 func (s *skillScript) Spec() tool.Spec {
 	class, policy := tool.ClassExternal, tool.PolicyAuto
@@ -140,23 +147,27 @@ func (s *skillScript) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 	if err != nil {
 		return tool.Result{}, err
 	}
+	var begin func(context.Context) (bool, error)
 	if s.sk.Script.Effects == skills.EffectsChange {
-		first, err := s.begun.Begin(ctx, c.Key(), s.sk.Name)
-		if err != nil {
-			return tool.Result{}, fmt.Errorf("%s: %w", s.sk.ToolName(), err)
-		}
-		if !first {
-			s.runs.Add(ctx, 1, metric.WithAttributes(attribute.String("skill", s.sk.Name), attribute.String("result", "cut_short")))
-			return tool.Result{}, fmt.Errorf("%s: this call started once and a restart or a failure cut its turn short; it may have done its work, so it is not run again. Tell the owner the outcome is unknown; they can ask for it again", s.sk.ToolName())
-		}
+		// Recorded by the runner right before the script starts, so a run that
+		// fails before that (sandbox off, copy refused) can be tried again.
+		begin = func(ctx context.Context) (bool, error) { return s.begun.Begin(ctx, c.Key(), s.sk.Name) }
 	}
 	started := time.Now()
-	out, err := s.run.Run(ctx, s.sk, []byte(in))
+	out, err := s.run.RunOnce(ctx, s.sk, []byte(in), begin)
 	s.dur.Record(ctx, time.Since(started).Seconds(), metric.WithAttributes(attribute.String("skill", s.sk.Name)))
 	result := "ok"
 	defer func() {
 		s.runs.Add(ctx, 1, metric.WithAttributes(attribute.String("skill", s.sk.Name), attribute.String("result", result)))
 	}()
+	if errors.Is(err, skills.ErrAlreadyBegun) {
+		result = "cut_short"
+		return tool.Result{}, fmt.Errorf("%s: this call started once and a restart or a failure cut its turn short; it may have done its work, so it is not run again. Tell the owner the outcome is unknown; they can ask for it again", s.sk.ToolName())
+	}
+	if errors.Is(err, skills.ErrScriptsOff) {
+		result = "off"
+		return tool.Result{}, fmt.Errorf("%s: this skill's script cannot run here: the command sandbox is off; tell the owner, /status says why", s.sk.ToolName())
+	}
 	if err != nil {
 		result = "error"
 		return tool.Result{}, fmt.Errorf("%s: %w", s.sk.ToolName(), err)

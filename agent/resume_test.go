@@ -154,7 +154,8 @@ func TestConfirmThenApproveResumes(t *testing.T) {
 	}
 	e.smart.push(say("Done: created."))
 	out := e.turn(t, press(owner, q.Buttons[0].ID, "77"))
-	if len(side.calls) != 1 || side.calls[0].Key() != ev.ID+":1" || !side.calls[0].Admin || side.calls[0].Transport != "telegram" {
+	if len(side.calls) != 1 || side.calls[0].Key() != ev.ID+":1" || !side.calls[0].Admin || side.calls[0].Transport != "telegram" ||
+		!side.calls[0].Approved {
 		t.Fatalf("calls %+v", side.calls)
 	}
 	edit, ok := findOut(out, isEdit)

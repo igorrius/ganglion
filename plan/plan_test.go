@@ -15,6 +15,7 @@ import (
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/pending"
 )
 
 const conv = "telegram:42"
@@ -75,9 +76,18 @@ func call(n int) tool.Call {
 
 const firstKey = "plan:T1:1:show"
 
+// words are steps of words only.
+func words(texts ...string) []Step {
+	out := make([]Step, len(texts))
+	for i, s := range texts {
+		out[i] = Step{Text: s}
+	}
+	return out
+}
+
 func (e *env) show(t *testing.T, steps ...string) {
 	t.Helper()
-	if err := e.s.Show(context.Background(), call(1), steps); err != nil {
+	if err := e.s.Show(context.Background(), call(1), words(steps...)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -141,7 +151,7 @@ func TestRerunFindsTheActivePlan(t *testing.T) {
 	e := newEnv(t)
 	e.show(t, "one")
 	other := call(5)
-	if err := e.s.Show(context.Background(), other, []string{"one"}); err != nil {
+	if err := e.s.Show(context.Background(), other, words("one")); err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range e.box.msgs {
@@ -292,7 +302,7 @@ func TestLimitsAreRefused(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t)
-			if err := e.s.Show(context.Background(), call(1), steps); !errors.Is(err, ErrLimit) {
+			if err := e.s.Show(context.Background(), call(1), words(steps...)); !errors.Is(err, ErrLimit) {
 				t.Fatalf("err %v", err)
 			}
 			if len(e.box.msgs) != 0 {
@@ -338,7 +348,7 @@ func TestOldPlanCountsAsClosed(t *testing.T) {
 	if err := e.s.Step(context.Background(), conv, 1, Done, "", ""); !errors.Is(err, ErrNoPlan) {
 		t.Fatalf("err %v", err)
 	}
-	if err := e.s.Show(context.Background(), call(9), []string{"b"}); err != nil {
+	if err := e.s.Show(context.Background(), call(9), words("b")); err != nil {
 		t.Fatal(err)
 	}
 	if len(e.box.msgs) != 2 || e.box.msgs[1].IdemKey != "plan:T1:9:show" {
@@ -350,7 +360,7 @@ func TestOldPlanCountsAsClosed(t *testing.T) {
 func TestFailedEnqueueShowsNoPlan(t *testing.T) {
 	e := newEnv(t)
 	e.box.err = errors.New("disk on fire")
-	if err := e.s.Show(context.Background(), call(1), []string{"a"}); err == nil {
+	if err := e.s.Show(context.Background(), call(1), words("a")); err == nil {
 		t.Fatal("no error")
 	}
 	if err := e.s.Step(context.Background(), conv, 1, Done, "", ""); !errors.Is(err, ErrNoPlan) {
@@ -418,5 +428,293 @@ func TestLinesNeverReachedStaySkipped(t *testing.T) {
 	ed := e.edits()
 	if got := ed[len(ed)-1].Text; got != "✅ 1. a\n⏭ 2. b\n⏭ 3. c" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// last is the latest message stored.
+func (b *box) last() event.Outgoing {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.msgs) == 0 {
+		return event.Outgoing{}
+	}
+	return b.msgs[len(b.msgs)-1]
+}
+
+// approve shows a plan in conv through a pressed question, one step per
+// command, as the approved run of plan.show does.
+func (e *env) approve(t *testing.T, conv string, cmds ...tool.Command) tool.Call {
+	t.Helper()
+	c := tool.Call{TurnID: "A" + conv, N: 1, Conv: conv, Transport: "telegram", Approved: true}
+	steps := make([]Step, len(cmds))
+	for i := range cmds {
+		steps[i] = Step{Text: "step", Command: &cmds[i]}
+	}
+	if err := e.s.Show(context.Background(), c, steps); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func argv(a ...string) tool.Command { return tool.Command{Argv: a} }
+
+func (e *env) approved(t *testing.T, conv string) []tool.Command {
+	t.Helper()
+	got, err := e.s.Approved(context.Background(), conv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+// R-CMD-7, ruling 8: the pressed question becomes the plan, edited in place
+// with no buttons, and only the commands that need a press are approved.
+func TestAnApprovedPlanTakesTheQuestionAsItsMessage(t *testing.T) {
+	e := newEnv(t)
+	c := tool.Call{TurnID: "e1", N: 1, Conv: conv, Transport: "telegram", Approved: true}
+	steps := []Step{
+		{Text: "Measure"},
+		{Text: "Clean Go's cache", Command: &tool.Command{Argv: []string{"go", "clean", "-cache"}}},
+		{Text: "Look again", Command: &tool.Command{Argv: []string{"df", "-h"}}},
+	}
+	if err := e.s.Show(context.Background(), c, steps); err != nil {
+		t.Fatal(err)
+	}
+	m := e.box.last()
+	if m.EditOf != "e1:1"+pending.QuestionKeySuffix || len(m.Buttons) != 0 || !strings.Contains(m.Text, "`go clean -cache`") {
+		t.Fatalf("message = %+v; want an edit of the question with the plan and no buttons", m)
+	}
+	if len(e.box.msgs) != 1 {
+		t.Fatalf("outbox %+v; want only the edit of the question", e.box.msgs)
+	}
+	got := e.approved(t, conv)
+	if len(got) != 1 || !got[0].Equal(argv("go", "clean", "-cache")) {
+		t.Fatalf("approved = %+v; want only the command that needs a press", got)
+	}
+	// The plan's later edits change the question too.
+	e.now = t0.Add(3 * time.Second)
+	e.step(t, 1, Done)
+	if ed := e.box.last(); ed.EditOf != "e1:1"+pending.QuestionKeySuffix || !strings.Contains(ed.Text, "✅ 1. Measure") {
+		t.Fatalf("step edit %+v", ed)
+	}
+}
+
+// A command step shows its exact command under the words, in a code span
+// a backtick cannot end, and its folder.
+func TestRenderShowsACommandUnderItsStep(t *testing.T) {
+	e := newEnv(t)
+	steps := []Step{
+		{Text: "Clean", Command: &tool.Command{Argv: []string{"rm", "-r", "build"}, Dir: "/srv/app"}},
+		{Text: "Odd", Command: &tool.Command{Argv: []string{"echo", "a`b"}}},
+	}
+	if err := e.s.Show(context.Background(), call(1), steps); err != nil {
+		t.Fatal(err)
+	}
+	want := "⏳ 1. Clean\n    `rm -r build` in `/srv/app`\n· 2. Odd\n    `` echo 'a`b' ``"
+	if got := e.box.msgs[0].Text; got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+}
+
+// Review focus 6: a new plan shown without a press approves nothing new; it
+// keeps only the approved commands it still lists.
+func TestAnUnapprovedPlanApprovesNothingNew(t *testing.T) {
+	e := newEnv(t)
+	e.approve(t, conv, argv("go", "clean", "-cache"), argv("rm", "-r", "/tmp/a"))
+	c := tool.Call{TurnID: "e2", N: 1, Conv: conv, Transport: "telegram"}
+	steps := []Step{
+		{Text: "x", Command: &tool.Command{Argv: []string{"go", "clean", "-cache"}}},
+		{Text: "y", Command: &tool.Command{Argv: []string{"cargo", "clean"}}},
+		{Text: "z", Command: &tool.Command{Argv: []string{"rm", "-r", "/tmp/a"}, Dir: "/elsewhere"}},
+	}
+	if err := e.s.Show(context.Background(), c, steps); err != nil {
+		t.Fatal(err)
+	}
+	got := e.approved(t, conv)
+	if len(got) != 1 || !got[0].Equal(argv("go", "clean", "-cache")) {
+		t.Fatalf("approved = %+v; want the one the new plan still lists, in its folder", got)
+	}
+	// The change edits the question the plan became, not a new message.
+	if m := e.box.last(); m.EditOf != "A"+conv+":1"+pending.QuestionKeySuffix {
+		t.Fatalf("message %+v", m)
+	}
+}
+
+func TestApprovalEndsWithThePlan(t *testing.T) {
+	e := newEnv(t)
+	e.approve(t, conv, argv("go", "clean", "-cache"))
+	if err := e.s.Finish(context.Background(), conv, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.approved(t, conv); len(got) != 0 {
+		t.Fatalf("a closed plan still approves %+v", got)
+	}
+}
+
+// The approval's hour runs from the press, not from the plan's last change:
+// a plan kept open by its steps (or by a command in the background) does not
+// stretch it.
+func TestApprovalEndsAfterAnHourEvenWhileThePlanMoves(t *testing.T) {
+	e := newEnv(t)
+	e.approve(t, conv, argv("go", "clean", "-cache"), argv("cargo", "clean"))
+	e.now = t0.Add(50 * time.Minute)
+	e.step(t, 1, Done)
+	if got := e.approved(t, conv); len(got) != 2 {
+		t.Fatalf("approved at 50 min = %+v", got)
+	}
+	e.now = t0.Add(61 * time.Minute)
+	if got := e.approved(t, conv); len(got) != 0 {
+		t.Fatalf("approved past the hour = %+v", got)
+	}
+	e.step(t, 2, Done) // the plan itself is still shown and moving
+	// A plan shown again without a press does not renew the hour.
+	c := tool.Call{TurnID: "e3", N: 1, Conv: conv, Transport: "telegram"}
+	if err := e.s.Show(context.Background(), c, []Step{{Text: "x", Command: &tool.Command{Argv: []string{"cargo", "clean"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.approved(t, conv); len(got) != 0 {
+		t.Fatalf("approved after a new plan past the hour = %+v", got)
+	}
+}
+
+func TestApprovalIsTheConversations(t *testing.T) {
+	e := newEnv(t)
+	e.approve(t, "telegram:1", argv("go", "clean", "-cache"))
+	if got := e.approved(t, "telegram:2"); len(got) != 0 {
+		t.Fatalf("another conversation inherits %+v", got)
+	}
+	if got := e.approved(t, "telegram:1"); len(got) != 1 {
+		t.Fatalf("the conversation's own approval = %+v", got)
+	}
+}
+
+// A plan shown before the press is closed under its own message; the
+// approved one is the question.
+func TestAnApprovedPlanClosesTheOneBefore(t *testing.T) {
+	e := newEnv(t)
+	e.show(t, "a", "b")
+	e.approve(t, conv, argv("go", "clean", "-cache"))
+	var closed, approved bool
+	for _, m := range e.edits() {
+		closed = closed || m.EditOf == firstKey && m.Text == "⏭ 1. a\n⏭ 2. b"
+		approved = approved || m.EditOf == "A"+conv+":1"+pending.QuestionKeySuffix
+	}
+	if !closed || !approved {
+		t.Fatalf("edits %+v", e.edits())
+	}
+}
+
+// A rerun of the approved plan.show (a crash before its outcome was stored)
+// stores the same edit once and keeps the approval.
+func TestRerunOfAnApprovedPlanEditsOnce(t *testing.T) {
+	e := newEnv(t)
+	e.approve(t, conv, argv("go", "clean", "-cache"))
+	e.approve(t, conv, argv("go", "clean", "-cache"))
+	if len(e.box.msgs) != 1 {
+		t.Fatalf("outbox %+v", e.box.msgs)
+	}
+	if got := e.approved(t, conv); len(got) != 1 {
+		t.Fatalf("approved %+v", got)
+	}
+}
+
+// A conversation with no plan approves nothing, and a plan of words only
+// approves nothing either.
+func TestNoPlanApprovesNothing(t *testing.T) {
+	e := newEnv(t)
+	if got := e.approved(t, conv); len(got) != 0 {
+		t.Fatalf("approved %+v", got)
+	}
+	e.show(t, "a")
+	if got := e.approved(t, conv); len(got) != 0 {
+		t.Fatalf("approved %+v", got)
+	}
+}
+
+// A command line counts within the plan's limit, so the plan still fits one
+// message.
+func TestACommandCountsWithinTheLimit(t *testing.T) {
+	e := newEnv(t)
+	long := strings.Repeat("x", 1000)
+	steps := []Step{
+		{Text: "a", Command: &tool.Command{Argv: []string{"echo", long}}},
+		{Text: "b", Command: &tool.Command{Argv: []string{"echo", long}}},
+		{Text: "c", Command: &tool.Command{Argv: []string{"echo", long}}},
+		{Text: "d", Command: &tool.Command{Argv: []string{"echo", long}}},
+	}
+	if err := e.s.Show(context.Background(), call(1), steps); !errors.Is(err, ErrLimit) {
+		t.Fatalf("err %v", err)
+	}
+}
+
+// newHomeEnv is newEnv with the node user's home set, as the node runs it.
+func newHomeEnv(t *testing.T, home string) *env {
+	t.Helper()
+	e := newEnv(t)
+	var err error
+	e.s, err = New(context.Background(), e.db, e.box, WithClock(func() time.Time { return e.now }), WithHome(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+// A command without dir runs in home, and its plan says so, as its question
+// does.
+func TestACommandWithoutAFolderShowsHome(t *testing.T) {
+	e := newHomeEnv(t, "/home/o")
+	steps := []Step{{Text: "Clean", Command: &tool.Command{Argv: []string{"go", "clean", "-cache"}}}}
+	if err := e.s.Show(context.Background(), call(1), steps); err != nil {
+		t.Fatal(err)
+	}
+	if want := "⏳ 1. Clean\n    `go clean -cache` in `/home/o`"; e.box.msgs[0].Text != want {
+		t.Fatalf("got %q\nwant %q", e.box.msgs[0].Text, want)
+	}
+}
+
+// A plan shown again keeps an approved command whose folder it now writes as
+// home, or leaves out where it was home, and drops one in any other folder.
+func TestAnApprovedCommandStaysListedInHomeEitherWay(t *testing.T) {
+	for _, c := range []struct {
+		approved, shown string
+		kept            bool
+	}{{"", "/home/o", true}, {"/home/o", "", true}, {"", "/srv", false}} {
+		e := newHomeEnv(t, "/home/o")
+		e.approve(t, conv, tool.Command{Argv: []string{"go", "clean", "-cache"}, Dir: c.approved})
+		steps := []Step{{Text: "x", Command: &tool.Command{Argv: []string{"go", "clean", "-cache"}, Dir: c.shown}}}
+		if err := e.s.Show(context.Background(), tool.Call{TurnID: "e2", N: 1, Conv: conv, Transport: "telegram"}, steps); err != nil {
+			t.Fatal(err)
+		}
+		if got := len(e.approved(t, conv)) == 1; got != c.kept {
+			t.Errorf("approved in %q, shown in %q: kept %v, want %v", c.approved, c.shown, got, c.kept)
+		}
+	}
+}
+
+// Check runs Show's limits without showing anything.
+func TestCheckRunsTheLimits(t *testing.T) {
+	e := newHomeEnv(t, "/home/o")
+	sp := call(1).Speak
+	long := strings.Repeat("x", 1000)
+	many := make([]Step, maxSteps+1)
+	for i := range many {
+		many[i] = Step{Text: "s"}
+	}
+	for name, steps := range map[string][]Step{
+		"none":       nil,
+		"too many":   many,
+		"empty text": {{Text: "  "}},
+		"too long": {{Text: "a", Command: &tool.Command{Argv: []string{"echo", long}}}, {Text: "b", Command: &tool.Command{Argv: []string{"echo", long}}},
+			{Text: "c", Command: &tool.Command{Argv: []string{"echo", long}}}, {Text: "d", Command: &tool.Command{Argv: []string{"echo", long}}}},
+	} {
+		if err := e.s.Check(sp, "telegram", steps); !errors.Is(err, ErrLimit) {
+			t.Errorf("%s: %v, want ErrLimit", name, err)
+		}
+	}
+	if err := e.s.Check(sp, "telegram", words("a", "b")); err != nil {
+		t.Fatalf("a good plan: %v", err)
+	}
+	if len(e.box.msgs) != 0 {
+		t.Fatalf("Check sent %+v", e.box.msgs)
 	}
 }

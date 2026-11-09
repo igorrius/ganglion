@@ -17,7 +17,7 @@ func (hostKernel) Euid() int                 { return os.Geteuid() }
 func (hostKernel) LandlockABI() (int, error) { return landlockABI() }
 
 // Dumpable reports whether this process's /proc files are open to its own
-// user; the node clears it at start (cmd/harden_linux.go).
+// user; the node clears it at start (Harden).
 func (hostKernel) Dumpable() (bool, error) {
 	v, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0)
 	return v != 0, err

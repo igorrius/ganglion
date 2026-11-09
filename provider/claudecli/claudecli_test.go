@@ -399,3 +399,47 @@ func TestLiveClaude(t *testing.T) {
 	}
 	t.Logf("live answer %q, usage %+v", resp.Message.Content, resp.Usage)
 }
+
+func TestWorkDirIsMadePrivateWhenFirstUsed(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "data", "claude")
+	c, _ := fake(t, "ok", WithWorkDir(dir))
+	if _, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("mode = %v, want 0700", info.Mode().Perm())
+	}
+}
+
+// A relative work folder (a relative --db) must not break the prompt file
+// path: the CLI runs inside that folder and would resolve a relative path
+// from there.
+func TestRelativeWorkDirGivesAnAbsolutePromptPath(t *testing.T) {
+	t.Chdir(t.TempDir())
+	c, rec := fake(t, "ok", WithWorkDir("rel/claude"))
+	if _, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got recorded
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	i := slices.Index(got.Args, "--system-prompt-file")
+	if i < 0 || i+1 >= len(got.Args) {
+		t.Fatalf("no --system-prompt-file in %q", got.Args)
+	}
+	if p := got.Args[i+1]; !filepath.IsAbs(p) {
+		t.Fatalf("system prompt path %q is not absolute", p)
+	}
+	if got.System == "" {
+		t.Fatal("the CLI could not read the system prompt file")
+	}
+}

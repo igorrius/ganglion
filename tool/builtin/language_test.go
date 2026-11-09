@@ -128,7 +128,7 @@ func TestLanguageSetIsAdminOnlyUntilPermissionsExist(t *testing.T) {
 	if got := reg.Specs(false); len(got) != 0 {
 		t.Fatalf("offered to a person who is not an admin: %+v", got)
 	}
-	d, _ := policy.Decide(policy.DefaultConfig().MaxDepth, spec, tool.Call{Name: "language.set", Args: json.RawMessage(`{"code":"uk"}`), Admin: false})
+	d, _ := policy.Decide(policy.DefaultConfig(), spec, tool.Call{Name: "language.set", Args: json.RawMessage(`{"code":"uk"}`), Admin: false})
 	if d != tool.PolicyForbidden {
 		t.Fatalf("policy %s", d)
 	}

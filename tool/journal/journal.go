@@ -46,6 +46,7 @@ const (
 	DecisionExpired    Decision = "expired"
 	DecisionForbidden  Decision = "forbidden"
 	DecisionOutOfGrant Decision = "out_of_grant"
+	DecisionPlanned    Decision = "planned" // a command an approved plan lists (ADR-0040)
 )
 
 // Entry is one journal row.

@@ -264,19 +264,19 @@ Design: [p1-m3d-host-commands-design.md](p1-m3d-host-commands-design.md)
 [ADR-0039](../adr/0039-command-sandbox.md),
 [ADR-0040](../adr/0040-plans-as-approvals.md) (Proposed). The
 sandbox spike (3.20) comes first, with its own plan:
-[p1-m3d-sandbox.md](p1-m3d-sandbox.md); the plan for 3.21–3.27 is written
-after it, on what the spike found.
+[p1-m3d-sandbox.md](p1-m3d-sandbox.md); the plan for 3.21–3.27 is
+[p1-m3d-commands.md](p1-m3d-commands.md).
 
 | Task | Done when |
 |---|---|
 | 3.20 The command sandbox: `no_new_privs`, a clean environment, the node's environment and memory unreadable (not dumpable), its data and secret files and the owner's secret stores unreadable; off with a reason where it cannot be set up or the node runs as root (R-CMD-3, ADR-0039); a spike on the owner's machine, Railway and a Pi first; closed 2026-11-08, [plan](p1-m3d-sandbox.md), Railway and the Pi not yet measured | From a command, the node's environment, database and `*_FILE` secrets cannot be read and `sudo` gains nothing; in a container without the kernel features the tool is not offered and the reason is reported |
-| 3.21 `host.stats` and the node's own files: memory, load, disk, the sizes of the node's folders; the claude CLI work directory cleaned by age (R-CMD-5, R-CMD-8) | Works in a 128 MB container with `host.exec` off; the work directory stops growing |
-| 3.22 `host.exec`: argv without a shell, the class table with consequence lines in English, Russian and Ukrainian, output capped, redacted and tainting, journal, kill switch (R-CMD-1, 2, 6) | Read runs by itself; content, change and script ask with the fixed line; forbidden never runs, press or not |
-| 3.23 Long commands: past a short wait a command continues in the background and its completion resumes the conversation; time limit, process group, parallel cap (R-CMD-4) | A `du` over a large tree answers in the same conversation after the turn has ended |
-| 3.24 Plans: on the display built in 3.30, one press approves the listed commands exactly; a change outside the plan gets its own press (R-CMD-7, ADR-0040) | "Clean the Go cache and the Docker images" runs after one press; `docker rm` not in the plan does not run without its own press |
-| 3.25 Commands in task grants: exact argv with consequence lines in the creation confirmation; a run outside them is denied with one notice (R-POL-8) | A weekly `docker image prune -af` runs without a press; `docker rm` in the same task is denied |
-| 3.26 Skill scripts (3.7) move onto the sandbox | A skill script cannot read the node's secrets |
-| 3.27 M3d acceptance, scripted and live on the test bot (design section 10) | All ten checks pass; the node's RSS stays in the budget |
+| 3.21 `host.stats` and the node's own files: memory, load, disk, the sizes of the node's folders; the claude CLI work directory cleaned by age (R-CMD-5, R-CMD-8); closed 2026-11-09, [plan](p1-m3d-commands.md) | Works in a 128 MB container with `host.exec` off; the work directory stops growing |
+| 3.22 `host.exec`: argv without a shell, the class table with consequence lines in English, Russian and Ukrainian, output capped, redacted and tainting, journal, kill switch (R-CMD-1, 2, 6); closed 2026-11-09, [plan](p1-m3d-commands.md) | Read runs by itself; content, change and script ask with the fixed line; forbidden never runs, press or not |
+| 3.23 Long commands: past a short wait a command continues in the background and its completion resumes the conversation; time limit, process group, parallel cap (R-CMD-4); closed 2026-11-09, [plan](p1-m3d-commands.md) | A `du` over a large tree answers in the same conversation after the turn has ended |
+| 3.24 Plans: on the display built in 3.30, one press approves the listed commands exactly; a change outside the plan gets its own press (R-CMD-7, ADR-0040); closed 2026-11-09, [plan](p1-m3d-commands.md) | "Clean the Go cache and the Docker images" runs after one press; `docker rm` not in the plan does not run without its own press |
+| 3.25 Commands in task grants: exact argv with consequence lines in the creation confirmation; a run outside them is denied with one notice (R-POL-8); closed 2026-11-09, [plan](p1-m3d-commands.md) | A weekly `docker image prune -af` runs without a press; `docker rm` in the same task is denied |
+| 3.26 Skill scripts (3.7) move onto the sandbox; closed 2026-11-09, [plan](p1-m3d-commands.md) | A skill script cannot read the node's secrets |
+| 3.27 M3d acceptance, scripted and live on the test bot (design section 10); closed 2026-11-09, [plan](p1-m3d-commands.md) | All ten checks pass; the node's RSS stays in the budget |
 
 ### M4 · Reflexes: runner and Deye (spec 7.5, 8)
 

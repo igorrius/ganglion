@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-host-outside-plan
+why: >-
+  R-CMD-7, ADR-0040, design §10 check 3: an approved plan approves exactly the commands it
+  lists; a command it does not list asks on its own, and nothing runs it as planned.
+covers:
+  - plan/**
+  - tool/builtin/plan.go
+  - tool/builtin/host.go
+  - policy/**
+  - agent/resume.go
+  - agent/tools.go
+model: scripted
+script:
+  - {tool: plan.show, args: '{"steps":[{"text":"Make a scratch folder","argv":["mkdir","-p","/var/tmp/ganglion-lab-plan"],"reason":"to have one"}]}'}
+  - {say: "The plan waits for your press."}
+  - {tool: host.exec, args: '{"argv":["mkdir","-p","/var/tmp/ganglion-lab-plan"],"reason":"step 1"}'}
+  - {tool: plan.step, args: '{"n":1,"outcome":"scratch folder made"}'}
+  - {tool: host.exec, args: '{"argv":["rmdir","/var/tmp/ganglion-lab-plan"],"reason":"tidy up"}'}
+  - {say: "Removing it waits for your press."}
+  - {say: "The folder stays."}
+steps:
+  - say: "Make a scratch folder in /var/tmp"
+  - facts:
+      questions: 1
+  - press: Approve
+  - facts:
+      questions: 1
+      question: {contains: "rmdir /var/tmp/ganglion-lab-plan"}
+      journal:
+        - {tool: plan.show, decision: approved, count: 1}
+        - {tool: host.exec, decision: planned, count: 1}
+        - {tool: host.exec, decision: confirm, count: 1}
+      no_journal:
+        - {tool: host.exec, decision: allowed}
+        - {tool: host.exec, decision: approved}
+  - press: Deny
+  - facts:
+      questions: 0
+      journal:
+        - {tool: host.exec, decision: planned, count: 1}
+      no_journal:
+        - {tool: host.exec, decision: allowed}
+        - {tool: host.exec, decision: approved}

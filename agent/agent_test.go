@@ -269,6 +269,7 @@ func overDefaults(cfg Config) Config {
 	if cfg.Location != nil {
 		d.Location = cfg.Location
 	}
+	d.Home = cfg.Home
 	return d
 }
 

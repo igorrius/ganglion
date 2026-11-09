@@ -8,7 +8,7 @@ build:
 
 test:
 	go test -race ./...
-	go test -race -tags lab ./internal/chatlab/... ./tools/chatlab/...
+	go test -race -timeout 20m -tags lab ./internal/chatlab/... ./tools/chatlab/...
 
 lint:
 	golangci-lint run
@@ -94,10 +94,10 @@ crash-agent:
 
 # RSS of the echo bot and of the agent on a fake model API, idle and after
 # 1,000 messages through the fake Bot API; the agent also with a tool call
-# in every turn; and the node's peak after one hostile 1 MiB page through
+# in every turn and with host.exec df -h in every turn; and the node's peak after one hostile 1 MiB page through
 # web.fetch and html2md.
 memory:
-	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent|AgentTools|Metrics)$$' -v ./cmd/
+	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemory(Echo|Agent|AgentTools|AgentHostExec|Metrics)$$' -v ./cmd/
 	GANGLION_MEASURE=1 go test -count=1 -run 'TestMemoryHostilePage' -v ./config/
 
 # The modules. html2md (ADR-0035) is a Rust crate whose build,

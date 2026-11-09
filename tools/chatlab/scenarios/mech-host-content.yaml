@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-host-content
+why: >-
+  R-CMD-2, R-CMD-6, design §10 check 6: a command that shows what is inside a file asks first,
+  with the fixed line on secrets, and after the press its output taints the session.
+covers:
+  - hostcmd/**
+  - policy/**
+  - tool/builtin/host.go
+  - tool/pending/**
+model: scripted
+script:
+  - {tool: host.exec, args: '{"argv":["cat","/etc/hostname"],"reason":"the machine name"}'}
+  - {say: "It waits for your press."}
+  - {say: "That is the machine name."}
+steps:
+  - say: "What is this machine called?"
+  - facts:
+      questions: 1
+      question: {contains: "passwords and keys in them would reach the model"}
+      no_journal:
+        - {tool: host.exec, decision: allowed}
+  - press: Approve
+  - facts:
+      questions: 0
+      journal:
+        - {tool: host.exec, decision: approved, result_contains: "exit 0", count: 1}
+      tainted: true

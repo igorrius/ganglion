@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-host-plan
+why: >-
+  R-CMD-7, ADR-0040, design §10 check 2: a plan whose steps carry commands that need a press is
+  one question with their fixed lines; after one press every listed command runs as planned, the
+  plan message is edited with ticks and no buttons, and nothing is asked again.
+covers:
+  - plan/**
+  - tool/builtin/plan.go
+  - tool/builtin/host.go
+  - policy/**
+  - agent/resume.go
+  - agent/tools.go
+model: scripted
+script:
+  - {tool: plan.show, args: '{"steps":[{"text":"Make a scratch folder","argv":["mkdir","-p","/var/tmp/ganglion-lab-plan"],"reason":"to clean it next"},{"text":"Remove it","argv":["rmdir","/var/tmp/ganglion-lab-plan"],"reason":"cleanup"},{"text":"Check free space","argv":["df","-h","/var/tmp"]}]}'}
+  - {say: "The plan waits for your press."}
+  - {tool: host.exec, args: '{"argv":["mkdir","-p","/var/tmp/ganglion-lab-plan"],"reason":"step 1"}'}
+  - {tool: plan.step, args: '{"n":1}'}
+  - {tool: host.exec, args: '{"argv":["rmdir","/var/tmp/ganglion-lab-plan"],"reason":"step 2"}'}
+  - {tool: plan.step, args: '{"n":2}'}
+  - {tool: host.exec, args: '{"argv":["df","-h","/var/tmp"],"reason":"step 3"}'}
+  - {tool: plan.step, args: '{"n":3,"outcome":"scratch folder made and removed"}'}
+  - {say: "Done."}
+steps:
+  - say: "Make a scratch folder in /var/tmp and clean it up"
+  - facts:
+      questions: 1
+      question: {contains: "Creates files, folders or links"}
+      no_journal:
+        - {tool: host.exec}
+  - press: Approve
+  - facts:
+      questions: 0
+      journal:
+        - {tool: plan.show, decision: approved, count: 1}
+        - {tool: host.exec, decision: planned, count: 2}
+        - {tool: host.exec, decision: allowed, count: 1}
+      message_replaced: "✅"

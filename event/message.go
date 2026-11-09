@@ -100,3 +100,9 @@ type Schedule struct {
 	Job       string `json:"job"`          // the job's id
 	Scheduled int64  `json:"scheduled_ms"` // the slot, Unix ms; for a run now, when it was asked
 }
+
+// CommandDone is the payload of an event of kind "command.done": the call
+// key of the command, whose outcome the runner stored.
+type CommandDone struct {
+	Key string `json:"key"`
+}

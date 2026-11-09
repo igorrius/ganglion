@@ -106,6 +106,12 @@ type Deps struct {
 	// Status hears the stages of a person's message (R-LIVE-7); NoStatus when
 	// unset. It must not block.
 	Status StatusFunc
+	// Switch is host.exec's kill switch, set by an admin's /commands (R-POL-5);
+	// NoSwitch when unset.
+	Switch Switch
+	// Commands are host commands' outcomes (host.Runner), read when one
+	// that went on in the background ends (R-CMD-4); NoCommands when unset.
+	Commands Commands
 	// StatusSources are the components /status asks (R-OBS-11); none when unset.
 	StatusSources []status.Source
 	Now           func() time.Time
@@ -139,16 +145,23 @@ func (NoLanguages) NoticeFor(context.Context, string, texts.Lang, string) (bool,
 	return false, nil
 }
 
-// Plans is the end of a turn for a conversation's plan (plan.Store).
+// Plans is the end of a turn for a conversation's plan, and the commands its
+// approved plan lists (plan.Store).
 type Plans interface {
 	Finish(ctx context.Context, conv string, kept bool) error
+	// Approved lists the commands the conversation's approved plan lets run
+	// without another press (R-CMD-7).
+	Approved(ctx context.Context, conv string) ([]tool.Command, error)
 }
 
-// NoPlans is the Plans of an agent with no plan tools.
+// NoPlans is the Plans of an agent with no plan tools; it approves nothing.
 type NoPlans struct{}
 
 // Finish implements Plans.
 func (NoPlans) Finish(context.Context, string, bool) error { return nil }
+
+// Approved implements Plans.
+func (NoPlans) Approved(context.Context, string) ([]tool.Command, error) { return nil, nil }
 
 // StatusFunc hears where the work on a person's message stands.
 type StatusFunc func(event.Status)
@@ -190,6 +203,12 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Inbox == nil {
 		d.Inbox = NoInbox{}
 	}
+	if d.Switch == nil {
+		d.Switch = NoSwitch{}
+	}
+	if d.Commands == nil {
+		d.Commands = NoCommands{}
+	}
 	if d.Plans == nil {
 		d.Plans = NoPlans{}
 	}
@@ -206,7 +225,7 @@ func New(cfg Config, d Deps) *Agent {
 		cfg.Location = time.UTC
 	}
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
-	a.stages = []stage{a.resume, a.scheduled, a.dropStalePending, a.idle, a.command, a.limits, a.answer, a.compactHistory}
+	a.stages = []stage{a.resume, a.scheduled, a.dropStale, a.idle, a.command, a.limits, a.answer, a.compactHistory}
 	a.commands = map[string]command{}
 	for _, c := range a.commandTable() {
 		a.commands[c.word] = c.run
@@ -217,8 +236,8 @@ func New(cfg Config, d Deps) *Agent {
 
 // Handle implements core.Handler: it runs the turn's stages and returns
 // the replies and the new state. It answers text messages, button
-// presses, the expiry of pending calls and scheduled jobs; other events
-// are left alone.
+// presses, the expiry of pending calls, scheduled jobs and the end of host
+// commands that went on in the background; other events are left alone.
 func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
 	t, ok, err := a.begin(ctx, e)
 	if err != nil || !ok {
@@ -254,6 +273,9 @@ var payloads = map[event.Kind]func(t *turn) bool{
 	},
 	event.KindSchedule: func(t *turn) bool {
 		return json.Unmarshal(t.event.Payload, &t.schedule) == nil && t.schedule.Job != ""
+	},
+	event.KindCommandDone: func(t *turn) bool {
+		return json.Unmarshal(t.event.Payload, &t.command) == nil && t.command.Key != ""
 	},
 }
 
@@ -293,9 +315,10 @@ func (a *Agent) finish(ctx context.Context, t *turn) ([]event.Outgoing, queue.St
 	if err := a.d.Turns.Record(rctx, t.record); err != nil {
 		a.log.Warn("agent: trace not recorded", "id", t.event.ID, "err", err)
 	}
-	// A parked call goes on after its press, and the plan with it. A plan is
-	// progress, so a failure here costs the turn nothing.
-	if err := a.d.Plans.Finish(rctx, t.event.Conv, len(t.state.Pending) > 0); err != nil {
+	// A parked call goes on after its press, and a command in the background
+	// after its end (R-CMD-4), and the plan with them. A plan is progress, so
+	// a failure here costs the turn nothing.
+	if err := a.d.Plans.Finish(rctx, t.event.Conv, len(t.state.Pending) > 0 || len(t.state.Commands) > 0); err != nil {
 		a.log.Warn("agent: plan not finished", "conv", t.event.Conv, "err", err)
 	}
 	a.tellMachineTexts(rctx, t)

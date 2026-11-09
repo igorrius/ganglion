@@ -87,14 +87,15 @@ func TestLocalSafeToolsAreTheListed(t *testing.T) {
 		if s.LocalSafe {
 			got = append(got, s.Name)
 		}
-		if s.Name == "web.fetch" || s.Name == "web.search" || s.Name == "memory.write" || s.Name == "message.send" || s.Name == "schedule.create" {
+		if s.Name == "web.fetch" || s.Name == "web.search" || s.Name == "memory.write" || s.Name == "message.send" || s.Name == "schedule.create" ||
+			s.Name == "host.exec" {
 			if s.LocalSafe {
 				t.Errorf("%s leaves the node", s.Name)
 			}
 		}
 	}
 	slices.Sort(got)
-	want := []string{"cells.get", "journal.search", "language.set", "logs.search", "memory.read", "memory.recall", "schedule.list", "skill.read", "turns.failed"}
+	want := []string{"cells.get", "host.stats", "journal.search", "language.set", "logs.search", "memory.read", "memory.recall", "schedule.list", "skill.read", "turns.failed"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("local-safe tools %v, want %v", got, want)
 	}

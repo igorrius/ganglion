@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/clock"
 	"github.com/igorrius/ganglion/texts"
+	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -64,11 +66,11 @@ func (a *Agent) giveUpText(e event.Event) string {
 
 // GiveUp is the agent's core.GiveUp: an apology to the person and an
 // alert to the admins for a message that failed every attempt. A
-// scheduled job has nobody to apologise to in its conversation: only the
-// admins hear of it.
+// scheduled job, and any event of a task's conversation (a command's end),
+// has nobody to apologise to in its conversation: only the admins hear of it.
 func (a *Agent) GiveUp(e event.Event, attempts int) []event.Outgoing {
 	var out []event.Outgoing
-	if e.Kind != event.KindSchedule {
+	if e.Kind != event.KindSchedule && !strings.HasPrefix(e.Conv, tool.TaskConvPrefix) {
 		out = append(out, event.Outgoing{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv,
 			Text: a.giveUpText(e)})
 	}

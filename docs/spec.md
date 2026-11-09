@@ -663,7 +663,8 @@ human); module install — tests + reviewer + admin.
   injection defence).
 - **R-POL-5.** Kill switches are switch cells per action/device plus a
   global one ([ADR-0014](adr/0014-state-cells.md)); toggled by a Telegram
-  command.
+  command. The first switch is `tools.host_exec`, set by an admin's
+  `/commands on|off`; the agent cannot set a `tools.*` cell.
 - **R-POL-6.** A session is **tainted** once external content enters it: a
   web page, a search result, a forwarded message (a quote of another
   message and a reply to a message in another chat count too: the
@@ -938,7 +939,8 @@ The scheduler moves up from M4 to M3b; M4 reuses it for module triggers.
 M3d, after M3c. Design: [M3d design](plans/p1-m3d-host-commands-design.md);
 decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
 [ADR-0039](adr/0039-command-sandbox.md),
-[ADR-0040](adr/0040-plans-as-approvals.md) (Proposed).
+[ADR-0057](adr/0057-commands-may-list-split-folders.md),
+[ADR-0040](adr/0040-plans-as-approvals.md).
 
 - **R-CMD-1.** `host.exec` runs a program with a list of arguments, with
   no shell, on the node that serves the conversation, as the node's Unix
@@ -959,6 +961,12 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
     `docker exec`, `systemd-run`, `systemctl --user start` and `enable`,
     `crontab`, `at`).
 
+  A script runs only written out in the command (`bash -c`, `python3 -c`,
+  `awk` and `sed` with their program); an interpreter given a file or its
+  input is forbidden, since the press could not show it. `ps` and `top`
+  are read only with name-only columns. Docker runs only the subcommands
+  in the table.
+
   Moving an entry towards read widens rights and is the owner's decision,
   in configuration the agent cannot edit.
 - **R-CMD-3.** Every command runs in a sandbox: it cannot gain privileges
@@ -966,7 +974,12 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   environment or memory (the node marks itself not dumpable; `ps` still
   lists it, as it lists every process, owner 2026-11-08), and cannot read
   the node's data directory, its secret files, `.env` and `.env.*` files
-  in any folder, or a default list of the owner's secret stores. Below Landlock ABI 9, which reaches socket files,
+  in any folder, or a default list of the owner's secret stores. A command may list
+  every folder on the machine: listing is granted on the folders the sandbox splits around a
+  denied path, and it reaches their whole tree, so the names inside denied folders are visible
+  but not their contents (owner, 2026-11-08,
+  [ADR-0057](adr/0057-commands-may-list-split-folders.md)); `GANGLION_SANDBOX_HIDE_NAMES=on`
+  hides them too. Below Landlock ABI 9, which reaches socket files,
   a command opens no Unix socket at all, so gpg-agent and the keyring are
   out of reach (`docker ps`, `systemctl --user` and `lpstat` with them);
   signals are not limited, so `kill` reaches the owner's processes
@@ -975,6 +988,10 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   to three folders deep under home and the command's folder. If the node cannot set
   this up, or runs as root, `host.exec` is not offered and the node says
   why.
+
+  Docker is one consequence of these rules: its command-line tool reaches
+  its daemon over a Unix socket, so below Landlock ABI 9 Docker commands
+  fail from the sandbox.
 - **R-CMD-4.** A command longer than a short wait continues in the
   background; its completion resumes the conversation with the result.
   Commands have a hard time limit, their own process group and a cap on
@@ -996,6 +1013,9 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   listed commands, argument for argument, in this conversation, until the
   plan ends or expires. A command that needs a press and is not in the
   approved plan does not run: it gets its own confirmation or a new plan.
+  A command is its argv and its folder: approval of one is not approval of
+  the same argv elsewhere. The approved plan's question becomes the plan's
+  message.
 - **R-CMD-8.** The node accounts for everything it creates on disk (what,
   size, age) and cleans it by age or size; `host.stats` reports it. The
   claude CLI work directory is the first case.
@@ -1424,6 +1444,8 @@ Ideas that come up along the way and are outside the current phase go here.
 Reviewed at each gate.
 
 - Classifier and learning in the router (P2 / P3).
+- A global kill switch for every tool.
+- Docker from commands below Landlock ABI 9.
 - Channels other than Telegram and MQTT; HTTP API; web UI.
 - Compiling flows into Home Assistant automations.
 - CBOR and microcontroller adapters.
