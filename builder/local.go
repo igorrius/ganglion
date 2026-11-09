@@ -136,7 +136,7 @@ func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 	}
 	defer func() { _ = os.RemoveAll(temp) }()
 	work := filepath.Join(temp, "src")
-	if err := copySource(src.Dir, work, l.cfg.MaxCopy); err != nil {
+	if err := CopySource(src.Dir, work, l.cfg.MaxCopy); err != nil {
 		return Artifact{}, "", err
 	}
 	manifest, err := readRegular(filepath.Join(work, manifestFile), l.cfg.MaxCopy)
@@ -419,9 +419,11 @@ func readOpened(f *os.File, limit int64) ([]byte, error) {
 	return b, nil
 }
 
-// copySource copies the regular files of src into dst without a top-level
-// target folder. A symlink, or more than limit bytes, is refused.
-func copySource(src, dst string, limit int64) error {
+// CopySource copies the regular files of src into dst without a top-level
+// target folder: the copy a build makes, and the one module.import makes of
+// an example into the workspace. A symlink (src itself included), a device,
+// or more than limit bytes is refused; dst may exist.
+func CopySource(src, dst string, limit int64) error {
 	var total int64
 	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {

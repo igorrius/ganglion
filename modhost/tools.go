@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 
-	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/pdk"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/tool"
@@ -23,9 +21,6 @@ const (
 
 // noArgs is the input schema of a module's tool: it takes no arguments.
 var noArgs = json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
-
-// maxAbout caps a tool's description, which the manifest writes.
-const maxAbout = 300
 
 // moduleTool is one tool trigger of a running module, named
 // <short name>.<tool> by the node, so it collides neither with a built-in
@@ -55,7 +50,7 @@ func (h *Host) toolsOf(l *loaded) []tool.Handler {
 		if tr.Tool == "" {
 			continue
 		}
-		about := text.Truncate(strings.Join(strings.Fields(tr.About), " "), maxAbout)
+		about := tr.Description()
 		if about == "" {
 			about = "A tool of the owner's module " + l.short + "."
 		}

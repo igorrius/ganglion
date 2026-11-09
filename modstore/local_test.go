@@ -440,3 +440,12 @@ func TestListIncludesLocalModules(t *testing.T) {
 		t.Fatalf("list %+v", vs)
 	}
 }
+
+func TestCheckShortName(t *testing.T) {
+	for name, ok := range map[string]bool{"deye-reader": true, "x_1": true, "": false, "../x": false, "a/b": false, "..": false,
+		"Deye": false, "1x": false, "cells": false, strings.Repeat("a", 64): true, strings.Repeat("a", 65): false} {
+		if got := modstore.CheckShortName(name) == ""; got != ok {
+			t.Errorf("%q: ok %v, want %v", name, got, ok)
+		}
+	}
+}

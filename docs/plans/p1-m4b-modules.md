@@ -703,19 +703,25 @@ git commit -m "modhost: the owner's modules run in the node — cron, tools, con
 ```
 Install local/deye-reader (version 3, 161 KB, a3f9c1…)?
 • Network: eu1-developer.deyecloud.com
-• Secrets: DEYE_APP_ID, DEYE_APP_SECRET, DEYE_EMAIL, DEYE_PASSWORD
-• Creates cells: deye-reader.soc, deye-reader.grid, deye-reader.sample
-• Takes back cells: — 
+• Secrets it reads: DEYE_APP_ID, DEYE_APP_SECRET, DEYE_EMAIL, DEYE_PASSWORD
+• Creates cells: deye-reader.grid, deye-reader.sample, deye-reader.soc
+• Takes back cells: —
 • Reads cells: —
 • Runs: */30 * * * *; tool deye-reader.status
+• For the agent, deye-reader.status is described as `'Battery state of charge, grid and the last full reading of the Deye inverter.'`
 • Limits: 32 MiB, 20 s a call
 ```
+
+  (As built: "Secrets it reads:", because the redaction reads "Secrets: X" as a secret and its
+  value and would hide the first name; the cells in the plan's sorted order; each tool's
+  description, which the agent reads, on its own line, escaped as `host.exec` shows an argument.
+  The press re-plans and installs only when the window it would show is the one the owner saw.)
 
   and, for an update that widens, a first line `New: network api.example.com` (each widened
   item). A plan with a `Refusal` is not asked: the tool answers the refusal. The press runs the
   install with the sha recorded in the pending call's args, so what was shown is what installs.
 
-- [ ] **Step 1: Failing tests** with a fake builder and a real `modstore` on a temp DB:
+- [x] **Step 1: Failing tests** with a fake builder and a real `modstore` on a temp DB:
   - `module.import` copies and commits (a real `gitrepo` in a temp dir); refuses `../x` names,
     a missing `from`, an existing target;
   - `module.build` answers the rights; a builder error answers the log tail as External;
@@ -723,8 +729,8 @@ Install local/deye-reader (version 3, 161 KB, a3f9c1…)?
     the settings line, calls `Reload`; a refusal never asks;
   - a widening update's question starts with the `New:` line;
   - no secret value in any answer or question (the fake secrets source holds `hunter2`).
-- [ ] **Step 2: Run, see them fail.** **Step 3: Implement.**
-- [ ] **Step 4: `make lint test`, commit, push.**
+- [x] **Step 2: Run, see them fail.** **Step 3: Implement.**
+- [x] **Step 4: `make lint test`, commit, push.**
 
 ```bash
 git commit -m "tools: module.import, module.build and module.install with the rights window (R-RUN-9)"

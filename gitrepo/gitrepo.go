@@ -184,6 +184,14 @@ func (r *Repo) staged(ctx context.Context, paths []string) (bool, error) {
 	return strings.TrimSpace(out) != "", nil
 }
 
+// Head is the id of the current commit; an error in a repository with no
+// commit yet.
+func (r *Repo) Head(ctx context.Context) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.head(ctx)
+}
+
 // head is the id of the current commit.
 func (r *Repo) head(ctx context.Context) (string, error) {
 	out, err := r.run(ctx, "rev-parse", "HEAD")

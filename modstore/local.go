@@ -99,19 +99,34 @@ func IsLocal(name string) bool { return strings.HasPrefix(name, LocalPrefix) }
 // its cells.
 func ShortName(name string) string { return strings.TrimPrefix(name, LocalPrefix) }
 
+// CheckShortName is the refusal of short as the name of a local module after
+// local/, in the node's words; "" when it may be one. The name is also the
+// module's folder in the workspace and the prefix of its cells and tools.
+func CheckShortName(short string) string {
+	switch {
+	case len(short) > maxShortName || !shortNameRE.MatchString(short):
+		return fmt.Sprintf("the name after local/ is lower-case letters, digits, - and _, starting with a letter, at most %d", maxShortName)
+	case slices.Contains(Reserved, short):
+		return fmt.Sprintf("the name %s is reserved for the node's own tools", short)
+	}
+	return ""
+}
+
+// maxShortName bounds a local module's short name.
+const maxShortName = 64
+
 // checkBuild is everything about a build that needs neither the node's
 // secrets nor its cells: the name, the bytes and the manifest. A reason is
 // the node's own words.
 func checkBuild(b Build) (runner.Manifest, string, string) {
-	short := ShortName(b.Module)
-	switch {
-	case !IsLocal(b.Module):
+	if !IsLocal(b.Module) {
 		return runner.Manifest{}, "a module built on this node is named local/<name>", ""
-	case !shortNameRE.MatchString(short):
-		return runner.Manifest{}, "the name after local/ is lower-case letters, digits, - and _, starting with a letter", ""
-	case slices.Contains(Reserved, short):
-		return runner.Manifest{}, fmt.Sprintf("the name %s is reserved for the node's own tools", short), ""
-	case !bytes.HasPrefix(b.Wasm, wasmMagic):
+	}
+	short := ShortName(b.Module)
+	if why := CheckShortName(short); why != "" {
+		return runner.Manifest{}, why, ""
+	}
+	if !bytes.HasPrefix(b.Wasm, wasmMagic) {
 		return runner.Manifest{}, "the build is not a WebAssembly module", ""
 	}
 	m, err := runner.ParseManifest(b.Manifest)

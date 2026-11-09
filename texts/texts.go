@@ -86,6 +86,25 @@ const (
 	AskSkillScript       Key = "ask.skill_script"
 	AskHostExec          Key = "ask.host_exec"
 	AskPlan              Key = "ask.plan"
+	AskModuleImport      Key = "ask.module_import"
+	AskModuleInstall     Key = "ask.module_install"
+	AskModuleNetwork     Key = "ask.module_network"
+	AskModuleSecrets     Key = "ask.module_secrets"
+	AskModuleCreates     Key = "ask.module_creates"
+	AskModuleTakes       Key = "ask.module_takes"
+	AskModuleReads       Key = "ask.module_reads"
+	AskModuleRuns        Key = "ask.module_runs"
+	AskModuleTool        Key = "ask.module_tool"
+	AskModuleAbout       Key = "ask.module_about"
+	AskModuleLimits      Key = "ask.module_limits"
+	AskModuleNew         Key = "ask.module_new"
+	AskModuleNewNetwork  Key = "ask.module_new_network"
+	AskModuleNewSecrets  Key = "ask.module_new_secrets"
+	AskModuleNewCells    Key = "ask.module_new_cells"
+	AskModuleNewReads    Key = "ask.module_new_reads"
+	AskModuleNewRuns     Key = "ask.module_new_runs"
+	AskModuleNewMemory   Key = "ask.module_new_memory"
+	AskModuleNewTimeout  Key = "ask.module_new_timeout"
 	SchedSummaryReminder Key = "sched.summary_reminder"
 	SchedSummaryTask     Key = "sched.summary_task"
 	SchedSummaryCommands Key = "sched.summary_commands"
@@ -225,7 +244,7 @@ var allKeys = []Key{
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, ReplyRestarting, StatusCommandsOff,
-	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, AskHostExec, AskPlan, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
+	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, AskHostExec, AskPlan, AskModuleImport, AskModuleInstall, AskModuleNetwork, AskModuleSecrets, AskModuleCreates, AskModuleTakes, AskModuleReads, AskModuleRuns, AskModuleTool, AskModuleAbout, AskModuleLimits, AskModuleNew, AskModuleNewNetwork, AskModuleNewSecrets, AskModuleNewCells, AskModuleNewReads, AskModuleNewRuns, AskModuleNewMemory, AskModuleNewTimeout, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, StatusModuleFallback, StatusReasonModuleFailed, StatusModulesLocal, StatusModuleOff, StatusReasonModuleCrashloop, StatusModuleStopped, StatusReasonModuleInit, StatusReasonModuleCells, StatusReasonModuleLoad, StatusReasonModuleNoAdmin, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled, StatusUnitDay, StatusUnitHour, StatusUnitMin, StatusUnitSec, StatusSandboxReady, StatusSandboxOff, StatusReasonSandboxNotLinux, StatusReasonSandboxRoot, StatusReasonSandboxLandlock, StatusReasonSandboxDumpable, StatusReasonSandboxSelfTest,
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
 }

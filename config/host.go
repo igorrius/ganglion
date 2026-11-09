@@ -41,6 +41,7 @@ func Places() do.Provider[[]host.Place] {
 		for _, p := range tempPrefixes {
 			ps = append(ps, host.Place{Name: host.PlaceTemp, Path: os.TempDir(), Prefix: p, MaxAge: leftoverAge})
 		}
+		ps = append(ps, host.Place{Name: host.PlaceBuilds, Path: buildsDir(b), MaxAge: leftoverAge})
 		if root := buildConfig(b).TempRoot; root != "" {
 			ps = append(ps, host.Place{Name: host.PlaceTemp, Path: root, Prefix: "ganglion-build-", MaxAge: leftoverAge})
 		}

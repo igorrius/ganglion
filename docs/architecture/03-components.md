@@ -34,6 +34,7 @@ flowchart TB
     planapp["Plan approval<br/>one press approves exactly<br/>the commands the plan lists"]
     modhost["Module host<br/>the owner's modules: cells, cron jobs,<br/>tools, contract, supervisor"]
     runner["Runner<br/>wazero, manifest grants,<br/>answers checked"]
+    builderc["Module builder<br/>Rust from the workspace's source,<br/>confined in the sandbox"]
     cellsc[("Cells<br/>each owned by one module")]
     outbox[("Outbox")]
     sender["Outbox sender<br/>retries, 429 retry_after"]
@@ -70,6 +71,9 @@ flowchart TB
     loop -- "module job: ModuleCron" --> modhost
     tools -- "module tools, dynamic" --> modhost
     modhost --> runner
+    tools -- "module.build" --> builderc
+    builderc -- "writes only its temp folder" --> sandbox
+    tools -- "module.install after the press: reload" --> modhost
     modhost -- "own cells only" --> cellsc
     modhost -- "cron jobs" --> sched
     modhost -- "escalation event" --> inbox
@@ -106,6 +110,7 @@ flowchart TB
 | Web reader | `web.fetch` on public addresses only (checked on every connection, redirects included, a task kept to its granted hosts) within size and time limits; `web.search` through Brave or DuckDuckGo; remote text only as outside content | R-WEB-1…3 |
 | html2md module | Turns a page into Markdown in the WASM sandbox, granted nothing; replaced without a core release | R-WEB-1 |
 | Module host (`modhost`) | Runs the owner's local modules in the node: loads the active versions, defines the cells they own under their prefix, keeps a `module` cron job each (owned by the installing admin), offers their tools to the registry as they come and go, checks every answer against the manifest's contract, counts runs and failures, turns a module off after five failures within an hour, and puts one escalation of a kind an hour as a turn in the admin's private chat | R-RUN-11…14 |
+| Module builder and the module tools | `module.import` copies an example the node ships into the workspace and commits it after a press; `module.build` builds `modules/<name>` from the workspace in the sandbox and keeps the build as a file with the rights its manifest asks for; `module.install` shows the owner those rights (the install window) and, after the press, installs exactly the build the window showed, re-planned at the press, then writes its settings line and reloads it in the module host | R-RUN-9 |
 | turns | Trace and cost of every turn | R-AGT-5 |
 
 ## Edge runner

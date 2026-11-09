@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"go.yaml.in/yaml/v3"
 
 	"github.com/igorrius/ganglion/internal/size"
+	"github.com/igorrius/ganglion/internal/text"
 )
 
 // Defaults for limits a manifest leaves out.
@@ -40,6 +42,16 @@ type Trigger struct {
 	Tool   string `yaml:"tool,omitempty"`
 	About  string `yaml:"about,omitempty"`  // the tool's description for the agent
 	Output *Shape `yaml:"output,omitempty"` // required for a tool of a local module
+}
+
+// MaxAbout caps a tool's description, which the manifest writes.
+const MaxAbout = 300
+
+// Description is the tool's about on one line, cut at MaxAbout: the text the
+// agent reads as the tool's description and the install window shows ("" when
+// the manifest gives none). The manifest writes it, so it is the module's text.
+func (t Trigger) Description() string {
+	return text.Truncate(strings.Join(strings.Fields(t.About), " "), MaxAbout)
 }
 
 // ConfigKey declares one setting a module reads.

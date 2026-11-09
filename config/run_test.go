@@ -275,7 +275,7 @@ func TestAgentOverTelegram(t *testing.T) {
 		offered = append(offered, tl["function"].(map[string]any)["name"].(string))
 	}
 	want := "cells.get,cells.set,host.stats,journal.search,language.set,logs.search,memory.audit,memory.forget,memory.read,memory.recall,memory.write," +
-		"message.send,persona.propose,plan.show,plan.step,schedule.create,schedule.delete,schedule.list,schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
+		"message.send,module.build,module.install,persona.propose,plan.show,plan.step,schedule.create,schedule.delete,schedule.list,schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
 	if _, err := exec.LookPath("git"); err != nil {
 		want = "cells.get,cells.set,host.stats,journal.search,language.set,logs.search,message.send,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
 			"schedule.run_now,skill.read,turns.failed,web.fetch,web.search"

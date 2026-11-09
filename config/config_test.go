@@ -118,7 +118,11 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 	want := []string{"cells.get", "cells.set", "host.exec", "host.stats", "message.send", "plan.show", "plan.step", "schedule.create", "schedule.delete",
 		"schedule.list", "schedule.run_now", "web.fetch", "web.search", "logs.search", "journal.search", "turns.failed", "skill.read", "language.set"}
 	if _, err := exec.LookPath("git"); err == nil {
-		want = append(want, "memory.audit", "memory.forget", "memory.read", "memory.recall", "memory.write", "persona.propose")
+		// The module tools need the workspace's git too; module.import is
+		// on offer only where the node finds its examples folder, which a
+		// test's folder has not.
+		want = append(want, "memory.audit", "memory.forget", "memory.read", "memory.recall", "memory.write", "persona.propose",
+			"module.build", "module.install")
 	}
 	// host.exec is registered always and on offer only while the sandbox is
 	// ready (R-CMD-1, R-CMD-3).

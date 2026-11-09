@@ -113,6 +113,9 @@ func (f ModulesFile) Modules() ([]Module, error) {
 	return file.Modules, nil
 }
 
+// SetModule is SetModule on this file.
+func (f ModulesFile) SetModule(m Module) error { return SetModule(f.Path, m) }
+
 // SetOff writes or removes off: true on the line of name, adding the line
 // when it is missing, and leaves its config as it is. why is the node's
 // reason, written beside off: true as a comment ("crashloop"); turning a

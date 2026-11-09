@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -110,4 +111,14 @@ func TestTheNodeHostsALocalModule(t *testing.T) {
 func agentDeps(i do.Injector) agent.Deps {
 	_, d := agentParts(i)
 	return d
+}
+
+func TestExamplesDirIsTheNamedFolderWhenItExists(t *testing.T) {
+	dir := t.TempDir()
+	if got := examplesDir(Bootstrap{Examples: dir}); got != dir {
+		t.Fatalf("examples %q, want %q", got, dir)
+	}
+	if got := examplesDir(Bootstrap{Examples: filepath.Join(dir, "missing")}); got != "" {
+		t.Fatalf("a missing folder is %q", got)
+	}
 }

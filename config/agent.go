@@ -181,7 +181,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
 		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i), do.MustInvoke[*builtin.HostExec](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
-		metricsTools(do.MustInvoke[Bootstrap](i)))...)
+		do.MustInvoke[Moduling](i).Tools, metricsTools(do.MustInvoke[Bootstrap](i)))...)
 }
 
 // metricsTools is metrics.show when the command line gave a renderer.

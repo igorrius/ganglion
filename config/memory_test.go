@@ -38,6 +38,11 @@ func TestMemoryOnRegistersToolsAndTheAudit(t *testing.T) {
 	if _, ok := reg.Spec("memory.write"); !ok {
 		t.Fatal("memory.write is not registered")
 	}
+	for _, name := range []string{builtin.ModuleBuildTool, builtin.ModuleInstallTool, builtin.ModuleImportTool} {
+		if _, ok := reg.Spec(name); !ok {
+			t.Fatalf("%s is not registered", name)
+		}
+	}
 	j, err := do.MustInvoke[*schedule.Store](i).Get(context.Background(), "system:memory-audit")
 	if err != nil {
 		t.Fatal(err)
@@ -62,6 +67,9 @@ func TestMemoryOffWithoutGit(t *testing.T) {
 	}
 	if _, ok := reg.Spec("memory.write"); ok {
 		t.Fatal("memory tools without git")
+	}
+	if _, ok := reg.Spec(builtin.ModuleBuildTool); ok {
+		t.Fatal("module tools without git")
 	}
 	if _, err := do.Invoke[*agent.Agent](i); err != nil {
 		t.Fatal(err)
