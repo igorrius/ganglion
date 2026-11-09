@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Entry is one version in a module's journal: who asked for it, in whose
+// Entry is one version in a module's journal (SHA256 is the build's Digest, wasm and manifest): who asked for it, in whose
 // words, from which commit, and how it has run.
 type Entry struct {
 	Version, SHA256, State, By, Note, Commit string

@@ -3,7 +3,9 @@ package modstore
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -30,7 +32,18 @@ var Reserved = []string{"html2md", "cells", "module", "modules", "memory", "host
 
 // ErrBuildMismatch is an install of bytes that are not the build the plan
 // named: the press installs exactly the sha it showed.
-var ErrBuildMismatch = errors.New("modstore: the build is not the one the plan named")
+var ErrBuildMismatch = errors.New("modstore: this is not the build the install window showed (its digest differs)")
+
+// Digest is the identity of a build: sha256 over the 32-byte sha256 of the
+// .wasm followed by the 32-byte sha256 of the manifest, as lower-case hex.
+// It covers both files, so the rights the window shows (read from the
+// manifest) and the code that runs cannot differ, and two builds with the
+// same wasm and different manifests never share a name on disk.
+func Digest(wasm, manifest []byte) string {
+	w, m := sha256.Sum256(wasm), sha256.Sum256(manifest)
+	d := sha256.Sum256(append(w[:], m[:]...))
+	return hex.EncodeToString(d[:])
+}
 
 var shortNameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 
@@ -57,8 +70,8 @@ type Rights struct {
 
 // Plan is a build checked but not installed.
 type Plan struct {
-	SHA256   string
-	Version  int // the manifest's version
+	SHA256   string // the build's Digest (wasm and manifest); what InstallLocal takes
+	Version  int    // the manifest's version
 	Size     int
 	Rights   Rights
 	Widening Rights // what the active version did not have; empty for a first install
@@ -128,7 +141,7 @@ func clip(s string, n int) string {
 // no cell belongs to another owner. A refusal is in Plan.Refusal and names
 // the cause, never a value; an error is the store's own.
 func (s *Store) PlanLocal(ctx context.Context, b Build, secretSet func(string) bool, config map[string]any, owners CellOwners) (Plan, error) {
-	p := Plan{SHA256: sum(b.Wasm), Size: len(b.Wasm)}
+	p := Plan{SHA256: Digest(b.Wasm, b.Manifest), Size: len(b.Wasm)}
 	m, why := checkBuild(b)
 	if why != "" {
 		p.Refusal = why
@@ -290,13 +303,14 @@ func sortedKeys[V any](m map[string]V) []string {
 	return out
 }
 
-// InstallLocal stores and activates exactly the build whose sha the plan
-// named: bytes that hash to anything else are ErrBuildMismatch. The build
+// InstallLocal stores and activates exactly the build whose digest the plan
+// showed: a wasm and a manifest whose Digest is anything else are
+// ErrBuildMismatch, nothing is stored. The build
 // is checked again for what needs no node state (a refusal is an Outcome);
 // then, in one transaction, the old active becomes previous and the one
 // before it retired with its files removed (its journal row stays).
 func (s *Store) InstallLocal(ctx context.Context, b Build, sha string) (Outcome, error) {
-	if sum(b.Wasm) != sha {
+	if Digest(b.Wasm, b.Manifest) != sha {
 		return Outcome{}, ErrBuildMismatch
 	}
 	m, why := checkBuild(b)
@@ -353,8 +367,8 @@ func (s *Store) readLocal(v Version) (wasm, manifest []byte, err error) {
 	if manifest, err = os.ReadFile(base + ".yaml"); err != nil {
 		return nil, nil, fmt.Errorf("modstore: the stored files cannot be read: %w", err)
 	}
-	if sum(wasm) != v.SHA256 || sum(manifest) != v.manifestSHA256 {
-		return nil, nil, errors.New("modstore: the stored files do not match their sums")
+	if Digest(wasm, manifest) != v.SHA256 || sum(manifest) != v.manifestSHA256 {
+		return nil, nil, errors.New("modstore: the stored files do not match their digest")
 	}
 	return wasm, manifest, nil
 }

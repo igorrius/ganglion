@@ -82,7 +82,7 @@ func TestPlanOfAFirstInstallListsTheRights(t *testing.T) {
 	s := newEnv(t).open(t)
 	b := build("local/x", variant("a"), withKey(localManifest))
 	p := plan(t, s, b, noOwners)
-	if p.Refusal != "" || p.SHA256 != sum(b.Wasm) || p.Version != 1 || p.Size != len(b.Wasm) {
+	if p.Refusal != "" || p.SHA256 != modstore.Digest(b.Wasm, b.Manifest) || p.Version != 1 || p.Size != len(b.Wasm) {
 		t.Fatalf("plan %+v", p)
 	}
 	r := p.Rights
@@ -218,7 +218,7 @@ func TestInstallOnlyThePlannedSha(t *testing.T) {
 	s := e.open(t)
 	ctx := context.Background()
 	b := build("local/x", variant("a"), withKey(localManifest))
-	if _, err := s.InstallLocal(ctx, b, sum([]byte("something else"))); !errors.Is(err, modstore.ErrBuildMismatch) {
+	if _, err := s.InstallLocal(ctx, b, modstore.Digest([]byte("something else"), nil)); !errors.Is(err, modstore.ErrBuildMismatch) {
 		t.Fatalf("a sha the store has not seen: %v", err)
 	}
 	if len(mustList(t, s)) != 0 {
@@ -228,7 +228,7 @@ func TestInstallOnlyThePlannedSha(t *testing.T) {
 	if o.Result != modstore.ResultInstalled || o.Module != "local/x" || o.To != "1" {
 		t.Fatalf("outcome %+v", o)
 	}
-	if st, err := os.Stat(filepath.Join(e.dir, "local", "x", sum(b.Wasm)+".wasm")); err != nil || st.Mode().Perm() != 0o600 {
+	if st, err := os.Stat(filepath.Join(e.dir, "local", "x", modstore.Digest(b.Wasm, b.Manifest)+".wasm")); err != nil || st.Mode().Perm() != 0o600 {
 		t.Fatalf("stored file %v, %v", st, err)
 	}
 	if o := install(t, s, b); o.Result != modstore.ResultUpToDate {
@@ -236,10 +236,29 @@ func TestInstallOnlyThePlannedSha(t *testing.T) {
 	}
 }
 
+// Review focus 2: a manifest with one more host and the digest of the plan
+// of another build is refused, and nothing is activated.
+func TestInstallRefusesAManifestThePlanDidNotShow(t *testing.T) {
+	s := newEnv(t).open(t)
+	a := build("local/x", variant("a"), withKey(localManifest))
+	p := plan(t, s, a, noOwners)
+	wider := a
+	wider.Manifest = []byte(strings.Replace(withKey(localManifest), "http.fetch: [192.168.1.5]", "http.fetch: [192.168.1.5, evil.example.com]", 1))
+	if _, err := s.InstallLocal(context.Background(), wider, p.SHA256); !errors.Is(err, modstore.ErrBuildMismatch) {
+		t.Fatalf("err %v", err)
+	}
+	if len(mustList(t, s)) != 0 {
+		t.Fatal("a refused install left a row")
+	}
+	if pw := plan(t, s, wider, noOwners); pw.SHA256 == p.SHA256 {
+		t.Fatal("same wasm, other manifest, same digest")
+	}
+}
+
 func TestInstallRefusesWhatThePlanWouldRefuse(t *testing.T) {
 	s := newEnv(t).open(t)
 	b := build("local/cells", variant("a"), withKey(localManifest))
-	o, err := s.InstallLocal(context.Background(), b, sum(b.Wasm))
+	o, err := s.InstallLocal(context.Background(), b, modstore.Digest(b.Wasm, b.Manifest))
 	if err != nil || o.Result != modstore.ResultRefused || !strings.Contains(o.Reason, "reserved") {
 		t.Fatalf("outcome %+v, %v", o, err)
 	}
@@ -255,7 +274,7 @@ func TestVersionsRotateAndRetiredFilesGo(t *testing.T) {
 	for i, tag := range []string{"a", "b", "c"} {
 		b := build("local/x", variant(tag), strings.Replace(withKey(localManifest), "version: 1", "version: "+string(rune('1'+i)), 1))
 		install(t, s, b)
-		shas = append(shas, sum(b.Wasm))
+		shas = append(shas, modstore.Digest(b.Wasm, b.Manifest))
 	}
 	states := map[string]modstore.State{}
 	for _, v := range mustList(t, s) {
@@ -281,7 +300,7 @@ func TestActiveLocal(t *testing.T) {
 	if err != nil || len(as) != 2 {
 		t.Fatalf("active %+v, %v", as, err)
 	}
-	if as[0].Module != "local/x" || as[0].SHA256 != sum(b1.Wasm) || string(as[0].Wasm) != string(b1.Wasm) || string(as[0].Manifest) != string(b1.Manifest) {
+	if as[0].Module != "local/x" || as[0].SHA256 != modstore.Digest(b1.Wasm, b1.Manifest) || string(as[0].Wasm) != string(b1.Wasm) || string(as[0].Manifest) != string(b1.Manifest) {
 		t.Fatalf("active[0] %+v", as[0])
 	}
 }
@@ -291,7 +310,7 @@ func TestActiveLocalSkipsAndMarksAVersionWhoseFilesChanged(t *testing.T) {
 	s := e.open(t)
 	b := build("local/x", variant("a"), withKey(localManifest))
 	install(t, s, b)
-	if err := os.WriteFile(filepath.Join(e.dir, "local", "x", sum(b.Wasm)+".wasm"), []byte("tampered"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(e.dir, "local", "x", modstore.Digest(b.Wasm, b.Manifest)+".wasm"), []byte("tampered"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	as, err := s.ActiveLocal(context.Background())
@@ -314,11 +333,11 @@ func TestJournalListsEveryVersionWithItsCounters(t *testing.T) {
 		install(t, s, b)
 	}
 	for range 3 {
-		s.Count(ctx, "local/x", sum(b3.Wasm), modstore.CallResult{})
+		s.Count(ctx, "local/x", modstore.Digest(b3.Wasm, b3.Manifest), modstore.CallResult{})
 	}
-	s.Count(ctx, "local/x", sum(b3.Wasm), modstore.CallResult{Failed: true, Kind: "module.format"})
-	s.Count(ctx, "local/x", sum(b3.Wasm), modstore.CallResult{Failed: true, Exception: true, Kind: "module.trap"})
-	s.Count(ctx, "local/x", sum(b1.Wasm), modstore.CallResult{})
+	s.Count(ctx, "local/x", modstore.Digest(b3.Wasm, b3.Manifest), modstore.CallResult{Failed: true, Kind: "module.format"})
+	s.Count(ctx, "local/x", modstore.Digest(b3.Wasm, b3.Manifest), modstore.CallResult{Failed: true, Exception: true, Kind: "module.trap"})
+	s.Count(ctx, "local/x", modstore.Digest(b1.Wasm, b1.Manifest), modstore.CallResult{})
 
 	es, err := s.Journal(ctx, "local/x")
 	if err != nil || len(es) != 3 {
@@ -328,7 +347,7 @@ func TestJournalListsEveryVersionWithItsCounters(t *testing.T) {
 		t.Fatalf("order %+v", es)
 	}
 	e := es[0]
-	if e.SHA256 != sum(b3.Wasm) || e.State != "active" || e.Note != "the third" || e.By != "telegram:1" || e.Commit != "abc123" ||
+	if e.SHA256 != modstore.Digest(b3.Wasm, b3.Manifest) || e.State != "active" || e.Note != "the third" || e.By != "telegram:1" || e.Commit != "abc123" ||
 		e.Runs != 5 || e.Failures != 2 || e.Exceptions != 1 || e.LastFailureKind != "module.trap" || !e.LastFailure.Equal(t0) || !e.Installed.Equal(t0) {
 		t.Fatalf("newest %+v", e)
 	}
@@ -356,10 +375,10 @@ func TestRollbackOfALocalModule(t *testing.T) {
 		t.Fatalf("rollback %+v, %v", o, err)
 	}
 	as, err := s.ActiveLocal(ctx)
-	if err != nil || len(as) != 1 || as[0].SHA256 != sum(b1.Wasm) {
+	if err != nil || len(as) != 1 || as[0].SHA256 != modstore.Digest(b1.Wasm, b1.Manifest) {
 		t.Fatalf("active %+v, %v", as, err)
 	}
-	if _, err := os.Stat(filepath.Join(e.dir, "local", "x", sum(b2.Wasm)+".wasm")); err == nil {
+	if _, err := os.Stat(filepath.Join(e.dir, "local", "x", modstore.Digest(b2.Wasm, b2.Manifest)+".wasm")); err == nil {
 		t.Fatal("the replaced version's file stayed")
 	}
 	if o, err := s.Rollback(ctx, "local/x"); err != nil || o.Result != modstore.ResultNothingToRollBack {
