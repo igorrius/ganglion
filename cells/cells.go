@@ -55,6 +55,8 @@ type Cell struct {
 	Version       int64           // 1 on create, +1 on every change
 	Updated       time.Time
 	Expires       time.Time // requests only; zero otherwise
+	Owner         string    // the module that reports the cell; "" for none (R-RUN-11)
+	About         string    // what the cell means, in the owner's words
 }
 
 // Change is one entry of a cell's history and of the global change stream.
@@ -74,6 +76,7 @@ var (
 	ErrNotFound = errors.New("cells: not found")
 	ErrExists   = errors.New("cells: already exists")
 	ErrConflict = errors.New("cells: version conflict")
+	ErrOwned    = errors.New("cells: owned by another module")
 )
 
 // Store keeps cells and their changes. Implementations: MemStore and
@@ -92,6 +95,14 @@ type Store interface {
 	ChangesSince(ctx context.Context, seq int64, limit int) ([]Change, error)
 	// History returns up to limit changes of one cell, newest first.
 	History(ctx context.Context, id string, limit int) ([]Change, error)
+	// HistorySince returns up to limit changes of one cell made at or after
+	// sinceMS (Unix milliseconds), oldest first.
+	HistorySince(ctx context.Context, id string, sinceMS int64, limit int) ([]Change, error)
+	// SetOwner sets the owner and about of a cell without a new version or a
+	// change. It returns ErrNotFound for a missing cell.
+	SetOwner(ctx context.Context, id, owner, about string) error
+	// Disown clears the owner of every cell of owner and returns how many.
+	Disown(ctx context.Context, owner string) (int, error)
 	// PendingRequestsBefore returns pending request cells expiring at or
 	// before t.
 	PendingRequestsBefore(ctx context.Context, t time.Time) ([]Cell, error)

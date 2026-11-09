@@ -25,6 +25,15 @@ func TestServiceOnSQLite(t *testing.T) {
 		"ReconcileContinuesPastFailures":           TestReconcileContinuesPastFailures,
 		"ExternalReportBeforeCommandIsNotManual":   TestExternalReportBeforeCommandIsNotManual,
 		"SetDesiredReturnsTheCellAfterASyncReport": TestSetDesiredReturnsTheCellAfterASyncReport,
+		"DefineAcceptsDashedIDs":                   TestDefineAcceptsDashedIDs,
+		"DefineOwnedCreatesWithOwnerAndAbout":      TestDefineOwnedCreatesWithOwnerAndAbout,
+		"DefineOwnedByAnotherOwnerIsRefused":       TestDefineOwnedByAnotherOwnerIsRefused,
+		"DefineOwnedSameOwnerUpdatesAbout":         TestDefineOwnedSameOwnerUpdatesAbout,
+		"DefineOwnedTakesAnOwnerlessCell":          TestDefineOwnedTakesAnOwnerlessCell,
+		"DefineOwnedValidates":                     TestDefineOwnedValidates,
+		"DisownThenRedefineKeepsHistory":           TestDisownThenRedefineKeepsHistory,
+		"ListReturnsOwnerAndAbout":                 TestListReturnsOwnerAndAbout,
+		"HistorySinceIsOldestFirstAndLimited":      TestHistorySinceIsOldestFirstAndLimited,
 	}
 	factories := map[string]func(*testing.T) cells.Store{
 		"file":   func(t *testing.T) cells.Store { return sqliteStore(t, filepath.Join(t.TempDir(), "cells.db")) },
