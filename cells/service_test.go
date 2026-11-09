@@ -283,9 +283,17 @@ func TestDefineOwnedSameOwnerUpdatesAbout(t *testing.T) {
 	if c.About != "new" || c.Version != 1 {
 		t.Fatalf("cell = %+v", c)
 	}
-	err := s.DefineOwned(context.Background(), cells.OwnedDef{ID: "deye-reader.soc", Owner: "deye-reader", Kind: cells.KindSwitch})
-	if err == nil || !strings.Contains(err.Error(), "deye-reader.soc") {
-		t.Fatalf("other kind = %v, want an error naming the cell", err)
+}
+
+func TestDefineOwnedOfAnotherKindConflicts(t *testing.T) {
+	s, _ := newService(t)
+	define(t, s, "deye-reader.soc", cells.KindSwitch)
+	err := defineOwned(t, s, "deye-reader", "soc")
+	if !errors.Is(err, cells.ErrConflict) || !strings.Contains(err.Error(), "deye-reader.soc") {
+		t.Fatalf("a switch taken as a sensor = %v, want ErrConflict naming the cell", err)
+	}
+	if c, _ := s.Get(context.Background(), "deye-reader.soc"); c.Owner != "" || c.Kind != cells.KindSwitch {
+		t.Fatalf("cell changed: %+v", c)
 	}
 }
 

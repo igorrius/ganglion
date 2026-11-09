@@ -29,6 +29,7 @@ func TestServiceOnSQLite(t *testing.T) {
 		"DefineOwnedCreatesWithOwnerAndAbout":      TestDefineOwnedCreatesWithOwnerAndAbout,
 		"DefineOwnedByAnotherOwnerIsRefused":       TestDefineOwnedByAnotherOwnerIsRefused,
 		"DefineOwnedSameOwnerUpdatesAbout":         TestDefineOwnedSameOwnerUpdatesAbout,
+		"DefineOwnedOfAnotherKindConflicts":        TestDefineOwnedOfAnotherKindConflicts,
 		"DefineOwnedTakesAnOwnerlessCell":          TestDefineOwnedTakesAnOwnerlessCell,
 		"DefineOwnedValidates":                     TestDefineOwnedValidates,
 		"DisownThenRedefineKeepsHistory":           TestDisownThenRedefineKeepsHistory,
