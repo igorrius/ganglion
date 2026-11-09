@@ -76,11 +76,13 @@ queue/sqlqueue/sqlqueue.go
 queue/sqlqueue/telemetry.go
 router/router.go
 router/rules/**
+runner/cells.go
 runner/contract.go
 runner/manifest.go
 runner/memory_mmap.go
 runner/runner.go
 runner/state.go
+runner/state_sql.go
 runner/swap.go
 runner/telemetry.go
 runner/tool.go

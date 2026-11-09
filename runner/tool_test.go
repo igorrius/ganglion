@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/modules/html2md"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/runner/runnertest"
 )
@@ -72,5 +73,40 @@ func TestToolModuleHasNoLog(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), "ignore previous") {
 		t.Fatalf("the module logged: %s", logs.String())
+	}
+}
+
+// A tool answer that does not fit the trigger's output is the node's
+// complaint, not the module's text (R-RUN-14). html2md stands in for a
+// tool module: the probe imports log, which a tool module does not get.
+func loadHTML2MD(t *testing.T, output string) *runner.ToolModule {
+	t.Helper()
+	manifest := "name: html2md\ntriggers:\n  - tool: convert\n    about: x\n    output:\n      title: string\n      markdown: " + output + "\n"
+	m, err := runner.LoadTool(context.Background(), html2md.Wasm, []byte(manifest), runner.Deps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
+	return m
+}
+
+const page = `{"html":"<html><body><article><h1>Hello</h1><p>secret words here</p></article></body></html>","url":"https://example.test/"}`
+
+func TestToolAnswerMustFitItsOutput(t *testing.T) {
+	m := loadHTML2MD(t, "integer")
+	_, err := m.Call(context.Background(), []byte(page)) // markdown is a string
+	me, ok := errors.AsType[*runner.ModuleError](err)
+	if !ok || me.Kind != "module.format" || me.Msg != "field markdown: expected integer, got string" {
+		t.Fatalf("Call = %v, want a module.format ModuleError naming the field", err)
+	}
+	if strings.Contains(me.Msg, "secret") {
+		t.Fatal("the error echoes the module's text")
+	}
+}
+
+func TestToolAnswerThatFitsPasses(t *testing.T) {
+	m := loadHTML2MD(t, "string")
+	if _, err := m.Call(context.Background(), []byte(page)); err != nil {
+		t.Fatalf("Call = %v, want the answer", err)
 	}
 }

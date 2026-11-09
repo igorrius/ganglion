@@ -57,10 +57,14 @@ func (h *fakeHost) Fetch(req pdk.Request) (pdk.Response, error) {
 
 func (h *fakeHost) StateGet(k string) (string, bool) { v, ok := h.state[k]; return v, ok }
 func (h *fakeHost) StatePut(k, v string)             { h.state[k] = v }
-func (h *fakeHost) Secret(n string) (string, bool)   { v, ok := h.secrets[n]; return v, ok && v != "" }
-func (h *fakeHost) Config(string) (string, bool)     { return "", false }
-func (h *fakeHost) Now() time.Time                   { return now }
-func (h *fakeHost) Log(string)                       {}
+func (h *fakeHost) CellReport(string, any) error     { return pdk.ErrCellDenied }
+func (h *fakeHost) CellGet(string) (json.RawMessage, time.Time, bool) {
+	return nil, time.Time{}, false
+}
+func (h *fakeHost) Secret(n string) (string, bool) { v, ok := h.secrets[n]; return v, ok && v != "" }
+func (h *fakeHost) Config(string) (string, bool)   { return "", false }
+func (h *fakeHost) Now() time.Time                 { return now }
+func (h *fakeHost) Log(string)                     {}
 
 func (h *fakeHost) count(path string) int {
 	n := 0

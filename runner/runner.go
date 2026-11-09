@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,8 +49,14 @@ type Deps struct {
 	// ever asked for.
 	Secrets func(name string) (string, bool)
 	State   State
-	HTTP    *http.Client
-	Logger  *slog.Logger
+	// Cells is the port for cell_report and cell_get; a module with no cells
+	// needs none.
+	Cells CellPort
+	// Prefix is the module's short name, the owner part of its cell ids
+	// ("deye-reader" for deye-reader.soc). It defaults to the manifest's name.
+	Prefix string
+	HTTP   *http.Client
+	Logger *slog.Logger
 }
 
 // Module is a compiled module ready to handle calls. Calls are serialized.
@@ -63,6 +70,9 @@ type Module struct {
 
 	mu      sync.Mutex
 	pending []byte // host → module buffer, copied out by take
+	// formatErr is the node's description of a cell value that did not fit
+	// its type during this call; the call then ends as KindFormat.
+	formatErr string
 }
 
 // Load compiles a module and prepares its host functions.
@@ -73,6 +83,12 @@ func Load(ctx context.Context, wasm []byte, m Manifest, deps Deps) (*Module, err
 func load(ctx context.Context, wasm []byte, m Manifest, deps Deps, tool bool) (*Module, error) {
 	if deps.Logger == nil {
 		deps.Logger = slog.New(slog.DiscardHandler)
+	}
+	if deps.Cells == nil {
+		deps.Cells = noCells{}
+	}
+	if deps.Prefix == "" {
+		deps.Prefix = m.Name
 	}
 	if deps.HTTP == nil {
 		deps.HTTP = &http.Client{Timeout: m.Limits.Timeout}
@@ -147,6 +163,7 @@ func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResu
 	defer func() { _ = inst.Close(context.Background()) }()
 
 	m.pending = input
+	m.formatErr = ""
 	res, err := inst.ExportedFunction("handle").Call(ctx, uint64(len(input)))
 	if err != nil {
 		result, err := m.callError(ctx, "handle", err, &stderr)
@@ -160,6 +177,11 @@ func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResu
 	var out pdk.Output
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return pdk.Output{}, resultBadOutput, fmt.Errorf("runner: %s returned bad output: %w", m.manifest.Name, err)
+	}
+	if m.formatErr != "" {
+		out = pdk.Output{Kind: pdk.KindFormat, Error: m.formatErr}
+	} else {
+		out = m.checkAnswer(in.Trigger, out)
 	}
 	if !out.OK {
 		return out, resultFailed, nil
@@ -228,6 +250,13 @@ func (m *Module) instantiateHost(ctx context.Context) error {
 		}
 		return m.offer(m.deps.Secrets(key))
 	}).Export("secret_get").
+		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, np, nn, vp, vn uint32) int32 {
+		v, _ := mod.Memory().Read(vp, vn)
+		return m.cellReport(ctx, readString(mod, np, nn), bytes.Clone(v))
+	}).Export("cell_report").
+		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
+		return m.cellGet(ctx, readString(mod, p, n))
+	}).Export("cell_get").
 		NewFunctionBuilder().WithFunc(func(_ context.Context, mod api.Module, p, n uint32) int32 {
 		v, ok := m.manifest.ConfigValues[readString(mod, p, n)]
 		return m.offer(v, ok)
@@ -281,7 +310,22 @@ func (m *Module) fetch(ctx context.Context, raw []byte) pdk.Response {
 	if len(body) > maxHTTPResponse {
 		return pdk.Response{Error: "response body exceeds 1 MiB"}
 	}
-	return pdk.Response{Status: resp.StatusCode, Body: body}
+	return pdk.Response{Status: resp.StatusCode, Headers: firstValues(resp.Header), Body: body}
+}
+
+// firstValues keeps the first value of each response header under its
+// lower-case name.
+func firstValues(h http.Header) map[string]string {
+	if len(h) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(h))
+	for k, v := range h {
+		if len(v) > 0 {
+			out[strings.ToLower(k)] = v[0]
+		}
+	}
+	return out
 }
 
 // marshal encodes v without escaping '<', '>' and '&': a module that

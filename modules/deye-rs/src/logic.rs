@@ -18,6 +18,8 @@ pub struct Request {
 #[derive(Debug, Clone, Default)]
 pub struct Response {
     pub status: u16,
+    /// Lower-case names, the first value of each.
+    pub headers: std::collections::HashMap<String, String>,
     pub body: Vec<u8>,
 }
 
@@ -28,6 +30,10 @@ pub trait Host {
     fn state_put(&self, key: &str, value: &str);
     fn secret(&self, name: &str) -> Option<String>;
     fn config(&self, key: &str) -> Option<String>;
+    /// Sets a cell the manifest declares; `name` has no module prefix.
+    fn cell_report(&self, name: &str, value: &serde_json::Value) -> Result<(), String>;
+    /// Reads an own cell by name or a listed one by id, with its time in ms.
+    fn cell_get(&self, id: &str) -> Option<(serde_json::Value, i64)>;
     fn now_unix(&self) -> i64;
     fn log(&self, msg: &str);
 }
@@ -307,8 +313,15 @@ mod tests {
             };
             Ok(Response {
                 status: 200,
+                headers: Default::default(),
                 body: body.into_bytes(),
             })
+        }
+        fn cell_report(&self, _: &str, _: &serde_json::Value) -> Result<(), String> {
+            Err("no cells in this fake".into())
+        }
+        fn cell_get(&self, _: &str) -> Option<(serde_json::Value, i64)> {
+            None
         }
         fn state_get(&self, k: &str) -> Option<String> {
             self.state.borrow().get(k).cloned()

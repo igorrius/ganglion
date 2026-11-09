@@ -11,11 +11,12 @@ import (
 )
 
 type op struct {
-	Op    string `json:"op"`
-	URL   string `json:"url,omitempty"`
-	Name  string `json:"name,omitempty"`
-	Value string `json:"value,omitempty"`
-	MiB   int    `json:"mib,omitempty"`
+	Op    string          `json:"op"`
+	URL   string          `json:"url,omitempty"`
+	Name  string          `json:"name,omitempty"`
+	Value string          `json:"value,omitempty"`
+	MiB   int             `json:"mib,omitempty"`
+	JSON  json.RawMessage `json:"json,omitempty"`
 }
 
 var (
@@ -25,6 +26,9 @@ var (
 
 // Run executes the operation named in the payload.
 func Run(h pdk.Host, in pdk.Input) (any, error) {
+	if in.Trigger == "init" || in.Trigger == "health" {
+		return lifecycle(h, in.Trigger)
+	}
 	var o op
 	if err := json.Unmarshal(in.Payload, &o); err != nil {
 		return nil, err
@@ -55,6 +59,18 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 	case "log":
 		h.Log(o.Value)
 		return map[string]bool{"ok": true}, nil
+	case "cell_report":
+		err := h.CellReport(o.Name, o.JSON)
+		return map[string]any{"ok": err == nil, "denied": errors.Is(err, pdk.ErrCellDenied)}, nil
+	case "cell_get":
+		v, at, ok := h.CellGet(o.Name)
+		return map[string]any{"ok": ok, "value": v, "at_ms": at.UnixMilli()}, nil
+	case "headers":
+		resp, err := h.Fetch(pdk.Request{Method: "GET", URL: o.URL})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"status": resp.Status, "value": resp.Headers[o.Name]}, nil
 	case "spin":
 		for spins >= 0 { // spin until the host's timeout stops the module
 			spins++
@@ -68,4 +84,19 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 		return nil, pdk.WithKind(pdk.KindAuthFailed, errors.New(o.Value))
 	}
 	return nil, errors.New("unknown op " + o.Op)
+}
+
+// lifecycle answers init and health as the config key "lifecycle" says:
+// "unknown" is a module that has no such trigger, "fail" one that fails.
+// Otherwise it notes the trigger in its state, so a test can see it.
+func lifecycle(h pdk.Host, trigger string) (any, error) {
+	mode, _ := h.Config("lifecycle")
+	switch mode {
+	case "unknown":
+		return nil, errors.New(pdk.ErrUnknownTrigger)
+	case "fail":
+		return nil, errors.New("lifecycle boom")
+	}
+	h.StatePut("last_trigger", trigger)
+	return map[string]string{"trigger": trigger}, nil
 }

@@ -127,7 +127,7 @@ plan. M4a ([plan](p1-m4a-config.md)) is done: `settings`, `ganglion.yaml`, `/res
 | `runner/runner.go`, `runner/cells.go` (+tests), `runner/state_sql.go` | host functions, init/health, SQL state |
 | `pdk/pdk.go`, `pdk/guest/guest.go`, `runner/runnertest/*` | cell functions, headers, suite |
 | `cells/service.go`, `cells/sqlstore/migrations/002_owner.sql`, `cells/*` | ids, owner, about, list, history since |
-| `modstore/local.go`, `modstore/journal.go`, `modstore/migrations/002_journal.sql`, `003_state.sql` | local installs, journal |
+| `modstore/local.go`, `modstore/journal.go`, `modstore/migrations/002_state.sql`, `003_journal.sql` | local installs, journal |
 | `settings/write.go` (+test) | `SetModule`, `RemoveModule` |
 | `builder/builder.go`, `builder/local.go` (+tests) | the builder |
 | `modhost/*.go` (+tests) | hosting local modules |
@@ -332,7 +332,7 @@ git commit -m "cells: ids may hold '-'; cells have an owner and an about; list a
 **Files:**
 - Modify: `pdk/pdk.go`, `pdk/guest/guest.go`, `modules/deye-rs/src/guest.rs` (until task 10 moves it)
 - Modify: `runner/runner.go` (`instantiateHost`, `fetch`, `handle`), `runner/tool.go`
-- Create: `runner/cells.go` (+test), `runner/state_sql.go` (+test), `modstore/migrations/003_state.sql`
+- Create: `runner/cells.go` (+test), `runner/state_sql.go` (+test), `modstore/migrations/002_state.sql`
 - Modify: `runner/runnertest/runnertest.go`, `runner/runnertest/probe/probe.go`
 
 **Interfaces:**
@@ -383,7 +383,7 @@ func (m *Module) Health(ctx context.Context) error // Trigger "health"
 - [ ] **Step 2: Run, see them fail.**
 - [ ] **Step 3: Implement.** `fetch` copies `resp.Header` into `Headers` (lower-case keys, first
   value). The Go glue gets `//go:wasmimport ganglion cell_report` and `cell_get`; the Rust glue the
-  same two `extern "C"` imports and `Host` trait methods. `003_state.sql`:
+  same two `extern "C"` imports and `Host` trait methods. `002_state.sql`:
 
 ```sql
 CREATE TABLE module_state (
@@ -406,7 +406,7 @@ git commit -m "runner: cell_report and cell_get by the manifest, answers checked
 
 **Files:**
 - Create: `settings/write.go` (+test)
-- Create: `modstore/local.go`, `modstore/journal.go` (+tests), `modstore/migrations/002_journal.sql`
+- Create: `modstore/local.go`, `modstore/journal.go` (+tests), `modstore/migrations/003_journal.sql`
 - Modify: `modstore/store.go` (`List` includes local modules; `Rollback` works for them)
 
 **Interfaces:**
@@ -470,7 +470,7 @@ func (s *Store) ActiveLocal(ctx context.Context) ([]Active, error) // {Module, S
 var Reserved = []string{"html2md", "cells", "module", "modules", "memory", "host", "web", "schedule", "message", "skill", "metrics", "config", "request", "tools"}
 ```
 
-  `002_journal.sql` adds to `module_versions`: `by TEXT NOT NULL DEFAULT ''`, `note TEXT NOT NULL
+  `003_journal.sql` adds to `module_versions`: `by TEXT NOT NULL DEFAULT ''`, `note TEXT NOT NULL
   DEFAULT ''`, `commit_id TEXT NOT NULL DEFAULT ''`, `language TEXT NOT NULL DEFAULT ''`, `runs`,
   `failures`, `exceptions INTEGER NOT NULL DEFAULT 0`, `last_failure_kind TEXT NOT NULL DEFAULT ''`,
   `last_failure_ms INTEGER NOT NULL DEFAULT 0`. Retired rows of local modules are kept (their files

@@ -25,6 +25,8 @@ import (
 // Instance is a loaded module.
 type Instance interface {
 	Handle(ctx context.Context, in pdk.Input) (pdk.Output, error)
+	Init(ctx context.Context) error
+	Health(ctx context.Context) error
 	Close(ctx context.Context) error
 }
 
@@ -54,7 +56,8 @@ type env struct {
 	wasm     []byte
 	manifest runner.Manifest
 	secrets  map[string]string
-	state    *runner.MemState
+	state    runner.State
+	cells    *fakeCells
 	logs     syncBuffer
 }
 
@@ -64,6 +67,8 @@ func (e *env) instance(t *testing.T) Instance {
 	inst, err := e.load(ctx, e.wasm, e.manifest, runner.Deps{
 		Secrets: func(n string) (string, bool) { v, ok := e.secrets[n]; return v, ok },
 		State:   e.state,
+		Cells:   e.cells,
+		Prefix:  "probe-mod",
 		HTTP:    http.DefaultClient,
 		Logger:  slog.New(slog.NewTextHandler(&e.logs, nil)),
 	})
@@ -108,6 +113,7 @@ func Run(t *testing.T, load Loader, probe []byte) {
 			},
 			secrets: map[string]string{},
 			state:   runner.NewMemState(),
+			cells:   &fakeCells{values: map[string]cellValue{}},
 		}
 	}
 
@@ -235,6 +241,9 @@ func Run(t *testing.T, load Loader, probe []byte) {
 		}
 		call(t, inst, `{"op":"echo"}`)
 	})
+
+	runCellTests(t, fresh)
+	runLifecycleTests(t, fresh)
 }
 
 // syncBuffer is a strings.Builder safe for concurrent log writes.

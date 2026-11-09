@@ -26,6 +26,16 @@ type Host interface {
 	Secret(name string) (value string, ok bool)
 	// Config returns a value from the manifest's config block.
 	Config(key string) (value string, ok bool)
+	// CellReport sets one of the cells the module's manifest declares under
+	// cells.report; name is the short name, without the module's prefix. It
+	// fails with ErrCellDenied for a cell the module does not own and with
+	// ErrCellType for a value that does not fit the cell's type; the second
+	// also fails the whole call as KindFormat.
+	CellReport(name string, value any) error
+	// CellGet reads a cell: one of the module's own by its short name, or
+	// another by the full id its manifest lists under cells.read. at is when
+	// the cell last changed.
+	CellGet(id string) (value json.RawMessage, at time.Time, ok bool)
 	// Now returns the current time.
 	Now() time.Time
 	// Log writes a line to the runner's log.
@@ -43,14 +53,15 @@ type Request struct {
 // Response is the host's answer to a Request. Error is set when the request
 // could not be made at all (denied by policy, network failure, timeout).
 type Response struct {
-	Status int    `json:"status"`
-	Body   []byte `json:"body,omitempty"`
-	Error  string `json:"error,omitempty"`
+	Status  int               `json:"status"`
+	Headers map[string]string `json:"headers,omitempty"` // lower-case names, first value of each
+	Body    []byte            `json:"body,omitempty"`
+	Error   string            `json:"error,omitempty"`
 }
 
 // Input is what the runner passes to a module's handle export.
 type Input struct {
-	Trigger string          `json:"trigger"`           // "cron", "tool:<name>", "event:<kind>"
+	Trigger string          `json:"trigger"`           // "cron", "tool:<name>", "event:<kind>", "init", "health"
 	Payload json.RawMessage `json:"payload,omitempty"` // trigger-specific data
 }
 
@@ -59,6 +70,18 @@ type Input struct {
 const (
 	KindException  = "module.exception" // unexpected data or a failed read
 	KindAuthFailed = "auth_failed"      // credentials rejected; do not retry
+	KindFormat     = "module.format"    // the host found the answer outside its declared contract
+)
+
+// ErrUnknownTrigger is the Error text of a module that does not handle a
+// trigger it was called with. The runner takes it as success for the
+// "init" and "health" triggers, so a module need not implement them.
+const ErrUnknownTrigger = "unknown trigger"
+
+// Cell errors a Host returns.
+var (
+	ErrCellDenied = errors.New("cell is not declared by this module")
+	ErrCellType   = errors.New("value does not fit the cell's type")
 )
 
 // Output is what a module's handle export returns.

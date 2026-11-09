@@ -17,6 +17,8 @@ unsafe extern "C" {
     fn state_put(kptr: u32, klen: u32, vptr: u32, vlen: u32);
     fn secret_get(ptr: u32, len: u32) -> i32;
     fn config_get(ptr: u32, len: u32) -> i32;
+    fn cell_report(nptr: u32, nlen: u32, vptr: u32, vlen: u32) -> i32;
+    fn cell_get(ptr: u32, len: u32) -> i32;
 }
 
 fn take_n(n: usize) -> Vec<u8> {
@@ -61,7 +63,20 @@ impl Host for OwnHost {
             None => Vec::new(),
         };
         let status = resp.get("status").and_then(|s| s.as_u64()).unwrap_or(0) as u16;
-        Ok(Response { status, body })
+        let headers = resp
+            .get("headers")
+            .and_then(|h| h.as_object())
+            .map(|h| {
+                h.iter()
+                    .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(Response {
+            status,
+            headers,
+            body,
+        })
     }
     fn state_get(&self, key: &str) -> Option<String> {
         lookup(state_get, key)
@@ -81,6 +96,28 @@ impl Host for OwnHost {
     }
     fn config(&self, key: &str) -> Option<String> {
         lookup(config_get, key)
+    }
+    fn cell_report(&self, name: &str, value: &serde_json::Value) -> Result<(), String> {
+        let v = value.to_string();
+        let code = unsafe {
+            cell_report(
+                name.as_ptr() as u32,
+                name.len() as u32,
+                v.as_ptr() as u32,
+                v.len() as u32,
+            )
+        };
+        match code {
+            0 => Ok(()),
+            -2 => Err("value does not fit the cell's type".to_string()),
+            _ => Err("cell is not declared by this module".to_string()),
+        }
+    }
+    fn cell_get(&self, id: &str) -> Option<(serde_json::Value, i64)> {
+        let raw = lookup(cell_get, id)?;
+        let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+        let at = v.get("at_ms")?.as_i64()?;
+        Some((v.get("value")?.clone(), at))
     }
     fn now_unix(&self) -> i64 {
         (unsafe { now_ms() }) / 1000
