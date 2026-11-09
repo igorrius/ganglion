@@ -1922,19 +1922,19 @@ git commit -m "/restart ends the node with code 75 for its supervisor to start a
   are"), `docs/architecture/05-code-map.md`, this plan's checkboxes
 - The board: G-117 and G-122 to done
 
-- [ ] **Step 1: Measure**
+- [x] **Step 1: Measure**
 
 Run: `make memory`
 Expected: idle RSS and after-1000-turns RSS within 2 MB of M3d's numbers in `docs/README.md`; a
 growth needs a reason in the README.
 
-- [ ] **Step 2: Check GOMEMLIMIT in a container**
+- [x] **Step 2: Check GOMEMLIMIT in a container**
 
 Run: `docker run --rm -m 256m -v "$PWD/bin:/b" debian:stable-slim /b/ganglion run --roles core --db /tmp/g.db`
 (stop it after the "memory limit" log line).
 Expected: `memory limit bytes=214748364 source=cgroup`.
 
-- [ ] **Step 3: The bad-config checks of the design's acceptance (check 1)**
+- [x] **Step 3: The bad-config checks of the design's acceptance (check 1)**
 
 By hand, each must fail the start with a message naming the path:
 - an unknown key (`agent: {limitz: {}}`);
@@ -1948,7 +1948,11 @@ the models in the `chat` order; `/restart` replies and the node comes back (run 
 or a supervisor that restarts on exit 75); the clean-context check runs on Haiku (the turn trace
 shows `check` with `haiku`).
 
-- [ ] **Step 5: Docs and commit**
+Pending the owner (not run by Claude: it needs the test bot). To check: a turn answers; `/status`
+lists the models in the `chat` order; `/restart` replies and the node comes back under a loop that
+restarts on exit 75; the turn trace shows `check` with `haiku`.
+
+- [x] **Step 5: Docs and commit**
 
 Tick 4.1 and 4.2 in the phase plan; "Where we are" gains an M4a line (one file, models by
 purpose, `/restart`, measured numbers).

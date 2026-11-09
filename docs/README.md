@@ -6,9 +6,10 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** M4 (reflexes: one config file with models by purpose, modules
-  the agent builds from source, cells owned by modules, the Deye example on
-  Railway), designed on 2026-11-09 ([design](plans/p1-m4-reflexes-design.md),
+- **Next:** the owner's live check of M4a, then the M4b plan (modules the
+  agent builds from source, cells owned by modules, the Deye example on
+  Railway). M4 was designed on 2026-11-09
+  ([design](plans/p1-m4-reflexes-design.md),
   [phase plan](plans/p1-all-in-one.md)). Load shedding and the two-week
   clock of the gate left P1 ([ADR-0058](adr/0058-load-shedding-leaves-p1.md)).
 - **P0 results:**
@@ -361,6 +362,24 @@ Start here when coming back to the project.
     - open: Railway and a Pi are still to measure; Docker does not work from commands below Landlock ABI 9
       (commands are classed and asked for as designed, then fail to reach the daemon); `make lab-faults` was
       not run; the merge.
+  - **M4a, config and models by purpose, done in code (2026-11-09)** on branch `m4-reflexes`, live check
+    pending the owner ([plan](plans/p1-m4a-config.md), tasks 4.1 and 4.2,
+    [ADR-0059](adr/0059-node-config-file.md), [ADR-0060](adr/0060-models-by-purpose.md)):
+    - one config file, `ganglion.yaml`, with `schemas/node.schema.json`; a secret is written as `env:NAME`,
+      never in the file; parsing is strict and a bad file fails the start naming the path;
+    - the retired variables (`GANGLION_TZ` and the rest) fail the start with a hint to the new key;
+    - models by purpose (`chat`, `check`, ...), each with an order and an effort; the tools and the live
+      scripts read example files;
+    - `GOMEMLIMIT` comes from the environment, `node.memory_limit` or the container's cgroup, in that order;
+      in a 256 MB container with no setting it is 214,748,364 bytes (`source=cgroup`), with
+      `GOMEMLIMIT=100MiB` `source=env`, with `memory_limit: 120MiB` `source=config`;
+    - `/restart` ends the node with exit code 75 for its supervisor to start again;
+    - measured (`make memory`, ADR-0056), against M3d: binary 46.9 MB (47.0); the agent with tools 39.2 MB
+      idle, 44.8 MB after 1,000 turns (45.1 and 47.4); with `host.exec` 39.4 and 45.8 MB (45.1 and 50.7);
+      echo 41.6 and 43.4 MB (39.2 and 44.0); the agent without tools 44.8 and 48.1 MB (45.2 and 48.9);
+      50 `/metrics` pictures 110 MB, the hostile page peak 111 MB, as before: no growth over 2 MB;
+    - open: the owner's live check on the test bot (a turn, `/status` models in the `chat` order,
+      `/restart` under a supervisor, the check on Haiku).
   - Scope stays one operator, one agent, one bot (spec 14). Voice
     messages and PDF generation went to "Not now".
   - Deferred minors from the reviews:
