@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/sandbox"
@@ -29,10 +28,15 @@ func buildConfig(b Bootstrap) builder.LocalConfig {
 }
 
 // buildRoot is the folder the node's builds are made in: its own, mode
-// 0700, in the temp folder, named for the user, so build folders are not
-// made in a folder every user shares (ADR-0064). Not under home, where the
-// owner's ~/.cargo/config.toml would be a parent's cargo configuration, and
-// not under the data folder, which the sandbox denies.
+// 0700, under the user's cache folder, where every folder above is the
+// user's or root's and no one else's to write (ADR-0064). Not the shared
+// temp folder, where anyone can plant a cargo configuration in a parent,
+// and not the data folder, which the sandbox denies. "" when the user has
+// no cache folder: the node builds nothing then.
 func buildRoot() string {
-	return filepath.Join(os.TempDir(), "ganglion-builds-"+strconv.Itoa(os.Geteuid()))
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(cache, "ganglion", "builds")
 }

@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 // confined runs argv through s.Confined writing only beneath write, and
@@ -305,5 +306,108 @@ func TestAConfinedCommandChangesNoModeOrOwner(t *testing.T) {
 	}
 	if out, code := output(t, s, "/", "chmod", "0640", file); code != 0 {
 		t.Fatalf("host.exec's command cannot chmod: exit %d, %q", code, out)
+	}
+}
+
+// metaEnv names what TestMetadataFromInside does: "fchmod <path> <octal>"
+// or "setflags <path>"; it is set only inside the sandbox.
+const metaEnv = "GANGLION_SANDBOX_TEST_META"
+
+// TestMetadataFromInside is the probe the descriptor tests run in the
+// sandbox: it opens the path for reading and changes its mode or its
+// chattr flags through the descriptor. On its own it skips.
+func TestMetadataFromInside(t *testing.T) {
+	op, rest, _ := strings.Cut(os.Getenv(metaEnv), " ")
+	if op == "" {
+		t.Skip("runs only inside the sandbox")
+	}
+	path, arg, _ := strings.Cut(rest, " ")
+	f, err := os.Open(path)
+	if err != nil {
+		fmt.Println("open refused:", err)
+		return
+	}
+	defer func() { _ = f.Close() }()
+	switch op {
+	case "fchmod":
+		mode, _ := strconv.ParseUint(arg, 8, 32)
+		err = syscall.Fchmod(int(f.Fd()), uint32(mode))
+	case "setflags":
+		_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), fsIOCSetFlags, uintptr(unsafe.Pointer(new(int64))))
+		if errno != 0 {
+			err = errno
+		}
+	}
+	if err != nil {
+		fmt.Println("refused:", err)
+		return
+	}
+	fmt.Println("done")
+}
+
+// metadata runs TestMetadataFromInside with step, deny denied, confined to
+// work, or as host.exec's command when work is "", and returns what it
+// printed.
+func metadata(t *testing.T, deny []string, work, step string) string {
+	t.Helper()
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := ready(t, Policy{Deny: func() []string { return deny }, Env: []string{"PATH=/usr/bin:/bin", metaEnv + "=" + step}})
+	argv := []string{self, "-test.run=^TestMetadataFromInside$"}
+	if work == "" {
+		out, _ := output(t, s, "/", argv...)
+		return out
+	}
+	out, _ := confined(t, s, []string{work}, argv...)
+	return out
+}
+
+// ADR-0064, abuse test: through a descriptor a confined command cannot grant
+// a mode bit (fchmod 0777 of a denied folder it may list, the reviewer's
+// escape) nor set chattr flags, while it can still set 0644 on its own file,
+// as cargo does on what it unpacks; host.exec's commands are unaffected.
+func TestAConfinedCommandGrantsNoModeThroughADescriptor(t *testing.T) {
+	denied := resolvedTemp(t)
+	inner := filepath.Join(denied, "inner")
+	if err := os.Mkdir(inner, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	deny := []string{inner}
+	before, err := os.Stat(denied)
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := resolvedTemp(t)
+	mine := filepath.Join(work, "mine")
+	if err := os.WriteFile(mine, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out := metadata(t, deny, work, "fchmod "+inner+" 0777"); !strings.Contains(out, "refused:") {
+		t.Errorf("fchmod 0777 of a denied folder: %q", out)
+	}
+	if out := metadata(t, deny, work, "fchmod "+denied+" 0777"); !strings.Contains(out, "refused:") {
+		t.Errorf("fchmod 0777 of the denied folder's parent: %q", out)
+	}
+	for p, want := range map[string]os.FileMode{inner: 0o700, denied: before.Mode().Perm()} {
+		if info, err := os.Stat(p); err != nil || info.Mode().Perm() != want {
+			t.Errorf("%s: mode %v, %v; want %v", p, info.Mode().Perm(), err, want)
+		}
+	}
+	if out := metadata(t, deny, work, "fchmod "+mine+" 0644"); !strings.Contains(out, "done") {
+		t.Errorf("fchmod 0644 of its own file: %q", out)
+	}
+	if info, err := os.Stat(mine); err != nil || info.Mode().Perm() != 0o644 {
+		t.Errorf("its own file: %v, %v; want 0644", info.Mode().Perm(), err)
+	}
+	if out := metadata(t, deny, work, "fchmod "+mine+" 0666"); !strings.Contains(out, "refused:") {
+		t.Errorf("fchmod 0666 of its own file: %q", out)
+	}
+	if out := metadata(t, deny, work, "setflags "+mine); !strings.Contains(out, "refused: operation not permitted") {
+		t.Errorf("FS_IOC_SETFLAGS: %q", out)
+	}
+	if out := metadata(t, deny, "", "fchmod "+mine+" 0666"); !strings.Contains(out, "done") {
+		t.Errorf("host.exec's command cannot fchmod: %q", out)
 	}
 }

@@ -92,18 +92,33 @@ func source(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-// buildTemp points the temporary folder at one the test owns and returns it.
+// buildTemp points the temporary folder at one the test owns, mode 0700 as
+// a build root must be (testConfig builds there), and returns it.
 func buildTemp(t *testing.T) string {
 	t.Helper()
 	tmp := t.TempDir()
+	if err := os.Chmod(tmp, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("TMPDIR", tmp)
 	return tmp
 }
 
+// testConfig is a config for the fake starter, building in the temporary
+// folder of the test (buildTemp).
 func testConfig() LocalConfig {
 	cfg := DefaultLocalConfig()
-	cfg.Cargo, cfg.Rustup = "/opt/rust/bin/cargo", "/opt/rust/rustup"
+	cfg.Cargo, cfg.Rustup, cfg.Toolchain, cfg.TempRoot = "/opt/rust/bin/cargo", "/opt/rust/rustup", "stable-test", os.TempDir()
 	return cfg
+}
+
+// newLocal is NewLocal for a root in a t.TempDir: /tmp above it may be
+// written by others, so the check of the folders above the root is left
+// out; the real-Rust tests keep it.
+func newLocal(start Starter, cfg LocalConfig) *Local {
+	l := NewLocal(start, cfg)
+	l.parents = func(string) error { return nil }
+	return l
 }
 
 var rustFiles = map[string]string{"Cargo.toml": "[package]\n", "manifest.yaml": "name: local/m\n", "src/lib.rs": "//"}
@@ -113,7 +128,7 @@ func TestBuildRunsCargoInTheCopyWithATemporaryEnvironment(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "secret-token-value")
 	dir := source(t, rustFiles)
 	fake := &fakeStarter{wasm: []byte("\x00asm\x01\x00\x00\x00")}
-	art, _, err := NewLocal(fake, testConfig()).Build(t.Context(), Source{Name: "m", Dir: dir})
+	art, _, err := newLocal(fake, testConfig()).Build(t.Context(), Source{Name: "m", Dir: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +145,7 @@ func TestBuildRunsCargoInTheCopyWithATemporaryEnvironment(t *testing.T) {
 		t.Fatalf("dir = %q, want <tmp>/ganglion-build-*/src", c.dir)
 	}
 	wantEnv := []string{"PATH=/opt/rust/bin:/usr/local/bin:/usr/bin:/bin", "CARGO_HOME=" + temp + "/cargo-home",
-		"CARGO_TARGET_DIR=" + temp + "/target", "RUSTUP_HOME=/opt/rust/rustup", "HOME=" + temp, "TMPDIR=" + temp + "/tmp"}
+		"CARGO_TARGET_DIR=" + temp + "/target", "RUSTUP_HOME=/opt/rust/rustup", "HOME=" + temp, "TMPDIR=" + temp + "/tmp", "RUSTUP_TOOLCHAIN=stable-test"}
 	if !slices.Equal(c.env, wantEnv) {
 		t.Fatalf("env = %q, want %q", c.env, wantEnv)
 	}
@@ -152,7 +167,7 @@ func TestBuildRunsCargoInTheCopyWithATemporaryEnvironment(t *testing.T) {
 func TestArtifactIdentityIsTheStoresDigest(t *testing.T) {
 	buildTemp(t)
 	fake := &fakeStarter{wasm: []byte("\x00asm\x01\x00\x00\x00")}
-	art, _, err := NewLocal(fake, testConfig()).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
+	art, _, err := newLocal(fake, testConfig()).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +182,7 @@ func TestTheCopyLeavesTheSourceAndSkipsTarget(t *testing.T) {
 	dir := source(t, files)
 	var seen []string
 	fake := &fakeStarter{wasm: []byte("w")}
-	b := NewLocal(&listStarter{fakeStarter: fake, seen: &seen}, testConfig())
+	b := newLocal(&listStarter{fakeStarter: fake, seen: &seen}, testConfig())
 	if _, _, err := b.Build(t.Context(), Source{Name: "m", Dir: dir}); err != nil {
 		t.Fatal(err)
 	}
@@ -202,6 +217,8 @@ func TestBuildRefusals(t *testing.T) {
 	}{
 		"go":            {files: map[string]string{"go.mod": "module x\n", "manifest.yaml": "x"}, is: ErrNoBuilder},
 		"no cargo":      {files: rustFiles, cfg: func(c *LocalConfig) { c.Cargo = "" }, is: ErrNoBuilder},
+		"no toolchain":  {files: rustFiles, cfg: func(c *LocalConfig) { c.Toolchain = "" }, is: ErrNoBuilder},
+		"no root":       {files: rustFiles, cfg: func(c *LocalConfig) { c.TempRoot = "" }, want: "no folder of its own"},
 		"unknown":       {files: map[string]string{"manifest.yaml": "x"}, want: "language is unknown"},
 		"over the cap":  {files: rustFiles, cfg: func(c *LocalConfig) { c.MaxCopy = 10 }, want: "too big"},
 		"no manifest":   {files: map[string]string{"Cargo.toml": "[package]\n"}, want: "manifest.yaml"},
@@ -218,7 +235,7 @@ func TestBuildRefusals(t *testing.T) {
 			if name == "cargo failure" {
 				fake.exit = "echo boom >&2; exit 3"
 			}
-			_, log, err := NewLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, c.files)})
+			_, log, err := newLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, c.files)})
 			if err == nil {
 				t.Fatal("no error")
 			}
@@ -244,7 +261,7 @@ func TestASymlinkInTheSourceIsRefused(t *testing.T) {
 	if err := os.Symlink("/etc/passwd", filepath.Join(dir, "link")); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := NewLocal(&fakeStarter{}, testConfig()).Build(t.Context(), Source{Name: "m", Dir: dir})
+	_, _, err := newLocal(&fakeStarter{}, testConfig()).Build(t.Context(), Source{Name: "m", Dir: dir})
 	if err == nil || !strings.Contains(err.Error(), "link") {
 		t.Fatalf("error = %v, want one naming the link", err)
 	}
@@ -304,7 +321,7 @@ func TestAWasmThatIsNotOneHonestFileIsRefused(t *testing.T) {
 			tmp := buildTemp(t)
 			cfg := testConfig()
 			cfg.MaxWasm = 1024
-			b := NewLocal(&planter{&fakeStarter{}, c.plant}, cfg)
+			b := newLocal(&planter{&fakeStarter{}, c.plant}, cfg)
 			done := make(chan error, 1)
 			go func() {
 				_, _, err := b.Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
@@ -347,7 +364,7 @@ func TestAnOversizedManifestIsRefused(t *testing.T) {
 	files := map[string]string{"Cargo.toml": "[package]\n", "manifest.yaml": strings.Repeat("a", 100)}
 	cfg := testConfig()
 	cfg.MaxCopy = 50
-	_, _, err := NewLocal(&fakeStarter{}, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, files)})
+	_, _, err := newLocal(&fakeStarter{}, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, files)})
 	if err == nil {
 		t.Fatal("no error")
 	}
@@ -356,7 +373,7 @@ func TestAnOversizedManifestIsRefused(t *testing.T) {
 func TestTheLogKeepsTheLast8KiB(t *testing.T) {
 	buildTemp(t)
 	fake := &fakeStarter{wasm: []byte("w"), exit: `head -c 20000 /dev/zero | tr '\0' a; echo; echo THE-END`}
-	_, log, err := NewLocal(fake, testConfig()).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
+	_, log, err := newLocal(fake, testConfig()).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +387,7 @@ func TestATimedOutBuildIsStoppedAndCleanedUp(t *testing.T) {
 	cfg := testConfig()
 	cfg.Timeout = 200 * time.Millisecond
 	fake := &fakeStarter{wasm: []byte("w"), exit: "sleep 30"}
-	_, _, err := NewLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
+	_, _, err := newLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
 	if err == nil || !strings.Contains(err.Error(), "ran past") {
 		t.Fatalf("error = %v", err)
 	}
@@ -387,7 +404,7 @@ func TestATimedOutBuildIsSentSIGTERM(t *testing.T) {
 	cfg := testConfig()
 	cfg.Timeout = 200 * time.Millisecond
 	fake := &fakeStarter{wasm: []byte("w"), exit: `trap 'echo got-term; exit 7' TERM; sleep 30 >/dev/null 2>&1 & wait`}
-	_, log, err := NewLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
+	_, log, err := newLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
 	if err == nil || !strings.Contains(err.Error(), "ran past") {
 		t.Fatalf("error = %v", err)
 	}
@@ -414,7 +431,7 @@ func TestAConfigInAParentFolderRefusesTheBuild(t *testing.T) {
 			cfg := testConfig()
 			cfg.TempRoot = filepath.Join(parent, "builds")
 			fake := &fakeStarter{wasm: []byte("w")}
-			b := NewLocal(fake, cfg)
+			b := newLocal(fake, cfg)
 			_, _, err := b.Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
 			if err == nil || !strings.Contains(err.Error(), planted) {
 				t.Fatalf("Build: %v, want a refusal naming %s", err, planted)
@@ -439,7 +456,7 @@ func TestTheTempRootIsTheNodesOwn(t *testing.T) {
 	cfg := testConfig()
 	cfg.TempRoot = filepath.Join(parent, "builds")
 	fake := &fakeStarter{wasm: []byte("w")}
-	if _, _, err := NewLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)}); err != nil {
+	if _, _, err := newLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)}); err != nil {
 		t.Fatal(err)
 	}
 	if info, err := os.Lstat(cfg.TempRoot); err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
@@ -458,10 +475,33 @@ func TestTheTempRootIsTheNodesOwn(t *testing.T) {
 	}
 	for _, root := range []string{open, link} {
 		cfg.TempRoot = root
-		_, _, err := NewLocal(&fakeStarter{wasm: []byte("w")}, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
+		_, _, err := newLocal(&fakeStarter{wasm: []byte("w")}, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
 		if err == nil || !strings.Contains(err.Error(), "mode 0700") {
 			t.Errorf("root %s: %v, want a refusal", root, err)
 		}
+	}
+}
+
+// ADR-0064: a build root with a folder above it that others may write (a
+// t.TempDir is under /tmp) is refused by the real check before anything
+// runs; a root whose parents are root's and not writable by others passes.
+func TestARootUnderASharedFolderIsRefused(t *testing.T) {
+	buildTemp(t)
+	cfg := testConfig()
+	cfg.TempRoot = filepath.Join(t.TempDir(), "builds")
+	fake := &fakeStarter{wasm: []byte("w")}
+	_, _, err := NewLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
+	if err == nil || !strings.Contains(err.Error(), "may be written by others") {
+		t.Fatalf("Build under /tmp: %v, want a refusal naming the shared folder", err)
+	}
+	if len(fake.calls) != 0 {
+		t.Fatal("a command started under a shared folder")
+	}
+	if info, err := os.Stat("/usr/bin"); err != nil || info.Mode().Perm()&0o022 != 0 {
+		t.Skip("no /usr/bin that only root writes")
+	}
+	if err := safeParents("/usr/bin"); err != nil {
+		t.Fatalf("safeParents(/usr/bin) = %v", err)
 	}
 }
 
@@ -488,7 +528,10 @@ func realSandbox(t *testing.T) *sandbox.Sandbox {
 	return s
 }
 
-// rustConfig finds cargo the way the node's command line does, or skips.
+// rustConfig finds cargo the way the node's command line does, pins the
+// toolchain rustc names from "/", and builds in a root of the test's own
+// under the user's cache folder, whose parents pass the real check; or
+// skips.
 func rustConfig(t *testing.T) LocalConfig {
 	t.Helper()
 	home, _ := os.UserHomeDir()
@@ -504,7 +547,35 @@ func rustConfig(t *testing.T) LocalConfig {
 	if cfg.Rustup == "" {
 		cfg.Rustup = filepath.Join(home, ".rustup")
 	}
+	cmd := exec.CommandContext(t.Context(), filepath.Join(filepath.Dir(cargo), "rustc"), "--print", "sysroot")
+	cmd.Dir = "/"
+	out, err := cmd.Output()
+	if err != nil {
+		t.Skipf("rustc does not name its toolchain: %v", err)
+	}
+	cfg.Toolchain = filepath.Base(strings.TrimSpace(string(out)))
+	cfg.TempRoot = testRoot(t)
 	return cfg
+}
+
+// testRoot is a fresh 0700 build root under the user's cache folder,
+// removed after the test; it skips where there is no cache folder.
+func testRoot(t *testing.T) string {
+	t.Helper()
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		t.Skipf("no cache folder: %v", err)
+	}
+	base := filepath.Join(cache, "ganglion", "builds-test")
+	if err := os.MkdirAll(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.MkdirTemp(base, "t-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	return root
 }
 
 // rustBuilder is the local builder on this machine's sandbox and Rust, or
@@ -519,21 +590,28 @@ func rustBuilder(t *testing.T) *Local {
 	if can[Rust] == "" {
 		t.Skip("the wasm32-wasip1 target is not installed (`rustup target add wasm32-wasip1`)")
 	}
-	t.Logf("Can: %v", can)
+	t.Logf("Can: %v, toolchain %s, root %s", can, b.cfg.Toolchain, b.cfg.TempRoot)
 	return b
 }
 
-func TestARealRustModuleBuildsInTheSandboxAndRuns(t *testing.T) {
-	b := rustBuilder(t)
-	tmp := buildTemp(t)
-	art, log, err := b.Build(t.Context(), Source{Name: "hello", Dir: "testdata/hello"})
+// leftNothing fails the test when the build left an entry in its root.
+func leftNothing(t *testing.T, b *Local) {
+	t.Helper()
+	if left, _ := os.ReadDir(b.cfg.TempRoot); len(left) != 0 {
+		t.Fatalf("the build left %d entries in its root", len(left))
+	}
+}
+
+// buildAndCheck builds src with b, checks the module loads and is
+// healthy, and returns the log.
+func buildAndCheck(t *testing.T, b *Local, src Source) Log {
+	t.Helper()
+	art, log, err := b.Build(t.Context(), src)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	t.Logf("built %d bytes, sha %s\n%s", len(art.Wasm), art.SHA256, log)
-	if left, _ := os.ReadDir(tmp); len(left) != 0 {
-		t.Fatalf("the build left %d entries in the temporary folder", len(left))
-	}
+	leftNothing(t, b)
 	m, err := runner.ParseManifest(art.Manifest)
 	if err != nil {
 		t.Fatal(err)
@@ -545,6 +623,60 @@ func TestARealRustModuleBuildsInTheSandboxAndRuns(t *testing.T) {
 	t.Cleanup(func() { _ = mod.Close(context.Background()) })
 	if err := mod.Health(t.Context()); err != nil {
 		t.Fatalf("Health: %v", err)
+	}
+	return log
+}
+
+func TestARealRustModuleBuildsInTheSandboxAndRuns(t *testing.T) {
+	buildAndCheck(t, rustBuilder(t), Source{Name: "hello", Dir: "testdata/hello"})
+}
+
+// A crate with a dependency from crates.io builds: cargo fetches and
+// unpacks it in the sandbox, setting 0644 on what it unpacks, which the
+// confined filter allows (ADR-0064). It skips when crates.io is out of reach.
+func TestARealRustModuleWithADependencyBuilds(t *testing.T) {
+	b := rustBuilder(t)
+	art, log, err := b.Build(t.Context(), Source{Name: "withdep", Dir: "testdata/withdep"})
+	if err != nil && (strings.Contains(string(log), "failed to download") || strings.Contains(string(log), "Couldn't resolve host") ||
+		strings.Contains(string(log), "failed to query replaced source")) {
+		t.Skipf("crates.io is out of reach:\n%s", log)
+	}
+	if err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	t.Logf("built %d bytes\n%s", len(art.Wasm), log)
+	if !strings.Contains(string(log), "Compiling itoa") {
+		t.Fatalf("the dependency was not built:\n%s", log)
+	}
+	leftNothing(t, b)
+}
+
+// ADR-0064, abuse test: a rust-toolchain.toml that names a toolchain by
+// path, here in the source where the parents check does not look, does not
+// run that toolchain: builds are pinned with RUSTUP_TOOLCHAIN.
+func TestABuildIsPinnedToTheNodesToolchain(t *testing.T) {
+	b := rustBuilder(t)
+	planted := t.TempDir()
+	if err := os.Mkdir(filepath.Join(planted, "bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range []string{"cargo", "rustc"} {
+		script := "#!/bin/sh\necho PLANTED-" + tool + "-RAN >&2\nexit 1\n"
+		if err := os.WriteFile(filepath.Join(planted, "bin", tool), []byte(script), 0o700); err != nil { //nolint:gosec // the planted toolchain
+			t.Fatal(err)
+		}
+	}
+	src := filepath.Join(t.TempDir(), "hello")
+	if err := os.CopyFS(src, os.DirFS("testdata/hello")); err != nil {
+		t.Fatal(err)
+	}
+	pin := "[toolchain]\npath = \"" + planted + "\"\n"
+	if err := os.WriteFile(filepath.Join(src, "rust-toolchain.toml"), []byte(pin), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	log := buildAndCheck(t, b, Source{Name: "hello", Dir: src})
+	if strings.Contains(string(log), "PLANTED") {
+		t.Fatalf("the planted toolchain ran:\n%s", log)
 	}
 }
 
@@ -588,9 +720,9 @@ func TestABuildWritesOnlyItsFolderAndLeavesNoProcess(t *testing.T) {
 	if _, err := exec.LookPath("setsid"); err != nil {
 		t.Skip("no setsid here")
 	}
-	tmp := buildTemp(t)
 	outside := filepath.Join(t.TempDir(), "escaped")
-	poison := filepath.Join(tmp, ".cargo", "config.toml")
+	poison := filepath.Join(filepath.Dir(b.cfg.TempRoot), ".cargo", "config.toml") // a parent of every later build's folder
+	t.Cleanup(func() { _ = os.RemoveAll(filepath.Dir(poison)) })
 	secs := fmt.Sprintf("6%d.%d", os.Getpid()%10, time.Now().UnixNano()%1_000_000)
 	t.Cleanup(func() {
 		for _, pid := range sleeping(secs) {
@@ -622,7 +754,5 @@ func TestABuildWritesOnlyItsFolderAndLeavesNoProcess(t *testing.T) {
 	if pids := sleeping(secs); len(pids) != 0 {
 		t.Fatalf("the detached sleep %v outlived the build", pids)
 	}
-	if left, _ := os.ReadDir(tmp); len(left) != 0 {
-		t.Fatalf("the build left %d entries in the temporary folder", len(left))
-	}
+	leftNothing(t, b)
 }

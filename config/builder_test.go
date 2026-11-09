@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"testing"
 	"time"
 
@@ -22,7 +21,7 @@ import (
 func TestTheBuilderRefusesWithTheSandboxOff(t *testing.T) {
 	b := agentConfig(t)
 	b.Build = builder.DefaultLocalConfig()
-	b.Build.Cargo = "/nonexistent/cargo"
+	b.Build.Cargo, b.Build.Toolchain = "/nonexistent/cargo", "stable-test"
 	i := New(context.Background(), b, slog.New(slog.DiscardHandler))
 	t.Cleanup(func() { _ = i.Shutdown() })
 	do.OverrideValue(i, sandbox.New("/nonexistent", sandbox.Policy{}, rootKernel{}, time.Now()))
@@ -42,11 +41,15 @@ func TestTheBuilderRefusesWithTheSandboxOff(t *testing.T) {
 	}
 }
 
-// Builds are made in the node's own root in the temp folder, and the
-// janitor sweeps what a crash left there (ADR-0064).
+// Builds are made in the node's own root under the user's cache folder, or
+// nowhere, and the janitor sweeps what a crash left there (ADR-0064).
 func TestBuildsGoToTheNodesOwnRoot(t *testing.T) {
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		t.Skip("no cache folder here")
+	}
 	root := buildConfig(Bootstrap{}).TempRoot
-	if filepath.Dir(root) != os.TempDir() || filepath.Base(root) != "ganglion-builds-"+strconv.Itoa(os.Geteuid()) {
+	if root != filepath.Join(cache, "ganglion", "builds") {
 		t.Fatalf("TempRoot = %s", root)
 	}
 	b := agentConfig(t)
@@ -60,6 +63,11 @@ func TestBuildsGoToTheNodesOwnRoot(t *testing.T) {
 		return p.Path == root && p.Prefix == "ganglion-build-" && p.MaxAge > 0
 	}) {
 		t.Fatalf("the janitor does not sweep %s", root)
+	}
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	if root := buildConfig(Bootstrap{}).TempRoot; root != "" {
+		t.Fatalf("with no cache folder TempRoot = %s, want none (builds refused)", root)
 	}
 }
 

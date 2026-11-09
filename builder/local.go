@@ -37,8 +37,13 @@ type LocalConfig struct {
 	MaxCopy int64         // bytes of source a build may copy
 	MaxWasm int64         // bytes of the built .wasm the node will read
 	// TempRoot is the node's own folder (mode 0700) the build folders are
-	// made in; "" is the system's temporary folder. config fills it.
+	// made in, under the user's cache folder; config fills it. "" builds
+	// nothing.
 	TempRoot string
+	// Toolchain is the rustup toolchain every build is pinned to with
+	// RUSTUP_TOOLCHAIN, resolved by the command line at start; "" builds
+	// nothing (ADR-0064).
+	Toolchain string
 }
 
 // DefaultLocalConfig is the design's limits: ten minutes, 16 MiB of source and
@@ -66,21 +71,27 @@ const (
 type Local struct {
 	start Starter
 	cfg   LocalConfig
+	// parents checks the build root and the folders above it
+	// (safeParents); the package's tests that build in a t.TempDir under
+	// the shared /tmp replace it.
+	parents func(root string) error
 }
 
 var _ Builder = (*Local)(nil)
 
 // NewLocal makes a builder that starts its commands through start.
-func NewLocal(start Starter, cfg LocalConfig) *Local { return &Local{start: start, cfg: cfg} }
+func NewLocal(start Starter, cfg LocalConfig) *Local {
+	return &Local{start: start, cfg: cfg, parents: safeParents}
+}
 
 // Can runs cargo and rustc once and reports Rust when both answer and the
 // wasm32-wasip1 target is installed. A node with no cargo, or no target,
 // reports no Rust and no error; a toolchain that cannot run is an error.
 func (l *Local) Can(ctx context.Context) (Abilities, error) {
-	if l.cfg.Cargo == "" {
+	if l.cfg.Cargo == "" || l.cfg.Toolchain == "" {
 		return Abilities{}, nil
 	}
-	temp, err := makeTemp(l.cfg.TempRoot)
+	temp, err := l.makeTemp()
 	if err != nil {
 		return nil, err
 	}
@@ -116,10 +127,10 @@ func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 	if err != nil {
 		return Artifact{}, "", err
 	}
-	if lang != Rust || l.cfg.Cargo == "" {
+	if lang != Rust || l.cfg.Cargo == "" || l.cfg.Toolchain == "" {
 		return Artifact{}, "", fmt.Errorf("%w: %s", ErrNoBuilder, lang)
 	}
-	temp, err := makeTemp(l.cfg.TempRoot)
+	temp, err := l.makeTemp()
 	if err != nil {
 		return Artifact{}, "", err
 	}
@@ -158,11 +169,15 @@ func digest(wasm, manifest []byte) string {
 // and nothing new may then be made directly in it (ADR-0064).
 var tempFolders = []string{"cargo-home", "target", "tmp"}
 
-// makeTemp makes the build's temporary folder in root, the only one its
+// makeTemp makes the build's temporary folder in the root, the only one its
 // commands may write (ADR-0064), with the folders cargo and the linker
 // write in.
-func makeTemp(root string) (string, error) {
+func (l *Local) makeTemp() (string, error) {
+	root := l.cfg.TempRoot
 	if err := ensureRoot(root); err != nil {
+		return "", err
+	}
+	if err := l.parents(root); err != nil {
 		return "", err
 	}
 	temp, err := os.MkdirTemp(root, tempPrefix)
@@ -178,15 +193,15 @@ func makeTemp(root string) (string, error) {
 	return temp, nil
 }
 
-// ensureRoot makes root, when one is named, and checks that it is the
-// node's own folder that no one else may enter: a folder, not a symlink,
-// owned by this user, mode 0700. Anything else is refused: another user
-// could have made it first.
+// ensureRoot makes root and checks that it is the node's own folder that
+// no one else may enter: a folder, not a symlink, owned by this user, mode
+// 0700. Anything else is refused: another user could have made it first.
+// No root (the user's cache folder is unknown) builds nothing.
 func ensureRoot(root string) error {
 	if root == "" {
-		return nil
+		return errors.New("builder: the node has no folder of its own to build in (the user's cache folder is unknown), so nothing is built")
 	}
-	if err := os.Mkdir(root, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+	if err := os.MkdirAll(root, 0o700); err != nil {
 		return fmt.Errorf("builder: %w", err)
 	}
 	info, err := os.Lstat(root)
@@ -198,6 +213,32 @@ func ensureRoot(root string) error {
 		return fmt.Errorf("builder: %s must be a folder of the node's own user with mode 0700, so nothing is built", root)
 	}
 	return nil
+}
+
+// safeParents refuses a build root when it or a folder above it, up to "/",
+// is a symlink or not a folder, belongs to a user other than root and the
+// node's, or may be written by its group or others. Then only root and the
+// node's user can put a file in the build's parent folders, and the check
+// of checkAncestors cannot be raced (ADR-0064).
+func safeParents(root string) error {
+	for dir := root; ; dir = filepath.Dir(dir) {
+		info, err := os.Lstat(dir)
+		if err != nil {
+			return fmt.Errorf("builder: %s cannot be checked, so nothing is built: %w", dir, err)
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		switch {
+		case !info.IsDir() || !ok:
+			return fmt.Errorf("builder: %s, above the build folder, is not a folder (a symlink?), so nothing is built", dir)
+		case st.Uid != 0 && int(st.Uid) != os.Geteuid():
+			return fmt.Errorf("builder: %s, above the build folder, belongs to another user, so nothing is built", dir)
+		case info.Mode().Perm()&0o022 != 0:
+			return fmt.Errorf("builder: %s, above the build folder, may be written by others, so nothing is built", dir)
+		}
+		if dir == filepath.Dir(dir) {
+			return nil
+		}
+	}
 }
 
 // ancestorConfigs are the files cargo (.cargo/config, .cargo/config.toml)
@@ -245,6 +286,7 @@ func (l *Local) env(temp string) []string {
 		"RUSTUP_HOME=" + l.cfg.Rustup,
 		"HOME=" + temp,
 		"TMPDIR=" + filepath.Join(temp, "tmp"),
+		"RUSTUP_TOOLCHAIN=" + l.cfg.Toolchain,
 	}
 }
 

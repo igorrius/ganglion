@@ -142,24 +142,56 @@ needs no namespace.
 - The built `.wasm` is read through `os.Root` on the build's folder: a
   `target` or `release` folder the build swapped for a symlink that
   leads out of it is refused.
-- Landlock (to ABI 7 at least) does not govern a file's metadata. The
-  confined helper's seccomp filter therefore also refuses, with `EPERM`,
-  changing a file's mode, owner or extended attributes by path
-  (`chmod`, `chown`, `lchown` on amd64; `fchmodat`, `fchmodat2`,
-  `fchownat`, `setxattr`, `lsetxattr`, `removexattr`, `lremovexattr`,
-  `setxattrat`, `removexattrat`), inside the build's folder too: seccomp
-  cannot tell paths apart. The two real builds of the tests (one with a
-  build script compiled and linked) need none of them.
-- Before each cargo run the builder looks in the build's folder and every
-  folder above it, up to `/`, for `.cargo/config`, `.cargo/config.toml`,
+- Landlock (to ABI 7 at least) does not govern a file's metadata, and a
+  confined command may open for reading whatever it may read, a denied
+  folder it may list (ADR-0057) included. The confined helper's seccomp
+  filter therefore also refuses, with `EPERM`, inside the build's folder
+  too, since seccomp cannot tell paths apart:
+  - changing a file's owner or extended attributes, by path or through a
+    descriptor (`chown`, `lchown` on amd64; `fchownat`, `fchown`,
+    `setxattr`, `lsetxattr`, `fsetxattr`, `removexattr`, `lremovexattr`,
+    `fremovexattr`, `setxattrat`, `removexattrat`);
+  - changing a file's mode by path (`chmod` on amd64; `fchmodat`,
+    `fchmodat2`);
+  - `fchmod` with a mode that has a bit of `07022` (group or other write,
+    setuid, setgid, sticky). cargo needs `fchmod`: it sets 0644 on every
+    file it unpacks from crates.io, and refusing `fchmod` outright fails
+    with "failed to set permissions to 644" (measured);
+  - `ioctl` with `FS_IOC_SETFLAGS`, `FS_IOC32_SETFLAGS` or
+    `FS_IOC_FSSETXATTR` (chattr's flags).
+
+  The real builds of the tests (one with a build script compiled and
+  linked, one with a dependency fetched and unpacked from crates.io) pass
+  under the filter.
+- The toolchain is pinned. The command line asks rustc, once at start and
+  from `/`, which rustup toolchain it resolves to, and every build runs
+  with `RUSTUP_TOOLCHAIN` set to it (`LocalConfig.Toolchain`); with none
+  resolved the node builds nothing. A `rust-toolchain.toml` that names a
+  toolchain by `path =`, in a parent or in the source, is then ignored by
+  both proxies, `cargo` and the `rustc` cargo starts (measured: unpinned,
+  the planted `cargo` ran; running the toolchain's own `cargo` was not
+  enough, since it starts `rustc` through the proxy, and the planted
+  `rustc` ran).
+- Build folders are made in the node's own folder under the user's cache
+  folder, `~/.cache/ganglion/builds` (`LocalConfig.TempRoot`, filled by
+  `config`), made with mode 0700 and refused when it is anything else (a
+  symlink, another owner, another mode); the janitor sweeps the leftovers
+  in it. Before each build the root and every folder above it, up to `/`,
+  must be a real folder that belongs to root or the node's user and that
+  neither its group nor others may write; anything else refuses the build,
+  naming the folder. Only root and the node's user can then put a file in
+  a parent of a build. With no cache folder (no `HOME` or
+  `XDG_CACHE_HOME`) the node builds nothing; it does not fall back to the
+  shared temp folder. Not under the data folder, which the sandbox denies.
+- Before each cargo run the builder also looks in the build's folder and
+  every folder above it for `.cargo/config`, `.cargo/config.toml`,
   `rust-toolchain` and `rust-toolchain.toml`, which cargo and rustup's
   proxy read from every parent folder, and refuses the build naming the
-  path when one is there (or when a path cannot be checked). Build folders
-  are made in the node's own folder `<temp>/ganglion-builds-<uid>`, made
-  with mode 0700 and refused when it is anything else (a symlink, another
-  owner, another mode); the janitor sweeps the leftovers in it. Not under
-  home, where the owner's own `~/.cargo/config.toml` would be a parent's
-  configuration, and not under the data folder, which the sandbox denies.
+  path when one is there (or when a path cannot be checked). With the
+  parents only root's and the node user's, this check cannot be raced by
+  another user. The owner's `~/.cargo/config.toml` is such a file, since
+  home is a parent of the cache folder: a node whose user has one builds
+  nothing until it is moved, which the refusal says.
 
 ## Security
 
@@ -174,13 +206,21 @@ needs no namespace.
     any file of the owner's: Landlock grants no write right outside the
     build's folder (tests `TestAConfinedCommandWritesOnlyItsFolder`,
     `TestABuildWritesOnlyItsFolderAndLeavesNoProcess`).
-  - Weakens the mode of the node's database or a secret file, or takes
-    the execute bit off the owner's toolchain, by path: the seccomp filter
-    refuses it (`TestAConfinedCommandChangesNoModeOrOwner`).
-  - Someone else plants a cargo or rustup configuration in a parent of the
-    build's folder (any local user can write `/tmp`): the build is refused
-    and the path named (`TestAConfigInAParentFolderRefusesTheBuild`). That
-    user can still stop builds this way, not change what they make.
+  - Changes the mode, owner or attributes of the node's database, a
+    secret file or a denied folder, or opens up any file's mode: by path
+    the seccomp filter refuses it
+    (`TestAConfinedCommandChangesNoModeOrOwner`); through a descriptor,
+    such as a denied folder opened for listing, it refuses granting any
+    bit of `07022`, every owner and attribute change, and chattr's flags
+    (`TestAConfinedCommandGrantsNoModeThroughADescriptor`).
+  - Plants a cargo or rustup configuration in a parent of the build's
+    folder: only root and the node's user can write those folders (a
+    root under a shared folder is refused,
+    `TestARootUnderASharedFolderIsRefused`), and one found is refused
+    with its path (`TestAConfigInAParentFolderRefusesTheBuild`).
+  - Names another toolchain by path in a `rust-toolchain.toml`: builds
+    are pinned to the node's toolchain
+    (`TestABuildIsPinnedToTheNodesToolchain`).
   - Truncates a file on an old kernel: no confined command below ABI 3
     (`TestConfinedNeedsLandlock3`).
   - Reads a denied file, or a denied path inside its own folder: the deny
@@ -203,29 +243,33 @@ needs no namespace.
 - **Known limits, not covered:**
   - The network stays open to a build (cargo fetches crates; Landlock's
     network rules are not used), as it is to `host.exec`.
-  - A file's times: `utimensat` and `futimens` are not refused (cargo sets
-    times for its fingerprints, and seccomp cannot tell paths apart), so a
-    build can change the times of any file it can reach, outside its
-    folder too.
-  - Metadata through a file descriptor: `fchmod`, `fchown`, `fsetxattr`
-    and `fremovexattr` are not refused (copying a file sets its mode
-    through the descriptor), so a build can change the mode of a file
-    outside its folder that it may open for reading, the owner's own
-    files and toolchain included. Denied files cannot be opened, so the
-    node's database and secrets are out of reach. Ownership changes are
-    limited by the kernel to the user's own groups.
-  - A cargo or rustup configuration in a parent folder, such as one a
-    pressed `host.exec` wrote in `/tmp`, stops builds until it is removed.
+  - Taking mode bits away: `fchmod` with a mode within `0755`, through a
+    descriptor of any file or folder the build may open for reading,
+    outside its folder too, is allowed, since cargo needs it. A build can
+    take the execute bit off the owner's toolchain, or the read bits off
+    the owner's files or off a denied folder (which it can open for
+    listing). It cannot grant any bit.
+  - A file's times: `utimensat`, `futimens`, and on amd64 `utime`,
+    `utimes` and `futimesat` are not refused (cargo sets times for its
+    fingerprints, and seccomp cannot tell paths apart), so a build can
+    change the times of any file it can reach, outside its folder too.
+  - A cargo or rustup configuration that root or the node's user (a
+    pressed `host.exec`) puts in a parent of the build root stops builds
+    until it is removed.
 
 ## Consequences
 
 - A build cannot write, create or remove anything outside its folder, nor
-  change a file's mode, owner or attributes by path (times and the
-  descriptor-based changes above stay possible), so a build that needs to
+  change a file's owner or attributes, nor grant a mode bit; it can still
+  take mode bits away and change times (above). So a build that needs to
   write elsewhere (a shared `sccache`, a global cargo cache) does not work;
   each build fetches its crates again into its temporary `CARGO_HOME`.
-- A build script that sets a mode by path (`chmod` of a generated file)
-  fails, inside its own folder too.
+- A build script that sets a mode by path (`chmod` of a generated file),
+  or grants group or other write through `fchmod`, fails, inside its own
+  folder too.
+- Builds need the node's user to have a cache folder, with no symlink and
+  nothing writable by others from it up to `/`, and the toolchain to be a
+  rustup toolchain; elsewhere the node builds nothing and says why.
 - Builds need Landlock ABI 3 (Linux 6.2); a node on an older kernel has
   `host.exec` but no builder, and says why. Railway and a Pi are not yet
   measured (ADR-0039).
