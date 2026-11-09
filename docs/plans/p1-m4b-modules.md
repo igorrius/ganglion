@@ -476,7 +476,7 @@ var Reserved = []string{"html2md", "cells", "module", "modules", "memory", "host
   `last_failure_ms INTEGER NOT NULL DEFAULT 0`. Retired rows of local modules are kept (their files
   are deleted): the journal reads all rows of a module, newest first.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `settings/write_test.go`: a file with comments and two modules; `SetModule` of one changes
     only its line, keeps the comments, adds a third at the end; `RemoveModule` drops one; the result
     parses with `settings.Parse`; a failed write (read-only dir) leaves the old file.
@@ -489,10 +489,10 @@ var Reserved = []string{"html2md", "cells", "module", "modules", "memory", "host
       the previous version becomes `previous`, the one before is retired and its files removed;
     - `Journal` lists all versions with by, note, commit and counters after `Count` calls;
     - `Rollback("local/x")` swaps back.
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement** with `yaml.Node` editing in `settings/write.go` and the store code
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement** with `yaml.Node` editing in `settings/write.go` and the store code
   following the existing `install`/`retire` transaction (`modstore/install.go:199-265`).
-- [ ] **Step 4: `make lint test`, commit, push.**
+- [x] **Step 4: `make lint test`, commit, push.**
 
 ```bash
 git commit -m "modstore: local builds planned, installed and journaled; settings writes its module lines (R-RUN-9, 10)"

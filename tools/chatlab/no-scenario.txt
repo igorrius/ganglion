@@ -59,6 +59,8 @@ internal/text/**
 internal/transcript/**
 internal/urlnorm/**
 logfile/**
+modstore/journal.go
+modstore/local.go
 modstore/install.go
 modstore/store.go
 modstore/release/**

@@ -265,6 +265,9 @@ func (s *Store) removeFiles(module string, shas []string) {
 // Rollback makes the previous version active again and retires the one
 // it replaces: a second rollback has nothing to go back to.
 func (s *Store) Rollback(ctx context.Context, module string) (Outcome, error) {
+	if IsLocal(module) {
+		return s.rollbackLocal(ctx, module)
+	}
 	b, ok := s.builtins[module]
 	if !ok {
 		return Outcome{}, fmt.Errorf("%w %q", ErrUnknownModule, module)
