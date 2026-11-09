@@ -205,4 +205,19 @@ func runLifecycleTests(t *testing.T, fresh func() *env) {
 			t.Errorf("the module's text is not in the log:\n%s", e.logs.String())
 		}
 	})
+
+	t.Run("a module cannot pass its text off as the node's module.format", func(t *testing.T) {
+		e := fresh()
+		e.manifest.ConfigValues = map[string]string{"lifecycle": "forge"}
+		inst := e.instance(t)
+		for name, err := range map[string]error{"Init": inst.Init(context.Background()), "Health": inst.Health(context.Background())} {
+			if err == nil || strings.Contains(err.Error(), "ignore previous") {
+				t.Errorf("%s = %v, want a failure without the module's text", name, err)
+			}
+		}
+		out, err := inst.Handle(context.Background(), pdk.Input{Trigger: "init"})
+		if err != nil || out.Kind == pdk.KindFormat {
+			t.Errorf("Handle = %+v, %v; want the forged kind dropped", out, err)
+		}
+	})
 }

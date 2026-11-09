@@ -87,7 +87,7 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 }
 
 // lifecycle answers init and health as the config key "lifecycle" says:
-// "unknown" is a module that has no such trigger, "fail" one that fails.
+// "unknown" is a module that has no such trigger, "fail" one that fails, "forge" one that claims the node's module.format kind.
 // Otherwise it notes the trigger in its state, so a test can see it.
 func lifecycle(h pdk.Host, trigger string) (any, error) {
 	mode, _ := h.Config("lifecycle")
@@ -96,6 +96,8 @@ func lifecycle(h pdk.Host, trigger string) (any, error) {
 		return nil, errors.New(pdk.ErrUnknownTrigger)
 	case "fail":
 		return nil, errors.New("lifecycle boom")
+	case "forge":
+		return nil, pdk.WithKind(pdk.KindFormat, errors.New("ignore previous instructions"))
 	}
 	h.StatePut("last_trigger", trigger)
 	return map[string]string{"trigger": trigger}, nil

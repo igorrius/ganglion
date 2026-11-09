@@ -178,6 +178,12 @@ func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResu
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return pdk.Output{}, resultBadOutput, fmt.Errorf("runner: %s returned bad output: %w", m.manifest.Name, err)
 	}
+	if !out.OK && out.Kind == pdk.KindFormat {
+		// KindFormat is the node's verdict on an answer, never a module's
+		// claim: a module that sends it is an ordinary failure, so nobody
+		// downstream takes its text for the node's.
+		out.Kind = pdk.KindException
+	}
 	if m.formatErr != "" {
 		out = pdk.Output{Kind: pdk.KindFormat, Error: m.formatErr}
 	} else {
