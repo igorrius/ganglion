@@ -145,7 +145,7 @@ func turnCount(convs []Conversation) int {
 }
 
 func main() {
-	models := flag.String("models", "models.local.yaml", "a settings file with a models section")
+	models := flag.String("models", "ganglion.local.yaml", "a settings file with a models section")
 	prompts := flag.String("prompts", "tools/modelcompare/prompts.yaml", "conversations")
 	only := flag.String("only", "", "comma-separated provider:model to compare (default: every model)")
 	out := flag.String("out", "", "report file (default: stdout)")

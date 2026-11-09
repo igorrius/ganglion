@@ -148,7 +148,7 @@ func runScenarios(ctx context.Context, args []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defaultModels := filepath.Join(root, "models.example.yaml")
+	defaultModels := filepath.Join(root, "examples", "ganglion.lab.yaml")
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	all := fs.Bool("all", false, "run everything, not only what changed: about 900,000 tokens")
 	maxTokens := fs.Int("max-tokens", 1_500_000, "stop starting repeats past this many tokens")
@@ -248,7 +248,7 @@ func loadModels(path string) (settings.Models, map[string]string, error) {
 // sessionFlags are what start hands to the session's server.
 func sessionFlags(fs *flag.FlagSet, root string) (persona, models *string) {
 	persona = fs.String("persona", chatlab.PersonaDefault, "a directory with the persona's files")
-	models = fs.String("models", filepath.Join(root, "models.example.yaml"), "a settings file whose models section is under test")
+	models = fs.String("models", filepath.Join(root, "examples", "ganglion.lab.yaml"), "a settings file whose models section is under test")
 	return persona, models
 }
 

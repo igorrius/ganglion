@@ -51,7 +51,7 @@
     "mcp/lines.go": "1285d34c113d364ae7c2d7735d1ca828a0b607cb280d5227adafb88b33f014c8",
     "mcp/relay.go": "52992986ebb95b6f3275cff3408ffe6340334ef1d8fff8b8856bde2513c5384c",
     "mcp/server.go": "38bbcdce92876d5a1ff6ea073f7f353a00a01d70e2c684657067c6967780c55a",
-    "models.example.yaml": "75ebc6dab3ed07a1d0b4aae4761cb23c1f97642b310d4ae60c742f595d61b84d",
+    "examples/ganglion.lab.yaml": "75ebc6dab3ed07a1d0b4aae4761cb23c1f97642b310d4ae60c742f595d61b84d",
     "provider/claudecli/bridge.go": "7527d2c5b1b447448a8ca925f533cc43a0b5c0be4d481ff9bc10dc5c37cff632",
     "provider/claudecli/claudecli.go": "b8176be6436ed5cc11b09bd3eabfed319729c824d4efb827701770aaa1e00f03",
     "provider/claudecli/proc_other.go": "ac390a48e6332635da7fdf4762dba4f66af55b967f7a3c97d869873ff6d7c38a",

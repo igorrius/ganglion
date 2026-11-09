@@ -1,9 +1,0 @@
-# The language baseline's second models section (chatlab design, section 8.3):
-# the same scenarios on Haiku alone tell a weak rule from a weak model.
-models:
-  providers:
-    - {name: claude, type: claude-cli}
-  models:
-    - {id: haiku, provider: claude, name: haiku, tools: true, context: 200000}
-  purposes:
-    chat: [{model: haiku}]

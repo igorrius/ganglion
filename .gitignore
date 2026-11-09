@@ -11,7 +11,8 @@
 docs/.obsidian/
 .ganglion/
 
-# Local model catalogues (provider keys stay in .env)
+# Local node config (secrets stay in .env)
+ganglion.local.yaml
 models.local.yaml
 
 # The agent workspace (persona, memory); examples/workspace shows the layout
