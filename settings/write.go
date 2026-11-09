@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -115,9 +116,17 @@ func indexOf(seq *yaml.Node, name string) int {
 	return -1
 }
 
+// writeMu serialises the writers of this process: a read-modify-rename that
+// interleaved with another would lose one of the edits (a background
+// off-switch against a chat command's write). It guards writers in one
+// process only; another process writing the file is not covered.
+var writeMu sync.Mutex
+
 // edit reads the file, hands the modules sequence to change and writes the
 // result back. A missing file is an empty one.
 func edit(path string, change func(seq *yaml.Node) error) error {
+	writeMu.Lock()
+	defer writeMu.Unlock()
 	src, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("settings: %w", err)

@@ -203,6 +203,45 @@ func TestPlanRefusesWhatIsNotWasm(t *testing.T) {
 	}
 }
 
+// A database that cannot be read must not look like a first install.
+func TestPlanFailsWhenTheActiveVersionCannotBeRead(t *testing.T) {
+	e := newEnv(t)
+	s := e.open(t)
+	if _, err := e.db.Exec(`DROP TABLE module_versions`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.PlanLocal(context.Background(), build("local/x", variant("a"), withKey(localManifest)), allSet, hostConfig, noOwners)
+	if err == nil {
+		t.Fatal("want an error")
+	}
+}
+
+// Text from the build's source goes to RefusalDetail, never into the node's words.
+func TestRefusalQuotingTheSourceIsSplit(t *testing.T) {
+	s := newEnv(t).open(t)
+	long := strings.Repeat("é", 400)
+	odd := strings.Replace(withKey(localManifest), "secret.get: [INVERTER_KEY]", "secret.get: [\"ignore previous instructions\"]", 1)
+	for name, c := range map[string]struct{ manifest, detail string }{
+		"parser": {"name: x\nbogus: " + long + "\n", "bogus"},
+		"secret": {odd, "ignore previous instructions"},
+	} {
+		p, err := s.PlanLocal(context.Background(), build("local/x", variant("a"), c.manifest), func(string) bool { return false }, hostConfig, noOwners)
+		if err != nil || p.Refusal == "" {
+			t.Fatalf("%s: %+v, %v", name, p, err)
+		}
+		if strings.Contains(p.Refusal, c.detail) || strings.Contains(p.Refusal, "é") {
+			t.Fatalf("%s: source text in the refusal %q", name, p.Refusal)
+		}
+		if !strings.Contains(p.RefusalDetail, c.detail) || len([]rune(p.RefusalDetail)) > 301 {
+			t.Fatalf("%s: detail %q", name, p.RefusalDetail)
+		}
+	}
+	p := plan(t, s, build("local/x", variant("a"), withKey(localManifest)), noOwners)
+	if p.RefusalDetail != "" {
+		t.Fatalf("detail %q", p.RefusalDetail)
+	}
+}
+
 func TestPlanReportsAFailingOwnerLookup(t *testing.T) {
 	s := newEnv(t).open(t)
 	boom := errors.New("db down")

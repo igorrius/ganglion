@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/sqlitedb"
 )
@@ -75,7 +76,11 @@ type Plan struct {
 	Size     int
 	Rights   Rights
 	Widening Rights // what the active version did not have; empty for a first install
-	Refusal  string // "" = installable; else the node's reason
+	Refusal  string // "" = installable; else the node's reason, in the node's fixed words
+	// RefusalDetail is text taken from the build's source (the parser's
+	// message, a name that is not plain): it may quote the manifest. It is
+	// shown to the owner, and to the model only as outside content.
+	RefusalDetail string
 }
 
 // CellOwners reports a cell's owner ("" = ownerless) and whether it exists.
@@ -97,42 +102,35 @@ func ShortName(name string) string { return strings.TrimPrefix(name, LocalPrefix
 // checkBuild is everything about a build that needs neither the node's
 // secrets nor its cells: the name, the bytes and the manifest. A reason is
 // the node's own words.
-func checkBuild(b Build) (runner.Manifest, string) {
+func checkBuild(b Build) (runner.Manifest, string, string) {
 	short := ShortName(b.Module)
 	switch {
 	case !IsLocal(b.Module):
-		return runner.Manifest{}, "a module built on this node is named local/<name>"
+		return runner.Manifest{}, "a module built on this node is named local/<name>", ""
 	case !shortNameRE.MatchString(short):
-		return runner.Manifest{}, "the name after local/ is lower-case letters, digits, - and _, starting with a letter"
+		return runner.Manifest{}, "the name after local/ is lower-case letters, digits, - and _, starting with a letter", ""
 	case slices.Contains(Reserved, short):
-		return runner.Manifest{}, fmt.Sprintf("the name %s is reserved for the node's own tools", short)
+		return runner.Manifest{}, fmt.Sprintf("the name %s is reserved for the node's own tools", short), ""
 	case !bytes.HasPrefix(b.Wasm, wasmMagic):
-		return runner.Manifest{}, "the build is not a WebAssembly module"
+		return runner.Manifest{}, "the build is not a WebAssembly module", ""
 	}
 	m, err := runner.ParseManifest(b.Manifest)
 	switch {
 	case err != nil:
-		return m, "the manifest is not valid for this core: " + clip(err.Error(), 300)
+		return m, "the manifest is not valid for this core", text.Truncate(err.Error(), 300)
 	case m.Name != short && m.Name != b.Module:
-		return m, "the manifest names another module"
+		return m, "the manifest names another module", ""
 	case m.ABI != runner.ABIVersion:
-		return m, fmt.Sprintf("the module speaks ABI %d; this core speaks %d", m.ABI, runner.ABIVersion)
+		return m, fmt.Sprintf("the module speaks ABI %d; this core speaks %d", m.ABI, runner.ABIVersion), ""
 	case len(m.Capabilities.EventEmit) > 0:
-		return m, "the manifest asks for event.emit; a local module may not emit events"
+		return m, "the manifest asks for event.emit; a local module may not emit events", ""
 	}
 	for _, t := range m.Triggers {
 		if t.Tool != "" && t.Output == nil {
-			return m, fmt.Sprintf("the tool %s has no output: its answer would reach the model unchecked", t.Tool)
+			return m, fmt.Sprintf("the tool %s has no output: its answer would reach the model unchecked", t.Tool), ""
 		}
 	}
-	return m, ""
-}
-
-func clip(s string, n int) string {
-	if len(s) > n {
-		return s[:n] + "…"
-	}
-	return s
+	return m, "", ""
 }
 
 // PlanLocal checks a build without installing it: the name is local/…, not
@@ -142,13 +140,13 @@ func clip(s string, n int) string {
 // the cause, never a value; an error is the store's own.
 func (s *Store) PlanLocal(ctx context.Context, b Build, secretSet func(string) bool, config map[string]any, owners CellOwners) (Plan, error) {
 	p := Plan{SHA256: Digest(b.Wasm, b.Manifest), Size: len(b.Wasm)}
-	m, why := checkBuild(b)
+	m, why, detail := checkBuild(b)
 	if why != "" {
-		p.Refusal = why
+		p.Refusal, p.RefusalDetail = why, detail
 		return p, nil
 	}
 	p.Version = m.Version
-	if p.Refusal = missing(m, secretSet, config); p.Refusal != "" {
+	if p.Refusal, p.RefusalDetail = missing(m, secretSet, config); p.Refusal != "" {
 		return p, nil
 	}
 	rights, why, err := cellRights(ctx, b.Module, m, owners)
@@ -157,27 +155,45 @@ func (s *Store) PlanLocal(ctx context.Context, b Build, secretSet func(string) b
 		return p, err
 	}
 	p.Rights = rights
-	if old, ok := s.activeRights(ctx, b.Module); ok {
+	old, ok, err := s.activeRights(ctx, b.Module)
+	if err != nil {
+		return p, err
+	}
+	if ok {
 		p.Widening = widening(rights, old)
 	}
 	return p, nil
 }
 
+// plainName is a name safe to put in the node's own words: short and made
+// of the characters names are made of. Anything else is detail.
+var plainNameRE = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
+
+// named is the refusal "<what> NAME is <rest>" with the name in the node's
+// words when it is a plain name; otherwise the words stay fixed and the name
+// goes to the detail.
+func named(what, name, rest string) (string, string) {
+	if plainNameRE.MatchString(name) {
+		return fmt.Sprintf("%s %s %s", what, name, rest), ""
+	}
+	return fmt.Sprintf("a %s the module names %s", what, rest), text.Truncate(name, 100)
+}
+
 // missing names the first secret that is not set or required config key
-// that is not given.
-func missing(m runner.Manifest, secretSet func(string) bool, config map[string]any) string {
+// that is not given, as a refusal and its detail.
+func missing(m runner.Manifest, secretSet func(string) bool, config map[string]any) (string, string) {
 	for _, name := range sorted(m.Capabilities.SecretGet) {
 		if !secretSet(name) {
-			return fmt.Sprintf("the secret %s is not set on this node", name)
+			return named("the secret", name, "is not set on this node")
 		}
 	}
 	for _, key := range sortedKeys(m.Config) {
 		k := m.Config[key]
 		if _, given := config[key]; k.Required && k.Default == "" && !given {
-			return fmt.Sprintf("the config key %s is required and not set in the module's settings", key)
+			return named("the config key", key, "is required and not set in the module's settings")
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // cellRights splits the cells a module declares into those it would create,
@@ -237,21 +253,25 @@ func baseRights(m runner.Manifest) Rights {
 
 // activeRights are the rights of the module's active version; false when
 // it has none (a first install widens nothing). A version whose files cannot
-// be read counts as having no rights, so everything shows as widening.
-func (s *Store) activeRights(ctx context.Context, module string) (activeRightsSet, bool) {
+// be read counts as having no rights, so everything shows as widening; a
+// database that fails is an error, never a first install.
+func (s *Store) activeRights(ctx context.Context, module string) (activeRightsSet, bool, error) {
 	vs, err := s.versions(ctx, module, StateActive)
-	if err != nil || len(vs) == 0 {
-		return activeRightsSet{}, false
+	if err != nil {
+		return activeRightsSet{}, false, fmt.Errorf("modstore: %w", err)
+	}
+	if len(vs) == 0 {
+		return activeRightsSet{}, false, nil
 	}
 	_, manifest, err := s.readLocal(vs[0])
 	if err != nil {
-		return activeRightsSet{}, true
+		return activeRightsSet{}, true, nil
 	}
 	m, err := runner.ParseManifest(manifest)
 	if err != nil {
-		return activeRightsSet{}, true
+		return activeRightsSet{}, true, nil
 	}
-	return activeRightsSet{Rights: baseRights(m), cells: cellIDs(module, m)}, true
+	return activeRightsSet{Rights: baseRights(m), cells: cellIDs(module, m)}, true, nil
 }
 
 // activeRightsSet is the old version's rights and the cells it declared.
@@ -313,7 +333,7 @@ func (s *Store) InstallLocal(ctx context.Context, b Build, sha string) (Outcome,
 	if Digest(b.Wasm, b.Manifest) != sha {
 		return Outcome{}, ErrBuildMismatch
 	}
-	m, why := checkBuild(b)
+	m, why, _ := checkBuild(b)
 	if why != "" {
 		return Outcome{Module: b.Module, Result: ResultRefused, Reason: why}, nil
 	}

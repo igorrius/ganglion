@@ -1,9 +1,11 @@
 package settings_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/igorrius/ganglion/settings"
@@ -152,5 +154,29 @@ func TestSetModuleRefusesAFileThatIsNotAMapping(t *testing.T) {
 	}
 	if got := read(t, p); got != "- a\n- b\n" {
 		t.Fatalf("the file changed: %q", got)
+	}
+}
+
+func TestConcurrentWritersLoseNoEdit(t *testing.T) {
+	p := writeFile(t, "node:\n  tz: Europe/Kyiv\n")
+	const n = 16
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Go(func() {
+			if err := settings.SetModule(p, settings.Module{Name: fmt.Sprintf("local/m%d", i), Off: i%2 == 0}); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	f := loaded(t, p)
+	if len(f.Modules) != n {
+		t.Fatalf("%d modules survived, want %d:\n%s", len(f.Modules), n, read(t, p))
+	}
+	for _, m := range f.Modules {
+		var i int
+		if _, err := fmt.Sscanf(m.Name, "local/m%d", &i); err != nil || m.Off != (i%2 == 0) {
+			t.Fatalf("module %+v", m)
+		}
 	}
 }
