@@ -651,7 +651,7 @@ func (h *Host) Status(ctx context.Context, s status.Scope) ([]status.Check, erro
     `agent.Deps`, no-op by default), no reply, no model.
   - Ticks: `cells.Reconcile` at start and every 5 min as a housekeeper.
 
-- [ ] **Step 1: Failing tests** (Go probe module, fake inbox, fake jobs, fake settings, a fake
+- [x] **Step 1: Failing tests** (Go probe module, fake inbox, fake jobs, fake settings, a fake
   clock; no sleeping):
   - `Start` loads one active module, defines its cells with owner and about, ensures its cron job,
     skips an `off` one;
@@ -665,14 +665,14 @@ func (h *Host) Status(ctx context.Context, s status.Scope) ([]status.Check, erro
     dynamic `cells.get` is skipped.
   - `agent`: a `KindModule` job calls `ModuleCron` and sends nothing; a `module` event becomes a
     turn whose history has the note.
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement.** `config` wires `modhost.Host` (Start in the core's startup, Handlers
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement.** `config` wires `modhost.Host` (Start in the core's startup, Handlers
   through `tool.WithDynamic`, `ModuleCron`, status source).
-- [ ] **Step 4: Docs** — `05-code-map.md` (`builder`, `modhost`, the dependency rules: `modhost`
+- [x] **Step 4: Docs** — `05-code-map.md` (`builder`, `modhost`, the dependency rules: `modhost`
   imports `runner`, `modstore`, `cells`, `schedule`, `event`, `tool`, `settings`, `secrets`,
   `status`, `alert`; nothing imports `modhost` but `config`); `03-components.md` and
   `04-runtime.md` (a module run on cron; a module tool call; escalation) with Mermaid diagrams.
-- [ ] **Step 5: `make lint test`, commit, push.**
+- [x] **Step 5: `make lint test`, commit, push.**
 
 ```bash
 git commit -m "modhost: the owner's modules run in the node — cron, tools, contract, supervisor, escalation (R-RUN-12..14)"

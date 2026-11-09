@@ -38,6 +38,10 @@ const (
 	stderrCaptureCap = 4 << 10
 )
 
+// ErrTimeout is a call stopped at the manifest's time limit; a host that
+// words the failure for a model or the owner tells it from a trap by it.
+var ErrTimeout = errors.New("timed out")
+
 // compilationCache is shared by every module in the process, so loading the
 // same module again (a new version rollout, a restart of a role) skips the
 // expensive compilation step.
@@ -199,7 +203,7 @@ func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResu
 // memory among them: the module cannot grow and aborts).
 func (m *Module) callError(ctx context.Context, stage string, err error, stderr *limitedBuffer) (callResult, error) {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return resultTimeout, fmt.Errorf("runner: %s: timed out after %v", m.manifest.Name, m.manifest.Limits.Timeout)
+		return resultTimeout, fmt.Errorf("runner: %s: %w after %v", m.manifest.Name, ErrTimeout, m.manifest.Limits.Timeout)
 	}
 	if s := stderr.String(); s != "" {
 		return resultTrap, fmt.Errorf("runner: %s %s: %w\n%s", m.manifest.Name, stage, err, s)

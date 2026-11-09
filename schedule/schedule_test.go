@@ -476,3 +476,84 @@ func TestEnsureSystemReplacesTheStoredJob(t *testing.T) {
 		t.Fatalf("a system kind without System: %v", err)
 	}
 }
+
+// moduleJob is the cron job of the owner's module local/probe (ruling 9 of
+// the M4b plan).
+func moduleJob(id, cron string) schedule.Job {
+	return schedule.Job{ID: id, Owner: owner, Conv: "telegram:42", Transport: "telegram", Kind: schedule.KindModule,
+		Cron: cron, Text: "local/probe", System: true, Created: t0}
+}
+
+// A module's cron job is the node's: EnsureModule stores or replaces it
+// (and brings back one deleted), it fires as a schedule event in its
+// owner's chat, the owner cannot delete it, and DeleteModule deletes every
+// job of that module and no other.
+func TestModuleJobs(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	j := moduleJob("module:local/probe:0", "*/30 * * * *")
+	if err := e.store.EnsureModule(ctx, j); err != nil {
+		t.Fatal(err)
+	}
+	other := moduleJob("module:local/other:0", "30 * * * *")
+	other.Text = "local/other"
+	if err := e.store.EnsureModule(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	j.Cron = "*/15 * * * *"
+	if err := e.store.EnsureModule(ctx, j); err != nil {
+		t.Fatalf("again: %v", err)
+	}
+	got, err := e.store.Get(ctx, j.ID)
+	if err != nil || got.Kind != schedule.KindModule || got.Cron != "*/15 * * * *" || !got.System || got.Text != "local/probe" ||
+		got.EventConv() != "telegram:42" {
+		t.Fatalf("job %+v, %v", got, err)
+	}
+	if err := e.store.Delete(ctx, j.ID, owner, "press"); !errors.Is(err, schedule.ErrSystem) {
+		t.Fatalf("the owner deleted a module's job: %v", err)
+	}
+	if list, _ := e.store.List(ctx, owner); len(list) != 2 {
+		t.Fatalf("the owner's list shows %d jobs, want both module jobs", len(list))
+	}
+	e.now = t0.Add(30 * time.Minute)
+	evs := e.tick(t)
+	if len(evs) != 2 || evs[0].Kind != event.KindSchedule || evs[0].Conv != "telegram:42" {
+		t.Fatalf("events %+v", evs)
+	}
+
+	if err := e.store.DeleteModule(ctx, "local/probe"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := e.store.Get(ctx, j.ID); !got.Deleted {
+		t.Fatal("the module's job is not deleted")
+	}
+	if got, _ := e.store.Get(ctx, other.ID); got.Deleted {
+		t.Fatal("another module's job was deleted")
+	}
+	if err := e.store.EnsureModule(ctx, j); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := e.store.Get(ctx, j.ID); got.Deleted {
+		t.Fatal("EnsureModule did not bring the job back")
+	}
+
+	for name, bad := range map[string]schedule.Job{
+		"not system": func() schedule.Job { b := moduleJob("m1", "0 * * * *"); b.System = false; return b }(),
+		"with a grant": func() schedule.Job {
+			b := moduleJob("m2", "0 * * * *")
+			b.Grant = tool.Grant{Tools: []string{"clock"}}
+			return b
+		}(),
+		"a task": task("m3", "0 * * * *"),
+	} {
+		if err := e.store.EnsureModule(ctx, bad); !errors.Is(err, schedule.ErrInvalid) {
+			t.Errorf("%s: %v, want ErrInvalid", name, err)
+		}
+	}
+	mine := task("j1", "0 9 * * *")
+	e.create(t, mine)
+	taken := moduleJob("j1", "0 * * * *")
+	if err := e.store.EnsureModule(ctx, taken); !errors.Is(err, schedule.ErrExists) {
+		t.Fatalf("a module job over a person's: %v, want ErrExists", err)
+	}
+}

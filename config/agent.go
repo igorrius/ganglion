@@ -14,6 +14,7 @@ import (
 	"github.com/igorrius/ganglion/diag"
 	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/language"
+	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/plan"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider"
@@ -99,6 +100,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		SystemJobs:    do.MustInvoke[Remembering](i).Jobs,
 		Restart:       do.MustInvoke[agent.RestartFunc](i),
 		Modules:       do.MustInvoke[agent.Modules](i),
+		ModuleCron:    do.MustInvoke[*modhost.Host](i).RunCron,
 		Switch:        do.MustInvoke[*host.Switch](i),
 		Commands:      do.MustInvoke[*host.Runner](i),
 		Skills:        do.MustInvoke[Skilled](i).Set,
@@ -152,10 +154,13 @@ func Translator() do.Provider[*language.Translator] {
 }
 
 // Tools provides the tool registry. Each tool joins by one line in
-// toolHandlers.
+// toolHandlers; the tools of the owner's modules come and go with them.
 func Tools() do.Provider[*tool.Registry] {
 	return func(i do.Injector) (*tool.Registry, error) {
-		return tool.NewRegistry(router.Local{}, toolHandlers(i)...)
+		return tool.NewRegistryWith(router.Local{}, []tool.RegistryOption{
+			tool.WithDynamic(do.MustInvoke[*modhost.Host](i).Handlers),
+			tool.WithRegistryLogger(do.MustInvoke[*slog.Logger](i)),
+		}, toolHandlers(i)...)
 	}
 }
 

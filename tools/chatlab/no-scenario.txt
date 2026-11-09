@@ -18,6 +18,7 @@ agent/config.go
 agent/limits.go
 agent/model.go
 agent/modules.go
+agent/module_event.go
 agent/persona.go
 agent/restart.go
 agent/state.go
@@ -26,6 +27,7 @@ alert/**
 cells/backend.go
 cells/cells.go
 cells/memstore.go
+cells/reconciler.go
 cells/request.go
 cells/service.go
 cells/sqlstore/**
@@ -44,6 +46,7 @@ config/config.go
 config/delivery.go
 config/host.go
 config/memory.go
+config/modhost.go
 config/storage.go
 config/web.go
 core/**
@@ -62,6 +65,7 @@ internal/text/**
 internal/transcript/**
 internal/urlnorm/**
 logfile/**
+modhost/**
 modstore/journal.go
 modstore/local.go
 modstore/install.go

@@ -97,6 +97,14 @@ func TestBootstrapFromFile(t *testing.T) {
 	if b.Agent.TZ.String() != "UTC" || b.Agent.DailyTurns != 7 || b.BotToken != "t0k" {
 		t.Fatalf("got %+v", b)
 	}
+	// The modules: section is written where it was read; module secrets come
+	// from the same source.
+	if b.SettingsPath != path || b.Secrets == nil {
+		t.Fatalf("settings path %q, secrets %v", b.SettingsPath, b.Secrets)
+	}
+	if v, _ := b.Secrets.Secret("BOT"); v != "t0k" {
+		t.Fatalf("secret = %q", v)
+	}
 }
 
 func TestRetiredVariableFailsTheStart(t *testing.T) {
@@ -134,6 +142,9 @@ func TestDefaultConfigMayBeMissing(t *testing.T) {
 	b, err := bootstrap(flags.Run{DB: filepath.Join(t.TempDir(), "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
 	if err != nil || b.Settings.Node.TZ != "Europe/Kyiv" {
 		t.Fatalf("got %+v, %v", b.Settings.Node, err)
+	}
+	if filepath.Base(b.SettingsPath) != "ganglion.yaml" || filepath.Dir(b.SettingsPath) != filepath.Dir(b.DB) {
+		t.Fatalf("settings path %q beside %q", b.SettingsPath, b.DB)
 	}
 }
 

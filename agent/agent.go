@@ -48,6 +48,14 @@ type NameFunc func(ctx context.Context, principal string) (string, error)
 // handled again.
 type SystemJob func(ctx context.Context, sp texts.Speaker) (string, error)
 
+// ModuleCronFunc runs a module of the owner's on its cron job
+// (schedule.KindModule): no model, no message (R-RUN-12). An error is the
+// node's own failure, logged; the module's failures are its host's to count.
+type ModuleCronFunc func(ctx context.Context, module string) error
+
+// NoModuleCron is the ModuleCronFunc of a node that hosts no modules.
+func NoModuleCron(context.Context, string) error { return nil }
+
 // Deps are the agent's collaborators. All are required except Middleware,
 // QuickActions, SystemJobs, Facts, Inbox, Plans, Status, Now and Log; the composition root
 // passes no-op implementations where a part is off (ADR-0028).
@@ -76,6 +84,8 @@ type Deps struct {
 	Jobs         Jobs // scheduled jobs, read when their time comes
 	// SystemJobs are the system jobs' code by job id (builtin.AuditJobID).
 	SystemJobs map[string]SystemJob
+	// ModuleCron runs a module's cron job (modhost); NoModuleCron when unset.
+	ModuleCron ModuleCronFunc
 	IsAdmin    AdminFunc
 	// Names are the access list's names, for the line that tells a task
 	// run who receives its answer (ruling R41).
@@ -215,6 +225,9 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Commands == nil {
 		d.Commands = NoCommands{}
 	}
+	if d.ModuleCron == nil {
+		d.ModuleCron = NoModuleCron
+	}
 	if d.Plans == nil {
 		d.Plans = NoPlans{}
 	}
@@ -282,6 +295,14 @@ var payloads = map[event.Kind]func(t *turn) bool{
 	},
 	event.KindCommandDone: func(t *turn) bool {
 		return json.Unmarshal(t.event.Payload, &t.command) == nil && t.command.Key != ""
+	},
+	event.KindModule: func(t *turn) bool {
+		m := &t.module
+		if json.Unmarshal(t.event.Payload, m) != nil || m.Module == "" || m.Principal == "" {
+			return false
+		}
+		t.msg = event.Message{From: m.Principal}
+		return true
 	},
 }
 

@@ -180,3 +180,40 @@ func TestConcurrentWritersLoseNoEdit(t *testing.T) {
 		}
 	}
 }
+
+// The supervisor turns a module off with only its off key, leaving its
+// config and every other line as they were, and says why beside it; turning
+// it on removes both (ruling 8 of the M4b plan). ModulesFile reads the
+// modules: section as it is now, a missing file as none.
+func TestModulesFileSetOff(t *testing.T) {
+	p := writeFile(t, twoModules)
+	f := settings.ModulesFile{Path: p}
+	if err := f.SetOff("local/deye-reader", true, "crashloop"); err != nil {
+		t.Fatal(err)
+	}
+	got := read(t, p)
+	if !strings.Contains(got, "off: true # crashloop") || !strings.Contains(got, "host: 192.168.1.5 # inverter") ||
+		!strings.Contains(got, "tz: Europe/Kyiv # home") {
+		t.Fatalf("file:\n%s", got)
+	}
+	mods, err := f.Modules()
+	if err != nil || len(mods) != 2 || !mods[0].Off || mods[0].Config["host"] != "192.168.1.5" || !mods[1].Off {
+		t.Fatalf("modules %+v, %v", mods, err)
+	}
+	if err := f.SetOff("local/deye-reader", false, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, p); strings.Contains(got, "crashloop") {
+		t.Fatalf("the reason stayed:\n%s", got)
+	}
+	if err := f.SetOff("local/new", true, "crashloop"); err != nil {
+		t.Fatal(err)
+	}
+	if mods, _ := f.Modules(); len(mods) != 3 || mods[2].Name != "local/new" || !mods[2].Off {
+		t.Fatalf("modules %+v", mods)
+	}
+	none := settings.ModulesFile{Path: filepath.Join(t.TempDir(), "ganglion.yaml")}
+	if mods, err := none.Modules(); err != nil || len(mods) != 0 {
+		t.Fatalf("a missing file: %+v, %v", mods, err)
+	}
+}

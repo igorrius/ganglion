@@ -5,6 +5,7 @@ import (
 
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/internal/memlimit"
+	"github.com/igorrius/ganglion/secrets"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/tool/builtin"
 )
@@ -59,6 +60,13 @@ type Bootstrap struct {
 	// Settings is the file the node read, for config.show and the parts
 	// that edit it (M4b).
 	Settings settings.File
+	// SettingsPath is where that file is (or would be: a node may start
+	// without one), which the parts that edit its modules: section write;
+	// "" is ganglion.yaml beside the database.
+	SettingsPath string
+	// Secrets is where the node reads secrets that are not in the file, such
+	// as those a module's manifest names (R-RUN-1); nil reads none.
+	Secrets secrets.Source
 	// Metrics draws the node's own metrics for metrics.show and /metrics
 	// (ADR-0045); the command line sets it from telemetry, nil leaves the
 	// tool out.

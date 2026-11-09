@@ -20,19 +20,25 @@ import (
 // same directory and a rename: a failed write leaves the old file as it was.
 func SetModule(path string, m Module) error {
 	return edit(path, func(seq *yaml.Node) error {
-		i := indexOf(seq, m.Name)
-		if i < 0 {
-			seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
-				plain("name"), {Kind: yaml.ScalarNode, Tag: "!!str", Value: m.Name}}})
-			i = len(seq.Content) - 1
-		}
-		item := seq.Content[i]
+		item := lineOf(seq, m.Name)
 		if err := setConfig(item, m.Config); err != nil {
 			return err
 		}
 		setOff(item, m.Off)
 		return nil
 	})
+}
+
+// lineOf is the line of the module called name in the sequence, added at
+// the end when it is missing.
+func lineOf(seq *yaml.Node, name string) *yaml.Node {
+	if i := indexOf(seq, name); i >= 0 {
+		return seq.Content[i]
+	}
+	item := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
+		plain("name"), {Kind: yaml.ScalarNode, Tag: "!!str", Value: name}}}
+	seq.Content = append(seq.Content, item)
+	return item
 }
 
 // plain is a key written without quotes (a node with no tag is never
@@ -88,6 +94,38 @@ func setOff(item *yaml.Node, off bool) {
 	case off:
 		item.Content = append(item.Content, plain("off"), &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
 	}
+}
+
+// ModulesFile is the modules: section of the node's file as it is now: it
+// reads the file on every call, so a write by /modules or by the module
+// supervisor is seen at once (M4b).
+type ModulesFile struct {
+	Path string
+}
+
+// Modules reads the file and returns its modules: section; a missing file
+// has none. The whole file is checked, as at start.
+func (f ModulesFile) Modules() ([]Module, error) {
+	file, err := LoadOptional(f.Path, os.ReadFile)
+	if err != nil {
+		return nil, err
+	}
+	return file.Modules, nil
+}
+
+// SetOff writes or removes off: true on the line of name, adding the line
+// when it is missing, and leaves its config as it is. why is the node's
+// reason, written beside off: true as a comment ("crashloop"); turning a
+// module on removes both (ruling 8 of the M4b plan).
+func (f ModulesFile) SetOff(name string, off bool, why string) error {
+	return edit(f.Path, func(seq *yaml.Node) error {
+		item := lineOf(seq, name)
+		setOff(item, off)
+		if v, _ := field(item, "off"); v != nil {
+			v.LineComment = why
+		}
+		return nil
+	})
 }
 
 // RemoveModule drops the line of name from modules:; a name that is not

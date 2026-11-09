@@ -107,6 +107,7 @@ func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read
 		return config.Bootstrap{}, err
 	}
 	b.Build = localBuild(getenv)
+	b.SettingsPath, b.Secrets = settingsPath(v.Config, v.DB), src
 	return b, nil
 }
 
@@ -116,7 +117,16 @@ func loadSettings(named, db string, read settings.ReadFunc) (settings.File, erro
 	if named != "" {
 		return settings.Load(named, read)
 	}
-	return settings.LoadOptional(filepath.Join(filepath.Dir(db), settings.FileName), read)
+	return settings.LoadOptional(settingsPath(named, db), read)
+}
+
+// settingsPath is the file the node reads its settings from: the one the
+// operator named, else the one beside the database at db.
+func settingsPath(named, db string) string {
+	if named != "" {
+		return named
+	}
+	return filepath.Join(filepath.Dir(db), settings.FileName)
 }
 
 // fromFile maps the file to the node's bootstrap settings for the

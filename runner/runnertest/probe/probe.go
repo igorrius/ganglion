@@ -6,6 +6,7 @@ package probe
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/igorrius/ganglion/pdk"
 )
@@ -29,8 +30,12 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 	if in.Trigger == "init" || in.Trigger == "health" {
 		return lifecycle(h, in.Trigger)
 	}
+	payload := in.Payload
+	if len(payload) == 0 || string(payload) == "{}" {
+		payload = scripted(h, in.Trigger)
+	}
 	var o op
-	if err := json.Unmarshal(in.Payload, &o); err != nil {
+	if err := json.Unmarshal(payload, &o); err != nil {
 		return nil, err
 	}
 	switch o.Op {
@@ -84,6 +89,14 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 		return nil, pdk.WithKind(pdk.KindAuthFailed, errors.New(o.Value))
 	}
 	return nil, errors.New("unknown op " + o.Op)
+}
+
+// scripted is the operation a host configured for a trigger that brings no
+// payload (a cron run, a tool called with no arguments): the config key
+// "op_<trigger>", ":" written as "_" ("op_cron", "op_tool_status").
+func scripted(h pdk.Host, trigger string) json.RawMessage {
+	v, _ := h.Config("op_" + strings.ReplaceAll(trigger, ":", "_"))
+	return json.RawMessage(v)
 }
 
 // lifecycle answers init and health as the config key "lifecycle" says:

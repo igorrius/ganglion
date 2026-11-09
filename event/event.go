@@ -29,7 +29,14 @@ const (
 	// background after its call returned (R-CMD-4); its payload is a
 	// CommandDone.
 	KindCommandDone Kind = "command.done"
+	// KindModule is a module of the owner's that needs the agent: an
+	// escalation the node words itself (R-RUN-14); its payload is a Module.
+	KindModule Kind = "module"
 )
+
+// SourceModule is the Source of the events the node puts for the owner's
+// modules: only those make a module turn.
+const SourceModule = "module"
 
 // Event is the single input from any transport: a chat message, a sensor
 // reading, a cron tick or a module exception.

@@ -6,6 +6,7 @@ package runnertest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -222,8 +223,8 @@ func Run(t *testing.T, load Loader, probe []byte) {
 		inst := e.instance(t)
 		start := time.Now()
 		_, err := inst.Handle(context.Background(), pdk.Input{Trigger: "cron", Payload: json.RawMessage(`{"op":"spin"}`)})
-		if err == nil {
-			t.Fatal("spinning module returned no error")
+		if !errors.Is(err, runner.ErrTimeout) {
+			t.Fatalf("spinning module returned %v, want runner.ErrTimeout", err)
 		}
 		if d := time.Since(start); d > 3*time.Second {
 			t.Fatalf("Handle took %v, want it stopped near the 200 ms timeout", d)
@@ -236,8 +237,8 @@ func Run(t *testing.T, load Loader, probe []byte) {
 		e.manifest.Limits.Memory = 32 << 20
 		inst := e.instance(t)
 		_, err := inst.Handle(context.Background(), pdk.Input{Trigger: "cron", Payload: json.RawMessage(`{"op":"alloc","mib":64}`)})
-		if err == nil {
-			t.Fatal("allocating 64 MiB under a 32 MiB limit succeeded")
+		if err == nil || errors.Is(err, runner.ErrTimeout) {
+			t.Fatalf("allocating 64 MiB under a 32 MiB limit: %v, want a trap", err)
 		}
 		call(t, inst, `{"op":"echo"}`)
 	})
