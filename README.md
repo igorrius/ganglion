@@ -31,6 +31,10 @@ Requires Go 1.27 and, for linting, golangci-lint v2 built with Go 1.27.
 ```sh
 make check                      # lint, test, build
 ./bin/ganglion version          # version, commit, toolchain
+
+# Run: settings live in ganglion.yaml beside the database; secrets stay in the environment.
+cp examples/ganglion.example.yaml ganglion.yaml   # set telegram.admin and the models you use
+export TELEGRAM_BOT_TOKEN=...                      # and the provider keys the file names
 ./bin/ganglion run --roles core,edge,worker
 
 make modules modrun             # build the Deye module (Go) and the module runner

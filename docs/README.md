@@ -291,7 +291,7 @@ Start here when coming back to the project.
       not dumpable, and `ps` still sees the machine (owner);
     - denied for each command: the node's binary, data, logs, modules and workspace, `*_FILE`
       secrets, the owner's secret stores, shell histories and the files that run at login,
-      `.env` files three folders deep, `GANGLION_SANDBOX_DENY`; 59 paths on the owner's machine;
+      `.env` files three folders deep, `sandbox.deny`; 59 paths on the owner's machine;
     - checks at start and a self-test; off with a reason in `/status` and the log (not Linux, root,
       no Landlock, dumpable, self-test); signals not limited, so `kill` will reach the owner's
       processes (owner);
@@ -319,7 +319,7 @@ Start here when coming back to the project.
       for an hour; commands in a task's grant, listed with their folders and lines;
     - skill scripts run in the command sandbox, from a copy of their skill, and only while it is on;
     - the kill switch `tools.host_exec` and an admin's `/commands on|off`, with its line in `/status`;
-    - commands may list the folders the sandbox splits; `GANGLION_SANDBOX_HIDE_NAMES=on` hides the names
+    - commands may list the folders the sandbox splits; `sandbox.hide_names: true` hides the names
       ([ADR-0057](adr/0057-commands-may-list-split-folders.md));
     - scripted acceptance: seven mech-host chatlab scenarios, 3 of 3 runs each, the end-to-end sandbox test
       (`config/hostexec_accept_test.go`) and the task-grant test; the branch's reviews found gaps in the
@@ -476,7 +476,7 @@ Start here when coming back to the project.
       - `TMPDIR` is assumed outside the deny list; a failed start after `Begin` leaves its key begun;
       - `mech-host-forbidden` counts two forbidden calls without telling `sudo` from `systemd-run`;
       - the injection scenario's second facts repeat the first; the background scenario's second reply proves little;
-      - `cmd/run.go` compares `GANGLION_SANDBOX_HIDE_NAMES` with a literal `"on"`; a long doc line in `grants.go`;
+      - a long doc line in `grants.go`;
       - the Landlock write checks assert only a non-zero exit.
       - from the live check (not M3d code): the agent asked two separate questions instead of showing a plan
         until told to, and did not tick the plan's steps after the work (the plan is a prompt directive);
@@ -501,7 +501,7 @@ is needed for tests: they run against a fake Bot API.
   token is `TELEGRAM_TEST_BOT_TOKEN`. Two runs at once get `409 Conflict`,
   and the older one stops polling (R-DLV-8).
 - **Your Telegram user id:** needed for the admin entry in the access list
-  (`GANGLION_ADMIN=telegram:user:<id>`); strangers get no reply. Any
+  (`telegram.admin: telegram:user:<id>` in the settings file); strangers get no reply. Any
   "user info" bot shows it, or the `from.id` of your message in
   `getUpdates`.
 - **Running locally:** a `.env` file in the repository root (git-ignored); copy
@@ -509,8 +509,12 @@ is needed for tests: they run against a fake Bot API.
 
   ```sh
   TELEGRAM_TEST_BOT_TOKEN=<token from @BotFather>
-  GANGLION_ADMIN=telegram:user:<your id>
   ```
+
+  Settings go in `ganglion.local.yaml` (git-ignored): copy
+  [`examples/ganglion.example.yaml`](../examples/ganglion.example.yaml) and set `telegram.admin` to
+  `telegram:user:<your id>`. For `make live-echo`, set it in
+  [`examples/ganglion.echo.yaml`](../examples/ganglion.echo.yaml) instead.
 
 - **Running in a Claude Code cloud session:** a local `.env` does not reach
   the container. In the cloud environment's settings (the environment menu
@@ -518,9 +522,8 @@ is needed for tests: they run against a fake Bot API.
   1. Network access: add `api.telegram.org` to Allowed domains, keeping
      "Allow package managers" ticked
      ([docs](https://code.claude.com/docs/en/cloud-environments#network-access)).
-  2. Add `TELEGRAM_TEST_BOT_TOKEN` and `GANGLION_ADMIN` as secrets or
-     environment variables. A new session picks them up. Never paste the
-     token into the chat.
+  2. Add `TELEGRAM_TEST_BOT_TOKEN` as a secret or environment variable. A new session picks it up.
+     Never paste the token into the chat. Settings go in a `ganglion.yaml` the session can read.
 
 ## Installing a skill
 
@@ -551,7 +554,7 @@ now only an admin can ask), then their Telegram's, then English. English, Russia
 language in the table is translated once by the cheap model, and each person is told so once.
 
 To correct a text, put `<code>.yaml` in the `languages/` directory beside the database
-(`GANGLION_LANGUAGES` moves it, but never into the workspace), with the keys you want from
+(`agent.languages` moves it, but never into the workspace), with the keys you want from
 `texts/lang/en.yaml`, and restart. A text keeps its `{placeholders}` and adds no links, mentions or
 Markdown; one that does not is logged and left out. Your file comes before a shipped file and a
 translation, key by key.

@@ -149,7 +149,7 @@ func TestEveryPropertyIsDescribed(t *testing.T) {
 }
 
 func TestExamplesLoad(t *testing.T) {
-	for _, p := range []string{"../examples/ganglion.example.yaml", "../examples/ganglion.lab.yaml", "../examples/ganglion.haiku-only.yaml"} {
+	for _, p := range []string{"../examples/ganglion.example.yaml", "../examples/ganglion.lab.yaml", "../examples/ganglion.haiku-only.yaml", "../examples/ganglion.echo.yaml"} {
 		src, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatal(err)
@@ -159,7 +159,8 @@ func TestExamplesLoad(t *testing.T) {
 			t.Errorf("%s: %v", p, err)
 			continue
 		}
-		if f.Models == nil {
+		// The echo bot runs without a model.
+		if f.Models == nil && !strings.HasSuffix(p, "ganglion.echo.yaml") {
 			t.Errorf("%s: no models section", p)
 		}
 		if first, _, _ := strings.Cut(string(src), "\n"); first != "# yaml-language-server: $schema=../schemas/node.schema.json" {

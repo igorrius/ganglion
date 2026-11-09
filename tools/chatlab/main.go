@@ -26,10 +26,10 @@ import (
 )
 
 const usage = `usage:
-  chatlab run [names...] [--all] [--max-tokens 1500000] [--judge sonnet] [--models <file>] [--repeat n] [--dir <scenarios>]
+  chatlab run [names...] [--all] [--max-tokens 1500000] [--judge sonnet] [--config <file>] [--repeat n] [--dir <scenarios>]
   chatlab skip-full
   chatlab mark <names...>
-  chatlab start [--persona <dir>] [--models <file>]
+  chatlab start [--persona <dir>] [--config <file>]
   chatlab say "..."
   chatlab send <name> [--type <mime>] [--size <bytes>] [--caption "..."]
   chatlab press "Approve"
@@ -153,7 +153,7 @@ func runScenarios(ctx context.Context, args []string) (int, error) {
 	all := fs.Bool("all", false, "run everything, not only what changed: about 900,000 tokens")
 	maxTokens := fs.Int("max-tokens", 1_500_000, "stop starting repeats past this many tokens")
 	judge := fs.String("judge", chatlab.DefaultJudgeModel, "the judge's model, through the claude CLI")
-	models := fs.String("models", defaultModels, "a settings file whose models section is under test")
+	models := fs.String("config", defaultModels, "a settings file whose models section is under test")
 	repeat := fs.Int("repeat", 0, "repeats of each scenario instead of its own number")
 	dir := fs.String("dir", filepath.Join(root, "tools", "chatlab", "scenarios"), "where the scenarios are")
 	names, err := flagsLast(fs, args)
@@ -248,7 +248,7 @@ func loadModels(path string) (settings.Models, map[string]string, error) {
 // sessionFlags are what start hands to the session's server.
 func sessionFlags(fs *flag.FlagSet, root string) (persona, models *string) {
 	persona = fs.String("persona", chatlab.PersonaDefault, "a directory with the persona's files")
-	models = fs.String("models", filepath.Join(root, "examples", "ganglion.lab.yaml"), "a settings file whose models section is under test")
+	models = fs.String("config", filepath.Join(root, "examples", "ganglion.lab.yaml"), "a settings file whose models section is under test")
 	return persona, models
 }
 
@@ -275,7 +275,7 @@ func startSession(args []string) error {
 			return err
 		}
 		defer func() { _ = log.Close() }()
-		cmd := exec.Command(exe, "serve", "--dir", dir, "--persona", *persona, "--models", *models) //nolint:gosec,noctx // this program, outliving this call
+		cmd := exec.Command(exe, "serve", "--dir", dir, "--persona", *persona, "--config", *models) //nolint:gosec,noctx // this program, outliving this call
 		cmd.Stdout, cmd.Stderr, cmd.Dir = log, log, root
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		if err := cmd.Start(); err != nil {

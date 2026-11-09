@@ -16,31 +16,35 @@ lint:
 check: lint test build
 
 # The M2 echo bot on the owner's test bot (docs/README.md, owner setup).
-# .env holds TELEGRAM_TEST_BOT_TOKEN and GANGLION_ADMIN; stop any other
-# process polling that bot first, or this one gets 409 and stops polling.
+# .env holds TELEGRAM_TEST_BOT_TOKEN and the provider keys; settings live in
+# LIVE_CONFIG. Fill in telegram.admin in examples/ganglion.echo.yaml (or point
+# LIVE_ECHO_CONFIG at a copy). Stop any other process polling that bot first,
+# or this one gets 409 and stops polling.
 # A second instance needs its own database: make live-echo LIVE_DB=bin/live2.db
 LIVE_DB ?= bin/live.db
+LIVE_ECHO_CONFIG ?= examples/ganglion.echo.yaml
 
 live-echo: build
 	@test -f .env || { echo "live-echo: no .env (see docs/README.md, owner setup)"; exit 1; }
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-echo: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
-	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) ./bin/ganglion run --roles core
+	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= \
+	./bin/ganglion run --roles core --db $(LIVE_DB) --config $(LIVE_ECHO_CONFIG)
 
-# The M3a agent on the test bot: live-echo plus a model catalogue
-# (models.local.yaml, git-ignored; see models.example.yaml) and the agent's
-# workspace (./workspace, git-ignored; copy examples/workspace for a
-# persona). Provider keys named by key_env come from .env.
-LIVE_MODELS ?= models.local.yaml
-LIVE_WORKSPACE ?= workspace
+# The M3a agent on the test bot: live-echo plus the settings file LIVE_CONFIG
+# (ganglion.local.yaml, git-ignored; copy examples/ganglion.example.yaml and
+# set telegram.admin) with its models section and agent.workspace (./workspace,
+# git-ignored; copy examples/workspace for a persona). Provider keys named by
+# `key: env:NAME` come from .env.
+LIVE_CONFIG ?= ganglion.local.yaml
 
 live-agent: build
 	@test -f .env || { echo "live-agent: no .env (see docs/README.md, owner setup)"; exit 1; }
-	@test -f $(LIVE_MODELS) || { echo "live-agent: no $(LIVE_MODELS); copy models.example.yaml"; exit 1; }
+	@test -f $(LIVE_CONFIG) || { echo "live-agent: no $(LIVE_CONFIG); copy examples/ganglion.example.yaml and set telegram.admin"; exit 1; }
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-agent: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
-	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) \
-	GANGLION_MODELS_FILE=$(LIVE_MODELS) GANGLION_WORKSPACE=$(LIVE_WORKSPACE) ./bin/ganglion run --roles core
+	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= \
+	./bin/ganglion run --roles core --db $(LIVE_DB) --config $(LIVE_CONFIG)
 
 # The scripted acceptance of M3b (config/accept_test.go): the real core
 # with real models and the real web, the fake Bot API playing the owner.
@@ -60,7 +64,7 @@ accept: build
 COMPARE ?=
 compare:
 	@set -a; [ -f .env ] && . ./.env; set +a; \
-	go run ./tools/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
+	go run ./tools/modelcompare -config $(LIVE_CONFIG) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
 
 # Test the agent by talking to it (ADR-0048): real models over the fake Bot API,
 # a table of what passed. It runs what changed since it last passed; LAB picks

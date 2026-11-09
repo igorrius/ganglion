@@ -99,7 +99,7 @@ const minValue = 6
 
 // Values returns a function that replaces every exact occurrence of the
 // given secret values with "[redacted]": the secrets the node read, which
-// no pattern may recognise (a provider key named by key_env). Empty and
+// no pattern may recognise (a provider key). Empty and
 // very short values are skipped; a longer value wins over its prefix.
 func Values(vs ...string) func(string) string {
 	keep := make([]string, 0, len(vs))

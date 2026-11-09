@@ -2,7 +2,7 @@
 // of a settings file's models section and writes a Markdown report: answers
 // side by side, latency, tokens, cache and cost (M3a task 10, decision D-6).
 //
-//	modelcompare -models ganglion.local.yaml -prompts tools/modelcompare/prompts.yaml \
+//	modelcompare -config ganglion.local.yaml -prompts tools/modelcompare/prompts.yaml \
 //	  -only claude:haiku,openrouter:deepseek/deepseek-v4.1-flash -out report.md
 //
 // Provider keys come from the variable each provider's key names (or
@@ -145,7 +145,7 @@ func turnCount(convs []Conversation) int {
 }
 
 func main() {
-	models := flag.String("models", "ganglion.local.yaml", "a settings file with a models section")
+	models := flag.String("config", "ganglion.local.yaml", "a settings file with a models section")
 	prompts := flag.String("prompts", "tools/modelcompare/prompts.yaml", "conversations")
 	only := flag.String("only", "", "comma-separated provider:model to compare (default: every model)")
 	out := flag.String("out", "", "report file (default: stdout)")

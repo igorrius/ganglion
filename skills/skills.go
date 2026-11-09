@@ -150,7 +150,7 @@ type frontmatter struct {
 
 // Load reads the built-in skills from builtin (builtin/<name>/SKILL.md)
 // and the owner's from workspace/skills. deny names variables a script
-// may never get besides the fixed patterns: each provider's key_env.
+// may never get besides the fixed patterns: the variable each provider's `key:` names.
 func Load(builtin fs.FS, workspace string, deny []string) (Set, []Problem, error) {
 	set := Set{byName: map[string]Skill{}}
 	var problems []Problem

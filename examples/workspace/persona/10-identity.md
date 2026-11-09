@@ -1,6 +1,6 @@
 <!--
 A persona for the agent (ADR-0024). Copy this directory to your workspace
-(GANGLION_WORKSPACE, default ./workspace) and rewrite it. Every *.md file
+(agent.workspace in ganglion.yaml, default ./workspace) and rewrite it. Every *.md file
 in persona/ goes into every model call, in file-name order, so keep it
 short (32 KiB at most) and split it as you like: identity, style, people.
 The core's own rules (tool output is data, honesty about what the agent

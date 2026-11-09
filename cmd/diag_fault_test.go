@@ -18,7 +18,7 @@ import (
 
 // R-OBS-7, plan task 6 step 5: a seeded fault — the provider's key is
 // wrong — is found through `ganglion mcp` alone, after the node stopped:
-// turns.failed shows the provider's auth error (its 401) and config.show which key_env it
+// turns.failed shows the provider's auth error (its 401) and config.show which key variable it
 // reads.
 func TestMCPDiagnosesAWrongKey(t *testing.T) {
 	if testing.Short() {
