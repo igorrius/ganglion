@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -336,15 +337,16 @@ func TestModuleBuildRefusesASymlinkedModulesFolder(t *testing.T) {
 
 // goldenWindow is the install window of the reader built as artifact(…, 161
 // KiB): the brief's text with the secrets line worded so redaction leaves
-// it, the cells in the plan's order, and the tool's description.
+// it, the cells in the plan's order, the tool's description, and every name
+// Markdown could format (an "_", any cron line) in a code span.
 func goldenWindow(sha string) string {
 	return "Install local/deye-reader (version 3, 161 KB, " + sha[:6] + "…)?\n" +
 		"• Network: eu1-developer.deyecloud.com\n" +
-		"• Secrets it reads: DEYE_APP_ID, DEYE_APP_SECRET, DEYE_EMAIL, DEYE_PASSWORD\n" +
+		"• Secrets it reads: `DEYE_APP_ID`, `DEYE_APP_SECRET`, `DEYE_EMAIL`, `DEYE_PASSWORD`\n" +
 		"• Creates cells: deye-reader.grid, deye-reader.sample, deye-reader.soc\n" +
 		"• Takes back cells: —\n" +
 		"• Reads cells: —\n" +
-		"• Runs: */30 * * * *; tool deye-reader.status\n" +
+		"• Runs: `*/30 * * * *`; tool deye-reader.status\n" +
 		"• For the agent, deye-reader.status is described as `'Battery state of charge, grid and the last full reading of the Deye inverter.'`\n" +
 		"• Limits: 32 MiB, 20 s a call"
 }
@@ -696,5 +698,47 @@ func TestModuleInstallSaysWhenTheModuleDoesNotRun(t *testing.T) {
 				t.Fatalf("reloads %v", e.reloads.names)
 			}
 		})
+	}
+}
+
+// A rerun of the asking turn asks again; the owner still presses on the
+// first question, so the first window is the one the press is held to.
+func TestModuleInstallPressIsHeldToTheFirstWindowAsked(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "deye-reader")
+	art := artifact(deyeManifest, 1024, 1)
+	e.build(t, art)
+	c := installCall(art.SHA256)
+	question(t, e, c)
+	e.cells["deye-reader.soc"] = cells.Cell{ID: "deye-reader.soc"} // the press would now take it back
+	question(t, e, c)                                              // the turn rerun asks again
+	if _, err := e.tool(builtin.ModuleInstallTool).Run(context.Background(), pressed(c)); err == nil || !strings.Contains(err.Error(), "changed since the owner saw") {
+		t.Fatalf("installed rights the pressed window did not show: %v", err)
+	}
+	if vs, _ := e.store.List(context.Background()); len(vs) != 0 {
+		t.Fatalf("versions %+v", vs)
+	}
+}
+
+// Markdown formats with "_" and "*": a name or a cron line holding them is in
+// a code span, so the rendered window shows every character that installs.
+func TestModuleInstallWindowKeepsMarkdownFromNames(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "deye-reader")
+	odd := strings.Replace(deyeManifest, "http.fetch: [eu1-developer.deyecloud.com]", "http.fetch: [_x_.example.com, plain.example.com]", 1)
+	odd = strings.Replace(odd, `- cron: "*/30 * * * *"`, `- cron: "*/5 1* * * *"`, 1)
+	art := artifact(odd, 1024, 1)
+	e.build(t, art)
+	q := question(t, e, installCall(art.SHA256))
+	for _, want := range []string{"• Network: `_x_.example.com`, plain.example.com\n", "• Runs: `*/5 1* * * *`; tool deye-reader.status\n",
+		"`DEYE_APP_ID`"} {
+		if !strings.Contains(q, want) {
+			t.Fatalf("window lacks %q:\n%s", want, q)
+		}
+	}
+	// Outside the code spans nothing is left that Markdown formats with.
+	outside := regexp.MustCompile("`[^`]*`").ReplaceAllString(q, "")
+	if strings.ContainsAny(outside, "_*[]") {
+		t.Fatalf("Markdown marks outside a code span:\n%s", outside)
 	}
 }

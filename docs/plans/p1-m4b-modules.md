@@ -703,19 +703,22 @@ git commit -m "modhost: the owner's modules run in the node — cron, tools, con
 ```
 Install local/deye-reader (version 3, 161 KB, a3f9c1…)?
 • Network: eu1-developer.deyecloud.com
-• Secrets it reads: DEYE_APP_ID, DEYE_APP_SECRET, DEYE_EMAIL, DEYE_PASSWORD
+• Secrets it reads: `DEYE_APP_ID`, `DEYE_APP_SECRET`, `DEYE_EMAIL`, `DEYE_PASSWORD`
 • Creates cells: deye-reader.grid, deye-reader.sample, deye-reader.soc
 • Takes back cells: —
 • Reads cells: —
-• Runs: */30 * * * *; tool deye-reader.status
+• Runs: `*/30 * * * *`; tool deye-reader.status
 • For the agent, deye-reader.status is described as `'Battery state of charge, grid and the last full reading of the Deye inverter.'`
 • Limits: 32 MiB, 20 s a call
 ```
 
   (As built: "Secrets it reads:", because the redaction reads "Secrets: X" as a secret and its
   value and would hide the first name; the cells in the plan's sorted order; each tool's
-  description, which the agent reads, on its own line, escaped as `host.exec` shows an argument.
-  The press re-plans and installs only when the window it would show is the one the owner saw.)
+  description, which the agent reads, on its own line, escaped as `host.exec` shows an argument;
+  a name with anything but letters, digits, dots and hyphens, and every cron line, in a code span,
+  so Markdown cannot format away a character of what installs.
+  The press re-plans and installs only when the window it would show is the one the owner saw;
+  the window is kept once per call, so a rerun of the asking turn cannot replace it.)
 
   and, for an update that widens, a first line `New: network api.example.com` (each widened
   item). A plan with a `Refusal` is not asked: the tool answers the refusal. The press runs the

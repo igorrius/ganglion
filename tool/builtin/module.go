@@ -196,6 +196,28 @@ func (m Modules) saveBuild(a builder.Artifact, rec buildRecord) error {
 	return nil
 }
 
+// writeOnce writes data at path unless a file is there already, which it
+// keeps: the data goes to a temporary file that is linked into place, so
+// path holds either nothing or the whole first write.
+func writeOnce(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(f.Name()) }()
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Link(f.Name(), path); err != nil && !errors.Is(err, fs.ErrExist) {
+		return err
+	}
+	return nil
+}
+
 // writeFile replaces path with data through a temporary file beside it.
 func writeFile(path string, data []byte) error {
 	f, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")

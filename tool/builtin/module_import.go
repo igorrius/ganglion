@@ -60,7 +60,7 @@ func (t *ModuleImport) Question(_ context.Context, c tool.Call) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	return whole(ModuleImportTool, c.Speak.Text(texts.AskModuleImport, texts.Vars{"from": shown(src), varName: a.Name}))
+	return whole(ModuleImportTool, c.Speak.Text(texts.AskModuleImport, texts.Vars{"from": shown(src), varName: item(a.Name)}))
 }
 
 // Run implements tool.Handler: only pressed, it copies and commits.
