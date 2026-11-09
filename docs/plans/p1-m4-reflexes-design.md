@@ -137,7 +137,7 @@ Rules (owner):
 - **A schema with descriptions.** `schemas/node.schema.json` gives every
   field a description, a type, a default and the allowed values, so an
   editor shows them on hover and marks errors; a test keeps it in step
-  with the code (ADR-0023). `examples/ganglion.example.yaml` comments
+  with the code (ADR-0023). `ganglion.example.yaml` at the root (beside `.env.example`) comments
   every field.
 - **Old variables fail the start.** `GANGLION_TZ`, `GANGLION_DAILY_TURNS`,
   `GANGLION_MODELS_FILE`, `key_env` and the rest are no longer read. A

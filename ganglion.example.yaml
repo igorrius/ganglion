@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../schemas/node.schema.json
+# yaml-language-server: $schema=schemas/node.schema.json
 # ganglion.yaml: everything an operator chooses (ADR-0059). Copy this file to
 # ganglion.yaml (or ganglion.local.yaml, which git ignores) and change what you
 # need. Every key is optional; the values below are the defaults unless a

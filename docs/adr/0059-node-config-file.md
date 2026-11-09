@@ -123,7 +123,7 @@ it.
 - **A schema with descriptions:** `schemas/node.schema.json` gives every
   field a description, a type, a default and the allowed values; a test
   keeps it in step with the loader (ADR-0023);
-  `examples/ganglion.example.yaml` comments every field.
+  `ganglion.example.yaml` at the root comments every field.
 - **A `modules:` line holds the name, the module's config and `off`.**
   Which version runs, and its files, stay in the module store of ADR-0041
   (`<data>/modules/<name>/<sha256>.wasm` and `module_versions`), so the

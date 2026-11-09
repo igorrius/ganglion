@@ -531,7 +531,7 @@ is needed for tests: they run against a fake Bot API.
   ```
 
   Settings go in `ganglion.local.yaml` (git-ignored): copy
-  [`examples/ganglion.example.yaml`](../examples/ganglion.example.yaml) and set `telegram.admin` to
+  [`ganglion.example.yaml`](../ganglion.example.yaml) and set `telegram.admin` to
   `telegram:user:<your id>`. For `make live-echo`, set it in
   [`examples/ganglion.echo.yaml`](../examples/ganglion.echo.yaml) instead.
 

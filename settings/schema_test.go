@@ -152,7 +152,16 @@ func TestEveryPropertyIsDescribed(t *testing.T) {
 }
 
 func TestExamplesLoad(t *testing.T) {
-	for _, p := range []string{"../examples/ganglion.example.yaml", "../examples/ganglion.lab.yaml", "../examples/ganglion.haiku-only.yaml", "../examples/ganglion.echo.yaml"} {
+	// The operator's template sits at the root, beside .env.example; the
+	// test tools' files sit in examples/. Each names the schema relative to
+	// itself.
+	header := map[string]string{
+		"../ganglion.example.yaml":             "# yaml-language-server: $schema=schemas/node.schema.json",
+		"../examples/ganglion.lab.yaml":        "# yaml-language-server: $schema=../schemas/node.schema.json",
+		"../examples/ganglion.haiku-only.yaml": "# yaml-language-server: $schema=../schemas/node.schema.json",
+		"../examples/ganglion.echo.yaml":       "# yaml-language-server: $schema=../schemas/node.schema.json",
+	}
+	for p, want := range header {
 		src, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatal(err)
@@ -166,7 +175,7 @@ func TestExamplesLoad(t *testing.T) {
 		if f.Models == nil && !strings.HasSuffix(p, "ganglion.echo.yaml") {
 			t.Errorf("%s: no models section", p)
 		}
-		if first, _, _ := strings.Cut(string(src), "\n"); first != "# yaml-language-server: $schema=../schemas/node.schema.json" {
+		if first, _, _ := strings.Cut(string(src), "\n"); first != want {
 			t.Errorf("%s: first line %q", p, first)
 		}
 	}

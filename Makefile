@@ -32,7 +32,7 @@ live-echo: build
 	./bin/ganglion run --roles core --db $(LIVE_DB) --config $(LIVE_ECHO_CONFIG)
 
 # The M3a agent on the test bot: live-echo plus the settings file LIVE_CONFIG
-# (ganglion.local.yaml, git-ignored; copy examples/ganglion.example.yaml and
+# (ganglion.local.yaml, git-ignored; copy ganglion.example.yaml and
 # set telegram.admin) with its models section and agent.workspace (./workspace,
 # git-ignored; copy examples/workspace for a persona). Provider keys named by
 # `key: env:NAME` come from .env.
@@ -40,7 +40,7 @@ LIVE_CONFIG ?= ganglion.local.yaml
 
 live-agent: build
 	@test -f .env || { echo "live-agent: no .env (see docs/README.md, owner setup)"; exit 1; }
-	@test -f $(LIVE_CONFIG) || { echo "live-agent: no $(LIVE_CONFIG); copy examples/ganglion.example.yaml and set telegram.admin"; exit 1; }
+	@test -f $(LIVE_CONFIG) || { echo "live-agent: no $(LIVE_CONFIG); copy ganglion.example.yaml and set telegram.admin"; exit 1; }
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-agent: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
 	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= \
