@@ -1,0 +1,17 @@
+.git
+.github
+bin/
+dist/
+target/
+**/target/
+.superpowers/
+.env
+.env.*
+*.db
+*.sqlite3
+logs/
+workspace/
+ganglion.local.yaml
+models.local.yaml
+.ganglion/
+docs/.obsidian/

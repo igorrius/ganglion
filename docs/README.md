@@ -7,7 +7,7 @@ Start here when coming back to the project.
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
 - **Next:** execute the [M4b plan](plans/p1-m4b-modules.md) (written
-  2026-11-09; tasks 1–9 done: contracts, owned cells, the runner's cell
+  2026-11-09; tasks 1–10 done: contracts, owned cells, the runner's cell
   host functions, local installs and the journal, the Rust builder in a
   confined sandbox, `modhost`, which runs the owner's modules in the
   node on cron and as tools with a supervisor and escalations, the
@@ -15,7 +15,7 @@ Start here when coming back to the project.
   the install window, `/modules`, `/cells`, `cells.list` and the condensed
   history, and the Deye example in Rust
   ([examples/modules/deye-reader](../examples/modules/deye-reader/README.md))
-  checked against the Go reader, now `internal/deyeref`; next the deploy):
+  checked against the Go reader, now `internal/deyeref`, and the container image with its Railway runbook, [deploy-railway.md](deploy-railway.md); next the owner's deploy):
   modules the agent builds from source, cells
   owned by modules, the Deye example, deploy on Railway. Rust with the
   `wasm32-wasip1` target is needed on the machine that builds modules (the
@@ -648,6 +648,16 @@ Suggested path after a long break: this page → the
 [one-picture overview](architecture/README.md#the-idea-in-one-picture) →
 [containers](architecture/02-containers.md) → the current phase in the
 [spec](spec.md#10-plan-phases-and-gates) → the [code map](architecture/05-code-map.md).
+
+## Deploy on Railway
+
+The image is built from the [`Dockerfile`](../Dockerfile): the node, Rust with
+`wasm32-wasip1` in `/opt/rust`, an unprivileged user `ganglion` (uid 10001)
+and a volume at `/data` that holds `ganglion.yaml` and the database. The
+owner sets up the service, the volume, the variables (`TELEGRAM_BOT_TOKEN` of
+the test bot, `DEYE_*`, a provider key) and the restart policy by the
+[runbook](deploy-railway.md). Module builds need Linux 6.2 or later (Landlock
+ABI 3).
 
 ## Reading in Obsidian
 

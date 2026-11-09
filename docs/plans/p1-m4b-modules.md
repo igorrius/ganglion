@@ -879,7 +879,7 @@ git commit -m "examples: deye-reader in Rust with cells, 429 and Retry-After, st
   (1 GB for builds) with `node.memory_limit: 100MiB` in the file, the restart policy "on failure"
   (exit 75 restarts), `railway ssh` + `ganglion mcp`, how to compare readings with `deye.py` for a
   few days (both write SOC every 30 min; a script or a query per day).
-- [ ] **Steps:** build the image locally (`docker build -t ganglion:m4 .`); run it with a temp
+- [x] **Steps:** build the image locally (`docker build -t ganglion:m4 .`); run it with a temp
   volume and a `ganglion.yaml` with no models: it starts, logs the memory limit, `cargo --version`
   works as the `ganglion` user inside; record the image size. The Railway deploy itself and the
   comparison are the owner's, with this doc (task 11). Commit, push.
