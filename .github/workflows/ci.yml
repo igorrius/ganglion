@@ -82,6 +82,26 @@ jobs:
         with:
           version: v2.15.0
 
+  # The deye-reader example (R-DEYE-1..3) is built by the node from source;
+  # its unit tests run here. The test job builds it with the node's builder
+  # and compares it with the Go reference (tools/modbench).
+  deye-reader:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: wasm32-wasip1
+          components: rustfmt, clippy
+      - name: Format, lint and unit tests
+        working-directory: examples/modules/deye-reader
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --target wasm32-wasip1 -- -D warnings
+          cargo test --locked
+
   # The html2md module (ADR-0035) is committed as html2md.wasm; the test
   # job above runs its fixture tests against that file. This job rebuilds
   # it from the Rust sources with the pinned toolchain, runs the module's

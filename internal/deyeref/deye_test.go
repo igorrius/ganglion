@@ -1,4 +1,4 @@
-package deye
+package deyeref
 
 import (
 	"crypto/sha256"
@@ -296,5 +296,18 @@ func TestHandleNeedsTheSerialNumber(t *testing.T) {
 	}
 	if len(h.requests) != 0 {
 		t.Errorf("made %d requests without a serial number", len(h.requests))
+	}
+}
+
+func TestHandleKnowsNoInitOrHealthAndMakesNoCall(t *testing.T) {
+	for _, trigger := range []string{"init", "health", "event:x"} {
+		h := &configHost{fakeHost: newHost(), config: map[string]string{"inverter_sn": testSN}}
+		out := pdk.Encode(Handle(h, pdk.Input{Trigger: trigger}))
+		if out.OK || out.Error != pdk.ErrUnknownTrigger {
+			t.Errorf("%s: output = %+v, want %q", trigger, out, pdk.ErrUnknownTrigger)
+		}
+		if len(h.requests) != 0 {
+			t.Errorf("%s: made %d requests", trigger, len(h.requests))
+		}
 	}
 }

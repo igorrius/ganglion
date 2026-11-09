@@ -1,7 +1,7 @@
 //! Module-side glue for the ganglion ABI: host functions in the "ganglion"
 //! import module, JSON across the boundary (see `pdk/guest` for Go).
 
-use crate::logic::{Host, Request, Response};
+use crate::host::{Host, Request, Response};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as B64;
 use std::sync::Mutex;

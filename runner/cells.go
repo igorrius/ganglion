@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/igorrius/ganglion/pdk"
@@ -31,6 +32,55 @@ func (noCells) Report(context.Context, string, json.RawMessage, string) error {
 
 func (noCells) Get(context.Context, string) (json.RawMessage, time.Time, error) {
 	return nil, time.Time{}, errors.New("runner: no cell port")
+}
+
+// MemCells is an in-memory CellPort for the development tools (modrun,
+// modbench) and tests: it keeps every reported value, with the time it
+// was reported.
+type MemCells struct {
+	now    func() time.Time
+	mu     sync.Mutex
+	values map[string]memCell
+}
+
+type memCell struct {
+	value json.RawMessage
+	at    time.Time
+}
+
+// NewMemCells returns an empty port whose reports are timed by now.
+func NewMemCells(now func() time.Time) *MemCells {
+	return &MemCells{now: now, values: map[string]memCell{}}
+}
+
+// Report implements CellPort.
+func (c *MemCells) Report(_ context.Context, id string, v json.RawMessage, _ string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.values[id] = memCell{value: slices.Clone(v), at: c.now()}
+	return nil
+}
+
+// Get implements CellPort.
+func (c *MemCells) Get(_ context.Context, id string) (json.RawMessage, time.Time, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.values[id]
+	if !ok {
+		return nil, time.Time{}, fmt.Errorf("runner: no cell %s", id)
+	}
+	return v.value, v.at, nil
+}
+
+// Values returns every cell's value by id.
+func (c *MemCells) Values() map[string]json.RawMessage {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]json.RawMessage, len(c.values))
+	for id, v := range c.values {
+		out[id] = v.value
+	}
+	return out
 }
 
 // Results of the cell_report host function.

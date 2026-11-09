@@ -3,8 +3,8 @@
 // memory. HTTP is answered from a replay file, so the numbers compare
 // modules and toolchains rather than the network (P0, ADR-0011).
 //
-//	modbench -wasm bin/deye-reader.tinygo.wasm \
-//	         -manifest modules/deye/deye-reader.yaml \
+//	modbench -wasm bin/deye-reader.rust.wasm \
+//	         -manifest examples/modules/deye-reader/manifest.yaml \
 //	         -replay tools/modbench/testdata/deye-replay.json \
 //	         -config inverter_sn=2400000001 -n 200
 //
@@ -72,6 +72,8 @@ type report struct {
 	RSSPeakMiB       float64 `json:"rss_peak_mib"` // high-water mark, includes compilation
 	HeapInuseMiB     float64 `json:"heap_inuse_mib"`
 	LastResult       string  `json:"last_result"`
+	// Cells are the cells the module reported, by id, after the last call.
+	Cells map[string]json.RawMessage `json:"cells,omitempty"`
 }
 
 type kvFlag map[string]string
@@ -91,7 +93,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	wasmPath := fs.String("wasm", "", "module .wasm file (required)")
 	manifestPath := fs.String("manifest", "", "module manifest .yaml (required)")
-	replayPath := fs.String("replay", "", "JSON object mapping URL paths to response bodies; __NOW__ becomes the current Unix time")
+	replayPath := fs.String("replay", "", "JSON list of recorded answers {path, status, headers, body}; __NOW__ becomes the current Unix time")
 	payloadPath := fs.String("payload", "", "JSON payload of a tool call; the module is called with trigger \"tool\" instead of \"cron\"")
 	htmlPath := fs.String("html", "", "a saved web page, sent as the tool payload {\"html\", \"url\"} (html2md)")
 	n := fs.Int("n", 100, "number of measured calls")
@@ -139,11 +141,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	// Every host name the module may reach is answered by the replay server.
 	client := &http.Client{Transport: redirect(srv.URL), Timeout: m.Limits.Timeout}
 
+	cells := runner.NewMemCells(time.Now)
 	deps := runner.Deps{
 		// Any granted secret gets a placeholder value: the replay server
 		// accepts any credentials.
 		Secrets: func(name string) (string, bool) { return "bench-" + strings.ToLower(name), true },
 		State:   runner.NewMemState(),
+		Cells:   cells,
 		HTTP:    client,
 		Logger:  slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
 	}
@@ -180,6 +184,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		}
 	}
 	r.LastResult = text.Truncate(string(out.Result), 1000)
+	r.Cells = cells.Values()
 	slices.Sort(durations)
 	r.CallP50Micros = micros(percentile(durations, 50))
 	r.CallP95Micros = micros(percentile(durations, 95))
@@ -244,38 +249,59 @@ func htmlPayload(path string) (string, error) {
 	return f.Name(), nil
 }
 
-// replay answers requests by URL path with recorded bodies.
+// replay answers requests by URL path with recorded answers.
 type replay struct {
-	bodies map[string][]byte
+	answers map[string]replayEntry
+	now     func() time.Time // the time __NOW__ becomes
+}
+
+// replayEntry is one recorded answer: a status (200 when left out),
+// headers and a JSON body.
+type replayEntry struct {
+	Path    string            `json:"path"`
+	Status  int               `json:"status"`
+	Headers map[string]string `json:"headers"`
+	Body    json.RawMessage   `json:"body"`
 }
 
 const nowSentinel = "987654321987654321"
 
+// newReplay reads a replay file: a JSON list of entries, one per path.
 func newReplay(src []byte) (*replay, error) {
 	// __NOW__ is not JSON; swap in a numeric sentinel to parse, then swap
 	// the current time in on each request.
 	src = bytes.ReplaceAll(src, []byte("__NOW__"), []byte(nowSentinel))
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(src, &raw); err != nil {
+	var entries []replayEntry
+	if err := json.Unmarshal(src, &entries); err != nil {
 		return nil, fmt.Errorf("replay file: %w", err)
 	}
-	r := &replay{bodies: make(map[string][]byte, len(raw))}
-	for path, body := range raw {
-		r.bodies[path] = body
+	r := &replay{answers: make(map[string]replayEntry, len(entries)), now: time.Now}
+	for _, e := range entries {
+		if _, dup := r.answers[e.Path]; dup || e.Path == "" {
+			return nil, fmt.Errorf("replay file: path %q is empty or repeated", e.Path)
+		}
+		if e.Status == 0 {
+			e.Status = http.StatusOK
+		}
+		r.answers[e.Path] = e
 	}
 	return r, nil
 }
 
 func (r *replay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	body, ok := r.bodies[req.URL.Path]
+	e, ok := r.answers[req.URL.Path]
 	if !ok {
 		http.NotFound(w, req)
 		return
 	}
 	_, _ = io.Copy(io.Discard, req.Body)
-	now := strconv.FormatInt(time.Now().Unix(), 10)
+	now := strconv.FormatInt(r.now().Unix(), 10)
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(bytes.ReplaceAll(body, []byte(nowSentinel), []byte(now)))
+	for k, v := range e.Headers {
+		w.Header().Set(k, v)
+	}
+	w.WriteHeader(e.Status)
+	_, _ = w.Write(bytes.ReplaceAll(e.Body, []byte(nowSentinel), []byte(now)))
 }
 
 // redirect returns a transport that sends every request to target, keeping

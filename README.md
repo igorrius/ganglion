@@ -37,14 +37,16 @@ cp ganglion.example.yaml ganglion.yaml   # set telegram.admin and the models you
 export TELEGRAM_BOT_TOKEN=...                      # and the provider keys the file names
 ./bin/ganglion run --roles core,edge,worker
 
-make modules modrun             # build the Deye module (Go) and the module runner
-./bin/modrun -wasm bin/deye-reader.go.wasm \
-  -manifest modules/deye/deye-reader.yaml -config inverter_sn=<serial>
+make example-deye modrun        # build the Deye example module (Rust) and the module runner
+./bin/modrun -wasm bin/deye-reader.rust.wasm \
+  -manifest examples/modules/deye-reader/manifest.yaml -config inverter_sn=<serial>
 ```
 
-`make modules-tinygo` and `make modules-rust` build the same module with
-TinyGo 0.44+ and Rust (`wasm32-wasip1`); `make bench` compares them. Module
-secrets are read from `.env`.
+The Deye reader is an example the agent copies into its workspace, builds
+and installs ([examples/modules/deye-reader](examples/modules/deye-reader/README.md)).
+`make modules` and `make modules-tinygo` build the Go reference reader
+(`internal/deyeref`) with Go and TinyGo 0.44+; `make bench` compares the
+builds. Module secrets are read from `.env`.
 
 ## Design
 

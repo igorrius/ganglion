@@ -599,7 +599,8 @@ escalate:                    # when to call the model
   ([ADR-0011](adr/0011-module-abi.md)): every host call, HTTP included, goes
   through our code, so policies, audit and timeouts apply to each request,
   and a failed request is an error the module handles, not a trap. Module
-  glue exists for Go/TinyGo (`pdk/guest`) and Rust (`modules/deye-rs`); a new
+  glue exists for Go/TinyGo (`pdk/guest`) and Rust
+  (`examples/modules/deye-reader/src/guest.rs`); a new
   language needs its own small glue.
 - **R-RUN-6.** Every node sets a soft memory limit (`GOMEMLIMIT`): the
   operator's own `GOMEMLIMIT` when set, else from its config, else about

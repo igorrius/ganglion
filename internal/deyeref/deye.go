@@ -1,9 +1,10 @@
-// Package deye reads a Deye hybrid inverter through the DeyeCloud OpenAPI.
-//
-// It is the logic of the deye-reader module (spec section 8.3), ported from
-// the Python deye.py the current bot runs. It talks to the world only through
-// pdk.Host, so the same code runs under `go test` and inside a WASM module.
-package deye
+// Package deyeref reads a Deye hybrid inverter through the DeyeCloud OpenAPI:
+// the Go reader, ported from the Python deye.py the current bot runs, kept as
+// the reference the Rust example examples/modules/deye-reader is checked
+// against (spec section 8, R-LS-4). It talks to the world only through
+// pdk.Host, so the same code runs under `go test` and, built from ./wasm,
+// inside a WASM module on modbench's replay server. It is not shipped.
+package deyeref
 
 import (
 	"crypto/sha256"

@@ -42,12 +42,26 @@ func TestManifestSchemaMatchesLoader(t *testing.T) {
 	}
 }
 
+// The example the agent builds first (R-DEYE-1) parses, with its three
+// cells, its status tool's contract and its required serial number.
 func TestDeyeManifestParses(t *testing.T) {
-	src, err := os.ReadFile("../modules/deye/deye-reader.yaml")
+	src, err := os.ReadFile("../examples/modules/deye-reader/manifest.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ParseManifest(src); err != nil {
+	m, err := ParseManifest(src)
+	if err != nil {
 		t.Fatal(err)
+	}
+	for _, c := range []string{"soc", "grid", "sample"} {
+		if _, ok := m.Cells.Report[c]; !ok {
+			t.Errorf("cell %s is not declared", c)
+		}
+	}
+	if len(m.Triggers) != 2 || m.Triggers[1].Tool != "status" || m.Triggers[1].Output == nil {
+		t.Errorf("triggers = %+v, want cron and the status tool with an output", m.Triggers)
+	}
+	if !m.Config["inverter_sn"].Required {
+		t.Error("inverter_sn is not required")
 	}
 }

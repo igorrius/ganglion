@@ -150,7 +150,7 @@ plan. M4a ([plan](p1-m4a-config.md)) is done: `settings`, `ganglion.yaml`, `/res
 - Create: `runner/contract.go`, `runner/contract_test.go`
 - Modify: `runner/manifest.go`, `runner/manifest_test.go`, `runner/manifest_schema_test.go`,
   `schemas/module-manifest.schema.json`
-- Modify: `modules/deye/deye-reader.yaml` (until task 10 moves it; it must parse in the new form)
+- Modify: `modules/deye/deye-reader.yaml` (until task 9 moves it; it must parse in the new form)
 
 **Interfaces:**
 - Produces:
@@ -330,7 +330,7 @@ git commit -m "cells: ids may hold '-'; cells have an owner and an about; list a
 ### Task 3: Runner — cell functions, headers, init/health, SQL state, the contract on answers (4.3; R-RUN-11, 14)
 
 **Files:**
-- Modify: `pdk/pdk.go`, `pdk/guest/guest.go`, `modules/deye-rs/src/guest.rs` (until task 10 moves it)
+- Modify: `pdk/pdk.go`, `pdk/guest/guest.go`, `modules/deye-rs/src/guest.rs` (until task 9 moves it)
 - Modify: `runner/runner.go` (`instantiateHost`, `fetch`, `handle`), `runner/tool.go`
 - Create: `runner/cells.go` (+test), `runner/state_sql.go` (+test), `modstore/migrations/002_state.sql`
 - Modify: `runner/runnertest/runnertest.go`, `runner/runnertest/probe/probe.go`
@@ -839,7 +839,7 @@ escalate:
   - tool `status`: a fresh read under the same rules, else the cells' values via `cell_get` with
     `age_s`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - Rust unit tests in `logic.rs` (run by `cargo test`, CI): 429 with `Retry-After: 120` stores
     not_before and the next run within 120 s makes no call; stale once; auth once; status falls
     back to cells.
@@ -848,7 +848,7 @@ escalate:
     cell with what `internal/deyeref` (Go) reports for the same responses (R-LS-4's spirit: two
     implementations agree).
   - `modbench` replay: an entry `{"path": …, "status": 429, "headers": {"Retry-After": "120"}}`.
-- [ ] **Step 2–4:** implement, `make lint test` (and `cargo test` in the example), commit, push.
+- [x] **Step 2–4:** implement, `make lint test` (and `cargo test` in the example), commit, push.
 
 ```bash
 git commit -m "examples: deye-reader in Rust with cells, 429 and Retry-After, stale once; the Go reader is the reference (R-DEYE-1..3)"

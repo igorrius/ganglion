@@ -1,42 +1,11 @@
-//! DeyeCloud reading logic, ported from `modules/deye/deye.go`.
+//! Reading the inverter through the DeyeCloud OpenAPI, ported from the Go
+//! reference `internal/deyeref`, which was ported from `deye.py`.
 
-use serde::{Deserialize, Serialize};
+use crate::host::{Host, Request};
+use serde::Serialize;
 
 /// The DeyeCloud EU endpoint.
 pub const API: &str = "https://eu1-developer.deyecloud.com/v1.0";
-
-/// An HTTP request made through the host.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Request {
-    pub method: String,
-    pub url: String,
-    pub headers: Vec<(String, String)>,
-    pub body: Vec<u8>,
-}
-
-/// The host's answer to a request.
-#[derive(Debug, Clone, Default)]
-pub struct Response {
-    pub status: u16,
-    /// Lower-case names, the first value of each.
-    pub headers: std::collections::HashMap<String, String>,
-    pub body: Vec<u8>,
-}
-
-/// Everything the module may ask of the runner.
-pub trait Host {
-    fn fetch(&self, req: &Request) -> Result<Response, String>;
-    fn state_get(&self, key: &str) -> Option<String>;
-    fn state_put(&self, key: &str, value: &str);
-    fn secret(&self, name: &str) -> Option<String>;
-    fn config(&self, key: &str) -> Option<String>;
-    /// Sets a cell the manifest declares; `name` has no module prefix.
-    fn cell_report(&self, name: &str, value: &serde_json::Value) -> Result<(), String>;
-    /// Reads an own cell by name or a listed one by id, with its time in ms.
-    fn cell_get(&self, id: &str) -> Option<(serde_json::Value, i64)>;
-    fn now_unix(&self) -> i64;
-    fn log(&self, msg: &str);
-}
 
 /// Why a read failed; maps to the Output kind.
 #[derive(Debug, PartialEq)]
@@ -45,6 +14,8 @@ pub enum Error {
     Auth(String),
     /// Cloud data older than 20 minutes.
     Stale(String),
+    /// HTTP 429, with the Retry-After header if the cloud sent one.
+    RateLimited(Option<String>),
     /// Anything else.
     Other(String),
 }
@@ -204,6 +175,9 @@ fn post(
     let resp = h
         .fetch(&req)
         .map_err(|e| Error::Other(format!("cloud request {path} failed: {e}")))?;
+    if resp.status == 429 {
+        return Err(Error::RateLimited(resp.headers.get("retry-after").cloned()));
+    }
     if !(200..300).contains(&resp.status) {
         return Err(Error::Other(format!(
             "cloud request {path} failed: HTTP {}",
@@ -251,106 +225,7 @@ fn hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
-    use std::collections::HashMap;
-
-    const NOW: i64 = 1_793_000_000;
-    const SN: &str = "2400000001";
-
-    struct Fake {
-        secrets: HashMap<&'static str, &'static str>,
-        state: RefCell<HashMap<String, String>>,
-        login: RefCell<String>,
-        latest: RefCell<String>,
-        urls: RefCell<Vec<String>>,
-        bodies: RefCell<Vec<String>>,
-    }
-
-    fn latest(collected: i64, soc: &str, grid_v: &str) -> String {
-        format!(
-            r#"{{"code":"1000000","success":true,"deviceDataList":[{{"collectionTime":{collected},"dataList":[
-            {{"key":"SOC","value":"{soc}"}},{{"key":"BatteryVoltage","value":"52.31"}},
-            {{"key":"BatteryPower","value":"-1250"}},{{"key":"BatteryCurrent","value":"-23.9"}},
-            {{"key":"GridVoltageL1L2","value":"{grid_v}"}},{{"key":"GridFrequency","value":"50.01"}},
-            {{"key":"TotalGridPower","value":"1830"}},{{"key":"InverterOutputPowerL1L2","value":"540"}},
-            {{"key":"DC Temperature","value":"31.5"}},{{"key":"AC Temperature","value":"38.2"}}]}}]}}"#
-        )
-    }
-
-    fn fake() -> Fake {
-        Fake {
-            secrets: HashMap::from([
-                ("DEYE_APP_ID", "app-1"),
-                ("DEYE_APP_SECRET", "s3cret"),
-                ("DEYE_EMAIL", "me@example.com"),
-                ("DEYE_PASSWORD", "pw"),
-            ]),
-            state: RefCell::new(HashMap::new()),
-            login: RefCell::new(
-                r#"{"code":"1000000","accessToken":"tok-1","expiresIn":"5183999"}"#.into(),
-            ),
-            latest: RefCell::new(latest(NOW - 180, "57", "230.4")),
-            urls: RefCell::new(vec![]),
-            bodies: RefCell::new(vec![]),
-        }
-    }
-
-    impl Host for Fake {
-        fn fetch(&self, req: &Request) -> Result<Response, String> {
-            self.urls.borrow_mut().push(req.url.clone());
-            self.bodies
-                .borrow_mut()
-                .push(String::from_utf8(req.body.clone()).unwrap());
-            let body = if req.url.contains("/account/token") {
-                self.login.borrow().clone()
-            } else {
-                assert!(
-                    req.headers
-                        .iter()
-                        .any(|(k, v)| k == "Authorization" && v.starts_with("bearer "))
-                );
-                self.latest.borrow().clone()
-            };
-            Ok(Response {
-                status: 200,
-                headers: Default::default(),
-                body: body.into_bytes(),
-            })
-        }
-        fn cell_report(&self, _: &str, _: &serde_json::Value) -> Result<(), String> {
-            Err("no cells in this fake".into())
-        }
-        fn cell_get(&self, _: &str) -> Option<(serde_json::Value, i64)> {
-            None
-        }
-        fn state_get(&self, k: &str) -> Option<String> {
-            self.state.borrow().get(k).cloned()
-        }
-        fn state_put(&self, k: &str, v: &str) {
-            self.state.borrow_mut().insert(k.into(), v.into());
-        }
-        fn secret(&self, n: &str) -> Option<String> {
-            self.secrets
-                .get(n)
-                .filter(|v| !v.is_empty())
-                .map(|v| v.to_string())
-        }
-        fn config(&self, _: &str) -> Option<String> {
-            None
-        }
-        fn now_unix(&self) -> i64 {
-            NOW
-        }
-        fn log(&self, _: &str) {}
-    }
-
-    fn logins(f: &Fake) -> usize {
-        f.urls
-            .borrow()
-            .iter()
-            .filter(|u| u.contains("/account/token"))
-            .count()
-    }
+    use crate::fake::{NOW, SN, fake, latest};
 
     #[test]
     fn logs_in_and_parses_sample() {
@@ -386,7 +261,7 @@ mod tests {
         let f = fake();
         read(&f, SN).unwrap();
         read(&f, SN).unwrap();
-        assert_eq!(logins(&f), 1);
+        assert_eq!(f.logins(), 1);
     }
 
     #[test]
@@ -395,7 +270,7 @@ mod tests {
         *f.login.borrow_mut() = r#"{"code":"2101006","msg":"password error"}"#.into();
         assert!(matches!(read(&f, SN), Err(Error::Auth(_))));
         assert!(matches!(read(&f, SN), Err(Error::Auth(_))));
-        assert_eq!(logins(&f), 1);
+        assert_eq!(f.logins(), 1);
         f.secrets.insert("DEYE_PASSWORD", "fixed");
         *f.login.borrow_mut() =
             r#"{"code":"1000000","accessToken":"tok-2","expiresIn":86400}"#.into();
@@ -418,7 +293,7 @@ mod tests {
         assert!(matches!(read(&f, SN), Err(Error::Other(_))));
         *f.latest.borrow_mut() = latest(NOW, "60", "231");
         read(&f, SN).unwrap();
-        assert_eq!(logins(&f), 2);
+        assert_eq!(f.logins(), 2);
     }
 
     #[test]
@@ -444,5 +319,17 @@ mod tests {
             Err(Error::Other(m)) => assert!(m.contains("SOC")),
             other => panic!("want an error naming SOC, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn http_429_is_rate_limited_with_its_retry_after() {
+        let f = fake();
+        f.latest_status.set(429);
+        f.latest_headers
+            .borrow_mut()
+            .insert("retry-after".into(), "120".into());
+        assert_eq!(read(&f, SN), Err(Error::RateLimited(Some("120".into()))));
+        f.latest_headers.borrow_mut().clear();
+        assert_eq!(read(&f, SN), Err(Error::RateLimited(None)));
     }
 }

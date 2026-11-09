@@ -2,7 +2,7 @@
 name = "deye-reader"
 version = "0.1.0"
 edition = "2024"
-description = "deye-reader module in Rust (P0 comparison of module toolchains, ADR-0011)"
+description = "The deye-reader module: Deye inverter readings from DeyeCloud as ganglion cells (spec R-DEYE-1..3)"
 license = "Apache-2.0"
 publish = false
 
