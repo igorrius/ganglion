@@ -198,9 +198,10 @@ sequenceDiagram
     end
 ```
 
-## Load-shedding flow (P1)
+## Load-shedding flow (planned, after P1)
 
-The first real flow (spec section 8): staged shedding of loads by battery
+Moved out of P1 by [ADR-0058](../adr/0058-load-shedding-leaves-p1.md); kept
+as the first flow for the flow engine (spec 9.6): staged shedding of loads by battery
 state of charge during a power cut. The flow sets the desired state of load
 cells; their backend (`virtual` in P1, Tuya plugs later) makes it real, and a
 Telegram notifier observes the changes ([ADR-0014](../adr/0014-state-cells.md)).

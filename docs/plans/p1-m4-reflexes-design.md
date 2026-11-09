@@ -117,8 +117,8 @@ sandbox: {deny: [], hide_names: false}
 models: …                                 # section 5
 modules:                                  # written by module.install, section 6
   - name: local/deye-reader
-    source: modules/local/deye-reader/3.wasm
     config: {inverter_sn: "2306…"}
+    # off: true                           # written by /modules off
 ```
 
 Rules (owner):
@@ -144,6 +144,21 @@ Rules (owner):
   node that finds one stops with a hint (`GANGLION_TZ is no longer read:
   set node.tz in ganglion.yaml`), so a stale Railway variable cannot leave
   a node silently on defaults.
+- **What a `modules:` line holds** (call): the name, the module's config
+  and whether it is off. Which version runs, and its files, stay in the
+  module store of ADR-0041 (`<data>/modules/<name>/<sha256>.wasm` and
+  `module_versions`), so the file never names a path the store owns.
+- **The node edits its own file carefully** (call). `module.install` and
+  `/modules config|off|on|remove` change only their module's line,
+  through the YAML node tree so the operator's comments and order stay,
+  and write a temporary file renamed over the old one, so a crash leaves
+  either the old file or the new one.
+- **Variables that stay** (call): `GANGLION_CONFIG`, `GANGLION_DB` (the
+  `--db` flag's variable), `OTEL_EXPORTER_OTLP_ENDPOINT`, the bridge's
+  per-run `GANGLION_MCP_TOKEN`, and the test tools' variables
+  (`GANGLION_LIVE_*`, `GANGLION_ACCEPT_OUT`, `GANGLION_MEASURE*`,
+  `GANGLION_CRASH_*`). Every other `GANGLION_*` that held a setting
+  before M4 fails the start.
 - **No chats or topics section in M4** (call). They served load-shedding
   notices; module failures reach the owner through the agent.
 
@@ -179,7 +194,7 @@ models:
     - {id: opus,   provider: claude, name: opus,   tools: true, context: 200000}
   purposes:
     chat:    [{model: sonnet, effort: medium}, {model: haiku}]
-    check:   [{model: haiku, effort: low}]
+    check:   [{model: haiku, effort: low}, {model: sonnet, effort: low}]
     compact: [{model: haiku}]
     code:    [{model: opus, effort: high}, {model: sonnet, effort: high}]
 ```
@@ -192,10 +207,14 @@ models:
 - **The order is the preference.** The next entry is taken when one is
   out of limits, answers 429 or times out; cooling and limits work as
   today.
+- **`check` keeps a fallback** (call): ADR-0047's clean-context check
+  fell back to Sonnet when Haiku was out of limits, and the example keeps
+  that. A purpose whose list is used up fails closed, as today.
 - **`effort` is optional.** It is passed to providers that take one
   (`reasoning_effort` on OpenAI-compatible APIs); whether the claude CLI
   takes one is checked during the build. A provider that cannot take an
-  effort set in the file fails the start.
+  effort set in the file fails the start; if the CLI cannot, the example
+  files drop `effort` from its models.
 - **`code` is checked but unused in M4**; the agent starts writing modules
   in P3. Without it, P3 answers "no model to write code" rather than
   picking one.
@@ -239,7 +258,15 @@ type Builder interface {
 - A worker marked `builder` (P2) is a second implementation of the same
   interface; the owner and the agent see no difference.
 - Dependencies come from crates.io (or the Go proxy) pinned by the lock
-  file's checksums.
+  file's checksums; the build runs with `--locked` (or `-mod=readonly`), so
+  it never resolves a version the lock file does not name.
+- **`module.build` asks no press** (call): it reads the workspace, writes
+  only its temporary folder and runs in the sandbox without the node's
+  secrets; the dependencies' build scripts run there too. What runs in
+  the node is guarded by the install press, which names the checksum of
+  exactly the artifact the build made.
+- This reverses ADR-0041's "the node does not compile modules" for
+  `local/…` modules only; built-in modules still come only from releases.
 
 ### 6.3 Build, approve, install
 
@@ -333,8 +360,27 @@ cells:
 - Reading another module's cell needs it in `cells.read` by full name,
   shown in the install window. This is the link future flows will use.
 - Removing a module keeps its cells and history without an owner:
-  nobody writes, anyone allowed reads; reinstalling takes them back.
+  nobody writes, anyone allowed reads. Only a module of the same full name
+  (`local/deye-reader`) takes them back, and its install window says so
+  ("takes over 3 existing cells with their history").
+- **Reserved names** (call). The prefix is the name without `local/`, so
+  a local module may not be named like a built-in module (`html2md`), a
+  built-in tool group (`cells`, `module`, `modules`, `memory`, `host`,
+  `web`, `schedule`, `message`, `skill`, `metrics`, `config`) or a core
+  cell family (`request`). The list lives in code next to the tool
+  registry; the install refuses a reserved name.
 - The agent reads any cell; it never writes a sensor.
+- **Only strings taint** (owner). A module's tool output and its cells'
+  values are outside content only where they are strings: numbers,
+  booleans and null never taint a session, any string taints it like a
+  fetched page (ADR-0049). `about` is shown to the owner in `/cells`,
+  never to the model, which gets the cell's name and kind. Deye's values
+  are all numbers, so asking about the battery taints nothing.
+- **Modules hand over contract data** (owner). A module interprets what it
+  fetched and returns only what its tools and cells declare; the model
+  works after it on prepared data, or not at all. The module-writing skill
+  of P3 carries this as a mandatory instruction next to "do not break the
+  system you run on" (spec 9.4).
 - Tools follow the same rule: the manifest declares `tool: status`, the
   agent sees `deye-reader.status`, so a module's tool can collide neither
   with a built-in tool nor with another module's.

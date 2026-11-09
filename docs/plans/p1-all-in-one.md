@@ -7,7 +7,7 @@
 
 **Goal:** the ganglion agent replaces the family bot: it talks in Telegram
 without losing messages, delegates regular work to reflexes that run
-without the model (the Deye load-shedding flow), and changes its own
+without the model (the Deye module the agent builds), and changes its own
 configuration on request with the owner's approval — cheaper than the
 current setup.
 
@@ -53,15 +53,15 @@ pinned by a test in the task that owns the code.
    Telegram offset, during a turn, between sending and marking sent. Expect
    no lost message and at most one duplicate (task 2.5, 3.8).
 2. **Stale or missing Deye data during an outage** — cloud lag, auth error,
-   HTTP 429. Expect no switching and one clear notice, not a flood
-   (tasks 4.5, 5.1).
+   HTTP 429. Expect one clear notice, not a flood, and no second login
+   with refused credentials (tasks 4.4, 4.6).
 3. **Two processes on one bot token during a deploy** — Telegram answers
    `409 Conflict`. Expect the newer process to stop polling and alert, not
    fight (task 2.3).
 4. **Time** — Kyiv time in every message, cron across DST changes, catch-up
    after downtime firing each missed job once (task 3.10, moved from 4.2).
 5. **An approved configuration change breaks something** — a threshold that
-   makes the flow oscillate, an observer pointed at a missing chat. Expect
+   breaks a module's setting, a limit the node cannot apply. Expect
    validation before applying, and a one-command rollback (task 6.3).
 
 ## Milestones
@@ -76,9 +76,9 @@ pinned by a test in the task that owns the code.
 | M3c | Modules, skills, diagnostics — **done** ([plan](p1-m3c-modules-skills-diagnostics.md)) | Module update and rollback, skills, attachments, logs on disk, `ganglion mcp`, the 3.8 acceptance | about 1 weekend |
 | M3 live | Live turns — **done** ([plan](p1-live-turns.md)) | Additions join a running turn, status reactions, a plan shown during the turn | |
 | M3 more | After using the bot — **done** | A closed question folds, `/last`, fixed texts in the person's language, rich messages, replies that know what they answer, `/status` | |
-| M3d | Host commands and plans ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
-| M4 | Reflexes: runner and Deye | Config, modules on cron writing sensor cells, exposed to the agent as tools (the scheduler and the first module-as-tool path come from M3b); deployed next to the current bot | 0.5 weekend |
-| M5 | Load-shedding flow | The 8.1 state machine on `virtual` load cells; Telegram notifier; shadow week | 0.5 weekend |
+| M3d | Host commands and plans — **done** ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
+| M4 | Reflexes: config, modules built by the agent, Deye ([design](p1-m4-reflexes-design.md)) | One config file with models by purpose; the agent builds modules from source and installs them on the owner's press; modules own cells; the runner in the node with a supervisor; the Deye example deployed next to the current bot | about 1.5 weekends |
+| ~~M5~~ | ~~Load-shedding flow~~ — left P1 ([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)) | Moved to the flow engine (spec 9.6) | — |
 | M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback | 0.25–0.5 weekend |
 | M7 | Migration | Memory import and consolidation, remaining skills and crons, backups, cutover, gate | 0.5–1 weekend |
 
@@ -98,19 +98,17 @@ flowchart LR
     M3B --> M3C["M3c Modules, skills, diagnostics"]
     M3C --> M3L["M3 live turns"]
     M3L --> M3M["M3 more: after using the bot"]
-    M1 --> M4["M4 Runner + Deye"]
-    M3B --> M4
-    M4 --> M5["M5 Load-shedding flow"]
-    M2 --> M5
     M3M --> M3D["M3d Host commands and plans"]
-    M3D --> M6["M6 Agent reconfigures"]
-    M5 --> M6
+    M3D --> M4["M4 Config, modules, Deye"]
+    M1 --> M4
+    M4 --> M6["M6 Agent reconfigures"]
     M6 --> M7["M7 Migration"]
 ```
 
 M1 and M2 are independent. After M3a the agent talks on the test bot,
 after M3b it acts; from M4 on, every reflex is wired to it as a tool. The
-"Deye two weeks without the model" clock of the gate starts at M4.
+two-week clock of the gate is gone (ADR-0058): a module is journaled from
+its start, version by version.
 
 ### M1 · State cells (ADR-0014) — done
 
@@ -278,34 +276,33 @@ sandbox spike (3.20) comes first, with its own plan:
 | 3.26 Skill scripts (3.7) move onto the sandbox; closed 2026-11-09, [plan](p1-m3d-commands.md) | A skill script cannot read the node's secrets |
 | 3.27 M3d acceptance, scripted and live on the test bot (design section 10); closed 2026-11-09, [plan](p1-m3d-commands.md) | All ten checks pass; the node's RSS stays in the budget |
 
-### M4 · Reflexes: runner and Deye (spec 7.5, 8)
+### M4 · Reflexes: config, modules built by the agent, Deye ([design](p1-m4-reflexes-design.md))
+
+Redesigned in the owner's brainstorm of 2026-11-09: Deye is a module of
+the owner's system that the agent builds and installs, not a part of the
+agent; load shedding and the two-week clock left P1
+([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)). The step-by-step plan
+is [p1-m4-reflexes.md](p1-m4-reflexes.md).
 
 | Task | Done when |
 |---|---|
-| 4.1 Node config in YAML (decision D-3): roles, modules with manifests, cells, Telegram chats and topics; secrets through a secret source (environment and `*_FILE` first), never in the YAML; `GOMEMLIMIT` from the config, else about 80% of the container's memory limit (R-RUN-6, ADR-0056); a JSON Schema in `schemas/` kept in sync by a test ([ADR-0023](../adr/0023-json-schemas-for-yaml-files.md)) | Config tests; a bad config fails at start with a clear message; in a container limited to 256 MB with no setting, `GOMEMLIMIT` is about 205 MB |
-| 4.2 **Done in M3b (task 3.10).** Scheduler: cron in Europe/Kyiv, `cron_runs` table, catch-up after downtime runs each missed job once; `idemKey` = job + scheduled time; the agent's `schedule.*` uses it. M4 adds module cron triggers on it | Tests across a DST change and a simulated downtime |
-| 4.3 Cell host functions for modules (`cell.get`, `cell.report`, `cell.set`), granted per cell in the manifest; `pdk` and `pdk/guest` updated | Runner conformance suite extended and green |
-| 4.4 Runner in `node.Run`: modules from config, triggered by the scheduler or called by the agent as tools (`deye.status`; the minimal "module as a tool" path, with an embedded module, **moved to M3b**, task 3.11; M4 extends it to modules from config); optional `init` and `health` exports (spec 7.5); a minimal supervisor — backoff after failures, N failures in M minutes disable the module and emit `module.crashloop`; failures and `auth_failed` reach the agent as events; `cells.Reconcile` at start and periodically, `ExpireDue` on a short tick (M1 review) | `deye-reader` writes the `grid` and `soc` sensor cells on schedule; the agent answers "how is the battery?" through the tool; a failing probe module is disabled |
-| 4.5 Deye cadence and limits: 30 min with grid, 5 min without; HTTP 429 backs off honouring `Retry-After`; stale data reported once | Tests with the replay server from `tools/modbench` |
-| 4.6 Deploy: container image, a Railway service next to the current bot, test bot token; compare with `deye.py` for a few days (R-LS-4); check that `ganglion mcp` works over `railway ssh` (moved from M3c) | Samples match `deye.py`; RSS within budget; the two-week clock starts |
-
-### M5 · Load-shedding flow (spec 8)
-
-| Task | Done when |
-|---|---|
-| 5.1 The flow as a WASM module using cell host functions (decision D-4) with the 8.1 states and 8.2 rules: thresholds from config, hysteresis, debounce, freshness, manual override for 2 h (time of the external change from the cell's history), kill switches, staged restore 1 min apart; the flow sets desired only on a decision, never re-asserts it on every poll (each `SetDesired` is a change and a notice) | Unit tests of the state machine |
-| 5.2 Telegram notifier as an observer of load cells; kill switches toggled through the agent ("pause the boiler automation") with confirmation | Tests with a fake Bot API |
-| 5.3 Tests: R-LS-1 replay of SOC history (the real history stays a local, uncommitted fixture; synthetic outage curves are committed) and R-LS-2 invariants on `virtual` cells with fault injection | Suites green; invariants hold under injected failures |
-| 5.4 Shadow week (R-LS-3) to a test topic, reviewed by the owner; then enabled on `virtual` cells with notifications to the real topic | A week without a wrong decision |
+| 4.1 Config file: `ganglion.yaml` with its skeleton, `schemas/node.schema.json` with descriptions, secrets as `env:NAME`, `node.memory_limit` (R-RUN-6), the `modules:` section; strict parsing ([ADR-0059](../adr/0059-node-config-file.md), R-CFG-1–4, 7) | Config tests; a bad config fails at start naming the path; in a container limited to 256 MB with no setting, `GOMEMLIMIT` is about 205 MB |
+| 4.2 Every old setting and `models.yaml` into the file; models by purpose with order and effort (R-RTR-6, [ADR-0060](../adr/0060-models-by-purpose.md)); old variables fail the start with a hint (R-CFG-5); `/restart`; the lab, `make accept` and the live scripts on example files | A turn uses the `chat` list and the clean-context check the `check` list in the configured order; a stale `GANGLION_TZ` fails the start |
+| 4.3 Module cells: `cell.report` and `cell.get` granted by the manifest, ownership and prefixes, `cells.list`, condensed history in `cells.get`, `/cells` (R-RUN-11, [ADR-0062](../adr/0062-cells-owned-by-modules.md)); `pdk` and `pdk/guest` updated | Runner conformance suite extended and green; a module cannot write another's cell |
+| 4.4 Runner in the node: module jobs on the scheduler, module tools, `init` and `health`, the supervisor (five failures in an hour disable), escalation to the agent once per kind per hour, `cells.Reconcile` and `ExpireDue` ticks, telemetry (R-RUN-12) | A failing probe module is disabled and the agent tells the owner once |
+| 4.5 The builder (`local`, in the command sandbox, temporary target folder), `module.build`, `module.install` with the rights window, the version journal, `/modules` commands (R-RUN-9, 10, [ADR-0061](../adr/0061-local-modules-built-from-source.md), [ADR-0063](../adr/0063-module-language.md)) | "Build and install" works from a workspace source; a ready `.wasm` is refused; no build folder remains; a widening is worded on its own line |
+| 4.6 The `deye-reader` example in Rust under `examples/modules/`: cells, 30-minute cron, 429 with `Retry-After`, stale data once, no second login (R-DEYE-1–3); the Go build moves to the runner's test data as the reference | Tests with the replay server from `tools/modbench`; the Rust and Go builds agree on a recorded response |
+| 4.7 Deploy: container image with the Rust toolchain and an unprivileged user, a Railway service next to the current bot, test bot token; compare with `deye.py` for a few days (R-LS-4); `ganglion mcp` over `railway ssh` (moved from M3c) | Samples match `deye.py`; idle RSS within budget; a build's peak memory measured |
+| 4.8 M4 acceptance, scripted and live on the test bot (design section 11) | All ten checks pass |
 
 ### M6 · The agent reconfigures the system (ADR-0015)
 
 | Task | Done when |
 |---|---|
 | 6.1 Configuration as versioned data: the node config lives in a git repo next to memory; every change is a commit with a reason | History of changes is visible; a restart picks up the latest commit |
-| 6.2 `config.propose` tool: the agent turns a request ("send boiler notices to me privately", "shed the big boiler at 45%") into a structured change with a human-readable diff; the owner approves through a request cell | A proposal without approval is never applied; an expired request discards it |
-| 6.3 Validation and rollback: a change must parse, pass config checks and, for the flow, keep the R-LS-2 invariants on `virtual` cells before it applies; `config.rollback` restores the previous commit | A change that breaks an invariant is rejected with the reason; rollback restores behaviour |
-| 6.4 Risk class on backend changes: moving a cell to a backend of a higher class (e.g. `virtual` → `tuya`) is always a separate, explicitly worded approval (ADR-0014); needs a rebind path in `cells` — today `Define` with another backend is `ErrConflict` | Test: such a change cannot be bundled into a routine approval |
+| 6.2 `config.propose` tool: the agent turns a request ("lower my daily turn limit", "poll the inverter every 15 minutes") into a structured change with a human-readable diff; the owner approves through a request cell | A proposal without approval is never applied; an expired request discards it |
+| 6.3 Validation and rollback: a change must parse and pass the config's checks (the schema, the modules' manifests) before it applies; `config.rollback` restores the previous commit | A change that fails a check is rejected with the reason; rollback restores behaviour |
+| 6.4 **Left P1 with load shedding (ADR-0058).** Risk class on backend changes: moving a cell to a backend of a higher class (e.g. `virtual` → `tuya`) is always a separate, explicitly worded approval (ADR-0014); needs a rebind path in `cells` — today `Define` with another backend is `ErrConflict` | Test: such a change cannot be bundled into a routine approval |
 
 ### M7 · Migration (spec 7.7, 7.8, 10.2)
 
@@ -330,8 +327,8 @@ starting point, not a decision.
 | D-5 | Sandbox for level-2 scripts | M3c: subprocess, environment allowlist, timeout; M3d: the command sandbox of [ADR-0039](../adr/0039-command-sandbox.md) (Proposed), which skill scripts move onto (spec 11) | M3c, M3d |
 | D-6 | First cloud model for routine turns | Chosen on cost and quality of real turns (spec 11) | M3 |
 | D-7 | Git for memory and config: the `git` binary or go-git | The binary: smaller process (principle 8); decided in [ADR-0033](../adr/0033-memory-in-the-workspace-git-with-the-git-binary.md) | M3b |
-| D-3 | Node config and secrets | YAML, like manifests (ADR-0012), for the node config. Requirements: (1) three kinds of data — bootstrap (data directory, roles) from flags or environment; node config (chats, cells, modules, policies) as YAML in a git repo that the agent changes only with approval (M6); secrets never in the YAML; (2) secrets come through one secret-source interface: environment and `*_FILE` files (Docker and Kubernetes secrets) in P1, an encrypted store later; the runner's `secret.get` reads from it; (3) the same binary works on Railway, in Docker or Kubernetes and as a local install | M4 |
-| D-4 | The flow as a WASM module with cell host functions, or native Go | WASM module: it is the project's core hypothesis | M5 |
+| D-3 | Node config and secrets | Decided ([ADR-0059](../adr/0059-node-config-file.md)): one `ganglion.yaml` holds everything an operator chooses, models included; the environment keeps the config path, the database path, the roles and the secrets; secrets as `env:NAME` | M4 |
+| D-4 | The flow as a WASM module with cell host functions, or native Go | Left P1 with load shedding (ADR-0058) | — |
 
 ## Cut list
 

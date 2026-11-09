@@ -305,7 +305,7 @@ Guarantee: **at-least-once + idempotency.**
   file came (name, type, size) beside the caption, and the agent says it
   cannot open it yet (M3c; reading files is in "Not now").
 - **R-DLV-11.** A message with a table or at least two headings goes out as a Telegram rich message
-  when `GANGLION_TELEGRAM_RICH` is `on`, the default. One with buttons, an edit, an attachment, a fold
+  when `telegram.rich` is on, the default. One with buttons, an edit, an attachment, a fold
   or a superseded answer does not. The transport builds the message's blocks from an allowlist and never
   passes the model's text to Telegram's parser, so no button or media block can come from it. A refused
   rich message is sent the ordinary way, never lost
@@ -410,7 +410,7 @@ The skill declares its requirements in the `SKILL.md` frontmatter:
 
 ```yaml
 model:
-  tier: cheap          # cheap | smart
+  purpose: check       # chat | check | compact | code (R-RTR-6)
   tools: true
   context: short       # short | long
   vision: false
@@ -420,9 +420,9 @@ model:
 | Layer | What it does | Phase |
 |---|---|---|
 | 1. Hard filters (tags) | Drops models without the required capabilities; `privacy: local-only` keeps local models only | P1 |
-| 2. Rules and weights | Daily budget, worker health and exhausted limits, task kind (a turn → smart; compaction and checks → cheap); ranking by price, tier and latency with weights from config. A scheduled agent turn is a turn: what must stay cheap is a regular task that needs no model at all, which becomes a reflex (section 1, core hypothesis) | P1 |
+| 2. Rules and order | Daily budget, worker health and exhausted limits, the task's purpose (a turn → `chat`; the clean-context check → `check`; compaction → `compact`; writing modules and skills → `code`); candidates in the order the config lists them for that purpose (R-RTR-6). A scheduled agent turn is a turn: what must stay cheap is a regular task that needs no model at all, which becomes a reflex (section 1, core hypothesis) | P1 |
 | 3. Fallback chain | Error, 429, timeout or exhausted limit — take the next candidate | P1 |
-| 4. Classifier | A cheap model estimates task complexity when the skill sets no `tier` | P2 |
+| 4. Classifier | A cheap model estimates task complexity when the skill sets no `purpose` | P2 |
 | 5. Learning | Who succeeded, at what cost, how the human reacted — the rules adapt | P3 |
 
 - **R-RTR-1.** Each model carries capability tags (tools, vision, context),
@@ -459,6 +459,17 @@ model:
   [ADR-0039](adr/0039-command-sandbox.md) (M3d) it can read what the
   node's user can read
   ([ADR-0042](adr/0042-skills-and-scripts-before-the-sandbox.md)).
+- **R-RTR-6.** Models are chosen by purpose (M4,
+  [ADR-0060](adr/0060-models-by-purpose.md)). The config lists the models
+  once, then for each purpose an ordered list of `{model, effort}`:
+  `chat` (turns and scheduled agent tasks), `check` (short yes/no
+  decisions such as the clean-context check), `compact` (history
+  compaction), `code` (writing modules and skills, used from P3). The
+  purposes are a fixed list in code; an unknown one fails the start. The
+  order is the preference; the next entry is taken on an exhausted limit,
+  429 or a timeout. `effort` is passed to providers that take one; a
+  provider that cannot take an effort set in the config fails the start.
+  Tiers (`smart`, `cheap`) and "cheaper first within a tier" are gone.
 
 ### 7.4. Providers and model access
 
@@ -538,21 +549,29 @@ and `health` are planned for P1, with the supervisor). It sees only the host fun
 | `config.get` | Values from the manifest's `config` block (e.g. a device serial number) |
 | `now` | Current time |
 
-Example manifest:
+Example manifest (M4 form,
+[ADR-0062](adr/0062-cells-owned-by-modules.md)):
 
 ```yaml
-name: deye-monitor
+name: deye-reader
 version: 3
 triggers:
   - cron: "*/30 * * * *"
-  - tool: deye.status        # the model can call it as a tool
+  - tool: status             # the agent sees it as deye-reader.status
 capabilities:
   http.fetch: [eu1-developer.deyecloud.com]
   secret.get: [DEYE_APP_ID, DEYE_APP_SECRET, DEYE_EMAIL, DEYE_PASSWORD]
-  event.emit: [battery.changed, module.exception]
   state: true
+cells:
+  report:                    # the module's own cells: deye-reader.soc, ...
+    soc:    {kind: sensor, about: "Battery state of charge, %"}
+    grid:   {kind: sensor, about: "Grid present: true/false"}
+    sample: {kind: sensor, about: "The whole reading, 12 fields"}
+  read: []                   # other modules' cells, by full name
+config:
+  inverter_sn: {type: string, required: true}
 limits:
-  memory: 8MiB
+  memory: 32MiB
   timeout: 20s
 escalate:                    # when to call the model
   - on: module.exception
@@ -582,8 +601,8 @@ escalate:                    # when to call the model
 - **R-RUN-7.** A module can be a tool of the core: the agent calls it
   through the same policies as any tool. The first one is `html2md`
   (7.11), a pure function granted no host functions, embedded in the
-  binary (M3b). M4 extends the path to modules from the node config
-  (`deye.status`).
+  binary (M3b). M4 extends the path to modules the agent builds
+  (`deye-reader.status`, R-RUN-9).
 - **R-RUN-8.** Modules are installed, updated and rolled back without
   restarting the node (M3c, admin only):
   - the source in P1 is a URL plus a sha256 sum; built-in modules come
@@ -615,6 +634,54 @@ escalate:                    # when to call the model
   The owner drives it with `/modules`, `/modules update <name>` and
   `/modules rollback <name>`, without a model
   ([ADR-0041](adr/0041-module-install-update-and-trust-boundary.md)).
+
+- **R-RUN-9.** A module of the owner's system (`local/…`) has one way in:
+  the agent builds it from source in `workspace/modules/<name>/` and the
+  owner approves the install; the node never accepts a ready `.wasm` from
+  a file, a URL or a chat (M4,
+  [ADR-0061](adr/0061-local-modules-built-from-source.md)):
+  - builds go through one `Builder` interface (`Can`: which languages it
+    builds; `Build`: source → one `.wasm` and a log). The node itself is
+    the builder unless a worker marked `builder` exists (P2); the node's
+    builder runs each build in the command sandbox (7.12) with a
+    temporary target folder removed afterwards;
+  - `module.build` and `module.install` are the agent's tools; the install
+    window lists the network, secrets, cells created and read, triggers and
+    limits, and a version that widens its rights says so on its own line;
+  - the install checks the name, the secrets, the required config, cell
+    ownership, that the module loads and that its `health` passes;
+  - the language follows [ADR-0063](adr/0063-module-language.md): Rust by
+    default, TinyGo for existing Go code, standard Go only when TinyGo
+    cannot.
+- **R-RUN-10.** Every version of a module stays in its journal: who built
+  it, the note "why" (the agent's or the owner's words, never the module's),
+  the workspace commit it was built from, and its runs, failures and
+  exceptions. `/modules <name>` shows the journal from the module's start;
+  `/modules config|off|on|rollback|remove` act without a restart.
+- **R-RUN-11.** Modules own cells. The manifest's `cells.report` declares
+  them; the install creates them as `<module>.<name>` and records the
+  owner; a module writes only its own cells (`cell.report` names a cell
+  without the prefix) and reads others' only when `cells.read` lists them
+  by full name. A removed module's cells stay, read-only. A module's tools
+  take the same prefix (`deye-reader.status`). The agent reads any cell
+  (`cells.list`, `cells.get` with a condensed history) and never writes a
+  sensor; the owner sees cells with `/cells`, without a model.
+- **R-RUN-12.** The runner in the node runs a module on its cron lines
+  (scheduler jobs of the kind "module", no model involved) and as an agent
+  tool, one instance at a time; calls the optional `init` on load and
+  `health` at install and on the module's card. Five failures within an
+  hour disable the module and raise `module.crashloop`. The kinds the
+  manifest's `escalate` lists, and `module.crashloop` always, reach the
+  agent as a turn in the owner's private chat, at most once per kind per
+  module per hour; the model sees the kind and the node's facts, never
+  the module's text.
+
+- **R-RUN-13.** What a module returns to the model (its tool's output,
+  its cells' values) is outside content only where it is a string: numbers,
+  booleans and null never taint a session; any string taints it like a
+  fetched page ([ADR-0049](adr/0049-three-gaps-where-outside-text-and-private-data-cross.md)).
+  A cell's `about` is shown to the owner (`/cells`), never to the model,
+  which gets the cell's name and kind (owner, 2026-11-09).
 
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation
@@ -779,7 +846,7 @@ undone with `git revert`.
 | A host command reads secrets or gains root | Commands run in a sandbox: no privilege gain, a clean environment, the node's environment, memory and secret files unreadable; root and anything that starts a process outside the sandbox are forbidden; the tool is off where the sandbox cannot be set up (R-CMD-1–3, [ADR-0039](adr/0039-command-sandbox.md)) | P1 (M3d) |
 | The node's own files fill the disk | Everything the node creates is accounted for (what, size, age) and cleaned by age or size (R-CMD-8) | P1 (M3d) |
 | Infinite loop | R-AGT-4 | P1 |
-| Exhausted limits | Regular work as reflexes with no model where it can be; a model out of limits cools down and the next tier takes over; usage counter in `turns` | P1 |
+| Exhausted limits | Regular work as reflexes with no model where it can be; a model out of limits cools down and the next one in its purpose's list takes over; usage counter in `turns` | P1 |
 | Self-modification broke something | Regression scenarios (question → expected tool call) after every change | P3 |
 | Lost volume or corrupted DB | Daily backup of SQLite (`VACUUM INTO`) and the memory git repo to S3 or a private remote | P1 |
 
@@ -796,7 +863,7 @@ undone with `git revert`.
     (`go_*`: goroutines, heap, GC; `process_*`: CPU, resident memory,
     open files, start time).
 - **R-OBS-2.** Metrics are served in the Prometheus text format at
-  `/metrics` on a local address (`GANGLION_METRICS_ADDR`, default
+  `/metrics` on a local address (`metrics.addr` in the config, default
   `127.0.0.1:9464`). The promtop web dashboard is at `/webmetrics/`, for
   localhost only.
 - **R-OBS-3.** Traces go out over OTLP/HTTP when the standard
@@ -816,8 +883,8 @@ undone with `git revert`.
   `<data>/logs/`, beside stdout (M3c). Writes are synchronous, so the last
   lines before a `kill -9` survive. Files rotate by size with limits on
   their count and age, so the disk never fills. Secrets are redacted.
-  `<data>` is the directory of the database; `--log-dir`
-  (`GANGLION_LOG_DIR`) moves the logs, and `off` keeps them on stdout
+  `<data>` is the directory of the database; `log.dir` in the config
+  moves the logs, and `off` keeps them on stdout
   only ([ADR-0043](adr/0043-logs-on-disk-with-an-own-rotator.md)).
 - **R-OBS-7.** `ganglion mcp` is an MCP server over stdio for diagnosis
   from outside (M3c). It needs no running node and no model: it opens the
@@ -900,7 +967,7 @@ undone with `git revert`.
 
 The scheduler moves up from M4 to M3b; M4 reuses it for module triggers.
 
-- **R-SCH-1.** Crons run in the node's time zone (`GANGLION_TZ`, default
+- **R-SCH-1.** Crons run in the node's time zone (`node.tz` in the config, default
   Europe/Kyiv) and are recorded in `cron_runs`. After downtime each missed
   job runs once, not once per missed slot. A run's `idemKey` is the job
   plus the scheduled time.
@@ -978,13 +1045,13 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   every folder on the machine: listing is granted on the folders the sandbox splits around a
   denied path, and it reaches their whole tree, so the names inside denied folders are visible
   but not their contents (owner, 2026-11-08,
-  [ADR-0057](adr/0057-commands-may-list-split-folders.md)); `GANGLION_SANDBOX_HIDE_NAMES=on`
+  [ADR-0057](adr/0057-commands-may-list-split-folders.md)); `sandbox.hide_names: true`
   hides them too. Below Landlock ABI 9, which reaches socket files,
   a command opens no Unix socket at all, so gpg-agent and the keyring are
   out of reach (`docker ps`, `systemctl --user` and `lpstat` with them);
   signals are not limited, so `kill` reaches the owner's processes
   (owner, 2026-11-08; [ADR-0039](adr/0039-command-sandbox.md)). The
-  owner adds paths with `GANGLION_SANDBOX_DENY`; `.env` files are found
+  owner adds paths with `sandbox.deny`; `.env` files are found
   to three folders deep under home and the command's folder. If the node cannot set
   this up, or runs as root, `host.exec` is not offered and the node says
   why.
@@ -1062,88 +1129,69 @@ What the node writes without a model reaches people who may read only their own 
   verdict quoted in a report (a memory check's reason) stays in the words it was given, since the
   check is a measured security boundary.
 
-## 8. First flow: Deye and load shedding (P1)
+### 7.14. Node configuration
 
-Deye battery monitoring plus staged shedding of loads by battery state of
-charge (SOC). A scaled-down reference scenario: sensor, rules, action,
-notification — all without an LLM.
+One file, `ganglion.yaml`, holds everything an operator chooses (owner,
+2026-11-09, [ADR-0059](adr/0059-node-config-file.md); decision D-3 of the
+phase plan).
 
-The flow acts on **state cells**, not on devices
-([ADR-0014](adr/0014-state-cells.md)): each load is a switch cell with a
-*desired* state the flow sets and a *reported* state from its backend. In
-P1 the loads use the `virtual` backend and a Telegram notifier observes
-their changes; Tuya plugs become the backend when they are linked, without
-changing the flow.
+- **R-CFG-1.** Outside the file stay only the config path (`--config` or
+  `GANGLION_CONFIG`, default `ganglion.yaml` beside the database), the
+  database path (`--db`), the roles (`--roles`) and the secrets. No file
+  means defaults.
+- **R-CFG-2.** A field that takes a secret holds `env:NAME`; the node reads
+  `NAME` or the file named by `NAME_FILE`. A literal value in such a field
+  fails the start. Module secrets are named by the manifest and never
+  appear in the file.
+- **R-CFG-3.** Parsing is strict: an unknown key fails the start, and an
+  error names the path and the reason. `off` turns a thing off; a missing
+  key means the default.
+- **R-CFG-4.** `schemas/node.schema.json` describes every field (meaning,
+  type, default, allowed values) and is kept in step with the code by a
+  test ([ADR-0023](adr/0023-json-schemas-for-yaml-files.md)).
+- **R-CFG-5.** The `GANGLION_*` variables that held settings before M4,
+  `GANGLION_MODELS_FILE` and `key_env` are no longer read; a node that
+  finds one fails the start with the key that replaces it.
+  `OTEL_EXPORTER_OTLP_ENDPOINT`, OpenTelemetry's own setting, is still
+  read.
+- **R-CFG-6.** Modules apply at once: install, update, rollback, config,
+  off, on and remove. Every other section applies at the next start;
+  `/restart` (admin) ends the node cleanly for its supervisor to start
+  again.
+- **R-CFG-7.** `node.memory_limit` sets `GOMEMLIMIT` (R-RUN-6).
 
-### 8.1. States
+## 8. First reflex: Deye (P1)
 
-```
-              SOC < 50% and grid down          SOC < 40%
- ┌──────────────┐ ───────────▶ ┌──────────────────┐ ──────▶ ┌──────────────────┐
- │ All on       │              │ Big boiler off,  │         │ Both boilers off │
- │              │ ◀─────────── │ kitchen one on   │ ◀────── │ (base load only) │
- └──────────────┘ SOC ≥ 60%    └──────────────────┘ SOC≥50% └──────────────────┘
-                  or grid back                      or grid back
- In every state: data older than 20 min → touch nothing;
- respect a manual switch-on for 2 h; a kill switch per load and a global one.
-```
+Deye battery monitoring as the first reflex: a module the agent builds
+from source and installs with the owner's approval (R-RUN-9), polling
+DeyeCloud on cron and writing sensor cells, with no model in the loop.
+The agent answers "how is the battery?" and "how did it discharge
+overnight?" from the module's tool and the cells' history.
 
-### 8.2. Rules
+Load shedding, planned here until M4, left P1 (owner, 2026-11-09,
+[ADR-0058](adr/0058-load-shedding-leaves-p1.md)): switching loads by
+rules over sensor values is a flow of ready modules linked through cells,
+which belongs with the flow engine (9.6).
 
-| Rule | Value |
-|---|---|
-| Thresholds | 50% — big boiler, 40% — kitchen boiler. In the flow config, not in code |
-| Condition | Only while the grid is down. If the inverter drains the battery even with grid, drop this condition |
-| Restore | +10% hysteresis: big at ≥ 60%, kitchen at ≥ 50%; or when the grid returns — one at a time, 1 min apart |
-| Debounce | Each load cell changes desired state at most once per 15 min |
-| Polling | 30 min with grid, 5 min without (at 5 kW, 10% of a 10 kWh battery is gone in ≈ 12 min); at most 288 calls a day, about 9% of DeyeCloud's free 100,000 calls a month in the worst case. On HTTP 429 back off, honouring `Retry-After` (task 0.7) |
-| Data freshness | Older than 20 min — switch nothing, report it |
-| Manual override | A load's reported state changed without our command (someone switched it by hand) — automation stays off it for 2 hours and reports it. Applies only to backends that report state |
-| Kill switches | Switch cells per load and a global one; off means notifications only. Telegram command sets their desired state |
-| Notifications | A Telegram observer posts silently to the notifications topic on every change of a load cell |
-| Escalation to the model | Deye or backend auth error, a backend not converging desired and reported, no data for over an hour |
+- **R-DEYE-1.** `deye-reader` is an example in the repository
+  (`examples/modules/deye-reader`, Rust), not a part of the agent: the
+  agent copies it into its workspace, builds and installs it. Its cells
+  are `deye-reader.soc` (state of charge, %), `deye-reader.grid` (grid
+  present) and `deye-reader.sample` (the whole reading, the 12 fields of
+  `deye.py`).
+- **R-DEYE-2.** It polls every 30 minutes. On HTTP 429 it waits until
+  `Retry-After` has passed; a reading older than 20 minutes is reported
+  once per episode; a refused login is never retried with the same
+  credentials and raises `auth_failed` (task 0.7).
+- **R-DEYE-3.** `deye-reader.status` reads fresh under the same 429 rule;
+  when the cloud cannot answer it returns the cells' last values with
+  their age.
+- **R-LS-4.** Until the bot migrates, the module runs alongside `deye.py`
+  and their readings are compared.
 
-### 8.3. Blocks
-
-Reusable blocks:
-
-- `deye-reader` — reads SOC and grid status into sensor cells (done in P0 as
-  a WASM module);
-- load cells `load.big_boiler`, `load.kitchen_boiler` — switch cells; backend
-  `virtual` in P1, `tuya` once the plugs are linked;
-- a Telegram notifier — an observer of the load cells;
-- `load-shedding` — the flow itself, the state machine from 8.1, which only
-  reads sensor cells and writes the desired state of load cells.
-
-The bot still answers "how is the battery?" through the `deye.status` tool.
-
-**Tuya access** (when the plugs are linked; P1):
-
-- **Cloud (Tuya OpenAPI)** — a project on the Tuya developer platform plus a
-  linked Smart Life account; works from cloud hosting, like DeyeCloud.
-- **Local (LAN protocol, device key)** — only from a runner at home, but no
-  dependency on the cloud or the internet.
-
-The flow matters precisely during a power cut. The home router runs on the
-inverter and its own battery, and on 2026-11-01 DeyeCloud kept serving fresh
-data during an outage, so the cloud path works when it is needed (task 0.7).
-A home runner with LAN access (P2) adds independence from the cloud but is
-not required for the first flow.
-
-### 8.4. Checks before enabling
-
-- **R-LS-1.** Replay of the SOC history (samples every 30 min already
-  accumulate in `deye.sqlite3`) and synthetic discharge curves during an
-  outage.
-- **R-LS-2.** Invariants covered by tests on `virtual` cells, including
-  injected failures and manual changes: a load never changes more often than
-  once per 15 min; never switches on while SOC is below the threshold and the
-  grid is down; nothing happens on stale data.
-- **R-LS-3.** Shadow mode is the `virtual` backend: the flow runs for real,
-  the notifier reports every change, no device is touched. Moving a load to
-  the `tuya` backend raises its risk class and needs the owner's approval.
-- **R-LS-4.** Until the bot migrates, the WASM module runs alongside
-  `deye.py` and their outputs are compared.
+The home router runs on the inverter and its own battery, and on
+2026-11-01 DeyeCloud kept serving fresh data during an outage, so the
+cloud path works when it is needed (task 0.7).
 
 ## 9. P2–P3: outline
 
@@ -1245,8 +1293,14 @@ it then runs on its own.
 
 1. The model describes the contract: trigger, inputs, tools, output, when to
    call the model.
-2. It writes the code (TinyGo, Rust or AssemblyScript) and tests.
-3. The build runs on a worker with a toolchain, not on the edge.
+2. It writes the code and tests in the language
+   [ADR-0063](adr/0063-module-language.md) picks: Rust by default for small
+   system modules (HTTP, JSON, arithmetic), TinyGo when Go code already
+   exists and TinyGo compiles it, standard Go only when TinyGo cannot and a
+   rewrite does not pay. The model uses the `code` purpose (R-RTR-6).
+3. The build goes through the `Builder` interface of R-RUN-9: the core
+   node builds unless a worker marked `builder` exists. The build path and
+   the install window come in M4; P3 adds the model writing the source.
 4. Sandbox tests → summary in Telegram (what it does, which permissions,
    test results, diff) → "Install" / "Reject" buttons.
 5. The module is signed and rolled out via desired state.
@@ -1274,6 +1328,16 @@ the skill itself, so it is in front of the model whenever it writes or ships a
 module, and it adds to the measures above, which code enforces; it never
 replaces them.
 
+A second mandatory instruction (owner, 2026-11-09), in words close to
+these: "A module does its one task fully and hands the system contract
+data. It interprets what it fetched itself and returns only what its
+tools and cells declare: numbers, flags, short fixed values, not raw text
+from outside. Plain code full of if-else is fine; what matters is that
+the model works after the module on clean, prepared data, or not at all."
+This is the point of the platform: modules carry the regular work, the
+model is called for what only a model can do. It also keeps the system
+safe: a value that is not a string never taints a session (R-RUN-13).
+
 ### 9.5. Distributed tool pool (P2–P3)
 
 Each node declares its tools in a registry on NATS: name, MCP schema, where it
@@ -1287,6 +1351,96 @@ A state machine of reusable blocks on the runner; the model writes the flow
 description and only the missing blocks. Kill switches in KV with an API, a
 simulator with event replay, shadow mode, risk classes in policies. A
 possible second backend: compiling flows into Home Assistant automations.
+
+Ready modules linked through cells: one module reports a cell, another
+reads it (R-RUN-11) and acts. A flow is edited visually, in the spirit of
+Node-RED, by a person or by the model, with the modules already written
+by the model (owner, 2026-11-09).
+
+#### First flow: load shedding (moved from P1)
+
+Planned for P1 until M4 and moved here by
+[ADR-0058](adr/0058-load-shedding-leaves-p1.md); kept as the first flow
+to build on the engine. The sensor half is the Deye reflex (section 8);
+the 30-minute polling would need the 5-minute cadence below again.
+
+Deye battery monitoring plus staged shedding of loads by battery state of
+charge (SOC). A scaled-down reference scenario: sensor, rules, action,
+notification — all without an LLM.
+
+The flow acts on **state cells**, not on devices
+([ADR-0014](adr/0014-state-cells.md)): each load is a switch cell with a
+*desired* state the flow sets and a *reported* state from its backend. In
+P1 the loads use the `virtual` backend and a Telegram notifier observes
+their changes; Tuya plugs become the backend when they are linked, without
+changing the flow.
+
+#### States
+
+```
+              SOC < 50% and grid down          SOC < 40%
+ ┌──────────────┐ ───────────▶ ┌──────────────────┐ ──────▶ ┌──────────────────┐
+ │ All on       │              │ Big boiler off,  │         │ Both boilers off │
+ │              │ ◀─────────── │ kitchen one on   │ ◀────── │ (base load only) │
+ └──────────────┘ SOC ≥ 60%    └──────────────────┘ SOC≥50% └──────────────────┘
+                  or grid back                      or grid back
+ In every state: data older than 20 min → touch nothing;
+ respect a manual switch-on for 2 h; a kill switch per load and a global one.
+```
+
+#### Rules
+
+| Rule | Value |
+|---|---|
+| Thresholds | 50% — big boiler, 40% — kitchen boiler. In the flow config, not in code |
+| Condition | Only while the grid is down. If the inverter drains the battery even with grid, drop this condition |
+| Restore | +10% hysteresis: big at ≥ 60%, kitchen at ≥ 50%; or when the grid returns — one at a time, 1 min apart |
+| Debounce | Each load cell changes desired state at most once per 15 min |
+| Polling | 30 min with grid, 5 min without (at 5 kW, 10% of a 10 kWh battery is gone in ≈ 12 min); at most 288 calls a day, about 9% of DeyeCloud's free 100,000 calls a month in the worst case. On HTTP 429 back off, honouring `Retry-After` (task 0.7) |
+| Data freshness | Older than 20 min — switch nothing, report it |
+| Manual override | A load's reported state changed without our command (someone switched it by hand) — automation stays off it for 2 hours and reports it. Applies only to backends that report state |
+| Kill switches | Switch cells per load and a global one; off means notifications only. Telegram command sets their desired state |
+| Notifications | A Telegram observer posts silently to the notifications topic on every change of a load cell |
+| Escalation to the model | Deye or backend auth error, a backend not converging desired and reported, no data for over an hour |
+
+#### Blocks
+
+Reusable blocks:
+
+- `deye-reader` — reads SOC and grid status into sensor cells (done in P0 as
+  a WASM module);
+- load cells `load.big_boiler`, `load.kitchen_boiler` — switch cells; backend
+  `virtual` in P1, `tuya` once the plugs are linked;
+- a Telegram notifier — an observer of the load cells;
+- `load-shedding` — the flow itself, the state machine above, which only
+  reads sensor cells and writes the desired state of load cells.
+
+**Tuya access** (when the plugs are linked; P1):
+
+- **Cloud (Tuya OpenAPI)** — a project on the Tuya developer platform plus a
+  linked Smart Life account; works from cloud hosting, like DeyeCloud.
+- **Local (LAN protocol, device key)** — only from a runner at home, but no
+  dependency on the cloud or the internet.
+
+The flow matters precisely during a power cut. The home router runs on the
+inverter and its own battery, and on 2026-11-01 DeyeCloud kept serving fresh
+data during an outage, so the cloud path works when it is needed (task 0.7).
+A home runner with LAN access (P2) adds independence from the cloud but is
+not required for the first flow.
+
+#### Checks before enabling
+
+- **R-LS-1.** Replay of the SOC history (samples every 30 min already
+  accumulate in `deye.sqlite3`) and synthetic discharge curves during an
+  outage.
+- **R-LS-2.** Invariants covered by tests on `virtual` cells, including
+  injected failures and manual changes: a load never changes more often than
+  once per 15 min; never switches on while SOC is below the threshold and the
+  grid is down; nothing happens on stale data.
+- **R-LS-3.** Shadow mode is the `virtual` backend: the flow runs for real,
+  the notifier reports every change, no device is touched. Moving a load to
+  the `tuya` backend raises its risk class and needs the owner's approval.
+
 
 ### 9.7. North star: the gate
 
@@ -1336,7 +1490,7 @@ with a gate; the next phase does not start until the gate is passed.
 | Phase | What we do | Exit gate |
 |---|---|---|
 | **P0 · Recon** | Repository skeleton; Deye monitor hand-written in WASM with `http.fetch`; evaluate Extism, MCP transports and A2A; compare module languages (TinyGo, Go, Rust); measure runner RAM | The module runs in wazero; resources measured; ABI decided (done: own ABI, ADR-0011) |
-| **P1 · All-in-one** | Core + runner in one process: state cells, inbox/outbox and Telegram, then the agent (history, rule-based router, one API provider, memory, skills, policies); Deye module and load-shedding flow as its reflexes, in production after a week of shadow mode; the agent changes the system's configuration with the owner's approval; migrate the family bot ([plan](plans/p1-all-in-one.md)) | Deye runs 2 weeks without the model; the bot replaces the current one and costs less |
+| **P1 · All-in-one** | Core + runner in one process: state cells, inbox/outbox and Telegram, then the agent (history, rule-based router, one API provider, memory, skills, policies); the Deye module as its first reflex, built and installed by the agent; one config file; the agent changes the system's configuration with the owner's approval; migrate the family bot ([plan](plans/p1-all-in-one.md)) | Deye runs on cron without the model, its versions journaled; the bot replaces the current one and costs less |
 | **P2 · Network** | claude CLI worker; runner on a separate Pi; protocol v0 over NATS (leaf + JetStream, JWT/NKeys); desired state; watchdog; MQTT devices; policies on the runner; embedding memory; router classifier | Link loss without data loss; module update on an edge and rollback with one command |
 | **P3 · Skill compilation** | The model writes contract, code and tests; build on a worker; signed one-click install; repair on `module.crashloop`; agent-written MCP modules; Home Assistant | The model compiled and updated a module on its own; public release 0.1 |
 
@@ -1354,7 +1508,8 @@ with a gate; the next phase does not start until the gate is passed.
 
 ### 10.2. P1 · All-in-one — scope and acceptance
 
-Scope: sections 7 and 8 in full. Milestones, tasks, decisions and the
+Scope: sections 7 and 8 in full; load shedding left P1 in M4
+([ADR-0058](adr/0058-load-shedding-leaves-p1.md)). Milestones, tasks, decisions and the
 cut list are in the [P1 phase plan](plans/p1-all-in-one.md). The agent
 milestone is split into M3a (talks), M3b (works with the world: tools,
 policies, memory, the scheduler, web reading, the MCP bridge) and M3c
@@ -1368,6 +1523,9 @@ knowing which message a reply answers (R-DLV-13, 14) and `/status`. M3d
 (host commands and plans, 7.12) follows them
 ([M3d design](plans/p1-m3d-host-commands-design.md),
 [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md)).
+M4 brings one config file, models by purpose, modules the agent builds
+from source, and cells owned by modules
+([M4 design](plans/p1-m4-reflexes-design.md)).
 
 Acceptance:
 
@@ -1376,14 +1534,15 @@ Acceptance:
   nothing and duplicates at most one message (R-DLV-*).
 - The router returns candidates from a skill's frontmatter and falls back on
   429 and timeouts.
-- The Deye module runs on cron without the model; the load-shedding flow has
-  passed a week of shadow mode and is enabled; R-LS-2 invariants are covered
-  by tests.
+- The agent builds the Deye module from source and installs it after the
+  owner's press; it runs on cron without the model, writes its cells, and
+  its versions and failures are journaled (R-RUN-9–12).
 - The agent applies a configuration change the owner approved (for example
-  where boiler notices go), refuses one that breaks a flow invariant, and
-  rolls back on request.
-- **Gate:** Deye runs two weeks without the model; the family bot has
-  migrated and costs less than the current setup.
+  a module's setting or a limit), refuses one that fails the config's
+  checks, and rolls back on request.
+- **Gate:** the Deye module runs on cron without the model, its versions
+  journaled; the family bot has migrated and costs less than the current
+  setup.
 
 Testing uses a separate bot: two processes with the same token cannot
 coexist. The family bot migrates at the end of P1; the current bot stays as a
@@ -1393,12 +1552,12 @@ fallback until the gate is passed.
 
 | Question | Options | Leaning towards | Decided by |
 |---|---|---|---|
-| Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Not chosen; P0 numbers (ADR-0011) favour Rust or TinyGo over standard Go | Start of P3: how reliably the model writes and fixes each, plus the P0 numbers |
-| Tuya access | Cloud · LAN | Cloud: the internet stays up during outages (0.7); LAN later with a home runner | P1, when the plugs are linked |
+| Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Decided (owner, 2026-11-09, [ADR-0063](adr/0063-module-language.md)): Rust by default, TinyGo for existing Go code, standard Go only when TinyGo cannot | — |
+| Tuya access | Cloud · LAN | Cloud: the internet stays up during outages (0.7); LAN later with a home runner | With load shedding, after P1 (ADR-0058) |
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
 | History and tool format | Own · Anthropic Messages · OpenAI | Decided: neutral own format + MCP tool schemas ([ADR-0020](adr/0020-neutral-history-as-conversation-state.md)) | — |
 | First API provider | Anthropic · Gemini · OpenAI-compatible | Decided for development: the operator's choice ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)); the claude CLI only, as chosen in [ADR-0047](adr/0047-sonnet-answers-during-development.md); OpenRouter fallbacks are a later topic | Revisit with more users or stronger tasks |
-| Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles (conversation, writing tools, analysis) | For development, tiers: Sonnet for turns, Haiku for compaction and checks ([ADR-0047](adr/0047-sonnet-answers-during-development.md)). Short decisions and embeddings wait for a concrete task ("Models by purpose" in the "Not now" list). Opus when the agent writes skills or modules | When the agent starts writing skills or modules |
+| Choosing models by purpose | Tiers and skill frontmatter only · a router classifier (layer 4) · per-purpose profiles | Decided for roles (owner, 2026-11-09, [ADR-0060](adr/0060-models-by-purpose.md)): purposes `chat`, `check`, `compact`, `code`, each an ordered list with an optional effort (R-RTR-6). Embeddings and vision wait in "Not now"; the classifier stays P2 | — |
 | Where nodes live | Cloud hosting · Pi · home PC | Edge in the cloud or on a Pi, claude CLI worker on the owner's PC | The P1 monthly bill |
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
 | Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Closed for host commands and skill scripts by [ADR-0039](adr/0039-command-sandbox.md) (accepted 2026-11-08): `no_new_privs`, a clean environment, Landlock, no Unix sockets below Landlock 9, the node not dumpable, fail closed | Railway and a Pi measured with `tools/sandboxprobe`; MCP modules in P3 |
@@ -1591,10 +1750,9 @@ Reviewed at each gate.
   agent picks its models, and may have only an OpenAI-compatible API, so ganglion
   does not rank them against one model. Each is taken up when a concrete task
   works badly without it:
-  - **A role for short decisions:** when something other than the memory check
-    needs it; that check runs on any `cheap` model today. It stays apart from the
-    tiers, so that a model that can only decide never lands in a fallback chain
-    for a person's message. A model check of commands can only add to M3d's class
+  - **A role for short decisions:** done in M4 as the `check` purpose
+    (R-RTR-6); a model listed only under `check` never lands in the `chat`
+    list for a person's message. A model check of commands can only add to M3d's class
     table, never replace it, because a model can be injected.
   - **Embeddings:** when memory search starts to miss (today a substring scan of
     the newest 500 sessions), with a research note first.

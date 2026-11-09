@@ -6,8 +6,11 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** M3d is done (closed 2026-11-09). Next is the merge of `m3d-commands`, then M4 (reflexes: runner
-  and Deye) per the [phase plan](plans/p1-all-in-one.md).
+- **Next:** M4 (reflexes: one config file with models by purpose, modules
+  the agent builds from source, cells owned by modules, the Deye example on
+  Railway), designed on 2026-11-09 ([design](plans/p1-m4-reflexes-design.md),
+  [phase plan](plans/p1-all-in-one.md)). Load shedding and the two-week
+  clock of the gate left P1 ([ADR-0058](adr/0058-load-shedding-leaves-p1.md)).
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
   - 0.2 Deye reader in WASM on wazero: matched `deye.py` on the live API,

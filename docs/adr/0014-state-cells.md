@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-01
 - **Deciders:** Igor Artasevych
-- **Spec:** [8](../spec.md#8-first-flow-deye-and-load-shedding-p1), [9.6](../spec.md#96-flow-engine-p3), R-POL-5
+- **Spec:** [8](../spec.md#8-first-reflex-deye-p1), [9.6](../spec.md#96-flow-engine-p3), R-POL-5
 
 ## Context
 
