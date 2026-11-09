@@ -6,12 +6,15 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** the M4b plan (modules the
-  agent builds from source, cells owned by modules, the Deye example on
-  Railway). M4 was designed on 2026-11-09
-  ([design](plans/p1-m4-reflexes-design.md),
-  [phase plan](plans/p1-all-in-one.md)). Load shedding and the two-week
-  clock of the gate left P1 ([ADR-0058](adr/0058-load-shedding-leaves-p1.md)).
+- **Next:** execute the [M4b plan](plans/p1-m4b-modules.md) (written
+  2026-11-09, not started): modules the agent builds from source, cells
+  owned by modules, the Deye example, deploy on Railway. Rust with the
+  `wasm32-wasip1` target is needed on the machine that builds modules (the
+  owner's machine has none yet; CI gets it in task 1). M4 was designed on
+  2026-11-09 ([design](plans/p1-m4-reflexes-design.md),
+  [phase plan](plans/p1-all-in-one.md)); M4a is done. Load shedding and the
+  two-week clock of the gate left P1
+  ([ADR-0058](adr/0058-load-shedding-leaves-p1.md)).
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
   - 0.2 Deye reader in WASM on wazero: matched `deye.py` on the live API,
