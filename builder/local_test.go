@@ -5,10 +5,12 @@ package builder
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -31,9 +33,10 @@ func TestMain(m *testing.M) {
 
 // call is one command the fake starter was asked for.
 type call struct {
-	argv []string
-	dir  string
-	env  []string
+	write []string
+	argv  []string
+	dir   string
+	env   []string
 }
 
 // fakeStarter records the commands and, for a cargo build, writes what cargo
@@ -45,10 +48,10 @@ type fakeStarter struct {
 	exit  string // a shell script to run instead of true
 }
 
-func (f *fakeStarter) Command(ctx context.Context, argv []string, dir string, env ...string) (*exec.Cmd, error) {
+func (f *fakeStarter) Confined(ctx context.Context, write, argv []string, dir string, env ...string) (*exec.Cmd, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, call{slices.Clone(argv), dir, slices.Clone(env)})
+	f.calls = append(f.calls, call{slices.Clone(write), slices.Clone(argv), dir, slices.Clone(env)})
 	if target := envValue(env, "CARGO_TARGET_DIR"); target != "" && f.wasm != nil {
 		out := filepath.Join(target, rustTarget, "release")
 		if err := os.MkdirAll(out, 0o700); err != nil {
@@ -127,9 +130,12 @@ func TestBuildRunsCargoInTheCopyWithATemporaryEnvironment(t *testing.T) {
 		t.Fatalf("dir = %q, want <tmp>/ganglion-build-*/src", c.dir)
 	}
 	wantEnv := []string{"PATH=/opt/rust/bin:/usr/local/bin:/usr/bin:/bin", "CARGO_HOME=" + temp + "/cargo-home",
-		"CARGO_TARGET_DIR=" + temp + "/target", "RUSTUP_HOME=/opt/rust/rustup", "HOME=" + temp}
+		"CARGO_TARGET_DIR=" + temp + "/target", "RUSTUP_HOME=/opt/rust/rustup", "HOME=" + temp, "TMPDIR=" + temp + "/tmp"}
 	if !slices.Equal(c.env, wantEnv) {
 		t.Fatalf("env = %q, want %q", c.env, wantEnv)
+	}
+	if !slices.Equal(c.write, []string{temp}) {
+		t.Fatalf("write = %q, want only the build's folder %q (ADR-0064)", c.write, temp)
 	}
 	if strings.Contains(strings.Join(c.env, "\n"), "secret-token-value") || envValue(c.env, "TELEGRAM_BOT_TOKEN") != "" {
 		t.Fatal("a node variable reached the build's environment")
@@ -179,12 +185,12 @@ type listStarter struct {
 	seen *[]string
 }
 
-func (l *listStarter) Command(ctx context.Context, argv []string, dir string, env ...string) (*exec.Cmd, error) {
+func (l *listStarter) Confined(ctx context.Context, write, argv []string, dir string, env ...string) (*exec.Cmd, error) {
 	es, _ := os.ReadDir(dir)
 	for _, e := range es {
 		*l.seen = append(*l.seen, e.Name())
 	}
-	return l.fakeStarter.Command(ctx, argv, dir, env...)
+	return l.fakeStarter.Confined(ctx, write, argv, dir, env...)
 }
 
 func TestBuildRefusals(t *testing.T) {
@@ -251,7 +257,7 @@ type planter struct {
 	plant func(dir string) error
 }
 
-func (p *planter) Command(ctx context.Context, argv []string, dir string, env ...string) (*exec.Cmd, error) {
+func (p *planter) Confined(ctx context.Context, write, argv []string, dir string, env ...string) (*exec.Cmd, error) {
 	out := filepath.Join(envValue(env, "CARGO_TARGET_DIR"), rustTarget, "release")
 	if err := os.MkdirAll(out, 0o700); err != nil {
 		return nil, err
@@ -259,12 +265,19 @@ func (p *planter) Command(ctx context.Context, argv []string, dir string, env ..
 	if err := p.plant(out); err != nil {
 		return nil, err
 	}
-	return p.fakeStarter.Command(ctx, argv, dir, env...)
+	return p.fakeStarter.Confined(ctx, write, argv, dir, env...)
 }
 
 func TestAWasmThatIsNotOneHonestFileIsRefused(t *testing.T) {
 	secret := filepath.Join(t.TempDir(), "secret")
 	if err := os.WriteFile(secret, []byte("node-secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outsideWasm := filepath.Join(t.TempDir(), "target", rustTarget, "release")
+	if err := os.MkdirAll(outsideWasm, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outsideWasm, "x.wasm"), []byte("node-secret"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cases := map[string]struct {
@@ -279,6 +292,12 @@ func TestAWasmThatIsNotOneHonestFileIsRefused(t *testing.T) {
 		"huge": {func(d string) error {
 			return os.WriteFile(filepath.Join(d, "x.wasm"), make([]byte, 1025), 0o600)
 		}, "too big"},
+		// A release folder, or a folder above it, swapped for a symlink to a
+		// folder outside the build's that holds one honest-looking .wasm.
+		"symlinked release": {func(d string) error { return swapForLink(d, outsideWasm) }, "inside the build's folder"},
+		"symlinked target": {func(d string) error {
+			return swapForLink(filepath.Dir(filepath.Dir(d)), filepath.Dir(filepath.Dir(outsideWasm)))
+		}, "inside the build's folder"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -304,6 +323,14 @@ func TestAWasmThatIsNotOneHonestFileIsRefused(t *testing.T) {
 			}
 		})
 	}
+}
+
+// swapForLink replaces the folder dir with a symlink to target.
+func swapForLink(dir, target string) error {
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	return os.Symlink(target, dir)
 }
 
 func twoFiles(dir string) error {
@@ -352,6 +379,23 @@ func TestATimedOutBuildIsStoppedAndCleanedUp(t *testing.T) {
 	}
 }
 
+// A build past its time limit is sent SIGTERM, which the sandbox's helper
+// takes as the word to kill what the build left (ADR-0064), not SIGKILL,
+// which would end the helper first.
+func TestATimedOutBuildIsSentSIGTERM(t *testing.T) {
+	buildTemp(t)
+	cfg := testConfig()
+	cfg.Timeout = 200 * time.Millisecond
+	fake := &fakeStarter{wasm: []byte("w"), exit: `trap 'echo got-term; exit 7' TERM; sleep 30 >/dev/null 2>&1 & wait`}
+	_, log, err := NewLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
+	if err == nil || !strings.Contains(err.Error(), "ran past") {
+		t.Fatalf("error = %v", err)
+	}
+	if !strings.Contains(string(log), "got-term") {
+		t.Fatalf("the build was not sent SIGTERM: %q", log)
+	}
+}
+
 // realSandbox is the command sandbox of this machine, or the test is skipped.
 func realSandbox(t *testing.T) *sandbox.Sandbox {
 	t.Helper()
@@ -394,9 +438,11 @@ func rustConfig(t *testing.T) LocalConfig {
 	return cfg
 }
 
-func TestARealRustModuleBuildsInTheSandboxAndRuns(t *testing.T) {
-	cfg := rustConfig(t)
-	b := NewLocal(realSandbox(t), cfg)
+// rustBuilder is the local builder on this machine's sandbox and Rust, or
+// the test is skipped.
+func rustBuilder(t *testing.T) *Local {
+	t.Helper()
+	b := NewLocal(realSandbox(t), rustConfig(t))
 	can, err := b.Can(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -405,6 +451,11 @@ func TestARealRustModuleBuildsInTheSandboxAndRuns(t *testing.T) {
 		t.Skip("the wasm32-wasip1 target is not installed (`rustup target add wasm32-wasip1`)")
 	}
 	t.Logf("Can: %v", can)
+	return b
+}
+
+func TestARealRustModuleBuildsInTheSandboxAndRuns(t *testing.T) {
+	b := rustBuilder(t)
 	tmp := buildTemp(t)
 	art, log, err := b.Build(t.Context(), Source{Name: "hello", Dir: "testdata/hello"})
 	if err != nil {
@@ -425,5 +476,84 @@ func TestARealRustModuleBuildsInTheSandboxAndRuns(t *testing.T) {
 	t.Cleanup(func() { _ = mod.Close(context.Background()) })
 	if err := mod.Health(t.Context()); err != nil {
 		t.Fatalf("Health: %v", err)
+	}
+}
+
+// escapeSource is testdata/escape copied to a folder of the test's, with the
+// steps its build script takes.
+func escapeSource(t *testing.T, steps ...string) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "escape")
+	if err := os.CopyFS(dir, os.DirFS("testdata/escape")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "escape.txt"), []byte(strings.Join(steps, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// sleeping are the pids of the live `sleep <secs>` processes.
+func sleeping(secs string) []int {
+	want := "sleep\x00" + secs + "\x00"
+	entries, _ := os.ReadDir("/proc")
+	var out []int
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		if b, err := os.ReadFile("/proc/" + e.Name() + "/cmdline"); err == nil && strings.HasSuffix(string(b), want) {
+			out = append(out, pid)
+		}
+	}
+	return out
+}
+
+// ADR-0064, abuse test: a build script writes only beneath the build's own
+// folder (not another folder of the user's, not a .cargo/config.toml in a
+// parent of the work folder that every later build would read), and what it
+// detaches with setsid does not outlive Build.
+func TestABuildWritesOnlyItsFolderAndLeavesNoProcess(t *testing.T) {
+	b := rustBuilder(t)
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skip("no setsid here")
+	}
+	tmp := buildTemp(t)
+	outside := filepath.Join(t.TempDir(), "escaped")
+	poison := filepath.Join(tmp, ".cargo", "config.toml")
+	secs := fmt.Sprintf("6%d.%d", os.Getpid()%10, time.Now().UnixNano()%1_000_000)
+	t.Cleanup(func() {
+		for _, pid := range sleeping(secs) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
+	src := escapeSource(t, "write "+outside, "write "+poison, "write-tmp inside", "detach "+secs)
+	// A .env in the source is denied, which splits the build's folder: the
+	// build must still have the folders it writes in.
+	if err := os.WriteFile(filepath.Join(src, ".env"), []byte("TOKEN=x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, log, err := b.Build(t.Context(), Source{Name: "escape", Dir: src})
+	if err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	t.Logf("the build's log:\n%s", log)
+	for _, p := range []string{outside, poison} {
+		if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("the build wrote %s, outside its folder: %v", p, err)
+		}
+	}
+	if !strings.Contains(string(log), "/inside") || !strings.Contains(string(log), "wrote ") {
+		t.Errorf("the build could not write its own folder:\n%s", log)
+	}
+	if !strings.Contains(string(log), "detached sleep "+secs) {
+		t.Fatalf("the build script did not start its detached process:\n%s", log)
+	}
+	if pids := sleeping(secs); len(pids) != 0 {
+		t.Fatalf("the detached sleep %v outlived the build", pids)
+	}
+	if left, _ := os.ReadDir(tmp); len(left) != 0 {
+		t.Fatalf("the build left %d entries in the temporary folder", len(left))
 	}
 }

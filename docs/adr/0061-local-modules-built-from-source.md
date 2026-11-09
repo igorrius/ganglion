@@ -110,7 +110,9 @@ type Builder interface {
   marked `builder` exists (P2); the owner and the agent see no difference.
 - Every build runs in the M3d command sandbox, with a time limit and its
   target folder (`CARGO_TARGET_DIR`) in a temporary folder removed
-  afterwards: one `.wasm` comes out, no build garbage stays.
+  afterwards: one `.wasm` comes out, no build garbage stays. See
+  [ADR-0064](0064-builds-write-only-their-temp-folder.md): that folder is
+  the only one a build may write, and what it leaves running is killed.
 - `Can` checks what the machine has: `cargo` with `wasm32-wasip1`,
   `tinygo`, `go`. A module in a language no builder can build gets "no
   builder for Rust on this node".

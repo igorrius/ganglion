@@ -69,6 +69,7 @@ considered, how they compare, the decision and its consequences. See
 | [0061](0061-local-modules-built-from-source.md) | Build `local/…` modules from source through a builder, install them on the owner's press, and journal every version (extends 0041) | Proposed | 2026-11-09 |
 | [0062](0062-cells-owned-by-modules.md) | Let modules own the cells they declare, and prefix cell and tool names with the module's name (extends 0014) | Proposed | 2026-11-09 |
 | [0063](0063-module-language.md) | Write modules in Rust by default, TinyGo when Go code already exists, standard Go only when neither fits | Proposed | 2026-11-09 |
+| [0064](0064-builds-write-only-their-temp-folder.md) | Let a module's build write only its own temporary folder, and kill what it leaves running (refines 0039) | Accepted | 2026-11-09 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

@@ -1,0 +1,6 @@
+name: local/escape
+version: 1
+abi: 1
+limits:
+  memory: 16MiB
+  timeout: 5s

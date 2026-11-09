@@ -6,6 +6,7 @@ package sandbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,6 +39,12 @@ type spec struct {
 	Grants []Grant
 	ABI    int
 	Try    string // the self-test: a denied file the helper tries to read instead of exec'ing
+	// Confine writes only through Write grants and scopes signals (ADR-0064).
+	Confine bool
+	// Reap keeps the helper as the command's parent, a subreaper that kills
+	// whatever the command left when it ends (supervise, ADR-0064). The
+	// helper it starts gets the spec without it.
+	Reap bool
 }
 
 // command is an exec.Cmd that runs self as the helper with sp on fd 3. The
@@ -184,8 +191,66 @@ func (s *Sandbox) Ready() (bool, Reason) { return s.reason == Ready, s.reason }
 // denied with the rest. Each KEY=VALUE of env replaces the policy's value
 // of that key or is added after it; an entry without "=" is dropped.
 func (s *Sandbox) Command(ctx context.Context, argv []string, dir string, env ...string) (*exec.Cmd, error) {
+	sp, _, err := s.spec(argv, dir, env)
+	if err != nil {
+		return nil, err
+	}
+	return command(ctx, s.self, sp)
+}
+
+// ErrCannotConfine is Confined on a kernel whose Landlock cannot keep a
+// command's writes to its folders: below ABI 3 truncating a file is not
+// governed. The command does not run (fail closed, ADR-0064).
+var ErrCannotConfine = errors.New("sandbox: this kernel's Landlock cannot keep a command's writes to its folders")
+
+// minConfineABI is the first Landlock version that governs every write,
+// truncation included.
+const minConfineABI = 3
+
+// writableDevices are the files outside its folders a confined command may
+// write: cargo and rustc open /dev/null for the output of the programs they
+// probe.
+var writableDevices = []string{"/dev/null"}
+
+// Confined is Command for code the node does not trust to write: a module's
+// build, whose build script and macros come with its source (ADR-0064). It
+// reads what Command reads and writes only beneath the folders of write and
+// writableDevices; from Landlock ABI 6 it signals no process outside its own
+// sandbox. Its helper stays as its parent and, when it ends or is sent
+// SIGTERM, kills every process it left, those that left its process group
+// too: the caller stops it with SIGTERM, not SIGKILL. The folders are
+// resolved to their real paths; one that is denied is an error.
+func (s *Sandbox) Confined(ctx context.Context, write, argv []string, dir string, env ...string) (*exec.Cmd, error) {
+	sp, deny, err := s.spec(argv, dir, env)
+	if err != nil {
+		return nil, err
+	}
+	if s.abi < minConfineABI {
+		return nil, ErrCannotConfine
+	}
+	roots := make([]string, 0, len(write))
+	for _, w := range write {
+		resolved, err := filepath.EvalSymlinks(w)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox: %w", err)
+		}
+		roots = append(roots, resolved)
+	}
+	writes, err := WriteGrants(roots, deny, os.ReadDir, s.policy.HideNames)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range writableDevices {
+		writes = append(writes, Grant{Path: d, Write: true})
+	}
+	sp.Grants, sp.Confine, sp.Reap = append(sp.Grants, writes...), true, true
+	return command(ctx, s.self, sp)
+}
+
+// spec is what the helper gets for argv in dir, with the paths it denies.
+func (s *Sandbox) spec(argv []string, dir string, env []string) (spec, []string, error) {
 	if s.reason != Ready {
-		return nil, ErrOff
+		return spec{}, nil, ErrOff
 	}
 	deny := s.policy.denied()
 	for _, f := range EnvFiles(append([]string{dir}, s.policy.EnvRoots...), s.policy.EnvDepth, os.ReadDir) {
@@ -195,9 +260,9 @@ func (s *Sandbox) Command(ctx context.Context, argv []string, dir string, env ..
 	}
 	grants, err := Grants(deny, os.ReadDir, s.policy.HideNames)
 	if err != nil {
-		return nil, err
+		return spec{}, nil, err
 	}
-	return command(ctx, s.self, spec{Argv: argv, Env: mergeEnv(s.policy.Env, env), Dir: dir, Grants: grants, ABI: s.abi})
+	return spec{Argv: argv, Env: mergeEnv(s.policy.Env, env), Dir: dir, Grants: grants, ABI: s.abi}, deny, nil
 }
 
 // mergeEnv is base with each KEY=VALUE of extra replacing the same key in

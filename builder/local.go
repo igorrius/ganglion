@@ -22,9 +22,10 @@ import (
 	"github.com/igorrius/ganglion/sandbox"
 )
 
-// Starter makes a command confined by the sandbox (sandbox.Sandbox).
+// Starter makes a command confined by the sandbox that writes only beneath
+// the folders of write (sandbox.Sandbox.Confined, ADR-0064).
 type Starter interface {
-	Command(ctx context.Context, argv []string, dir string, env ...string) (*exec.Cmd, error)
+	Confined(ctx context.Context, write, argv []string, dir string, env ...string) (*exec.Cmd, error)
 }
 
 // LocalConfig is what the node tells the local builder; the command line
@@ -76,18 +77,18 @@ func (l *Local) Can(ctx context.Context) (Abilities, error) {
 	if l.cfg.Cargo == "" {
 		return Abilities{}, nil
 	}
-	temp, err := os.MkdirTemp("", tempPrefix)
+	temp, err := makeTemp()
 	if err != nil {
-		return nil, fmt.Errorf("builder: %w", err)
+		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(temp) }()
 	env := l.env(temp)
-	version, _, err := l.run(ctx, []string{l.cfg.Cargo, "--version"}, temp, env)
+	version, _, err := l.run(ctx, []string{l.cfg.Cargo, "--version"}, temp, temp, env)
 	if err != nil {
 		return nil, fmt.Errorf("builder: cargo --version: %w", err)
 	}
 	rustc := filepath.Join(filepath.Dir(l.cfg.Cargo), "rustc")
-	root, _, err := l.run(ctx, []string{rustc, "--print", "sysroot"}, temp, env)
+	root, _, err := l.run(ctx, []string{rustc, "--print", "sysroot"}, temp, temp, env)
 	if err != nil {
 		return nil, fmt.Errorf("builder: rustc --print sysroot: %w", err)
 	}
@@ -115,9 +116,9 @@ func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 	if lang != Rust || l.cfg.Cargo == "" {
 		return Artifact{}, "", fmt.Errorf("%w: %s", ErrNoBuilder, lang)
 	}
-	temp, err := os.MkdirTemp("", tempPrefix)
+	temp, err := makeTemp()
 	if err != nil {
-		return Artifact{}, "", fmt.Errorf("builder: %w", err)
+		return Artifact{}, "", err
 	}
 	defer func() { _ = os.RemoveAll(temp) }()
 	work := filepath.Join(temp, "src")
@@ -129,11 +130,11 @@ func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 		return Artifact{}, "", fmt.Errorf("builder: %s has no %s: %w", src.Name, manifestFile, err)
 	}
 	argv := []string{l.cfg.Cargo, "build", "--release", "--locked", "--target", rustTarget}
-	_, log, err := l.run(ctx, argv, work, l.env(temp))
+	_, log, err := l.run(ctx, argv, work, temp, l.env(temp))
 	if err != nil {
 		return Artifact{}, log, fmt.Errorf("builder: building %s: %w", src.Name, err)
 	}
-	wasm, err := readWasm(filepath.Join(temp, "target", rustTarget, "release"), l.cfg.MaxWasm)
+	wasm, err := readWasm(temp, l.cfg.MaxWasm)
 	if err != nil {
 		return Artifact{}, log, fmt.Errorf("builder: %s: %w", src.Name, err)
 	}
@@ -149,9 +150,30 @@ func digest(wasm, manifest []byte) string {
 	return hex.EncodeToString(d[:])
 }
 
+// tempFolders are made in the build's folder before cargo runs. The sandbox
+// splits the folder when the source holds a denied path such as a .env file,
+// and nothing new may then be made directly in it (ADR-0064).
+var tempFolders = []string{"cargo-home", "target", "tmp"}
+
+// makeTemp makes the build's temporary folder, the only one its commands may
+// write (ADR-0064), with the folders cargo and the linker write in.
+func makeTemp() (string, error) {
+	temp, err := os.MkdirTemp("", tempPrefix)
+	if err != nil {
+		return "", fmt.Errorf("builder: %w", err)
+	}
+	for _, f := range tempFolders {
+		if err := os.Mkdir(filepath.Join(temp, f), 0o700); err != nil {
+			_ = os.RemoveAll(temp)
+			return "", fmt.Errorf("builder: %w", err)
+		}
+	}
+	return temp, nil
+}
+
 // env is everything a build gets on top of the sandbox's own environment: no
-// node variable, a temporary cargo home and target folder, the toolchain
-// folder the node named.
+// node variable, a temporary cargo home, target and temporary folder, the
+// toolchain folder the node named.
 func (l *Local) env(temp string) []string {
 	path := strings.Join([]string{filepath.Dir(l.cfg.Cargo), "/usr/local/bin", "/usr/bin", "/bin"}, ":")
 	return []string{
@@ -160,26 +182,32 @@ func (l *Local) env(temp string) []string {
 		"CARGO_TARGET_DIR=" + filepath.Join(temp, "target"),
 		"RUSTUP_HOME=" + l.cfg.Rustup,
 		"HOME=" + temp,
+		"TMPDIR=" + filepath.Join(temp, "tmp"),
 	}
 }
 
-// run runs argv in dir in the sandbox, in a process group of its own, under
-// the build's time limit. It returns stdout and the tail of stdout and stderr
-// together; a non-zero exit is an error.
-func (l *Local) run(ctx context.Context, argv []string, dir string, env []string) ([]byte, Log, error) {
+// run runs argv in dir in the sandbox, writing only beneath temp, in a
+// process group of its own, under the build's time limit. It returns stdout
+// and the tail of stdout and stderr together; a non-zero exit is an error.
+func (l *Local) run(ctx context.Context, argv []string, dir, temp string, env []string) ([]byte, Log, error) {
 	ctx, cancel := context.WithTimeout(ctx, l.cfg.Timeout)
 	defer cancel()
-	cmd, err := l.start.Command(ctx, argv, dir, env...)
-	if errors.Is(err, sandbox.ErrOff) {
+	cmd, err := l.start.Confined(ctx, []string{temp}, argv, dir, env...)
+	switch {
+	case errors.Is(err, sandbox.ErrOff):
 		return nil, "", errors.New("the command sandbox is off, so nothing can be built")
-	}
-	if err != nil {
+	case errors.Is(err, sandbox.ErrCannotConfine):
+		return nil, "", errors.New("this kernel's Landlock cannot keep a build to its own folder (ABI 3 or later is needed), so nothing can be built")
+	case err != nil:
 		return nil, "", err
 	}
 	tail, out := &tailWriter{max: logKeep}, &bytes.Buffer{}
 	cmd.Stdout, cmd.Stderr = io.MultiWriter(out, tail), tail
 	cmd.WaitDelay = waitDelay
 	procgroup.Own(cmd)
+	// The sandbox's helper kills what the build left, setsid or not, when it
+	// gets SIGTERM; SIGKILL to the group comes after it (ADR-0064).
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	err = cmd.Start()
 	sandbox.Release(cmd)
 	if err == nil {
@@ -213,14 +241,31 @@ func detect(dir string) (Language, error) {
 	return "", fmt.Errorf("builder: %s has no Cargo.toml or go.mod: the language is unknown", filepath.Base(dir))
 }
 
-// readWasm reads the one .wasm file a release build left in dir. The build's
-// own code wrote it, so it is read as hostile: see readRegular.
-func readWasm(dir string, limit int64) ([]byte, error) {
-	found, err := filepath.Glob(filepath.Join(dir, "*.wasm"))
+// readWasm reads the one .wasm file a release build left in its target
+// folder beneath temp. The build's own code wrote it, so it is read as
+// hostile: the folders on the way are opened inside temp, and a symlink that
+// leads out of it is refused (os.Root), and the file itself is read as
+// readRegular reads.
+func readWasm(temp string, limit int64) ([]byte, error) {
+	root, err := os.OpenRoot(temp)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+	release, err := root.OpenRoot(filepath.Join("target", rustTarget, "release"))
+	if err != nil {
+		return nil, fmt.Errorf("target/%s/release cannot be opened inside the build's folder: %w", rustTarget, err)
+	}
+	defer func() { _ = release.Close() }()
+	found, err := fs.Glob(release.FS(), "*.wasm")
 	if err != nil || len(found) != 1 {
 		return nil, fmt.Errorf("the build must leave exactly one .wasm file in target/%s/release, found %d", rustTarget, len(found))
 	}
-	b, err := readRegular(found[0], limit)
+	f, err := release.OpenFile(found[0], os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, fmt.Errorf("the .wasm the build left: %s cannot be opened as a plain file: %w", found[0], err)
+	}
+	b, err := readOpened(f, limit)
 	if err != nil {
 		return nil, fmt.Errorf("the .wasm the build left: %w", err)
 	}
@@ -236,20 +281,26 @@ func readRegular(path string, limit int64) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s cannot be opened as a plain file: %w", filepath.Base(path), err)
 	}
+	return readOpened(f, limit)
+}
+
+// readOpened reads f, which it closes, when it is a regular file of at most
+// limit bytes.
+func readOpened(f *os.File, limit int64) ([]byte, error) {
 	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
 		return nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s is not a regular file", filepath.Base(path))
+		return nil, fmt.Errorf("%s is not a regular file", filepath.Base(f.Name()))
 	}
 	b, err := io.ReadAll(io.LimitReader(f, limit+1))
 	if err != nil {
 		return nil, err
 	}
 	if int64(len(b)) > limit {
-		return nil, fmt.Errorf("%s is over %d bytes, too big to take", filepath.Base(path), limit)
+		return nil, fmt.Errorf("%s is over %d bytes, too big to take", filepath.Base(f.Name()), limit)
 	}
 	return b, nil
 }

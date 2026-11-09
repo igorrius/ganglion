@@ -170,3 +170,43 @@ func TestGrantsNeverListADeniedFolder(t *testing.T) {
 		}
 	}
 }
+
+// ADR-0064: a write folder is granted whole, as Write grants, when nothing
+// beneath it is denied.
+func TestWriteGrantsAreTheFolders(t *testing.T) {
+	m := fstest.MapFS{"tmp/b/src/lib.rs": {}, "tmp/c/x": {}}
+	got, err := WriteGrants([]string{"/tmp/b"}, []string{"/home/u/.ssh"}, tree(t, m), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []Grant{{Path: "/tmp/b", Dir: true, Write: true}}; !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+// A denied path inside a write folder stays denied: the folder is split
+// around it, and its list grants write nothing.
+func TestWriteGrantsSplitAroundADeniedPath(t *testing.T) {
+	m := fstest.MapFS{"tmp/b/src/.env": {}, "tmp/b/src/lib.rs": {}, "tmp/b/target/x": {}}
+	got, err := WriteGrants([]string{"/tmp/b"}, []string{"/tmp/b/src/.env"}, tree(t, m), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"/tmp/b", "/tmp/b/src", "/tmp/b/src/lib.rs", "/tmp/b/target"}; !slices.Equal(paths(got), want) {
+		t.Fatalf("got %v, want %v", paths(got), want)
+	}
+	for _, g := range got {
+		if g.Write == g.List {
+			t.Errorf("%+v: a list grant writes, or a content grant does not", g)
+		}
+	}
+}
+
+func TestWriteGrantsRefuseADeniedOrUncleanFolder(t *testing.T) {
+	m := fstest.MapFS{"home/u/.ssh/id": {}, "tmp/b/x": {}}
+	for _, write := range [][]string{{"/home/u/.ssh"}, {"/home/u/.ssh/inner"}, {"tmp/b"}, {"/tmp/b/../c"}} {
+		if _, err := WriteGrants(write, []string{"/home/u/.ssh"}, tree(t, m), false); err == nil {
+			t.Errorf("WriteGrants(%q) granted it", write)
+		}
+	}
+}

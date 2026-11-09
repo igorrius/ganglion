@@ -654,7 +654,9 @@ escalate:                    # when to call the model
     builds; `Build`: source → one `.wasm` and a log). The node itself is
     the builder unless a worker marked `builder` exists (P2); the node's
     builder runs each build in the command sandbox (7.12) with a
-    temporary target folder removed afterwards;
+    temporary target folder removed afterwards, the only folder the
+    build may write, and kills whatever the build left running
+    ([ADR-0064](adr/0064-builds-write-only-their-temp-folder.md));
   - `module.build` and `module.install` are the agent's tools; the install
     window lists the network, secrets, cells created and read, triggers and
     limits, and a version that widens its rights says so on its own line;
