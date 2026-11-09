@@ -19,7 +19,7 @@ import (
 const leftoverAge = 24 * time.Hour
 
 // tempPrefixes are the names the node gives its temporary folders.
-var tempPrefixes = []string{"ganglion-claude-", "ganglion-mcp-", "ganglion-skill-", "ganglion-sandbox-"}
+var tempPrefixes = []string{"ganglion-claude-", "ganglion-mcp-", "ganglion-skill-", "ganglion-sandbox-", "ganglion-build-"}
 
 // Places provides the node's places on disk, the one list host.stats and the
 // janitor read.

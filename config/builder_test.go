@@ -1,0 +1,50 @@
+package config
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/igorrius/ganglion/builder"
+	"github.com/igorrius/ganglion/sandbox"
+	"github.com/samber/do/v2"
+)
+
+// With the sandbox off, the provided builder refuses to build and says why;
+// a Go source is still refused as a language with no builder.
+func TestTheBuilderRefusesWithTheSandboxOff(t *testing.T) {
+	b := agentConfig(t)
+	b.Build = builder.DefaultLocalConfig()
+	b.Build.Cargo = "/nonexistent/cargo"
+	i := New(context.Background(), b, slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	do.OverrideValue(i, sandbox.New("/nonexistent", sandbox.Policy{}, rootKernel{}, time.Now()))
+	bl, err := do.Invoke[builder.Builder](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for name, body := range map[string]string{"Cargo.toml": "[package]\n", "manifest.yaml": "name: local/m\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _, err = bl.Build(context.Background(), builder.Source{Name: "m", Dir: dir})
+	if err == nil || errors.Is(err, builder.ErrNoBuilder) {
+		t.Fatalf("Build with the sandbox off: %v", err)
+	}
+}
+
+func TestTheJanitorSweepsBuildLeftovers(t *testing.T) {
+	var found bool
+	for _, p := range tempPrefixes {
+		found = found || p == "ganglion-build-"
+	}
+	if !found {
+		t.Fatal("ganglion-build- is not among the temp prefixes the janitor sweeps")
+	}
+}

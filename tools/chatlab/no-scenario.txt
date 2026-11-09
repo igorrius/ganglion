@@ -12,6 +12,7 @@ host/stats.go
 host/switch.go
 host/telemetry.go
 access/**
+builder/**
 agent/commands.go
 agent/config.go
 agent/limits.go
@@ -33,10 +34,12 @@ cmd/relay.go
 cmd/root.go
 cmd/run.go
 cmd/sandbox.go
+cmd/toolchain.go
 cmd/version.go
 cmd/flags/**
 config/agent.go
 config/bootstrap.go
+config/builder.go
 config/config.go
 config/delivery.go
 config/host.go

@@ -3,6 +3,7 @@ package config
 import (
 	"time"
 
+	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/internal/memlimit"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/tool/builtin"
@@ -48,6 +49,10 @@ type Bootstrap struct {
 	// folders the sandbox splits, so the names inside denied folders stay
 	// hidden too (ADR-0057). Off by default.
 	SandboxHideNames bool
+	// Build is what the module builder is told: where cargo and the
+	// toolchain are, and its limits (R-RUN-9). The command line fills it from
+	// the node's environment; Cargo "" means this node builds nothing.
+	Build builder.LocalConfig
 	// MemoryLimit is the Go runtime's soft memory limit the command line
 	// set, and where it came from (R-RUN-6).
 	MemoryLimit memlimit.Limit

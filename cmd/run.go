@@ -102,7 +102,12 @@ func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read
 		return config.Bootstrap{}, err
 	}
 	limit := memlimit.Decide(getenv("GOMEMLIMIT"), uint64(f.Node.MemoryLimit), read)
-	return fromFile(f, v.DB, limit, src)
+	b, err := fromFile(f, v.DB, limit, src)
+	if err != nil {
+		return config.Bootstrap{}, err
+	}
+	b.Build = localBuild(getenv)
+	return b, nil
 }
 
 // loadSettings reads the file the operator named, which must exist, or
