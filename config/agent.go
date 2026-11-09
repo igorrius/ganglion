@@ -97,6 +97,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Persona:       agent.PersonaDir(b.Agent.Workspace),
 		Facts:         do.MustInvoke[Remembering](i).Facts,
 		SystemJobs:    do.MustInvoke[Remembering](i).Jobs,
+		Restart:       do.MustInvoke[agent.RestartFunc](i),
 		Modules:       do.MustInvoke[agent.Modules](i),
 		Switch:        do.MustInvoke[*host.Switch](i),
 		Commands:      do.MustInvoke[*host.Runner](i),

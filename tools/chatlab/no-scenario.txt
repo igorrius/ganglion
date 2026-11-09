@@ -18,6 +18,7 @@ agent/limits.go
 agent/model.go
 agent/modules.go
 agent/persona.go
+agent/restart.go
 agent/state.go
 agent/telemetry.go
 alert/**
@@ -65,6 +66,7 @@ modules/html2md/**
 node/lock_unix.go
 node/node.go
 node/poller.go
+node/restart.go
 node/roles.go
 pdk/**
 queue/queue.go

@@ -21,7 +21,7 @@ type Component interface {
 }
 
 // Run starts the given roles and blocks until ctx is cancelled, then
-// returns nil. core builds the core role's components; it is called only
+// returns nil, or ErrRestart when ctx was cancelled with that cause. core builds the core role's components; it is called only
 // when roles include Core. An error building or running a component ends
 // Run with that error. Edge and worker have no behaviour yet
 // (docs/spec.md, section 10).
@@ -38,7 +38,7 @@ func Run(ctx context.Context, roles []Role, core func() ([]Component, error), lo
 
 	if !slices.Contains(roles, Core) {
 		<-ctx.Done()
-		return nil
+		return stopped(ctx)
 	}
 	components, err := core()
 	if err == nil {
@@ -47,7 +47,7 @@ func Run(ctx context.Context, roles []Role, core func() ([]Component, error), lo
 	if err != nil && ctx.Err() == nil {
 		return err
 	}
-	return nil // a stop was asked for; errors on the way out do not matter
+	return stopped(ctx) // a stop was asked for; errors on the way out do not matter
 }
 
 // RunAll runs the components until ctx ends or one of them fails; then it

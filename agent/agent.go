@@ -87,6 +87,9 @@ type Deps struct {
 	// Facts is the memory's index, shown to admins only (design section
 	// 4, rule 8); NoFacts when unset.
 	Facts FactsFunc
+	// Restart ends the node so its supervisor starts it again, for
+	// /restart (R-CFG-6); a no-op when unset.
+	Restart RestartFunc
 	// Modules updates and rolls back the node's modules for /modules
 	// (R-RUN-8); NoModules when unset.
 	Modules Modules
@@ -196,6 +199,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Texts == nil {
 		d.Texts = texts.Shipped()
+	}
+	if d.Restart == nil {
+		d.Restart = func() {}
 	}
 	if d.Modules == nil {
 		d.Modules = NoModules{}

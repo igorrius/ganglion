@@ -60,6 +60,10 @@ func (a *Agent) commandTable() []commandEntry {
 		{"/status", a.showStatus, map[transport.Lang]string{
 			transport.LangDefault: "How the node is doing", transport.LangRussian: "Как дела у ноды",
 			transport.LangUkrainian: "Як справи у вузла"}},
+		{"/restart", a.restart, map[transport.Lang]string{
+			transport.LangDefault:   "Restart the node: settings apply",
+			transport.LangRussian:   "Перезапустить ноду: настройки применятся",
+			transport.LangUkrainian: "Перезапустити вузол: налаштування застосуються"}},
 		{"/metrics", a.showMetrics, map[transport.Lang]string{
 			transport.LangDefault:   "Agent metrics as a picture: /metrics [all | ganglion | runtime | process | filter]",
 			transport.LangRussian:   "Метрики агента картинкой: /metrics [all | ganglion | runtime | process | фильтр]",

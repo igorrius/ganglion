@@ -418,3 +418,24 @@ func TestTurnSpanAndGiveUpMetric(t *testing.T) {
 		t.Fatal("no turn span with event.kind")
 	}
 }
+
+// A handler that ends the node (/restart) still has its replies stored: the
+// event is not run again after the restart (R-CFG-6).
+func TestRepliesAreStoredWhenTheNodeStopsInTheTurn(t *testing.T) {
+	q := memQueue(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	h := func(_ context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		cancel()
+		return []event.Outgoing{{IdemKey: e.IdemKey + ":reply:0", Transport: e.Source, Conv: e.Conv, Text: "restarting"}}, queue.StateUpdate{}, nil
+	}
+	l := NewLoop(q, q.InboxReady(), h, slog.New(slog.DiscardHandler))
+	if err := q.Put(context.Background(), msgEvent("k1", "telegram:a", "/restart")); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if ps := outbox(t, q); len(ps) != 1 || ps[0].Msg.Text != "restarting" {
+		t.Fatalf("outbox %+v", ps)
+	}
+}

@@ -1818,7 +1818,7 @@ git commit -m "tools, tests and docs read ganglion.yaml; the live targets take L
   - `config.Run` returns `node.ErrRestart` when the node stopped for `/restart`;
   - `main` exits 75 on `node.ErrRestart`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 // agent/restart_test.go
@@ -1851,12 +1851,12 @@ func TestRunReturnsErrRestart(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./agent/ -run Restart ./node/ -run Restart`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 - `node/restart.go`: `var ErrRestart = errors.New("node: restart requested")`. In `node.Run`, where
   it returns nil on `ctx.Err() != nil`, return `context.Cause(ctx)` when it is `ErrRestart`.
@@ -1901,12 +1901,12 @@ func (a *Agent) restart(ctx context.Context, t *turn, _ string) error {
 
   with `const exitRestart = 75 // EX_TEMPFAIL: a supervisor that restarts on failure starts it again`.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `make lint test`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add node agent config main.go texts

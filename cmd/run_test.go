@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -14,8 +16,10 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/cmd/flags"
+	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/memlimit"
 	"github.com/igorrius/ganglion/internal/testinputs"
+	"github.com/igorrius/ganglion/node"
 )
 
 func TestRunStartsAllRolesByDefault(t *testing.T) {
@@ -170,4 +174,17 @@ func (s *syncBuffer) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
+}
+
+// R-CFG-6: the restart error reaches main unchanged, whichever way the
+// command line wraps its errors.
+func TestRunKeepsErrRestart(t *testing.T) {
+	clearEnv(t)
+	var out syncBuffer
+	start := func(context.Context, []node.Role, config.Bootstrap, *slog.Logger) error { return node.ErrRestart }
+	args := append([]string{"ganglion", "run"}, nodeFiles(t, "metrics: {addr: \"127.0.0.1:0\"}\nlog: {dir: off}\n")...)
+	err := newRoot(&out, &out, start).Run(context.Background(), args)
+	if !errors.Is(err, node.ErrRestart) {
+		t.Fatalf("err = %v", err)
+	}
 }

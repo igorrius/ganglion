@@ -54,6 +54,8 @@ func New(ctx context.Context, b Bootstrap, logger *slog.Logger) *do.RootScope {
 		do.ProvideValue(i, b)
 		do.ProvideValue(i, logger)
 		do.ProvideValue(i, ProcessStart(time.Now()))
+		// A node that nothing supervises has no restart; Run replaces it.
+		do.ProvideValue(i, agent.RestartFunc(func() {}))
 	}, Core)
 }
 
@@ -61,7 +63,10 @@ func New(ctx context.Context, b Bootstrap, logger *slog.Logger) *do.RootScope {
 // shuts the container down, closing resources in reverse dependency
 // order.
 func Run(ctx context.Context, roles []node.Role, b Bootstrap, logger *slog.Logger) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	i := New(ctx, b, logger)
+	do.OverrideValue(i, agent.RestartFunc(func() { cancel(node.ErrRestart) }))
 	defer func() {
 		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
