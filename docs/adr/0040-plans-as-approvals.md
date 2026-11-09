@@ -1,6 +1,6 @@
 # ADR-0040: Let one press on a plan approve exactly the commands it lists
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-09)
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-6, 7), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-2, 4, 6, 8); [M3d design](../plans/p1-m3d-host-commands-design.md) section 7; [ADR-0032](0032-buttons-and-resume.md) (buttons and resume), [ADR-0038](0038-host-commands-as-argv-with-classes-in-code.md)

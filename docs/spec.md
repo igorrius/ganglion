@@ -940,7 +940,7 @@ M3d, after M3c. Design: [M3d design](plans/p1-m3d-host-commands-design.md);
 decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
 [ADR-0039](adr/0039-command-sandbox.md),
 [ADR-0057](adr/0057-commands-may-list-split-folders.md),
-[ADR-0040](adr/0040-plans-as-approvals.md) (Proposed).
+[ADR-0040](adr/0040-plans-as-approvals.md).
 
 - **R-CMD-1.** `host.exec` runs a program with a list of arguments, with
   no shell, on the node that serves the conversation, as the node's Unix

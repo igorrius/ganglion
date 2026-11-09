@@ -4922,7 +4922,7 @@ git commit -m "sandbox: commands may list the folders it splits; GANGLION_SANDBO
 
 ### Task 12: Docs, measure, review, the live check, the ADRs accepted (3.27)
 
-- [ ] **Step 1: Architecture.**
+- [x] **Step 1: Architecture.**
   - `03-components.md`: the component diagram gains `host` (runner, janitor, switch) and
     `hostcmd`, connected to `policy`, `tool/builtin`, `sandbox`, the inbox (`command.done`) and
     `plan`.
@@ -4930,7 +4930,7 @@ git commit -m "sandbox: commands may list the folders it splits; GANGLION_SANDBO
   - `05-code-map.md`: every row from tasks 1–10 is in, and its dependency diagram has `host`
     and `hostcmd`.
 
-- [ ] **Step 2: Measure** (ADR-0056: compare with the previous milestone, `/status`'s numbers).
+- [x] **Step 2: Measure** (ADR-0056: compare with the previous milestone, `/status`'s numbers).
 
   - `make memory`: idle and after 1,000 turns with a tool call in each, against `/status`'s 46.4 MB
     binary and 47–48 MB RSS.
@@ -4941,7 +4941,7 @@ git commit -m "sandbox: commands may list the folders it splits; GANGLION_SANDBO
 
   Write the numbers into "Where we are".
 
-- [ ] **Step 3: Review.**
+- [x] **Step 3: Review.**
   - Run `/code-review` on the branch, at the level the owner sets, with the Review Focus list of
     this plan as its brief.
   - Fix each finding with a test, or record it with its reason under "Deferred minors" in
@@ -4949,7 +4949,7 @@ git commit -m "sandbox: commands may list the folders it splits; GANGLION_SANDBO
   - The class table gets its own pass: the reviewer tries to make a read command write, or print
     contents or an environment.
 
-- [ ] **Step 4: The live check on the test bot** (the owner, with `make live-agent`).
+- [x] **Step 4: The live check on the test bot** (the owner, with `make live-agent`).
 
   On the owner's machine (Landlock ABI 7, so no Docker; ruling 5):
   1. "How much space is left and what takes it under ~/projects?" `host.stats` and read commands
@@ -4973,7 +4973,7 @@ git commit -m "sandbox: commands may list the folders it splits; GANGLION_SANDBO
 
   Write what the owner saw into "Where we are", with the date.
 
-- [ ] **Step 5: The ADRs and the spec**
+- [x] **Step 5: The ADRs and the spec**
   - The owner accepts ADR-0038 and ADR-0040: their status becomes `Accepted (<date>)`, and their
     row in `docs/adr/README.md` changes.
   - Spec 7.12's header drops "(Proposed)".

@@ -1,6 +1,6 @@
 # ADR-0038: Give the agent host commands as argv, classed by a table in code, in a milestone M3d
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-09)
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-1, 2, 4–6, 8), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-4, 6, 8), [10.2](../spec.md#102-p1--all-in-one--scope-and-acceptance); [M3d design](../plans/p1-m3d-host-commands-design.md); [ADR-0031](0031-agent-security-baseline.md) (the baseline), [ADR-0039](0039-command-sandbox.md) (the sandbox), [ADR-0040](0040-plans-as-approvals.md) (plans)
@@ -151,9 +151,8 @@ The class table grew during the build, past what the plan wrote down:
   `bwrap`, `systemd-inhibit`, `dbus-run-session` and `busybox` run another
   program from their arguments, each with its own grammar the table does not
   read; the line says to run that program directly. This is a controller's
-  decision taken during the build, not the owner's: it is open for the
-  owner, who may want, say, `nice` or `timeout` classed by the program they
-  run instead.
+  decision taken during the build. The owner accepted it with this ADR on
+  2026-11-09.
 - **`env` and `find -exec` class the command they run.** Each is a script,
   or the class of the command inside when that is more severe: `env sudo`
   is forbidden as root, `find . -exec rm {} ;` a script. The most severe
