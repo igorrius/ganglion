@@ -1941,16 +1941,20 @@ By hand, each must fail the start with a message naming the path:
 - a literal secret (`telegram: {token: 123:ABC}`): the message has no `123:ABC`;
 - `GANGLION_TZ=UTC` set.
 
-- [ ] **Step 4: Live**
+- [x] **Step 4: Live**
 
 `make live-agent` with `ganglion.local.yaml` from the example: a turn answers; `/status` shows
 the models in the `chat` order; `/restart` replies and the node comes back (run it under a loop
 or a supervisor that restarts on exit 75); the clean-context check runs on Haiku (the turn trace
 shows `check` with `haiku`).
 
-Pending the owner (not run by Claude: it needs the test bot). To check: a turn answers; `/status`
-lists the models in the `chat` order; `/restart` replies and the node comes back under a loop that
-restarts on exit 75; the turn trace shows `check` with `haiku`.
+Done 2026-11-09 by the owner on the test bot, with the node under a loop that restarts on exit
+75: two turns answered on `claude/sonnet` (the second wrote memory through `memory.write`, which
+runs the clean-context check); `/status` answered; `/restart` logged `restart requested` with
+the owner as `by`, the node exited 75, came back in under a second, and the reply was delivered
+after the restart. The claude CLI 2.1.319 accepts `--model haiku --effort low` (checked by hand);
+the check's own model is not in the turn trace, so the trace check of this step was replaced by
+that run.
 
 - [x] **Step 5: Docs and commit**
 

@@ -6,7 +6,7 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** the owner's live check of M4a, then the M4b plan (modules the
+- **Next:** the M4b plan (modules the
   agent builds from source, cells owned by modules, the Deye example on
   Railway). M4 was designed on 2026-11-09
   ([design](plans/p1-m4-reflexes-design.md),
@@ -362,8 +362,8 @@ Start here when coming back to the project.
     - open: Railway and a Pi are still to measure; Docker does not work from commands below Landlock ABI 9
       (commands are classed and asked for as designed, then fail to reach the daemon); `make lab-faults` was
       not run; the merge.
-  - **M4a, config and models by purpose, done in code (2026-11-09)** on branch `m4-reflexes`, live check
-    pending the owner ([plan](plans/p1-m4a-config.md), tasks 4.1 and 4.2,
+  - **M4a, config and models by purpose, done (2026-11-09)** on branch `m4-reflexes`, checked live on
+    the test bot by the owner (turns, `/status`, memory, `/restart` with exit 75) ([plan](plans/p1-m4a-config.md), tasks 4.1 and 4.2,
     [ADR-0059](adr/0059-node-config-file.md), [ADR-0060](adr/0060-models-by-purpose.md)):
     - one config file, `ganglion.yaml`, with `schemas/node.schema.json`; a secret is written as `env:NAME`,
       never in the file; parsing is strict and a bad file fails the start naming the path;
