@@ -56,7 +56,7 @@ func confine(sp spec) error {
 	if err := restrict(sp.ABI, sp.Grants, sp.Confine); err != nil {
 		return err
 	}
-	if err := refuseUnixSockets(); err != nil {
+	if err := refuseUnixSockets(sp.Confine); err != nil {
 		return err
 	}
 	if sp.Try != "" {

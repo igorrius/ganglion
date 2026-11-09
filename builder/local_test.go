@@ -396,6 +396,75 @@ func TestATimedOutBuildIsSentSIGTERM(t *testing.T) {
 	}
 }
 
+// ADR-0064, abuse test: a cargo or rustup configuration in a parent folder
+// of the build, which anyone who can write that folder could plant, refuses
+// the build and Can before any command starts, naming its path.
+func TestAConfigInAParentFolderRefusesTheBuild(t *testing.T) {
+	for _, name := range []string{".cargo/config", ".cargo/config.toml", "rust-toolchain", "rust-toolchain.toml"} {
+		t.Run(name, func(t *testing.T) {
+			buildTemp(t)
+			parent := t.TempDir()
+			planted := filepath.Join(parent, name)
+			if err := os.MkdirAll(filepath.Dir(planted), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(planted, []byte("[build]\nrustc-wrapper = \"/x\"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg := testConfig()
+			cfg.TempRoot = filepath.Join(parent, "builds")
+			fake := &fakeStarter{wasm: []byte("w")}
+			b := NewLocal(fake, cfg)
+			_, _, err := b.Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
+			if err == nil || !strings.Contains(err.Error(), planted) {
+				t.Fatalf("Build: %v, want a refusal naming %s", err, planted)
+			}
+			if _, err := b.Can(t.Context()); err == nil || !strings.Contains(err.Error(), planted) {
+				t.Fatalf("Can: %v, want a refusal naming %s", err, planted)
+			}
+			if len(fake.calls) != 0 {
+				t.Fatal("a command started under a planted configuration")
+			}
+			if left, _ := os.ReadDir(cfg.TempRoot); len(left) != 0 {
+				t.Fatalf("a refused build left %d entries", len(left))
+			}
+		})
+	}
+}
+
+// The build folders are made in the node's own 0700 root; a root that is
+// not that (another user could have made it first) refuses the build.
+func TestTheTempRootIsTheNodesOwn(t *testing.T) {
+	parent := t.TempDir()
+	cfg := testConfig()
+	cfg.TempRoot = filepath.Join(parent, "builds")
+	fake := &fakeStarter{wasm: []byte("w")}
+	if _, _, err := NewLocal(fake, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)}); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(cfg.TempRoot); err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
+		t.Fatalf("the root: %v, %v", info, err)
+	}
+	if got := filepath.Dir(filepath.Dir(fake.calls[0].dir)); got != cfg.TempRoot {
+		t.Fatalf("the build ran in %s, want a folder in %s", fake.calls[0].dir, cfg.TempRoot)
+	}
+	open := filepath.Join(parent, "open")
+	if err := os.Mkdir(open, 0o755); err != nil { //nolint:gosec // a root that is too open, on purpose
+		t.Fatal(err)
+	}
+	link := filepath.Join(parent, "link")
+	if err := os.Symlink(cfg.TempRoot, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range []string{open, link} {
+		cfg.TempRoot = root
+		_, _, err := NewLocal(&fakeStarter{wasm: []byte("w")}, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
+		if err == nil || !strings.Contains(err.Error(), "mode 0700") {
+			t.Errorf("root %s: %v, want a refusal", root, err)
+		}
+	}
+}
+
 // realSandbox is the command sandbox of this machine, or the test is skipped.
 func realSandbox(t *testing.T) *sandbox.Sandbox {
 	t.Helper()

@@ -6,10 +6,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/igorrius/ganglion/builder"
+	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/samber/do/v2"
 )
@@ -36,6 +39,27 @@ func TestTheBuilderRefusesWithTheSandboxOff(t *testing.T) {
 	_, _, err = bl.Build(context.Background(), builder.Source{Name: "m", Dir: dir})
 	if err == nil || errors.Is(err, builder.ErrNoBuilder) {
 		t.Fatalf("Build with the sandbox off: %v", err)
+	}
+}
+
+// Builds are made in the node's own root in the temp folder, and the
+// janitor sweeps what a crash left there (ADR-0064).
+func TestBuildsGoToTheNodesOwnRoot(t *testing.T) {
+	root := buildConfig(Bootstrap{}).TempRoot
+	if filepath.Dir(root) != os.TempDir() || filepath.Base(root) != "ganglion-builds-"+strconv.Itoa(os.Geteuid()) {
+		t.Fatalf("TempRoot = %s", root)
+	}
+	b := agentConfig(t)
+	i := New(context.Background(), b, slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	places, err := do.Invoke[[]host.Place](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(places, func(p host.Place) bool {
+		return p.Path == root && p.Prefix == "ganglion-build-" && p.MaxAge > 0
+	}) {
+		t.Fatalf("the janitor does not sweep %s", root)
 	}
 }
 

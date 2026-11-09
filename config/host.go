@@ -41,6 +41,7 @@ func Places() do.Provider[[]host.Place] {
 		for _, p := range tempPrefixes {
 			ps = append(ps, host.Place{Name: host.PlaceTemp, Path: os.TempDir(), Prefix: p, MaxAge: leftoverAge})
 		}
+		ps = append(ps, host.Place{Name: host.PlaceTemp, Path: buildConfig(b).TempRoot, Prefix: "ganglion-build-", MaxAge: leftoverAge})
 		return ps, nil
 	}
 }

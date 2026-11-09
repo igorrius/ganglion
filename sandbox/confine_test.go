@@ -267,3 +267,43 @@ func poll(ctx context.Context, ok func() bool) bool {
 	}
 	return true
 }
+
+// ADR-0064, abuse test: Landlock does not govern a file's mode, owner or
+// extended attributes, so the confined filter refuses changing them by path:
+// a file outside, a denied file and a denied folder keep their modes. The
+// same calls are refused inside the command's folder too. host.exec's
+// commands keep them.
+func TestAConfinedCommandChangesNoModeOrOwner(t *testing.T) {
+	dir, db := secretDir(t)
+	other := resolvedTemp(t)
+	file := filepath.Join(other, "file")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work := resolvedTemp(t)
+	mine := filepath.Join(work, "mine")
+	if err := os.WriteFile(mine, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := ready(t, Policy{Deny: func() []string { return []string{dir} }})
+	owner := strconv.Itoa(os.Getuid())
+	for _, argv := range [][]string{
+		{"chmod", "0666", file}, {"chmod", "0666", db}, {"chmod", "0777", dir}, {"chmod", "0700", mine},
+		{"chown", owner, file}, {"chown", owner, mine},
+	} {
+		if out, code := confined(t, s, []string{work}, argv...); code == 0 {
+			t.Errorf("%q changed a file's metadata: %q", argv, out)
+		}
+	}
+	for p, want := range map[string]os.FileMode{file: 0o600, db: 0o600, mine: 0o600} {
+		if info, err := os.Stat(p); err != nil || info.Mode().Perm() != want {
+			t.Errorf("%s: mode %v, %v; want %v", p, info.Mode().Perm(), err, want)
+		}
+	}
+	if info, err := os.Stat(dir); err != nil || info.Mode().Perm() == 0o777 {
+		t.Errorf("the denied folder's mode changed: %v, %v", info.Mode().Perm(), err)
+	}
+	if out, code := output(t, s, "/", "chmod", "0640", file); code != 0 {
+		t.Fatalf("host.exec's command cannot chmod: exit %d, %q", code, out)
+	}
+}

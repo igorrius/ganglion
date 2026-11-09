@@ -36,6 +36,9 @@ type LocalConfig struct {
 	Timeout time.Duration // how long a build may run
 	MaxCopy int64         // bytes of source a build may copy
 	MaxWasm int64         // bytes of the built .wasm the node will read
+	// TempRoot is the node's own folder (mode 0700) the build folders are
+	// made in; "" is the system's temporary folder. config fills it.
+	TempRoot string
 }
 
 // DefaultLocalConfig is the design's limits: ten minutes, 16 MiB of source and
@@ -77,7 +80,7 @@ func (l *Local) Can(ctx context.Context) (Abilities, error) {
 	if l.cfg.Cargo == "" {
 		return Abilities{}, nil
 	}
-	temp, err := makeTemp()
+	temp, err := makeTemp(l.cfg.TempRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +119,7 @@ func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 	if lang != Rust || l.cfg.Cargo == "" {
 		return Artifact{}, "", fmt.Errorf("%w: %s", ErrNoBuilder, lang)
 	}
-	temp, err := makeTemp()
+	temp, err := makeTemp(l.cfg.TempRoot)
 	if err != nil {
 		return Artifact{}, "", err
 	}
@@ -155,10 +158,14 @@ func digest(wasm, manifest []byte) string {
 // and nothing new may then be made directly in it (ADR-0064).
 var tempFolders = []string{"cargo-home", "target", "tmp"}
 
-// makeTemp makes the build's temporary folder, the only one its commands may
-// write (ADR-0064), with the folders cargo and the linker write in.
-func makeTemp() (string, error) {
-	temp, err := os.MkdirTemp("", tempPrefix)
+// makeTemp makes the build's temporary folder in root, the only one its
+// commands may write (ADR-0064), with the folders cargo and the linker
+// write in.
+func makeTemp(root string) (string, error) {
+	if err := ensureRoot(root); err != nil {
+		return "", err
+	}
+	temp, err := os.MkdirTemp(root, tempPrefix)
 	if err != nil {
 		return "", fmt.Errorf("builder: %w", err)
 	}
@@ -169,6 +176,61 @@ func makeTemp() (string, error) {
 		}
 	}
 	return temp, nil
+}
+
+// ensureRoot makes root, when one is named, and checks that it is the
+// node's own folder that no one else may enter: a folder, not a symlink,
+// owned by this user, mode 0700. Anything else is refused: another user
+// could have made it first.
+func ensureRoot(root string) error {
+	if root == "" {
+		return nil
+	}
+	if err := os.Mkdir(root, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("builder: %w", err)
+	}
+	info, err := os.Lstat(root)
+	if err != nil {
+		return fmt.Errorf("builder: %w", err)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !info.IsDir() || info.Mode().Perm() != 0o700 || !ok || int(st.Uid) != os.Geteuid() {
+		return fmt.Errorf("builder: %s must be a folder of the node's own user with mode 0700, so nothing is built", root)
+	}
+	return nil
+}
+
+// ancestorConfigs are the files cargo (.cargo/config, .cargo/config.toml)
+// and rustup's proxy (rust-toolchain, rust-toolchain.toml, which may name a
+// toolchain by path) read in every parent folder of the folder they run in.
+var ancestorConfigs = []string{
+	filepath.Join(".cargo", "config"), filepath.Join(".cargo", "config.toml"),
+	"rust-toolchain", "rust-toolchain.toml",
+}
+
+// checkAncestors refuses a build when temp or any folder above it, up to
+// "/", holds a file of ancestorConfigs: cargo would read it and build
+// something other than the source (ADR-0064). Anyone who can write a parent
+// folder, any user in /tmp, could have put it there. A path that cannot be
+// checked refuses too. The message names the node's own path.
+func checkAncestors(temp string) error {
+	for dir := temp; ; dir = filepath.Dir(dir) {
+		for _, name := range ancestorConfigs {
+			p := filepath.Join(dir, name)
+			_, err := os.Lstat(p)
+			switch {
+			case err == nil:
+				return fmt.Errorf("builder: %s is in a parent folder of the build; cargo would read it and build "+
+					"something other than the source, so nothing is built until it is removed", p)
+			case errors.Is(err, fs.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
+			default:
+				return fmt.Errorf("builder: %s cannot be checked, so nothing is built: %w", p, err)
+			}
+		}
+		if dir == filepath.Dir(dir) {
+			return nil
+		}
+	}
 }
 
 // env is everything a build gets on top of the sandbox's own environment: no
@@ -190,6 +252,9 @@ func (l *Local) env(temp string) []string {
 // process group of its own, under the build's time limit. It returns stdout
 // and the tail of stdout and stderr together; a non-zero exit is an error.
 func (l *Local) run(ctx context.Context, argv []string, dir, temp string, env []string) ([]byte, Log, error) {
+	if err := checkAncestors(temp); err != nil {
+		return nil, "", err
+	}
 	ctx, cancel := context.WithTimeout(ctx, l.cfg.Timeout)
 	defer cancel()
 	cmd, err := l.start.Confined(ctx, []string{temp}, argv, dir, env...)

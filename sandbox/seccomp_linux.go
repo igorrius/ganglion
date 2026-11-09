@@ -37,12 +37,45 @@ var errNoArch = errors.New("no seccomp architecture for " + runtime.GOARCH)
 // tell which socket files a command may connect to, and through them it
 // would reach gpg-agent or the keyring; the owner chose no Unix sockets at
 // all there (2026-11-08, ADR-0039). io_uring is refused because it can open
-// sockets past the filter. socketpair stays: it reaches no one.
-func refuseUnixSockets() error {
+// sockets past the filter. socketpair stays: it reaches no one. For a
+// confined command it also refuses changing a file's mode, owner or
+// extended attributes by path (metadataCalls), which Landlock does not
+// govern (ADR-0064).
+func refuseUnixSockets(confine bool) error {
 	arch, ok := auditArchs[runtime.GOARCH]
 	if !ok {
 		return errNoArch
 	}
+	refused := []uint32{unix.SYS_IO_URING_SETUP}
+	if confine {
+		refused = append(refused, metadataCalls()...)
+	}
+	prog := filter(arch, refused)
+	fprog := unix.SockFprog{Len: uint16(len(prog)), Filter: &prog[0]}
+	if _, _, errno := unix.RawSyscall(unix.SYS_PRCTL, unix.PR_SET_SECCOMP, unix.SECCOMP_MODE_FILTER,
+		uintptr(unsafe.Pointer(&fprog))); errno != 0 {
+		return fmt.Errorf("seccomp: %w", errno)
+	}
+	runtime.KeepAlive(prog)
+	return nil
+}
+
+// metadataCalls are the calls that change a file's mode, owner or extended
+// attributes by its path: Landlock (to ABI 7 at least) governs none of
+// them, so a confined command could otherwise chmod a file it may only read
+// (ADR-0064). The fd-based ones (fchmod, fchown, fsetxattr) and utimensat
+// stay: cargo sets times, and copies a file's mode through its fd.
+func metadataCalls() []uint32 {
+	return append([]uint32{
+		unix.SYS_FCHMODAT, unix.SYS_FCHMODAT2, unix.SYS_FCHOWNAT,
+		unix.SYS_SETXATTR, unix.SYS_LSETXATTR, unix.SYS_REMOVEXATTR, unix.SYS_LREMOVEXATTR,
+		unix.SYS_SETXATTRAT, unix.SYS_REMOVEXATTRAT,
+	}, legacyMetadataCalls...)
+}
+
+// filter is the program: another architecture and x32 refused, each call
+// of refused refused, socket(AF_UNIX, …) refused, the rest allowed.
+func filter(arch uint32, refused []uint32) []unix.SockFilter {
 	deny := unix.SECCOMP_RET_ERRNO | uint32(unix.EPERM)
 	prog := []unix.SockFilter{
 		stmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, offArch),
@@ -51,21 +84,19 @@ func refuseUnixSockets() error {
 		stmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, offNr),
 		jump(unix.BPF_JMP|unix.BPF_JGE|unix.BPF_K, x32Bit, 0, 1),
 		stmt(unix.BPF_RET|unix.BPF_K, deny), // x32
-		jump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, unix.SYS_IO_URING_SETUP, 0, 1),
-		stmt(unix.BPF_RET|unix.BPF_K, deny),
+	}
+	for _, nr := range refused {
+		prog = append(prog,
+			jump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, nr, 0, 1),
+			stmt(unix.BPF_RET|unix.BPF_K, deny))
+	}
+	return append(prog,
 		jump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, unix.SYS_SOCKET, 0, 3),
 		stmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, offArg0),
 		jump(unix.BPF_JMP|unix.BPF_JEQ|unix.BPF_K, unix.AF_UNIX, 0, 1),
 		stmt(unix.BPF_RET|unix.BPF_K, deny),
 		stmt(unix.BPF_RET|unix.BPF_K, unix.SECCOMP_RET_ALLOW),
-	}
-	fprog := unix.SockFprog{Len: uint16(len(prog)), Filter: &prog[0]}
-	if _, _, errno := unix.RawSyscall(unix.SYS_PRCTL, unix.PR_SET_SECCOMP, unix.SECCOMP_MODE_FILTER,
-		uintptr(unsafe.Pointer(&fprog))); errno != 0 {
-		return fmt.Errorf("seccomp: %w", errno)
-	}
-	runtime.KeepAlive(prog)
-	return nil
+	)
 }
 
 func stmt(code uint16, k uint32) unix.SockFilter { return unix.SockFilter{Code: code, K: k} }
