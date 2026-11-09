@@ -37,11 +37,14 @@ RUN useradd --uid 10001 --create-home --home-dir /home/ganglion --shell /usr/sbi
 
 COPY --from=build /out/ganglion /usr/local/bin/ganglion
 COPY examples/ /app/examples/
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # Rustup must never try to install or update at run time: its home is read-only.
 ENV RUSTUP_AUTO_INSTALL=0 \
     HOME=/home/ganglion
-USER ganglion
+# The image starts as root only for docker-entrypoint.sh, which hands /data to
+# ganglion and drops to uid 10001 before the node starts. Running the image
+# with --user 10001 skips the hand-over and needs a volume that user owns.
 WORKDIR /data
 VOLUME /data
-ENTRYPOINT ["ganglion", "run", "--db", "/data/ganglion.db"]
+ENTRYPOINT ["docker-entrypoint.sh", "ganglion", "run", "--db", "/data/ganglion.db"]

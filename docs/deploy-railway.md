@@ -26,8 +26,11 @@ Three details matter to the builder:
 - Rustup's home is read-only for the node. `RUSTUP_AUTO_INSTALL=0` is set, so
   rustup never tries to install a toolchain at run time. The node asks rustc
   for its toolchain at start and pins every build to it.
-- The sandbox refuses to run commands as root, so the container must run as
-  `ganglion` (see "The volume" below).
+- The sandbox refuses to run commands as root, so the node must run as
+  `ganglion`: the entrypoint drops to it (see "The service", step 3). Over
+  `railway ssh` or `docker exec` you are root; use
+  `setpriv --reuid=10001 --regid=10001 --clear-groups <command>` to act as the
+  node's user.
 
 The image installs no model provider. Add one at deploy time, with the owner:
 
@@ -44,12 +47,15 @@ The image installs no model provider. Add one at deploy time, with the owner:
    repository and branch (Railway builds the `Dockerfile` by itself). Do not
    point it at the current bot's token: use the test bot's.
 2. **Volume:** add a volume to the service, mount path `/data`.
-3. **The volume must be writable by uid 10001.** Railway mounts volumes owned
-   by root. Railway's documented fix is the variable `RAILWAY_RUN_UID=10001`
-   (and `RAILWAY_RUN_GID=10001`), which runs the container as that user and
-   hands it the volume; check the current Railway docs, and confirm with
-   `railway ssh` and `ls -ld /data`. Running as root is not an option: the
-   node's command sandbox and the builder are off for root.
+3. **The volume and the user.** Railway mounts volumes owned by root, and its
+   documentation suggests `RAILWAY_RUN_UID=0` for images that default to a
+   non-root user. Do not set it: the node's command sandbox and the builder
+   are off for root. The image starts as root only for
+   [`docker-entrypoint.sh`](../docker-entrypoint.sh), which `chown`s `/data` to
+   uid 10001 when it is not already owned by it and then drops to that user
+   (`setpriv`) before the node starts. Tried locally with a root-owned Docker
+   volume; confirm on Railway with `ls -ld /data` (owner `ganglion`) and that
+   the node's process runs as uid 10001 (`cat /proc/<pid>/status`, `Uid:`).
 4. **Variables:**
 
    | Variable | Value |
@@ -57,7 +63,6 @@ The image installs no model provider. Add one at deploy time, with the owner:
    | `TELEGRAM_BOT_TOKEN` | the test bot's token (never the live bot's) |
    | `DEYE_APP_ID`, `DEYE_APP_SECRET`, `DEYE_EMAIL`, `DEYE_PASSWORD` | the DeyeCloud credentials the module lists in its manifest |
    | `OPENROUTER_API_KEY` | a provider key, if the agent runs through OpenRouter |
-   | `RAILWAY_RUN_UID`, `RAILWAY_RUN_GID` | `10001` |
 
    Secrets are written in `ganglion.yaml` as `env:NAME` and never in the file.
 5. **Memory:** give the service 1 GB while builds run (cargo and rustc peak
@@ -98,6 +103,16 @@ check before relying on it:
 2. The node's log line `sandbox: ready` (or `sandbox: commands are off` with
    the reason), and the admin's `/status`, which shows the sandbox verdict.
 
+Checked locally (2026-11-09, host kernel 6.18, Docker's default seccomp
+profile, uid 10001): the node logs `sandbox: ready denied=60 hide_names=false`,
+and `go test ./builder -run 'Rust|Real'` and `go test ./sandbox -run Confined`
+pass in a container as that user with this image's Rust, so the default seccomp
+profile does not block Landlock or the build helper. What Railway's runtime
+allows cannot be known without deploying, so it is a deploy-time check: in the
+node's log after the first start, the line must read `sandbox: ready ...`; if it
+reads `sandbox: commands are off`, its `reason` names what is missing (kernel,
+root, or dumpable) and nothing can be built.
+
 If the sandbox is off, the node still runs the echo bot, the built-in modules
 and installed modules; it only builds nothing.
 
@@ -106,7 +121,7 @@ and installed modules; it only builds nothing.
 Over `railway ssh`:
 
 ```sh
-cargo --version && rustc --version   # as the ganglion user
+setpriv --reuid=10001 --regid=10001 --clear-groups cargo --version   # as the ganglion user
 ls -ld /data /home/ganglion          # both writable by the user
 uname -r
 ganglion mcp --db /data/ganglion.db  # read-only diagnostics over stdio
