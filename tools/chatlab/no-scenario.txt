@@ -82,6 +82,7 @@ runner/swap.go
 runner/telemetry.go
 runner/tool.go
 secrets/**
+settings/**
 sqlitedb/**
 tool/args.go
 tool/registry.go
