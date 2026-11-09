@@ -113,7 +113,11 @@ func (c *Client) Name() string { return c.name }
 func (c *Client) workDir() (string, error) {
 	c.dirOnce.Do(func() {
 		if c.fixedDir != "" {
-			c.dir, c.dirErr = c.fixedDir, os.MkdirAll(c.fixedDir, 0o700)
+			// Absolute, because the CLI runs inside this folder and would
+			// resolve a relative prompt file path from there.
+			if c.dir, c.dirErr = filepath.Abs(c.fixedDir); c.dirErr == nil {
+				c.dirErr = os.MkdirAll(c.dir, 0o700)
+			}
 			return
 		}
 		c.dir, c.dirErr = os.MkdirTemp("", "ganglion-claude-")

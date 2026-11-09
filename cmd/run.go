@@ -90,13 +90,17 @@ func bootstrap(v flags.Run, src secrets.Source, readFile func(string) ([]byte, e
 	b := config.Bootstrap{DB: v.DB, Languages: v.Languages, BotAPIURL: v.TelegramAPIURL, Admin: v.Admin, MetricsAddr: v.MetricsAddr, TelegramReply: v.TelegramReply, TelegramRich: v.TelegramRich == "on",
 		ReactionAfter: v.ReactionAfter, ReactionDwell: v.ReactionDwell}
 	b.ModulesDir = filepath.Join(filepath.Dir(v.DB), "modules")
-	b.ClaudeDir = filepath.Join(filepath.Dir(v.DB), "claude")
+	// Absolute: the CLI runs inside it, and the sandbox, the janitor and
+	// host.stats must all name the same folder.
+	var err error
+	if b.ClaudeDir, err = filepath.Abs(filepath.Join(filepath.Dir(v.DB), "claude")); err != nil {
+		return config.Bootstrap{}, err
+	}
 	b.SandboxDeny = filepath.SplitList(v.SandboxDeny)
 	b.SandboxHideNames = v.SandboxHideNames == "on"
 	if dir, on := flags.LogDir(v.DB, v.LogDir); on {
 		b.LogDir = dir
 	}
-	var err error
 	if b.BotToken, err = src.Secret("TELEGRAM_BOT_TOKEN"); err != nil {
 		return config.Bootstrap{}, err
 	}

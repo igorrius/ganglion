@@ -305,3 +305,20 @@ func TestTheSandboxHelperIsHidden(t *testing.T) {
 		t.Fatalf("the help lists the helper:\n%s", out)
 	}
 }
+
+// A relative database path gives an absolute claude folder: the CLI runs
+// inside it and the sandbox, the janitor and host.stats must see the same
+// folder.
+func TestBootstrapClaudeDirIsAbsolute(t *testing.T) {
+	clearEnv(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	b, _, _, err := captured(t, "run", "--roles", "core", "--db", "bin/live.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := filepath.Abs("bin/claude")
+	if b.ClaudeDir != want {
+		t.Fatalf("ClaudeDir %q, want %q", b.ClaudeDir, want)
+	}
+}
