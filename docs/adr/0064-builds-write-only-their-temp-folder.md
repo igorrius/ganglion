@@ -157,8 +157,9 @@ needs no namespace.
     setuid, setgid, sticky). cargo needs `fchmod`: it sets 0644 on every
     file it unpacks from crates.io, and refusing `fchmod` outright fails
     with "failed to set permissions to 644" (measured);
-  - `ioctl` with `FS_IOC_SETFLAGS`, `FS_IOC32_SETFLAGS` or
-    `FS_IOC_FSSETXATTR` (chattr's flags).
+  - chattr's flags: `ioctl` with `FS_IOC_SETFLAGS`, `FS_IOC32_SETFLAGS` or
+    `FS_IOC_FSSETXATTR`, and `file_setattr` (Linux 6.17), which sets them
+    by path.
 
   The real builds of the tests (one with a build script compiled and
   linked, one with a dependency fetched and unpacked from crates.io) pass
@@ -171,7 +172,12 @@ needs no namespace.
   both proxies, `cargo` and the `rustc` cargo starts (measured: unpinned,
   the planted `cargo` ran; running the toolchain's own `cargo` was not
   enough, since it starts `rustc` through the proxy, and the planted
-  `rustc` ran).
+  `rustc` ran). The pin and the parents check guard against what lies
+  outside the source. They do not reach the source's own
+  `.cargo/config.toml`, which cargo reads in the work folder:
+  `build.rustc`, `build.rustc-wrapper` or `target.<triple>.linker` there
+  still choose what compiles the module. That is part of the source the
+  owner reviews, and it runs in the same sandbox as the build script.
 - Build folders are made in the node's own folder under the user's cache
   folder, `~/.cache/ganglion/builds` (`LocalConfig.TempRoot`, filled by
   `config`), made with mode 0700 and refused when it is anything else (a
@@ -207,12 +213,14 @@ needs no namespace.
     build's folder (tests `TestAConfinedCommandWritesOnlyItsFolder`,
     `TestABuildWritesOnlyItsFolderAndLeavesNoProcess`).
   - Changes the mode, owner or attributes of the node's database, a
-    secret file or a denied folder, or opens up any file's mode: by path
-    the seccomp filter refuses it
-    (`TestAConfinedCommandChangesNoModeOrOwner`); through a descriptor,
-    such as a denied folder opened for listing, it refuses granting any
-    bit of `07022`, every owner and attribute change, and chattr's flags
-    (`TestAConfinedCommandGrantsNoModeThroughADescriptor`).
+    secret file or a denied folder: by path the seccomp filter refuses
+    every such change (`TestAConfinedCommandChangesNoModeOrOwner`);
+    through a descriptor, such as a denied folder opened for listing, it
+    refuses every owner and attribute change, chattr's flags (by
+    descriptor and by path), and a mode with group or other write,
+    setuid, setgid or sticky
+    (`TestAConfinedCommandGrantsNoModeThroughADescriptor`). Granting group
+    and other read and execute stays open (known limits).
   - Plants a cargo or rustup configuration in a parent of the build's
     folder: only root and the node's user can write those folders (a
     root under a shared folder is refused,
@@ -243,12 +251,20 @@ needs no namespace.
 - **Known limits, not covered:**
   - The network stays open to a build (cargo fetches crates; Landlock's
     network rules are not used), as it is to `host.exec`.
-  - Taking mode bits away: `fchmod` with a mode within `0755`, through a
-    descriptor of any file or folder the build may open for reading,
-    outside its folder too, is allowed, since cargo needs it. A build can
-    take the execute bit off the owner's toolchain, or the read bits off
-    the owner's files or off a denied folder (which it can open for
-    listing). It cannot grant any bit.
+  - `fchmod` with a mode within `0755`: through a descriptor of any file or
+    folder the build may open for reading, outside its folder too, a
+    denied folder it may list included, this is allowed, because cargo
+    sets 0644 and 0755 on what it unpacks. So a build can:
+    - take mode bits away, e.g. the execute bit off the owner's
+      toolchain, or the read bits off the owner's files;
+    - grant group and other read and execute (measured: `fchmod 0755` of
+      a 0700 denied folder, `fchmod 0644` of a 0600 file outside its
+      folder), opening that file's contents, or that folder's names, to
+      the machine's other local users. The build itself still cannot read
+      a denied file.
+
+    Only a mount namespace with the outside mounted read-only (option B)
+    would close this.
   - A file's times: `utimensat`, `futimens`, and on amd64 `utime`,
     `utimes` and `futimesat` are not refused (cargo sets times for its
     fingerprints, and seccomp cannot tell paths apart), so a build can
@@ -260,8 +276,9 @@ needs no namespace.
 ## Consequences
 
 - A build cannot write, create or remove anything outside its folder, nor
-  change a file's owner or attributes, nor grant a mode bit; it can still
-  take mode bits away and change times (above). So a build that needs to
+  change a file's owner, attributes or chattr flags, nor grant write,
+  setuid, setgid or sticky. It can still take mode bits away, grant group
+  and other read and execute, and change times (above). So a build that needs to
   write elsewhere (a shared `sccache`, a global cargo cache) does not work;
   each build fetches its crates again into its temporary `CARGO_HOME`.
 - A build script that sets a mode by path (`chmod` of a generated file),
@@ -290,3 +307,8 @@ needs no namespace.
   narrowed (Landlock ABI 4 network rules, MCP modules in P3).
 - Builds move to a worker marked `builder` (P2): the same mode applies
   there.
+- A node that builds shares its machine with other local users, for whom
+  the read and execute bits a build can grant matter (option B, a mount
+  namespace).
+- A new kernel call changes a file's metadata (as `file_setattr` did in
+  6.17): add it to the confined filter.

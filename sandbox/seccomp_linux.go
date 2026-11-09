@@ -78,8 +78,8 @@ func refuseUnixSockets(confine bool) error {
 	return nil
 }
 
-// metadataCalls are the calls that change a file's mode, owner or extended
-// attributes: Landlock (to ABI 7 at least) governs none of them, so a
+// metadataCalls are the calls that change a file's mode, owner, extended
+// attributes or chattr flags (file_setattr, Linux 6.17, by path): Landlock (to ABI 7 at least) governs none of them, so a
 // confined command could otherwise chmod a file it may only read, or a
 // denied folder it may list (ADR-0064). fchmod is checked by its mode
 // instead (confinedChecks); file times stay: cargo sets them.
@@ -88,7 +88,7 @@ func metadataCalls() []uint32 {
 		unix.SYS_FCHMODAT, unix.SYS_FCHMODAT2, unix.SYS_FCHOWNAT, unix.SYS_FCHOWN,
 		unix.SYS_SETXATTR, unix.SYS_LSETXATTR, unix.SYS_FSETXATTR,
 		unix.SYS_REMOVEXATTR, unix.SYS_LREMOVEXATTR, unix.SYS_FREMOVEXATTR,
-		unix.SYS_SETXATTRAT, unix.SYS_REMOVEXATTRAT,
+		unix.SYS_SETXATTRAT, unix.SYS_REMOVEXATTRAT, unix.SYS_FILE_SETATTR,
 	}, legacyMetadataCalls...)
 }
 

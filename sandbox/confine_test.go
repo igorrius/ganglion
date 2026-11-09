@@ -309,9 +309,16 @@ func TestAConfinedCommandChangesNoModeOrOwner(t *testing.T) {
 	}
 }
 
-// metaEnv names what TestMetadataFromInside does: "fchmod <path> <octal>"
-// or "setflags <path>"; it is set only inside the sandbox.
+// metaEnv names what TestMetadataFromInside does: "fchmod <path> <octal>",
+// "setflags <path>" or "setattr <path>"; it is set only inside the sandbox.
 const metaEnv = "GANGLION_SANDBOX_TEST_META"
+
+// file_setattr's number, AT_FDCWD and FS_XFLAG_NODUMP, for the probe.
+const (
+	sysFileSetattr = 469
+	atFDCWD        = -100
+	fsXflagNodump  = 0x80
+)
 
 // TestMetadataFromInside is the probe the descriptor tests run in the
 // sandbox: it opens the path for reading and changes its mode or its
@@ -332,6 +339,15 @@ func TestMetadataFromInside(t *testing.T) {
 	case "fchmod":
 		mode, _ := strconv.ParseUint(arg, 8, 32)
 		err = syscall.Fchmod(int(f.Fd()), uint32(mode))
+	case "setattr": // file_setattr(AT_FDCWD, path, &file_attr{fa_xflags: FS_XFLAG_NODUMP}, 24, 0)
+		attr := [3]uint64{fsXflagNodump}
+		p, _ := syscall.BytePtrFromString(path)
+		dirfd := atFDCWD
+		_, _, errno := syscall.Syscall6(sysFileSetattr, uintptr(dirfd), uintptr(unsafe.Pointer(p)),
+			uintptr(unsafe.Pointer(&attr)), unsafe.Sizeof(attr), 0, 0)
+		if errno != 0 {
+			err = errno
+		}
 	case "setflags":
 		_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), fsIOCSetFlags, uintptr(unsafe.Pointer(new(int64))))
 		if errno != 0 {
@@ -365,9 +381,11 @@ func metadata(t *testing.T, deny []string, work, step string) string {
 }
 
 // ADR-0064, abuse test: through a descriptor a confined command cannot grant
-// a mode bit (fchmod 0777 of a denied folder it may list, the reviewer's
-// escape) nor set chattr flags, while it can still set 0644 on its own file,
-// as cargo does on what it unpacks; host.exec's commands are unaffected.
+// write, setuid, setgid or sticky (fchmod 0777 of a denied folder it may
+// list, the reviewer's escape) nor set chattr flags, by descriptor or by
+// path (file_setattr), while it can still set 0644 on its own file, as cargo
+// does on what it unpacks; host.exec's commands are unaffected. Granting
+// group and other read stays possible (a known limit of ADR-0064).
 func TestAConfinedCommandGrantsNoModeThroughADescriptor(t *testing.T) {
 	denied := resolvedTemp(t)
 	inner := filepath.Join(denied, "inner")
@@ -406,6 +424,15 @@ func TestAConfinedCommandGrantsNoModeThroughADescriptor(t *testing.T) {
 	}
 	if out := metadata(t, deny, work, "setflags "+mine); !strings.Contains(out, "refused: operation not permitted") {
 		t.Errorf("FS_IOC_SETFLAGS: %q", out)
+	}
+	outside := filepath.Join(resolvedTemp(t), "file")
+	if err := os.WriteFile(outside, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{inner, outside, mine} {
+		if out := metadata(t, deny, work, "setattr "+p); !strings.Contains(out, "refused: operation not permitted") {
+			t.Errorf("file_setattr by path on %s: %q", p, out)
+		}
 	}
 	if out := metadata(t, deny, "", "fchmod "+mine+" 0666"); !strings.Contains(out, "done") {
 		t.Errorf("host.exec's command cannot fchmod: %q", out)

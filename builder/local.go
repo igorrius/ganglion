@@ -201,6 +201,9 @@ func ensureRoot(root string) error {
 	if root == "" {
 		return errors.New("builder: the node has no folder of its own to build in (the user's cache folder is unknown), so nothing is built")
 	}
+	if !filepath.IsAbs(root) {
+		return fmt.Errorf("builder: the build folder %s is not an absolute path (a relative HOME?), so nothing is built", root)
+	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return fmt.Errorf("builder: %w", err)
 	}
@@ -215,13 +218,17 @@ func ensureRoot(root string) error {
 	return nil
 }
 
-// safeParents refuses a build root when it or a folder above it, up to "/",
+// safeParents refuses a build root that is not absolute, or when it or a
+// folder above it, up to "/",
 // is a symlink or not a folder, belongs to a user other than root and the
 // node's, or may be written by its group or others. Then only root and the
 // node's user can put a file in the build's parent folders, and the check
 // of checkAncestors cannot be raced (ADR-0064).
 func safeParents(root string) error {
-	for dir := root; ; dir = filepath.Dir(dir) {
+	if !filepath.IsAbs(root) {
+		return fmt.Errorf("builder: the build folder %s is not an absolute path, so nothing is built", root)
+	}
+	for dir := filepath.Clean(root); ; dir = filepath.Dir(dir) {
 		info, err := os.Lstat(dir)
 		if err != nil {
 			return fmt.Errorf("builder: %s cannot be checked, so nothing is built: %w", dir, err)

@@ -219,6 +219,7 @@ func TestBuildRefusals(t *testing.T) {
 		"no cargo":      {files: rustFiles, cfg: func(c *LocalConfig) { c.Cargo = "" }, is: ErrNoBuilder},
 		"no toolchain":  {files: rustFiles, cfg: func(c *LocalConfig) { c.Toolchain = "" }, is: ErrNoBuilder},
 		"no root":       {files: rustFiles, cfg: func(c *LocalConfig) { c.TempRoot = "" }, want: "no folder of its own"},
+		"relative root": {files: rustFiles, cfg: func(c *LocalConfig) { c.TempRoot = "cache/ganglion/builds" }, want: "not an absolute path"},
 		"unknown":       {files: map[string]string{"manifest.yaml": "x"}, want: "language is unknown"},
 		"over the cap":  {files: rustFiles, cfg: func(c *LocalConfig) { c.MaxCopy = 10 }, want: "too big"},
 		"no manifest":   {files: map[string]string{"Cargo.toml": "[package]\n"}, want: "manifest.yaml"},
@@ -502,6 +503,9 @@ func TestARootUnderASharedFolderIsRefused(t *testing.T) {
 	}
 	if err := safeParents("/usr/bin"); err != nil {
 		t.Fatalf("safeParents(/usr/bin) = %v", err)
+	}
+	if err := safeParents("usr/bin"); err == nil || !strings.Contains(err.Error(), "not an absolute path") {
+		t.Fatalf("safeParents of a relative root = %v, want a refusal", err)
 	}
 }
 
