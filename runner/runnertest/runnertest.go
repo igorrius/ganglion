@@ -162,7 +162,7 @@ func Run(t *testing.T, load Loader, probe []byte) {
 
 	t.Run("config from the manifest", func(t *testing.T) {
 		e := fresh()
-		e.manifest.Config = map[string]string{"inverter_sn": "123"}
+		e.manifest.ConfigValues = map[string]string{"inverter_sn": "123"}
 		r := result(t, call(t, e.instance(t), `{"op":"config","name":"inverter_sn"}`))
 		if r["ok"] != true || r["value"] != "123" {
 			t.Fatalf("config = %v, want 123", r)

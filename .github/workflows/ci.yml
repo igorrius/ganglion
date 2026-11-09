@@ -47,6 +47,10 @@ jobs:
       - name: A run by hand reuses no result
         if: github.event_name == 'workflow_dispatch'
         run: go clean -testcache
+      # The module tests build Rust to wasm32-wasip1 and skip without it.
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          targets: wasm32-wasip1
       - name: Build
         run: go build ./...
       - name: Vet

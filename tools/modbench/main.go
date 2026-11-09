@@ -125,10 +125,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if m.Config == nil {
-		m.Config = map[string]string{}
+	if m.ConfigValues == nil {
+		m.ConfigValues = map[string]string{}
 	}
-	maps.Copy(m.Config, config)
+	maps.Copy(m.ConfigValues, config)
 	in, target, err := benchInput(*replayPath, *payloadPath)
 	if err != nil {
 		return err

@@ -14,14 +14,22 @@ name: deye-reader
 version: 1
 triggers:
   - cron: "*/30 * * * *"
-  - tool: deye.status
+  - tool: status
+    about: Battery, grid and load now.
+    output: {soc: integer, grid: boolean}
 capabilities:
   http.fetch: [eu1-developer.deyecloud.com]
   secret.get: [DEYE_APP_ID, DEYE_APP_SECRET]
   event.emit: [battery.changed]
   state: true
 config:
-  inverter_sn: "2400000001"
+  inverter_sn: {type: string, required: true}
+  poll_s: {type: number, default: "30"}
+cells:
+  report:
+    soc: {kind: sensor, type: integer, about: "Battery charge, percent"}
+    grid: {kind: sensor, type: "boolean?", about: Grid is up}
+  read: [house.power]
 limits:
   memory: 8MiB
   timeout: 20s
@@ -38,15 +46,28 @@ func TestParseManifest(t *testing.T) {
 	if m.Name != "deye-reader" || m.Version != 1 {
 		t.Errorf("name/version = %s/%d", m.Name, m.Version)
 	}
-	if len(m.Triggers) != 2 || m.Triggers[0].Cron != "*/30 * * * *" || m.Triggers[1].Tool != "deye.status" {
+	if len(m.Triggers) != 2 || m.Triggers[0].Cron != "*/30 * * * *" || m.Triggers[1].Tool != "status" {
 		t.Errorf("triggers = %+v", m.Triggers)
 	}
 	c := m.Capabilities
 	if !slices.Equal(c.HTTPFetch, []string{"eu1-developer.deyecloud.com"}) || !slices.Equal(c.SecretGet, []string{"DEYE_APP_ID", "DEYE_APP_SECRET"}) || !c.State {
 		t.Errorf("capabilities = %+v", c)
 	}
-	if m.Config["inverter_sn"] != "2400000001" {
+	if k := m.Config["inverter_sn"]; k.Type != "string" || !k.Required {
 		t.Errorf("config = %v", m.Config)
+	}
+	if k := m.Config["poll_s"]; k.Type != "number" || k.Required || k.Default != "30" {
+		t.Errorf("config = %v", m.Config)
+	}
+	if tr := m.Triggers[1]; tr.About == "" || tr.Output == nil || tr.Output.Type != "object" || tr.Output.Fields["soc"].Type != "integer" {
+		t.Errorf("tool trigger = %+v", tr)
+	}
+	soc, grid := m.Cells.Report["soc"], m.Cells.Report["grid"]
+	if soc.Kind != "sensor" || soc.Type.Type != "integer" || soc.About != "Battery charge, percent" || !grid.Type.Nullable {
+		t.Errorf("cells = %+v", m.Cells)
+	}
+	if !slices.Equal(m.Cells.Read, []string{"house.power"}) {
+		t.Errorf("cells.read = %v", m.Cells.Read)
 	}
 	if m.Limits.Memory != 8<<20 || m.Limits.Timeout != 20*time.Second {
 		t.Errorf("limits = %+v, want 8 MiB and 20 s", m.Limits)
@@ -82,6 +103,25 @@ func TestParseManifestRejects(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if _, err := ParseManifest([]byte(src)); err == nil {
 				t.Fatalf("ParseManifest accepted:\n%s", src)
+			}
+		})
+	}
+}
+
+func TestParseManifestRejectsV2(t *testing.T) {
+	cases := map[string]struct{ src, field string }{
+		"cell kind":   {"cells:\n  report:\n    soc: {kind: switch, type: integer}\n", "soc"},
+		"cell name":   {"cells:\n  report:\n    So-C!: {kind: sensor, type: integer}\n", "So-C!"},
+		"cell type":   {"cells:\n  report:\n    soc: {kind: sensor}\n", "soc"},
+		"read id":     {"cells:\n  read: [soc]\n", "soc"},
+		"config type": {"config:\n  day: {type: date}\n", "day"},
+		"tool name":   {"triggers:\n  - tool: Status\n", "Status"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := ParseManifest([]byte("name: x\n" + tc.src))
+			if err == nil || !strings.Contains(err.Error(), tc.field) {
+				t.Fatalf("err = %v, want one naming %q", err, tc.field)
 			}
 		})
 	}

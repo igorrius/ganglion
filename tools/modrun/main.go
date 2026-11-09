@@ -84,10 +84,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if len(config) > 0 && m.Config == nil {
-		m.Config = map[string]string{}
+	if len(config) > 0 && m.ConfigValues == nil {
+		m.ConfigValues = map[string]string{}
 	}
-	maps.Copy(m.Config, config)
+	maps.Copy(m.ConfigValues, config)
 	secrets, err := loadEnv(*envPath)
 	if err != nil {
 		return err

@@ -229,7 +229,7 @@ func (m *Module) instantiateHost(ctx context.Context) error {
 		return m.offer(m.deps.Secrets(key))
 	}).Export("secret_get").
 		NewFunctionBuilder().WithFunc(func(_ context.Context, mod api.Module, p, n uint32) int32 {
-		v, ok := m.manifest.Config[readString(mod, p, n)]
+		v, ok := m.manifest.ConfigValues[readString(mod, p, n)]
 		return m.offer(v, ok)
 	}).Export("config_get").
 		Instantiate(ctx)

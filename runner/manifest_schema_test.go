@@ -21,6 +21,9 @@ func TestManifestSchemaMatchesLoader(t *testing.T) {
 	}{
 		{"", append(schemas.YAMLFields(Manifest{}), "limits")},
 		{"/properties/triggers/items", schemas.YAMLFields(Trigger{})},
+		{"/$defs/cellDecl", schemas.YAMLFields(CellDecl{})},
+		{"/$defs/configKey", schemas.YAMLFields(ConfigKey{})},
+		{"/properties/cells", schemas.YAMLFields(Cells{})},
 		{"/properties/capabilities", schemas.YAMLFields(Capabilities{})},
 		{"/properties/escalate/items", schemas.YAMLFields(Escalation{})},
 		{"/properties/limits", []string{"memory", "timeout"}},

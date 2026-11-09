@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"go.yaml.in/yaml/v3"
@@ -21,20 +22,44 @@ const (
 // Manifest declares what a module is, when it runs and what it may touch
 // (docs/spec.md, section 7.5). Anything not listed is denied.
 type Manifest struct {
-	Name         string            `yaml:"name"`
-	Version      int               `yaml:"version"`
-	ABI          int               `yaml:"abi"` // the module ABI it speaks (ADR-0011); missing reads as 1
-	Triggers     []Trigger         `yaml:"triggers"`
-	Capabilities Capabilities      `yaml:"capabilities"`
-	Config       map[string]string `yaml:"config"`
-	Limits       Limits            `yaml:"-"`
-	Escalate     []Escalation      `yaml:"escalate"`
+	Name         string               `yaml:"name"`
+	Version      int                  `yaml:"version"`
+	ABI          int                  `yaml:"abi"` // the module ABI it speaks (ADR-0011); missing reads as 1
+	Triggers     []Trigger            `yaml:"triggers"`
+	Capabilities Capabilities         `yaml:"capabilities"`
+	Cells        Cells                `yaml:"cells"`
+	Config       map[string]ConfigKey `yaml:"config"` // the keys the module reads
+	ConfigValues map[string]string    `yaml:"-"`      // their values, set by the host
+	Limits       Limits               `yaml:"-"`
+	Escalate     []Escalation         `yaml:"escalate"`
 }
 
 // Trigger starts a module: a cron schedule or a tool call by the model.
 type Trigger struct {
-	Cron string `yaml:"cron,omitempty"`
-	Tool string `yaml:"tool,omitempty"`
+	Cron   string `yaml:"cron,omitempty"`
+	Tool   string `yaml:"tool,omitempty"`
+	About  string `yaml:"about,omitempty"`  // the tool's description for the agent
+	Output *Shape `yaml:"output,omitempty"` // required for a tool of a local module
+}
+
+// ConfigKey declares one setting a module reads.
+type ConfigKey struct {
+	Type     string `yaml:"type"` // string | number | boolean
+	Required bool   `yaml:"required"`
+	Default  string `yaml:"default"`
+}
+
+// CellDecl declares one cell a module reports.
+type CellDecl struct {
+	Kind  string `yaml:"kind"` // sensor (switch later)
+	Type  Shape  `yaml:"type"`
+	About string `yaml:"about"`
+}
+
+// Cells are the cells a module owns and the ones it may read.
+type Cells struct {
+	Report map[string]CellDecl `yaml:"report"` // by short name; the cell id is <module>.<name>
+	Read   []string            `yaml:"read"`   // full cell ids
 }
 
 // Capabilities are the host functions a module is granted.
@@ -78,10 +103,8 @@ func ParseManifest(src []byte) (Manifest, error) {
 	if m.Name == "" {
 		return Manifest{}, errors.New("manifest: name is required")
 	}
-	for i, t := range m.Triggers {
-		if (t.Cron == "") == (t.Tool == "") {
-			return Manifest{}, fmt.Errorf("manifest: trigger %d must set exactly one of cron, tool", i)
-		}
+	if err := m.checkV2(); err != nil {
+		return Manifest{}, fmt.Errorf("manifest: %w", err)
 	}
 
 	m.Limits = Limits{Memory: DefaultMemory, Timeout: DefaultTimeout}
@@ -103,4 +126,46 @@ func ParseManifest(src []byte) (Manifest, error) {
 		m.Limits.Timeout = d
 	}
 	return m, nil
+}
+
+var (
+	cellNamePattern = regexp.MustCompile(`^[a-z0-9_-]+$`)
+	cellIDPattern   = regexp.MustCompile(`^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+$`)
+	toolNamePattern = regexp.MustCompile(`^[a-z0-9_]+$`)
+)
+
+// checkV2 validates triggers, cells and config keys.
+func (m Manifest) checkV2() error {
+	for i, t := range m.Triggers {
+		if (t.Cron == "") == (t.Tool == "") {
+			return fmt.Errorf("trigger %d must set exactly one of cron, tool", i)
+		}
+		if t.Tool != "" && !toolNamePattern.MatchString(t.Tool) {
+			return fmt.Errorf("tool %q: a name is lower-case letters, digits and _", t.Tool)
+		}
+	}
+	for name, c := range m.Cells.Report {
+		if !cellNamePattern.MatchString(name) {
+			return fmt.Errorf("cells.report %q: a name is lower-case letters, digits, _ and -", name)
+		}
+		if c.Kind != "sensor" {
+			return fmt.Errorf("cells.report %q: kind must be sensor", name)
+		}
+		if c.Type.Type == "" {
+			return fmt.Errorf("cells.report %q: type is required", name)
+		}
+	}
+	for _, id := range m.Cells.Read {
+		if !cellIDPattern.MatchString(id) {
+			return fmt.Errorf("cells.read %q: not a full cell id like module.cell", id)
+		}
+	}
+	for name, k := range m.Config {
+		switch k.Type {
+		case "string", "number", "boolean":
+		default:
+			return fmt.Errorf("config %q: type must be string, number or boolean", name)
+		}
+	}
+	return nil
 }
