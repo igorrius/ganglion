@@ -4,7 +4,10 @@
 // fails with the path in the file.
 package settings
 
-import "time"
+import (
+	"path/filepath"
+	"time"
+)
 
 // File is the whole config file. Every section has a default, so a missing
 // or empty file is a working node.
@@ -150,4 +153,17 @@ func Default() File {
 			Search:      Search{Mode: auto, BraveKey: "env:BRAVE_API_KEY"},
 		},
 	}
+}
+
+// LogDir is the log directory of a node whose database is at db: log.dir
+// itself, "logs" beside the database when it is empty, and off (false) for
+// "off" (R-OBS-6).
+func (f File) LogDir(db string) (string, bool) {
+	switch f.Log.Dir {
+	case off:
+		return "", false
+	case "":
+		return filepath.Join(filepath.Dir(db), "logs"), true
+	}
+	return f.Log.Dir, true
 }

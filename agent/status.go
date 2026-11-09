@@ -57,7 +57,7 @@ func (a *Agent) ownStatus(ctx context.Context, t *turn, s status.Scope) []status
 // that answered its last turn when that was not the first.
 func (a *Agent) sessionLine(ctx context.Context, t *turn) status.Check {
 	c := status.Check{Section: status.SectionModels, State: status.OK, Line: texts.StatusSession}
-	cands, err := a.d.Router.Route(ctx, router.TaskReq{Kind: router.TaskMessage, Tools: len(a.toolSpecs(t)) > 0, Privacy: t.state.privacy()})
+	cands, err := a.d.Router.Route(ctx, router.TaskReq{Purpose: router.PurposeChat, Tools: len(a.toolSpecs(t)) > 0, Privacy: t.state.privacy()})
 	if err != nil || len(cands) == 0 {
 		c.State, c.Line = status.Fail, texts.StatusSessionNone
 		return c

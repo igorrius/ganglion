@@ -83,6 +83,9 @@ type wireRequest struct {
 	Messages  []wireMessage `json:"messages"`
 	Tools     []wireTool    `json:"tools,omitempty"`
 	MaxTokens int           `json:"max_tokens,omitempty"`
+	// ReasoningEffort is the request's effort; absent leaves the model's
+	// default.
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 }
 
 type wireResponse struct {
@@ -102,7 +105,7 @@ type wireResponse struct {
 }
 
 func toWire(req provider.ChatRequest) wireRequest {
-	w := wireRequest{Model: req.Model, MaxTokens: req.MaxTokens}
+	w := wireRequest{Model: req.Model, MaxTokens: req.MaxTokens, ReasoningEffort: string(req.Effort)}
 	for _, m := range req.Messages {
 		content := m.Content
 		wm := wireMessage{Role: string(m.Role), Content: &content, ToolCallID: m.ToolCallID}

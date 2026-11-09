@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/igorrius/ganglion/provider"
-	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/settings"
 )
 
 type answering struct {
@@ -46,35 +46,39 @@ func TestCounterPassesAFailure(t *testing.T) {
 	}
 }
 
-func catalog(t *testing.T, body string) rules.Catalog {
+// labModels reads section as the models: section of ganglion.yaml.
+func labModels(t *testing.T, section string) settings.Models {
 	t.Helper()
-	c, err := rules.LoadCatalog(strings.NewReader(body))
+	f, err := settings.Parse([]byte("models:\n  " + strings.ReplaceAll(strings.TrimSpace(section), "\n", "\n  ") + "\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return c
+	return *f.Models
+}
+
+// keyed is a models section of one local provider whose key is in env.
+func keyed(t *testing.T, env string) settings.Models {
+	return labModels(t, "providers: [{name: p, type: openai, base_url: 'http://127.0.0.1:1', key: env:"+env+"}]\n"+
+		"models: [{provider: p, name: m}]\npurposes: {chat: [{model: m}]}")
 }
 
 func TestKeysFor(t *testing.T) {
 	t.Setenv("LAB_TEST_KEY", "k1")
-	c := catalog(t, "providers:\n  - {name: p, type: openai, base_url: 'http://127.0.0.1:1', key_env: LAB_TEST_KEY}\nmodels:\n  - {provider: p, name: m, tier: smart}\n")
-	keys, err := KeysFor(c)
+	keys, err := KeysFor(keyed(t, "LAB_TEST_KEY"))
 	if err != nil || keys["p"] != "k1" {
 		t.Fatalf("keys %v, %v", keys, err)
 	}
 }
 
 func TestKeysForMissing(t *testing.T) {
-	c := catalog(t, "providers:\n  - {name: p, type: openai, base_url: 'http://127.0.0.1:1', key_env: LAB_TEST_NONE}\nmodels:\n  - {provider: p, name: m, tier: smart}\n")
-	if _, err := KeysFor(c); err == nil || !strings.Contains(err.Error(), "LAB_TEST_NONE") {
+	if _, err := KeysFor(keyed(t, "LAB_TEST_NONE")); err == nil || !strings.Contains(err.Error(), "LAB_TEST_NONE") {
 		t.Fatalf("err %v", err)
 	}
 }
 
 func TestKeysForRefusesTelegram(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "real")
-	c := catalog(t, "providers:\n  - {name: p, type: openai, base_url: 'http://127.0.0.1:1', key_env: TELEGRAM_BOT_TOKEN}\nmodels:\n  - {provider: p, name: m, tier: smart}\n")
-	if _, err := KeysFor(c); err == nil || strings.Contains(err.Error(), "real") {
+	if _, err := KeysFor(keyed(t, "TELEGRAM_BOT_TOKEN")); err == nil || strings.Contains(err.Error(), "real") {
 		t.Fatalf("err %v", err)
 	}
 }
@@ -96,12 +100,13 @@ func TestScrubEnvironment(t *testing.T) {
 }
 
 func TestMainModel(t *testing.T) {
-	both := catalog(t, "providers:\n  - {name: c, type: claude-cli}\nmodels:\n  - {provider: c, name: haiku, tier: cheap}\n  - {provider: c, name: sonnet, tier: smart}\n")
+	both := labModels(t, "providers: [{name: c, type: claude-cli}]\n"+
+		"models: [{id: small, provider: c, name: haiku}, {id: big, provider: c, name: sonnet}]\n"+
+		"purposes: {chat: [{model: big}, {model: small}], check: [{model: small}]}")
 	if got := MainModel(both); got != "sonnet" {
-		t.Errorf("both: %q", got)
+		t.Errorf("the first of chat, by the provider's name: %q", got)
 	}
-	cheap := catalog(t, "providers:\n  - {name: c, type: claude-cli}\nmodels:\n  - {provider: c, name: haiku, tier: cheap}\n")
-	if got := MainModel(cheap); got != "haiku" {
-		t.Errorf("cheap: %q", got)
+	if got := MainModel(settings.Models{}); got != "" {
+		t.Errorf("no models: %q", got)
 	}
 }

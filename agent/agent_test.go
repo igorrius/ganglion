@@ -157,6 +157,7 @@ type env struct {
 	turns      *turns.Log
 	now        time.Time
 	router     *rules.Router
+	routed     *routeLog // the tasks the agent asked the router for
 	archive    *Archive
 	deps       Deps
 	logs       *bytes.Buffer
@@ -166,6 +167,44 @@ type env struct {
 	personaErr error
 	names      map[string]string // the access list's names by principal
 	early      *enqueued         // what the agent stored in the outbox before a turn's end
+}
+
+// testPurposes are the lists of the test router: a turn tries smart and
+// then cheap, the housekeeping purposes cheap and then smart. extra models
+// join every list at the end.
+func testPurposes(extra ...string) map[router.Purpose][]router.Choice {
+	chat := []router.Choice{{Model: "smart"}, {Model: "cheap"}}
+	house := []router.Choice{{Model: "cheap"}, {Model: "smart"}}
+	for _, id := range extra {
+		chat, house = append(chat, router.Choice{Model: id}), append(house, router.Choice{Model: id})
+	}
+	return map[router.Purpose][]router.Choice{router.PurposeChat: chat, router.PurposeCheck: house,
+		router.PurposeCompact: house, router.PurposeTranslate: house}
+}
+
+// routeLog is a router that records the tasks it is asked to route.
+type routeLog struct {
+	router.Router
+	mu    sync.Mutex
+	tasks []router.TaskReq
+}
+
+func (r *routeLog) Route(ctx context.Context, t router.TaskReq) ([]router.Candidate, error) {
+	r.mu.Lock()
+	r.tasks = append(r.tasks, t)
+	r.mu.Unlock()
+	return r.Router.Route(ctx, t)
+}
+
+// purposes are the purposes of the routed tasks, in order.
+func (r *routeLog) purposes() []router.Purpose {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]router.Purpose, len(r.tasks))
+	for i, t := range r.tasks {
+		out[i] = t.Purpose
+	}
+	return out
 }
 
 // enqueued is an outbox that records what is stored in it.
@@ -210,12 +249,13 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 	e := &env{db: db, logs: &bytes.Buffer{}, archive: arch, smart: &fakeProvider{name: "p1"}, cheap: &fakeProvider{name: "p2"}, states: &states{m: map[string]json.RawMessage{}}, turns: tl, now: t0, admin: true, jobs: jobs{},
 		names: map[string]string{"telegram:user:42": "Igor Artasevych"}, early: &enqueued{}}
 	e.router, err = rules.New([]router.Model{
-		{Provider: "p1", Name: "smart", Tier: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 2}},
-		{Provider: "p2", Name: "cheap", Tier: "cheap", Caps: router.ModelCaps{Tools: true}},
-	}, rules.WithClock(func() time.Time { return e.now }))
+		{ID: "smart", Provider: "p1", Name: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 2}},
+		{ID: "cheap", Provider: "p2", Name: "cheap", Caps: router.ModelCaps{Tools: true}},
+	}, testPurposes(), rules.WithClock(func() time.Time { return e.now }))
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.routed = &routeLog{Router: e.router}
 	if tools == nil {
 		tools = registry(t)
 	}
@@ -225,7 +265,7 @@ func newEnv(t *testing.T, cfg Config, tools *tool.Registry) *env {
 		t.Fatal(err)
 	}
 	e.deps = Deps{
-		States: e.states, Router: e.router, Tools: tools, Policy: passThrough, Pending: e.pending, IsAdmin: func(context.Context, string) (bool, error) { return e.admin, nil }, Turns: tl, Archive: arch, Jobs: e.jobs,
+		States: e.states, Router: e.routed, Tools: tools, Policy: passThrough, Pending: e.pending, IsAdmin: func(context.Context, string) (bool, error) { return e.admin, nil }, Turns: tl, Archive: arch, Jobs: e.jobs,
 		Providers: map[string]provider.Provider{"p1": e.smart, "p2": e.cheap},
 		Alerts: alert.Admins{List: func(context.Context) ([]string, error) { return []string{"telegram:user:1"}, nil }, Private: func(p string) (string, string, bool) {
 			id, ok := strings.CutPrefix(p, "telegram:user:")
@@ -398,7 +438,7 @@ func TestFallbackOnRateLimit(t *testing.T) {
 	if len(tr.Route) != 2 || tr.Route[0] != (turns.Attempt{Provider: "p1", Model: "smart", Error: "rate_limit"}) || tr.Route[1].Error != "" {
 		t.Fatalf("route %+v", tr.Route)
 	}
-	cs, _ := e.router.Route(context.Background(), router.TaskReq{Kind: "message"})
+	cs, _ := e.router.Route(context.Background(), router.TaskReq{Purpose: router.PurposeChat})
 	if cs[0].Provider != "p2" {
 		t.Fatalf("the router did not hear about the rate limit: %+v", cs)
 	}
@@ -477,6 +517,9 @@ func TestCompaction(t *testing.T) {
 	}
 	if got := rec.Value(t, "ganglion.compactions", map[string]string{"result": "ok"}); got != 1 {
 		t.Fatalf("compactions ok = %v, want 1", got)
+	}
+	if got := e.routed.purposes(); !slices.Contains(got, router.PurposeChat) || got[len(got)-1] != router.PurposeCompact {
+		t.Fatalf("purposes %v: a turn is chat, its compaction compact", got)
 	}
 }
 

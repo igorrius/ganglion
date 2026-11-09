@@ -86,7 +86,7 @@ func (d *Diag) table() []entry {
 			`{"since":{"type":"string"},"limit":{"type":"integer"}}`), d.turnsFailed},
 		{tool("turn.show", "One turn whole by its id: the incoming event (kind and time, not its text), the route and cost, every tool call with its decision, and the replies with their delivery status.",
 			`{"turn":{"type":"string"}}`), d.turnShow},
-		{tool("config.show", "The node's settings as this process reads them (flags and environment); secrets only as set or unset.", `{}`), d.configShow},
+		{tool("config.show", "The node's settings as this process reads them (ganglion.yaml and the secrets it names); secrets only as set or unset.", `{}`), d.configShow},
 		{tool("queues.state", "The inbox and the outbox: counts by status, the oldest waiting, and the latest messages given up with their errors.", `{}`), d.queuesState},
 	}
 }

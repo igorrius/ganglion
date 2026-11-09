@@ -26,7 +26,7 @@ func skillEnv(t *testing.T) *confirmEnv {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"),
-		[]byte("---\nname: quick-sum\ndescription: Add numbers fast\nmodel:\n  tier: cheap\n---\nAdd them.\n"), 0o600); err != nil {
+		[]byte("---\nname: quick-sum\ndescription: Add numbers fast\nmodel:\n  purpose: check\n---\nAdd them.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	set, problems, err := skills.Load(skills.Builtin, ws, nil)
@@ -75,12 +75,16 @@ func TestSkillsIndexStable(t *testing.T) {
 
 func TestSkillRouteKeepsLocalOnly(t *testing.T) {
 	a := &Agent{d: Deps{Skills: fakeSkillSet{"private": {Model: router.TaskReq{Privacy: skills.PrivacyLocalOnly}},
-		"cloudy": {Model: router.TaskReq{Tier: router.TierSmart}}}}}
-	task := a.skillRoute(router.TaskReq{}, []provider.ToolCall{readCall("private"), readCall("cloudy")}, true)
-	if task.Privacy != skills.PrivacyLocalOnly || task.Tier != router.TierSmart {
+		"cloudy": {Model: router.TaskReq{Purpose: router.PurposeCode}}}}}
+	chat := router.TaskReq{Purpose: router.PurposeChat}
+	task := a.skillRoute(chat, []provider.ToolCall{readCall("private"), readCall("cloudy")}, true)
+	if task.Privacy != skills.PrivacyLocalOnly || task.Purpose != router.PurposeCode {
 		t.Fatalf("task %+v", task)
 	}
-	if task := a.skillRoute(router.TaskReq{}, []provider.ToolCall{readCall("cloudy")}, false); task.Tier != "" {
+	if task := a.skillRoute(chat, []provider.ToolCall{readCall("private")}, true); task.Purpose != router.PurposeChat {
+		t.Fatalf("a skill with no purpose changed the turn's: %+v", task)
+	}
+	if task := a.skillRoute(chat, []provider.ToolCall{readCall("cloudy")}, false); task.Purpose != router.PurposeChat {
 		t.Fatalf("a family turn was re-routed: %+v", task)
 	}
 }
@@ -110,11 +114,11 @@ func localEnv(t *testing.T, cfg Config) (*confirmEnv, *fakeProvider) {
 	local := &fakeProvider{name: "p3"}
 	e.deps.Providers["p3"] = local
 	e.deps.Router, err = rules.New([]router.Model{
-		{Provider: "p1", Name: "smart", Tier: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 1}},
-		{Provider: "p2", Name: "cheap", Tier: "cheap", Caps: router.ModelCaps{Tools: true}},
-		// Dearer, so only a local-only task picks it.
-		{Provider: "p3", Name: "local", Tier: "smart", Caps: router.ModelCaps{Tools: true, Local: true, PriceInMTok: 50, PriceOutMTok: 50}},
-	}, rules.WithClock(func() time.Time { return e.now }))
+		{ID: "smart", Provider: "p1", Name: "smart", Caps: router.ModelCaps{Tools: true, PriceInMTok: 1, PriceOutMTok: 1}},
+		{ID: "cheap", Provider: "p2", Name: "cheap", Caps: router.ModelCaps{Tools: true}},
+		// Last in every list, so only a local-only task picks it.
+		{ID: "local", Provider: "p3", Name: "local", Caps: router.ModelCaps{Tools: true, Local: true, PriceInMTok: 50, PriceOutMTok: 50}},
+	}, testPurposes("local"), rules.WithClock(func() time.Time { return e.now }))
 	if err != nil {
 		t.Fatal(err)
 	}

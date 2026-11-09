@@ -42,8 +42,8 @@ func (a *Agent) skillRoute(task router.TaskReq, calls []provider.ToolCall, admin
 			continue
 		}
 		m := sk.Model
-		if m.Tier != "" {
-			task.Tier = m.Tier
+		if m.Purpose != "" {
+			task.Purpose = m.Purpose
 		}
 		if m.Context != "" {
 			task.Context = m.Context

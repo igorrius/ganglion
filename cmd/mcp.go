@@ -1,22 +1,25 @@
 package cmd
 
 import (
-	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"time"
 
-	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/diag"
 	"github.com/igorrius/ganglion/internal/buildinfo"
 	"github.com/igorrius/ganglion/mcp"
-	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/secrets"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/urfave/cli/v3"
 )
@@ -25,7 +28,7 @@ import (
 // (R-OBS-7, ADR-0044). It needs no running node and no model, opens the
 // database read-only, and writes only JSON-RPC to stdout.
 func mcpCommand(in io.Reader, out io.Writer) *cli.Command {
-	var db, logDir string
+	var db, cfg, logDir string
 	return &cli.Command{
 		Name:  "mcp",
 		Usage: "serve read-only diagnostics (logs, the tool-call journal, turns, queues, settings) as an MCP server over stdio",
@@ -33,7 +36,7 @@ func mcpCommand(in io.Reader, out io.Writer) *cli.Command {
 			"Read access to the data directory is read access to all conversation history.",
 		// A usage error must not print help to stdout, the protocol's channel.
 		OnUsageError: func(_ context.Context, _ *cli.Command, err error, _ bool) error { return err },
-		Flags:        []cli.Flag{flags.DBFlag(&db), flags.LogDirFlag(&logDir)},
+		Flags:        []cli.Flag{flags.DBFlag(&db), flags.ConfigFlag(&cfg), flags.LogDirFlag(&logDir)},
 		Action: func(ctx context.Context, _ *cli.Command) error {
 			if _, err := os.Stat(db); errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("no database at %s; set GANGLION_DB to the node's database", db)
@@ -43,11 +46,17 @@ func mcpCommand(in io.Reader, out io.Writer) *cli.Command {
 				return err
 			}
 			defer func() { _ = ro.Close() }()
-			dir, on := flags.LogDir(db, logDir)
-			if !on {
-				dir = ""
+			// A file that does not load is shown in config.show; the
+			// diagnostics still serve, on the default log directory.
+			f, loadErr := settings.Load(cmp.Or(cfg, filepath.Join(filepath.Dir(db), settings.FileName)), os.ReadFile)
+			if loadErr != nil {
+				f = settings.Default()
 			}
-			d := diag.New(ro, dir, runSettings(ctx, secrets.OSEnv(), os.ReadFile), time.Now)
+			if logDir != "" {
+				f.Log.Dir = logDir
+			}
+			dir, _ := f.LogDir(db)
+			d := diag.New(ro, dir, runSettings(f, loadErr, secrets.OSEnv(), os.Getenv), time.Now)
 			srv := mcp.NewServer(diag.ClientSource, buildinfo.Read().Short(), d.Tools(), d.ExecForClient, mcp.WithInstructions(diag.ClientInstructions))
 			return srv.Serve(ctx, stdio{in, out})
 		},
@@ -60,81 +69,105 @@ type stdio struct {
 	io.Writer
 }
 
-// runSettings are the settings `ganglion run` would read in this
-// process's environment, with each flag's variable; the secrets the node
-// reads, only whether they are set; and the model catalogue without keys.
-// A setting that cannot be read is shown with its error.
-func runSettings(ctx context.Context, src secrets.Source, readFile func(string) ([]byte, error)) diag.Settings {
-	var v flags.Run
-	def := agent.DefaultConfig()
-	fl := v.Flags(def.DailyTurns, def.DailyTokens, def.SessionIdle)
+// runSettings are the settings `ganglion run` would read in this process's
+// environment: every key of f with its value, each secret only as its
+// variable and whether it is set, the models by id and the purposes in
+// order. A file that did not load, or a retired variable that would stop
+// the start, is an error row first.
+func runSettings(f settings.File, loadErr error, src secrets.Source, getenv func(string) string) diag.Settings {
 	var out diag.Settings
-	c := &cli.Command{Name: "settings", Flags: fl, Writer: io.Discard, ErrWriter: io.Discard,
-		Action: func(_ context.Context, c *cli.Command) error {
-			for _, f := range fl {
-				name := f.Names()[0]
-				env := ""
-				if keys := envKeys(f); len(keys) > 0 {
-					env = keys[0]
-				}
-				out = append(out, diag.Setting{Name: name, Env: env, Value: fmt.Sprint(c.Value(name))})
-			}
-			return nil
-		}}
-	if err := c.Run(ctx, []string{"settings"}); err != nil {
-		out = append(out, diag.Setting{Name: "error", Value: err.Error()})
-	}
-	for _, name := range []string{"TELEGRAM_BOT_TOKEN", "BRAVE_API_KEY"} {
-		out = append(out, secretSetting(src, name))
-	}
-	return append(out, catalogueSettings(v.ModelsFile, src, readFile)...)
-}
-
-// envKeys are the environment variables a flag reads.
-func envKeys(f cli.Flag) []string {
-	switch f := f.(type) {
-	case *cli.StringFlag:
-		return f.Sources.EnvKeys()
-	case *cli.IntFlag:
-		return f.Sources.EnvKeys()
-	case *cli.FloatFlag:
-		return f.Sources.EnvKeys()
-	}
-	return nil
-}
-
-func secretSetting(src secrets.Source, name string) diag.Setting {
-	val, err := src.Secret(name)
-	if err != nil {
-		return diag.Setting{Name: name, Env: name, Value: "error: " + err.Error()}
-	}
-	return diag.Setting{Name: name, Env: name, Value: val, Secret: true}
-}
-
-// catalogueSettings list the catalogue's providers, with whether each
-// key is set, and its models.
-func catalogueSettings(path string, src secrets.Source, readFile func(string) ([]byte, error)) diag.Settings {
-	if path == "" {
-		return nil
-	}
-	data, err := readFile(path)
-	if err != nil {
-		return diag.Settings{{Name: "models", Value: "error: " + err.Error()}}
-	}
-	cat, err := rules.LoadCatalog(bytes.NewReader(data))
-	if err != nil {
-		return diag.Settings{{Name: "models", Value: "error: " + err.Error()}}
-	}
-	var out diag.Settings
-	for _, p := range cat.Providers {
-		out = append(out, diag.Setting{Name: "provider " + p.Name,
-			Value: fmt.Sprintf("type=%s base_url=%s, its key in %s", p.Type, p.BaseURL, p.KeyEnv)})
-		if p.KeyEnv != "" {
-			out = append(out, secretSetting(src, p.KeyEnv))
+	for _, err := range []error{loadErr, settings.Retired(getenv)} {
+		if err != nil {
+			out = append(out, diag.Setting{Name: "error", Value: err.Error()})
 		}
 	}
-	for _, m := range cat.Models {
-		out = append(out, diag.Setting{Name: "model " + m.Provider + "/" + m.Name, Value: fmt.Sprintf("tier=%s tools=%v", m.Tier, m.Tools)})
+	rest := f
+	rest.Models, rest.Modules = nil, nil
+	out = append(out, sectionSettings("", reflect.ValueOf(rest), src)...)
+	if f.Models != nil {
+		out = append(out, modelSettings(*f.Models, src)...)
+	}
+	for _, m := range f.Modules {
+		out = append(out, diag.Setting{Name: "modules", Value: m.Name + map[bool]string{true: " (off)"}[m.Off]})
+	}
+	return out
+}
+
+// sectionSettings lists every leaf of the struct v, by its path in the
+// file. A nil pointer is left out.
+func sectionSettings(path string, v reflect.Value, src secrets.Source) diag.Settings {
+	var out diag.Settings
+	t := v.Type()
+	for i := range t.NumField() {
+		name, _, _ := strings.Cut(t.Field(i).Tag.Get("yaml"), ",")
+		at := strings.TrimPrefix(path+"."+name, ".")
+		switch fv := v.Field(i); {
+		case fv.Kind() == reflect.Pointer && fv.IsNil():
+		case fv.Kind() == reflect.Struct:
+			out = append(out, sectionSettings(at, fv, src)...)
+		default:
+			out = append(out, leafSetting(at, fv, src))
+		}
+	}
+	return out
+}
+
+// leafSetting is one value; a secret is its variable and whether it is set.
+func leafSetting(path string, v reflect.Value, src secrets.Source) diag.Setting {
+	switch x := v.Interface().(type) {
+	case settings.SecretRef:
+		return secretSetting(path, x, src)
+	case settings.Duration:
+		return diag.Setting{Name: path, Value: time.Duration(x).String()}
+	case []string:
+		return diag.Setting{Name: path, Value: strings.Join(x, ", ")}
+	}
+	return diag.Setting{Name: path, Value: fmt.Sprint(v.Interface())}
+}
+
+// secretSetting is "env:NAME (set)" or "(unset)"; the value never leaves
+// this function.
+func secretSetting(path string, r settings.SecretRef, src secrets.Source) diag.Setting {
+	if r == "" {
+		return diag.Setting{Name: path, Value: "none"}
+	}
+	val, err := r.Resolve(src)
+	state := map[bool]string{true: "set", false: "unset"}[val != ""]
+	if err != nil {
+		state = "error: " + err.Error()
+	}
+	return diag.Setting{Name: path, Env: r.Name(), Value: fmt.Sprintf("%s (%s)", r, state)}
+}
+
+// modelSettings list the providers with their keys as set or unset, the
+// models as "id provider/name", and each purpose as "chat: sonnet
+// (medium), haiku".
+func modelSettings(m settings.Models, src secrets.Source) diag.Settings {
+	var out diag.Settings
+	for i, p := range m.Providers {
+		at := fmt.Sprintf("models.providers[%d]", i)
+		out = append(out, diag.Setting{Name: at, Value: fmt.Sprintf("%s type=%s base_url=%s", p.Name, p.Type, p.BaseURL)})
+		if p.Key != "" {
+			out = append(out, secretSetting(at+".key", p.Key, src))
+		}
+	}
+	for _, d := range m.Models {
+		out = append(out, diag.Setting{Name: "models.models", Value: fmt.Sprintf("%s %s/%s tools=%v context=%d", d.ID, d.Provider, d.Name, d.Tools, d.Context)})
+	}
+	purposes := m.RouterPurposes()
+	for _, p := range router.Purposes {
+		list, ok := purposes[p]
+		if !ok {
+			continue
+		}
+		parts := make([]string, len(list))
+		for i, c := range list {
+			parts[i] = c.Model
+			if c.Effort != "" {
+				parts[i] += " (" + string(c.Effort) + ")"
+			}
+		}
+		out = append(out, diag.Setting{Name: "models.purposes", Value: fmt.Sprintf("%s: %s", p, strings.Join(parts, ", "))})
 	}
 	return out
 }

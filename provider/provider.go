@@ -10,6 +10,8 @@ package provider
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/igorrius/ganglion/router"
 )
 
 // Role is who wrote a message of the history. Roles are stored in
@@ -65,6 +67,7 @@ type Exec func(ctx context.Context, call ToolCall) (string, error)
 // ChatRequest asks a model for the next step of a turn.
 type ChatRequest struct {
 	Model     string
+	Effort    router.Effort // "" = the provider's default
 	Messages  []Message
 	Tools     []Tool
 	MaxTokens int // 0: the provider's default

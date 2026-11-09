@@ -4,10 +4,8 @@ package cmd
 
 import (
 	"encoding/json"
-	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -34,15 +32,13 @@ func TestMCPDiagnosesAWrongKey(t *testing.T) {
 	}
 	fake := telegramtest.NewServer(t, crashToken)
 	model := providertest.NewServer(t, "sk-right")
-	models := filepath.Join(dir, "models.yaml")
-	if err := os.WriteFile(models, []byte("providers:\n  - {name: or, type: openai, base_url: "+model.URL()+
-		", key_env: OR_KEY}\nmodels:\n  - {provider: or, name: m1, tier: smart, tools: true, context: 64000}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	// ganglion.yaml beside the database: the node and `ganglion mcp` both
+	// read it.
+	writeConfig(t, dir, crashTelegram(fake.URL())+"metrics: {addr: off}\nagent: {workspace: \""+filepath.Join(dir, "ws")+"\"}\n"+
+		"models:\n  providers: [{name: or, type: openai, base_url: \""+model.URL()+"\", key: env:OR_KEY}]\n"+
+		"  models: [{id: m1, provider: or, name: m1, tools: true, context: 64000}]\n  purposes: {chat: [{model: m1}]}\n")
 	db := filepath.Join(dir, "fault.db")
-	env := append(os.Environ(), "GANGLION_DB="+db, "GANGLION_LOG_DIR=", "GANGLION_MODELS_FILE="+models, "OR_KEY=sk-wrong",
-		"OR_KEY_FILE=", "TELEGRAM_BOT_TOKEN="+crashToken, "TELEGRAM_BOT_TOKEN_FILE=", "TELEGRAM_API_URL="+fake.URL(),
-		"GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID), "GANGLION_METRICS_ADDR=off", "GANGLION_WORKSPACE="+filepath.Join(dir, "ws"))
+	env := childEnv("GANGLION_DB="+db, "OR_KEY=sk-wrong", "OR_KEY_FILE=", "TELEGRAM_BOT_TOKEN="+crashToken)
 	node := exec.Command(bin, "run", "--roles", "core")
 	node.Env = env
 	var nodeOut lockedBuffer
@@ -62,9 +58,8 @@ func TestMCPDiagnosesAWrongKey(t *testing.T) {
 	_ = node.Process.Signal(syscall.SIGTERM)
 	_ = node.Wait()
 
-	for k, v := range map[string]string{"GANGLION_MODELS_FILE": models, "OR_KEY": "sk-wrong", "GANGLION_LOG_DIR": ""} {
-		t.Setenv(k, v)
-	}
+	clearEnv(t)
+	t.Setenv("OR_KEY", "sk-wrong")
 	answers, stderr := mcpSession(t, []string{"--db", db}, 3, mcpInit,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"turns_failed","arguments":{}}}`,
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"config_show","arguments":{}}}`)
@@ -76,7 +71,7 @@ func TestMCPDiagnosesAWrongKey(t *testing.T) {
 		t.Fatalf("turns_failed does not show the provider's auth error: %s", failed)
 	}
 	cfg, _ := json.Marshal(answers[2])
-	if !strings.Contains(string(cfg), "its key in OR_KEY") || strings.Contains(string(cfg), "sk-wrong") {
+	if !strings.Contains(string(cfg), "env:OR_KEY (set)") || strings.Contains(string(cfg), "sk-wrong") {
 		t.Fatalf("config_show: %s", cfg)
 	}
 }

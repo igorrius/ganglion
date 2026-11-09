@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/provider/providertest"
-	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -89,23 +89,22 @@ func TestReachWithNudgePasses(t *testing.T) {
 	}
 }
 
+// twoModels are big on the server at a, tried first for every purpose, and
+// small at b.
+func twoModels(t *testing.T, a, b string) settings.Models {
+	return labModels(t, `providers: [{name: a, type: openai, base_url: "`+a+`"}, {name: b, type: openai, base_url: "`+b+`"}]
+models: [{provider: a, name: big, tools: true, context: 200000}, {provider: b, name: small, tools: true, context: 200000}]
+purposes: {chat: [{model: big}, {model: small}]}`)
+}
+
 func TestAnotherModelMakesItInconclusive(t *testing.T) {
 	smart := providertest.NewServer(t, "a")
 	cheap := providertest.NewServer(t, "b")
 	smart.Fail(429, 60)
 	cheap.Reply("Hello from the small model.")
-	cat, err := rules.LoadCatalog(strings.NewReader(`providers:
-  - {name: a, type: openai, base_url: "` + smart.URL() + `"}
-  - {name: b, type: openai, base_url: "` + cheap.URL() + `"}
-models:
-  - {provider: a, name: big, tier: smart, tools: true, context: 200000}
-  - {provider: b, name: small, tier: cheap, tools: true, context: 200000}
-`))
-	if err != nil {
-		t.Fatal(err)
-	}
+	models := twoModels(t, smart.URL(), cheap.URL())
 	s := Scenario{Name: "x", Why: "w", Repeat: 1, Persona: PersonaDefault, Steps: []Step{{Say: "hi"}, {Facts: &Facts{Reply: &Text{Contains: "Hello"}}}}}
-	o := runOne(t, RunOptions{Scenarios: []Scenario{s}, Catalog: cat, Keys: map[string]string{"a": "a", "b": "b"}})
+	o := runOne(t, RunOptions{Scenarios: []Scenario{s}, Models: models, Keys: map[string]string{"a": "a", "b": "b"}})
 	if o.Result != ResultInconclusive || !strings.Contains(o.Facts, "small") || !strings.Contains(o.Facts, "big") {
 		t.Fatalf("outcome %+v", o)
 	}
@@ -114,17 +113,12 @@ models:
 func TestNodeNeverQuiet(t *testing.T) {
 	hung := providertest.NewServer(t, "a")
 	hung.Hang()
-	cat, err := rules.LoadCatalog(strings.NewReader(`providers:
-  - {name: a, type: openai, base_url: "` + hung.URL() + `"}
-models:
-  - {provider: a, name: big, tier: smart, tools: true, context: 200000}
-`))
-	if err != nil {
-		t.Fatal(err)
-	}
+	models := labModels(t, `providers: [{name: a, type: openai, base_url: "`+hung.URL()+`"}]
+models: [{provider: a, name: big, tools: true, context: 200000}]
+purposes: {chat: [{model: big}]}`)
 	stuck := Scenario{Name: "stuck", Why: "w", Repeat: 1, Persona: PersonaDefault, Steps: []Step{{Say: "hi"}, {Facts: &Facts{Questions: new(0)}}}}
 	next := scripted("next", sayHello, Step{Say: "hi"}, Step{Facts: &Facts{Reply: &Text{Contains: "Hello."}}})
-	r := RunAll(context.Background(), RunOptions{Scenarios: []Scenario{stuck, next}, Catalog: cat, Keys: map[string]string{"a": "a"}, TurnLimit: 2 * time.Second})
+	r := RunAll(context.Background(), RunOptions{Scenarios: []Scenario{stuck, next}, Models: models, Keys: map[string]string{"a": "a"}, TurnLimit: 2 * time.Second})
 	if r.Outcomes[0].Result != ResultFailed || !strings.Contains(r.Outcomes[0].Facts, "not quiet") {
 		t.Fatalf("stuck %+v", r.Outcomes[0])
 	}
@@ -188,12 +182,10 @@ func TestJudgeWithNothingToReadFails(t *testing.T) {
 }
 
 func TestMissingRelayIsNotRun(t *testing.T) {
-	cat, err := rules.LoadCatalog(strings.NewReader("providers:\n  - {name: c, type: claude-cli}\nmodels:\n  - {provider: c, name: sonnet, tier: smart, tools: true, context: 200000}\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	models := labModels(t, "providers: [{name: c, type: claude-cli}]\nmodels: [{provider: c, name: sonnet, tools: true, context: 200000}]\n"+
+		"purposes: {chat: [{model: sonnet}]}")
 	s := Scenario{Name: "x", Why: "w", Repeat: 1, Persona: PersonaDefault, Steps: []Step{{Say: "hi"}, {Facts: &Facts{Questions: new(0)}}}}
-	o := runOne(t, RunOptions{Scenarios: []Scenario{s}, Catalog: cat, Relay: "/nonexistent/ganglion"})
+	o := runOne(t, RunOptions{Scenarios: []Scenario{s}, Models: models, Relay: "/nonexistent/ganglion"})
 	if o.Result != ResultNotRun || !strings.Contains(o.Facts, "ganglion") {
 		t.Fatalf("outcome %+v", o)
 	}
@@ -205,18 +197,9 @@ func TestAFactFailedUnderAnotherModelIsInconclusive(t *testing.T) {
 	cheap := providertest.NewServer(t, "b")
 	smart.Fail(429, 60)
 	cheap.Reply("Hello from the small model.")
-	cat, err := rules.LoadCatalog(strings.NewReader(`providers:
-  - {name: a, type: openai, base_url: "` + smart.URL() + `"}
-  - {name: b, type: openai, base_url: "` + cheap.URL() + `"}
-models:
-  - {provider: a, name: big, tier: smart, tools: true, context: 200000}
-  - {provider: b, name: small, tier: cheap, tools: true, context: 200000}
-`))
-	if err != nil {
-		t.Fatal(err)
-	}
+	models := twoModels(t, smart.URL(), cheap.URL())
 	s := Scenario{Name: "x", Why: "w", Repeat: 1, Persona: PersonaDefault, Steps: []Step{{Say: "hi"}, {Facts: &Facts{Reply: &Text{Contains: "Goodbye"}}}}}
-	o := runOne(t, RunOptions{Scenarios: []Scenario{s}, Catalog: cat, Keys: map[string]string{"a": "a", "b": "b"}})
+	o := runOne(t, RunOptions{Scenarios: []Scenario{s}, Models: models, Keys: map[string]string{"a": "a", "b": "b"}})
 	if o.Result != ResultInconclusive || !strings.Contains(o.Facts, "small") {
 		t.Fatalf("outcome %+v", o)
 	}

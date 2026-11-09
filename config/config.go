@@ -101,9 +101,9 @@ const (
 	watchNone          = "watch.none"          // no transport in /status
 )
 
-// agentOn reports whether the settings turn the agent on: a model
-// catalogue is set.
-func agentOn(b Bootstrap) bool { return b.Agent.Catalog != nil }
+// agentOn reports whether the settings turn the agent on: the file has a
+// models section.
+func agentOn(b Bootstrap) bool { return b.Agent.Models != nil }
 
 // telegramOn reports whether the settings turn Telegram on: a bot token
 // is set.

@@ -214,7 +214,7 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 // (shutdown) is an error, so the event is offered again.
 func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Message) (added []provider.Message, text string, end turns.Outcome, err error) {
 	tools := a.toolSpecs(t)
-	task := router.TaskReq{Kind: router.TaskMessage, Tools: len(tools) > 0, Privacy: t.state.privacy()}
+	task := router.TaskReq{Purpose: router.PurposeChat, Tools: len(tools) > 0, Privacy: t.state.privacy()}
 	var exec provider.Exec // a CLI provider runs the calls itself; no tools, nothing to run
 	if len(tools) > 0 {
 		exec = a.exec(t)

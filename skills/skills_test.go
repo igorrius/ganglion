@@ -45,7 +45,7 @@ func reasons(ps []Problem) string {
 
 func TestLoadBuiltinAndWorkspace(t *testing.T) {
 	ws := t.TempDir()
-	writeSkill(t, ws, "disk-report", "name: disk-report\ndescription: Sizes of folders\nmodel:\n  tier: smart\n  context: long\n"+
+	writeSkill(t, ws, "disk-report", "name: disk-report\ndescription: Sizes of folders\nmodel:\n  purpose: check\n  context: long\n"+
 		"script:\n  run: run.sh\n  effects: read\n  env: [LANG]\n  timeout: 20s\n", "echo hi\n")
 	set, problems, err := Load(builtinFS, ws, nil)
 	if err != nil || len(problems) != 0 {
@@ -56,7 +56,7 @@ func TestLoadBuiltinAndWorkspace(t *testing.T) {
 		t.Fatalf("metrics %+v", m)
 	}
 	d, ok := set.Get("disk-report")
-	if !ok || d.Model.Tier != router.TierSmart || d.Model.Context != "long" || d.Script == nil ||
+	if !ok || d.Model.Purpose != router.PurposeCheck || d.Model.Context != "long" || d.Script == nil ||
 		d.Script.Effects != EffectsRead || d.Script.Timeout != 20*time.Second || !slices.Equal(d.Script.Env, []string{"LANG"}) {
 		t.Fatalf("disk-report %+v %+v", d, d.Script)
 	}
@@ -153,16 +153,22 @@ func TestRelativeWorkspaceScriptRuns(t *testing.T) {
 func TestModelBlockValidated(t *testing.T) {
 	ws := t.TempDir()
 	writeSkill(t, ws, "typo-privacy", "name: typo-privacy\ndescription: x\nmodel:\n  privacy: local\n", "")
-	writeSkill(t, ws, "typo-tier", "name: typo-tier\ndescription: x\nmodel:\n  tier: huge\n", "")
+	writeSkill(t, ws, "old-tier", "name: old-tier\ndescription: x\nmodel:\n  tier: cheap\n", "")
+	writeSkill(t, ws, "typo-purpose", "name: typo-purpose\ndescription: x\nmodel:\n  purpose: think\n", "")
 	writeSkill(t, ws, "typo-context", "name: typo-context\ndescription: x\nmodel:\n  context: medium\n", "")
 	writeSkill(t, ws, "read", "name: read\ndescription: x\n", "") // its tool would be skill.read
-	writeSkill(t, ws, "good", "name: good\ndescription: |\n  two\n  lines\nmodel:\n  tier: smart\n  context: long\n  privacy: local-only\n", "")
+	writeSkill(t, ws, "good", "name: good\ndescription: |\n  two\n  lines\nmodel:\n  purpose: chat\n  context: long\n  privacy: local-only\n", "")
 	set, problems, err := Load(builtinFS, ws, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := set.Names(); !slices.Equal(got, []string{"good", "metrics"}) || len(problems) != 4 {
+	if got := set.Names(); !slices.Equal(got, []string{"good", "metrics"}) || len(problems) != 5 {
 		t.Fatalf("loaded %v\n%s", got, reasons(problems))
+	}
+	for _, p := range problems {
+		if p.Skill == "old-tier" && !strings.Contains(p.Reason, "tier") || p.Skill == "typo-purpose" && !strings.Contains(p.Reason, `"think"`) {
+			t.Errorf("%s: the reason does not name the field: %s", p.Skill, p.Reason)
+		}
 	}
 	if g, _ := set.Get("good"); g.Description != "two lines" {
 		t.Fatalf("description %q", g.Description)

@@ -1,11 +1,12 @@
 // Command modelcompare runs the same conversations through several models
-// of a catalogue and writes a Markdown report: answers side by side,
-// latency, tokens, cache and cost (M3a task 10, decision D-6).
+// of a settings file's models section and writes a Markdown report: answers
+// side by side, latency, tokens, cache and cost (M3a task 10, decision D-6).
 //
-//	modelcompare -models models.local.yaml -prompts tools/modelcompare/prompts.yaml \
+//	modelcompare -models ganglion.local.yaml -prompts tools/modelcompare/prompts.yaml \
 //	  -only claude:haiku,openrouter:deepseek/deepseek-v4.1-flash -out report.md
 //
-// Provider keys come from each provider's key_env (or <key_env>_FILE).
+// Provider keys come from the variable each provider's key names (or
+// <NAME>_FILE).
 package main
 
 import (
@@ -26,7 +27,8 @@ import (
 	"github.com/igorrius/ganglion/provider/claudecli"
 	"github.com/igorrius/ganglion/provider/openai"
 	"github.com/igorrius/ganglion/router"
-	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/secrets"
+	"github.com/igorrius/ganglion/settings"
 )
 
 // Conversation is a scripted conversation.
@@ -142,22 +144,8 @@ func turnCount(convs []Conversation) int {
 	return n
 }
 
-func key(p rules.ProviderDef) (string, error) {
-	if p.KeyEnv == "" {
-		return "", nil
-	}
-	if v := strings.TrimSpace(os.Getenv(p.KeyEnv)); v != "" {
-		return v, nil
-	}
-	if f := os.Getenv(p.KeyEnv + "_FILE"); f != "" {
-		b, err := os.ReadFile(f)
-		return strings.TrimSpace(string(b)), err
-	}
-	return "", fmt.Errorf("%s (key_env of provider %s) is not set", p.KeyEnv, p.Name)
-}
-
 func main() {
-	models := flag.String("models", "models.local.yaml", "model catalogue")
+	models := flag.String("models", "models.local.yaml", "a settings file with a models section")
 	prompts := flag.String("prompts", "tools/modelcompare/prompts.yaml", "conversations")
 	only := flag.String("only", "", "comma-separated provider:model to compare (default: every model)")
 	out := flag.String("out", "", "report file (default: stdout)")
@@ -170,12 +158,19 @@ func main() {
 }
 
 func mainErr(modelsPath, promptsPath, only, outPath string, timeout time.Duration) error {
-	f, err := os.Open(modelsPath)
+	src, err := os.ReadFile(modelsPath)
 	if err != nil {
 		return err
 	}
-	cat, err := rules.LoadCatalog(f)
-	_ = f.Close()
+	file, err := settings.Parse(src)
+	if err != nil {
+		return fmt.Errorf("%s: %w", modelsPath, err)
+	}
+	if file.Models == nil {
+		return fmt.Errorf("%s: no models section", modelsPath)
+	}
+	cat := *file.Models
+	keys, err := cat.Keys(secrets.OSEnv())
 	if err != nil {
 		return err
 	}
@@ -190,14 +185,10 @@ func mainErr(modelsPath, promptsPath, only, outPath string, timeout time.Duratio
 	providers := map[string]provider.Provider{}
 	for _, p := range cat.Providers {
 		switch p.Type {
-		case rules.TypeClaudeCLI:
+		case settings.TypeClaudeCLI:
 			providers[p.Name] = claudecli.New(p.Name)
 		default:
-			k, err := key(p)
-			if err != nil {
-				return err
-			}
-			providers[p.Name] = openai.New(p.Name, p.BaseURL, k)
+			providers[p.Name] = openai.New(p.Name, p.BaseURL, keys[p.Name])
 		}
 	}
 	var picked []router.Model

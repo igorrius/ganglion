@@ -7,16 +7,21 @@ import (
 	"github.com/igorrius/ganglion/tool"
 )
 
-// Tiers come from the model catalogue (YAML); task kinds are metric and
-// log values: their spelling must never change.
+// Purposes and efforts are keys and values of ganglion.yaml, and purposes
+// are metric and log values: their spelling must never change.
 func TestVocabularyValues(t *testing.T) {
 	for got, want := range map[string]string{
-		string(router.TierCheap): "cheap", string(router.TierSmart): "smart",
-		string(router.TaskMessage): "message", string(router.TaskCompaction): "compaction",
+		string(router.PurposeChat): "chat", string(router.PurposeCheck): "check", string(router.PurposeCompact): "compact",
+		string(router.PurposeTranslate): "translate", string(router.PurposeCode): "code",
+		string(router.EffortLow): "low", string(router.EffortMedium): "medium", string(router.EffortHigh): "high",
+		string(router.EffortXHigh): "xhigh", string(router.EffortMax): "max",
 	} {
 		if got != want {
 			t.Errorf("%q, want %q", got, want)
 		}
+	}
+	if len(router.Purposes) != 5 || router.Purposes[0] != router.PurposeChat {
+		t.Fatalf("Purposes = %v", router.Purposes)
 	}
 }
 

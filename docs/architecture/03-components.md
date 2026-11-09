@@ -17,14 +17,14 @@ flowchart TB
     actors["Turn workers<br/>parallel; one turn per conversation at a time;<br/>sessions"]
     loop["Agent loop<br/>model, tools, next step"]
     history["History<br/>neutral format, summaries"]
-    router["Router<br/>filters, rules, weights, fallback"]
+    router["Router<br/>a purpose's models in order,<br/>filters, budget, fallback"]
     providers["Providers<br/>OpenAI-compatible, claude CLI"]
     tools["Tool registry<br/>memory.*, schedule.*, web.*,<br/>message.send, device.*"]
     web["Web reader<br/>public addresses only, limits,<br/>fixed errors; search backends"]
     html2md["html2md module<br/>WASM, no capabilities:<br/>HTML to Markdown"]
     policies["Policies<br/>risk classes, confirmations, audit"]
     memory["Memory<br/>memory/*.md in git,<br/>quarantine, recall, audit"]
-    guard["Clean-context check<br/>cheap model, no history, no tools"]
+    guard["Clean-context check<br/>the check purpose's models,<br/>no history, no tools"]
     sched["Scheduler<br/>crons, catch-up;<br/>reminders, tasks with grants"]
     hostrun["Host command runner<br/>host.exec in the sandbox, once per key;<br/>past 20 s in the background"]
     hostcmd["Class table (hostcmd)<br/>argv to read, content, change,<br/>script or forbidden; fixed lines"]
@@ -82,12 +82,12 @@ flowchart TB
 | Status reactions | Work that takes long shows on the person's message; a hint, outside the outbox | R-LIVE-7 |
 | Agent loop | Model call → tool calls → next step, step limit, depth limit; a message written during the turn joins it between calls | R-AGT-3, R-AGT-4, R-LIVE-1..6 |
 | History | Provider-neutral transcript, compaction | R-AGT-2 |
-| Router | Ordered candidates by skill requirements, budget, health; skills (`skills`): built-in and the owner's, a script per skill with an effect class, the rest of a turn routed by the skill read | R-RTR-1…5 |
+| Router | Ordered candidates: the purpose's list from `ganglion.yaml` in order, filtered by skill requirements, budget and health; skills (`skills`): built-in and the owner's, a script per skill with an effect class, the rest of a turn routed by the skill read | R-RTR-1…6 |
 | Providers | Talk to model backends, translate MCP tools | R-PRV-1…4 |
 | Policies | Decide autonomous / confirm / forbid; audit | R-POL-1…5 |
 | Tool registry | Tools available to the model, local and on edges | — |
 | Memory | Facts in git with where they came from; the index in an admin's system prompt; recall over facts and archived sessions; nightly consolidation (M7) later | R-MEM-1…5 |
-| Clean-context check | Checks every memory write, and on schedule stored facts and the persona, with a cheap model that sees only the text; fails closed into quarantine | R-POL-7 |
+| Clean-context check | Checks every memory write, and on schedule stored facts and the persona, with a model of the `check` purpose that sees only the text; fails closed into quarantine | R-POL-7 |
 | Scheduler | Crons in the node's zone with catch-up after downtime; reminders and agent tasks with grants, each task in its own conversation | R-SCH-1, R-SCH-2, R-POL-8 |
 | Host command runner | Runs `host.exec` commands in the sandbox once per call key; one still running after 20 s goes on, and its end comes back as a `command.done` event that resumes its conversation (a task's under its grant) | R-CMD-1, R-CMD-4 |
 | Class table | `hostcmd.Classify(argv)` gives a class and a fixed consequence line in three languages from code, never from the model; the policy, the tool, a plan and the agent's question all ask it, and what it cannot read moves a command up | R-CMD-2, R-CMD-6 |

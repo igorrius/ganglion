@@ -16,9 +16,9 @@ import (
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/claudecli"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
-	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/web"
@@ -28,7 +28,7 @@ import (
 // LabOptions are what chatlab changes in a node (ADR-0048). Nothing here
 // reaches the ganglion binary: TestLabStaysOutOfTheBinary holds that.
 type LabOptions struct {
-	Catalog    rules.Catalog
+	Models     settings.Models
 	Keys       map[string]string
 	Relay      string // the ganglion binary the claude CLI starts as its MCP server
 	Resolver   web.Resolver
@@ -122,9 +122,9 @@ func applyLab(i do.Injector, o LabOptions) {
 	do.Override(i, func(i do.Injector) (map[string]provider.Provider, error) {
 		claudeDir := do.MustInvoke[Bootstrap](i).ClaudeDir
 		out := map[string]provider.Provider{}
-		for _, p := range o.Catalog.Providers {
+		for _, p := range o.Models.Providers {
 			var built provider.Provider
-			if p.Type == rules.TypeClaudeCLI {
+			if p.Type == settings.TypeClaudeCLI {
 				built = claudecli.New(p.Name, claudeOptions(claudeDir, claudecli.WithCommand(p.Command), claudecli.WithRelay(o.Relay))...)
 			} else {
 				built = providerFactories[p.Type](p, o.Keys[p.Name], claudeDir)

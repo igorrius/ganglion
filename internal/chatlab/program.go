@@ -11,7 +11,7 @@ import (
 
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/router"
-	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/settings"
 )
 
 // program is what the fakes need from their owner outside `go test`.
@@ -66,16 +66,17 @@ func (p counted) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 	return resp, err
 }
 
-// MainModel is the model under test: the catalogue's first smart model,
-// otherwise its first.
-func MainModel(c rules.Catalog) string {
-	for _, m := range c.Models {
-		if m.Tier == router.TierSmart {
-			return m.Name
-		}
+// MainModel is the model under test: the provider's name of the first model
+// of chat.
+func MainModel(m settings.Models) string {
+	chat := m.Purposes[router.PurposeChat]
+	if len(chat) == 0 {
+		return ""
 	}
-	if len(c.Models) > 0 {
-		return c.Models[0].Name
+	for _, d := range m.Models {
+		if d.ID == chat[0].Model {
+			return d.Name
+		}
 	}
 	return ""
 }
@@ -92,20 +93,21 @@ func ScrubEnvironment() {
 	}
 }
 
-// KeysFor reads the catalogue's API keys from the environment; a Telegram
+// KeysFor reads the providers' API keys from the environment; a Telegram
 // variable is never a provider's key.
-func KeysFor(c rules.Catalog) (map[string]string, error) {
+func KeysFor(m settings.Models) (map[string]string, error) {
 	keys := map[string]string{}
-	for _, p := range c.Providers {
-		if p.KeyEnv == "" {
+	for _, p := range m.Providers {
+		if p.Key == "" {
 			continue
 		}
-		if strings.HasPrefix(p.KeyEnv, "TELEGRAM_") {
-			return nil, fmt.Errorf("chatlab: provider %s: key_env %s is a Telegram setting", p.Name, p.KeyEnv)
+		name := p.Key.Name()
+		if strings.HasPrefix(name, "TELEGRAM_") {
+			return nil, fmt.Errorf("chatlab: provider %s: key %s is a Telegram setting", p.Name, name)
 		}
-		key := os.Getenv(p.KeyEnv)
+		key := os.Getenv(name)
 		if key == "" {
-			return nil, fmt.Errorf("chatlab: provider %s: %s is not set", p.Name, p.KeyEnv)
+			return nil, fmt.Errorf("chatlab: provider %s: %s is not set", p.Name, name)
 		}
 		keys[p.Name] = key
 	}

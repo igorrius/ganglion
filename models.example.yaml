@@ -1,23 +1,27 @@
-# yaml-language-server: $schema=schemas/models.schema.json
-# Model catalogue for GANGLION_MODELS_FILE (docs/plans/p1-m3a-talking-agent.md,
-# ADR-0021). List one provider or several; the router ranks every model
-# and falls back across them. Keys never go here: key_env names the
-# variable (or <NAME>_FILE) that holds a provider's key.
+# The models section of ganglion.yaml (ADR-0059, ADR-0060) that chatlab and the
+# acceptance run on, until examples/ganglion.lab.yaml replaces this file. Keys
+# never go here: a provider's key is env:NAME, the variable (or NAME_FILE) that
+# holds it.
 #
-# Tiers: a turn (a person's message or a scheduled task) tries "smart" models
-# first, compaction and checks "cheap" first; the other tier is the fallback.
-# Within a tier, cheaper first. Subscription and local models cost 0 here.
-
-providers:
-  # The claude CLI installed and logged in on this machine (no key).
-  - {name: claude, type: claude-cli}
-  # Any OpenAI-compatible API; uncomment and set OPENROUTER_API_KEY in .env.
-  # - {name: openrouter, type: openai, base_url: https://openrouter.ai/api/v1, key_env: OPENROUTER_API_KEY}
-
+# Each purpose lists its models in the order they are tried; check, compact and
+# translate use chat's list when they have none of their own.
 models:
-  # ADR-0047: Sonnet answers; Haiku does compaction and the memory check, and
-  # takes over when Sonnet is out of limits. Both get the agent's tools over
-  # the MCP bridge (ADR-0036).
-  - {provider: claude, name: sonnet, tier: smart, tools: true, context: 200000}
-  - {provider: claude, name: haiku, tier: cheap, tools: true, context: 200000}
-  # - {provider: openrouter, name: deepseek/deepseek-v4.1-flash, tier: cheap, tools: true, context: 1048576, price_in: 0.045, price_out: 0.5}
+  providers:
+    # The claude CLI installed and logged in on this machine (no key).
+    - {name: claude, type: claude-cli}
+    # Any OpenAI-compatible API; uncomment and set OPENROUTER_API_KEY in .env.
+    # - {name: openrouter, type: openai, base_url: https://openrouter.ai/api/v1, key: env:OPENROUTER_API_KEY}
+
+  models:
+    # ADR-0047: Sonnet answers; Haiku does compaction and the memory check, and
+    # takes over when Sonnet is out of limits. Both get the agent's tools over
+    # the MCP bridge (ADR-0036).
+    - {id: sonnet, provider: claude, name: sonnet, tools: true, context: 200000}
+    - {id: haiku, provider: claude, name: haiku, tools: true, context: 200000}
+    # - {id: flash, provider: openrouter, name: deepseek/deepseek-v4.1-flash, tools: true, context: 1048576, price_in: 0.045, price_out: 0.5}
+
+  purposes:
+    chat:      [{model: sonnet}, {model: haiku}]
+    check:     [{model: haiku}, {model: sonnet}]
+    compact:   [{model: haiku}, {model: sonnet}]
+    translate: [{model: haiku}, {model: sonnet}]

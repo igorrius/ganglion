@@ -13,6 +13,7 @@ import (
 
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/providertest"
+	"github.com/igorrius/ganglion/router"
 )
 
 const key = "sk-or-v1-secret-key-0123456789"
@@ -165,5 +166,37 @@ func TestEmptyToolArgumentsBecomeAnObject(t *testing.T) {
 		if calls := resp.Message.ToolCalls; len(calls) != 1 || string(calls[0].Args) != `{}` {
 			t.Fatalf("arguments %q: tool calls %+v", args, calls)
 		}
+	}
+}
+
+// effortBody sends one request with effort to a server that records the
+// body it got.
+func effortBody(t *testing.T, effort router.Effort) map[string]any {
+	t.Helper()
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
+	}))
+	defer srv.Close()
+	c := New("t", srv.URL, "k")
+	if _, err := c.Chat(context.Background(), provider.ChatRequest{Model: "m", Effort: effort,
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}}); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+func TestEffortIsSentAsReasoningEffort(t *testing.T) {
+	if body := effortBody(t, router.EffortLow); body["reasoning_effort"] != "low" {
+		t.Fatalf("body = %v", body)
+	}
+}
+
+func TestNoEffortSendsNoField(t *testing.T) {
+	if body := effortBody(t, ""); body == nil {
+		t.Fatal("no request")
+	} else if _, ok := body["reasoning_effort"]; ok {
+		t.Fatalf("an unset effort is sent: %v", body)
 	}
 }

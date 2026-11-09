@@ -1,6 +1,7 @@
-// Package router chooses which provider and model handle a task: hard
-// filters by tags, rules and weights, then a fallback chain (docs/spec.md,
-// section 7.3).
+// Package router chooses which provider and model handle a task: the
+// task's purpose names an ordered list of models, hard filters by tags drop
+// the ones that do not fit, and the rest is the fallback chain (docs/spec.md,
+// section 7.3, R-RTR-6).
 package router
 
 import (
@@ -9,36 +10,42 @@ import (
 	"time"
 )
 
-// Tier is a model's class in the catalogue.
-type Tier string
+// Purpose is what a model call is for (R-RTR-6). Each purpose has its own
+// ordered list of models in ganglion.yaml.
+type Purpose string
 
-// Tiers.
+// Purposes.
 const (
-	TierCheap Tier = "cheap"
-	TierSmart Tier = "smart"
+	PurposeChat      Purpose = "chat"      // a turn: a person's message or a scheduled agent task
+	PurposeCheck     Purpose = "check"     // a short yes/no decision: the clean-context check
+	PurposeCompact   Purpose = "compact"   // folding old history into a summary
+	PurposeTranslate Purpose = "translate" // fixed texts into a language with no file (R-LANG-5)
+	PurposeCode      Purpose = "code"      // writing modules and skills (P3)
 )
 
-// TaskKind is what a model is asked to do; the router picks the tier by it
-// when the task names none.
-type TaskKind string
+// Purposes lists every purpose, in the order the file shows them.
+var Purposes = []Purpose{PurposeChat, PurposeCheck, PurposeCompact, PurposeTranslate, PurposeCode}
 
-// Task kinds.
+// Effort is a model's reasoning effort; "" leaves the provider's default.
+type Effort string
+
+// Efforts, from the least to the most.
 const (
-	TaskMessage    TaskKind = "message"    // answer a person
-	TaskCompaction TaskKind = "compaction" // fold old history into a summary
-	TaskGuard      TaskKind = "guard"      // the clean-context check of what the agent keeps (R-POL-7)
-	TaskTranslate  TaskKind = "translate"  // fixed texts into a language with no file (R-LANG-5)
+	EffortLow    Effort = "low"
+	EffortMedium Effort = "medium"
+	EffortHigh   Effort = "high"
+	EffortXHigh  Effort = "xhigh"
+	EffortMax    Effort = "max"
 )
 
 // TaskReq is what a task needs from a model. Skills declare it in the
 // model block of their SKILL.md frontmatter.
 type TaskReq struct {
-	Tier    Tier // empty lets the router decide
+	Purpose Purpose // which list of models the task takes
 	Tools   bool
-	Context string // "short" or "long"
+	Context string // "" or "long"
 	Vision  bool
 	Privacy string // "local-only" keeps the task off cloud models
-	Kind    TaskKind
 }
 
 // ModelCaps are the tags the router filters and ranks a model by
@@ -56,17 +63,24 @@ type ModelCaps struct {
 
 // Model is one entry of the model catalogue.
 type Model struct {
+	ID       string // the catalogue id the purposes name
 	Provider string
-	Name     string
-	Tier     Tier
+	Name     string // the provider's model name
 	Caps     ModelCaps
 }
 
-// Candidate is one "provider + model" option. Prices travel with it, so the
-// caller can cost a turn.
+// Choice is one entry of a purpose's list.
+type Choice struct {
+	Model  string // a Model.ID
+	Effort Effort
+}
+
+// Candidate is one "provider + model" option. Effort and prices travel with
+// it, so the caller can ask for the effort and cost a turn.
 type Candidate struct {
 	Provider     string
 	Model        string
+	Effort       Effort
 	PriceInMTok  float64
 	PriceOutMTok float64
 }

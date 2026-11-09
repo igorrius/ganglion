@@ -53,7 +53,7 @@ func newGuard(models map[string]*fakeModel, order ...string) (*guard.Guard, *fak
 	r := &fakeRouter{}
 	ps := map[string]provider.Provider{}
 	for _, name := range order {
-		r.cands = append(r.cands, router.Candidate{Provider: name, Model: "m-" + name})
+		r.cands = append(r.cands, router.Candidate{Provider: name, Model: "m-" + name, Effort: router.EffortLow})
 	}
 	for name, m := range models {
 		ps[name] = m
@@ -87,7 +87,7 @@ func TestFactVerdicts(t *testing.T) {
 }
 
 // The check is one system prompt and the fact as data: no history, no
-// tools, a cheap model.
+// tools, a model of the check purpose at its effort.
 func TestFactRequestIsCleanContext(t *testing.T) {
 	m := &fakeModel{text: `{"ok":true,"reason":"fact"}`}
 	g, r, _ := newGuard(map[string]*fakeModel{"p": m}, "p")
@@ -95,11 +95,11 @@ func TestFactRequestIsCleanContext(t *testing.T) {
 	if _, err := g.CheckFact(context.Background(), fact); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.tasks) != 1 || r.tasks[0].Tier != router.TierCheap || r.tasks[0].Kind != router.TaskGuard || r.tasks[0].Tools {
+	if len(r.tasks) != 1 || r.tasks[0] != (router.TaskReq{Purpose: router.PurposeCheck}) {
 		t.Fatalf("task %+v", r.tasks)
 	}
 	req := m.reqs[0]
-	if len(req.Tools) != 0 || len(req.Messages) != 2 || req.Model != "m-p" {
+	if len(req.Tools) != 0 || len(req.Messages) != 2 || req.Model != "m-p" || req.Effort != router.EffortLow {
 		t.Fatalf("request %+v", req)
 	}
 	sys, user := req.Messages[0], req.Messages[1]

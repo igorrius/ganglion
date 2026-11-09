@@ -75,16 +75,29 @@ func decodeStrict(n *yaml.Node, v any) error {
 	return dec.Decode(v)
 }
 
-// walk decodes n into v. A mapping into a struct goes key by key, so an error
-// names the deepest path; anything else is decoded whole.
+// walk decodes n into v. A mapping into a struct goes key by key, a
+// sequence into a slice item by item and a mapping into a map entry by
+// entry, so an error names the deepest path, such as
+// models.purposes.chat[1].model; anything else is decoded whole.
 func walk(n *yaml.Node, path string, v reflect.Value) error {
 	if v.Kind() == reflect.Pointer && v.Type().Elem().Kind() == reflect.Struct && n.Kind == yaml.MappingNode {
 		v.Set(reflect.New(v.Type().Elem()))
 		v = v.Elem()
 	}
-	if v.Kind() != reflect.Struct || n.Kind != yaml.MappingNode {
-		return leaf(n, path, v)
+	switch {
+	case v.Kind() == reflect.Struct && n.Kind == yaml.MappingNode:
+		return walkStruct(n, path, v)
+	case v.Kind() == reflect.Slice && n.Kind == yaml.SequenceNode:
+		return walkSlice(n, path, v)
+	case v.Kind() == reflect.Map && v.Type().Key().Kind() == reflect.String && n.Kind == yaml.MappingNode:
+		return walkMap(n, path, v)
 	}
+	return leaf(n, path, v)
+}
+
+// walkStruct decodes a mapping into the struct v key by key; an unknown key
+// is an error.
+func walkStruct(n *yaml.Node, path string, v reflect.Value) error {
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		key := n.Content[i].Value
 		field, ok := fieldByTag(v, key)
@@ -95,6 +108,35 @@ func walk(n *yaml.Node, path string, v reflect.Value) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// walkSlice replaces the slice v with the sequence's items, each at
+// path[i].
+func walkSlice(n *yaml.Node, path string, v reflect.Value) error {
+	s := reflect.MakeSlice(v.Type(), len(n.Content), len(n.Content))
+	for i, item := range n.Content {
+		if err := walk(item, fmt.Sprintf("%s[%d]", path, i), s.Index(i)); err != nil {
+			return err
+		}
+	}
+	v.Set(s)
+	return nil
+}
+
+// walkMap replaces the map v with the mapping's entries, each at
+// path.key.
+func walkMap(n *yaml.Node, path string, v reflect.Value) error {
+	m := reflect.MakeMapWithSize(v.Type(), len(n.Content)/2)
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		key := n.Content[i].Value
+		val := reflect.New(v.Type().Elem()).Elem()
+		if err := walk(n.Content[i+1], joinPath(path, key), val); err != nil {
+			return err
+		}
+		m.SetMapIndex(reflect.ValueOf(key).Convert(v.Type().Key()), val)
+	}
+	v.Set(m)
 	return nil
 }
 
@@ -160,6 +202,9 @@ func (f File) check() error {
 		if !c.ok {
 			return pathError(c.path, c.reason)
 		}
+	}
+	if f.Models != nil {
+		return f.Models.check("models")
 	}
 	return nil
 }

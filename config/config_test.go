@@ -20,8 +20,8 @@ import (
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider/providertest"
-	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sandbox"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
@@ -36,11 +36,8 @@ import (
 func TestCoreContainerBuildsAndShutsDown(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	model := providertest.NewServer(t, "sk-test")
-	catalog, err := rules.LoadCatalog(strings.NewReader("providers:\n  - {name: or, type: openai, base_url: " + model.URL() +
-		", key_env: OR_KEY}\n  - {name: cli, type: claude-cli}\nmodels:\n  - {provider: or, name: m1, tier: smart, context: 64000}\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	models := parseModels(t, "providers:\n  - {name: or, type: openai, base_url: \""+model.URL()+
+		"\", key: env:OR_KEY}\n  - {name: cli, type: claude-cli}\nmodels:\n  - {provider: or, name: m1, context: 64000}\npurposes: {chat: [{model: m1}]}\n")
 	for name, tc := range map[string]struct {
 		token, admin string
 		agent        bool
@@ -55,7 +52,7 @@ func TestCoreContainerBuildsAndShutsDown(t *testing.T) {
 			b := testConfig(t)
 			b.BotToken, b.BotAPIURL, b.Admin = tc.token, fake.URL(), tc.admin
 			if tc.agent {
-				b.Agent = AgentSettings{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, TZ: time.UTC, Workspace: t.TempDir()}
+				b.Agent = AgentSettings{Models: models, Keys: map[string]string{"or": "sk-test"}, TZ: time.UTC, Workspace: t.TempDir()}
 			}
 			for range 2 { // the second build proves the first released the lock
 				i := New(context.Background(), b, slog.New(slog.DiscardHandler))
@@ -80,15 +77,32 @@ func TestCoreContainerBuildsAndShutsDown(t *testing.T) {
 // modelConfig is agentConfig with its models served by model.
 func modelConfig(t *testing.T, model *providertest.Server) Bootstrap {
 	t.Helper()
-	catalog, err := rules.LoadCatalog(strings.NewReader("providers:\n  - {name: or, type: openai, base_url: " + model.URL() +
-		", key_env: OR_KEY}\nmodels:\n  - {provider: or, name: m1, tier: smart, tools: true, context: 64000}\n" +
-		"  - {provider: or, name: m2, tier: cheap, tools: true, context: 64000}\n"))
+	b := agentConfig(t)
+	b.Agent.Models = orModels(t, model.URL(), "m1", "m2")
+	return b
+}
+
+// parseModels reads section as the models: section of ganglion.yaml.
+func parseModels(t *testing.T, section string) *settings.Models {
+	t.Helper()
+	f, err := settings.Parse([]byte("models:\n  " + strings.ReplaceAll(strings.TrimSpace(section), "\n", "\n  ") + "\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := agentConfig(t)
-	b.Agent.Catalog = &catalog
-	return b
+	return f.Models
+}
+
+// orModels is the models of one OpenAI-compatible provider, or, at url with
+// its key in OR_KEY: ids are its models with tools, tried for chat in order.
+func orModels(t *testing.T, url string, ids ...string) *settings.Models {
+	t.Helper()
+	var ms, chat []string
+	for _, id := range ids {
+		ms = append(ms, "  - {provider: or, name: "+id+", tools: true, context: 64000}")
+		chat = append(chat, "{model: "+id+"}")
+	}
+	return parseModels(t, "providers:\n  - {name: or, type: openai, base_url: \""+url+"\", key: env:OR_KEY}\nmodels:\n"+
+		strings.Join(ms, "\n")+"\npurposes: {chat: ["+strings.Join(chat, ", ")+"]}\n")
 }
 
 // The core role registers every tool of M3b, each for admins only, and
