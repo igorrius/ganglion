@@ -111,7 +111,21 @@ func (m *Module) lifecycle(ctx context.Context, trigger string) error {
 	if out.OK || out.Error == pdk.ErrUnknownTrigger {
 		return nil
 	}
-	return &ModuleError{Module: m.manifest.Name, Kind: out.Kind, Msg: out.Error}
+	m.deps.Logger.Warn("module "+trigger+" failed", "module", m.manifest.Name, "kind", out.Kind, "error", out.Error)
+	return lifecycleError(m.manifest.Name, trigger, out)
+}
+
+// lifecycleError words a failed init or health in the node's own text
+// (R-RUN-14): the module's text goes to the log only. KindFormat's text is
+// the node's already.
+func lifecycleError(module, trigger string, out pdk.Output) error {
+	switch out.Kind {
+	case pdk.KindFormat:
+		return &ModuleError{Module: module, Kind: out.Kind, Msg: out.Error}
+	case pdk.KindAuthFailed:
+		return &ModuleError{Module: module, Kind: out.Kind, Msg: trigger + " failed: credentials rejected"}
+	}
+	return &ModuleError{Module: module, Kind: pdk.KindException, Msg: trigger + " failed"}
 }
 
 // checkAnswer is the contract of a tool answer: the output its trigger

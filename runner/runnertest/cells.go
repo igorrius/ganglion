@@ -191,15 +191,18 @@ func runLifecycleTests(t *testing.T, fresh func() *env) {
 		}
 	})
 
-	t.Run("a failing init or health is an error with the module's words", func(t *testing.T) {
+	t.Run("a failing init or health is an error in the node's words", func(t *testing.T) {
 		e := fresh()
 		e.manifest.ConfigValues = map[string]string{"lifecycle": "fail"}
 		inst := e.instance(t)
-		if err := inst.Init(context.Background()); err == nil || !strings.Contains(err.Error(), "lifecycle boom") {
-			t.Errorf("Init = %v, want the failure", err)
+		if err := inst.Init(context.Background()); err == nil || strings.Contains(err.Error(), "lifecycle boom") {
+			t.Errorf("Init = %v, want a failure in the node's words", err)
 		}
-		if err := inst.Health(context.Background()); err == nil || !strings.Contains(err.Error(), "lifecycle boom") {
-			t.Errorf("Health = %v, want the failure", err)
+		if err := inst.Health(context.Background()); err == nil || strings.Contains(err.Error(), "lifecycle boom") {
+			t.Errorf("Health = %v, want a failure in the node's words", err)
+		}
+		if !strings.Contains(e.logs.String(), "lifecycle boom") {
+			t.Errorf("the module's text is not in the log:\n%s", e.logs.String())
 		}
 	})
 }

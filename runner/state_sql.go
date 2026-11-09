@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"time"
 )
@@ -19,9 +20,22 @@ type SQLState struct {
 	log *slog.Logger
 }
 
+// SQLStateOption configures a SQLState.
+type SQLStateOption func(*SQLState)
+
+// WithStateLogger sets where failed reads and writes are logged; the
+// default discards them.
+func WithStateLogger(l *slog.Logger) SQLStateOption {
+	return func(s *SQLState) { s.log = l }
+}
+
 // NewSQLState returns a State over db.
-func NewSQLState(db *sql.DB) State {
-	return &SQLState{db: db, log: slog.New(slog.DiscardHandler)}
+func NewSQLState(db *sql.DB, opts ...SQLStateOption) State {
+	s := &SQLState{db: db, log: slog.New(slog.DiscardHandler)}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // Get returns a module's value. A failed read is reported as absent.
@@ -31,7 +45,7 @@ func (s *SQLState) Get(module, key string) (string, bool) {
 	var v string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM module_state WHERE module = ? AND key = ?`, module, key).Scan(&v)
 	if err != nil {
-		if err != sql.ErrNoRows {
+		if !errors.Is(err, sql.ErrNoRows) {
 			s.log.Warn("module state read failed", "module", module, "err", err)
 		}
 		return "", false
