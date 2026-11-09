@@ -403,6 +403,32 @@ module's card.
 `cells.Reconcile` at start and every 5 minutes; `ExpireDue` every 10
 seconds (from the M1 review).
 
+### 8.6 Telemetry (owner)
+
+Telemetry over NATS is P2 (R-OBS-9). In P1 modules, the runner and the
+`local` builder run inside the node, so their numbers join the node's own
+OpenTelemetry metrics (`/metrics`, the promtop dashboard, `/metrics` in
+Telegram, `/status`). Nothing in M4 is thrown away when a builder or a
+runner moves to a worker: the same instruments then travel as snapshots
+over the bus. M4 adds:
+
+| What | Metric |
+|---|---|
+| Module runs | `ganglion.module.calls` gains the version and the trigger (cron or tool) |
+| Supervisor | disables by `crashloop`; events to the agent by kind, and how many the once-an-hour rule held back |
+| Builds | count and result by language, duration, the build process's peak memory (it sizes the Railway container) |
+| Installs | installs, refusals by reason, rejected presses |
+| Cells | reports by owning module; the age of each cell's last value, which shows a module that stopped writing |
+
+`/status` gains a line: modules running and disabled, the last build and
+its result.
+
+The owner has no telemetry collector yet. OTLP traces stay as they are:
+off unless the standard `OTEL_EXPORTER_OTLP_ENDPOINT` is set. That
+variable is the one exception to "the file is the single source": it is
+OpenTelemetry's own setting, not one of ganglion's, and it gets no key in
+`ganglion.yaml` until a collector exists.
+
 ## 9. The `deye-reader` example
 
 - The Rust module (`modules/deye-rs`) moves to
