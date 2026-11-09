@@ -83,7 +83,7 @@ func TestModelsChecks(t *testing.T) {
 		"unknown type":     {strings.Replace(models, "type: claude-cli", "type: grpc", 1), "models.providers[0].type: must be openai or claude-cli"},
 		"no models":        {"models:\n  providers: [{name: c, type: claude-cli}]\n  purposes: {chat: [{model: x}]}\n", "models.models: required"},
 		"duplicate name":   {strings.Replace(models, "{name: or,", "{name: claude,", 1), `models.providers[1].name: "claude" twice`},
-		"unknown key":      {strings.Replace(models, "context: 200000}", "context: 200000, tier: smart}", 1), `models.models[0]: unknown key "tier"`},
+		"unknown key":      {strings.Replace(models, "context: 200000}", "context: 200000, tierz: smart}", 1), `models.models[0]: unknown key "tierz"`},
 	} {
 		_, err := settings.Parse([]byte(c.src))
 		if err == nil || !strings.Contains(err.Error(), c.want) {
@@ -126,5 +126,63 @@ func TestRouterModels(t *testing.T) {
 	if got.ID != "flash" || got.Provider != "or" || got.Name != "deepseek/deepseek-v4.1-flash" || !got.Caps.Tools ||
 		got.Caps.ContextTokens != 1048576 || got.Caps.PriceInMTok != 0.045 || got.Caps.PriceOutMTok != 0.5 {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+// R-CFG-5: keys of the old models file pasted into the section fail with
+// the key that replaces them, not as an unknown key.
+func TestRetiredModelKeysFail(t *testing.T) {
+	for name, c := range map[string]struct{ src, want string }{
+		"key_env": {strings.Replace(models, "{name: claude, type: claude-cli}", "{name: claude, type: claude-cli, key_env: X}", 1),
+			"ganglion.yaml: models.providers[0]: key_env is no longer read: use key: env:NAME"},
+		"tier": {strings.Replace(models, "context: 200000}", "context: 200000, tier: smart}", 1),
+			"ganglion.yaml: models.models[0]: tier is no longer read: list the model under models.purposes"},
+	} {
+		_, err := settings.Parse([]byte(c.src))
+		if err == nil || err.Error() != c.want {
+			t.Errorf("%s: err = %v; want %q", name, err, c.want)
+		}
+	}
+}
+
+// A base_url never carries a key: the key is env:NAME; only a host on
+// this machine goes without one.
+func TestBaseURLChecks(t *testing.T) {
+	provider := func(url string) string {
+		return "models:\n  providers: [{name: p, base_url: '" + url + "'}]\n  models: [{provider: p, name: m}]\n  purposes: {chat: [{model: m}]}\n"
+	}
+	for url, want := range map[string]string{
+		"https://user:hunter2@openrouter.ai/api/v1": "models.providers[0].base_url: must not carry credentials; use key: env:NAME",
+		"http://localhost.example.com/v1":           "models.providers[0].key: required",
+		"http://127.0.0.1.example.com/v1":           "models.providers[0].key: required",
+	} {
+		_, err := settings.Parse([]byte(provider(url)))
+		if err == nil || !strings.Contains(err.Error(), want) || strings.Contains(err.Error(), "hunter2") {
+			t.Errorf("%s: err = %v; want %q", url, err, want)
+		}
+	}
+	for _, url := range []string{"http://localhost:11434/v1", "http://127.0.0.1:11434/v1", "http://[::1]:11434/v1", "https://localhost/v1"} {
+		if _, err := settings.Parse([]byte(provider(url))); err != nil {
+			t.Errorf("%s is on this machine: %v", url, err)
+		}
+	}
+}
+
+// A purpose left empty by commenting out its entries is still empty.
+func TestEmptyPurposeFails(t *testing.T) {
+	src := "models:\n  providers: [{name: c, type: claude-cli}]\n  models: [{provider: c, name: m}]\n  purposes:\n    chat:\n"
+	if _, err := settings.Parse([]byte(src)); err == nil || !strings.Contains(err.Error(), "models.purposes.chat: required") {
+		t.Fatalf("err = %v", err)
+	}
+	src = "models:\n  providers: [{name: c, type: claude-cli}]\n  models: [{provider: c, name: m}]\n  purposes:\n    chat: [{model: m}]\n    check:\n"
+	if _, err := settings.Parse([]byte(src)); err == nil || !strings.Contains(err.Error(), "models.purposes.check: must list at least one model") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestDuplicatePurposeFails(t *testing.T) {
+	src := "models:\n  providers: [{name: c, type: claude-cli}]\n  models: [{provider: c, name: m}]\n  purposes:\n    chat: [{model: m}]\n    chat: [{model: m}]\n"
+	if _, err := settings.Parse([]byte(src)); err == nil || err.Error() != `ganglion.yaml: models.purposes: key "chat" twice` {
+		t.Fatalf("err = %v", err)
 	}
 }

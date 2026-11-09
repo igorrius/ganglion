@@ -98,14 +98,17 @@ it.
 - **Outside the file:** the config path (`--config` or `GANGLION_CONFIG`,
   default `ganglion.yaml` beside the database), the database path (`--db`
   or `GANGLION_DB`), the roles (the `--roles` flag), and secrets. No file
-  means the defaults, as a node without variables behaves today.
+  at the default path means the defaults, as a node without variables
+  behaves today; a path given with `--config` or `GANGLION_CONFIG` must
+  exist, so a typo in it does not start a node on defaults.
 - **Secrets are references.** A secret field holds `env:NAME`; the node
   reads `NAME` or `NAME_FILE`. A literal in a secret field fails the
   start. Module secrets are not in the file: the manifest names them and
   the node reads them from the same source.
 - **Old variables fail the start** with a hint naming the new key
   (`GANGLION_TZ is no longer read: set node.tz in ganglion.yaml`); so do
-  `GANGLION_MODELS_FILE` and `key_env`. The variables that stay are
+  `GANGLION_MODELS_FILE`, and `key_env` or `tier` pasted from the old
+  models file into the `models:` section. The variables that stay are
   `GANGLION_CONFIG`, `GANGLION_DB`, `OTEL_EXPORTER_OTLP_ENDPOINT`, the MCP
   bridge's per-run `GANGLION_MCP_TOKEN` and the test tools' variables
   (`GANGLION_LIVE_*`, `GANGLION_ACCEPT_OUT`, `GANGLION_MEASURE*`,
@@ -134,7 +137,9 @@ it.
   on, remove) at once; every other section at the next start. `/restart`
   (admin) ends the node cleanly and Railway or systemd starts it again.
 - **`node.memory_limit`** sets `GOMEMLIMIT`; without it, about 80 % of the
-  container's limit (R-RUN-6, ADR-0056).
+  container's limit (R-RUN-6, ADR-0056). A `GOMEMLIMIT` the operator set
+  wins over both: it is the Go runtime's own setting, like `OTEL_*`, not a
+  retired ganglion variable.
 - **One exception:** `OTEL_EXPORTER_OTLP_ENDPOINT` stays an environment
   variable. It is OpenTelemetry's own setting, not ganglion's, and gets no
   key until the owner has a collector.

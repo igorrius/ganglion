@@ -56,7 +56,7 @@ func (e setEnv) GoString() string { return "setEnv(" + strconv.Quote(string(e)) 
 // ConfigFlag is --config, shared by `run` and `mcp`: the node's settings
 // file (ADR-0059).
 func ConfigFlag(dst *string) cli.Flag {
-	return &cli.StringFlag{Name: "config", Usage: "the settings file; default: ganglion.yaml beside the database", Category: catStorage,
+	return &cli.StringFlag{Name: "config", Usage: "the settings file, which must exist; default: ganglion.yaml beside the database, defaults when missing", Category: catStorage,
 		Local: true, Sources: env("GANGLION_CONFIG"), Destination: dst, TakesFile: true}
 }
 

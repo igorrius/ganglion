@@ -3,6 +3,7 @@ package memlimit_test
 import (
 	"errors"
 	"io/fs"
+	"runtime/debug"
 	"testing"
 
 	"github.com/igorrius/ganglion/internal/memlimit"
@@ -33,7 +34,7 @@ func TestDecide(t *testing.T) {
 		{"garbage", 0, map[string]string{memlimit.CgroupV2: "lots\n"}, memlimit.Limit{Source: memlimit.SourceNone}},
 	}
 	for _, c := range cases {
-		if got := memlimit.Decide(c.configured, files(c.fs)); got != c.want {
+		if got := memlimit.Decide("", c.configured, files(c.fs)); got != c.want {
 			t.Errorf("%s: Decide = %+v, want %+v", c.name, got, c.want)
 		}
 	}
@@ -41,7 +42,27 @@ func TestDecide(t *testing.T) {
 
 func TestDecideReadErrorIsNone(t *testing.T) {
 	read := func(string) ([]byte, error) { return nil, errors.New("denied") }
-	if got := memlimit.Decide(0, read); got.Source != memlimit.SourceNone {
+	if got := memlimit.Decide("", 0, read); got.Source != memlimit.SourceNone {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+// R-RUN-6, R-CFG-7: a GOMEMLIMIT the operator set is the Go runtime's own
+// setting and wins over the file and the cgroup.
+func TestOperatorsGOMEMLIMITWins(t *testing.T) {
+	got := memlimit.Decide("300MiB", 100<<20, files(map[string]string{memlimit.CgroupV2: "268435456\n"}))
+	if got != (memlimit.Limit{Source: memlimit.SourceEnv}) {
+		t.Fatalf("Decide = %+v", got)
+	}
+}
+
+// Apply leaves the runtime's own limit alone and reports it.
+func TestApplyKeepsTheOperatorsLimit(t *testing.T) {
+	was := debug.SetMemoryLimit(-1)
+	t.Cleanup(func() { debug.SetMemoryLimit(was) })
+	debug.SetMemoryLimit(300 << 20)
+	got := memlimit.Apply(memlimit.Limit{Source: memlimit.SourceEnv})
+	if got != (memlimit.Limit{Bytes: 300 << 20, Source: memlimit.SourceEnv}) || debug.SetMemoryLimit(-1) != 300<<20 {
+		t.Fatalf("Apply = %+v, runtime %d", got, debug.SetMemoryLimit(-1))
 	}
 }

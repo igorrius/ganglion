@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -98,23 +97,33 @@ func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read
 	if err := settings.Retired(getenv); err != nil {
 		return config.Bootstrap{}, err
 	}
-	path := cmp.Or(v.Config, filepath.Join(filepath.Dir(v.DB), settings.FileName))
-	f, err := settings.Load(path, read)
+	f, err := loadSettings(v.Config, v.DB, read)
 	if err != nil {
 		return config.Bootstrap{}, err
 	}
-	return fromFile(f, v.DB, src)
+	limit := memlimit.Decide(getenv("GOMEMLIMIT"), uint64(f.Node.MemoryLimit), read)
+	return fromFile(f, v.DB, limit, src)
+}
+
+// loadSettings reads the file the operator named, which must exist, or
+// else the one beside the database at db, which may be missing (R-CFG-1).
+func loadSettings(named, db string, read settings.ReadFunc) (settings.File, error) {
+	if named != "" {
+		return settings.Load(named, read)
+	}
+	return settings.LoadOptional(filepath.Join(filepath.Dir(db), settings.FileName), read)
 }
 
 // fromFile maps the file to the node's bootstrap settings for the
-// database at db, reading the secrets through src.
-func fromFile(f settings.File, db string, src secrets.Source) (config.Bootstrap, error) {
+// database at db, with the decided memory limit, reading the secrets
+// through src.
+func fromFile(f settings.File, db string, limit memlimit.Limit, src secrets.Source) (config.Bootstrap, error) {
 	b := config.Bootstrap{DB: db, Languages: f.Agent.Languages, BotAPIURL: f.Telegram.APIURL, Admin: f.Telegram.Admin,
 		MetricsAddr: f.Metrics.Addr, TelegramReply: f.Telegram.Reply, TelegramRich: f.Telegram.Rich,
 		ReactionAfter: time.Duration(f.Telegram.Reactions.After), ReactionDwell: time.Duration(f.Telegram.Reactions.Dwell),
 		SandboxDeny: f.Sandbox.Deny, SandboxHideNames: f.Sandbox.HideNames,
 		ModulesDir:  filepath.Join(filepath.Dir(db), "modules"),
-		MemoryLimit: memlimit.Decide(uint64(f.Node.MemoryLimit), os.ReadFile), Settings: f}
+		MemoryLimit: limit, Settings: f}
 	// Absolute: the CLI runs inside it, and the sandbox, the janitor and
 	// host.stats must all name the same folder.
 	var err error

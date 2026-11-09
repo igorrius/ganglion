@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -116,6 +117,56 @@ func TestMemoryLimitInBootstrap(t *testing.T) {
 	}
 	if want := (memlimit.Limit{Bytes: 100 << 20, Source: memlimit.SourceConfig}); b.MemoryLimit != want {
 		t.Fatalf("MemoryLimit = %+v, want %+v", b.MemoryLimit, want)
+	}
+}
+
+// R-CFG-1: a config path the operator named must exist; only the default
+// path beside the database may be missing.
+func TestNamedConfigMustExist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gangilon.yaml")
+	_, err := bootstrap(flags.Run{Config: path, DB: "g.db"}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	if err == nil || err.Error() != "ganglion.yaml: "+path+": no such file" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestDefaultConfigMayBeMissing(t *testing.T) {
+	b, err := bootstrap(flags.Run{DB: filepath.Join(t.TempDir(), "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	if err != nil || b.Settings.Node.TZ != "Europe/Kyiv" {
+		t.Fatalf("got %+v, %v", b.Settings.Node, err)
+	}
+}
+
+// The memory limit reads the cgroup through the injected read, not the
+// host's files.
+func TestMemoryLimitReadsThroughTheInjectedRead(t *testing.T) {
+	read := func(p string) ([]byte, error) {
+		if p == memlimit.CgroupV2 {
+			return []byte("268435456\n"), nil
+		}
+		return nil, fs.ErrNotExist
+	}
+	b, err := bootstrap(flags.Run{DB: "/nowhere/g.db"}, fakeEnv{}, fakeEnv{}.get, read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (memlimit.Limit{Bytes: 214748364, Source: memlimit.SourceCgroup}); b.MemoryLimit != want {
+		t.Fatalf("MemoryLimit = %+v, want %+v", b.MemoryLimit, want)
+	}
+}
+
+// R-CFG-7: GOMEMLIMIT set by the operator wins over node.memory_limit.
+func TestOperatorsGOMEMLIMITWins(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ganglion.yaml")
+	mustWrite(t, path, "node: {memory_limit: 100MiB}\n")
+	env := fakeEnv{"GOMEMLIMIT": "300MiB"}
+	b, err := bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, env, env.get, os.ReadFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.MemoryLimit.Source != memlimit.SourceEnv {
+		t.Fatalf("MemoryLimit = %+v", b.MemoryLimit)
 	}
 }
 

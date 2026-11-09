@@ -167,3 +167,19 @@ func (f File) LogDir(db string) (string, bool) {
 	}
 	return f.Log.Dir, true
 }
+
+// SecretNames are the variables every secret reference of the file names:
+// the bot token, the search key and the providers' keys. A skill script
+// never gets them (R-RTR-5, ADR-0042).
+func (f File) SecretNames() []string {
+	var out []string
+	for _, r := range []SecretRef{f.Telegram.Token, f.Agent.Search.BraveKey} {
+		if r != "" {
+			out = append(out, r.Name())
+		}
+	}
+	if f.Models != nil {
+		out = append(out, f.Models.KeyNames()...)
+	}
+	return out
+}

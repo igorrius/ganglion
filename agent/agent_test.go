@@ -207,6 +207,13 @@ func (r *routeLog) purposes() []router.Purpose {
 	return out
 }
 
+// all are the routed tasks, in order.
+func (r *routeLog) all() []router.TaskReq {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.tasks)
+}
+
 // enqueued is an outbox that records what is stored in it.
 type enqueued struct {
 	mu   sync.Mutex
@@ -520,6 +527,12 @@ func TestCompaction(t *testing.T) {
 	}
 	if got := e.routed.purposes(); !slices.Contains(got, router.PurposeChat) || got[len(got)-1] != router.PurposeCompact {
 		t.Fatalf("purposes %v: a turn is chat, its compaction compact", got)
+	}
+	// R-RTR-6: the budget cuts a turn, not the housekeeping around it.
+	for _, task := range e.routed.all() {
+		if task.Turn != (task.Purpose == router.PurposeChat) {
+			t.Errorf("%+v: a turn's steps are a turn, its compaction is not", task)
+		}
 	}
 }
 

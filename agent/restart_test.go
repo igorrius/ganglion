@@ -28,6 +28,9 @@ func TestRestartIsAdminOnly(t *testing.T) {
 	if len(e.smart.requests()) != 0 {
 		t.Fatal("a model was called")
 	}
+	if !strings.Contains(e.logs.String(), `msg="agent: restart requested" by=`+owner) {
+		t.Fatalf("the log does not say who asked for the restart:\n%s", e.logs.String())
+	}
 }
 
 func TestRestartHasAHint(t *testing.T) {

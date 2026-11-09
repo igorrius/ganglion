@@ -76,9 +76,9 @@ func TestSkillsIndexStable(t *testing.T) {
 func TestSkillRouteKeepsLocalOnly(t *testing.T) {
 	a := &Agent{d: Deps{Skills: fakeSkillSet{"private": {Model: router.TaskReq{Privacy: skills.PrivacyLocalOnly}},
 		"cloudy": {Model: router.TaskReq{Purpose: router.PurposeCode}}}}}
-	chat := router.TaskReq{Purpose: router.PurposeChat}
+	chat := router.TaskReq{Purpose: router.PurposeChat, Turn: true}
 	task := a.skillRoute(chat, []provider.ToolCall{readCall("private"), readCall("cloudy")}, true)
-	if task.Privacy != skills.PrivacyLocalOnly || task.Purpose != router.PurposeCode {
+	if task.Privacy != skills.PrivacyLocalOnly || task.Purpose != router.PurposeCode || !task.Turn {
 		t.Fatalf("task %+v", task)
 	}
 	if task := a.skillRoute(chat, []provider.ToolCall{readCall("private")}, true); task.Purpose != router.PurposeChat {

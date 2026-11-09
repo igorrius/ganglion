@@ -291,6 +291,8 @@ func checkModel(purpose router.Purpose, context, privacy string) error {
 	switch {
 	case purpose != "" && !slices.Contains(router.Purposes, purpose):
 		return fmt.Errorf("model.purpose %q: want one of %v", purpose, router.Purposes)
+	case purpose == router.PurposeCode:
+		return fmt.Errorf("model.purpose %q: no skill may ask for it until P3", purpose)
 	case context != "" && context != "short" && context != "long":
 		return fmt.Errorf("model.context %q: want short or long", context)
 	case privacy != "" && privacy != PrivacyLocalOnly:

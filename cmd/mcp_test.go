@@ -143,6 +143,20 @@ func TestMCPConfigShowsTheFile(t *testing.T) {
 	}
 }
 
+// A config path given with --config must exist, as for run (R-CFG-1):
+// config.show says so instead of showing the defaults as the node's.
+func TestMCPConfigShowsAMissingNamedFile(t *testing.T) {
+	clearEnv(t)
+	db := nodeDB(t)
+	missing := filepath.Join(filepath.Dir(db), "gangilon.yaml")
+	answers, _ := mcpSession(t, []string{"--db", db, "--config", missing}, 2, mcpInit,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"config_show","arguments":{}}}`)
+	raw, _ := json.Marshal(answers)
+	if !strings.Contains(string(raw), "gangilon.yaml: no such file") {
+		t.Fatalf("config_show does not name the missing file: %s", raw)
+	}
+}
+
 func TestMCPMissingDatabase(t *testing.T) {
 	clearEnv(t)
 	var out, errOut bytes.Buffer

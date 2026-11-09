@@ -93,7 +93,7 @@ type Policy struct {
 	EnvDepth int
 	// HideNames keeps the folders split around a denied path unlisted, so
 	// the names inside denied folders stay hidden too
-	// (GANGLION_SANDBOX_HIDE_NAMES, ADR-0057).
+	// (sandbox.hide_names in ganglion.yaml, ADR-0057).
 	HideNames bool
 }
 

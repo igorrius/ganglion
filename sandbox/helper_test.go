@@ -438,7 +438,7 @@ func TestASplitFolderIsListedNotRead(t *testing.T) {
 	}
 }
 
-// GANGLION_SANDBOX_HIDE_NAMES=on: a split folder is not listed, as before
+// sandbox.hide_names: true: a split folder is not listed, as before
 // ADR-0057.
 func TestHideNamesKeepsASplitFolderUnlisted(t *testing.T) {
 	top := splitTree(t)

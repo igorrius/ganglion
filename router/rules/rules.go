@@ -55,9 +55,10 @@ type Option func(*Router)
 // WithClock sets the clock; the default is time.Now.
 func WithClock(now func() time.Time) Option { return func(r *Router) { r.now = now } }
 
-// WithBudget sets the daily budget: over b's daily budget, chat keeps free
-// and local models only. The day starts at midnight in loc; the other
-// purposes are housekeeping and are not cut.
+// WithBudget sets the daily budget: over b's daily budget, a turn keeps
+// free and local models only, whatever its purpose. The day starts at
+// midnight in loc; the calls outside a turn are housekeeping and are not
+// cut.
 func WithBudget(b Budget, dailyUSD float64, loc *time.Location) Option {
 	return func(r *Router) { r.budget, r.daily, r.loc = b, dailyUSD, loc }
 }
@@ -103,10 +104,10 @@ func fits(m router.Model, t router.TaskReq) bool {
 func price(m router.Model) float64 { return m.Caps.PriceInMTok + m.Caps.PriceOutMTok }
 
 // Route implements router.Router: the purpose's list in order, without the
-// models that do not fit the task; over budget, chat keeps free and local
-// models only; cooling models move to the end.
+// models that do not fit the task; over budget, a turn keeps free and
+// local models only; cooling models move to the end.
 func (r *Router) Route(ctx context.Context, t router.TaskReq) ([]router.Candidate, error) {
-	over := t.Purpose == router.PurposeChat && r.overBudget(ctx)
+	over := t.Turn && r.overBudget(ctx)
 	var out, cooling []router.Candidate
 	now := r.now()
 	r.mu.Lock()

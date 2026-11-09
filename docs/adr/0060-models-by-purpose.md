@@ -87,8 +87,11 @@ models:
   language with no file, R-LANG-5; found by the M4a plan), `code`
   (writing modules and skills). An unknown purpose fails the start.
   `check`, `compact` and `translate` use `chat`'s list when absent.
-- **The budget:** over the daily budget, `chat` keeps free and local
-  models only; the other purposes are housekeeping and are not cut.
+- **The budget:** over the daily budget, a turn (a person's or a
+  scheduled agent turn) keeps free and local models only, whatever
+  purpose a skill moved it to; the calls that are not a turn's own steps
+  (compaction, the clean-context check, translation) are housekeeping and
+  are not cut. A skill may not ask for `code` until P3.
 - **The order is the preference.** The next entry is taken when one is out
   of limits, answers 429 or times out; cooling and limits work as today.
 - **`check` keeps a fallback:** ADR-0047's clean-context check fell back

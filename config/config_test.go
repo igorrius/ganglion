@@ -305,6 +305,21 @@ func TestSecretValuesListsEverySecretTheNodeRead(t *testing.T) {
 	}
 }
 
+// A skill script never gets a variable the file names for a secret, the
+// bot token and the search key included, whatever it is called
+// (R-RTR-5, ADR-0042). The lab sets the models without a file.
+func TestScriptDenyListsEverySecretReference(t *testing.T) {
+	f, err := settings.Parse([]byte("telegram: {token: env:BOT}\nagent: {search: {brave_key: env:SEARCH}}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lab := &settings.Models{Providers: []settings.Provider{{Name: "or", Key: "env:LAB"}, {Name: "local"}}}
+	got := scriptDeny(Bootstrap{Settings: f, Agent: AgentSettings{Models: lab}})
+	if want := []string{"BOT", "LAB", "SEARCH"}; !slices.Equal(got, want) {
+		t.Fatalf("scriptDeny = %q, want %q", got, want)
+	}
+}
+
 // readyOf reports whether s runs commands.
 func readyOf(s *sandbox.Sandbox) bool { ok, _ := s.Ready(); return ok }
 

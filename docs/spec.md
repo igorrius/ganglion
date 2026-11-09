@@ -410,7 +410,7 @@ The skill declares its requirements in the `SKILL.md` frontmatter:
 
 ```yaml
 model:
-  purpose: check       # chat | check | compact | code (R-RTR-6)
+  purpose: check       # chat | check | compact | translate | code (R-RTR-6)
   tools: true
   context: short       # short | long
   vision: false
@@ -472,7 +472,13 @@ model:
   order is the preference; the next entry is taken on an exhausted limit,
   429 or a timeout. `effort` is passed to providers that take one; a
   provider that cannot take an effort set in the config fails the start.
-  Tiers (`smart`, `cheap`) and "cheaper first within a tier" are gone.
+  Over the daily budget a turn keeps free and local models only, whatever
+  purpose a skill moved it to; the calls that are not a turn's own steps
+  (compaction, the clean-context check, translation) are housekeeping and
+  are not cut.
+  A skill may ask for `chat`, `check`, `compact` or `translate`; `code`
+  waits for P3. Tiers (`smart`, `cheap`) and "cheaper first within a
+  tier" are gone.
 
 ### 7.4. Providers and model access
 
@@ -595,8 +601,9 @@ escalate:                    # when to call the model
   and a failed request is an error the module handles, not a trap. Module
   glue exists for Go/TinyGo (`pdk/guest`) and Rust (`modules/deye-rs`); a new
   language needs its own small glue.
-- **R-RUN-6.** Every node sets a soft memory limit (`GOMEMLIMIT`): from its
-  config, else about 80% of its container's memory limit (cgroup v2
+- **R-RUN-6.** Every node sets a soft memory limit (`GOMEMLIMIT`): the
+  operator's own `GOMEMLIMIT` when set, else from its config, else about
+  80% of its container's memory limit (cgroup v2
   `memory.max`, v1 `memory.limit_in_bytes`), else none. Edge JetStream streams
   have explicit size limits, so a long outage cannot grow memory or the
   backlog without bound (task 0.5,
@@ -1150,7 +1157,8 @@ phase plan).
 - **R-CFG-1.** Outside the file stay only the config path (`--config` or
   `GANGLION_CONFIG`, default `ganglion.yaml` beside the database), the
   database path (`--db`), the roles (`--roles`) and the secrets. No file
-  means defaults.
+  at the default path means defaults; a path given with `--config` or
+  `GANGLION_CONFIG` must exist.
 - **R-CFG-2.** A field that takes a secret holds `env:NAME`; the node reads
   `NAME` or the file named by `NAME_FILE`. A literal value in such a field
   fails the start. Module secrets are named by the manifest and never
@@ -1162,15 +1170,18 @@ phase plan).
   type, default, allowed values) and is kept in step with the code by a
   test ([ADR-0023](adr/0023-json-schemas-for-yaml-files.md)).
 - **R-CFG-5.** The `GANGLION_*` variables that held settings before M4,
-  `GANGLION_MODELS_FILE` and `key_env` are no longer read; a node that
-  finds one fails the start with the key that replaces it.
+  `GANGLION_MODELS_FILE`, and the models file's `key_env` and `tier` are
+  no longer read; a node that finds one, in its environment or pasted
+  into the file, fails the start with the key that replaces it.
   `OTEL_EXPORTER_OTLP_ENDPOINT`, OpenTelemetry's own setting, is still
   read.
 - **R-CFG-6.** Modules apply at once: install, update, rollback, config,
   off, on and remove. Every other section applies at the next start;
   `/restart` (admin) ends the node cleanly for its supervisor to start
   again.
-- **R-CFG-7.** `node.memory_limit` sets `GOMEMLIMIT` (R-RUN-6).
+- **R-CFG-7.** `node.memory_limit` sets `GOMEMLIMIT` (R-RUN-6). A
+  `GOMEMLIMIT` the operator set, the Go runtime's own setting, wins over
+  it.
 
 ## 8. First reflex: Deye (P1)
 

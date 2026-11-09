@@ -22,12 +22,29 @@ const FileName = "ganglion.yaml"
 // ReadFunc reads a file, as os.ReadFile does.
 type ReadFunc func(path string) ([]byte, error)
 
-// Load reads the file at path; a missing file is Default().
+// Load reads the file at a path the operator named (--config or
+// GANGLION_CONFIG); a missing file is an error, so a typo in the path does
+// not start a node on defaults (R-CFG-1).
 func Load(path string, read ReadFunc) (File, error) {
+	src, err := read(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return File{}, pathError(path, "no such file")
+	}
+	return parseRead(src, err)
+}
+
+// LoadOptional reads the file at the default path, beside the database; a
+// missing file there is Default().
+func LoadOptional(path string, read ReadFunc) (File, error) {
 	src, err := read(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return Default(), nil
 	}
+	return parseRead(src, err)
+}
+
+// parseRead parses what a read returned.
+func parseRead(src []byte, err error) (File, error) {
 	if err != nil {
 		return File{}, fmt.Errorf("%s: %w", FileName, err)
 	}
@@ -78,8 +95,12 @@ func decodeStrict(n *yaml.Node, v any) error {
 // walk decodes n into v. A mapping into a struct goes key by key, a
 // sequence into a slice item by item and a mapping into a map entry by
 // entry, so an error names the deepest path, such as
-// models.purposes.chat[1].model; anything else is decoded whole.
+// models.purposes.chat[1].model; anything else is decoded whole. A null
+// (a key whose children are all commented out) keeps the default.
 func walk(n *yaml.Node, path string, v reflect.Value) error {
+	if n.Kind == yaml.ScalarNode && n.Tag == "!!null" {
+		return nil
+	}
 	if v.Kind() == reflect.Pointer && v.Type().Elem().Kind() == reflect.Struct && n.Kind == yaml.MappingNode {
 		v.Set(reflect.New(v.Type().Elem()))
 		v = v.Elem()
@@ -95,12 +116,18 @@ func walk(n *yaml.Node, path string, v reflect.Value) error {
 	return leaf(n, path, v)
 }
 
-// walkStruct decodes a mapping into the struct v key by key; an unknown key
-// is an error.
+// walkStruct decodes a mapping into the struct v key by key; an unknown,
+// retired or repeated key is an error.
 func walkStruct(n *yaml.Node, path string, v reflect.Value) error {
+	if err := noTwice(n, path); err != nil {
+		return err
+	}
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		key := n.Content[i].Value
 		field, ok := fieldByTag(v, key)
+		if hint, retired := retiredKey(v.Type(), key); !ok && retired {
+			return pathError(path, key+" is no longer read: "+hint)
+		}
 		if !ok {
 			return pathError(path, fmt.Sprintf("unknown key %q", key))
 		}
@@ -127,6 +154,9 @@ func walkSlice(n *yaml.Node, path string, v reflect.Value) error {
 // walkMap replaces the map v with the mapping's entries, each at
 // path.key.
 func walkMap(n *yaml.Node, path string, v reflect.Value) error {
+	if err := noTwice(n, path); err != nil {
+		return err
+	}
 	m := reflect.MakeMapWithSize(v.Type(), len(n.Content)/2)
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		key := n.Content[i].Value
@@ -137,6 +167,20 @@ func walkMap(n *yaml.Node, path string, v reflect.Value) error {
 		m.SetMapIndex(reflect.ValueOf(key).Convert(v.Type().Key()), val)
 	}
 	v.Set(m)
+	return nil
+}
+
+// noTwice refuses a mapping that has a key twice: YAML would keep the last
+// one, and a second models: block pasted below the first would hide it.
+func noTwice(n *yaml.Node, path string) error {
+	seen := map[string]bool{}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		key := n.Content[i].Value
+		if seen[key] {
+			return pathError(path, fmt.Sprintf("key %q twice", key))
+		}
+		seen[key] = true
+	}
 	return nil
 }
 
@@ -184,16 +228,24 @@ var principalRE = regexp.MustCompile(`^[a-z][a-z0-9]*:user:[0-9A-Za-z_.-]+$`)
 // validAdmin accepts "" or <transport>:user:<id>.
 func validAdmin(v string) bool { return v == "" || principalRE.MatchString(v) }
 
+// The paths of keys that more than one check names.
+const (
+	keyTZ     = "node.tz"
+	keyAPIURL = "telegram.api_url"
+)
+
 // check is the validation that is not about the type of a value.
 func (f File) check() error {
 	for _, c := range []struct {
 		path, reason string
 		ok           bool
 	}{
-		{"node.tz", "must be an IANA time zone such as Europe/Kyiv", validTZ(f.Node.TZ)},
+		{keyTZ, "must name a time zone", f.Node.TZ != ""},
+		{keyTZ, "must be an IANA time zone such as Europe/Kyiv", validTZ(f.Node.TZ)},
 		{"log.level", "must be debug, info, warn or error", slices.Contains([]string{"debug", "info", "warn", "error"}, f.Log.Level)},
 		{"metrics.addr", `must be host:port or off`, validAddr(f.Metrics.Addr)},
-		{"telegram.api_url", "must be an http or https address", validURL(f.Telegram.APIURL)},
+		{keyAPIURL, "must be an http or https address", validURL(f.Telegram.APIURL)},
+		{keyAPIURL, "must not carry credentials; use token: env:NAME", !hasCredentials(f.Telegram.APIURL)},
 		{"telegram.admin", "must be <transport>:user:<id>, such as telegram:user:123456", validAdmin(f.Telegram.Admin)},
 		{"telegram.reply", "must be auto, always or off", slices.Contains([]string{auto, "always", off}, f.Telegram.Reply)},
 		{"agent.search.mode", "must be auto or off", slices.Contains([]string{auto, off}, f.Agent.Search.Mode)},
@@ -225,4 +277,11 @@ func validAddr(a string) bool {
 func validURL(s string) bool {
 	u, err := url.Parse(s)
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+// hasCredentials reports whether an address carries a user or a password:
+// a secret is never written in the file.
+func hasCredentials(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && u.User != nil
 }

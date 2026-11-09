@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -438,4 +439,106 @@ func TestRepliesAreStoredWhenTheNodeStopsInTheTurn(t *testing.T) {
 	if ps := outbox(t, q); len(ps) != 1 || ps[0].Msg.Text != "restarting" {
 		t.Fatalf("outbox %+v", ps)
 	}
+}
+
+// completeSpy records whether each Complete had a deadline, and fails it
+// with err when set.
+type completeSpy struct {
+	queue.Queue
+	mu        sync.Mutex
+	deadlines []bool
+	err       error
+}
+
+func (c *completeSpy) Complete(ctx context.Context, l queue.Lease, out []event.Outgoing, st queue.StateUpdate) error {
+	_, ok := ctx.Deadline()
+	c.mu.Lock()
+	c.deadlines = append(c.deadlines, ok)
+	err := c.err
+	c.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return c.Queue.Complete(ctx, l, out, st)
+}
+
+func (c *completeSpy) seen() []bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]bool(nil), c.deadlines...)
+}
+
+// A turn stored while the node runs is stored on the live ctx, with no
+// stop's bound; only a stop gives it completeTimeout.
+func TestCompleteIsBoundOnlyDuringAStop(t *testing.T) {
+	q := memQueue(t)
+	spy := &completeSpy{Queue: q}
+	l := NewLoop(spy, q.InboxReady(), EchoHandler, slog.New(slog.DiscardHandler))
+	start(t, l)
+	if err := spy.Put(context.Background(), msgEvent("k1", "telegram:a", "hi")); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the turn stored", func() bool { return len(spy.seen()) == 1 })
+	if spy.seen()[0] {
+		t.Fatal("a turn stored while the node runs had a deadline")
+	}
+
+	q = memQueue(t)
+	stopSpy := &completeSpy{Queue: q}
+	ctx, cancel := context.WithCancel(context.Background())
+	h := func(context.Context, event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		cancel()
+		return nil, queue.StateUpdate{}, nil
+	}
+	l = NewLoop(stopSpy, q.InboxReady(), h, slog.New(slog.DiscardHandler))
+	if err := stopSpy.Put(context.Background(), msgEvent("k2", "telegram:a", "/restart")); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := stopSpy.seen(); len(got) != 1 || !got[0] {
+		t.Fatalf("deadlines during a stop: %v", got)
+	}
+}
+
+// A turn not stored while the node stops runs again after the start; a
+// /restart doing that would loop, so it is a warning, not silence.
+func TestFailedCompleteDuringAStopIsAWarning(t *testing.T) {
+	q := memQueue(t)
+	spy := &completeSpy{Queue: q, err: errors.New("disk full")}
+	ctx, cancel := context.WithCancel(context.Background())
+	h := func(context.Context, event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+		cancel()
+		return nil, queue.StateUpdate{}, nil
+	}
+	var logs syncLog
+	l := NewLoop(spy, q.InboxReady(), h, slog.New(slog.NewTextHandler(&logs, nil)))
+	if err := spy.Put(context.Background(), msgEvent("k1", "telegram:a", "/restart")); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := logs.String(); !strings.Contains(got, "level=WARN") || !strings.Contains(got, "disk full") {
+		t.Fatalf("logs:\n%s", got)
+	}
+}
+
+// syncLog is a log buffer safe for the workers and the test at once.
+type syncLog struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncLog) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncLog) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }

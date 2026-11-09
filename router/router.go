@@ -42,6 +42,10 @@ const (
 // model block of their SKILL.md frontmatter.
 type TaskReq struct {
 	Purpose Purpose // which list of models the task takes
+	// Turn marks the steps of a person's or a scheduled agent turn: over the
+	// daily budget the router cuts paid cloud models from its candidates,
+	// whatever purpose a skill moved the turn to (R-RTR-6).
+	Turn    bool
 	Tools   bool
 	Context string // "" or "long"
 	Vision  bool

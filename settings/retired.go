@@ -1,6 +1,9 @@
 package settings
 
-import "fmt"
+import (
+	"fmt"
+	"reflect"
+)
 
 // retired maps each variable that held a setting before M4 to the key that
 // replaced it (R-CFG-5). Variables not listed here are not ganglion's
@@ -9,7 +12,7 @@ import "fmt"
 var retired = []struct{ env, key string }{
 	{"GANGLION_LOG_LEVEL", "log.level"},
 	{"GANGLION_ADMIN", "telegram.admin"},
-	{"TELEGRAM_API_URL", "telegram.api_url"},
+	{"TELEGRAM_API_URL", keyAPIURL},
 	{"GANGLION_TELEGRAM_REPLY", "telegram.reply"},
 	{"GANGLION_TELEGRAM_RICH", "telegram.rich"},
 	{"GANGLION_REACTION_AFTER", "telegram.reactions.after"},
@@ -25,7 +28,7 @@ var retired = []struct{ env, key string }{
 	{"GANGLION_DAILY_TURNS", "agent.limits.daily_turns"},
 	{"GANGLION_DAILY_TOKENS", "agent.limits.daily_tokens"},
 	{"GANGLION_SESSION_IDLE", "agent.session_idle"},
-	{"GANGLION_TZ", "node.tz"},
+	{"GANGLION_TZ", keyTZ},
 	{"GANGLION_SEARCH", "agent.search.mode"},
 }
 
@@ -37,4 +40,18 @@ func Retired(getenv func(string) string) error {
 		}
 	}
 	return nil
+}
+
+// retiredKeys are the keys of the old models file that someone may paste
+// into the models: section, with what replaces each (R-CFG-5). They are
+// checked before "unknown key", so the error says what to write instead.
+var retiredKeys = map[reflect.Type]map[string]string{
+	reflect.TypeFor[Provider](): {"key_env": "use key: env:NAME"},
+	reflect.TypeFor[ModelDef](): {"tier": "list the model under models.purposes"},
+}
+
+// retiredKey returns the hint for key when it is a retired key of t.
+func retiredKey(t reflect.Type, key string) (string, bool) {
+	hint, ok := retiredKeys[t][key]
+	return hint, ok
 }

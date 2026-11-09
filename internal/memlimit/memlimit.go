@@ -1,6 +1,6 @@
 // Package memlimit decides the node's soft memory limit (R-RUN-6,
-// ADR-0056): the configured value, else about 80 % of the container's
-// limit, else none.
+// ADR-0056): the operator's own GOMEMLIMIT, else the configured value, else
+// about 80 % of the container's limit, else none.
 package memlimit
 
 import (
@@ -27,12 +27,14 @@ type Source string
 
 // Sources.
 const (
+	SourceEnv    Source = "env"
 	SourceConfig Source = "config"
 	SourceCgroup Source = "cgroup"
 	SourceNone   Source = "none"
 )
 
-// Limit is the decided limit; Bytes is 0 when Source is SourceNone.
+// Limit is the decided limit; Bytes is 0 when Source is SourceNone, and
+// for SourceEnv until Apply reads it from the runtime.
 type Limit struct {
 	Bytes  int64
 	Source Source
@@ -41,9 +43,14 @@ type Limit struct {
 // ReadFunc reads a file, as os.ReadFile does.
 type ReadFunc func(path string) ([]byte, error)
 
-// Decide returns the configured bytes when set, else 80 % of the cgroup
-// limit, else none. A file it cannot read or parse counts as no limit.
-func Decide(configured uint64, read ReadFunc) Limit {
+// Decide returns SourceEnv when the operator set GOMEMLIMIT (env is its
+// value; the Go runtime reads it itself, like OTEL_* for OpenTelemetry),
+// else the configured bytes when set, else 80 % of the cgroup limit, else
+// none. A file it cannot read or parse counts as no limit.
+func Decide(env string, configured uint64, read ReadFunc) Limit {
+	if env != "" {
+		return Limit{Source: SourceEnv}
+	}
 	if configured > 0 {
 		return Limit{Bytes: int64(configured), Source: SourceConfig}
 	}
@@ -67,9 +74,15 @@ func cgroup(read ReadFunc, path string) (uint64, bool) {
 	return n, true
 }
 
-// Apply sets the limit on the runtime unless it is none, and returns it.
+// Apply sets the limit on the runtime and returns it. It leaves the
+// runtime alone for none, and for the operator's GOMEMLIMIT, whose bytes it
+// reads back from the runtime.
 func Apply(l Limit) Limit {
-	if l.Source != SourceNone {
+	switch l.Source {
+	case SourceNone:
+	case SourceEnv:
+		l.Bytes = debug.SetMemoryLimit(-1)
+	default:
 		debug.SetMemoryLimit(l.Bytes)
 	}
 	return l

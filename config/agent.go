@@ -195,19 +195,12 @@ type Skilled struct {
 }
 
 // Skills loads the built-in and the workspace skills; a script never
-// gets a provider's key (R-RTR-5, ADR-0042).
+// gets a variable that holds one of the node's secrets (R-RTR-5,
+// ADR-0042).
 func Skills() do.Provider[Skilled] {
 	return func(i do.Injector) (Skilled, error) {
 		b := do.MustInvoke[Bootstrap](i)
-		var deny []string
-		if m := b.Agent.Models; m != nil {
-			for _, p := range m.Providers {
-				if p.Key != "" {
-					deny = append(deny, p.Key.Name())
-				}
-			}
-		}
-		set, problems, err := skills.Load(skills.Builtin, b.Agent.Workspace, deny)
+		set, problems, err := skills.Load(skills.Builtin, b.Agent.Workspace, scriptDeny(b))
 		if err != nil {
 			return Skilled{}, err
 		}
@@ -221,6 +214,18 @@ func Skills() do.Provider[Skilled] {
 		box := do.MustInvoke[*sandbox.Sandbox](i)
 		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg, box), runs, sandboxGate{box}), Problems: problems}, nil
 	}
+}
+
+// scriptDeny are the variables a skill script may not list: every secret
+// reference of the file, and the providers' keys of models set without a
+// file (the lab), sorted and each once.
+func scriptDeny(b Bootstrap) []string {
+	deny := b.Settings.SecretNames()
+	if m := b.Agent.Models; m != nil {
+		deny = append(deny, m.KeyNames()...)
+	}
+	slices.Sort(deny)
+	return slices.Compact(deny)
 }
 
 // Diagnostics provides the diagnostic searches over the node's own

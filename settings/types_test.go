@@ -51,3 +51,12 @@ func TestOffAndDefaults(t *testing.T) {
 type fakeSource map[string]string
 
 func (f fakeSource) Secret(name string) (string, error) { return f[name], nil }
+
+func TestMoneyRefusesNaNAndInf(t *testing.T) {
+	for _, v := range []string{"NaN", "Inf", "+Inf", ".nan", ".inf", "infinity"} {
+		_, err := settings.Parse([]byte("agent:\n  limits: {daily_budget_usd: " + v + "}\n"))
+		if err == nil || !strings.Contains(err.Error(), "agent.limits.daily_budget_usd") {
+			t.Errorf("%s: err = %v", v, err)
+		}
+	}
+}

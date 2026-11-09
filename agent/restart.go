@@ -22,6 +22,7 @@ func (a *Agent) restart(ctx context.Context, t *turn, _ string) error {
 		return nil
 	}
 	t.reply(a.say(ctx, t, texts.ReplyRestarting, nil))
+	a.log.Info("agent: restart requested", "by", t.msg.From)
 	a.d.Restart()
 	return nil
 }

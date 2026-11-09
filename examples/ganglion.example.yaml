@@ -8,7 +8,7 @@
 node:
   # The soft memory limit of the node (GOMEMLIMIT). Without it the node takes
   # about 80 % of its container's limit, or none. Set it when the container is
-  # sized for module builds.
+  # sized for module builds. A GOMEMLIMIT set in the environment wins.
   # memory_limit: 400MiB
   # The IANA time zone that decides where a day starts.
   tz: Europe/Kyiv

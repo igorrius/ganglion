@@ -138,7 +138,7 @@ plan once this one is done; the `modules:` section is parsed here and used there
   `type Source string` with `SourceConfig`, `SourceCgroup`, `SourceNone`;
   `type ReadFunc func(path string) ([]byte, error)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 // internal/size/size_test.go
@@ -218,12 +218,12 @@ func TestDecideReadErrorIsNone(t *testing.T) {
 
 The 256 MB case is the phase plan's check: 80 % of 268,435,456 is 214,748,364 bytes, about 205 MiB.
 
-- [ ] **Step 2: Run the tests to see them fail**
+- [x] **Step 2: Run the tests to see them fail**
 
 Run: `go test ./internal/size/ ./internal/memlimit/`
 Expected: FAIL, the packages do not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/size/size.go
@@ -347,12 +347,12 @@ func Apply(l Limit) Limit {
 In `runner/manifest.go`, delete `parseSize` and call `size.Parse` where it was called (the
 `limits.memory` field); keep the error wrapping the caller already adds.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `go test ./internal/size/ ./internal/memlimit/ ./runner/`
 Expected: PASS.
 
-- [ ] **Step 5: Docs and commit**
+- [x] **Step 5: Docs and commit**
 
 Add `internal/size` and `internal/memlimit` to `docs/architecture/05-code-map.md` (the
 `internal/` list: "byte sizes" and "the soft memory limit, R-RUN-6").
@@ -447,7 +447,7 @@ type Size uint64                               // size.Parse form; 0 = unset
 
 `Limits` accepts the scalar `off` (every limit 0) as well as a mapping.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 // settings/types_test.go
@@ -561,12 +561,12 @@ func TestEmptyFileIsDefault(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the tests to see them fail**
+- [x] **Step 2: Run the tests to see them fail**
 
 Run: `go test ./settings/`
 Expected: FAIL, the package does not exist.
 
-- [ ] **Step 3: Implement the types and `Default`**
+- [x] **Step 3: Implement the types and `Default`**
 
 `settings/settings.go` holds the structs listed under Interfaces, each field with a doc comment
 that says what it does (these comments are the source the schema descriptions are written from),
@@ -747,7 +747,7 @@ func (l *Limits) UnmarshalYAML(n *yaml.Node) error {
 `decodeStrict(n *yaml.Node, v any) error` lives in `load.go`: it re-encodes `n` and decodes it
 with `KnownFields(true)`, so a custom `UnmarshalYAML` stays strict inside.
 
-- [ ] **Step 4: Implement `Parse`, `Load` and the checks with paths**
+- [x] **Step 4: Implement `Parse`, `Load` and the checks with paths**
 
 `settings/load.go`. yaml.v3 errors carry a line, not a path, so the loader walks the document
 itself: it decodes the root `yaml.Node`, then each section into its struct with a `pathError`
@@ -846,12 +846,12 @@ helper that maps a tag to a field; the tests of Step 1 pin its output.
 
 Move `validPrincipal`'s body here as `validAdmin`; `cmd/flags` drops it in task 4.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `go test ./settings/`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add settings
@@ -970,7 +970,7 @@ func (m Models) RouterPurposes() map[router.Purpose][]router.Choice // defaults 
 func (m Models) Keys(src secrets.Source) (map[string]string, error) // provider name → key
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `settings/models_test.go`:
 
@@ -1102,12 +1102,12 @@ with helpers `testModels()` (sonnet and haiku on provider `p`, tools, 200k, pric
 `paid(id)` (price 0.5/0.5), `chatSonnetHaiku()`, `mustNew`, and
 `models(t, r, task) []string` that returns `model/effort` per candidate.
 
-- [ ] **Step 2: Run the tests to see them fail**
+- [x] **Step 2: Run the tests to see them fail**
 
 Run: `go test ./settings/ ./router/...`
 Expected: FAIL to compile: `router.Purpose` and the new `rules.New` do not exist.
 
-- [ ] **Step 3: Implement `router` and `router/rules`**
+- [x] **Step 3: Implement `router` and `router/rules`**
 
 In `router/router.go` replace the tier and kind types with the block under Interfaces. In
 `router/rules/rules.go`:
@@ -1168,7 +1168,7 @@ func (r *Router) Route(ctx context.Context, t router.TaskReq) ([]router.Candidat
 Delete `ranked`, `taskTier`, `pick` and `rank`; `Report` stays as it is. `WithBudget`'s doc
 comment becomes "over b's daily budget, chat keeps free and local models only".
 
-- [ ] **Step 4: Implement `settings/models.go`**
+- [x] **Step 4: Implement `settings/models.go`**
 
 The types under Interfaces, decoded strictly. `Models.check(path)` is called from `File.check()`
 when `Models != nil`, and checks, in order, with the paths the tests pin:
@@ -1228,7 +1228,7 @@ func (m Models) Keys(src secrets.Source) (map[string]string, error) {
 
 Delete `router/rules/catalog.go` and its tests; `RouterModels()` moves to `settings.Models`.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `go test ./settings/ ./router/...`
 Expected: PASS. The rest of the repository does not compile yet; task 4 fixes the callers. Do
@@ -1252,7 +1252,7 @@ not commit a broken build: continue with task 4 and commit both together.
 - Produces: `provider.ChatRequest.Effort router.Effort`; skills frontmatter
   `model: {purpose, tools, context, vision, privacy}`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `provider/openai/client_test.go`:
 
@@ -1295,12 +1295,12 @@ without effort asserting they contain no `--effort`.
 `agent` tests: the recorded task of a message turn has `Purpose == router.PurposeChat`, of
 compaction `router.PurposeCompact`. `language` tests: translation routes `router.PurposeTranslate`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./provider/... ./skills/ ./guard/ ./agent/ ./language/`
 Expected: compile errors on `Effort` and `Purpose`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 - `provider.ChatRequest` gains `Effort router.Effort // "" = the provider's default`.
 - openai `wireRequest` gains `ReasoningEffort string \`json:"reasoning_effort,omitempty"\``, set
@@ -1328,7 +1328,7 @@ if req.Effort != "" {
 - Every test fixture with tiers: a `router.Model` gets an `ID` instead of a `Tier`; a router is
   built with `rules.New(models, map[router.Purpose][]router.Choice{router.PurposeChat: …})`.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `go test ./provider/... ./skills/ ./guard/ ./agent/ ./language/ ./router/... ./settings/`
 Expected: PASS. `cmd`, `config` and `internal/chatlab` still use the old catalogue; task 5
@@ -1356,7 +1356,7 @@ moves them. Continue with task 5 before committing, so no commit breaks the buil
   - `flags.Run{Config, DB, Roles string}`; `GANGLION_CONFIG` is the `--config` flag's variable,
     default `ganglion.yaml` beside the database.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `settings/retired_test.go`:
 
@@ -1428,12 +1428,12 @@ it in the test file.)
 `cmd/cmd_test.go:173`'s help assertion now expects `--config`, `GANGLION_CONFIG`, `--db`,
 `--roles` and no `--tz` or `--models-file`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `go test ./settings/ ./cmd/`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `settings/retired.go`:
 
@@ -1541,20 +1541,20 @@ list (:200-206) adds each `p.Key.Name()` instead of `p.KeyEnv`. `agentOn(b)` bec
 `announce` drops "no GANGLION_MODELS_FILE" for "no models section in ganglion.yaml; the agent is
 off", and "no TELEGRAM_BOT_TOKEN" names `f.Telegram.Token.Name()`.
 
-- [ ] **Step 4: `ganglion mcp`'s `config.show`**
+- [x] **Step 4: `ganglion mcp`'s `config.show`**
 
 `cmd/mcp.go` `runSettings` rebuilt: it takes the loaded `settings.File` and lists each section's
 keys and values as `diag.Settings` rows, secrets as "`env:NAME` (set)" or "(unset)", never the
 value; models as `id provider/name` and purposes as `chat: sonnet (medium), haiku`. Its test
 asserts no secret value appears and the purposes line is there.
 
-- [ ] **Step 5: Run every test**
+- [x] **Step 5: Run every test**
 
 Run: `make lint test`
 Expected: PASS. Fix every remaining compile error in tests from the list of task 4 (they now
 build `settings.Models` or `router.Model{ID: …}`).
 
-- [ ] **Step 6: Docs and commit (tasks 3–5 together)**
+- [x] **Step 6: Docs and commit (tasks 3–5 together)**
 
 `docs/architecture/05-code-map.md`: add `settings` ("ganglion.yaml: types, strict loading,
 `env:NAME`, retired variables, models by purpose") with its dependency rule (`settings` imports
@@ -1582,7 +1582,7 @@ git commit -m "settings: the node reads ganglion.yaml; models by purpose with ef
 **Interfaces:**
 - Consumes: `schemas.At`, `schemas.YAMLFields`, the `settings` types.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // settings/schema_test.go
@@ -1665,12 +1665,12 @@ pointer of each property whose `description` is missing or empty. The enums of `
 `log.level`, `agent.search.mode`, `provider.type` and `choice.effort` are asserted against the
 loader's sets the same way `catalog_schema_test.go` did.
 
-- [ ] **Step 2: Run it to see it fail**
+- [x] **Step 2: Run it to see it fail**
 
 Run: `go test ./settings/ -run Schema`
 Expected: FAIL: no `node.schema.json`.
 
-- [ ] **Step 3: Write the schema**
+- [x] **Step 3: Write the schema**
 
 `schemas/node.schema.json`, draft 2020-12, `$id`
 `https://raw.githubusercontent.com/igorrius/ganglion/master/schemas/node.schema.json`, a top
@@ -1685,7 +1685,7 @@ and say what "off" and a missing key mean, e.g. for `node.memory_limit`: "The no
 limit (GOMEMLIMIT). Without it the node takes about 80 % of its container's limit, or none.
 Set it when the container is sized for module builds."
 
-- [ ] **Step 4: Write the example files**
+- [x] **Step 4: Write the example files**
 
 `examples/ganglion.example.yaml`: every section with a comment on every field, the models of the
 design (claude sonnet, haiku, opus; the openrouter provider and flash commented out) and the
@@ -1700,7 +1700,7 @@ claude provider, sonnet and haiku, the same purposes without `code`, `metrics: {
 `examples/ganglion.haiku-only.yaml`: the content of `tools/chatlab/haiku-only.yaml` in the new form
 (`chat: [haiku]`).
 
-- [ ] **Step 5: Run the tests and commit**
+- [x] **Step 5: Run the tests and commit**
 
 Run: `make lint test`
 Expected: PASS.
@@ -1726,7 +1726,7 @@ git commit -m "schemas: node.schema.json describes every field of ganglion.yaml;
 **Interfaces:**
 - Consumes: `settings.Parse`, `settings.Models`.
 
-- [ ] **Step 1: Tests and harnesses write a file instead of variables**
+- [x] **Step 1: Tests and harnesses write a file instead of variables**
 
 A helper in each test package that needs one (`cmd`, `config`):
 
@@ -1751,7 +1751,7 @@ func writeConfig(t *testing.T, dir, body string) string {
   `key: env:OPENROUTER_API_KEY`) and set them on the `Bootstrap`.
 - `config/measure_test.go`: keeps `GANGLION_MEASURE*` (test variables, not settings).
 
-- [ ] **Step 2: Makefile and env example**
+- [x] **Step 2: Makefile and env example**
 
 ```make
 # .env holds TELEGRAM_TEST_BOT_TOKEN and the provider keys; settings live in LIVE_CONFIG.
@@ -1772,7 +1772,7 @@ Keep each target's existing prerequisites and lines other than the variables; `c
 `telegram.admin` line to fill in; add it to `TestExamplesLoad`. `.env.example` drops `GANGLION_ADMIN` and
 `GANGLION_TZ` and says settings live in `ganglion.local.yaml`.
 
-- [ ] **Step 3: chatlab and modelcompare**
+- [x] **Step 3: chatlab and modelcompare**
 
 - `tools/chatlab/main.go`: `-models` becomes `-config`, default `examples/ganglion.lab.yaml`;
   `loadCatalog` becomes `loadModels(path) (settings.Models, map[string]string, error)` through
@@ -1781,7 +1781,7 @@ Keep each target's existing prerequisites and lines other than the variables; `c
 - `tools/modelcompare/main.go`: `-models` becomes `-config`; it reads `settings.Load(...).Models`
   and keys through `Models.Keys(secrets.OSEnv())`.
 
-- [ ] **Step 4: Docs**
+- [x] **Step 4: Docs**
 
 `README.md` run instructions: copy `examples/ganglion.example.yaml` to `ganglion.yaml` beside the
 database, set `telegram.admin`, put `TELEGRAM_BOT_TOKEN` and provider keys in the environment,
@@ -1789,12 +1789,12 @@ run `./bin/ganglion run`. `docs/README.md` owner setup and the sandbox notes: th
 become their keys (`telegram.admin`, `agent.languages`, `sandbox.deny`, `sandbox.hide_names`).
 `examples/workspace/persona/10-identity.md:3`: `agent.workspace`.
 
-- [ ] **Step 5: Run everything**
+- [x] **Step 5: Run everything**
 
 Run: `make lint test && make lab` (the scripted lab scenarios; `make lab` needs no network)
 Expected: PASS; `passed.json` regenerated by the lab run.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A Makefile .env.example README.md docs examples tools cmd config

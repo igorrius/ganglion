@@ -1,10 +1,13 @@
 package settings_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -167,4 +170,76 @@ func TestExamplesLoad(t *testing.T) {
 			t.Errorf("%s: first line %q", p, first)
 		}
 	}
+}
+
+// R-CFG-4: every default the schema names is the loader's: the file that
+// sets a key to its schema default loads as settings.Default().
+func TestSchemaDefaultsMatchTheLoader(t *testing.T) {
+	b, err := schemas.Get("node.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var root map[string]any
+	if err := dec.Decode(&root); err != nil {
+		t.Fatal(err)
+	}
+	defs, _ := root["$defs"].(map[string]any)
+	found := 0
+	schemaDefaults(defs, root, nil, func(path []string, v any) {
+		found++
+		f, err := settings.Parse([]byte(yamlAt(path, v)))
+		if err != nil {
+			t.Errorf("%s: default %v does not load: %v", strings.Join(path, "."), v, err)
+		} else if !reflect.DeepEqual(f, settings.Default()) {
+			t.Errorf("%s: schema default %v differs from settings.Default()", strings.Join(path, "."), v)
+		}
+	})
+	if found < 15 {
+		t.Fatalf("found %d defaults; the walk lost its way", found)
+	}
+}
+
+// schemaDefaults calls visit for every property under node that has a
+// default, following $ref and oneOf into objects but not into arrays or
+// maps: their items have no place in settings.Default().
+func schemaDefaults(defs, node map[string]any, path []string, visit func([]string, any)) {
+	props, _ := node["properties"].(map[string]any)
+	for name, p := range props {
+		pm, _ := p.(map[string]any)
+		at := append(slices.Clone(path), name)
+		if d, ok := pm["default"]; ok {
+			visit(at, d)
+		}
+		refs := []any{pm}
+		if alts, ok := pm["oneOf"].([]any); ok {
+			refs = append(refs, alts...)
+		}
+		for _, r := range refs {
+			rm, _ := r.(map[string]any)
+			if ref, ok := rm["$ref"].(string); ok {
+				def, _ := defs[strings.TrimPrefix(ref, "#/$defs/")].(map[string]any)
+				schemaDefaults(defs, def, at, visit)
+			}
+		}
+	}
+}
+
+// yamlAt is a file that sets the key at path to v.
+func yamlAt(path []string, v any) string {
+	var b strings.Builder
+	for i, k := range path {
+		b.WriteString(strings.Repeat("  ", i) + k + ":")
+		if i < len(path)-1 {
+			b.WriteString("\n")
+		}
+	}
+	switch x := v.(type) {
+	case string:
+		b.WriteString(" " + strconv.Quote(x))
+	default:
+		fmt.Fprintf(&b, " %v", x)
+	}
+	return b.String() + "\n"
 }

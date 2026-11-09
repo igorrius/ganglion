@@ -2,6 +2,7 @@ package settings
 
 import (
 	"errors"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -90,7 +91,7 @@ func (m *Money) UnmarshalYAML(n *yaml.Node) error {
 		return nil
 	}
 	v, err := strconv.ParseFloat(n.Value, 64)
-	if err != nil || v < 0 {
+	if err != nil || v < 0 || math.IsNaN(v) || math.IsInf(v, 0) {
 		return errors.New("must be 0 or more US dollars, or off")
 	}
 	*m = Money(v)

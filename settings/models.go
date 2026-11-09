@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -118,6 +119,17 @@ func choices(list []Choice) []router.Choice {
 	return out
 }
 
+// KeyNames are the variables that hold the providers' keys.
+func (m Models) KeyNames() []string {
+	var out []string
+	for _, p := range m.Providers {
+		if p.Key != "" {
+			out = append(out, p.Key.Name())
+		}
+	}
+	return out
+}
+
 // Keys reads each provider's key through src; a provider whose key is set
 // in the file but whose variable is empty fails, naming the variable.
 func (m Models) Keys(src secrets.Source) (map[string]string, error) {
@@ -171,6 +183,8 @@ func (m *Models) checkProviders(path string) (map[string]string, error) {
 			return nil, pathError(at+".type", "must be openai or claude-cli")
 		case p.Type == TypeOpenAI && !validURL(p.BaseURL):
 			return nil, pathError(at+".base_url", "required: an http or https address")
+		case hasCredentials(p.BaseURL):
+			return nil, pathError(at+".base_url", "must not carry credentials; use key: env:NAME")
 		case p.Type == TypeOpenAI && p.Key == "" && !isLocalURL(p.BaseURL):
 			return nil, pathError(at+".key", "required: env:NAME of the API key; only a base_url on localhost goes without one")
 		}
@@ -180,9 +194,11 @@ func (m *Models) checkProviders(path string) (map[string]string, error) {
 }
 
 // isLocalURL reports whether an openai provider runs on this machine and
-// so may go without a key.
-func isLocalURL(u string) bool {
-	return strings.HasPrefix(u, "http://localhost") || strings.HasPrefix(u, "http://127.0.0.1")
+// so may go without a key: its host is localhost or a loopback address,
+// not a name that only starts like one.
+func isLocalURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && slices.Contains([]string{"localhost", "127.0.0.1", "::1"}, u.Hostname())
 }
 
 // owner is a model's provider, for the efforts it takes.

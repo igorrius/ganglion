@@ -48,7 +48,7 @@
       "additionalProperties": false,
       "properties": {
         "memory_limit": {
-          "description": "The node's soft memory limit (GOMEMLIMIT). Without it the node takes about 80 % of its container's limit, or none. Set it when the container is sized for module builds.",
+          "description": "The node's soft memory limit (GOMEMLIMIT). Without it the node takes about 80 % of its container's limit, or none. Set it when the container is sized for module builds. A GOMEMLIMIT set in the environment wins.",
           "$ref": "#/$defs/size"
         },
         "tz": {

@@ -110,11 +110,27 @@ func TestOverBudgetChatKeepsFreeModelsOnly(t *testing.T) {
 		router.PurposeChat:    {{Model: "flash"}, {Model: "haiku"}},
 		router.PurposeCompact: {{Model: "flash"}},
 	}, rules.WithBudget(spent(5), 1, time.UTC))
-	if got, want := models(t, r, router.TaskReq{Purpose: router.PurposeChat}), []string{"haiku/"}; !slices.Equal(got, want) {
+	if got, want := models(t, r, router.TaskReq{Purpose: router.PurposeChat, Turn: true}), []string{"haiku/"}; !slices.Equal(got, want) {
 		t.Fatalf("chat over budget = %v, want %v", got, want)
 	}
 	if got, want := models(t, r, router.TaskReq{Purpose: router.PurposeCompact}), []string{"flash/"}; !slices.Equal(got, want) {
 		t.Fatalf("compact over budget = %v, want %v", got, want)
+	}
+}
+
+// R-RTR-6: the budget cuts a turn, whatever purpose a skill moved it to,
+// and never the housekeeping outside a turn.
+func TestOverBudgetCutsATurnWhateverItsPurpose(t *testing.T) {
+	r := mustNew(t, append(testModels(), paid("flash")), map[router.Purpose][]router.Choice{
+		router.PurposeChat:    {{Model: "flash"}, {Model: "haiku"}},
+		router.PurposeCheck:   {{Model: "flash"}, {Model: "haiku"}},
+		router.PurposeCompact: {{Model: "flash"}, {Model: "haiku"}},
+	}, rules.WithBudget(spent(5), 1, time.UTC))
+	if got, want := models(t, r, router.TaskReq{Purpose: router.PurposeCheck, Turn: true}), []string{"haiku/"}; !slices.Equal(got, want) {
+		t.Fatalf("a turn re-routed to check over budget = %v, want %v", got, want)
+	}
+	if got, want := models(t, r, router.TaskReq{Purpose: router.PurposeCompact}), []string{"flash/", "haiku/"}; !slices.Equal(got, want) {
+		t.Fatalf("a compaction over budget = %v, want %v", got, want)
 	}
 }
 
@@ -158,7 +174,7 @@ func TestOverBudgetKeepsPaidLocalModels(t *testing.T) {
 	local := router.Model{ID: "box", Provider: "ollama", Name: "box", Caps: router.ModelCaps{Local: true, PriceInMTok: 1, PriceOutMTok: 1}}
 	r := mustNew(t, []router.Model{paid("flash"), local}, map[router.Purpose][]router.Choice{router.PurposeChat: {{Model: "flash"}, {Model: "box"}}},
 		rules.WithBudget(spent(2), 1, time.UTC))
-	if got := models(t, r, router.TaskReq{Purpose: router.PurposeChat}); !slices.Equal(got, []string{"box/"}) {
+	if got := models(t, r, router.TaskReq{Purpose: router.PurposeChat, Turn: true}); !slices.Equal(got, []string{"box/"}) {
 		t.Fatalf("got %v", got)
 	}
 }
@@ -172,7 +188,7 @@ func TestBudgetDayStartsInTheZone(t *testing.T) {
 	clk := newClock()
 	r := mustNew(t, append(testModels(), paid("flash")), map[router.Purpose][]router.Choice{router.PurposeChat: {{Model: "flash"}, {Model: "haiku"}}},
 		rules.WithClock(clk.now), rules.WithBudget(b, 1, kyiv))
-	if got := models(t, r, router.TaskReq{Purpose: router.PurposeChat}); !slices.Equal(got, []string{"flash/", "haiku/"}) {
+	if got := models(t, r, router.TaskReq{Purpose: router.PurposeChat, Turn: true}); !slices.Equal(got, []string{"flash/", "haiku/"}) {
 		t.Fatalf("under budget: %v", got)
 	}
 	if want := time.Date(2026, 11, 3, 0, 0, 0, 0, kyiv); !b.since.Equal(want) {

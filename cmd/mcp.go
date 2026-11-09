@@ -1,14 +1,12 @@
 package cmd
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -48,7 +46,7 @@ func mcpCommand(in io.Reader, out io.Writer) *cli.Command {
 			defer func() { _ = ro.Close() }()
 			// A file that does not load is shown in config.show; the
 			// diagnostics still serve, on the default log directory.
-			f, loadErr := settings.Load(cmp.Or(cfg, filepath.Join(filepath.Dir(db), settings.FileName)), os.ReadFile)
+			f, loadErr := loadSettings(cfg, db, os.ReadFile)
 			if loadErr != nil {
 				f = settings.Default()
 			}

@@ -252,7 +252,7 @@ func TestACommandListsHomeButReadsNoSecret(t *testing.T) {
 	}
 }
 
-// GANGLION_SANDBOX_HIDE_NAMES=on reaches the sandbox: home is not listed.
+// sandbox.hide_names: true reaches the sandbox: home is not listed.
 func TestHiddenNamesKeepHomeUnlisted(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "/" {
