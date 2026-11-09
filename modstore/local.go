@@ -436,17 +436,31 @@ func (s *Store) ActiveLocal(ctx context.Context) ([]Active, error) {
 	return out, nil
 }
 
+// currentLocal is the version a rollback goes back from: the active one, or
+// the newest failed one when the active version was marked failed (its files
+// did not match their sums). That is exactly when a rollback is needed. It
+// is ErrUnknownModule when the module has neither.
+func (s *Store) currentLocal(ctx context.Context, module string) (Version, error) {
+	for _, st := range []State{StateActive, StateFailed} {
+		vs, err := s.versions(ctx, module, st)
+		if err != nil {
+			return Version{}, fmt.Errorf("modstore: %w", err)
+		}
+		if len(vs) > 0 {
+			return vs[0], nil
+		}
+	}
+	return Version{}, fmt.Errorf("%w %q", ErrUnknownModule, module)
+}
+
 // rollbackLocal makes the previous version of a local module active again
 // and retires the one it replaces.
 func (s *Store) rollbackLocal(ctx context.Context, module string) (Outcome, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	cur, err := s.versions(ctx, module, StateActive)
+	cur, err := s.currentLocal(ctx, module)
 	if err != nil {
-		return Outcome{}, fmt.Errorf("modstore: %w", err)
-	}
-	if len(cur) == 0 {
-		return Outcome{}, fmt.Errorf("%w %q", ErrUnknownModule, module)
+		return Outcome{}, err
 	}
 	prevs, err := s.versions(ctx, module, StatePrevious)
 	if err != nil {
@@ -454,14 +468,14 @@ func (s *Store) rollbackLocal(ctx context.Context, module string) (Outcome, erro
 	}
 	if len(prevs) == 0 {
 		s.count(ctx, module, ResultNothingToRollBack)
-		return Outcome{Module: module, From: cur[0].Version, To: cur[0].Version, Result: ResultNothingToRollBack,
+		return Outcome{Module: module, From: cur.Version, To: cur.Version, Result: ResultNothingToRollBack,
 			Reason: "no previous version is kept"}, nil
 	}
 	prev := prevs[0]
 	if _, _, err := s.readLocal(prev); err != nil {
 		s.log.Warn("modstore: rollback refused", "module", module, "version", prev.Version, "err", err)
 		s.count(ctx, module, ResultRefused)
-		return Outcome{Module: module, From: cur[0].Version, To: prev.Version, Result: ResultRefused,
+		return Outcome{Module: module, From: cur.Version, To: prev.Version, Result: ResultRefused,
 			Reason: "the previous version's files are missing or do not match their sums"}, nil
 	}
 	var retired []string
@@ -478,5 +492,44 @@ func (s *Store) rollbackLocal(ctx context.Context, module string) (Outcome, erro
 	}
 	s.removeFiles(module, retired)
 	s.count(ctx, module, ResultRolledBack)
-	return Outcome{Module: module, From: cur[0].Version, To: prev.Version, Result: ResultRolledBack}, nil
+	return Outcome{Module: module, From: cur.Version, To: prev.Version, Result: ResultRolledBack}, nil
+}
+
+// RemoveLocal takes a local module out of service: its active, previous and
+// failed versions become retired and their files go; the journal stays, so
+// /modules still tells what it was. A module with nothing left to remove is
+// ErrUnknownModule.
+func (s *Store) RemoveLocal(ctx context.Context, module string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.currentLocal(ctx, module); err != nil {
+		return err
+	}
+	var shas []string
+	err := sqlitedb.Immediate(ctx, s.db, func(c *sql.Conn) error {
+		const live = `module = ? AND state IN ('active', 'previous', 'failed')`
+		rows, err := c.QueryContext(ctx, `SELECT sha256 FROM module_versions WHERE `+live, module)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var sha string
+			if err := rows.Scan(&sha); err != nil {
+				return err
+			}
+			shas = append(shas, sha)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		_ = rows.Close()
+		_, err = c.ExecContext(ctx, `UPDATE module_versions SET state = 'retired', reason = 'removed' WHERE `+live, module)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("modstore: %w", err)
+	}
+	s.removeFiles(module, shas)
+	return nil
 }

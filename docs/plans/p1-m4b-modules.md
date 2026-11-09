@@ -763,7 +763,7 @@ git commit -m "tools: module.import, module.build and module.install with the ri
     External when any value holds a string.
   - `cells.get {id, since?}`: with `since` (a Go duration, at most 7 days) the history condensed to
     at most 48 points (evenly picked) plus `min`, `max`, `mean` for numeric values.
-- [ ] **Steps:** failing tests (golden texts for the card and `/cells`; `cells.list` without
+- [x] **Steps:** failing tests (golden texts for the card and `/cells`; `cells.list` without
   `about`; history condensing 1,000 points to 48 with correct min/max/mean; `/modules config`
   refuses an undeclared key and a wrong type), implement, `make lint test`, commit, push.
 

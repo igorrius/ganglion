@@ -236,6 +236,58 @@ const (
 	CmdReason             Key = "cmd.reason"
 	CmdIn                 Key = "cmd.in"
 	CmdWrapper            Key = "cmd.wrapper"
+
+	ButtonHistory            Key = "button.history"
+	ModulesUsage             Key = "modules.usage"
+	ModulesNone              Key = "modules.none"
+	ModulesHeader            Key = "modules.header"
+	ModulesPrevious          Key = "modules.previous"
+	ModulesFailed            Key = "modules.failed"
+	ModulesLocalRow          Key = "modules.local_row"
+	ModulesStateRunning      Key = "modules.state_running"
+	ModulesStateOff          Key = "modules.state_off"
+	ModulesStateCrashloop    Key = "modules.state_crashloop"
+	ModulesStateStopped      Key = "modules.state_stopped"
+	ModulesUnknown           Key = "modules.unknown"
+	ModulesUpdated           Key = "modules.updated"
+	ModulesUpToDate          Key = "modules.up_to_date"
+	ModulesRolledBack        Key = "modules.rolled_back"
+	ModulesNothingToRollBack Key = "modules.nothing_to_roll_back"
+	ModulesStays             Key = "modules.stays"
+	ModulesCardRunning       Key = "modules.card_running"
+	ModulesCardStopped       Key = "modules.card_stopped"
+	ModulesCardVersions      Key = "modules.card_versions"
+	ModulesJournalRow        Key = "modules.journal_row"
+	ModulesMarkActive        Key = "modules.mark_active"
+	ModulesMarkPrevious      Key = "modules.mark_previous"
+	ModulesMarkFailed        Key = "modules.mark_failed"
+	ModulesMarkRetired       Key = "modules.mark_retired"
+	ModulesCardSettings      Key = "modules.card_settings"
+	ModulesSettingRow        Key = "modules.setting_row"
+	ModulesSettingUnset      Key = "modules.setting_unset"
+	ModulesSettingDefault    Key = "modules.setting_default"
+	ModulesSettingRequired   Key = "modules.setting_required"
+	ModulesConfigDone        Key = "modules.config_done"
+	ModulesConfigUndeclared  Key = "modules.config_undeclared"
+	ModulesConfigKeys        Key = "modules.config_keys"
+	ModulesConfigNoKeys      Key = "modules.config_no_keys"
+	ModulesConfigWrongType   Key = "modules.config_wrong_type"
+	ModulesOffDone           Key = "modules.off_done"
+	ModulesOnDone            Key = "modules.on_done"
+	ModulesNotStarted        Key = "modules.not_started"
+	ModulesRemoved           Key = "modules.removed"
+	CellsNone                Key = "cells.none"
+	CellsRow                 Key = "cells.row"
+	CellsNoValue             Key = "cells.no_value"
+	CellsMore                Key = "cells.more"
+	CellsAgeNow              Key = "cells.age_now"
+	CellsAgeMin              Key = "cells.age_min"
+	CellsAgeHour             Key = "cells.age_hour"
+	CellsAgeDay              Key = "cells.age_day"
+	CellsHistoryHead         Key = "cells.history_head"
+	CellsHistoryRow          Key = "cells.history_row"
+	CellsHistoryNone         Key = "cells.history_none"
+	CellsGone                Key = "cells.gone"
 )
 
 var allKeys = []Key{
@@ -246,6 +298,7 @@ var allKeys = []Key{
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, ReplyRestarting, StatusCommandsOff,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, AskHostExec, AskPlan, AskModuleImport, AskModuleInstall, AskModuleNetwork, AskModuleSecrets, AskModuleCreates, AskModuleTakes, AskModuleReads, AskModuleRuns, AskModuleTool, AskModuleAbout, AskModuleLimits, AskModuleNew, AskModuleNewNetwork, AskModuleNewSecrets, AskModuleNewCells, AskModuleNewReads, AskModuleNewRuns, AskModuleNewMemory, AskModuleNewTimeout, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, StatusModuleFallback, StatusReasonModuleFailed, StatusModulesLocal, StatusModuleOff, StatusReasonModuleCrashloop, StatusModuleStopped, StatusReasonModuleInit, StatusReasonModuleCells, StatusReasonModuleLoad, StatusReasonModuleNoAdmin, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled, StatusUnitDay, StatusUnitHour, StatusUnitMin, StatusUnitSec, StatusSandboxReady, StatusSandboxOff, StatusReasonSandboxNotLinux, StatusReasonSandboxRoot, StatusReasonSandboxLandlock, StatusReasonSandboxDumpable, StatusReasonSandboxSelfTest,
+	ButtonHistory, ModulesUsage, ModulesNone, ModulesHeader, ModulesPrevious, ModulesFailed, ModulesLocalRow, ModulesStateRunning, ModulesStateOff, ModulesStateCrashloop, ModulesStateStopped, ModulesUnknown, ModulesUpdated, ModulesUpToDate, ModulesRolledBack, ModulesNothingToRollBack, ModulesStays, ModulesCardRunning, ModulesCardStopped, ModulesCardVersions, ModulesJournalRow, ModulesMarkActive, ModulesMarkPrevious, ModulesMarkFailed, ModulesMarkRetired, ModulesCardSettings, ModulesSettingRow, ModulesSettingUnset, ModulesSettingDefault, ModulesSettingRequired, ModulesConfigDone, ModulesConfigUndeclared, ModulesConfigKeys, ModulesConfigNoKeys, ModulesConfigWrongType, ModulesOffDone, ModulesOnDone, ModulesNotStarted, ModulesRemoved, CellsNone, CellsRow, CellsNoValue, CellsMore, CellsAgeNow, CellsAgeMin, CellsAgeHour, CellsAgeDay, CellsHistoryHead, CellsHistoryRow, CellsHistoryNone, CellsGone,
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
 }
 

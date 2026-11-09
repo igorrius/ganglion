@@ -100,6 +100,9 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		SystemJobs:    do.MustInvoke[Remembering](i).Jobs,
 		Restart:       do.MustInvoke[agent.RestartFunc](i),
 		Modules:       do.MustInvoke[agent.Modules](i),
+		Local:         do.MustInvoke[*modhost.Host](i),
+		Cells:         do.MustInvoke[*cells.Service](i),
+		Buttons:       do.MustInvoke[*pending.Store](i),
 		ModuleCron:    do.MustInvoke[*modhost.Host](i).RunCron,
 		Switch:        do.MustInvoke[*host.Switch](i),
 		Commands:      do.MustInvoke[*host.Runner](i),
@@ -169,7 +172,8 @@ func toolHandlers(i do.Injector) []tool.Handler {
 	cs := do.MustInvoke[*cells.Service](i)
 	return append([]tool.Handler{
 		builtin.NewMessageSend(do.MustInvoke[builtin.Convs](i)),
-		builtin.NewCellsGet(cs),
+		builtin.NewCellsGet(cs, time.Now),
+		builtin.NewCellsList(cs, time.Now),
 		builtin.NewCellsSet(cs),
 		builtin.NewScheduleCreate(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleList(do.MustInvoke[builtin.Scheduling](i)),

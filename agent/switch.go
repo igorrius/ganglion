@@ -39,9 +39,9 @@ func (a *Agent) commandsSwitch(ctx context.Context, t *turn, arg string) error {
 		return nil
 	}
 	switch strings.ToLower(strings.TrimSpace(arg)) {
-	case "on":
+	case wordOn:
 		return a.setCommands(ctx, t, true)
-	case "off":
+	case wordOff:
 		return a.setCommands(ctx, t, false)
 	}
 	state := texts.ReplyCommandsOff

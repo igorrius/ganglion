@@ -117,10 +117,11 @@ type countCall struct {
 // store is the module store: active versions, the journal's "by" and the
 // counted runs.
 type store struct {
-	mu     sync.Mutex
-	active []modstore.Active
-	by     map[string]string // sha → who installed it
-	counts []countCall
+	mu         sync.Mutex
+	active     []modstore.Active
+	by         map[string]string // sha → who installed it
+	counts     []countCall
+	rolledBack []string
 }
 
 func (s *store) ActiveLocal(context.Context) ([]modstore.Active, error) {
@@ -145,6 +146,40 @@ func (s *store) Journal(_ context.Context, module string) ([]modstore.Entry, err
 		}
 	}
 	return out, nil
+}
+
+// List is the active versions as the store lists them.
+func (s *store) List(context.Context) ([]modstore.Version, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []modstore.Version
+	for _, a := range s.active {
+		out = append(out, modstore.Version{Module: a.Module, Version: "3", Source: modstore.SourceLocal, SHA256: a.SHA256, State: modstore.StateActive})
+	}
+	return out, nil
+}
+
+// Rollback pops the module's previous version, when the test gave one.
+func (s *store) Rollback(_ context.Context, module string) (modstore.Outcome, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rolledBack = append(s.rolledBack, module)
+	if !slices.ContainsFunc(s.active, func(a modstore.Active) bool { return a.Module == module }) {
+		return modstore.Outcome{}, modstore.ErrUnknownModule
+	}
+	return modstore.Outcome{Module: module, From: "3", To: "2", Result: modstore.ResultRolledBack}, nil
+}
+
+// RemoveLocal drops the module's active version.
+func (s *store) RemoveLocal(_ context.Context, module string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := len(s.active)
+	s.active = slices.DeleteFunc(s.active, func(a modstore.Active) bool { return a.Module == module })
+	if len(s.active) == n {
+		return modstore.ErrUnknownModule
+	}
+	return nil
 }
 
 func (s *store) failures() []modstore.CallResult {
@@ -249,6 +284,25 @@ func (c *conf) SetOff(name string, off bool, why string) error {
 	}
 	c.mods[i].Off = off
 	c.offs = append(c.offs, fmt.Sprintf("%s:%v:%s", name, off, why))
+	return nil
+}
+
+func (c *conf) SetModule(m settings.Module) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i := slices.IndexFunc(c.mods, func(x settings.Module) bool { return x.Name == m.Name })
+	if i < 0 {
+		c.mods = append(c.mods, m)
+		return nil
+	}
+	c.mods[i] = m
+	return nil
+}
+
+func (c *conf) RemoveModule(name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mods = slices.DeleteFunc(c.mods, func(m settings.Module) bool { return m.Name == name })
 	return nil
 }
 

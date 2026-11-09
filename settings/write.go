@@ -131,6 +131,9 @@ func (f ModulesFile) SetOff(name string, off bool, why string) error {
 	})
 }
 
+// RemoveModule is RemoveModule on this file.
+func (f ModulesFile) RemoveModule(name string) error { return RemoveModule(f.Path, name) }
+
 // RemoveModule drops the line of name from modules:; a name that is not
 // there is not an error.
 func RemoveModule(path, name string) error {

@@ -34,6 +34,9 @@ type Store interface {
 	ActiveLocal(ctx context.Context) ([]modstore.Active, error)
 	Count(ctx context.Context, module, sha string, r modstore.CallResult)
 	Journal(ctx context.Context, module string) ([]modstore.Entry, error)
+	List(ctx context.Context) ([]modstore.Version, error)
+	Rollback(ctx context.Context, module string) (modstore.Outcome, error)
+	RemoveLocal(ctx context.Context, module string) error
 }
 
 // Jobs keeps the modules' cron jobs (schedule.Store).
@@ -53,6 +56,8 @@ type Inbox interface {
 type SettingsPort interface {
 	Modules() ([]settings.Module, error)
 	SetOff(name string, off bool, why string) error
+	SetModule(m settings.Module) error
+	RemoveModule(name string) error
 }
 
 // Deps are the host's collaborators; all are required.
@@ -71,7 +76,7 @@ type Deps struct {
 
 // ErrNotStarted is a module that is active and on but could not start; the
 // error names why in the node's words.
-var ErrNotStarted = errors.New("modhost: the module did not start")
+var ErrNotStarted = modstore.ErrNotStarted
 
 // Host runs the owner's modules. Calls of a module are serialised by its
 // runner; Reload waits for the calls in progress.

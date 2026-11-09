@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/texts"
 )
 
-// Modules lists, updates and rolls back the node's modules (R-RUN-8).
+// Modules lists, updates and rolls back the node's built-in modules
+// (R-RUN-8).
 type Modules interface {
 	List(ctx context.Context) ([]modstore.Version, error)
 	Update(ctx context.Context, name string) (modstore.Outcome, error)
@@ -33,15 +35,70 @@ func (NoModules) Rollback(context.Context, string) (modstore.Outcome, error) {
 	return modstore.Outcome{}, modstore.ErrUnknownModule
 }
 
+// LocalModules is what /modules does with the owner's modules (modhost.Host,
+// R-RUN-10): every method takes the name with or without "local/", and
+// answers modstore.ErrUnknownModule for one it does not have.
+type LocalModules interface {
+	Local(ctx context.Context) ([]modstore.LocalModule, error)
+	Card(ctx context.Context, name string) (modstore.Card, error)
+	// Configure refuses with a *modstore.ConfigError.
+	Configure(ctx context.Context, name, key, value string) error
+	// SetOff and Configure answer modstore.ErrNotStarted when the module is
+	// on and did not start.
+	SetOff(ctx context.Context, name string, off bool) error
+	Rollback(ctx context.Context, name string) (modstore.Outcome, error)
+	Remove(ctx context.Context, name string) error
+}
+
+// NoLocalModules is a node that hosts no local modules.
+type NoLocalModules struct{}
+
+// Local lists nothing.
+func (NoLocalModules) Local(context.Context) ([]modstore.LocalModule, error) { return nil, nil }
+
+// Card has no module.
+func (NoLocalModules) Card(context.Context, string) (modstore.Card, error) {
+	return modstore.Card{}, modstore.ErrUnknownModule
+}
+
+// Configure has no module.
+func (NoLocalModules) Configure(context.Context, string, string, string) error {
+	return modstore.ErrUnknownModule
+}
+
+// SetOff has no module.
+func (NoLocalModules) SetOff(context.Context, string, bool) error { return modstore.ErrUnknownModule }
+
+// Rollback has no module.
+func (NoLocalModules) Rollback(context.Context, string) (modstore.Outcome, error) {
+	return modstore.Outcome{}, modstore.ErrUnknownModule
+}
+
+// Remove has no module.
+func (NoLocalModules) Remove(context.Context, string) error { return modstore.ErrUnknownModule }
+
+// Words of /modules and the names of the values its texts take.
 const (
-	replyModulesUsage = "Usage: /modules, /modules update <name>, /modules rollback <name>"
-	replyNoModules    = "No modules."
-	modulesNote       = commandPrefix + "the owner ran /modules: "
+	wordOff    = "off"
+	wordOn     = "on"
+	varName    = "name"
+	varVersion = "version"
+	varValue   = "value"
 )
 
-// modules is /modules: the list, or an update or a rollback by name, for
-// an admin, without a model. The reply and a [command] note in the
-// history say what happened.
+const modulesNote = commandPrefix + "the owner ran /modules: "
+
+// moduleReply is what /modules answers and what the history notes. The note
+// never holds text taken from a module's source (a setting's name, a note
+// of the journal): the model does not read it (R-RUN-13).
+type moduleReply struct{ text, note string }
+
+// dateLayout is the day and month, the same in every language.
+const dateLayout = "02.01"
+
+// modules is /modules: the list, a module's card, and its update, rollback,
+// config, off, on and remove, for an admin, without a model. The reply and
+// a [command] note in the history say what happened.
 func (a *Agent) modules(ctx context.Context, t *turn, arg string) error {
 	if err := a.setAdmin(ctx, t); err != nil {
 		return err
@@ -50,86 +107,318 @@ func (a *Agent) modules(ctx context.Context, t *turn, arg string) error {
 		t.reply(a.say(ctx, t, texts.ReplyNotAvailable, nil))
 		return nil
 	}
-	verb, name, _ := strings.Cut(strings.TrimSpace(arg), " ")
-	name = strings.TrimSpace(name)
-	var (
-		text string
-		err  error
-	)
-	switch {
-	case verb == "" && name == "":
-		text, err = a.listModules(ctx)
-	case verb == "update" && name != "":
-		text, err = outcomeText(name, func() (modstore.Outcome, error) { return a.d.Modules.Update(ctx, name) })
-	case verb == "rollback" && name != "":
-		text, err = outcomeText(name, func() (modstore.Outcome, error) { return a.d.Modules.Rollback(ctx, name) })
-	default:
-		text = replyModulesUsage
-	}
+	r, err := a.modulesReply(ctx, t, strings.TrimSpace(arg))
 	if err != nil {
 		return fmt.Errorf("agent: /modules: %w", err)
 	}
-	t.reply(text)
-	t.note(modulesNote + text)
+	t.reply(r.text)
+	t.note(modulesNote + r.note)
 	return nil
 }
 
-func (a *Agent) listModules(ctx context.Context) (string, error) {
-	vs, err := a.d.Modules.List(ctx)
-	if err != nil || len(vs) == 0 {
-		return replyNoModules, err
+// modulesReply runs the command in arg.
+func (a *Agent) modulesReply(ctx context.Context, t *turn, arg string) (moduleReply, error) {
+	verb, name, _ := strings.Cut(arg, " ")
+	name = strings.TrimSpace(name)
+	switch {
+	case verb == "":
+		return a.listModules(ctx, t)
+	case verb == "update" && name != "":
+		return a.outcomeReply(ctx, t, name, func() (modstore.Outcome, error) { return a.d.Modules.Update(ctx, name) })
+	case verb == "rollback" && name != "":
+		return a.rollback(ctx, t, name)
+	case (verb == wordOff || verb == wordOn) && name != "":
+		return a.switchModule(ctx, t, name, verb == wordOff)
+	case verb == "remove" && name != "":
+		return a.removeModule(ctx, t, name)
+	case verb == "config" && name != "":
+		return a.configModule(ctx, t, name)
+	case name == "" && !isModulesVerb(verb):
+		return a.moduleCard(ctx, t, verb)
 	}
+	return plain(a.say(ctx, t, texts.ModulesUsage, nil)), nil
+}
+
+func isModulesVerb(w string) bool {
+	switch w {
+	case "update", "rollback", wordOff, wordOn, "remove", "config":
+		return true
+	}
+	return false
+}
+
+// plain is a reply whose note is its text.
+func plain(text string) moduleReply { return moduleReply{text, text} }
+
+// unknown is the reply to a name no module has.
+func (a *Agent) unknown(ctx context.Context, t *turn, name string) moduleReply {
+	return plain(a.say(ctx, t, texts.ModulesUnknown, texts.Vars{varName: texts.Escape(name)}))
+}
+
+// listModules lists the built-in modules' versions and the local modules'
+// states.
+func (a *Agent) listModules(ctx context.Context, t *turn) (moduleReply, error) {
+	vs, err := a.d.Modules.List(ctx)
+	if err != nil {
+		return moduleReply{}, err
+	}
+	local, err := a.d.Local.Local(ctx)
+	if err != nil {
+		return moduleReply{}, err
+	}
+	lines := a.builtinLines(ctx, t, vs)
+	for _, m := range local {
+		lines = append(lines, "- "+a.say(ctx, t, texts.ModulesLocalRow, texts.Vars{varName: texts.Escape(m.Name),
+			"state": a.say(ctx, t, stateKey(m.State), nil), varVersion: texts.Escape(m.Version)}))
+	}
+	if len(lines) == 0 {
+		return plain(a.say(ctx, t, texts.ModulesNone, nil)), nil
+	}
+	return plain(a.say(ctx, t, texts.ModulesHeader, nil) + "\n" + strings.Join(lines, "\n")), nil
+}
+
+// stateKey is the text of a local module's state.
+func stateKey(s modstore.RunState) texts.Key {
+	switch s {
+	case modstore.RunRunning:
+		return texts.ModulesStateRunning
+	case modstore.RunOff:
+		return texts.ModulesStateOff
+	case modstore.RunCrashloop:
+		return texts.ModulesStateCrashloop
+	case modstore.RunStopped:
+	}
+	return texts.ModulesStateStopped
+}
+
+// builtinLines is a line for each built-in module: its versions.
+func (a *Agent) builtinLines(ctx context.Context, t *turn, vs []modstore.Version) []string {
 	var (
 		order []string
 		lines = map[string][]string{}
 	)
 	for _, v := range vs {
+		if v.Source == modstore.SourceLocal {
+			continue
+		}
 		if _, seen := lines[v.Module]; !seen {
 			order = append(order, v.Module)
 		}
 		var s string
 		switch v.State {
 		case modstore.StateActive:
-			s = v.Version
+			s = texts.Escape(v.Version)
 			if v.Source != modstore.SourceBuiltin {
-				s += " (" + v.Source + ")"
+				s += " (" + texts.Escape(v.Source) + ")"
 			}
 		case modstore.StatePrevious:
-			s = "previous: " + v.Version
+			s = a.say(ctx, t, texts.ModulesPrevious, texts.Vars{varVersion: texts.Escape(v.Version)})
 		case modstore.StateFailed:
-			s = v.Version + " failed: " + v.Reason
+			s = a.say(ctx, t, texts.ModulesFailed, texts.Vars{varVersion: texts.Escape(v.Version), "reason": texts.Escape(v.Reason)})
 		case modstore.StateRetired:
 			continue
 		}
 		lines[v.Module] = append(lines[v.Module], s)
 	}
-	var b strings.Builder
-	b.WriteString("Modules:")
+	out := make([]string, 0, len(order))
 	for _, m := range order {
-		b.WriteString("\n- " + m + ": " + strings.Join(lines[m], "; "))
+		out = append(out, "- "+texts.Escape(m)+": "+strings.Join(lines[m], "; "))
 	}
-	return b.String(), nil
+	return out
 }
 
-// outcomeText runs an update or a rollback and says what it did.
-func outcomeText(name string, run func() (modstore.Outcome, error)) (string, error) {
-	o, err := run()
+// moduleCard is /modules <name>: how the module stands, every version it
+// has had and its settings. The journal's notes and the manifest's words
+// are shown to the owner here and never noted for the model.
+func (a *Agent) moduleCard(ctx context.Context, t *turn, name string) (moduleReply, error) {
+	c, err := a.d.Local.Card(ctx, name)
 	if errors.Is(err, modstore.ErrUnknownModule) {
-		return "No module named " + name + ".", nil
+		return a.unknown(ctx, t, name), nil
 	}
 	if err != nil {
-		return "", err
+		return moduleReply{}, err
 	}
+	loc := a.cfg.Location
+	since := ""
+	if n := len(c.Journal); n > 0 {
+		since = c.Journal[n-1].Installed.In(loc).Format(dateLayout)
+	}
+	vars := texts.Vars{varName: texts.Escape(c.Name), "since": since}
+	var b strings.Builder
+	if c.State == modstore.RunRunning {
+		b.WriteString(a.say(ctx, t, texts.ModulesCardRunning, vars))
+	} else {
+		vars["state"] = a.say(ctx, t, stateKey(c.State), nil)
+		b.WriteString(a.say(ctx, t, texts.ModulesCardStopped, vars))
+	}
+	rows := make([]string, len(c.Journal))
+	for i, e := range c.Journal {
+		rows[i] = a.journalRow(ctx, t, e)
+	}
+	if len(rows) > 0 {
+		b.WriteString("\n" + a.say(ctx, t, texts.ModulesCardVersions, texts.Vars{"lines": strings.Join(rows, "\n")}))
+	}
+	if len(c.Config) > 0 {
+		b.WriteString("\n" + a.say(ctx, t, texts.ModulesCardSettings, texts.Vars{"lines": a.settingRows(ctx, t, c.Config)}))
+	}
+	return moduleReply{text: b.String(), note: "the owner opened the card of " + c.Name}, nil
+}
+
+// journalRow is one version: v3  14.11  "the note"  1,340 runs, 0 failures  ← active.
+func (a *Agent) journalRow(ctx context.Context, t *turn, e modstore.Entry) string {
+	note := ""
+	if e.Note != "" {
+		note = `"` + texts.Escape(e.Note) + `"  `
+	}
+	mark := texts.ModulesMarkRetired
+	switch e.State {
+	case string(modstore.StateActive):
+		mark = texts.ModulesMarkActive
+	case string(modstore.StatePrevious):
+		mark = texts.ModulesMarkPrevious
+	case string(modstore.StateFailed):
+		mark = texts.ModulesMarkFailed
+	}
+	return a.say(ctx, t, texts.ModulesJournalRow, texts.Vars{varVersion: texts.Escape(e.Version),
+		"date": e.Installed.In(a.cfg.Location).Format(dateLayout), "note": note, "runs": grouped(e.Runs),
+		"failures": grouped(e.Failures), "mark": a.say(ctx, t, mark, nil)})
+}
+
+// grouped is n with a comma between thousands: 1,340.
+func grouped(n int) string {
+	s := strconv.Itoa(n)
+	for i := len(s) - 3; i > 0 && s[i-1] != '-'; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
+}
+
+// settingRows is a line for each setting the manifest declares.
+func (a *Agent) settingRows(ctx context.Context, t *turn, lines []modstore.ConfigLine) string {
+	rows := make([]string, len(lines))
+	for i, l := range lines {
+		value := a.say(ctx, t, texts.ModulesSettingUnset, nil)
+		switch {
+		case l.Set:
+			value = texts.Escape(l.Value)
+		case l.Default != "":
+			value = a.say(ctx, t, texts.ModulesSettingDefault, texts.Vars{varValue: texts.Escape(l.Default)})
+		}
+		required := ""
+		if l.Required {
+			required = a.say(ctx, t, texts.ModulesSettingRequired, nil)
+		}
+		rows[i] = a.say(ctx, t, texts.ModulesSettingRow, texts.Vars{"key": texts.Escape(l.Key), varValue: value,
+			"type": texts.Escape(l.Type), "required": required})
+	}
+	return strings.Join(rows, "\n")
+}
+
+// configModule is /modules config <name> key=value: the key must be one the
+// manifest declares and the value of its type. Neither the key nor the value
+// reaches the history.
+func (a *Agent) configModule(ctx context.Context, t *turn, rest string) (moduleReply, error) {
+	name, assign, _ := strings.Cut(rest, " ")
+	key, value, ok := strings.Cut(strings.TrimSpace(assign), "=")
+	if key = strings.TrimSpace(key); !ok || key == "" {
+		return plain(a.say(ctx, t, texts.ModulesUsage, nil)), nil
+	}
+	err := a.d.Local.Configure(ctx, name, key, strings.TrimSpace(value))
+	short := texts.Escape(modstore.ShortName(name))
+	vars := texts.Vars{varName: short, "key": texts.Escape(key)}
+	var ce *modstore.ConfigError
+	switch {
+	case errors.Is(err, modstore.ErrUnknownModule):
+		return a.unknown(ctx, t, name), nil
+	case errors.As(err, &ce) && errors.Is(err, modstore.ErrUndeclaredKey):
+		vars["keys"] = a.say(ctx, t, texts.ModulesConfigNoKeys, nil)
+		if len(ce.Declared) > 0 {
+			vars["keys"] = a.say(ctx, t, texts.ModulesConfigKeys, texts.Vars{"keys": texts.Escape(strings.Join(ce.Declared, ", "))})
+		}
+		return moduleReply{a.say(ctx, t, texts.ModulesConfigUndeclared, vars), "the owner tried to set a setting that " + name + " does not declare"}, nil
+	case errors.As(err, &ce):
+		vars["type"] = texts.Escape(ce.Type)
+		return moduleReply{a.say(ctx, t, texts.ModulesConfigWrongType, vars), "the owner tried to set a setting of " + name + " to a value of the wrong type"}, nil
+	case errors.Is(err, modstore.ErrNotStarted):
+		return moduleReply{a.say(ctx, t, texts.ModulesNotStarted, vars), "the owner changed a setting of " + name + "; it did not start"}, nil
+	case err != nil:
+		return moduleReply{}, err
+	}
+	return moduleReply{a.say(ctx, t, texts.ModulesConfigDone, vars), "the owner changed a setting of " + name}, nil
+}
+
+// switchModule turns a local module off or on.
+func (a *Agent) switchModule(ctx context.Context, t *turn, name string, off bool) (moduleReply, error) {
+	err := a.d.Local.SetOff(ctx, name, off)
+	vars := texts.Vars{varName: texts.Escape(modstore.ShortName(name))}
+	switch {
+	case errors.Is(err, modstore.ErrUnknownModule):
+		return a.unknown(ctx, t, name), nil
+	case errors.Is(err, modstore.ErrNotStarted):
+		return plain(a.say(ctx, t, texts.ModulesNotStarted, vars)), nil
+	case err != nil:
+		return moduleReply{}, err
+	case off:
+		return plain(a.say(ctx, t, texts.ModulesOffDone, vars)), nil
+	}
+	return plain(a.say(ctx, t, texts.ModulesOnDone, vars)), nil
+}
+
+// removeModule removes a local module; its cells and journal stay.
+func (a *Agent) removeModule(ctx context.Context, t *turn, name string) (moduleReply, error) {
+	err := a.d.Local.Remove(ctx, name)
+	switch {
+	case errors.Is(err, modstore.ErrUnknownModule):
+		return a.unknown(ctx, t, name), nil
+	case err != nil:
+		return moduleReply{}, err
+	}
+	return plain(a.say(ctx, t, texts.ModulesRemoved, texts.Vars{varName: texts.Escape(modstore.ShortName(name))})), nil
+}
+
+// rollback returns a local module to its previous version, or else a
+// built-in one.
+func (a *Agent) rollback(ctx context.Context, t *turn, name string) (moduleReply, error) {
+	o, err := a.d.Local.Rollback(ctx, name)
+	if errors.Is(err, modstore.ErrUnknownModule) {
+		return a.outcomeReply(ctx, t, name, func() (modstore.Outcome, error) { return a.d.Modules.Rollback(ctx, name) })
+	}
+	if errors.Is(err, modstore.ErrNotStarted) {
+		text := a.outcomeText(ctx, t, o) + " " + a.say(ctx, t, texts.ModulesNotStarted, texts.Vars{varName: texts.Escape(modstore.ShortName(o.Module))})
+		return plain(text), nil
+	}
+	if err != nil {
+		return moduleReply{}, err
+	}
+	return plain(a.outcomeText(ctx, t, o)), nil
+}
+
+// outcomeReply runs an update or a rollback and says what it did.
+func (a *Agent) outcomeReply(ctx context.Context, t *turn, name string, run func() (modstore.Outcome, error)) (moduleReply, error) {
+	o, err := run()
+	if errors.Is(err, modstore.ErrUnknownModule) {
+		return a.unknown(ctx, t, name), nil
+	}
+	if err != nil {
+		return moduleReply{}, err
+	}
+	return plain(a.outcomeText(ctx, t, o)), nil
+}
+
+// outcomeText says what an update or a rollback did.
+func (a *Agent) outcomeText(ctx context.Context, t *turn, o modstore.Outcome) string {
+	vars := texts.Vars{"module": texts.Escape(modstore.ShortName(o.Module)), "from": texts.Escape(o.From), "to": texts.Escape(o.To)}
 	switch o.Result {
 	case modstore.ResultInstalled:
-		return fmt.Sprintf("%s updated from %s to %s.", o.Module, o.From, o.To), nil
+		return a.say(ctx, t, texts.ModulesUpdated, vars)
 	case modstore.ResultUpToDate:
-		return fmt.Sprintf("%s is up to date (%s).", o.Module, o.From), nil
+		return a.say(ctx, t, texts.ModulesUpToDate, vars)
 	case modstore.ResultRolledBack:
-		return fmt.Sprintf("%s rolled back from %s to %s.", o.Module, o.From, o.To), nil
+		return a.say(ctx, t, texts.ModulesRolledBack, vars)
 	case modstore.ResultNothingToRollBack:
-		return fmt.Sprintf("%s has no previous version to roll back to.", o.Module), nil
+		return a.say(ctx, t, texts.ModulesNothingToRollBack, vars)
 	case modstore.ResultRefused, modstore.ResultFailedSelfTest:
 	}
-	return fmt.Sprintf("%s stays on %s: %s.", o.Module, o.From, strings.TrimSuffix(o.Reason, ".")), nil
+	vars["reason"] = texts.Escape(strings.TrimSuffix(o.Reason, "."))
+	return a.say(ctx, t, texts.ModulesStays, vars)
 }

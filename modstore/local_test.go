@@ -449,3 +449,56 @@ func TestCheckShortName(t *testing.T) {
 		}
 	}
 }
+
+func TestRollbackWorksWhenTheActiveVersionWasMarkedFailed(t *testing.T) {
+	e := newEnv(t)
+	s := e.open(t)
+	ctx := context.Background()
+	b1 := build("local/x", variant("a"), withKey(localManifest))
+	b2 := build("local/x", variant("b"), strings.Replace(withKey(localManifest), "version: 1", "version: 2", 1))
+	install(t, s, b1)
+	install(t, s, b2)
+	if err := os.WriteFile(filepath.Join(e.dir, "local", "x", modstore.Digest(b2.Wasm, b2.Manifest)+".wasm"), []byte("tampered"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if as, err := s.ActiveLocal(ctx); err != nil || len(as) != 0 {
+		t.Fatalf("active %+v, %v", as, err)
+	}
+	o, err := s.Rollback(ctx, "local/x")
+	if err != nil || o.Result != modstore.ResultRolledBack || o.From != "2" || o.To != "1" {
+		t.Fatalf("rollback %+v, %v", o, err)
+	}
+	if as, err := s.ActiveLocal(ctx); err != nil || len(as) != 1 || as[0].SHA256 != modstore.Digest(b1.Wasm, b1.Manifest) {
+		t.Fatalf("active %+v, %v", as, err)
+	}
+}
+
+func TestRemoveLocalRetiresEveryVersionAndKeepsTheJournal(t *testing.T) {
+	e := newEnv(t)
+	s := e.open(t)
+	ctx := context.Background()
+	b1 := build("local/x", variant("a"), withKey(localManifest))
+	b2 := build("local/x", variant("b"), strings.Replace(withKey(localManifest), "version: 1", "version: 2", 1))
+	install(t, s, b1)
+	install(t, s, b2)
+	if err := s.RemoveLocal(ctx, "local/x"); err != nil {
+		t.Fatal(err)
+	}
+	if as, err := s.ActiveLocal(ctx); err != nil || len(as) != 0 {
+		t.Fatalf("active %+v, %v", as, err)
+	}
+	if vs := mustList(t, s); len(vs) != 0 {
+		t.Fatalf("list %+v", vs)
+	}
+	if es, err := s.Journal(ctx, "local/x"); err != nil || len(es) != 2 || es[0].State != "retired" {
+		t.Fatalf("journal %+v, %v", es, err)
+	}
+	for _, b := range []modstore.Build{b1, b2} {
+		if _, err := os.Stat(filepath.Join(e.dir, "local", "x", modstore.Digest(b.Wasm, b.Manifest)+".wasm")); err == nil {
+			t.Fatal("a removed version's file stayed")
+		}
+	}
+	if err := s.RemoveLocal(ctx, "local/x"); !errors.Is(err, modstore.ErrUnknownModule) {
+		t.Fatalf("a second remove: %v", err)
+	}
+}

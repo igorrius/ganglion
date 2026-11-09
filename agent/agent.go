@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"maps"
 	"slices"
 	"time"
 
@@ -103,6 +104,15 @@ type Deps struct {
 	// Modules updates and rolls back the node's modules for /modules
 	// (R-RUN-8); NoModules when unset.
 	Modules Modules
+	// Local runs the owner's modules for /modules (R-RUN-10); NoLocalModules
+	// when unset.
+	Local LocalModules
+	// Cells are read by /cells and its History button (R-RUN-11); NoCells
+	// when unset.
+	Cells CellsView
+	// Buttons stores the History buttons of /cells; NoButtons, and no buttons,
+	// when unset.
+	Buttons Buttons
 	// Skills are listed in an admin's system prompt, and the one the
 	// model reads routes the rest of the turn (R-RTR-4); none when unset.
 	Skills Skills
@@ -193,6 +203,28 @@ type Agent struct {
 	tool     tool.Func
 }
 
+// withOwnModules gives the parts of /modules and /cells their
+// no-op defaults; the quick actions are a copy, so the agent adds its own.
+func withOwnModules(d Deps) Deps {
+	if d.Modules == nil {
+		d.Modules = NoModules{}
+	}
+	if d.Local == nil {
+		d.Local = NoLocalModules{}
+	}
+	if d.Buttons == nil {
+		d.Buttons = NoButtons{}
+	}
+	if d.Cells == nil {
+		d.Cells = NoCells{}
+	}
+	d.QuickActions = maps.Clone(d.QuickActions)
+	if d.QuickActions == nil {
+		d.QuickActions = map[string]pending.QuickAction{}
+	}
+	return d
+}
+
 // New returns an agent.
 func New(cfg Config, d Deps) *Agent {
 	if d.Now == nil {
@@ -213,9 +245,7 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Restart == nil {
 		d.Restart = func() {}
 	}
-	if d.Modules == nil {
-		d.Modules = NoModules{}
-	}
+	d = withOwnModules(d)
 	if d.Inbox == nil {
 		d.Inbox = NoInbox{}
 	}
@@ -244,6 +274,7 @@ func New(cfg Config, d Deps) *Agent {
 		cfg.Location = time.UTC
 	}
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
+	a.d.QuickActions[ActionCellHistory] = a.historyButton
 	a.stages = []stage{a.resume, a.scheduled, a.dropStale, a.idle, a.command, a.limits, a.answer, a.compactHistory}
 	a.commands = map[string]command{}
 	for _, c := range a.commandTable() {

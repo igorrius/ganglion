@@ -7,12 +7,12 @@ Start here when coming back to the project.
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
 - **Next:** execute the [M4b plan](plans/p1-m4b-modules.md) (written
-  2026-11-09; tasks 1–7 done: contracts, owned cells, the runner's cell
+  2026-11-09; tasks 1–8 done: contracts, owned cells, the runner's cell
   host functions, local installs and the journal, the Rust builder in a
   confined sandbox, `modhost`, which runs the owner's modules in the
   node on cron and as tools with a supervisor and escalations, and the
   agent's tools `module.import`, `module.build` and `module.install` with
-  the install window; next `/modules` and `/cells`): modules the agent builds from source, cells
+  the install window, and `/modules`, `/cells`, `cells.list` and the condensed history; next the Deye example): modules the agent builds from source, cells
   owned by modules, the Deye example, deploy on Railway. Rust with the
   `wasm32-wasip1` target is needed on the machine that builds modules (the
   owner's machine has none yet; CI gets it in task 1). M4 was designed on
