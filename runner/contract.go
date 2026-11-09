@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -24,6 +25,8 @@ const (
 	typeEnum    = "enum"
 	typeNull    = "null"
 )
+
+var fieldNamePattern = regexp.MustCompile(`^[a-z0-9_]{1,32}$`)
 
 // Shape is a contract for a JSON value: a manifest's tool output and a
 // cell's type. Nothing outside this language is accepted.
@@ -50,6 +53,9 @@ func (s *Shape) UnmarshalYAML(n *yaml.Node) error {
 			item := new(Shape)
 			if err := n.Content[1].Decode(item); err != nil {
 				return err
+			}
+			if item.Type == "" {
+				return fmt.Errorf("line %d: the list item has no shape", n.Content[1].Line)
 			}
 			*s = Shape{Type: typeList, Item: item}
 			return nil
@@ -95,6 +101,9 @@ func (s *Shape) fromObject(n *yaml.Node) error {
 		var f Shape
 		if err := n.Content[i+1].Decode(&f); err != nil {
 			return err
+		}
+		if f.Type == "" {
+			return fmt.Errorf("line %d: field %q has no shape", n.Content[i].Line, name)
 		}
 		obj.Fields[name] = f
 		if optional {
@@ -184,7 +193,7 @@ func (s Shape) checkObject(x any, path string) error {
 	}
 	for _, name := range sortedKeys(obj) {
 		if _, declared := s.Fields[name]; !declared {
-			return at(join(path, name), "not declared")
+			return at(join(path, safeName(name)), "not declared")
 		}
 	}
 	return nil
@@ -217,6 +226,15 @@ func at(path, msg string) error {
 		return errors.New(msg)
 	}
 	return fmt.Errorf("field %s: %s", path, msg)
+}
+
+// safeName returns a module-written field name only when it is plain
+// enough to show; the node's own words reach the model (R-RUN-14).
+func safeName(name string) string {
+	if fieldNamePattern.MatchString(name) {
+		return name
+	}
+	return "<invalid name>"
 }
 
 func join(path, name string) string {

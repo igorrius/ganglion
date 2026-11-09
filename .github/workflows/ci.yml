@@ -50,6 +50,7 @@ jobs:
       # The module tests build Rust to wasm32-wasip1 and skip without it.
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
+          toolchain: stable
           targets: wasm32-wasip1
       - name: Build
         run: go build ./...
