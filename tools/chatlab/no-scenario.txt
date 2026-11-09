@@ -50,8 +50,10 @@ internal/backoff/**
 internal/buckets/**
 internal/buildinfo/**
 internal/clock/**
+internal/memlimit/**
 internal/procgroup/**
 internal/redact/**
+internal/size/**
 internal/text/**
 internal/transcript/**
 internal/urlnorm/**

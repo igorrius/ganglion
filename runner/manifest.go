@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/igorrius/ganglion/internal/size"
 )
 
 // Defaults for limits a manifest leaves out.
@@ -86,7 +86,7 @@ func ParseManifest(src []byte) (Manifest, error) {
 
 	m.Limits = Limits{Memory: DefaultMemory, Timeout: DefaultTimeout}
 	if s := raw.Limits.Memory; s != "" {
-		n, err := parseSize(s)
+		n, err := size.Parse(s)
 		if err != nil {
 			return Manifest{}, fmt.Errorf("manifest: limits.memory: %w", err)
 		}
@@ -103,23 +103,4 @@ func ParseManifest(src []byte) (Manifest, error) {
 		m.Limits.Timeout = d
 	}
 	return m, nil
-}
-
-// parseSize reads sizes such as "8MiB", "64KiB", "1GiB" or plain bytes.
-func parseSize(s string) (uint64, error) {
-	mult := uint64(1)
-	for suffix, m := range map[string]uint64{"KiB": 1 << 10, "MiB": 1 << 20, "GiB": 1 << 30} {
-		if rest, ok := strings.CutSuffix(s, suffix); ok {
-			s, mult = rest, m
-			break
-		}
-	}
-	n, err := strconv.ParseUint(s, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("bad size %q", s)
-	}
-	if n > (1<<64-1)/mult {
-		return 0, fmt.Errorf("size %q overflows", s)
-	}
-	return n * mult, nil
 }

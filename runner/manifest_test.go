@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/igorrius/ganglion/internal/size"
 )
 
 const deyeManifest = `
@@ -87,12 +89,12 @@ func TestParseManifestRejects(t *testing.T) {
 
 func TestParseMemorySizes(t *testing.T) {
 	for in, want := range map[string]uint64{"64KiB": 64 << 10, "8MiB": 8 << 20, "1GiB": 1 << 30, "65536": 65536} {
-		got, err := parseSize(in)
+		got, err := size.Parse(in)
 		if err != nil || got != want {
-			t.Errorf("parseSize(%q) = %d, %v; want %d", in, got, err, want)
+			t.Errorf("size.Parse(%q) = %d, %v; want %d", in, got, err, want)
 		}
 	}
-	if _, err := parseSize(strings.Repeat("9", 30) + "MiB"); err == nil {
-		t.Error("parseSize accepted an overflowing value")
+	if _, err := size.Parse(strings.Repeat("9", 30) + "MiB"); err == nil {
+		t.Error("size.Parse accepted an overflowing value")
 	}
 }
