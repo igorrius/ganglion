@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -33,12 +34,14 @@ type LocalConfig struct {
 	Rustup  string        // RUSTUP_HOME to pass, from the node's environment
 	Timeout time.Duration // how long a build may run
 	MaxCopy int64         // bytes of source a build may copy
+	MaxWasm int64         // bytes of the built .wasm the node will read
 }
 
-// DefaultLocalConfig is the design's limits: ten minutes, 16 MiB of source.
+// DefaultLocalConfig is the design's limits: ten minutes, 16 MiB of source and
+// of wasm.
 // The caller adds Cargo and Rustup.
 func DefaultLocalConfig() LocalConfig {
-	return LocalConfig{Timeout: 10 * time.Minute, MaxCopy: 16 << 20}
+	return LocalConfig{Timeout: 10 * time.Minute, MaxCopy: 16 << 20, MaxWasm: 16 << 20}
 }
 
 const (
@@ -121,7 +124,7 @@ func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 	if err := copySource(src.Dir, work, l.cfg.MaxCopy); err != nil {
 		return Artifact{}, "", err
 	}
-	manifest, err := os.ReadFile(filepath.Join(work, manifestFile))
+	manifest, err := readRegular(filepath.Join(work, manifestFile), l.cfg.MaxCopy)
 	if err != nil {
 		return Artifact{}, "", fmt.Errorf("builder: %s has no %s: %w", src.Name, manifestFile, err)
 	}
@@ -130,7 +133,7 @@ func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 	if err != nil {
 		return Artifact{}, log, fmt.Errorf("builder: building %s: %w", src.Name, err)
 	}
-	wasm, err := readWasm(filepath.Join(temp, "target", rustTarget, "release"))
+	wasm, err := readWasm(filepath.Join(temp, "target", rustTarget, "release"), l.cfg.MaxWasm)
 	if err != nil {
 		return Artifact{}, log, fmt.Errorf("builder: %s: %w", src.Name, err)
 	}
@@ -210,13 +213,45 @@ func detect(dir string) (Language, error) {
 	return "", fmt.Errorf("builder: %s has no Cargo.toml or go.mod: the language is unknown", filepath.Base(dir))
 }
 
-// readWasm reads the one .wasm file a release build left in dir.
-func readWasm(dir string) ([]byte, error) {
+// readWasm reads the one .wasm file a release build left in dir. The build's
+// own code wrote it, so it is read as hostile: see readRegular.
+func readWasm(dir string, limit int64) ([]byte, error) {
 	found, err := filepath.Glob(filepath.Join(dir, "*.wasm"))
 	if err != nil || len(found) != 1 {
 		return nil, fmt.Errorf("the build must leave exactly one .wasm file in target/%s/release, found %d", rustTarget, len(found))
 	}
-	return os.ReadFile(found[0])
+	b, err := readRegular(found[0], limit)
+	if err != nil {
+		return nil, fmt.Errorf("the .wasm the build left: %w", err)
+	}
+	return b, nil
+}
+
+// readRegular reads a regular file of at most limit bytes. It never follows a
+// symlink and never blocks on a pipe, and it checks the opened handle, not
+// the name: what a build left in its folder is not to be trusted, and the node
+// reads it outside the sandbox.
+func readRegular(path string, limit int64) ([]byte, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, fmt.Errorf("%s cannot be opened as a plain file: %w", filepath.Base(path), err)
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", filepath.Base(path))
+	}
+	b, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > limit {
+		return nil, fmt.Errorf("%s is over %d bytes, too big to take", filepath.Base(path), limit)
+	}
+	return b, nil
 }
 
 // copySource copies the regular files of src into dst without a top-level

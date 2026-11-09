@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -243,11 +244,85 @@ func TestASymlinkInTheSourceIsRefused(t *testing.T) {
 	}
 }
 
-func TestNoWasmOrTwoIsAnError(t *testing.T) {
+// planter is a fake starter that leaves what a hostile build could leave in
+// the release folder instead of one honest .wasm.
+type planter struct {
+	*fakeStarter
+	plant func(dir string) error
+}
+
+func (p *planter) Command(ctx context.Context, argv []string, dir string, env ...string) (*exec.Cmd, error) {
+	out := filepath.Join(envValue(env, "CARGO_TARGET_DIR"), rustTarget, "release")
+	if err := os.MkdirAll(out, 0o700); err != nil {
+		return nil, err
+	}
+	if err := p.plant(out); err != nil {
+		return nil, err
+	}
+	return p.fakeStarter.Command(ctx, argv, dir, env...)
+}
+
+func TestAWasmThatIsNotOneHonestFileIsRefused(t *testing.T) {
+	secret := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(secret, []byte("node-secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]struct {
+		plant func(dir string) error
+		want  string
+	}{
+		"none":    {func(string) error { return nil }, "exactly one .wasm"},
+		"two":     {func(d string) error { return twoFiles(d) }, "found 2"},
+		"symlink": {func(d string) error { return os.Symlink(secret, filepath.Join(d, "x.wasm")) }, "cannot be opened as a plain file"},
+		"fifo":    {func(d string) error { return syscall.Mkfifo(filepath.Join(d, "x.wasm"), 0o600) }, "not a regular file"},
+		"device":  {func(d string) error { return os.Symlink("/dev/zero", filepath.Join(d, "x.wasm")) }, "cannot be opened as a plain file"},
+		"huge": {func(d string) error {
+			return os.WriteFile(filepath.Join(d, "x.wasm"), make([]byte, 1025), 0o600)
+		}, "too big"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			tmp := buildTemp(t)
+			cfg := testConfig()
+			cfg.MaxWasm = 1024
+			b := NewLocal(&planter{&fakeStarter{}, c.plant}, cfg)
+			done := make(chan error, 1)
+			go func() {
+				_, _, err := b.Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				if err == nil || !strings.Contains(err.Error(), c.want) {
+					t.Fatalf("error = %v, want %q", err, c.want)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("Build hangs on what the build left")
+			}
+			if left, _ := os.ReadDir(tmp); len(left) != 0 {
+				t.Fatalf("left %d entries", len(left))
+			}
+		})
+	}
+}
+
+func twoFiles(dir string) error {
+	for _, n := range []string{"a.wasm", "b.wasm"} {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("w"), 0o600); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func TestAnOversizedManifestIsRefused(t *testing.T) {
 	buildTemp(t)
-	_, _, err := NewLocal(&fakeStarter{}, testConfig()).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)})
-	if err == nil || !strings.Contains(err.Error(), "exactly one .wasm") {
-		t.Fatalf("error = %v", err)
+	files := map[string]string{"Cargo.toml": "[package]\n", "manifest.yaml": strings.Repeat("a", 100)}
+	cfg := testConfig()
+	cfg.MaxCopy = 50
+	_, _, err := NewLocal(&fakeStarter{}, cfg).Build(t.Context(), Source{Name: "m", Dir: source(t, files)})
+	if err == nil {
+		t.Fatal("no error")
 	}
 }
 
