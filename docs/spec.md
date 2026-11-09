@@ -683,6 +683,15 @@ escalate:                    # when to call the model
   A cell's `about` is shown to the owner (`/cells`), never to the model,
   which gets the cell's name and kind (owner, 2026-11-09).
 
+- **R-RUN-14.** The manifest declares the shape of each tool's output and
+  the type of each cell's value; the node checks every answer and every
+  `cell.report` against it. A mismatch is a format error: the answer
+  reaches neither the model nor the cell, the run counts as a failure,
+  and `module.format` reaches the agent with the node's own description of
+  the mismatch (field, expected and actual type, never the value), as
+  context to revise the module (owner, 2026-11-09,
+  [ADR-0062](adr/0062-cells-owned-by-modules.md)).
+
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation
 on a Pi is pending:

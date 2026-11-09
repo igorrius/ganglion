@@ -117,6 +117,19 @@ cells:
   - `/cells` for the owner, without a model: values with their age, and
     under each cell its `about` and a button with its latest changes.
 
+### The contract is checked (owner, 2026-11-09)
+
+The manifest declares the shape of every tool's output and the type of
+every cell's value (number, boolean, a string from a fixed list, or a
+free string; objects of these). The node checks each answer and each
+`cell.report` against it. A mismatch is a format error: the answer never
+reaches the model or the cell, the run counts as a failure, and
+`module.format` is raised. The agent receives the node's own description
+of the mismatch (`deye-reader.status: field soc: expected number, got
+string`), never the value, as context to revise and improve the module.
+Modules are written in strictly typed languages, so a mismatch is a bug
+to fix, not data to tolerate.
+
 ## Security
 
 - **Trust boundaries:** between modules that share the node's cells, and
@@ -145,6 +158,10 @@ cells:
     the model.
   - *The agent, talked into it by an injected page, forges a reading.*
     No tool writes a sensor.
+  - *A module returns text where its contract promised a number.* The
+    node checks the answer against the manifest and drops it as a format
+    error; the agent learns the field and the expected type, not the
+    text.
   - *A module floods the history to fill the agent's context.* `cells.get`
     condenses history; the turn sees a sample and the summary figures.
 

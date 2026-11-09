@@ -376,6 +376,14 @@ cells:
   fetched page (ADR-0049). `about` is shown to the owner in `/cells`,
   never to the model, which gets the cell's name and kind. Deye's values
   are all numbers, so asking about the battery taints nothing.
+- **The contract is checked** (owner). The manifest declares the shape of
+  each tool's output and the type of each cell's value (number, boolean,
+  a string from a fixed list, a free string; objects of these). The node
+  checks every answer and every `cell.report`; a mismatch is a format
+  error: dropped, counted as a failure, and `module.format` reaches the
+  agent with the node's description (`deye-reader.status: field soc:
+  expected number, got string`), never the value, as context to revise
+  the module (R-RUN-14).
 - **Modules hand over contract data** (owner). A module interprets what it
   fetched and returns only what its tools and cells declare; the model
   works after it on prepared data, or not at all. The module-writing skill
@@ -435,7 +443,7 @@ module's card.
 
 - The manifest's `escalate` list says which kinds call the model
   (`deye-reader`: `module.exception`, `auth_failed`); `module.crashloop`
-  always does.
+  and `module.format` always do.
 - The event arrives as a turn in the owner's private chat: "module
   deye-reader: auth_failed, version 3, 14:30". The agent explains and
   proposes.
