@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/igorrius/ganglion/modstore"
+	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/settings"
 )
 
@@ -158,7 +159,69 @@ func TestRollbackAndRemove(t *testing.T) {
 	if ls, _ := e.host.Local(ctx); len(ls) != 0 {
 		t.Fatalf("list %+v", ls)
 	}
-	if err := e.host.Remove(ctx, "probe"); !errors.Is(err, modstore.ErrUnknownModule) {
-		t.Fatalf("second remove: %v", err)
+	if err := e.host.Remove(ctx, "probe"); err != nil {
+		t.Fatalf("a second remove is a no-op: %v", err)
+	}
+	if err := e.host.Remove(ctx, "never"); !errors.Is(err, modstore.ErrUnknownModule) {
+		t.Fatalf("unknown: %v", err)
+	}
+}
+
+// A remove that fails stopping the jobs leaves the module installed, and the
+// next remove finishes the work.
+func TestRemoveFailingOnJobsIsRepeatable(t *testing.T) {
+	e := startedProbe(t)
+	ctx := context.Background()
+	e.jobs.failDelete = errors.New("db busy")
+	if err := e.host.Remove(ctx, "probe"); err == nil {
+		t.Fatal("no error")
+	}
+	if ls, _ := e.host.Local(ctx); len(ls) != 1 || len(e.host.Handlers()) != 0 {
+		t.Fatalf("still installed and stopped: %+v, %d tools", ls, len(e.host.Handlers()))
+	}
+	e.jobs.failDelete = nil
+	if err := e.host.Remove(ctx, "probe"); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.jobs.all()) != 0 || len(e.conf.mods) != 0 {
+		t.Fatalf("left: %d jobs, %+v", len(e.jobs.all()), e.conf.mods)
+	}
+}
+
+// A remove that fails after the versions retired is finished by the next
+// one: the journal still knows the module.
+func TestRemoveFailingOnSettingsIsRepeatable(t *testing.T) {
+	e := startedProbe(t)
+	ctx := context.Background()
+	if err := e.host.Configure(ctx, "probe", "limit", "1"); err != nil {
+		t.Fatal(err)
+	}
+	e.conf.failRemove = errors.New("disk full")
+	if err := e.host.Remove(ctx, "probe"); err == nil {
+		t.Fatal("no error")
+	}
+	e.conf.failRemove = nil
+	if err := e.host.Remove(ctx, "probe"); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if len(e.conf.mods) != 0 || len(e.jobs.all()) != 0 {
+		t.Fatalf("left %+v", e.conf.mods)
+	}
+	if err := e.host.Remove(ctx, "never"); !errors.Is(err, modstore.ErrUnknownModule) {
+		t.Fatalf("a module with no journal: %v", err)
+	}
+}
+
+// Start deletes the jobs of a removed module that were left behind.
+func TestStartClearsTheJobsOfRemovedModules(t *testing.T) {
+	e := newEnv(t, active(t, "local/probe", probeManifest))
+	e.store.removed = []string{"local/gone"}
+	e.jobs.live["module:local/gone:0"] = schedule.Job{ID: "module:local/gone:0", Text: "local/gone"}
+	e.start(t)
+	if _, ok := e.jobs.live["module:local/gone:0"]; ok {
+		t.Fatal("the orphan job stayed")
+	}
+	if len(e.jobs.all()) != 1 {
+		t.Fatalf("jobs %+v", e.jobs.all())
 	}
 }

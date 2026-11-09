@@ -533,3 +533,23 @@ func (s *Store) RemoveLocal(ctx context.Context, module string) error {
 	s.removeFiles(module, shas)
 	return nil
 }
+
+// RemovedLocal lists the local modules with no version left in service: every
+// one of their versions is retired. Their jobs and cells may need clearing.
+func (s *Store) RemovedLocal(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT module FROM module_versions WHERE source = ?
+		AND module NOT IN (SELECT module FROM module_versions WHERE state != 'retired') ORDER BY module`, SourceLocal)
+	if err != nil {
+		return nil, fmt.Errorf("modstore: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var m string
+		if err := rows.Scan(&m); err != nil {
+			return nil, fmt.Errorf("modstore: %w", err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}

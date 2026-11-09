@@ -502,3 +502,16 @@ func TestRemoveLocalRetiresEveryVersionAndKeepsTheJournal(t *testing.T) {
 		t.Fatalf("a second remove: %v", err)
 	}
 }
+
+func TestRemovedLocalListsModulesWithNothingInService(t *testing.T) {
+	s := newEnv(t).open(t)
+	ctx := context.Background()
+	install(t, s, build("local/x", variant("a"), withKey(localManifest)))
+	install(t, s, build("local/y", variant("b"), strings.Replace(withKey(localManifest), "name: x", "name: y", 1)))
+	if err := s.RemoveLocal(ctx, "local/x"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.RemovedLocal(ctx); err != nil || len(got) != 1 || got[0] != "local/x" {
+		t.Fatalf("removed %v, %v", got, err)
+	}
+}

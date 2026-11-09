@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -184,8 +185,11 @@ func (a *Agent) historyButton(ctx context.Context, p pending.QuickPress) (pendin
 		return pending.QuickEdit{}, fmt.Errorf("agent: button %s: arguments: %w", p.Button.ID, err)
 	}
 	c, err := a.d.Cells.Get(ctx, ref.ID)
-	if err != nil {
+	if errors.Is(err, cells.ErrNotFound) {
 		return pending.QuickEdit{Text: p.Speak.Text(texts.CellsGone, nil)}, nil
+	}
+	if err != nil {
+		return pending.QuickEdit{}, err
 	}
 	changes, err := a.d.Cells.History(ctx, ref.ID, historyShown)
 	if err != nil {

@@ -762,7 +762,9 @@ git commit -m "tools: module.import, module.build and module.install with the ri
   - `cells.list` (read, auto, admin): `[{id, kind, owner, value, age_s}]` — no `about` (R-RUN-13);
     External when any value holds a string.
   - `cells.get {id, since?}`: with `since` (a Go duration, at most 7 days) the history condensed to
-    at most 48 points (evenly picked) plus `min`, `max`, `mean` for numeric values.
+    at most 48 points (evenly picked) plus `min`, `max`, `mean` for numeric values. An ownerless
+    switch's `on`/`off` does not taint a session: a switch holds only `on` or `off`, and modules own
+    sensors only, so no module text can reach the model through one.
 - [x] **Steps:** failing tests (golden texts for the card and `/cells`; `cells.list` without
   `about`; history condensing 1,000 points to 48 with correct min/max/mean; `/modules config`
   refuses an undeclared key and a wrong type), implement, `make lint test`, commit, push.

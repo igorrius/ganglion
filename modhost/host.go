@@ -37,6 +37,7 @@ type Store interface {
 	List(ctx context.Context) ([]modstore.Version, error)
 	Rollback(ctx context.Context, module string) (modstore.Outcome, error)
 	RemoveLocal(ctx context.Context, module string) error
+	RemovedLocal(ctx context.Context) ([]string, error)
 }
 
 // Jobs keeps the modules' cron jobs (schedule.Store).
@@ -122,7 +123,7 @@ func (h *Host) Start(ctx context.Context) error {
 			h.d.Log.Warn("modhost: a module did not start", "module", a.Module, "err", err)
 		}
 	}
-	return nil
+	return h.clearOrphans(ctx, actives)
 }
 
 // Reload brings module in line with the store and the settings after an

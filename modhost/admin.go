@@ -247,15 +247,55 @@ func (h *Host) Rollback(ctx context.Context, name string) (modstore.Outcome, err
 	return o, h.Reload(ctx, module)
 }
 
-// Remove takes a module out of service: its versions retire, it stops and
-// its jobs go, its settings line goes, and its cells lose their owner. The
-// cells and their history stay (ADR-0062), and so does the journal.
+// Remove takes a module out of service: it stops and its jobs go first, then
+// its versions retire, its settings line goes and its cells lose their owner.
+// The cells and their history stay (ADR-0062), and so does the journal. It
+// can be repeated: a remove that failed partway is finished by the next one,
+// for the journal still knows the module.
 func (h *Host) Remove(ctx context.Context, name string) error {
 	module := fullName(name)
-	if err := h.d.Store.RemoveLocal(ctx, module); err != nil {
+	if _, err := h.known(ctx, module); err != nil {
+		if !errors.Is(err, modstore.ErrUnknownModule) {
+			return err
+		}
+		journal, jerr := h.d.Store.Journal(ctx, module)
+		if jerr != nil {
+			return fmt.Errorf("modhost: %w", jerr)
+		}
+		if len(journal) == 0 {
+			return err
+		}
+	}
+	h.mu.Lock()
+	err := h.apply(ctx, module, nil, settings.Module{Name: module})
+	h.mu.Unlock()
+	if err != nil {
+		return err // still installed: the owner repeats the remove
+	}
+	if err := h.d.Store.RemoveLocal(ctx, module); err != nil && !errors.Is(err, modstore.ErrUnknownModule) {
 		return err
 	}
-	err := h.Reload(ctx, module)
 	_, derr := h.d.Cells.Disown(ctx, module)
-	return errors.Join(err, h.d.Settings.RemoveModule(module), derr)
+	return errors.Join(h.d.Settings.RemoveModule(module), derr)
+}
+
+// clearOrphans deletes the jobs of local modules that have no active
+// version: removed ones, and ones whose versions all failed. Start leaves them
+// no other way to go.
+func (h *Host) clearOrphans(ctx context.Context, actives []modstore.Active) error {
+	removed, err := h.d.Store.RemovedLocal(ctx)
+	if err != nil {
+		return fmt.Errorf("modhost: %w", err)
+	}
+	_, names, err := h.localVersions(ctx)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, m := range append(removed, names...) {
+		if !slices.ContainsFunc(actives, func(a modstore.Active) bool { return a.Module == m }) {
+			errs = append(errs, h.d.Jobs.DeleteModule(ctx, m))
+		}
+	}
+	return errors.Join(errs...)
 }

@@ -3,12 +3,15 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/texts"
+	"github.com/igorrius/ganglion/tool/pending"
 )
 
 // cellsEnv is an agent over a cell service with a sensor of a module and a
@@ -111,5 +114,34 @@ func TestCellsCommandNoneAndAdminOnly(t *testing.T) {
 	e.admin = false
 	if got := oneReply(t, e, "/cells"); got != replyTasksNotAvailable {
 		t.Fatalf("not admin: %q", got)
+	}
+}
+
+// failingCells is a cell service whose Get breaks; only a missing cell is "gone".
+type failingCells struct {
+	NoCells
+	err error
+}
+
+func (f failingCells) Get(context.Context, string) (cells.Cell, error) { return cells.Cell{}, f.err }
+
+func TestCellsHistoryButtonOnlyMissingCellsAreGone(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	e.deps.Buttons = e.pending
+	args, _ := json.Marshal(cellRef{ID: "x.y"})
+	press := pending.QuickPress{Speak: texts.Speaker{}, Button: pending.Button{ID: "b", Args: args}}
+	for _, c := range []struct {
+		err  error
+		gone bool
+	}{{cells.ErrNotFound, true}, {errors.New("db down"), false}} {
+		e.deps.Cells = failingCells{err: c.err}
+		a := New(overDefaults(Config{}), e.deps)
+		edit, err := a.historyButton(context.Background(), press)
+		if c.gone && (err != nil || edit.Text != "This cell no longer exists.") {
+			t.Errorf("missing: %+v, %v", edit, err)
+		}
+		if !c.gone && (err == nil || edit.Text != "") {
+			t.Errorf("broken store: %+v, %v", edit, err)
+		}
 	}
 }

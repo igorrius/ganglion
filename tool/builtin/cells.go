@@ -167,7 +167,7 @@ func (*CellsGet) Spec() tool.Spec {
 		Name: "cells.get",
 		Description: "Read a state cell, such as a switch or a sensor: its desired and reported values and whether they agree (in_sync). " +
 			"With since (a duration such as 6h, at most 168h) it also gives the history of the reported value, condensed to at most 48 points, " +
-			"with min, max and mean when every value is a number.",
+			"with min, max and mean over the numbers when no value is text.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"id":{"type":"string","description":"the cell id, such as load.boiler"},` +
 			`"since":{"type":"string","description":"how far back to read the history, a Go duration such as 90m or 24h, at most 168h"}},` +
@@ -308,14 +308,21 @@ func stats(changes []cells.Change) (lo, hi, mean *float64) {
 		return nil, nil, nil
 	}
 	l, h, sum := math.Inf(1), math.Inf(-1), 0.0
+	n := 0
 	for _, ch := range changes {
+		if string(ch.Value) == "null" { // a number? sensor with no reading
+			continue
+		}
 		var f float64
 		if json.Unmarshal(ch.Value, &f) != nil {
 			return nil, nil, nil
 		}
-		l, h, sum = min(l, f), max(h, f), sum+f
+		l, h, sum, n = min(l, f), max(h, f), sum+f, n+1
 	}
-	m := sum / float64(len(changes))
+	if n == 0 {
+		return nil, nil, nil
+	}
+	m := sum / float64(n)
 	return &l, &h, &m
 }
 

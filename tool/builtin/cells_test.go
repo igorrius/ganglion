@@ -183,3 +183,27 @@ func TestCellsGetRefusesABadSince(t *testing.T) {
 		t.Fatalf("168h: %v", err)
 	}
 }
+
+// A number? sensor reports null now and then; null is no number and no zero.
+func TestCellsGetStatsSkipNulls(t *testing.T) {
+	clock := cellsNow
+	s := sensorCells(t, &clock)
+	for i, v := range []string{"10", "null", "20", "null", "30"} {
+		report(t, s, &clock, "deye-reader.soc", v, cellsNow.Add(-time.Duration(5-i)*time.Minute))
+	}
+	res, err := builtin.NewCellsGet(s, func() time.Time { return cellsNow }).Run(context.Background(), call("cells.get", `{"id":"deye-reader.soc","since":"1h"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var a historyAnswer
+	if err := json.Unmarshal([]byte(res.Text), &a); err != nil {
+		t.Fatal(err)
+	}
+	h := a.History
+	if len(h.Points) != 5 || h.Min == nil || *h.Min != 10 || *h.Max != 30 || *h.Mean != 20 {
+		t.Fatalf("history %+v min %v max %v mean %v", h.Points, h.Min, h.Max, h.Mean)
+	}
+	if res.External {
+		t.Fatal("null and numbers are not outside content")
+	}
+}

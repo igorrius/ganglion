@@ -122,6 +122,8 @@ type store struct {
 	by         map[string]string // sha → who installed it
 	counts     []countCall
 	rolledBack []string
+	removed    []string
+	gone       []string // removed through RemoveLocal; the journal still has them
 }
 
 func (s *store) ActiveLocal(context.Context) ([]modstore.Active, error) {
@@ -140,6 +142,9 @@ func (s *store) Journal(_ context.Context, module string) ([]modstore.Entry, err
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []modstore.Entry
+	if slices.Contains(s.gone, module) {
+		out = append(out, modstore.Entry{Version: "3", State: "retired"})
+	}
 	for _, a := range s.active {
 		if a.Module == module {
 			out = append(out, modstore.Entry{Version: "3", SHA256: a.SHA256, State: "active", By: s.by[a.SHA256]})
@@ -179,8 +184,11 @@ func (s *store) RemoveLocal(_ context.Context, module string) error {
 	if len(s.active) == n {
 		return modstore.ErrUnknownModule
 	}
+	s.gone = append(s.gone, module)
 	return nil
 }
+
+func (s *store) RemovedLocal(context.Context) ([]string, error) { return s.removed, nil }
 
 func (s *store) failures() []modstore.CallResult {
 	s.mu.Lock()
@@ -202,8 +210,9 @@ func (s *store) runs() int {
 
 // jobs records the module jobs as schedule.Store keeps them.
 type jobs struct {
-	mu   sync.Mutex
-	live map[string]schedule.Job
+	mu         sync.Mutex
+	live       map[string]schedule.Job
+	failDelete error
 }
 
 func (j *jobs) EnsureModule(_ context.Context, job schedule.Job) error {
@@ -219,6 +228,9 @@ func (j *jobs) EnsureModule(_ context.Context, job schedule.Job) error {
 func (j *jobs) DeleteModule(_ context.Context, module string) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if j.failDelete != nil {
+		return j.failDelete
+	}
 	for id, job := range j.live {
 		if job.Text == module {
 			delete(j.live, id)
@@ -263,9 +275,10 @@ func (q *inbox) taken() []event.Event {
 
 // conf is the modules: section, with the supervisor's writes recorded.
 type conf struct {
-	mu   sync.Mutex
-	mods []settings.Module
-	offs []string // "name:why"
+	mu         sync.Mutex
+	mods       []settings.Module
+	offs       []string // "name:why"
+	failRemove error
 }
 
 func (c *conf) Modules() ([]settings.Module, error) {
@@ -302,6 +315,9 @@ func (c *conf) SetModule(m settings.Module) error {
 func (c *conf) RemoveModule(name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.failRemove != nil {
+		return c.failRemove
+	}
 	c.mods = slices.DeleteFunc(c.mods, func(m settings.Module) bool { return m.Name == name })
 	return nil
 }
