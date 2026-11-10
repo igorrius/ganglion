@@ -102,8 +102,9 @@ func (h *Host) known(ctx context.Context, module string) ([]modstore.Version, er
 	return vs, nil
 }
 
-// Card is how a module stands, every version it has had and the config keys
-// it declares with their values now.
+// Card is how a module stands, its health check when it runs (ruling 3 of
+// M4b), every version it has had and the config keys it declares with their
+// values now.
 func (h *Host) Card(ctx context.Context, name string) (modstore.Card, error) {
 	module := fullName(name)
 	vs, err := h.known(ctx, module)
@@ -114,7 +115,8 @@ func (h *Host) Card(ctx context.Context, name string) (modstore.Card, error) {
 	if err != nil {
 		return modstore.Card{}, fmt.Errorf("modhost: %w", err)
 	}
-	c := modstore.Card{Name: modstore.ShortName(module), State: h.runState(module), Version: activeVersion(vs), Journal: journal}
+	c := modstore.Card{Name: modstore.ShortName(module), State: h.runState(module), Version: activeVersion(vs), Journal: journal,
+		Health: h.health(ctx, module)}
 	m, ok, err := h.manifestOf(ctx, module)
 	if err != nil || !ok {
 		return c, err

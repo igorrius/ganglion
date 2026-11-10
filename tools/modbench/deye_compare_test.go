@@ -35,8 +35,13 @@ func TestMain(m *testing.M) {
 const exampleDir = "../../examples/modules/deye-reader"
 
 // The Rust example, built once by the node's own builder, run on the
-// recorded DeyeCloud answers.
+// recorded DeyeCloud answers. Its build fetches crates from crates.io, so it
+// runs only with GANGLION_NET_TESTS=1 (make test-net, docs/conventions.md
+// section 9).
 func TestTheRustExample(t *testing.T) {
+	if os.Getenv("GANGLION_NET_TESTS") == "" {
+		t.Skip("it fetches crates from crates.io: set GANGLION_NET_TESTS=1 (make test-net)")
+	}
 	art := buildExample(t)
 	t.Run("agrees with the Go reference", func(t *testing.T) { agreesWithTheReference(t, art) })
 	t.Run("waits out Retry-After", func(t *testing.T) { waitsOutRetryAfter(t, art) })

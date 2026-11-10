@@ -209,7 +209,7 @@ type Skilled struct {
 func Skills() do.Provider[Skilled] {
 	return func(i do.Injector) (Skilled, error) {
 		b := do.MustInvoke[Bootstrap](i)
-		set, problems, err := skills.Load(skills.Builtin, b.Agent.Workspace, scriptDeny(b))
+		set, problems, err := skills.Load(skills.Builtin, b.Agent.Workspace, nodeSecrets(b))
 		if err != nil {
 			return Skilled{}, err
 		}
@@ -225,10 +225,11 @@ func Skills() do.Provider[Skilled] {
 	}
 }
 
-// scriptDeny are the variables a skill script may not list: every secret
-// reference of the file, and the providers' keys of models set without a
-// file (the lab), sorted and each once.
-func scriptDeny(b Bootstrap) []string {
+// nodeSecrets are the node's own secrets: every secret reference of the
+// file, and the providers' keys of models set without a file (the lab),
+// sorted and each once. A skill script may not list them, and no module is
+// granted one.
+func nodeSecrets(b Bootstrap) []string {
 	deny := b.Settings.SecretNames()
 	if m := b.Agent.Models; m != nil {
 		deny = append(deny, m.KeyNames()...)

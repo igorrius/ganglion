@@ -164,10 +164,15 @@ func escalations(m runner.Manifest) map[Kind]bool {
 }
 
 // secret is the runner's secret lookup for module: the node's source; a
-// secret that cannot be read is logged by name and is not set. The runner
-// asks only for the names the manifest grants.
+// secret that cannot be read is logged by name and is not set, and one of
+// the node's own is never set. The runner asks only for the names the
+// manifest grants.
 func (h *Host) secret(module string) func(string) (string, bool) {
 	return func(name string) (string, bool) {
+		if modstore.NodeSecret(h.d.NodeSecrets, name) {
+			h.d.Log.Warn("modhost: a module asked for one of the node's own secrets; it is not given", "module", module, "secret", name)
+			return "", false
+		}
 		v, err := h.d.Secrets.Secret(name)
 		if err != nil {
 			h.d.Log.Warn("modhost: a module's secret cannot be read", "module", module, "secret", name, "err", err)

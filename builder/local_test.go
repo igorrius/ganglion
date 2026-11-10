@@ -637,8 +637,13 @@ func TestARealRustModuleBuildsInTheSandboxAndRuns(t *testing.T) {
 
 // A crate with a dependency from crates.io builds: cargo fetches and
 // unpacks it in the sandbox, setting 0644 on what it unpacks, which the
-// confined filter allows (ADR-0064). It skips when crates.io is out of reach.
+// confined filter allows (ADR-0064). It needs crates.io, so it runs only
+// with GANGLION_NET_TESTS=1 (make test-net, docs/conventions.md section 9),
+// and skips when crates.io is out of reach.
 func TestARealRustModuleWithADependencyBuilds(t *testing.T) {
+	if os.Getenv("GANGLION_NET_TESTS") == "" {
+		t.Skip("it fetches a crate from crates.io: set GANGLION_NET_TESTS=1 (make test-net)")
+	}
 	b := rustBuilder(t)
 	art, log, err := b.Build(t.Context(), Source{Name: "withdep", Dir: "testdata/withdep"})
 	if err != nil && (strings.Contains(string(log), "failed to download") || strings.Contains(string(log), "Couldn't resolve host") ||

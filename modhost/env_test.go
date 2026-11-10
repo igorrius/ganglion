@@ -29,6 +29,9 @@ import (
 
 const owner = "telegram:user:42"
 
+// botToken is the node's own secret in these tests: no module reads it.
+const botToken = "123:bot-token"
+
 var t0 = time.Date(2026, 11, 9, 14, 0, 0, 0, time.UTC)
 
 // hostile is a module's error text that must never reach the model.
@@ -124,11 +127,15 @@ type store struct {
 	rolledBack []string
 	removed    []string
 	gone       []string // removed through RemoveLocal; the journal still has them
+	failActive error    // ActiveLocal's, when set
 }
 
 func (s *store) ActiveLocal(context.Context) ([]modstore.Active, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.failActive != nil {
+		return nil, s.failActive
+	}
 	return slices.Clone(s.active), nil
 }
 
@@ -355,13 +362,14 @@ func newEnv(t *testing.T, actives ...modstore.Active) *env {
 	}
 	e.cells = cells.NewService(cells.NewMemStore(), cells.WithClock(func() time.Time { return e.now }))
 	e.host = modhost.New(modhost.Deps{
-		Store:    e.store,
-		Cells:    e.cells,
-		Jobs:     e.jobs,
-		Inbox:    e.inbox,
-		Secrets:  secretMap{"PROBE_TOKEN": "hunter2"},
-		State:    runner.NewMemState(),
-		Settings: e.conf,
+		Store:       e.store,
+		Cells:       e.cells,
+		Jobs:        e.jobs,
+		Inbox:       e.inbox,
+		Secrets:     secretMap{"PROBE_TOKEN": "hunter2", "TELEGRAM_BOT_TOKEN": botToken},
+		NodeSecrets: []string{"TELEGRAM_BOT_TOKEN"},
+		State:       runner.NewMemState(),
+		Settings:    e.conf,
 		Admins: alert.Admins{
 			List: func(context.Context) ([]string, error) { return []string{"telegram:user:1", owner}, nil },
 			Private: func(p string) (string, string, bool) {
@@ -385,9 +393,7 @@ func (w syncWriter) Write(p []byte) (int, error) {
 
 func (e *env) start(t *testing.T) {
 	t.Helper()
-	if err := e.host.Start(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	e.host.Start(context.Background())
 }
 
 // tool returns the host's tool called name, or nil.
@@ -424,4 +430,11 @@ func (e *env) moduleEvents(t *testing.T) []event.Module {
 		out = append(out, m)
 	}
 	return out
+}
+
+// logText is what the host logged so far.
+func (e *env) logText() string {
+	e.logsMu.Lock()
+	defer e.logsMu.Unlock()
+	return e.logs.String()
 }

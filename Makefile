@@ -1,7 +1,7 @@
 # Core tags only: a module's tag, html2md/vX.Y.Z (ADR-0041), is not the node's version.
 VERSION ?= $(shell git describe --tags --match 'v*' --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-tinygo modules-rust example-deye clean-modules modrun modbench bench bench-html2md lab lab-all lab-skip-full lab-faults
+.PHONY: build test test-net lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-tinygo modules-rust example-deye clean-modules modrun modbench bench bench-html2md lab lab-all lab-skip-full lab-faults
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
@@ -9,6 +9,12 @@ build:
 test:
 	go test -race ./...
 	go test -race -timeout 20m -tags lab ./internal/chatlab/... ./tools/chatlab/...
+
+# Tests that need the network (crates.io for Rust builds with dependencies):
+# out of go test ./... and never cached (docs/conventions.md, section 9). They
+# skip without Rust's wasm32-wasip1 target or the command sandbox.
+test-net:
+	GANGLION_NET_TESTS=1 go test -count=1 -timeout 20m -run 'TestTheRustExample|TestARealRustModuleWithADependencyBuilds' -v ./tools/modbench/ ./builder/
 
 lint:
 	golangci-lint run

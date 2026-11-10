@@ -63,16 +63,20 @@ type SettingsPort interface {
 
 // Deps are the host's collaborators; all are required.
 type Deps struct {
-	Store    Store
-	Cells    *cells.Service
-	Jobs     Jobs
-	Inbox    Inbox
-	Secrets  secrets.Source
-	State    runner.State
-	Settings SettingsPort
-	Admins   alert.Admins
-	Now      func() time.Time
-	Log      *slog.Logger
+	Store   Store
+	Cells   *cells.Service
+	Jobs    Jobs
+	Inbox   Inbox
+	Secrets secrets.Source
+	// NodeSecrets are the names of the node's own secrets (the bot token,
+	// the providers' and the search keys): no module reads one, even one
+	// installed before the install refused them.
+	NodeSecrets []string
+	State       runner.State
+	Settings    SettingsPort
+	Admins      alert.Admins
+	Now         func() time.Time
+	Log         *slog.Logger
 }
 
 // ErrNotStarted is a module that is active and on but could not start; the
@@ -94,6 +98,7 @@ type Host struct {
 	off     map[string]bool
 	fails   map[string][]time.Time
 	sent    map[string]string // escalation key → its hour
+	unread  time.Time         // when Start could not read the store or the settings; zero when it could
 }
 
 // New returns a host with no module running; Start loads them.
@@ -108,13 +113,18 @@ func New(d Deps) *Host {
 func (*Host) Name() string { return "modules-local" }
 
 // Start loads every active local module that the settings do not turn off:
-// its cells, its init, its cron jobs and its tools. A module that cannot
-// start is logged and shown in /status; it does not stop the node. An error
-// is the store's or the settings' own.
-func (h *Host) Start(ctx context.Context) error {
+// its cells, its init, its cron jobs and its tools. Nothing here stops the
+// node: a module that cannot start is logged and shown in /status, and so is
+// a store or a settings file that cannot be read, when none starts; jobs of
+// removed modules that cannot be cleared are logged and stay.
+func (h *Host) Start(ctx context.Context) {
 	actives, mods, err := h.read(ctx)
 	if err != nil {
-		return err
+		h.d.Log.Error("modhost: the local modules are not loaded: the store or the settings cannot be read", "err", err)
+		h.stateMu.Lock()
+		h.unread = h.d.Now()
+		h.stateMu.Unlock()
+		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -123,7 +133,9 @@ func (h *Host) Start(ctx context.Context) error {
 			h.d.Log.Warn("modhost: a module did not start", "module", a.Module, "err", err)
 		}
 	}
-	return h.clearOrphans(ctx, actives)
+	if err := h.clearOrphans(ctx, actives); err != nil {
+		h.d.Log.Warn("modhost: the jobs of removed modules are not cleared", "err", err)
+	}
 }
 
 // Reload brings module in line with the store and the settings after an

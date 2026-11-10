@@ -356,3 +356,54 @@ func TestAFailedInitKeepsTheModuleStopped(t *testing.T) {
 		t.Fatalf("reload: %v", err)
 	}
 }
+
+// I2, abuse test: a module installed before the install refused the node's
+// own secrets, and granted the bot token in its manifest, reads nothing.
+func TestAModuleNeverReadsTheNodesOwnSecret(t *testing.T) {
+	m := strings.Replace(probeManifest, "secret.get: [PROBE_TOKEN]", "secret.get: [PROBE_TOKEN, TELEGRAM_BOT_TOKEN]", 1)
+	m = strings.Replace(m, "  - tool: greedy\n", "  - tool: peek\n    about: Reads a secret.\n    output: {value: string, ok: boolean}\n  - tool: greedy\n", 1)
+	m = strings.Replace(m, "config:\n", "config:\n  op_tool_peek: {type: string, default: '{\"op\":\"secret\",\"name\":\"TELEGRAM_BOT_TOKEN\"}'}\n", 1)
+	e := newEnv(t, active(t, "local/probe", m))
+	e.start(t)
+	res, err := e.call(t, "probe.peek")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(res.Text, botToken) || !strings.Contains(res.Text, `"ok":false`) {
+		t.Fatalf("the module read the node's own secret: %s", res.Text)
+	}
+}
+
+// A store that cannot be read at start does not stop the node: Start logs it
+// and /status says the local modules were not loaded; a later Reload that
+// can read them starts them.
+func TestStartDoesNotStopTheNodeWhenTheStoreCannotBeRead(t *testing.T) {
+	e := newEnv(t, active(t, "local/probe", probeManifest))
+	e.store.failActive = errors.New("disk I/O error")
+	e.start(t)
+	checks, err := e.host.Status(context.Background(), status.Scope{})
+	if err != nil || len(checks) != 1 || checks[0].Line != texts.StatusModulesUnread || checks[0].Since != t0 {
+		t.Fatalf("status %+v, %v", checks, err)
+	}
+	if !strings.Contains(e.logText(), "the local modules are not loaded") {
+		t.Fatalf("log:\n%s", e.logText())
+	}
+	e.store.failActive = nil
+	if err := e.host.Reload(context.Background(), "local/probe"); err != nil {
+		t.Fatal(err)
+	}
+	if checks, _ := e.host.Status(context.Background(), status.Scope{}); hasLine(checks, texts.StatusModulesUnread, "") {
+		t.Fatalf("status %+v", checks)
+	}
+}
+
+// Jobs of a removed module that cannot be deleted are logged; Start goes on.
+func TestStartGoesOnWhenOrphanJobsCannotBeCleared(t *testing.T) {
+	e := newEnv(t)
+	e.store.removed = []string{"local/old"}
+	e.jobs.failDelete = errors.New("database is locked")
+	e.start(t)
+	if !strings.Contains(e.logText(), "the jobs of removed modules are not cleared") {
+		t.Fatalf("log:\n%s", e.logText())
+	}
+}

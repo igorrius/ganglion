@@ -101,15 +101,33 @@ func (m cellMap) Get(_ context.Context, id string) (cells.Cell, error) {
 	return c, nil
 }
 
-// reloads records the modules reloaded.
+// reloads is the module host: it records the modules reloaded, checked and
+// rolled back. A rollback goes to the real store when rollback is set.
 type reloads struct {
-	names []string
-	err   error
+	names      []string
+	err        error // every Reload's
+	checked    []string
+	check      error // every Check's
+	rolledBack []string
+	rollback   func(ctx context.Context, module string) (modstore.Outcome, error)
 }
 
 func (r *reloads) Reload(_ context.Context, module string) error {
 	r.names = append(r.names, module)
 	return r.err
+}
+
+func (r *reloads) Check(_ context.Context, b modstore.Build, _ map[string]any) error {
+	r.checked = append(r.checked, b.Module)
+	return r.check
+}
+
+func (r *reloads) Rollback(ctx context.Context, module string) (modstore.Outcome, error) {
+	r.rolledBack = append(r.rolledBack, module)
+	if r.rollback == nil {
+		return modstore.Outcome{}, errors.New("no rollback in this test")
+	}
+	return r.rollback(ctx, module)
 }
 
 // moduleEnv is a node for the module tools: a real store on a temp
@@ -475,6 +493,110 @@ func TestModuleInstallRefusalIsNeverAsked(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 	noSecret(t, err.Error())
+}
+
+// I2, abuse test: a build that asks for one of the node's own secrets is
+// refused before the owner is asked, though the secret is set.
+func TestModuleInstallRefusesTheNodesOwnSecret(t *testing.T) {
+	e := newModuleEnv(t)
+	e.m.NodeSecrets = []string{"TELEGRAM_BOT_TOKEN", "DEYE_PASSWORD"}
+	e.source(t, "deye-reader")
+	art := artifact(deyeManifest, 1024, 1)
+	e.build(t, art)
+	_, err := e.tool(builtin.ModuleInstallTool).(tool.Questioner).Question(context.Background(), installCall(art.SHA256))
+	if err == nil || !strings.Contains(err.Error(), "the secret DEYE_PASSWORD is the node's own") {
+		t.Fatalf("err %v", err)
+	}
+	noSecret(t, err.Error())
+}
+
+// install builds art and installs it with a press; it fails the test when
+// the install fails.
+func (e *moduleEnv) install(t *testing.T, art builder.Artifact) tool.Result {
+	t.Helper()
+	e.build(t, art)
+	c := installCall(art.SHA256)
+	question(t, e, c)
+	res, err := e.tool(builtin.ModuleInstallTool).Run(context.Background(), pressed(c))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+// activeSHA is the digest of the reader's active version.
+func (e *moduleEnv) activeSHA(t *testing.T) string {
+	t.Helper()
+	vs, err := e.store.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range vs {
+		if v.State == modstore.StateActive {
+			return v.SHA256
+		}
+	}
+	return ""
+}
+
+// R-RUN-9: a build that does not load, or whose health fails, in the
+// throwaway instance is refused at the press; the active version, the
+// settings and the running module stay as they were.
+func TestModuleInstallRefusesABuildThatFailsItsCheck(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "deye-reader")
+	first := artifact(deyeManifest, 1024, 1)
+	e.install(t, first)
+	before, err := os.ReadFile(e.settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, why := range []string{"it does not load on this node", "its health check failed (auth_failed)"} {
+		e.reloads.check = fmt.Errorf("the build did not pass its check: %s", why)
+		second := artifact(deyeManifest, 1024, byte(len(why)))
+		e.build(t, second)
+		c := installCall(second.SHA256)
+		question(t, e, c)
+		_, err := e.tool(builtin.ModuleInstallTool).Run(context.Background(), pressed(c))
+		if err == nil || !strings.Contains(err.Error(), "local/deye-reader is not installed and nothing changed") || !strings.Contains(err.Error(), why) {
+			t.Fatalf("err %v", err)
+		}
+		if got := e.activeSHA(t); got != first.SHA256 {
+			t.Fatalf("the active version changed to %s", got)
+		}
+		if after, _ := os.ReadFile(e.settings); string(after) != string(before) {
+			t.Fatalf("the settings changed:\n%s", after)
+		}
+		if len(e.reloads.names) != 1 {
+			t.Fatalf("reloads %v", e.reloads.names)
+		}
+	}
+	if len(e.reloads.checked) != 3 {
+		t.Fatalf("checked %v", e.reloads.checked)
+	}
+}
+
+// A version that passed its check but does not start is rolled back to the
+// version it replaced, and the answer says so.
+func TestModuleInstallRollsBackAVersionThatDoesNotStart(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "deye-reader")
+	first := artifact(deyeManifest, 1024, 1)
+	e.install(t, first)
+	e.reloads.err = errors.New("modhost: module not started: init")
+	e.reloads.rollback = func(ctx context.Context, module string) (modstore.Outcome, error) {
+		return e.store.Rollback(ctx, module)
+	}
+	res := e.install(t, artifact(deyeManifest, 1024, 2))
+	if !strings.Contains(res.Text, "did not start, so the node rolled back to version 3, which runs") || strings.Contains(res.Text, "init") {
+		t.Fatalf("answer %q", res.Text)
+	}
+	if got := e.activeSHA(t); got != first.SHA256 {
+		t.Fatalf("active %s, want the first build", got)
+	}
+	if !slices.Equal(e.reloads.rolledBack, []string{"local/deye-reader"}) {
+		t.Fatalf("rolled back %v", e.reloads.rolledBack)
+	}
 }
 
 func TestModuleInstallRefusesFilesThatAreNotTheirDigest(t *testing.T) {

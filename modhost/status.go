@@ -20,13 +20,17 @@ var reasonKeys = map[Reason]texts.Key{
 
 // Status implements status.Source (R-OBS-11): how many local modules run
 // and are off, and a line for each that should run and does not, or that
-// the node turned off; none when there are no local modules.
+// the node turned off; none when there are no local modules. When Start
+// could not read them and none has started since, one line says so.
 func (h *Host) Status(context.Context, status.Scope) ([]status.Check, error) {
 	h.mu.RLock()
 	running := len(h.running)
 	h.mu.RUnlock()
 	h.stateMu.Lock()
 	defer h.stateMu.Unlock()
+	if !h.unread.IsZero() && running == 0 {
+		return []status.Check{{Section: status.SectionProblems, State: status.Warn, Line: texts.StatusModulesUnread, Since: h.unread}}, nil
+	}
 	if running+len(h.off)+len(h.stopped) == 0 {
 		return nil, nil
 	}

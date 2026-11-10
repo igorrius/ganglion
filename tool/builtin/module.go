@@ -33,7 +33,7 @@ const modulesFolder = "modules"
 
 // ModuleStore plans and installs local builds (modstore.Store).
 type ModuleStore interface {
-	PlanLocal(ctx context.Context, b modstore.Build, secretSet func(string) bool, config map[string]any, owners modstore.CellOwners) (modstore.Plan, error)
+	PlanLocal(ctx context.Context, b modstore.Build, secrets modstore.Secrets, config map[string]any, owners modstore.CellOwners) (modstore.Plan, error)
 	InstallLocal(ctx context.Context, b modstore.Build, sha string) (modstore.Outcome, error)
 }
 
@@ -50,10 +50,13 @@ type CellReader interface {
 	Get(ctx context.Context, id string) (cells.Cell, error)
 }
 
-// Reloader brings a module in line with the store and the settings
-// (modhost.Host).
-type Reloader interface {
+// ModuleHost runs the owner's modules (modhost.Host): it checks a build in a
+// throwaway instance before it is installed, brings a module in line with
+// the store and the settings, and rolls one back.
+type ModuleHost interface {
+	Check(ctx context.Context, b modstore.Build, config map[string]any) error
 	Reload(ctx context.Context, module string) error
+	Rollback(ctx context.Context, name string) (modstore.Outcome, error)
 }
 
 // Workspace is the agent's workspace repository (gitrepo.Repo): where the
@@ -65,7 +68,8 @@ type Workspace interface {
 	Dirty(ctx context.Context, rel string) (bool, error)
 }
 
-// Modules is what the module tools work with. Every field is required;
+// Modules is what the module tools work with. Every field is required but
+// NodeSecrets (none on a node without secrets in its file);
 // Examples is "" on a node without an examples folder, and module.import is
 // then not offered.
 type Modules struct {
@@ -73,9 +77,12 @@ type Modules struct {
 	Builder   builder.Builder
 	Store     ModuleStore
 	Secrets   secrets.Source
-	Settings  ModuleSettings
-	Cells     CellReader
-	Host      Reloader
+	// NodeSecrets are the names of the node's own secrets (the bot token,
+	// the providers' and the search keys): no module is granted one.
+	NodeSecrets []string
+	Settings    ModuleSettings
+	Cells       CellReader
+	Host        ModuleHost
 	// Builds is the folder builds wait in until they are installed:
 	// <data>/modules/builds, which the janitor sweeps (ruling 6 of M4b).
 	Builds string
@@ -278,7 +285,7 @@ func (m Modules) plan(ctx context.Context, b modstore.Build) (modstore.Plan, err
 	if err != nil {
 		return modstore.Plan{}, err
 	}
-	return m.Store.PlanLocal(ctx, b, m.secretSet, line.Config, m.owner)
+	return m.Store.PlanLocal(ctx, b, modstore.Secrets{Set: m.secretSet, Node: m.NodeSecrets}, line.Config, m.owner)
 }
 
 // line is the settings line of module; one with only the name when there is

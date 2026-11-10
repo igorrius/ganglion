@@ -196,7 +196,7 @@ type Cells struct {
   `read` entry is a full cell id; a tool name matches `^[a-z0-9_]+$`; a config key's type is one
   of the three.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 // runner/contract_test.go
@@ -251,9 +251,9 @@ its cells, outputs and config keys, and cases that fail with the field named: a 
 switch`, a cell name `So-C!`, a `read` entry `soc` (not a full id), a config key `type: date`, a
 tool name `Status`.
 
-- [ ] **Step 2: Run them to see them fail** — `go test ./runner/ -run 'Shape|HasString|Manifest'`.
+- [x] **Step 2: Run them to see them fail** — `go test ./runner/ -run 'Shape|HasString|Manifest'`.
 
-- [ ] **Step 3: Implement** `contract.go` (UnmarshalYAML builds the Shape from the node: scalar →
+- [x] **Step 3: Implement** `contract.go` (UnmarshalYAML builds the Shape from the node: scalar →
   type name with optional `?`; sequence → enum of strings; mapping with the single key `list` →
   list; other mapping → object with `?`-suffixed field names optional), `Check` (decode with
   `json.Decoder.UseNumber` and walk; integer = a number whose text has no `.`/`e`), `HasString`.
@@ -261,10 +261,10 @@ tool name `Status`.
   (`oneOf` string / array of strings / object) and `trigger.about`, `trigger.output`; the schema
   test adds the new pointers.
 
-- [ ] **Step 4: CI** — add the Rust step to the `test` job; `make test` there now runs the Rust
+- [x] **Step 4: CI** — add the Rust step to the `test` job; `make test` there now runs the Rust
   tests the later tasks add.
 
-- [ ] **Step 5: Run `make lint test`, commit, push.**
+- [x] **Step 5: Run `make lint test`, commit, push.**
 
 ```bash
 git commit -m "runner: manifest v2 — cells, tool outputs, config keys; the contract language (R-RUN-11, 14)"
@@ -304,13 +304,13 @@ func (s *Service) HistorySince(ctx context.Context, id string, since time.Time, 
   and `HistorySince(ctx, id, sinceMS int64, limit int) ([]Change, error)`; both stores implement them
   and `storetest` covers them.
 
-- [ ] **Step 1: Failing tests** in `cells/cellstest` (run against both stores):
+- [x] **Step 1: Failing tests** in `cells/cellstest` (run against both stores):
   `deye-reader.soc` defines; a second owner gets `ErrOwned`; `Disown` then `DefineOwned` by a new
   owner of the same name takes the cell back with its history (`History` still has the old
   reports); `List` returns all cells with owner and about; `HistorySince` returns only newer
   changes in order and honours the limit.
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement** — migration:
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement** — migration:
 
 ```sql
 -- Cells owned by modules (R-RUN-11, ADR-0062).
@@ -319,7 +319,7 @@ ALTER TABLE cells ADD COLUMN about TEXT NOT NULL DEFAULT '';
 CREATE INDEX cell_changes_at ON cell_changes (cell_id, at_ms);
 ```
 
-- [ ] **Step 4: `make lint test`, commit, push.**
+- [x] **Step 4: `make lint test`, commit, push.**
 
 ```bash
 git commit -m "cells: ids may hold '-'; cells have an owner and an about; list and history since (R-RUN-11)"
@@ -367,7 +367,7 @@ func (m *Module) Health(ctx context.Context) error // Trigger "health"
   the module answered. The tool answer of a tool trigger is checked against that trigger's
   `Output` the same way.
 
-- [ ] **Step 1: Failing tests** — the conformance suite (`runnertest.Run`) gains subtests with
+- [x] **Step 1: Failing tests** — the conformance suite (`runnertest.Run`) gains subtests with
   new probe ops `cell_report`, `cell_get`, `headers`:
   - a declared cell is reported under `prefix.name` through the port;
   - an undeclared name, `../x` and `other.soc` are refused (-1) and nothing reaches the port;
@@ -380,8 +380,8 @@ func (m *Module) Health(ctx context.Context) error // Trigger "health"
   - state written in one instance is read in a new one through `NewSQLState`.
   `runner/tool_test.go`: a tool answer that does not fit its `Output` is a `*ModuleError` with
   kind `module.format`.
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement.** `fetch` copies `resp.Header` into `Headers` (lower-case keys, first
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement.** `fetch` copies `resp.Header` into `Headers` (lower-case keys, first
   value). The Go glue gets `//go:wasmimport ganglion cell_report` and `cell_get`; the Rust glue the
   same two `extern "C"` imports and `Host` trait methods. `002_state.sql`:
 
@@ -394,7 +394,7 @@ CREATE TABLE module_state (
 );
 ```
 
-- [ ] **Step 4: `make lint test`, commit, push.**
+- [x] **Step 4: `make lint test`, commit, push.**
 
 ```bash
 git commit -m "runner: cell_report and cell_get by the manifest, answers checked against the contract, headers, init/health, SQL state (R-RUN-11, 14)"
@@ -552,7 +552,7 @@ func NewLocal(start Starter, cfg LocalConfig) *Local
   `HOME=<temp>`; read the one `.wasm` in `target/wasm32-wasip1/release/` and `manifest.yaml`;
   `defer os.RemoveAll(temp)`. The log keeps the last 8 KiB.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - Without Rust (always run): a fake `Starter` records argv, dir and env, and writes a fake
     `.wasm` into the target dir; assert the argv, `--locked`, the temp paths, that no node env
     (e.g. `TELEGRAM_BOT_TOKEN`) is in the env, that the temp dir is gone afterwards, that a
@@ -562,14 +562,18 @@ func NewLocal(start Starter, cfg LocalConfig) *Local
     `builder/testdata/hello` (a `Cargo.toml`, `src/lib.rs` exporting `handle` that answers OK,
     `manifest.yaml`, `Cargo.lock`) through a real `sandbox` instance, load it with `runner.Load`,
     call `Health`.
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement.** `config` provides `builder.Builder` from `LocalConfig` filled by
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement.** `config` provides `builder.Builder` from `LocalConfig` filled by
   `cmd` (it looks up cargo and `RUSTUP_HOME`; domain code reads no env).
-- [ ] **Step 4: `make lint test`, commit, push.**
+- [x] **Step 4: `make lint test`, commit, push.**
 
 ```bash
 git commit -m "builder: Rust modules built in the command sandbox from a temporary copy (R-RUN-9, ADR-0061)"
 ```
+
+**Step 5b (done):** the review of task 5 found that a build could write outside its temporary
+folder; builds now run in the sandbox's `Confined` mode, which lets them write only that folder
+and pins the toolchain ([ADR-0064](../adr/0064-builds-write-only-their-temp-folder.md)).
 
 ---
 

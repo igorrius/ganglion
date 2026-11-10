@@ -134,6 +134,7 @@ func ownModulesEnv(t *testing.T) (*env, *fakeLocal, *fakeModules) {
 	e, m := modulesEnv(t)
 	l := &fakeLocal{card: modstore.Card{
 		LocalModule: modstore.LocalModule{Name: "deye-reader", State: modstore.RunRunning, Version: "3"},
+		Health:      modstore.HealthOK,
 		Journal: []modstore.Entry{
 			{Version: "3", State: "active", Note: "temperature arrives as a string", Installed: time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC), Runs: 1340},
 			{Version: "2", State: "previous", Note: "a *bold* note_", Installed: time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC), Runs: 200, Failures: 3},
@@ -175,6 +176,7 @@ func TestModulesListsLocalModulesWithTheirState(t *testing.T) {
 func TestModulesCardGolden(t *testing.T) {
 	e, _, _ := ownModulesEnv(t)
 	want := "deye-reader: running since 02.11\n" +
+		"Health: ok\n" +
 		"Versions:\n" +
 		"v3  14.11  \"temperature arrives as a string\"  1,340 runs, 0 failures  ← active\n" +
 		"v2  10.11  \"a \\*bold\\* note\\_\"  200 runs, 3 failures  ← previous\n" +
@@ -193,6 +195,18 @@ func TestModulesCardGolden(t *testing.T) {
 	}
 	if len(e.smart.requests()) != 0 {
 		t.Fatal("a model was called")
+	}
+}
+
+// The card tells a failed health check by its kind; a module that does not
+// run has no health line.
+func TestModulesCardHealth(t *testing.T) {
+	for health, want := range map[modstore.Health]string{"auth_failed": "\nHealth: failed (auth\\_failed)\n", "": "02.11\nVersions:"} {
+		e, l, _ := ownModulesEnv(t)
+		l.card.Health = health
+		if got := oneReply(t, e, "/modules deye-reader"); !strings.Contains(got, want) {
+			t.Fatalf("health %q: card\n%s\nwant %q", health, got, want)
+		}
 	}
 }
 

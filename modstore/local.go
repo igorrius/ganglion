@@ -148,12 +148,29 @@ func checkBuild(b Build) (runner.Manifest, string, string) {
 	return m, "", ""
 }
 
+// SecretSet reports whether the node has a value for the secret name.
+type SecretSet func(name string) bool
+
+// Secrets is what a plan knows of the node's secrets: which are set, and
+// which are the node's own (the bot token, the providers' and the search
+// keys), which no module is ever granted.
+type Secrets struct {
+	Set  SecretSet
+	Node []string
+}
+
+// NodeSecret reports whether name is one of the node's own secrets in own,
+// or the variable naming its file (NAME_FILE): a module may read neither.
+func NodeSecret(own []string, name string) bool {
+	return slices.Contains(own, name) || slices.Contains(own, strings.TrimSuffix(name, "_FILE"))
+}
+
 // PlanLocal checks a build without installing it: the name is local/…, not
-// reserved, the manifest parses, every secret is set (via the given
-// lookup), every required config key is given (from the module's settings),
+// reserved, the manifest parses, no secret is the node's own and every one
+// is set, every required config key is given (from the module's settings),
 // no cell belongs to another owner. A refusal is in Plan.Refusal and names
 // the cause, never a value; an error is the store's own.
-func (s *Store) PlanLocal(ctx context.Context, b Build, secretSet func(string) bool, config map[string]any, owners CellOwners) (Plan, error) {
+func (s *Store) PlanLocal(ctx context.Context, b Build, secrets Secrets, config map[string]any, owners CellOwners) (Plan, error) {
 	p := Plan{SHA256: Digest(b.Wasm, b.Manifest), Size: len(b.Wasm)}
 	m, why, detail := checkBuild(b)
 	if why != "" {
@@ -161,7 +178,7 @@ func (s *Store) PlanLocal(ctx context.Context, b Build, secretSet func(string) b
 		return p, nil
 	}
 	p.Version = m.Version
-	if p.Refusal, p.RefusalDetail = missing(m, secretSet, config); p.Refusal != "" {
+	if p.Refusal, p.RefusalDetail = missing(m, secrets, config); p.Refusal != "" {
 		return p, nil
 	}
 	rights, why, err := cellRights(ctx, b.Module, m, owners)
@@ -194,11 +211,14 @@ func named(what, name, rest string) (string, string) {
 	return fmt.Sprintf("a %s the module names %s", what, rest), text.Truncate(name, 100)
 }
 
-// missing names the first secret that is not set or required config key
-// that is not given, as a refusal and its detail.
-func missing(m runner.Manifest, secretSet func(string) bool, config map[string]any) (string, string) {
+// missing names the first secret that is the node's own or not set, or
+// required config key that is not given, as a refusal and its detail.
+func missing(m runner.Manifest, secrets Secrets, config map[string]any) (string, string) {
 	for _, name := range sorted(m.Capabilities.SecretGet) {
-		if !secretSet(name) {
+		if NodeSecret(secrets.Node, name) {
+			return named("the secret", name, "is the node's own")
+		}
+		if !secrets.Set(name) {
 			return named("the secret", name, "is not set on this node")
 		}
 	}

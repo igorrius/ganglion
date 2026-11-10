@@ -251,6 +251,9 @@ func (a *Agent) moduleCard(ctx context.Context, t *turn, name string) (moduleRep
 		vars["state"] = a.say(ctx, t, stateKey(c.State), nil)
 		b.WriteString(a.say(ctx, t, texts.ModulesCardStopped, vars))
 	}
+	if line := a.healthLine(ctx, t, c.Health); line != "" {
+		b.WriteString("\n" + line)
+	}
 	rows := make([]string, len(c.Journal))
 	for i, e := range c.Journal {
 		rows[i] = a.journalRow(ctx, t, e)
@@ -262,6 +265,19 @@ func (a *Agent) moduleCard(ctx context.Context, t *turn, name string) (moduleRep
 		b.WriteString("\n" + a.say(ctx, t, texts.ModulesCardSettings, texts.Vars{"lines": a.settingRows(ctx, t, c.Config)}))
 	}
 	return moduleReply{text: b.String(), note: "the owner opened the card of " + c.Name}, nil
+}
+
+// healthLine is the running module's health check on the card (ruling 3
+// of M4b): ok, or the kind it failed with in the node's words; none when the
+// module does not run.
+func (a *Agent) healthLine(ctx context.Context, t *turn, h modstore.Health) string {
+	switch h {
+	case "":
+		return ""
+	case modstore.HealthOK:
+		return a.say(ctx, t, texts.ModulesCardHealthOK, nil)
+	}
+	return a.say(ctx, t, texts.ModulesCardHealthFailed, texts.Vars{"kind": texts.Escape(string(h))})
 }
 
 // journalRow is one version: v3  14.11  "the note"  1,340 runs, 0 failures  ← active.

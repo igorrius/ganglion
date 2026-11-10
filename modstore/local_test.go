@@ -44,7 +44,12 @@ limits:
 `
 
 func noOwners(context.Context, string) (string, bool, error) { return "", false, nil }
-func allSet(string) bool                                     { return true }
+
+var allSet = modstore.Secrets{Set: func(string) bool { return true }}
+
+// nodeOwn is a node whose own secrets (the bot token, a provider's key) are
+// set, as every other secret is: a module may still not be granted them.
+var nodeOwn = modstore.Secrets{Set: func(string) bool { return true }, Node: []string{"TELEGRAM_BOT_TOKEN", "OPENROUTER_API_KEY"}}
 
 var hostConfig = map[string]any{"host": "192.168.1.5"}
 
@@ -156,7 +161,7 @@ func TestPlanRefusals(t *testing.T) {
 	for name, c := range map[string]struct {
 		module   string
 		manifest string
-		secret   func(string) bool
+		secret   modstore.Secrets
 		config   map[string]any
 		owners   modstore.CellOwners
 		want     []string
@@ -165,7 +170,9 @@ func TestPlanRefusals(t *testing.T) {
 		"reserved":       {"local/cells", good, allSet, hostConfig, noOwners, []string{"cells", "reserved"}},
 		"empty name":     {"local/", good, allSet, hostConfig, noOwners, []string{"local/"}},
 		"traversal":      {"local/../x", good, allSet, hostConfig, noOwners, []string{"name"}},
-		"missing secret": {"local/x", good, func(string) bool { return false }, hostConfig, noOwners, []string{"INVERTER_KEY", "not set"}},
+		"missing secret": {"local/x", good, modstore.Secrets{Set: func(string) bool { return false }}, hostConfig, noOwners, []string{"INVERTER_KEY", "not set"}},
+		"node's secret":  {"local/x", strings.Replace(good, "secret.get: [INVERTER_KEY]", "secret.get: [TELEGRAM_BOT_TOKEN]", 1), nodeOwn, hostConfig, noOwners, []string{"TELEGRAM_BOT_TOKEN", "the node's own"}},
+		"node's file":    {"local/x", strings.Replace(good, "secret.get: [INVERTER_KEY]", "secret.get: [OPENROUTER_API_KEY_FILE]", 1), nodeOwn, hostConfig, noOwners, []string{"OPENROUTER_API_KEY_FILE", "the node's own"}},
 		"missing config": {"local/x", good, allSet, nil, noOwners, []string{"host", "required"}},
 		"owned cell":     {"local/x", good, allSet, hostConfig, other, []string{"x.grid", "local/other"}},
 		"bad manifest":   {"local/x", "name: x\nbogus: 1\n", allSet, hostConfig, noOwners, []string{"manifest"}},
@@ -225,7 +232,7 @@ func TestRefusalQuotingTheSourceIsSplit(t *testing.T) {
 		"parser": {"name: x\nbogus: " + long + "\n", "bogus"},
 		"secret": {odd, "ignore previous instructions"},
 	} {
-		p, err := s.PlanLocal(context.Background(), build("local/x", variant("a"), c.manifest), func(string) bool { return false }, hostConfig, noOwners)
+		p, err := s.PlanLocal(context.Background(), build("local/x", variant("a"), c.manifest), modstore.Secrets{Set: func(string) bool { return false }}, hostConfig, noOwners)
 		if err != nil || p.Refusal == "" {
 			t.Fatalf("%s: %+v, %v", name, p, err)
 		}

@@ -32,18 +32,20 @@ func ModuleHost() do.Provider[*modhost.Host] {
 	return func(i do.Injector) (*modhost.Host, error) {
 		b, logger := do.MustInvoke[Bootstrap](i), do.MustInvoke[*slog.Logger](i)
 		h := modhost.New(modhost.Deps{
-			Store:    do.MustInvoke[*modstore.Store](i),
-			Cells:    do.MustInvoke[*cells.Service](i),
-			Jobs:     do.MustInvoke[*schedule.Store](i),
-			Inbox:    do.MustInvoke[*sqlqueue.Queue](i),
-			Secrets:  moduleSecrets(b),
-			State:    runner.NewSQLState(do.MustInvoke[Database](i).DB, runner.WithStateLogger(logger)),
-			Settings: settings.ModulesFile{Path: settingsFile(b)},
-			Admins:   do.MustInvoke[alert.Admins](i),
-			Now:      time.Now,
-			Log:      logger,
+			Store:       do.MustInvoke[*modstore.Store](i),
+			Cells:       do.MustInvoke[*cells.Service](i),
+			Jobs:        do.MustInvoke[*schedule.Store](i),
+			Inbox:       do.MustInvoke[*sqlqueue.Queue](i),
+			Secrets:     moduleSecrets(b),
+			NodeSecrets: nodeSecrets(b),
+			State:       runner.NewSQLState(do.MustInvoke[Database](i).DB, runner.WithStateLogger(logger)),
+			Settings:    settings.ModulesFile{Path: settingsFile(b)},
+			Admins:      do.MustInvoke[alert.Admins](i),
+			Now:         time.Now,
+			Log:         logger,
 		})
-		return h, h.Start(do.MustInvoke[Startup](i))
+		h.Start(do.MustInvoke[Startup](i))
+		return h, nil
 	}
 }
 
@@ -86,15 +88,16 @@ func ModuleTools() do.Provider[Moduling] {
 		}
 		b := do.MustInvoke[Bootstrap](i)
 		return Moduling{Tools: builtin.NewModuleTools(builtin.Modules{
-			Workspace: ws,
-			Builder:   do.MustInvoke[builder.Builder](i),
-			Store:     do.MustInvoke[*modstore.Store](i),
-			Secrets:   moduleSecrets(b),
-			Settings:  settings.ModulesFile{Path: settingsFile(b)},
-			Cells:     do.MustInvoke[*cells.Service](i),
-			Host:      do.MustInvoke[*modhost.Host](i),
-			Builds:    buildsDir(b),
-			Examples:  examplesDir(b),
+			Workspace:   ws,
+			Builder:     do.MustInvoke[builder.Builder](i),
+			Store:       do.MustInvoke[*modstore.Store](i),
+			Secrets:     moduleSecrets(b),
+			NodeSecrets: nodeSecrets(b),
+			Settings:    settings.ModulesFile{Path: settingsFile(b)},
+			Cells:       do.MustInvoke[*cells.Service](i),
+			Host:        do.MustInvoke[*modhost.Host](i),
+			Builds:      buildsDir(b),
+			Examples:    examplesDir(b),
 		})}, nil
 	}
 }

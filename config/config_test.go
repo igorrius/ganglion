@@ -318,9 +318,9 @@ func TestScriptDenyListsEverySecretReference(t *testing.T) {
 		t.Fatal(err)
 	}
 	lab := &settings.Models{Providers: []settings.Provider{{Name: "or", Key: "env:LAB"}, {Name: "local"}}}
-	got := scriptDeny(Bootstrap{Settings: f, Agent: AgentSettings{Models: lab}})
+	got := nodeSecrets(Bootstrap{Settings: f, Agent: AgentSettings{Models: lab}})
 	if want := []string{"BOT", "LAB", "SEARCH"}; !slices.Equal(got, want) {
-		t.Fatalf("scriptDeny = %q, want %q", got, want)
+		t.Fatalf("nodeSecrets = %q, want %q", got, want)
 	}
 }
 

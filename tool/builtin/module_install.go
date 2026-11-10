@@ -55,8 +55,9 @@ func (t *ModuleInstall) Question(ctx context.Context, c tool.Call) (string, erro
 }
 
 // Run implements tool.Handler: only pressed, and only when the plan now shows
-// the window the owner pressed on, it installs the build, writes its settings
-// line with the manifest's defaults and reloads the module.
+// the window the owner pressed on, it checks that the build loads and its
+// health passes, installs it, writes its settings line with the manifest's
+// defaults and reloads the module (R-RUN-9).
 func (t *ModuleInstall) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	if !c.Approved {
 		return tool.Result{}, fmt.Errorf("%s: an install needs the owner's press", ModuleInstallTool)
@@ -67,6 +68,9 @@ func (t *ModuleInstall) Run(ctx context.Context, c tool.Call) (tool.Result, erro
 	}
 	if err := t.m.sameWindow(c, w); err != nil {
 		return tool.Result{}, fmt.Errorf("%s: %w", ModuleInstallTool, err)
+	}
+	if err := t.check(ctx, b); err != nil {
+		return tool.Result{}, err
 	}
 	b.By = c.Principal
 	if note := oneLine(a.Note); note != "" {
@@ -111,8 +115,23 @@ func (t *ModuleInstall) prepare(ctx context.Context, c tool.Call) (installArgs, 
 	return a, b, windowOf(b, p, m), nil
 }
 
+// check loads the build in a throwaway instance with the module's settings
+// and runs its health trigger: a build that fails is refused and nothing
+// changes (R-RUN-9).
+func (t *ModuleInstall) check(ctx context.Context, b modstore.Build) error {
+	line, err := t.m.line(b.Module)
+	if err != nil {
+		return fmt.Errorf("%s: %w", ModuleInstallTool, err)
+	}
+	if err := t.m.Host.Check(ctx, b, line.Config); err != nil {
+		return fmt.Errorf("%s: %s is not installed and nothing changed: %w", ModuleInstallTool, b.Module, err)
+	}
+	return nil
+}
+
 // start writes the module's settings line, keeping the owner's values and
-// adding the manifest's defaults, reloads it, and says what came of it.
+// adding the manifest's defaults, reloads it, and says what came of it. A
+// version that does not start is rolled back to the one it replaced.
 func (t *ModuleInstall) start(ctx context.Context, b modstore.Build, o modstore.Outcome) string {
 	done := fmt.Sprintf("%s: version %s installed", o.Module, o.To)
 	if o.From != "" {
@@ -121,13 +140,29 @@ func (t *ModuleInstall) start(ctx context.Context, b modstore.Build, o modstore.
 	line, werr := t.writeLine(b)
 	switch {
 	case t.m.Host.Reload(ctx, b.Module) != nil:
-		return done + ", but it did not start; /status says why"
+		return done + t.rollBack(ctx, o)
 	case werr != nil:
 		return done + ", but its settings line could not be written, so it runs with its defaults; /status says how it is"
 	case line.Off:
 		return done + "; it stays off, as its settings say, until the owner turns it on"
 	}
 	return done + " and running"
+}
+
+// rollBack returns a module whose new version did not start to the version
+// it replaced, and says what came of it; a first install has none.
+func (t *ModuleInstall) rollBack(ctx context.Context, o modstore.Outcome) string {
+	if o.From == "" {
+		return ", but it did not start; /status says why"
+	}
+	r, err := t.m.Host.Rollback(ctx, o.Module)
+	switch {
+	case err == nil && r.Result == modstore.ResultRolledBack:
+		return fmt.Sprintf(", but it did not start, so the node rolled back to version %s, which runs; the node's log says why", r.To)
+	case r.Result == modstore.ResultRolledBack:
+		return fmt.Sprintf(", but it did not start; the node rolled back to version %s, which did not start either; /status says why", r.To)
+	}
+	return ", but it did not start, and rolling back to the version before failed; /status says why"
 }
 
 // writeLine writes b's settings line: the owner's values kept, the

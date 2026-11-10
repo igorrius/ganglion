@@ -661,8 +661,11 @@ escalate:                    # when to call the model
   - `module.build` and `module.install` are the agent's tools; the install
     window lists the network, secrets, cells created and read, triggers and
     limits, and a version that widens its rights says so on its own line;
-  - the install checks the name, the secrets, the required config, cell
-    ownership, that the module loads and that its `health` passes;
+  - the install checks the name, the secrets (none of the node's own: the
+    bot token, the providers' and the search keys), the required config,
+    cell ownership, and, in a throwaway instance before anything changes,
+    that the module loads and that its `health` passes; a new version that
+    then does not start is rolled back to the one it replaced;
   - the language follows [ADR-0063](adr/0063-module-language.md): Rust by
     default, TinyGo for existing Go code, standard Go only when TinyGo
     cannot.

@@ -38,7 +38,16 @@ type Card struct {
 	LocalModule
 	Journal []Entry // newest first, the retired ones too
 	Config  []ConfigLine
+	Health  Health // the running instance's health check; "" when it is not running
 }
+
+// Health is how a module's health check went (R-RUN-12): HealthOK, or the
+// kind it failed with, in the node's words (module.exception, auth_failed,
+// stale, module.format); "" when it did not run.
+type Health string
+
+// HealthOK is a health check that passed, or a module that has none.
+const HealthOK Health = "ok"
 
 // Config refusals.
 var (
