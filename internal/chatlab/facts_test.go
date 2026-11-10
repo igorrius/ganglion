@@ -110,3 +110,17 @@ func TestTainted(t *testing.T) {
 		t.Fatalf("an unasked taint failed: %v", got)
 	}
 }
+
+func TestCheckAbsent(t *testing.T) {
+	v := View{Exists: func(rel string) bool { return rel == "workspace/modules/x/target" }}
+	if got := Check(Facts{Absent: []string{"workspace/modules/x/.cargo"}}, v); len(got) != 0 {
+		t.Fatalf("a missing path failed: %v", got)
+	}
+	got := Check(Facts{Absent: []string{"workspace/modules/x/target"}}, v)
+	if len(got) != 1 || !strings.Contains(got[0], "target") {
+		t.Fatalf("got %v, want one line naming the path", got)
+	}
+	if got := Check(Facts{Absent: []string{"a"}}, View{}); len(got) != 0 {
+		t.Fatalf("a view with no way to look failed: %v", got)
+	}
+}

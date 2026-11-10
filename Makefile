@@ -15,6 +15,7 @@ test:
 # skip without Rust's wasm32-wasip1 target or the command sandbox.
 test-net:
 	GANGLION_NET_TESTS=1 go test -count=1 -timeout 20m -run 'TestTheRustExample|TestARealRustModuleWithADependencyBuilds' -v ./tools/modbench/ ./builder/
+	GANGLION_NET_TESTS=1 go test -count=1 -timeout 20m -tags lab -run 'TestShippedScriptedScenariosPass' -v ./internal/chatlab/
 
 lint:
 	golangci-lint run

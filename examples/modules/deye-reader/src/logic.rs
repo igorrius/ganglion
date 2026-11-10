@@ -441,10 +441,114 @@ mod tests {
         );
     }
 
+    /// Cells the node defined at install but the module never reported:
+    /// `cell_get` finds them, holding null.
+    fn null_cells(f: &Fake) {
+        let mut cells = f.cells.borrow_mut();
+        for name in ["soc", "grid", "sample"] {
+            cells.insert(name.into(), (Value::Null, (NOW - 3600) * 1000));
+        }
+    }
+
     #[test]
-    fn init_health_and_other_triggers_are_unknown_and_make_no_request() {
+    fn status_with_a_failed_read_and_null_cells_answers_the_failure() {
+        let cases = [
+            (
+                r#"{"code":"2101006","msg":"password error"}"#,
+                None,
+                "auth_failed",
+            ),
+            (r#"{"code":"1000000","accessToken":"tok-1"}"#, None, "module.exception"),
+            (
+                r#"{"code":"1000000","accessToken":"tok-1"}"#,
+                Some(latest(NOW - 21 * 60, "57", "230")),
+                "stale",
+            ),
+        ];
+        for (login, reading, want) in cases {
+            let f = fake();
+            null_cells(&f);
+            f.login.replace(login.into());
+            f.latest.replace(
+                reading.unwrap_or(r#"{"code":"2101010","msg":"no such device","success":false}"#.into()),
+            );
+            let out = handle(&f, "tool:status");
+            assert_eq!(
+                (out["ok"].as_bool(), kind(&out)),
+                (Some(false), want),
+                "{out}"
+            );
+            assert!(out.get("result").is_none(), "an answer with no reading: {out}");
+            assert!(out["error"].as_str().unwrap().starts_with("deye: "), "{out}");
+        }
+    }
+
+    #[test]
+    fn status_never_answers_a_cell_that_is_not_its_type() {
         let f = fake();
-        for trigger in ["init", "health", "tool:other", "event:x", ""] {
+        handle(&f, "cron");
+        f.cells
+            .borrow_mut()
+            .insert("grid".into(), (json!("yes"), NOW * 1000));
+        f.cells.borrow_mut().remove("sample");
+        f.latest
+            .replace(r#"{"code":"500","msg":"down","success":false}"#.into());
+        let out = handle(&f, "tool:status");
+        assert_eq!(kind(&out), "module.exception", "{out}");
+    }
+
+    #[test]
+    fn cron_with_a_failed_read_and_null_cells_answers_the_failure() {
+        let f = fake();
+        null_cells(&f);
+        f.latest
+            .replace(r#"{"code":"500","msg":"down","success":false}"#.into());
+        let out = handle(&f, "cron");
+        assert_eq!(kind(&out), "module.exception", "{out}");
+    }
+
+    #[test]
+    fn health_checks_the_serial_and_the_secrets_without_network() {
+        let f = fake();
+        let out = handle(&f, "health");
+        assert_eq!(out["ok"], true, "{out}");
+
+        for sn in ["", "<серийник>", "24000x0001", "1234567", "12345678901234567", " 2400000001"] {
+            let mut f = fake();
+            f.config.insert("inverter_sn", sn);
+            let out = handle(&f, "health");
+            assert_eq!(
+                (out["ok"].as_bool(), kind(&out)),
+                (Some(false), "module.exception"),
+                "{sn:?}: {out}"
+            );
+            assert!(out["error"].as_str().unwrap().contains("inverter_sn"), "{out}");
+        }
+        let mut f = fake();
+        f.config.clear();
+        assert_eq!(kind(&handle(&f, "health")), "module.exception");
+
+        for name in ["DEYE_APP_ID", "DEYE_APP_SECRET", "DEYE_EMAIL", "DEYE_PASSWORD"] {
+            for value in [None, Some("")] {
+                let mut f = fake();
+                match value {
+                    None => f.secrets.remove(name),
+                    Some(v) => f.secrets.insert(name, v),
+                };
+                let out = handle(&f, "health");
+                assert_eq!(kind(&out), "module.exception", "{name} {value:?}: {out}");
+                let msg = out["error"].as_str().unwrap();
+                assert!(msg.contains(name), "{msg}");
+                assert_eq!(f.calls(), 0);
+            }
+        }
+        assert_eq!(f.calls(), 0);
+    }
+
+    #[test]
+    fn init_and_other_triggers_are_unknown_and_make_no_request() {
+        let f = fake();
+        for trigger in ["init", "tool:other", "event:x", ""] {
             let out = handle(&f, trigger);
             assert_eq!(out["ok"], false);
             assert_eq!(out["error"], UNKNOWN_TRIGGER, "{trigger}");

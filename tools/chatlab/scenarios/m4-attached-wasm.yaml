@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m4-attached-wasm
+why: >-
+  M4 check 4 (ADR-0061, ADR-0041): a ready .wasm sent to the bot is never installed: the file is not
+  downloaded, and the one install tool takes only the digest of a build the node made from the workspace.
+covers:
+  - tool/builtin/module_install.go
+  - tool/builtin/module.go
+  - agent/files.go
+  - transport/telegram/transport.go
+repeat: 1
+model: scripted
+script:
+  - {tool: module.install, args: '{"build":"x.wasm"}'}
+  - {say: "I cannot install a ready file; a module is built from source in the workspace."}
+steps:
+  - send: {kind: document, name: x.wasm, type: application/wasm, size: 20000, caption: "install it"}
+  - facts:
+      files: 0
+      questions: 0
+      history: {contains: "x.wasm"}
+      journal:
+        - {tool: module.install, decision: confirm, count: 1}
+      no_journal:
+        - {tool: module.install, decision: approved}
+        - {tool: module.install, decision: allowed}
+      reply: {contains: "cannot install"}

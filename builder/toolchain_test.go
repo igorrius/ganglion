@@ -1,4 +1,4 @@
-package cmd
+package builder
 
 import (
 	"os"
@@ -17,11 +17,11 @@ func TestLocalBuildNamesTheToolchainFolder(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "cargo"), []byte("#!/bin/sh\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := localBuild(func(string) string { return "" })
+	cfg := LocalFromEnv(func(string) string { return "" })
 	if cfg.Cargo != filepath.Join(bin, "cargo") || cfg.Rustup != filepath.Join(home, ".rustup") {
 		t.Fatalf("cargo %q, rustup %q", cfg.Cargo, cfg.Rustup)
 	}
-	cfg = localBuild(func(k string) string {
+	cfg = LocalFromEnv(func(k string) string {
 		if k == "RUSTUP_HOME" {
 			return "/opt/rustup"
 		}
@@ -35,7 +35,7 @@ func TestLocalBuildNamesTheToolchainFolder(t *testing.T) {
 func TestLocalBuildWithNoCargoBuildsNothing(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PATH", t.TempDir())
-	if cfg := localBuild(func(string) string { return "" }); cfg.Cargo != "" {
+	if cfg := LocalFromEnv(func(string) string { return "" }); cfg.Cargo != "" {
 		t.Fatalf("cargo = %q, want none", cfg.Cargo)
 	}
 }
@@ -67,11 +67,11 @@ func TestLocalBuildPinsTheToolchain(t *testing.T) {
 		t.Fatal(err)
 	}
 	rustcPrinting(t, bin, toolchains)
-	if cfg := localBuild(func(string) string { return "" }); cfg.Toolchain != "stable-x86_64-unknown-linux-gnu" {
+	if cfg := LocalFromEnv(func(string) string { return "" }); cfg.Toolchain != "stable-x86_64-unknown-linux-gnu" {
 		t.Fatalf("toolchain = %q", cfg.Toolchain)
 	}
 	rustcPrinting(t, bin, t.TempDir())
-	if cfg := localBuild(func(string) string { return "" }); cfg.Toolchain != "" {
+	if cfg := LocalFromEnv(func(string) string { return "" }); cfg.Toolchain != "" {
 		t.Fatalf("a sysroot outside rustup pinned %q", cfg.Toolchain)
 	}
 }

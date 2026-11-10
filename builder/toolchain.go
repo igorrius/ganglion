@@ -1,4 +1,4 @@
-package cmd
+package builder
 
 import (
 	"context"
@@ -7,20 +7,18 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/igorrius/ganglion/builder"
 )
 
 // toolchainTimeout bounds asking rustc for its toolchain at start.
 const toolchainTimeout = 30 * time.Second
 
-// localBuild is what the module builder is told: cargo from the PATH or from
+// LocalFromEnv is what the module builder is told: cargo from the PATH or from
 // rustup's own folder, rustup's home from RUSTUP_HOME or ~/.rustup, and the
 // toolchain every build is pinned to (toolchain). The build runs with a
 // temporary HOME, so the toolchain folder must be named. No cargo leaves
 // Cargo empty: the node builds nothing.
-func localBuild(getenv func(string) string) builder.LocalConfig {
-	cfg := builder.DefaultLocalConfig()
+func LocalFromEnv(getenv func(string) string) LocalConfig {
+	cfg := DefaultLocalConfig()
 	home, _ := os.UserHomeDir()
 	if cargo, err := exec.LookPath("cargo"); err == nil {
 		cfg.Cargo = cargo

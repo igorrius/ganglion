@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/buildinfo"
@@ -106,7 +107,7 @@ func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read
 	if err != nil {
 		return config.Bootstrap{}, err
 	}
-	b.Build = localBuild(getenv)
+	b.Build = builder.LocalFromEnv(getenv)
 	b.SettingsPath, b.Secrets = settingsPath(v.Config, v.DB), src
 	return b, nil
 }

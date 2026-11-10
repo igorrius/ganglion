@@ -36,8 +36,12 @@ type Scenario struct {
 	Model   string       `yaml:"model"`   // "" or ModelScripted
 	Script  []ScriptStep `yaml:"script"`
 	Pages   []Page       `yaml:"pages"`
-	Steps   []Step       `yaml:"steps"`
-	Dir     string       `yaml:"-"` // where the scenario's file is
+	Modules []Module     `yaml:"modules"`
+	// Config is the settings the owner wrote for modules, by short name, in the
+	// node's ganglion.yaml before it starts.
+	Config map[string]map[string]any `yaml:"config"`
+	Steps  []Step                    `yaml:"steps"`
+	Dir    string                    `yaml:"-"` // where the scenario's file is
 }
 
 // ScriptStep is one answer of the scripted model: words or a tool call.
@@ -63,6 +67,14 @@ type Adds struct {
 	Say   string        `yaml:"say"`
 	After time.Duration `yaml:"after"`
 	Then  string        `yaml:"then"`
+}
+
+// Module is a module the node has installed from the start: the lab's probe
+// module (runner/runnertest/probe) under Manifest's name, rights and defaults.
+// A scenario that builds a module itself lists none.
+type Module struct {
+	Name     string `yaml:"name"`     // the short name; the manifest's name too
+	Manifest string `yaml:"manifest"` // under the scenario's directory
 }
 
 // Page is a web page the node reaches at URL, served from File.
@@ -142,6 +154,7 @@ type Facts struct {
 	Replies         *int          `yaml:"replies"`          // the model's messages since the last action
 	Jobs            *JobFact      `yaml:"jobs"`
 	Tainted         *bool         `yaml:"tainted"` // the chat's session holds outside content
+	Absent          []string      `yaml:"absent"`  // paths under the node's folder (workspace/…) that must not exist
 }
 
 var nameRE = regexp.MustCompile(`^[a-z0-9-]+$`)
@@ -249,6 +262,17 @@ func (s Scenario) checkPaths() error {
 			return fmt.Errorf("page %s: %w", p.File, err)
 		}
 	}
+	for _, m := range s.Modules {
+		if !nameRE.MatchString(m.Name) || m.Manifest == "" {
+			return fmt.Errorf("module %q needs a name and a manifest", m.Name)
+		}
+		if err := inside(m.Manifest); err != nil {
+			return err
+		}
+		if _, err := os.Stat(filepath.Join(s.Dir, m.Manifest)); err != nil {
+			return fmt.Errorf("module %s: %w", m.Name, err)
+		}
+	}
 	dirs := slices.Clone(s.Skills)
 	if s.Persona != PersonaDefault {
 		dirs = append(dirs, s.Persona)
@@ -337,5 +361,5 @@ func (st Step) check() error {
 func (f *Facts) empty() bool {
 	return len(f.Journal) == 0 && len(f.NoJournal) == 0 && f.Questions == nil && f.MessageReplaced == "" && f.Question == nil &&
 		f.Reply == nil && f.History == nil && f.Memory == nil && f.Files == nil && f.Jobs == nil && f.Taken == nil && f.Replies == nil &&
-		f.Tainted == nil
+		f.Tainted == nil && len(f.Absent) == 0
 }

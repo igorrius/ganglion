@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -285,6 +286,8 @@ func TestShippedScriptedScenariosPass(t *testing.T) {
 	for _, s := range all {
 		switch {
 		case s.Model != ModelScripted:
+		case buildsModules(s) && os.Getenv("GANGLION_NET_TESTS") == "":
+			t.Logf("%s: not run, a module build reaches crates.io (make test-net runs it)", s.Name)
 		case runsCommands(s) && !ready:
 			t.Logf("%s: not run, the command sandbox is not ready on this machine", s.Name)
 		default:
@@ -299,6 +302,11 @@ func TestShippedScriptedScenariosPass(t *testing.T) {
 			t.Errorf("%s: %+v", o.Scenario, o)
 		}
 	}
+}
+
+// buildsModules is whether s calls module.build, which needs Rust and the network.
+func buildsModules(s Scenario) bool {
+	return slices.ContainsFunc(s.Script, func(st ScriptStep) bool { return st.Tool == "module.build" })
 }
 
 // A language step counts over the repeats and needs no judge.
