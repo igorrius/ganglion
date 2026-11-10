@@ -70,8 +70,15 @@ func (a *Agent) moduleEvent(ctx context.Context, t *turn) error {
 // moduleNote is the history's line for a module's escalation, with its time
 // in the node's zone and the detail on one line, capped.
 func moduleNote(m event.Module, loc *time.Location) string {
-	name := strings.TrimPrefix(m.Module, localPrefix)
-	at := time.UnixMilli(m.At).In(loc).Format("15:04")
 	detail := text.Truncate(strings.Join(strings.Fields(m.Detail), " "), maxModuleDetail)
-	return fmt.Sprintf("%s%s: %s (version %s, %s). %s", moduleNotePrefix, name, m.Kind, m.Version, at, detail)
+	return fmt.Sprintf("%s%s: %s (version %s, %s). %s", moduleNotePrefix, moduleName(m.Module), m.Kind, m.Version, moduleClock(m.At, loc), detail)
+}
+
+// moduleName is how a note names a module: its full name without the
+// local prefix, as its cells and tools do.
+func moduleName(full string) string { return strings.TrimPrefix(full, localPrefix) }
+
+// moduleClock is a note's time of at (Unix ms) in the node's zone.
+func moduleClock(at int64, loc *time.Location) string {
+	return time.UnixMilli(at).In(loc).Format("15:04")
 }

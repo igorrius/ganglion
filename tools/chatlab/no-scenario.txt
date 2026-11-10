@@ -17,6 +17,7 @@ agent/commands.go
 agent/config.go
 agent/limits.go
 agent/model.go
+agent/module_notify.go
 agent/module_trigger.go
 agent/modules.go
 agent/persona.go
@@ -58,6 +59,7 @@ logfile/**
 modstore/chains.go
 modstore/card.go
 modstore/journal.go
+modstore/notify.go
 modstore/store.go
 modstore/release/**
 modules/html2md/**

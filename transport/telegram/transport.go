@@ -424,11 +424,21 @@ func (t *Transport) sendText(ctx context.Context, chat, thread int64, msg event.
 		DisableNotification: msg.Silent,
 		ReplyParameters:     t.replyTo(chat, msg.ReplyTo),
 		ReplyMarkup:         keyboard(msg.Buttons),
+		LinkPreviewOptions:  previewOptions(msg),
 	})
 	if err != nil {
 		return "", sendError(err)
 	}
 	return strconv.FormatInt(m.MessageID, 10), nil
+}
+
+// previewOptions turn the link preview off for a NoPreview message (R-RUN-16);
+// nil leaves Telegram's default.
+func previewOptions(msg event.Outgoing) *linkPreviewOptions {
+	if !msg.NoPreview {
+		return nil
+	}
+	return &linkPreviewOptions{IsDisabled: true}
 }
 
 // visible renders Markdown, or gives its source when nothing visible is left,

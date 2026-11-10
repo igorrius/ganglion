@@ -124,7 +124,8 @@ func scripted(h pdk.Host, trigger string) json.RawMessage {
 
 // lifecycle answers init and health as the config key "lifecycle" says:
 // "unknown" is a module that has no such trigger, "fail" one that fails, "forge" one that claims the node's module.format kind,
-// "health_auth" one whose health alone fails with auth_failed, "leak" one whose health fails with
+// "health_auth" one whose health alone fails with auth_failed, "notify" one that fails unless
+// notify answers "not here", "leak" one whose health fails with
 // its granted secret PROBE_TOKEN in the error.
 // Otherwise it notes the trigger in its state, so a test can see it.
 func lifecycle(h pdk.Host, trigger string) (any, error) {
@@ -140,6 +141,10 @@ func lifecycle(h pdk.Host, trigger string) (any, error) {
 		if trigger == "health" {
 			v, _ := h.Secret("PROBE_TOKEN")
 			return nil, errors.New("token " + v)
+		}
+	case "notify": // init and health may not notify: anything but "not here" fails them
+		if got := notifyErr(h.Notify("from " + trigger)); got != "not_here" {
+			return nil, errors.New("notify in " + trigger + " answered " + got)
 		}
 	case "health_auth": // init passes, health reports refused credentials
 		if trigger == "health" {

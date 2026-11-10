@@ -43,8 +43,9 @@ const (
 const ()
 
 // resume handles a press of a button, the expiry of a pending call, the
-// end of a host command in the background and a module's escalation, and
-// ends the turn; a message goes on to the next stages (ADR-0032, R-CMD-4).
+// end of a host command in the background, a module's escalation and a
+// module's message, and ends the turn; a message goes on to the next
+// stages (ADR-0032, R-CMD-4).
 func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 	switch t.event.Kind {
 	case event.KindDecision:
@@ -55,8 +56,10 @@ func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 		return true, a.commandDone(ctx, t)
 	case event.KindModule:
 		return true, a.moduleEvent(ctx, t)
+	case event.KindModuleNotify:
+		return true, a.moduleNotifyEvent(ctx, t)
 	case event.KindMessage, event.KindSchedule:
-	case event.KindModuleTrigger, event.KindModuleNotify: // never here: Handle runs a trigger before begin, and begin reads no notify
+	case event.KindModuleTrigger: // never here: Handle runs a trigger before begin
 	}
 	return false, nil
 }

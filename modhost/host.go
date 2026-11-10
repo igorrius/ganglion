@@ -44,6 +44,11 @@ type Store interface {
 	OpenEpisode(ctx context.Context, module, kind, sha string, at time.Time) (bool, error)
 	CloseEpisode(ctx context.Context, module, kind string) error
 	ClearEpisodes(ctx context.Context, module string) error
+	// CountNotify counts a module's message on day and says whether the
+	// owner was told of its limit that day; MarkLimited notes they were
+	// (modstore's notify).
+	CountNotify(ctx context.Context, module string, day time.Time) (n int, limited bool, err error)
+	MarkLimited(ctx context.Context, module string, day time.Time) error
 }
 
 // Jobs keeps the modules' cron jobs (schedule.Store).
@@ -52,8 +57,8 @@ type Jobs interface {
 	DeleteModule(ctx context.Context, module string) error
 }
 
-// Inbox takes the escalation events; an IdemKey already stored is a no-op
-// (the queue).
+// Inbox takes the escalation, trigger and notify events; an IdemKey
+// already stored is a no-op (the queue).
 type Inbox interface {
 	Put(ctx context.Context, e event.Event) error
 }
@@ -82,7 +87,10 @@ type Deps struct {
 	Settings    SettingsPort
 	Admins      alert.Admins
 	Now         func() time.Time
-	Log         *slog.Logger
+	// Location is the node's time zone: a module's daily notify limit
+	// counts its days (R-RUN-16); nil is UTC.
+	Location *time.Location
+	Log      *slog.Logger
 }
 
 // ErrNotStarted is a module that is active and on but could not start; the
@@ -113,6 +121,9 @@ type Host struct {
 
 // New returns a host with no module running; Start loads them.
 func New(d Deps) *Host {
+	if d.Location == nil {
+		d.Location = time.UTC
+	}
 	h := &Host{d: d, in: newInstruments(), running: map[string]*loaded{}, stopped: map[string]stop{},
 		off: map[string]bool{}, fails: map[string][]time.Time{}, stops: map[string]bool{}, episodes: map[string]map[Kind]string{}, clean: map[string]bool{}}
 	h.tools.Store(&[]tool.Handler{})

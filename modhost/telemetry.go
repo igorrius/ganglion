@@ -15,6 +15,7 @@ type instruments struct {
 	disables    metric.Int64Counter
 	escalations metric.Int64Counter
 	triggers    metric.Int64Counter
+	notifies    metric.Int64Counter
 }
 
 func newInstruments() instruments {
@@ -28,6 +29,8 @@ func newInstruments() instruments {
 		metric.WithDescription("Escalations to the agent, by module, kind and outcome (put, held: an episode of the kind is open, failed)."))
 	in.triggers, _ = m.Int64Counter("ganglion.modhost.triggers",
 		metric.WithDescription("Cell triggers of the modules whose runs wrote cells, by producer module and outcome (put, failed, stopped: the chain is deeper than 4)."))
+	in.notifies, _ = m.Int64Counter("ganglion.modhost.notifies",
+		metric.WithDescription("Calls of notify, by module and outcome (sent, limit: past per_day, not_here: init or health, failed: the node could not count or put it)."))
 	return in
 }
 
@@ -52,4 +55,9 @@ func (in instruments) escalated(ctx context.Context, module string, kind Kind, o
 // that stopped, for the producer module.
 func (in instruments) triggered(ctx context.Context, module string, o triggerOutcome) {
 	in.triggers.Add(ctx, 1, metric.WithAttributes(attribute.String("module", module), attribute.String("outcome", string(o))))
+}
+
+// notified counts one notify call of module.
+func (in instruments) notified(ctx context.Context, module string, o notifyOutcome) {
+	in.notifies.Add(ctx, 1, metric.WithAttributes(attribute.String("module", module), attribute.String("outcome", string(o))))
 }

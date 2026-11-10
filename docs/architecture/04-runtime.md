@@ -226,6 +226,7 @@ sequenceDiagram
         H->>Q: Put(module.trigger, conv module:deye-alerts, key trigger:local/deye-alerts:local/deye-reader:RUN, cells sorted, depth)
     else deeper
         H->>H: no event; a log line once per build
+        H->>Q: Put(module.notify, node line chain, key notify:local/deye-reader:chain:SHA)
     end
     Q->>A: kind module.trigger, before begin: no state, no turn, no model
     A->>H: RunTrigger(payload, event id)
@@ -234,6 +235,53 @@ sequenceDiagram
     H->>H: settle as unattended; fan out its own cells, depth + 1
     H-->>A: nil (a failure is the supervisor's); an error only when the run could not start
     A-->>Q: acknowledged, or retried after the lease on an error
+```
+
+## A module writes to its owner (P1)
+
+A module granted `notify: {per_day: N}` writes plain text to the private
+chat of the admin who installed it, with no model (R-RUN-16,
+[ADR-0066](../adr/0066-notify-capability.md)). The port counts the message
+for the day in the node's time zone before it puts the event; the agent
+writes the node's note into the history and the message into the outbox,
+which the queue stores together. The model never sees the text (R-RUN-13);
+the message carries a tainted origin, so a reply that quotes it brings it
+in as outside content. `init` and `health` carry no run: notify there
+answers "not here" and sends nothing.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as deye-alerts run
+    participant R as Runner
+    participant H as Notify port (module host)
+    participant St as modstore notify_days
+    participant Q as Inbox
+    participant A as Agent.Handle
+    participant O as Outbox
+
+    M->>R: notify(text)
+    R->>R: granted? cut at 1000 characters
+    R->>H: Notify(ctx with the run, text)
+    alt no run (init, health)
+        H-->>M: -3 not here
+    else a run
+        H->>St: CountNotify(module, day in the node's zone)
+        alt count at most per_day
+            H->>Q: Put(module.notify, conv: the owner's private chat, key notify:local/deye-alerts:RUN:N)
+            H-->>M: 0 sent
+        else over the limit
+            opt the limit line not sent today
+                H->>Q: Put(module.notify, node line limit, key notify:local/deye-alerts:limit:DAY)
+                H->>St: MarkLimited
+            end
+            H-->>M: -2 limit
+        end
+    end
+    Q->>A: kind module.notify, through begin, no model
+    A->>A: note "[module] deye-alerts notified you at 14:30" (a node line adds none)
+    A->>O: "deye-alerts: <text escaped>", no preview, tainted system origin
+    Note over A,O: the state with the note and the message are stored in one transaction
 ```
 
 ## A module tool call (P1)

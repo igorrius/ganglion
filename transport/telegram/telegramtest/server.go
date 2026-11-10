@@ -52,6 +52,9 @@ type Outgoing struct {
 	ReplyTo  int64  // reply_parameters.message_id; 0 when not a reply
 	Keyboard string // reply_markup.inline_keyboard as sent, JSON; "" when none or empty
 	Rich     bool   // sent by sendRichMessage; Text is its plain text
+	// NoPreview is link_preview_options.is_disabled: the message shows no
+	// link preview.
+	NoPreview bool
 }
 
 // Callback is a press of an inline button under a message the bot sent.
@@ -676,7 +679,10 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 		ReplyParameters *struct {
 			MessageID int64 `json:"message_id"`
 		} `json:"reply_parameters"`
-		ReplyMarkup *markup `json:"reply_markup"`
+		ReplyMarkup        *markup `json:"reply_markup"`
+		LinkPreviewOptions *struct {
+			IsDisabled bool `json:"is_disabled"`
+		} `json:"link_preview_options"`
 	}
 	raw, _ := json.Marshal(params)
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -713,6 +719,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 	if p.ReplyParameters != nil {
 		out.ReplyTo = p.ReplyParameters.MessageID
 	}
+	out.NoPreview = p.LinkPreviewOptions != nil && p.LinkPreviewOptions.IsDisabled
 	s.keep(w, out)
 }
 

@@ -37,10 +37,11 @@ func (r richCounter) add(ctx context.Context, o richOutcome) {
 }
 
 // richShape reports whether msg may go as a rich message at all: the setting is on,
-// and nothing later needs it to be ordinary (R-DLV-11).
+// nothing later needs it to be ordinary (R-DLV-11), and it is not a module's message,
+// which is plain text without previews (R-RUN-16).
 func (t *Transport) richShape(msg event.Outgoing) bool {
 	return t.rich && msg.Edit == "" && msg.EditOf == "" && msg.Ack == "" && msg.Attach == nil &&
-		len(msg.Buttons) == 0 && msg.Folded == "" && !msg.Superseded
+		len(msg.Buttons) == 0 && msg.Folded == "" && !msg.Superseded && !msg.NoPreview
 }
 
 // sendsRich reports whether Send sends this part as a rich message: it has the

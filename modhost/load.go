@@ -94,7 +94,7 @@ func (h *Host) prepare(ctx context.Context, a modstore.Active, s settings.Module
 		return nil, st, err
 	}
 	if l.mod, err = runner.Load(ctx, a.Wasm, m, runner.Deps{Secrets: h.secret(a.Module, l.given), State: h.d.State,
-		Cells: cellPort{cells: h.d.Cells, module: l.name, prefix: l.short}, Prefix: l.short, Logger: l.log}); err != nil {
+		Cells: cellPort{cells: h.d.Cells, module: l.name, prefix: l.short}, Notify: notifyPort{h: h, l: l}, Prefix: l.short, Logger: l.log}); err != nil {
 		h.d.Log.Warn("modhost: the module does not load", "module", a.Module, "err", err)
 		return nil, stop{reason: ReasonLoad, since: now}, nil
 	}

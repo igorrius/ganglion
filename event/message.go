@@ -129,6 +129,32 @@ type ModuleTrigger struct {
 	Depth    int      `json:"depth"`    // 1 for a trigger from a cron or tool run
 }
 
+// NotifyNode is what a module.notify event carries instead of a module's
+// text: a closed set of the node's own lines.
+type NotifyNode string
+
+// What a module.notify event carries.
+const (
+	NotifyText      NotifyNode = ""      // the module's text
+	NotifyLimitLine NotifyNode = "limit" // the node's line: the module reached its daily limit
+	NotifyChainLine NotifyNode = "chain" // the node's line: a chain of its cells went deeper than 4 and stopped
+)
+
+// ModuleNotify is the payload of an event of kind "module.notify": a
+// module's message for the admin who installed it, or a node line about
+// the module (R-RUN-16, ADR-0066). Text is the module's own, cut to 1000
+// characters: outside content, which goes to the owner escaped and never
+// to the model; the history gets the node's note without it.
+type ModuleNotify struct {
+	Module    string     `json:"module"`    // full name
+	Text      string     `json:"text"`      // the module's text, cut; "" for a node line
+	Node      NotifyNode `json:"node"`      // a node line instead of the text
+	PerDay    int        `json:"per_day"`   // the manifest's daily limit
+	At        int64      `json:"at_ms"`     // when the module wrote it, Unix ms
+	Principal string     `json:"principal"` // the admin it goes to
+	Transport string     `json:"transport"` // where it goes
+}
+
 // CommandDone is the payload of an event of kind "command.done": the call
 // key of the command, whose outcome the runner stored.
 type CommandDone struct {

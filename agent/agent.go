@@ -358,6 +358,14 @@ var payloads = map[event.Kind]func(t *turn) bool{
 		t.msg = event.Message{From: m.Principal}
 		return true
 	},
+	event.KindModuleNotify: func(t *turn) bool {
+		m := &t.notify
+		if json.Unmarshal(t.event.Payload, m) != nil || m.Module == "" || m.Principal == "" {
+			return false
+		}
+		t.msg = event.Message{From: m.Principal}
+		return true
+	},
 }
 
 // begin decodes the event and loads the conversation's state. ok is

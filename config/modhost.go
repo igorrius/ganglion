@@ -42,6 +42,7 @@ func ModuleHost() do.Provider[*modhost.Host] {
 			Settings:    settings.ModulesFile{Path: settingsFile(b)},
 			Admins:      do.MustInvoke[alert.Admins](i),
 			Now:         time.Now,
+			Location:    b.Agent.TZ,
 			Log:         logger,
 		})
 		h.Start(do.MustInvoke[Startup](i))

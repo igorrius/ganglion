@@ -114,13 +114,14 @@ func (h *Host) listeners(producer string, cells []string) []listener {
 
 // putTrigger puts the event that runs sub for the run r of producer, in the
 // conversation module:<short name>, so the queue runs one of sub's events
-// at a time (ruling 4 of M4c). A failure to put it is logged: a lost
-// trigger never fails the producer's run.
+// at a time (ruling 4 of M4c). The put does not end with ctx: the producer
+// ran, so a shutdown must not lose its trigger. A failure to put it is
+// logged: a lost trigger never fails the producer's run.
 func (h *Host) putTrigger(ctx context.Context, producer string, sub listener, r run) {
 	now := h.d.Now()
 	payload, err := json.Marshal(event.ModuleTrigger{Module: sub.l.name, Producer: producer, Run: r.ID, Cells: sub.cells, Depth: r.Depth + 1})
 	if err == nil {
-		err = h.d.Inbox.Put(ctx, event.Event{ID: event.NewID(now), IdemKey: "trigger:" + sub.l.name + ":" + producer + ":" + r.ID,
+		err = h.d.Inbox.Put(context.WithoutCancel(ctx), event.Event{ID: event.NewID(now), IdemKey: "trigger:" + sub.l.name + ":" + producer + ":" + r.ID,
 			Source: event.SourceModule, Conv: "module:" + sub.l.short, Kind: event.KindModuleTrigger, Payload: payload, At: now})
 	}
 	if err != nil {
@@ -132,9 +133,11 @@ func (h *Host) putTrigger(ctx context.Context, producer string, sub listener, r 
 }
 
 // chainStopped is a run of l deeper than maxDepth that wrote cells: no
-// event is put. The node says so once per active build, in memory (ruling 6
-// of M4c): a restart may say it once more. With loops refused at install,
-// this is a backstop.
+// event is put. The node says so in its log and to l's owner, in a node
+// line, once per active build, in memory (ruling 6 of M4c): after a restart
+// the log may say it once more, while the line's key keeps the owner's line
+// to one as long as the inbox holds it. With loops refused at install, this
+// is a backstop.
 func (h *Host) chainStopped(ctx context.Context, l *loaded) {
 	h.in.triggered(ctx, l.name, triggerStopped)
 	if !h.firstStop(l.sha) {
@@ -142,6 +145,10 @@ func (h *Host) chainStopped(ctx context.Context, l *loaded) {
 	}
 	h.d.Log.Warn("modhost: a chain of modules deeper than 4 stopped; its run's cells start no module",
 		"module", l.name, "version", l.version, "sha", l.sha)
+	line := event.ModuleNotify{Node: event.NotifyChainLine, PerDay: perDay(l)}
+	if err := h.putNotify(ctx, l, "notify:"+l.name+":chain:"+l.sha, line, h.d.Now()); err != nil {
+		h.d.Log.Error("modhost: the line of a stopped chain was not put", "module", l.name, "err", err)
+	}
 }
 
 // firstStop reports whether the build sha's chain stops for the first time

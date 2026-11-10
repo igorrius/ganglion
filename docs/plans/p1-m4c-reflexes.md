@@ -444,19 +444,19 @@ A "limit" or "chain" line writes no history note. New texts: `module.notify_limi
 reached its limit of {n} messages today"), `module.chain_stopped` ("{module}: a chain of modules
 deeper than 4 was stopped").
 
-- [ ] **Step 1: Failing tests** (`modstore`): the count per day; a new day starts at zero in the
+- [x] **Step 1: Failing tests** (`modstore`): the count per day; a new day starts at zero in the
   node's zone (a clock at 23:59 and 00:01 Kyiv); `MarkLimited` once.
-- [ ] **Step 2: Failing tests** (`modhost`, probe op `notify`): a cron run sends one event with
+- [x] **Step 2: Failing tests** (`modhost`, probe op `notify`): a cron run sends one event with
   the key of its slot; the same slot run twice puts one event; the 25th message of a 24-a-day
   module returns `-2` and puts exactly one "limit" event that day, and the 26th puts none; a
   `health` run returns `-3` and puts nothing.
-- [ ] **Step 3: Failing tests** (`agent`): a `module.notify` event produces one outgoing message
+- [x] **Step 3: Failing tests** (`agent`): a `module.notify` event produces one outgoing message
   `deye-alerts: <escaped text>` with a tainted origin, adds the history note without the text,
   leaves the session's taint unchanged, calls no provider; a text with `*bold*` and a link arrives
   escaped; a "limit" event sends the node line and adds no note. Telegram: a `NoPreview` message
   is sent with `link_preview_options.is_disabled` and never as a rich message.
-- [ ] **Step 4: Run, see them fail. Implement.** Texts in every language catalog.
-- [ ] **Step 5: `make lint test`; `04-runtime.md` (the notify path), code map; commit, push.**
+- [x] **Step 4: Run, see them fail. Implement.** Texts in every language catalog.
+- [x] **Step 5: `make lint test`; `04-runtime.md` (the notify path), code map; commit, push.**
 
 ```bash
 git commit -m "modhost, agent: notify writes to the owner within a daily limit; history gets the node's note, never the text (R-RUN-16)"

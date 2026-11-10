@@ -15,7 +15,7 @@ type run struct {
 	Trigger trigger  // cron | tool | cell
 	Depth   int      // 0 outside a chain
 	wrote   *written // the cells the run reported, full ids
-	sent    *int     // notify calls so far in this run
+	sent    *int     // messages notify sent so far in this run: the number in the last one's key
 }
 
 // newRun is a run that has written and sent nothing yet.
@@ -37,9 +37,10 @@ func runOf(ctx context.Context) (run, bool) {
 	return r, ok
 }
 
-// written is the set of cells a run reported. The runner serialises a
-// module's calls, so one run writes it at a time; the lock keeps that from
-// mattering.
+// written is the set of cells one run reported. A run's host calls are
+// sequential, but a module's calls may overlap: each run has its own set,
+// so overlapping runs never share one. The lock keeps the set safe
+// whichever goroutine a host call comes from.
 type written struct {
 	mu  sync.Mutex
 	ids map[string]bool
