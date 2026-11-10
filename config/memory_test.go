@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/agent"
-	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
@@ -19,14 +18,10 @@ import (
 
 func agentConfig(t *testing.T) Bootstrap {
 	t.Helper()
-	catalog, err := rules.LoadCatalog(strings.NewReader("providers:\n  - {name: or, type: openai, base_url: http://127.0.0.1:1, key_env: OR_KEY}\n" +
-		"models:\n  - {provider: or, name: m1, tier: cheap, context: 64000}\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	b := testConfig(t)
 	b.Admin = "telegram:user:42"
-	b.Agent = AgentSettings{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, TZ: time.UTC, Workspace: t.TempDir()}
+	b.Agent = AgentSettings{Models: parseModels(t, "providers: [{name: or, type: openai, base_url: \"http://127.0.0.1:1\", key: env:OR_KEY}]\n"+
+		"models: [{provider: or, name: m1, context: 64000}]\npurposes: {chat: [{model: m1}]}\n"), Keys: map[string]string{"or": "sk-test"}, TZ: time.UTC, Workspace: t.TempDir()}
 	return b
 }
 
@@ -42,6 +37,11 @@ func TestMemoryOnRegistersToolsAndTheAudit(t *testing.T) {
 	}
 	if _, ok := reg.Spec("memory.write"); !ok {
 		t.Fatal("memory.write is not registered")
+	}
+	for _, name := range []string{builtin.ModuleBuildTool, builtin.ModuleInstallTool, builtin.ModuleImportTool} {
+		if _, ok := reg.Spec(name); !ok {
+			t.Fatalf("%s is not registered", name)
+		}
 	}
 	j, err := do.MustInvoke[*schedule.Store](i).Get(context.Background(), "system:memory-audit")
 	if err != nil {
@@ -67,6 +67,9 @@ func TestMemoryOffWithoutGit(t *testing.T) {
 	}
 	if _, ok := reg.Spec("memory.write"); ok {
 		t.Fatal("memory tools without git")
+	}
+	if _, ok := reg.Spec(builtin.ModuleBuildTool); ok {
+		t.Fatal("module tools without git")
 	}
 	if _, err := do.Invoke[*agent.Agent](i); err != nil {
 		t.Fatal(err)

@@ -18,7 +18,9 @@
         "additionalProperties": false,
         "properties": {
           "cron": { "description": "Five-field cron expression.", "type": "string", "minLength": 1 },
-          "tool": { "description": "Tool name, e.g. deye.status.", "type": "string", "minLength": 1 }
+          "tool": { "description": "Tool name: lower-case letters, digits and _; the node prefixes it with the module.", "type": "string", "pattern": "^[a-z0-9_]+$" },
+          "about": { "description": "What the tool does, for the agent.", "type": "string" },
+          "output": { "description": "The contract of the tool's answer; required for a tool of a local module.", "$ref": "#/$defs/shape" }
         },
         "oneOf": [ { "required": ["cron"] }, { "required": ["tool"] } ]
       }
@@ -34,7 +36,29 @@
         "state": { "description": "May keep state in its KV store.", "type": "boolean" }
       }
     },
-    "config": { "description": "Plain settings passed to the module.", "type": "object", "additionalProperties": { "type": "string" } },
+    "cells": {
+      "description": "The cells the module reports and the ones it may read (ADR-0062).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "report": {
+          "description": "Sensor cells the module owns, by short name; the cell id is <module>.<name>.",
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z0-9_-]+$" },
+          "additionalProperties": { "$ref": "#/$defs/cellDecl" }
+        },
+        "read": {
+          "description": "Full ids of cells the module may read.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$" }
+        }
+      }
+    },
+    "config": {
+      "description": "The settings the module reads; the owner sets their values.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/configKey" }
+    },
     "limits": {
       "type": "object",
       "additionalProperties": false,
@@ -52,6 +76,36 @@
         "required": ["on"],
         "properties": { "on": { "type": "string", "minLength": 1 } }
       }
+    }
+  },
+  "$defs": {
+    "cellDecl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "type"],
+      "properties": {
+        "kind": { "description": "sensor; switch comes later.", "const": "sensor" },
+        "type": { "$ref": "#/$defs/shape" },
+        "about": { "description": "What the cell holds, for the agent.", "type": "string" }
+      }
+    },
+    "configKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["string", "number", "boolean"] },
+        "required": { "type": "boolean" },
+        "default": { "type": "string" }
+      }
+    },
+    "shape": {
+      "description": "A contract for a JSON value: a type name (number, integer, boolean, string; a trailing ? allows null), a list of strings (an enum), {list: <shape>} (an array) or a mapping of fields (an object; a field name is lower-case letters, digits and _, at most 32; one ending in ? may be missing, other fields are refused).",
+      "oneOf": [
+        { "type": "string", "pattern": "^(number|integer|boolean|string)\\??$" },
+        { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        { "type": "object", "propertyNames": { "pattern": "^[a-z0-9_]{1,32}\\??$" }, "additionalProperties": { "$ref": "#/$defs/shape" } }
+      ]
     }
   }
 }

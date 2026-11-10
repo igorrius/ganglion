@@ -17,10 +17,11 @@ type View struct {
 	Messages []Message
 	Last     []Message // the model's words since the last action
 	History  string
-	Memory   map[string]string // stored files by path
-	Jobs     map[string]int    // live jobs by kind, without system jobs
-	Taken    int               // messages that joined a running turn
-	Tainted  bool              // the chat's session holds outside content
+	Memory   map[string]string     // stored files by path
+	Jobs     map[string]int        // live jobs by kind, without system jobs
+	Taken    int                   // messages that joined a running turn
+	Tainted  bool                  // the chat's session holds outside content
+	Exists   func(rel string) bool // whether a path under the node's folder exists; nil: none does
 }
 
 // Check returns one line per failed check, saying what was wanted and what
@@ -63,8 +64,20 @@ func Check(f Facts, v View) []string {
 	if f.Tainted != nil && v.Tainted != *f.Tainted {
 		out = append(out, fmt.Sprintf("tainted: wanted %t, found %t", *f.Tainted, v.Tainted))
 	}
+	out = append(out, checkAbsent(f.Absent, v.Exists)...)
 	if f.Jobs != nil && v.Jobs[f.Jobs.Kind] != f.Jobs.Count {
 		out = append(out, fmt.Sprintf("jobs: wanted %d of kind %s, found %d", f.Jobs.Count, f.Jobs.Kind, v.Jobs[f.Jobs.Kind]))
+	}
+	return out
+}
+
+// checkAbsent names each of paths that exists; a nil exists finds none.
+func checkAbsent(paths []string, exists func(string) bool) []string {
+	var out []string
+	for _, rel := range paths {
+		if exists != nil && exists(rel) {
+			out = append(out, fmt.Sprintf("absent: %s exists", rel))
+		}
 	}
 	return out
 }

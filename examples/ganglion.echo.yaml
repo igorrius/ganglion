@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../schemas/node.schema.json
+# The echo bot (make live-echo): the core without a model. The bot token comes
+# from the environment (TELEGRAM_BOT_TOKEN); there is no models section.
+telegram:
+  # Your Telegram user id as telegram:user:<id>; strangers get no reply.
+  # admin: telegram:user:123456789
+  token: env:TELEGRAM_BOT_TOKEN

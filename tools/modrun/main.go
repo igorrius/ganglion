@@ -1,12 +1,14 @@
 // Command modrun runs a WASM module once, outside a node: a development and
 // acceptance tool for P0 (docs/spec.md, tasks 0.2–0.5).
 //
-//	modrun -wasm deye-reader.wasm -manifest modules/deye/deye-reader.yaml \
+//	modrun -wasm bin/deye-reader.rust.wasm \
+//	       -manifest examples/modules/deye-reader/manifest.yaml \
 //	       -config inverter_sn=XXXX -env .env
 //
 // Secrets come from the env file and the process environment; the module
 // sees only those its manifest grants. Module state persists in -state
-// between runs. The module's Output is printed to stdout as JSON.
+// between runs; cells live for the run, and each one the module reports is
+// logged. The module's Output is printed to stdout as JSON.
 package main
 
 import (
@@ -23,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -84,10 +87,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if len(config) > 0 && m.Config == nil {
-		m.Config = map[string]string{}
+	if len(config) > 0 && m.ConfigValues == nil {
+		m.ConfigValues = map[string]string{}
 	}
-	maps.Copy(m.Config, config)
+	maps.Copy(m.ConfigValues, config)
 	secrets, err := loadEnv(*envPath)
 	if err != nil {
 		return err
@@ -98,6 +101,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
+	cells := runner.NewMemCells(time.Now)
 	deps := runner.Deps{
 		Secrets: func(name string) (string, bool) {
 			if v, ok := os.LookupEnv(name); ok {
@@ -107,6 +111,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return v, ok && v != ""
 		},
 		State:  state,
+		Cells:  cells,
 		Logger: logger,
 	}
 	mod, err := runner.Load(ctx, wasm, m, deps)
@@ -118,6 +123,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	start := time.Now()
 	out, err := mod.Handle(ctx, pdk.Input{Trigger: *trigger, Payload: json.RawMessage(*payload)})
 	logger.Info("call finished", "module", m.Name, "elapsed", time.Since(start).Round(time.Millisecond))
+	logCells(logger, cells)
 	if serr := saveState(state, *statePath); serr != nil {
 		logger.Error("saving state failed", "err", serr)
 	}
@@ -127,6 +133,14 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+// logCells logs each cell the call reported, in id order.
+func logCells(logger *slog.Logger, cells *runner.MemCells) {
+	values := cells.Values()
+	for _, id := range slices.Sorted(maps.Keys(values)) {
+		logger.Info("cell reported", "cell", id, "value", string(values[id]))
+	}
 }
 
 func saveState(s *runner.MemState, path string) error {

@@ -23,6 +23,7 @@ const (
 	PlaceLanguages PlaceName = "languages"
 	PlaceClaude    PlaceName = "claude work folder"
 	PlaceTemp      PlaceName = "leftovers in the temp folder"
+	PlaceBuilds    PlaceName = "module builds"
 )
 
 // maxEntries caps the files one measure walks, so a huge tree cannot hold

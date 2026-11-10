@@ -48,14 +48,8 @@ func TestCrashHarness(t *testing.T) {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
 	fake := telegramtest.NewServer(t, crashToken)
-	env := append(os.Environ(),
-		"GANGLION_DB="+filepath.Join(dir, "crash.db"),
-		"TELEGRAM_BOT_TOKEN="+crashToken,
-		"TELEGRAM_BOT_TOKEN_FILE=",
-		"TELEGRAM_API_URL="+fake.URL(),
-		"GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID),
-		"GANGLION_METRICS_ADDR=127.0.0.1:0",
-	)
+	writeConfig(t, dir, crashTelegram(fake.URL())+"metrics: {addr: \"127.0.0.1:0\"}\n")
+	env := childEnv("GANGLION_DB="+filepath.Join(dir, "crash.db"), "TELEGRAM_BOT_TOKEN="+crashToken)
 
 	// Messages arrive gradually while the process is being killed: one
 	// kill cycle takes about 250 ms, so 200 messages spread over iters
@@ -146,6 +140,19 @@ func TestCrashHarness(t *testing.T) {
 	}
 	t.Logf("%d kills, %d replies sent before the final run, %d duplicate replies, confirmed up to %d",
 		iters, beforeFinal, dups, fake.Confirmed())
+}
+
+// crashTelegram is the telegram section of a child node on the fake Bot API
+// at url, with the admin of the tests.
+func crashTelegram(url string) string {
+	return "telegram: {api_url: \"" + url + "\", admin: \"telegram:user:" + strconv.Itoa(adminID) + "\"}\n"
+}
+
+// fakeModels is a models section with one model, m, on an OpenAI-compatible
+// fake at url whose key is in the variable keyVar.
+func fakeModels(url, keyVar string) string {
+	return "models:\n  providers: [{name: fake, type: openai, base_url: \"" + url + "\", key: env:" + keyVar + "}]\n" +
+		"  models: [{id: m, provider: fake, name: m, tools: true, context: 64000}]\n  purposes: {chat: [{model: m}]}\n"
 }
 
 // crashIters is the number of kills: def, or GANGLION_CRASH_ITERS.
@@ -255,20 +262,10 @@ func newCrashAgentNode(t *testing.T) *crashAgentNode {
 	if out, err := exec.Command("go", "build", "-o", n.bin, "..").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
-	catalog := filepath.Join(dir, "models.yaml")
-	yaml := "providers:\n  - {name: fake, type: openai, base_url: " + n.model.URL() + ", key_env: FAKE_KEY}\n" +
-		"models:\n  - {provider: fake, name: m, tier: smart, tools: true, context: 64000}\n"
-	if err := os.WriteFile(catalog, []byte(yaml), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	n.env = append(os.Environ(),
-		"GANGLION_DB="+filepath.Join(dir, "crash.db"),
-		"GANGLION_WORKSPACE="+n.workspace(),
-		"GANGLION_MODELS_FILE="+catalog, "FAKE_KEY=sk-crash",
-		"GANGLION_DAILY_TURNS=0", "GANGLION_DAILY_TOKENS=0", "GANGLION_SEARCH=off",
-		"TELEGRAM_BOT_TOKEN="+crashToken, "TELEGRAM_BOT_TOKEN_FILE=", "TELEGRAM_API_URL="+n.fake.URL(),
-		"GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID), "GANGLION_METRICS_ADDR=127.0.0.1:0",
-	)
+	writeConfig(t, dir, crashTelegram(n.fake.URL())+"metrics: {addr: \"127.0.0.1:0\"}\n"+
+		"agent: {workspace: \""+n.workspace()+"\", limits: {daily_turns: off, daily_tokens: off}, search: {mode: off}}\n"+
+		fakeModels(n.model.URL(), "FAKE_KEY"))
+	n.env = childEnv("GANGLION_DB="+filepath.Join(dir, "crash.db"), "FAKE_KEY=sk-crash", "TELEGRAM_BOT_TOKEN="+crashToken)
 	return n
 }
 
@@ -592,8 +589,8 @@ func TestNodeEnvironmentIsNotReadable(t *testing.T) {
 	}
 	fake := telegramtest.NewServer(t, crashToken)
 	cmd := exec.Command(bin, "run", "--roles", "core")
-	cmd.Env = append(os.Environ(), "GANGLION_DB="+filepath.Join(dir, "env.db"), "TELEGRAM_BOT_TOKEN="+crashToken, "TELEGRAM_BOT_TOKEN_FILE=",
-		"TELEGRAM_API_URL="+fake.URL(), "GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID), "GANGLION_METRICS_ADDR=off", "GANGLION_MODELS_FILE=")
+	writeConfig(t, dir, crashTelegram(fake.URL())+"metrics: {addr: off}\n")
+	cmd.Env = childEnv("GANGLION_DB="+filepath.Join(dir, "env.db"), "TELEGRAM_BOT_TOKEN="+crashToken)
 	var stdout lockedBuffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stdout
 	if err := cmd.Start(); err != nil {
@@ -631,9 +628,8 @@ func TestLastLineSurvivesKill(t *testing.T) {
 	}
 	fake := telegramtest.NewServer(t, crashToken)
 	cmd := exec.Command(bin, "run", "--roles", "core")
-	cmd.Env = append(os.Environ(), "GANGLION_DB="+filepath.Join(dir, "kill.db"), "GANGLION_LOG_DIR=",
-		"TELEGRAM_BOT_TOKEN="+crashToken, "TELEGRAM_BOT_TOKEN_FILE=", "TELEGRAM_API_URL="+fake.URL(),
-		"GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID), "GANGLION_METRICS_ADDR=off", "GANGLION_MODELS_FILE=")
+	writeConfig(t, dir, crashTelegram(fake.URL())+"metrics: {addr: off}\n")
+	cmd.Env = childEnv("GANGLION_DB="+filepath.Join(dir, "kill.db"), "TELEGRAM_BOT_TOKEN="+crashToken)
 	var stdout lockedBuffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stdout
 	if err := cmd.Start(); err != nil {

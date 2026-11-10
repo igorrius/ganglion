@@ -42,11 +42,17 @@ func (p *scripted) calls() int {
 	return len(p.reqs)
 }
 
-type oneModel struct{ kinds []router.TaskKind }
+// oneModel routes every task to p/m at low effort and records the tasks.
+type oneModel struct {
+	mu    sync.Mutex
+	tasks []router.TaskReq
+}
 
 func (r *oneModel) Route(_ context.Context, t router.TaskReq) ([]router.Candidate, error) {
-	r.kinds = append(r.kinds, t.Kind)
-	return []router.Candidate{{Provider: "p", Model: "m"}}, nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tasks = append(r.tasks, t)
+	return []router.Candidate{{Provider: "p", Model: "m", Effort: router.EffortLow}}, nil
 }
 
 func (*oneModel) Report(router.Candidate, error) {}
@@ -206,7 +212,13 @@ func TestRequestHoldsOnlyOurStrings(t *testing.T) {
 	_, _, p, tr := newTranslator(t, polish)
 	tr.Need("pl")
 	tr.sweep(context.Background())
+	if r := tr.router.(*oneModel); len(r.tasks) != 1 || r.tasks[0] != (router.TaskReq{Purpose: router.PurposeTranslate}) {
+		t.Fatalf("tasks %+v; want the translate purpose", r.tasks)
+	}
 	req := p.reqs[0]
+	if req.Effort != router.EffortLow {
+		t.Fatalf("effort %q; want the candidate's", req.Effort)
+	}
 	if len(req.Tools) != 0 || req.Exec != nil || len(req.Messages) != 2 ||
 		req.Messages[0].Role != provider.RoleSystem || req.Messages[1].Role != provider.RoleUser {
 		t.Fatalf("request %+v", req)

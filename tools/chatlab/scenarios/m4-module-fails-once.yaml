@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m4-module-fails-once
+why: >-
+  M4 checks 5 and 8 (R-RUN-11, R-RUN-12, owner ruling of 2026-11-10): a module whose cron run always fails
+  calls the model once per kind, not once per failure, and a crash-looping one is turned off and costs no
+  more turns; its cron runs themselves take no model call.
+covers:
+  - modhost/**
+  - config/modhost.go
+  - agent/module_event.go
+  - modstore/escalations.go
+  - schedule/**
+repeat: 1
+model: scripted
+modules:
+  - {name: deye-reader, manifest: modules/deye-failing.yaml}
+script:
+  - {say: "deye-reader's credentials were refused; I told you once."}
+  - {say: "deye-reader failed five times and the node turned it off."}
+steps:
+  - advance: {scheduler: 31m}
+  - facts: {replies: 1, reply: {contains: "credentials were refused"}}
+  - advance: {scheduler: 31m}
+  - facts: {replies: 0}
+  - advance: {scheduler: 31m}
+  - facts: {replies: 0}
+  - advance: {scheduler: 31m}
+  - facts: {replies: 0}
+  - advance: {scheduler: 31m}
+  - facts:
+      replies: 1
+      reply: {contains: "turned it off"}
+      history: {contains: "[module] deye-reader: module.crashloop"}
+  - advance: {scheduler: 31m}
+  - facts: {replies: 0}

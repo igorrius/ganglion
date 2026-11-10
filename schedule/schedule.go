@@ -38,6 +38,11 @@ const (
 	// as the memory audit, without a model, and sends its report to the
 	// job's conversation (ruling R36). Only the node makes one (System).
 	KindSystem Kind = "system"
+	// KindModule runs a module of the owner's on its manifest's cron, with
+	// no model (ruling 9 of the M4b plan): Text is the module's full name.
+	// Only the node makes one (EnsureModule), owned by the admin who
+	// installed the module; it cannot be deleted by a person.
+	KindModule Kind = "module"
 )
 
 // Errors; callers decide on them with errors.Is.
@@ -103,16 +108,16 @@ func (j Job) validate() error {
 	return j.validateKind()
 }
 
-// validateKind checks what depends on the kind: a reminder and a system
-// job have no grant, a task has someone to reply to, and only the node
-// makes a system job.
+// validateKind checks what depends on the kind: a reminder, a system job
+// and a module job have no grant, a task has someone to reply to, and only
+// the node makes a system or a module job.
 func (j Job) validateKind() error {
 	switch j.Kind {
-	case KindReminder, KindSystem:
-		if len(j.Grant.Tools) > 0 || len(j.Grant.Hosts) > 0 || j.Grant.ReplyTo != "" {
+	case KindReminder, KindSystem, KindModule:
+		if len(j.Grant.Tools) > 0 || len(j.Grant.Hosts) > 0 || j.Grant.ReplyTo != "" || len(j.Grant.Commands) > 0 {
 			return fmt.Errorf("%w %s: a %s job has no grant", ErrInvalid, j.ID, j.Kind)
 		}
-		if j.Kind == KindSystem && !j.System {
+		if (j.Kind == KindSystem || j.Kind == KindModule) && !j.System {
 			return fmt.Errorf("%w %s: only the node makes a system job", ErrInvalid, j.ID)
 		}
 	case KindTask:

@@ -225,8 +225,12 @@ func (s Scheduling) askRunNow(ctx context.Context, p pending.QuickPress, j sched
 
 // title names a job's kind in sp's language.
 func (s Scheduling) title(sp texts.Speaker, j schedule.Job) string {
-	if j.Kind == schedule.KindSystem {
+	switch j.Kind {
+	case schedule.KindSystem:
 		return sp.Text(texts.SchedKindSystem, nil)
+	case schedule.KindModule:
+		return sp.Text(texts.SchedKindModule, nil)
+	case schedule.KindReminder, schedule.KindTask:
 	}
 	kind := sp.Text(texts.SchedKindTask, nil)
 	if j.Kind == schedule.KindReminder {

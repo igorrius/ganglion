@@ -3,8 +3,12 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -12,17 +16,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/cmd/flags"
+	"github.com/igorrius/ganglion/config"
+	"github.com/igorrius/ganglion/internal/memlimit"
 	"github.com/igorrius/ganglion/internal/testinputs"
+	"github.com/igorrius/ganglion/node"
 )
 
 func TestRunStartsAllRolesByDefault(t *testing.T) {
 	clearEnv(t)
-	t.Setenv("GANGLION_DB", filepath.Join(t.TempDir(), "g.db"))
-	t.Setenv("GANGLION_METRICS_ADDR", "127.0.0.1:0")
 	var out syncBuffer
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // the node stops as soon as it has started
-	if err := Execute(ctx, []string{"ganglion", "run"}, &out, &out); err != nil {
+	args := append([]string{"ganglion", "run"}, nodeFiles(t, "metrics: {addr: \"127.0.0.1:0\"}\nlog: {dir: off}\n")...)
+	if err := Execute(ctx, args, &out, &out); err != nil {
 		t.Fatalf("run with defaults: %v", err)
 	}
 	if !strings.Contains(out.String(), "roles=core,edge,worker") {
@@ -32,12 +39,11 @@ func TestRunStartsAllRolesByDefault(t *testing.T) {
 
 func TestRunServesMetrics(t *testing.T) {
 	clearEnv(t)
-	t.Setenv("GANGLION_DB", filepath.Join(t.TempDir(), "g.db"))
-	t.Setenv("GANGLION_METRICS_ADDR", "127.0.0.1:0")
 	var out syncBuffer
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Execute(ctx, []string{"ganglion", "run", "--roles", "core"}, &out, &out) }()
+	args := append([]string{"ganglion", "run", "--roles", "core"}, nodeFiles(t, "metrics: {addr: \"127.0.0.1:0\"}\nlog: {dir: off}\n")...)
+	go func() { done <- Execute(ctx, args, &out, &out) }()
 	var addr string
 	for i := 0; i < 200 && addr == ""; i++ {
 		time.Sleep(10 * time.Millisecond)
@@ -67,16 +73,126 @@ func TestBusyMetricsPortDoesNotStopTheNode(t *testing.T) {
 	}
 	defer func() { _ = ln.Close() }()
 	clearEnv(t)
-	t.Setenv("GANGLION_DB", filepath.Join(t.TempDir(), "g.db"))
-	t.Setenv("GANGLION_METRICS_ADDR", ln.Addr().String())
 	var out syncBuffer
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := Execute(ctx, []string{"ganglion", "run", "--roles", "core"}, &out, &out); err != nil {
+	args := append([]string{"ganglion", "run", "--roles", "core"}, nodeFiles(t, "metrics: {addr: \""+ln.Addr().String()+"\"}\nlog: {dir: off}\n")...)
+	if err := Execute(ctx, args, &out, &out); err != nil {
 		t.Fatalf("a busy metrics port stopped the node: %v", err)
 	}
 	if !strings.Contains(out.String(), "metrics are off") {
 		t.Fatalf("no warning:\n%s", out.String())
+	}
+}
+
+func TestBootstrapFromFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ganglion.yaml")
+	mustWrite(t, path, "node: {tz: UTC}\nagent: {limits: {daily_turns: 7}}\ntelegram: {token: env:BOT}\n")
+	env := map[string]string{"BOT": "t0k"}
+	b, err := bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv(env), fakeEnv(env).get, os.ReadFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Agent.TZ.String() != "UTC" || b.Agent.DailyTurns != 7 || b.BotToken != "t0k" {
+		t.Fatalf("got %+v", b)
+	}
+	// The modules: section is written where it was read; module secrets come
+	// from the same source.
+	if b.SettingsPath != path || b.Secrets == nil {
+		t.Fatalf("settings path %q, secrets %v", b.SettingsPath, b.Secrets)
+	}
+	if v, _ := b.Secrets.Secret("BOT"); v != "t0k" {
+		t.Fatalf("secret = %q", v)
+	}
+}
+
+func TestRetiredVariableFailsTheStart(t *testing.T) {
+	env := fakeEnv{"GANGLION_TZ": "UTC"}
+	_, err := bootstrap(flags.Run{Config: "none.yaml", DB: "g.db"}, env, env.get, os.ReadFile)
+	if err == nil || !strings.Contains(err.Error(), "set node.tz in ganglion.yaml") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestMemoryLimitInBootstrap(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ganglion.yaml")
+	mustWrite(t, path, "node: {memory_limit: 100MiB}\n")
+	b, err := bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (memlimit.Limit{Bytes: 100 << 20, Source: memlimit.SourceConfig}); b.MemoryLimit != want {
+		t.Fatalf("MemoryLimit = %+v, want %+v", b.MemoryLimit, want)
+	}
+}
+
+// R-CFG-1: a config path the operator named must exist; only the default
+// path beside the database may be missing.
+func TestNamedConfigMustExist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gangilon.yaml")
+	_, err := bootstrap(flags.Run{Config: path, DB: "g.db"}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	if err == nil || err.Error() != "ganglion.yaml: "+path+": no such file" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestDefaultConfigMayBeMissing(t *testing.T) {
+	b, err := bootstrap(flags.Run{DB: filepath.Join(t.TempDir(), "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	if err != nil || b.Settings.Node.TZ != "Europe/Kyiv" {
+		t.Fatalf("got %+v, %v", b.Settings.Node, err)
+	}
+	if filepath.Base(b.SettingsPath) != "ganglion.yaml" || filepath.Dir(b.SettingsPath) != filepath.Dir(b.DB) {
+		t.Fatalf("settings path %q beside %q", b.SettingsPath, b.DB)
+	}
+}
+
+// The memory limit reads the cgroup through the injected read, not the
+// host's files.
+func TestMemoryLimitReadsThroughTheInjectedRead(t *testing.T) {
+	read := func(p string) ([]byte, error) {
+		if p == memlimit.CgroupV2 {
+			return []byte("268435456\n"), nil
+		}
+		return nil, fs.ErrNotExist
+	}
+	b, err := bootstrap(flags.Run{DB: "/nowhere/g.db"}, fakeEnv{}, fakeEnv{}.get, read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (memlimit.Limit{Bytes: 214748364, Source: memlimit.SourceCgroup}); b.MemoryLimit != want {
+		t.Fatalf("MemoryLimit = %+v, want %+v", b.MemoryLimit, want)
+	}
+}
+
+// R-CFG-7: GOMEMLIMIT set by the operator wins over node.memory_limit.
+func TestOperatorsGOMEMLIMITWins(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ganglion.yaml")
+	mustWrite(t, path, "node: {memory_limit: 100MiB}\n")
+	env := fakeEnv{"GOMEMLIMIT": "300MiB"}
+	b, err := bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, env, env.get, os.ReadFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.MemoryLimit.Source != memlimit.SourceEnv {
+		t.Fatalf("MemoryLimit = %+v", b.MemoryLimit)
+	}
+}
+
+// fakeEnv is the environment of a bootstrap test: its secrets and its
+// variables.
+type fakeEnv map[string]string
+
+func (e fakeEnv) Secret(name string) (string, error) { return e[name], nil }
+
+func (e fakeEnv) get(k string) string { return e[k] }
+
+func mustWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -120,4 +236,17 @@ func (s *syncBuffer) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
+}
+
+// R-CFG-6: the restart error reaches main unchanged, whichever way the
+// command line wraps its errors.
+func TestRunKeepsErrRestart(t *testing.T) {
+	clearEnv(t)
+	var out syncBuffer
+	start := func(context.Context, []node.Role, config.Bootstrap, *slog.Logger) error { return node.ErrRestart }
+	args := append([]string{"ganglion", "run"}, nodeFiles(t, "metrics: {addr: \"127.0.0.1:0\"}\nlog: {dir: off}\n")...)
+	err := newRoot(&out, &out, start).Run(context.Background(), args)
+	if !errors.Is(err, node.ErrRestart) {
+		t.Fatalf("err = %v", err)
+	}
 }

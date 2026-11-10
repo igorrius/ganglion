@@ -42,9 +42,9 @@ const (
 // Lines that say how a question ended, above its folded text (R-POL-9).
 const ()
 
-// resume handles a press of a button, the expiry of a pending call and the
-// end of a host command in the background, and ends the turn; a message
-// goes on to the next stages (ADR-0032, R-CMD-4).
+// resume handles a press of a button, the expiry of a pending call, the
+// end of a host command in the background and a module's escalation, and
+// ends the turn; a message goes on to the next stages (ADR-0032, R-CMD-4).
 func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 	switch t.event.Kind {
 	case event.KindDecision:
@@ -53,9 +53,11 @@ func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 		return true, a.expired(ctx, t)
 	case event.KindCommandDone:
 		return true, a.commandDone(ctx, t)
-	default: // event.KindMessage, event.KindSchedule
-		return false, nil
+	case event.KindModule:
+		return true, a.moduleEvent(ctx, t)
+	case event.KindMessage, event.KindSchedule:
 	}
+	return false, nil
 }
 
 // dropStale forgets pending ids whose calls no longer wait (they were

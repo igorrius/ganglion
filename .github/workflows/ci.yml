@@ -47,6 +47,11 @@ jobs:
       - name: A run by hand reuses no result
         if: github.event_name == 'workflow_dispatch'
         run: go clean -testcache
+      # The module tests build Rust to wasm32-wasip1 and skip without it.
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: wasm32-wasip1
       - name: Build
         run: go build ./...
       - name: Vet
@@ -55,6 +60,10 @@ jobs:
         run: |
           go test -race ./...
           go test -race -timeout 20m -tags lab ./internal/chatlab/... ./tools/chatlab/...
+      # The tests that fetch crates from crates.io (the Rust example, a build
+      # with a dependency): out of go test ./... and never cached.
+      - name: Network tests
+        run: make test-net
       # Also after a failure: go test keeps only passes, so the next push runs
       # what failed and reuses the rest.
       - name: Save the Go cache
@@ -76,6 +85,26 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
+
+  # The deye-reader example (R-DEYE-1..3) is built by the node from source;
+  # its unit tests run here. The test job builds it with the node's builder
+  # and compares it with the Go reference (tools/modbench, make test-net).
+  deye-reader:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: wasm32-wasip1
+          components: rustfmt, clippy
+      - name: Format, lint and unit tests
+        working-directory: examples/modules/deye-reader
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --target wasm32-wasip1 -- -D warnings
+          cargo test --locked
 
   # The html2md module (ADR-0035) is committed as html2md.wasm; the test
   # job above runs its fixture tests against that file. This job rebuilds

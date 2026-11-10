@@ -44,7 +44,7 @@ const (
 // admin check at run time decides the tools), the fixed instruction is
 // the message, the grant is on every call, and the answer goes to the
 // grant's reply target. A system job runs its registered code, without
-// a model, and ends the turn.
+// a model, and ends the turn; so does a module job, through ModuleCron.
 func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 	if t.event.Kind != event.KindSchedule {
 		return false, nil
@@ -78,6 +78,9 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 	case schedule.KindSystem:
 		t.made, t.replyConv = event.OriginSystem, j.Conv
 		return true, a.system(ctx, t, j)
+	case schedule.KindModule:
+		a.moduleCron(ctx, j)
+		return true, nil
 	default:
 		a.log.Warn("agent: scheduled job of an unknown kind", "job", j.ID, "kind", j.Kind)
 		return true, nil
@@ -129,6 +132,16 @@ func (a *Agent) system(ctx context.Context, t *turn, j schedule.Job) error {
 	}
 	t.reply(report)
 	return nil
+}
+
+// moduleCron runs a module's cron job: the module's host does the work,
+// without a model and without a message (R-RUN-12). A failure of the node
+// is logged and not tried again: the next slot runs the module anyway, and
+// a retried event would run it twice.
+func (a *Agent) moduleCron(ctx context.Context, j schedule.Job) {
+	if err := a.d.ModuleCron(ctx, j.Text); err != nil {
+		a.log.Warn("agent: module cron run failed", "job", j.ID, "module", j.Text, "err", err)
+	}
 }
 
 // grantCommandsLine tells a task run the exact commands its grant lists, so

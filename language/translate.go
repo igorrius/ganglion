@@ -280,7 +280,7 @@ func (t *Translator) count(ctx context.Context, l texts.Lang, outcome string) {
 // It has a clean context: no tools, no history, only our strings and the language's name from the
 // table (R-LANG-5).
 func (t *Translator) ask(ctx context.Context, l texts.Lang, source map[texts.Key]string) (string, string, error) {
-	cands, err := t.router.Route(ctx, router.TaskReq{Tier: router.TierCheap, Kind: router.TaskTranslate})
+	cands, err := t.router.Route(ctx, router.TaskReq{Purpose: router.PurposeTranslate})
 	if err != nil {
 		return "", "", err
 	}
@@ -302,7 +302,7 @@ func (t *Translator) ask(ctx context.Context, l texts.Lang, source map[texts.Key
 	}
 	cctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
-	resp, err := p.Chat(cctx, provider.ChatRequest{Model: c.Model, Messages: msgs, MaxTokens: maxAnswerTokens})
+	resp, err := p.Chat(cctx, provider.ChatRequest{Model: c.Model, Effort: c.Effort, Messages: msgs, MaxTokens: maxAnswerTokens})
 	t.router.Report(c, err)
 	if err != nil {
 		return "", "", err

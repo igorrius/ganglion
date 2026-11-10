@@ -7,6 +7,7 @@ import (
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/alert"
+	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/language"
@@ -184,8 +185,9 @@ func Housekeepers() do.Provider[Housekeeping] {
 }
 
 // AgentHousekeepers provides the daily prune of the tool-call journal, the
-// expiry of unanswered confirmations, the janitor, the translator and the
-// runner of host commands, which lives where the agent does.
+// expiry of unanswered confirmations, the janitor, the translator, the
+// runner of host commands, which lives where the agent does, and the
+// reconcile of the cells at start and every five minutes.
 func AgentHousekeepers() do.Provider[Housekeeping] {
 	return func(i do.Injector) (Housekeeping, error) {
 		logger := do.MustInvoke[*slog.Logger](i)
@@ -195,6 +197,7 @@ func AgentHousekeepers() do.Provider[Housekeeping] {
 			do.MustInvoke[*host.Janitor](i),
 			do.MustInvoke[*host.Runner](i),
 			node.Named("translator", do.MustInvoke[*language.Translator](i).Run),
+			cells.Reconciler{Service: do.MustInvoke[*cells.Service](i), Every: cells.ReconcileEvery, Log: logger, After: time.After},
 		}, nil
 	}
 }

@@ -19,7 +19,7 @@ import (
 const leftoverAge = 24 * time.Hour
 
 // tempPrefixes are the names the node gives its temporary folders.
-var tempPrefixes = []string{"ganglion-claude-", "ganglion-mcp-", "ganglion-skill-", "ganglion-sandbox-"}
+var tempPrefixes = []string{"ganglion-claude-", "ganglion-mcp-", "ganglion-skill-", "ganglion-sandbox-", "ganglion-build-"}
 
 // Places provides the node's places on disk, the one list host.stats and the
 // janitor read.
@@ -40,6 +40,10 @@ func Places() do.Provider[[]host.Place] {
 		}
 		for _, p := range tempPrefixes {
 			ps = append(ps, host.Place{Name: host.PlaceTemp, Path: os.TempDir(), Prefix: p, MaxAge: leftoverAge})
+		}
+		ps = append(ps, host.Place{Name: host.PlaceBuilds, Path: buildsDir(b), MaxAge: leftoverAge})
+		if root := buildConfig(b).TempRoot; root != "" {
+			ps = append(ps, host.Place{Name: host.PlaceTemp, Path: root, Prefix: "ganglion-build-", MaxAge: leftoverAge})
 		}
 		return ps, nil
 	}

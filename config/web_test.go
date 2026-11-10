@@ -95,7 +95,7 @@ func TestLocalSafeToolsAreTheListed(t *testing.T) {
 		}
 	}
 	slices.Sort(got)
-	want := []string{"cells.get", "host.stats", "journal.search", "language.set", "logs.search", "memory.read", "memory.recall", "schedule.list", "skill.read", "turns.failed"}
+	want := []string{"cells.get", "cells.list", "host.stats", "journal.search", "language.set", "logs.search", "memory.read", "memory.recall", "schedule.list", "skill.read", "turns.failed"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("local-safe tools %v, want %v", got, want)
 	}

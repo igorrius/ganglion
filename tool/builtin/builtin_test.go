@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/event"
@@ -211,7 +212,7 @@ func lamp(t *testing.T) *cells.Service {
 }
 
 func TestCellsGet(t *testing.T) {
-	get := builtin.NewCellsGet(lamp(t))
+	get := builtin.NewCellsGet(lamp(t), time.Now)
 	res, err := get.Run(context.Background(), call("cells.get", `{"id":"load.a"}`))
 	if err != nil {
 		t.Fatal(err)
@@ -229,7 +230,7 @@ func TestCellsGet(t *testing.T) {
 }
 
 func TestCellsGetUnknownAndBad(t *testing.T) {
-	get := builtin.NewCellsGet(lamp(t))
+	get := builtin.NewCellsGet(lamp(t), time.Now)
 	_, err := get.Run(context.Background(), call("cells.get", `{"id":"nope"}`))
 	if !errors.Is(err, cells.ErrNotFound) || !strings.Contains(err.Error(), "nope") {
 		t.Fatalf("unknown cell: %v", err)
@@ -291,7 +292,7 @@ func TestCellsSetRefuses(t *testing.T) {
 
 func TestCellsSpecs(t *testing.T) {
 	svc := lamp(t)
-	get, set := builtin.NewCellsGet(svc).Spec(), builtin.NewCellsSet(svc).Spec()
+	get, set := builtin.NewCellsGet(svc, time.Now).Spec(), builtin.NewCellsSet(svc).Spec()
 	if get.Name != "cells.get" || get.Class != tool.ClassRead || !get.AdminOnly {
 		t.Errorf("get %+v", get)
 	}
@@ -320,7 +321,7 @@ func (a *asker) Outgoing(context.Context, string) (event.Outgoing, error) {
 // behind the real policy.
 func TestCellsSetNeedsConfirm(t *testing.T) {
 	svc := lamp(t)
-	reg, err := tool.NewRegistry(router.Local{}, builtin.NewCellsGet(svc), builtin.NewCellsSet(svc), builtin.NewMessageSend(convs()))
+	reg, err := tool.NewRegistry(router.Local{}, builtin.NewCellsGet(svc, time.Now), builtin.NewCellsSet(svc), builtin.NewMessageSend(convs()))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -241,3 +241,18 @@ func TestOpenRemovesAStaleIndexLock(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestHeadIsTheLastCommit(t *testing.T) {
+	r := open(t)
+	if _, err := r.Head(context.Background()); err == nil {
+		t.Fatal("a repository with no commit has a head")
+	}
+	write(t, r, "memory/a.md", "a")
+	id, err := r.Commit(context.Background(), []string{"memory/a.md"}, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head, err := r.Head(context.Background()); err != nil || head != id {
+		t.Fatalf("head %q, %v; want %q", head, err, id)
+	}
+}

@@ -24,10 +24,13 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/config"
+	"github.com/igorrius/ganglion/internal/rustenv"
 	"github.com/igorrius/ganglion/logfile"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider/providertest"
-	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/secrets"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/telemetry"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 )
@@ -48,7 +51,7 @@ const (
 
 // NodeOptions say what a lab node runs.
 type NodeOptions struct {
-	Catalog  rules.Catalog // ignored when Scenario.Model is ModelScripted
+	Models   settings.Models // ignored when Scenario.Model is ModelScripted
 	Keys     map[string]string
 	Relay    string // the ganglion binary the claude CLI starts as its MCP server
 	Scenario Scenario
@@ -94,13 +97,11 @@ func Start(ctx context.Context, o NodeOptions) (n *Node, err error) {
 	if err := n.fillWorkspace(o.Scenario); err != nil {
 		return nil, err
 	}
-	cat, keys := o.Catalog, o.Keys
+	models, keys := o.Models, o.Keys
 	if o.Scenario.Model == ModelScripted {
-		if cat, keys, n.scripted, err = scriptedModel(closers, o.Scenario.Script, n.write); err != nil {
-			return nil, err
-		}
+		models, keys, n.scripted = scriptedModel(closers, o.Scenario.Script, n.write)
 	}
-	return n, n.run(ctx, o, cat, keys)
+	return n, n.run(ctx, o, models, keys)
 }
 
 const (
@@ -130,7 +131,7 @@ func (n *Node) write(w Writing) {
 }
 
 // run builds the container and starts the node.
-func (n *Node) run(ctx context.Context, o NodeOptions, cat rules.Catalog, keys map[string]string) error {
+func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, keys map[string]string) error {
 	fake := telegramtest.NewServer(n.closers, labToken)
 	if err := CheckLoopback(fake.URL()); err != nil {
 		return err
@@ -143,9 +144,9 @@ func (n *Node) run(ctx context.Context, o NodeOptions, cat rules.Catalog, keys m
 	if err != nil {
 		return err
 	}
-	b := config.Bootstrap{DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
-		Admin: fmt.Sprintf("telegram:user:%d", labChat), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
-		Agent: config.AgentSettings{Catalog: &cat, Keys: keys, Workspace: n.ws, DailyBudgetUSD: 1, DailyTurns: 300,
+	b := config.Bootstrap{Examples: examplesFolder(), DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
+		Admin: fmt.Sprintf("telegram:user:%d", labChat), Build: rustenv.LocalFromEnv(os.Getenv), Secrets: labSecrets(), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
+		Agent: config.AgentSettings{Models: &models, Keys: keys, Workspace: n.ws, DailyBudgetUSD: 1, DailyTurns: 300,
 			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}}
 	rot, err := logfile.Open(logfile.DefaultConfig(n.logs), time.Now)
 	if err != nil {
@@ -169,7 +170,16 @@ func (n *Node) run(ctx context.Context, o NodeOptions, cat rules.Catalog, keys m
 	b.Metrics = tel.Renderer()
 	// Built here, not in the goroutine: the tables exist when Start returns,
 	// and a container that cannot be built is Start's error.
-	n.lab, err = config.NewLab(runCtx, b, logger, config.LabOptions{Catalog: cat, Keys: keys, Relay: o.Relay, Resolver: pages, Connect: pages.connect,
+	for name, cfg := range o.Scenario.Config {
+		if err := settings.SetModule(filepath.Join(n.dir, settings.FileName), settings.Module{Name: "local/" + name, Config: cfg}); err != nil {
+			return fmt.Errorf("chatlab: settings for %s: %w", name, err)
+		}
+	}
+	mods, err := labModules(o.Scenario)
+	if err != nil {
+		return err
+	}
+	n.lab, err = config.NewLab(runCtx, b, logger, config.LabOptions{Models: models, Keys: keys, Relay: o.Relay, Resolver: pages, Connect: pages.connect, Modules: mods,
 		PendingNow: func() time.Time { return time.Now().Add(time.Duration(n.pending.Load())) },
 		SchedNow:   func() time.Time { return time.Now().Add(time.Duration(n.sched.Load())) },
 		Wrap:       o.Tokens.Wrap})
@@ -182,6 +192,29 @@ func (n *Node) run(ctx context.Context, o NodeOptions, cat rules.Catalog, keys m
 	n.db = n.lab.DB
 	n.peer = NewTelegram(fake, labChat, labOwner)
 	return nil
+}
+
+// examplesFolder is the repository's examples/modules, where module.import
+// copies from; "" outside a repository, which leaves the node to look for the
+// image's or the working folder's own.
+func examplesFolder() string {
+	root, err := RepoRoot()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(root, "examples", "modules")
+}
+
+// labSecrets is the node's secret source: the Deye example's four secrets
+// are set, to placeholders that name no account, so its install window has
+// nothing to refuse (the node never asks the cloud at install).
+func labSecrets() secrets.Source {
+	return secrets.Env{Getenv: func(name string) string {
+		if strings.HasPrefix(name, "DEYE_") && !strings.HasSuffix(name, "_FILE") {
+			return "lab-placeholder"
+		}
+		return ""
+	}, ReadFile: func(string) ([]byte, error) { return nil, os.ErrNotExist }}
 }
 
 // fillWorkspace gives the workspace its persona and skills.
@@ -261,13 +294,17 @@ func copyDir(src, dst string) error {
 // scriptedModel starts a fake model that plays script, one step per request,
 // and then says "ok". The memory check goes to a model of its own, so it
 // never takes a step.
-func scriptedModel(owner *program, script []ScriptStep, write func(Writing)) (rules.Catalog, map[string]string, *providertest.Server, error) {
-	const key = "scripted"
+func scriptedModel(owner *program, script []ScriptStep, write func(Writing)) (settings.Models, map[string]string, *providertest.Server) {
+	const (
+		key      = "scripted"
+		provider = "script"
+		guard    = "guard" // the model of the memory check and the housekeeping
+	)
 	fake := providertest.NewServer(owner, key)
 	var mu sync.Mutex
 	next := 0
 	fake.Respond(func(r providertest.Request) providertest.Answer {
-		if r.Model == "guard" {
+		if r.Model == guard {
 			return providertest.Answer{Text: `{"ok":true,"reason":""}`}
 		}
 		mu.Lock()
@@ -281,18 +318,24 @@ func scriptedModel(owner *program, script []ScriptStep, write func(Writing)) (ru
 		if st.Writes != nil {
 			write(*st.Writes)
 		}
-		return providertest.Answer{Text: st.Say, Tool: st.Tool, Args: st.Args}
+		return providertest.Answer{Text: st.Say, Tool: st.Tool, Args: withBuild(st.Args, r)}
 	})
-	cat, err := rules.LoadCatalog(strings.NewReader(`providers:
-  - {name: script, type: openai, base_url: "` + fake.URL() + `"}
-models:
-  - {provider: script, name: scripted, tier: smart, tools: true, context: 200000}
-  - {provider: script, name: guard, tier: cheap, context: 200000}
-`))
-	if err != nil {
-		return rules.Catalog{}, nil, nil, fmt.Errorf("chatlab: scripted catalogue: %w", err)
+	models := settings.Models{
+		Providers: []settings.Provider{{Name: provider, Type: settings.TypeOpenAI, BaseURL: fake.URL()}},
+		Models: []settings.ModelDef{
+			{ID: ModelScripted, Provider: provider, Name: ModelScripted, Tools: true, Context: 200_000},
+			{ID: guard, Provider: provider, Name: guard, Context: 200_000},
+		},
+		Purposes: map[router.Purpose][]settings.Choice{
+			// The housekeeping purposes go to guard too, so they never take
+			// a step of the script.
+			router.PurposeChat:      {{Model: ModelScripted}},
+			router.PurposeCheck:     {{Model: guard}},
+			router.PurposeCompact:   {{Model: guard}},
+			router.PurposeTranslate: {{Model: guard}},
+		},
 	}
-	return cat, map[string]string{"script": key}, fake, nil
+	return models, map[string]string{provider: key}, fake
 }
 
 // pageNet serves a scenario's pages from a local server at a public-looking
@@ -458,7 +501,11 @@ func ReadView(ctx context.Context, n *Node, last []Message) (View, error) {
 	if err != nil {
 		return View{}, fmt.Errorf("chatlab: journal: %w", err)
 	}
-	v := View{Journal: entries, Messages: n.peer.Messages(), Last: last, Memory: map[string]string{}, Jobs: map[string]int{}}
+	v := View{Journal: entries, Messages: n.peer.Messages(), Last: last, Memory: map[string]string{}, Jobs: map[string]int{},
+		Exists: func(rel string) bool {
+			_, err := os.Lstat(filepath.Join(n.dir, rel))
+			return err == nil
+		}}
 	if err := n.db.QueryRowContext(ctx, `SELECT count(*) FROM inbox WHERE taken_by IS NOT NULL`).Scan(&v.Taken); err != nil {
 		return View{}, fmt.Errorf("chatlab: inbox: %w", err)
 	}

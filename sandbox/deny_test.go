@@ -43,13 +43,49 @@ func TestDenyListKeepsADatabaseBesideOtherWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := DenyList("", dir, NodeFiles{DB: filepath.Join(dir, "ganglion.db")}, nil, nil)
-	for _, want := range []string{"ganglion.db", "ganglion.db-wal", "ganglion.db-shm", "ganglion.db-journal"} {
+	for _, want := range []string{"ganglion.db", "ganglion.db-wal", "ganglion.db-shm", "ganglion.db-journal", "ganglion.db.lock"} {
 		if !slices.Contains(got, filepath.Join(dir, want)) {
 			t.Errorf("%s is not denied; got %v", want, got)
 		}
 	}
 	if slices.Contains(got, dir) {
 		t.Fatalf("the working folder is denied: %v", got)
+	}
+}
+
+// TestDenyListHoldsTheSettingsAndTheLockInTheImagesLayout: the container
+// image runs in /data, where the database and ganglion.yaml are. A command
+// that rewrote ganglion.yaml would choose the admins and the providers'
+// commands at the next restart; one that held the lock would keep the node
+// from starting. Both are denied though the folder is not.
+func TestDenyListHoldsTheSettingsAndTheLockInTheImagesLayout(t *testing.T) {
+	data, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := NodeFiles{DB: filepath.Join(data, "ganglion.db"), Settings: filepath.Join(data, "ganglion.yaml"),
+		Workspace: filepath.Join(data, "workspace")}
+	got := DenyList("", data, node, nil, nil)
+	for _, want := range []string{"ganglion.yaml", "ganglion.db.lock", "ganglion.db", "workspace"} {
+		if !slices.Contains(got, filepath.Join(data, want)) {
+			t.Errorf("%s is not denied; got %v", want, got)
+		}
+	}
+	if slices.Contains(got, data) {
+		t.Fatalf("the working folder is denied: %v", got)
+	}
+}
+
+// A settings file named with --config anywhere is denied too.
+func TestDenyListHoldsASettingsFileElsewhere(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := filepath.Join(dir, "etc", "node.yaml")
+	got := DenyList("", "/", NodeFiles{DB: filepath.Join(dir, "data", "ganglion.db"), Settings: settings}, nil, nil)
+	if !slices.Contains(got, settings) {
+		t.Fatalf("the settings file is not denied: %v", got)
 	}
 }
 

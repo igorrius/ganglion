@@ -1,7 +1,7 @@
 # Core tags only: a module's tag, html2md/vX.Y.Z (ADR-0041), is not the node's version.
 VERSION ?= $(shell git describe --tags --match 'v*' --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-tinygo modules-rust clean-modules modrun modbench bench bench-html2md lab lab-all lab-skip-full lab-faults
+.PHONY: build test test-net lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-tinygo modules-rust example-deye clean-modules modrun modbench bench bench-html2md lab lab-all lab-skip-full lab-faults
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
@@ -10,37 +10,48 @@ test:
 	go test -race ./...
 	go test -race -timeout 20m -tags lab ./internal/chatlab/... ./tools/chatlab/...
 
+# Tests that need the network (crates.io for Rust builds with dependencies):
+# out of go test ./... and never cached (docs/conventions.md, section 9). They
+# skip without Rust's wasm32-wasip1 target or the command sandbox.
+test-net:
+	GANGLION_NET_TESTS=1 go test -count=1 -timeout 20m -run 'TestTheRustExample|TestARealRustModuleWithADependencyBuilds' -v ./tools/modbench/ ./builder/
+	GANGLION_NET_TESTS=1 go test -count=1 -timeout 20m -tags lab -run 'TestShippedScriptedScenariosPass' -v ./internal/chatlab/
+
 lint:
 	golangci-lint run
 
 check: lint test build
 
 # The M2 echo bot on the owner's test bot (docs/README.md, owner setup).
-# .env holds TELEGRAM_TEST_BOT_TOKEN and GANGLION_ADMIN; stop any other
-# process polling that bot first, or this one gets 409 and stops polling.
+# .env holds TELEGRAM_TEST_BOT_TOKEN and the provider keys; settings live in
+# LIVE_CONFIG. Fill in telegram.admin in examples/ganglion.echo.yaml (or point
+# LIVE_ECHO_CONFIG at a copy). Stop any other process polling that bot first,
+# or this one gets 409 and stops polling.
 # A second instance needs its own database: make live-echo LIVE_DB=bin/live2.db
 LIVE_DB ?= bin/live.db
+LIVE_ECHO_CONFIG ?= examples/ganglion.echo.yaml
 
 live-echo: build
 	@test -f .env || { echo "live-echo: no .env (see docs/README.md, owner setup)"; exit 1; }
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-echo: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
-	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) ./bin/ganglion run --roles core
+	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= \
+	./bin/ganglion run --roles core --db $(LIVE_DB) --config $(LIVE_ECHO_CONFIG)
 
-# The M3a agent on the test bot: live-echo plus a model catalogue
-# (models.local.yaml, git-ignored; see models.example.yaml) and the agent's
-# workspace (./workspace, git-ignored; copy examples/workspace for a
-# persona). Provider keys named by key_env come from .env.
-LIVE_MODELS ?= models.local.yaml
-LIVE_WORKSPACE ?= workspace
+# The M3a agent on the test bot: live-echo plus the settings file LIVE_CONFIG
+# (ganglion.local.yaml, git-ignored; copy ganglion.example.yaml and
+# set telegram.admin) with its models section and agent.workspace (./workspace,
+# git-ignored; copy examples/workspace for a persona). Provider keys named by
+# `key: env:NAME` come from .env.
+LIVE_CONFIG ?= ganglion.local.yaml
 
 live-agent: build
 	@test -f .env || { echo "live-agent: no .env (see docs/README.md, owner setup)"; exit 1; }
-	@test -f $(LIVE_MODELS) || { echo "live-agent: no $(LIVE_MODELS); copy models.example.yaml"; exit 1; }
+	@test -f $(LIVE_CONFIG) || { echo "live-agent: no $(LIVE_CONFIG); copy ganglion.example.yaml and set telegram.admin"; exit 1; }
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-agent: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
-	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= GANGLION_DB=$(LIVE_DB) \
-	GANGLION_MODELS_FILE=$(LIVE_MODELS) GANGLION_WORKSPACE=$(LIVE_WORKSPACE) ./bin/ganglion run --roles core
+	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= \
+	./bin/ganglion run --roles core --db $(LIVE_DB) --config $(LIVE_CONFIG)
 
 # The scripted acceptance of M3b (config/accept_test.go): the real core
 # with real models and the real web, the fake Bot API playing the owner.
@@ -60,7 +71,7 @@ accept: build
 COMPARE ?=
 compare:
 	@set -a; [ -f .env ] && . ./.env; set +a; \
-	go run ./tools/modelcompare -models $(LIVE_MODELS) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
+	go run ./tools/modelcompare -config $(LIVE_CONFIG) -only "$(COMPARE)" -out bin/compare.md && echo "report: bin/compare.md"
 
 # Test the agent by talking to it (ADR-0048): real models over the fake Bot API,
 # a table of what passed. It runs what changed since it last passed; LAB picks
@@ -106,7 +117,7 @@ memory:
 # toolchain pinned in modules/html2md/rust-toolchain.toml. Paths are
 # remapped so the module does not carry the builder's directories.
 modules: modules-html2md
-	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o bin/deye-reader.go.wasm ./modules/deye/wasm
+	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o bin/deye-reader.go.wasm ./internal/deyeref/wasm
 
 modules-html2md:
 	cd modules/html2md && \
@@ -114,16 +125,23 @@ modules-html2md:
 	cargo build --quiet --release --locked --target wasm32-wasip1
 	cp modules/html2md/target/wasm32-wasip1/release/html2md.wasm modules/html2md/html2md.wasm
 
-# The deye-reader module is also built with TinyGo and Rust to compare
-# toolchains (ADR-0011). Both are optional, must be on PATH, and are not
-# built in CI.
+# The deye-reader example (R-DEYE-1) is a Rust module the agent builds in its
+# workspace. example-deye builds it as the node's builder does, in a
+# temporary target folder it removes, into bin/deye-reader.rust.wasm. The Go
+# reference reader (internal/deyeref) is built by `modules` and, with
+# TinyGo, by modules-tinygo, to compare toolchains (ADR-0011); TinyGo is
+# optional and not built in CI.
+example-deye:
+	@mkdir -p bin
+	tmp=$$(mktemp -d) && trap 'rm -rf -- "$$tmp"' EXIT && \
+	cd examples/modules/deye-reader && \
+	CARGO_TARGET_DIR="$$tmp" cargo build --quiet --release --locked --target wasm32-wasip1 && \
+	cp "$$tmp/wasm32-wasip1/release/deye_reader.wasm" $(CURDIR)/bin/deye-reader.rust.wasm
+
+modules-rust: example-deye
 
 modules-tinygo:
-	tinygo build -target=wasip1 -buildmode=c-shared -opt=2 -no-debug -o bin/deye-reader.tinygo.wasm ./modules/deye/wasm
-
-modules-rust:
-	cd modules/deye-rs && cargo build --quiet --release --target wasm32-wasip1
-	cp modules/deye-rs/target/wasm32-wasip1/release/deye_reader.wasm bin/deye-reader.rust.wasm
+	tinygo build -target=wasip1 -buildmode=c-shared -opt=2 -no-debug -o bin/deye-reader.tinygo.wasm ./internal/deyeref/wasm
 
 # Cargo keeps every build of the Rust modules in their target/ folders:
 # host builds from `cargo test`, clippy and examples grow to gigabytes,
@@ -131,7 +149,7 @@ modules-rust:
 # the next build fills them again. bin/ (the live database) is not touched.
 clean-modules:
 	cd modules/html2md && cargo clean --quiet
-	cd modules/deye-rs && cargo clean --quiet
+	cd examples/modules/deye-reader && cargo clean --quiet
 
 modrun:
 	go build -o bin/modrun ./tools/modrun
@@ -144,8 +162,9 @@ bench-html2md: modbench
 	for f in modules/html2md/testdata/*.html; do \
 	  ./bin/modbench -wasm modules/html2md/html2md.wasm -manifest modules/html2md/html2md.yaml -html $$f -n 100 || exit 1; done
 
-# Measure every built deye-reader variant, one process each.
+# Measure every built deye-reader variant (make modules example-deye), one
+# process each.
 bench: modbench
 	for f in bin/deye-reader.*.wasm; do \
-	  ./bin/modbench -wasm $$f -manifest modules/deye/deye-reader.yaml \
+	  ./bin/modbench -wasm $$f -manifest examples/modules/deye-reader/manifest.yaml \
 	    -replay tools/modbench/testdata/deye-replay.json -config inverter_sn=2400000001 -n 300 || exit 1; done

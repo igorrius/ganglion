@@ -23,7 +23,7 @@ import (
 // not a line (principle 8, ADR-0056), so the numbers are reported and
 // compared by hand with the previous milestone. Run it with `make memory`;
 // it is skipped otherwise.
-func TestMemoryEcho(t *testing.T) { measure(t, "echo", nil, everyMessage) }
+func TestMemoryEcho(t *testing.T) { measure(t, "echo", "", everyMessage) }
 
 // TestMemoryAgent measures the agent with one model on a fake API: the
 // history, sessions and turns trace grow while the model answers instantly.
@@ -32,13 +32,7 @@ func TestMemoryAgent(t *testing.T) {
 		t.Skip("set GANGLION_MEASURE=1 (make memory)")
 	}
 	model := providertest.NewServer(t, "sk-measure")
-	catalog := filepath.Join(t.TempDir(), "models.yaml")
-	yaml := "providers:\n  - {name: fake, type: openai, base_url: " + model.URL() + ", key_env: FAKE_KEY}\n" +
-		"models:\n  - {provider: fake, name: m, tier: smart, context: 64000}\n"
-	if err := os.WriteFile(catalog, []byte(yaml), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	measure(t, "agent", []string{"GANGLION_MODELS_FILE=" + catalog, "FAKE_KEY=sk-measure", "GANGLION_DAILY_TURNS=0"}, everyMessage)
+	measure(t, "agent", "agent: {limits: {daily_turns: off}}\n"+fakeModels(model.URL(), "FAKE_KEY"), everyMessage)
 }
 
 // measureTools are the tools the fake model calls in turn, one per turn:
@@ -74,12 +68,6 @@ func TestMemoryAgentTools(t *testing.T) {
 		call := measureTools[int(k)%len(measureTools)]
 		return providertest.Answer{Tool: call[0], Args: call[1]}
 	})
-	catalog := filepath.Join(t.TempDir(), "models.yaml")
-	yaml := "providers:\n  - {name: fake, type: openai, base_url: " + model.URL() + ", key_env: FAKE_KEY}\n" +
-		"models:\n  - {provider: fake, name: m, tier: smart, tools: true, context: 64000}\n"
-	if err := os.WriteFile(catalog, []byte(yaml), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	answers := func(sent []telegramtest.Outgoing) int {
 		n := 0
 		for _, s := range sent {
@@ -89,8 +77,8 @@ func TestMemoryAgentTools(t *testing.T) {
 		}
 		return n
 	}
-	measure(t, "agent with tools", []string{"GANGLION_MODELS_FILE=" + catalog, "FAKE_KEY=sk-measure", "GANGLION_DAILY_TURNS=0",
-		"GANGLION_DAILY_TOKENS=0", "GANGLION_SEARCH=off"}, answers)
+	measure(t, "agent with tools", "agent: {limits: {daily_turns: off, daily_tokens: off}, search: {mode: off}}\n"+
+		fakeModels(model.URL(), "FAKE_KEY"), answers)
 }
 
 // TestMemoryAgentHostExec measures the agent when every turn's tool is
@@ -118,12 +106,6 @@ func TestMemoryAgentHostExec(t *testing.T) {
 		turn.Add(1)
 		return providertest.Answer{Tool: "host.exec", Args: `{"argv":["df","-h"],"reason":"measure"}`}
 	})
-	catalog := filepath.Join(t.TempDir(), "models.yaml")
-	yaml := "providers:\n  - {name: fake, type: openai, base_url: " + model.URL() + ", key_env: FAKE_KEY}\n" +
-		"models:\n  - {provider: fake, name: m, tier: smart, tools: true, context: 64000}\n"
-	if err := os.WriteFile(catalog, []byte(yaml), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	answers := func(sent []telegramtest.Outgoing) int {
 		if notReady.Load() {
 			t.Skip("the command sandbox is not ready on this machine: host.exec df -h gave no table")
@@ -136,8 +118,8 @@ func TestMemoryAgentHostExec(t *testing.T) {
 		}
 		return n
 	}
-	measure(t, "agent with host.exec", []string{"GANGLION_MODELS_FILE=" + catalog, "FAKE_KEY=sk-measure", "GANGLION_DAILY_TURNS=0",
-		"GANGLION_DAILY_TOKENS=0", "GANGLION_SEARCH=off"}, answers)
+	measure(t, "agent with host.exec", "agent: {limits: {daily_turns: off, daily_tokens: off}, search: {mode: off}}\n"+
+		fakeModels(model.URL(), "FAKE_KEY"), answers)
 }
 
 // TestMemoryMetrics measures the picture: RSS and peak after 50 /metrics
@@ -147,13 +129,7 @@ func TestMemoryMetrics(t *testing.T) {
 		t.Skip("set GANGLION_MEASURE=1 (make memory)")
 	}
 	model := providertest.NewServer(t, "sk-measure")
-	catalog := filepath.Join(t.TempDir(), "models.yaml")
-	yaml := "providers:\n  - {name: fake, type: openai, base_url: " + model.URL() + ", key_env: FAKE_KEY}\n" +
-		"models:\n  - {provider: fake, name: m, tier: smart, tools: true, context: 64000}\n"
-	if err := os.WriteFile(catalog, []byte(yaml), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cmd, fake, size := startMeasured(t, []string{"GANGLION_MODELS_FILE=" + catalog, "FAKE_KEY=sk-measure", "GANGLION_DAILY_TURNS=0", "GANGLION_DAILY_TOKENS=0"})
+	cmd, fake, size := startMeasured(t, "agent: {limits: {daily_turns: off, daily_tokens: off}}\n"+fakeModels(model.URL(), "FAKE_KEY"))
 	defer stopMeasured(cmd)
 	time.Sleep(2 * time.Second)
 	const n = 50
@@ -177,11 +153,11 @@ func everyMessage(sent []telegramtest.Outgoing) int { return len(sent) }
 
 // measure starts the binary, reads its RSS when idle, sends 1,000
 // messages and reads RSS and peak once replies counts all of them.
-func measure(t *testing.T, label string, extraEnv []string, replies func([]telegramtest.Outgoing) int) {
+func measure(t *testing.T, label, config string, replies func([]telegramtest.Outgoing) int) {
 	if os.Getenv("GANGLION_MEASURE") == "" {
 		t.Skip("set GANGLION_MEASURE=1 (make memory)")
 	}
-	cmd, fake, size := startMeasured(t, extraEnv)
+	cmd, fake, size := startMeasured(t, config)
 	defer stopMeasured(cmd)
 
 	time.Sleep(2 * time.Second)
@@ -207,9 +183,9 @@ func measure(t *testing.T, label string, extraEnv []string, replies func([]teleg
 		label, float64(size)/(1<<20), float64(idle)/1024, n, float64(after)/1024, float64(peak)/1024)
 }
 
-// startMeasured builds and starts the binary on a fake Bot API; it returns
-// the binary's size.
-func startMeasured(t *testing.T, extraEnv []string) (*exec.Cmd, *telegramtest.Server, int64) {
+// startMeasured builds and starts the binary on a fake Bot API with config
+// added to its ganglion.yaml; it returns the binary's size.
+func startMeasured(t *testing.T, config string) (*exec.Cmd, *telegramtest.Server, int64) {
 	t.Helper()
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "ganglion")
@@ -222,15 +198,16 @@ func startMeasured(t *testing.T, extraEnv []string) (*exec.Cmd, *telegramtest.Se
 	}
 	fake := telegramtest.NewServer(t, crashToken)
 	cmd := exec.Command(bin, "run", "--roles", "core")
-	cmd.Env = append(append(os.Environ(), extraEnv...),
-		"GANGLION_DB="+filepath.Join(dir, "mem.db"),
-		"GANGLION_WORKSPACE="+filepath.Join(dir, "workspace"),
-		"TELEGRAM_BOT_TOKEN="+crashToken,
-		"TELEGRAM_BOT_TOKEN_FILE=",
-		"TELEGRAM_API_URL="+fake.URL(),
-		"GANGLION_ADMIN=telegram:user:"+strconv.Itoa(adminID),
-		"GANGLION_METRICS_ADDR=127.0.0.1:0",
-	)
+	// config may hold an agent section of its own: the workspace goes into
+	// it, or into a new one.
+	ws := "workspace: \"" + filepath.Join(dir, "workspace") + "\""
+	if rest, ok := strings.CutPrefix(config, "agent: {"); ok {
+		config = "agent: {" + ws + ", " + rest
+	} else {
+		config = "agent: {" + ws + "}\n" + config
+	}
+	writeConfig(t, dir, crashTelegram(fake.URL())+"metrics: {addr: \"127.0.0.1:0\"}\n"+config)
+	cmd.Env = childEnv("GANGLION_DB="+filepath.Join(dir, "mem.db"), "FAKE_KEY=sk-measure", "TELEGRAM_BOT_TOKEN="+crashToken)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}

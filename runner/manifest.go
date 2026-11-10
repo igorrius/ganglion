@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"strconv"
+	"regexp"
 	"strings"
 	"time"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/igorrius/ganglion/internal/size"
+	"github.com/igorrius/ganglion/internal/text"
 )
 
 // Defaults for limits a manifest leaves out.
@@ -21,20 +24,54 @@ const (
 // Manifest declares what a module is, when it runs and what it may touch
 // (docs/spec.md, section 7.5). Anything not listed is denied.
 type Manifest struct {
-	Name         string            `yaml:"name"`
-	Version      int               `yaml:"version"`
-	ABI          int               `yaml:"abi"` // the module ABI it speaks (ADR-0011); missing reads as 1
-	Triggers     []Trigger         `yaml:"triggers"`
-	Capabilities Capabilities      `yaml:"capabilities"`
-	Config       map[string]string `yaml:"config"`
-	Limits       Limits            `yaml:"-"`
-	Escalate     []Escalation      `yaml:"escalate"`
+	Name         string               `yaml:"name"`
+	Version      int                  `yaml:"version"`
+	ABI          int                  `yaml:"abi"` // the module ABI it speaks (ADR-0011); missing reads as 1
+	Triggers     []Trigger            `yaml:"triggers"`
+	Capabilities Capabilities         `yaml:"capabilities"`
+	Cells        Cells                `yaml:"cells"`
+	Config       map[string]ConfigKey `yaml:"config"` // the keys the module reads
+	ConfigValues map[string]string    `yaml:"-"`      // their values, set by the host
+	Limits       Limits               `yaml:"-"`
+	Escalate     []Escalation         `yaml:"escalate"`
 }
 
 // Trigger starts a module: a cron schedule or a tool call by the model.
 type Trigger struct {
-	Cron string `yaml:"cron,omitempty"`
-	Tool string `yaml:"tool,omitempty"`
+	Cron   string `yaml:"cron,omitempty"`
+	Tool   string `yaml:"tool,omitempty"`
+	About  string `yaml:"about,omitempty"`  // the tool's description for the agent
+	Output *Shape `yaml:"output,omitempty"` // required for a tool of a local module
+}
+
+// MaxAbout caps a tool's description, which the manifest writes.
+const MaxAbout = 300
+
+// Description is the tool's about on one line, cut at MaxAbout: the text the
+// agent reads as the tool's description and the install window shows ("" when
+// the manifest gives none). The manifest writes it, so it is the module's text.
+func (t Trigger) Description() string {
+	return text.Truncate(strings.Join(strings.Fields(t.About), " "), MaxAbout)
+}
+
+// ConfigKey declares one setting a module reads.
+type ConfigKey struct {
+	Type     string `yaml:"type"` // string | number | boolean
+	Required bool   `yaml:"required"`
+	Default  string `yaml:"default"`
+}
+
+// CellDecl declares one cell a module reports.
+type CellDecl struct {
+	Kind  string `yaml:"kind"` // sensor (switch later)
+	Type  Shape  `yaml:"type"`
+	About string `yaml:"about"`
+}
+
+// Cells are the cells a module owns and the ones it may read.
+type Cells struct {
+	Report map[string]CellDecl `yaml:"report"` // by short name; the cell id is <module>.<name>
+	Read   []string            `yaml:"read"`   // full cell ids
 }
 
 // Capabilities are the host functions a module is granted.
@@ -78,15 +115,13 @@ func ParseManifest(src []byte) (Manifest, error) {
 	if m.Name == "" {
 		return Manifest{}, errors.New("manifest: name is required")
 	}
-	for i, t := range m.Triggers {
-		if (t.Cron == "") == (t.Tool == "") {
-			return Manifest{}, fmt.Errorf("manifest: trigger %d must set exactly one of cron, tool", i)
-		}
+	if err := m.checkV2(); err != nil {
+		return Manifest{}, fmt.Errorf("manifest: %w", err)
 	}
 
 	m.Limits = Limits{Memory: DefaultMemory, Timeout: DefaultTimeout}
 	if s := raw.Limits.Memory; s != "" {
-		n, err := parseSize(s)
+		n, err := size.Parse(s)
 		if err != nil {
 			return Manifest{}, fmt.Errorf("manifest: limits.memory: %w", err)
 		}
@@ -105,21 +140,63 @@ func ParseManifest(src []byte) (Manifest, error) {
 	return m, nil
 }
 
-// parseSize reads sizes such as "8MiB", "64KiB", "1GiB" or plain bytes.
-func parseSize(s string) (uint64, error) {
-	mult := uint64(1)
-	for suffix, m := range map[string]uint64{"KiB": 1 << 10, "MiB": 1 << 20, "GiB": 1 << 30} {
-		if rest, ok := strings.CutSuffix(s, suffix); ok {
-			s, mult = rest, m
-			break
+var (
+	cellNamePattern = regexp.MustCompile(`^[a-z0-9_-]+$`)
+	cellIDPattern   = regexp.MustCompile(`^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+$`)
+	toolNamePattern = regexp.MustCompile(`^[a-z0-9_]+$`)
+)
+
+// checkV2 validates triggers, cells and config keys.
+func (m Manifest) checkV2() error {
+	if err := m.checkTriggers(); err != nil {
+		return err
+	}
+	for name, c := range m.Cells.Report {
+		if !cellNamePattern.MatchString(name) {
+			return fmt.Errorf("cells.report %q: a name is lower-case letters, digits, _ and -", name)
+		}
+		if c.Kind != "sensor" {
+			return fmt.Errorf("cells.report %q: kind must be sensor", name)
+		}
+		if c.Type.Type == "" {
+			return fmt.Errorf("cells.report %q: type is required", name)
 		}
 	}
-	n, err := strconv.ParseUint(s, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("bad size %q", s)
+	for _, id := range m.Cells.Read {
+		if !cellIDPattern.MatchString(id) {
+			return fmt.Errorf("cells.read %q: not a full cell id like module.cell", id)
+		}
 	}
-	if n > (1<<64-1)/mult {
-		return 0, fmt.Errorf("size %q overflows", s)
+	for name, k := range m.Config {
+		switch k.Type {
+		case "string", "number", "boolean":
+		default:
+			return fmt.Errorf("config %q: type must be string, number or boolean", name)
+		}
 	}
-	return n * mult, nil
+	return nil
+}
+
+// checkTriggers validates each trigger and refuses a tool named twice (the
+// install window would show one tool's about and the node run another's
+// handler) or a cron line given twice (the module would run twice a tick).
+func (m Manifest) checkTriggers() error {
+	tools, crons := map[string]bool{}, map[string]bool{}
+	for i, t := range m.Triggers {
+		if (t.Cron == "") == (t.Tool == "") {
+			return fmt.Errorf("trigger %d must set exactly one of cron, tool", i)
+		}
+		if t.Tool != "" && !toolNamePattern.MatchString(t.Tool) {
+			return fmt.Errorf("tool %q: a name is lower-case letters, digits and _", t.Tool)
+		}
+		if t.Tool != "" && tools[t.Tool] {
+			return fmt.Errorf("tool %s is declared twice", t.Tool)
+		}
+		cron := strings.Join(strings.Fields(t.Cron), " ")
+		if cron != "" && crons[cron] {
+			return fmt.Errorf("trigger %d repeats the cron line of another", i)
+		}
+		tools[t.Tool], crons[cron] = true, true
+	}
+	return nil
 }

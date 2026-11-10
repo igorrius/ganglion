@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m4-build-and-install
+why: >-
+  M4 check 3 (R-RUN-9, ADR-0061, ADR-0064): "build and install deye-reader" imports the example into the
+  workspace, builds it in the sandbox, shows the install window with the build's rights, and after the press
+  installs exactly that build and runs it; no build folder (target/) is left in the workspace.
+covers:
+  - tool/builtin/module.go
+  - tool/builtin/module_build.go
+  - tool/builtin/module_import.go
+  - tool/builtin/module_install.go
+  - tool/builtin/module_window.go
+  - config/builder.go
+  - config/modhost.go
+  - builder/**
+  - internal/rustenv/**
+  - modstore/install.go
+  - modstore/local.go
+  - modhost/**
+  - examples/modules/deye-reader/**
+repeat: 1
+model: scripted
+config:
+  deye-reader: {inverter_sn: "2400000000"}
+script:
+  - {tool: module.import, args: '{"from":"deye-reader","name":"deye-reader"}'}
+  - {say: "The copy waits for your press."}
+  - {tool: module.build, args: '{"name":"deye-reader","note":"first build"}'}
+  - {tool: module.install, args: '{"build":"$BUILD","note":"first install"}'}
+  - {say: "The install waits for your press."}
+  - {say: "deye-reader is installed and running."}
+steps:
+  - say: "Build and install deye-reader"
+  - facts:
+      questions: 1
+      question: {contains: "deye-reader"}
+      journal:
+        - {tool: module.build, count: 0}
+  - press: Approve
+  - facts:
+      questions: 1
+      question: {contains: "eu1-developer.deyecloud.com"}
+      journal:
+        - {tool: module.import, decision: approved, count: 1}
+        - {tool: module.build, decision: allowed, result_contains: '"language":"rust"', count: 1}
+        - {tool: module.install, decision: approved, count: 0}
+  - press: Approve
+  - facts:
+      questions: 0
+      journal:
+        - {tool: module.install, decision: approved, result_contains: "and running", count: 1}
+      reply: {contains: "installed and running"}
+      absent:
+        - workspace/modules/deye-reader/target
+        - workspace/modules/deye-reader/.cargo

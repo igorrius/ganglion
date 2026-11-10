@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/buildinfo"
 	"github.com/igorrius/ganglion/node"
@@ -32,15 +31,13 @@ func newRoot(out, errOut io.Writer, start startFunc) *cli.Command {
 // newRootIO is the command tree with in as the stdin of the commands
 // that speak over it (mcp, mcp-relay).
 func newRootIO(in io.Reader, out, errOut io.Writer, start startFunc) *cli.Command {
-	var root flags.Root
 	return &cli.Command{
 		Name:      "ganglion",
 		Usage:     "a node of the ganglion agent network",
 		Version:   buildinfo.Read().Short(),
 		Writer:    out,
 		ErrWriter: errOut,
-		Flags:     root.Flags(),
-		Commands:  []*cli.Command{runCommand(&root, out, start), versionCommand(out), relayCommand(in, out), mcpCommand(in, out), sandboxCommand()},
+		Commands:  []*cli.Command{runCommand(out, start), versionCommand(out), relayCommand(in, out), mcpCommand(in, out), sandboxCommand()},
 		// Without a command: help, and a failure, so a supervisor still
 		// starting the command line from before `run` sees an error
 		// instead of a clean exit.

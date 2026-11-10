@@ -19,7 +19,6 @@ import (
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
-	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/tool"
@@ -254,14 +253,9 @@ func TestAgentOverTelegram(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	model := providertest.NewServer(t, "sk-test")
 	model.Reply("Привет, Igor!")
-	catalog, err := rules.LoadCatalog(strings.NewReader("providers:\n  - {name: or, type: openai, base_url: " + model.URL() +
-		", key_env: OR_KEY}\nmodels:\n  - {provider: or, name: m1, tier: smart, tools: true, context: 64000}\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	cfg := testConfig(t)
 	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
-	cfg.Agent = AgentSettings{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, DailyBudgetUSD: 1, TZ: time.UTC,
+	cfg.Agent = AgentSettings{Models: orModels(t, model.URL(), "m1"), Keys: map[string]string{"or": "sk-test"}, DailyBudgetUSD: 1, TZ: time.UTC,
 		Workspace: t.TempDir()}
 	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
 
@@ -280,10 +274,10 @@ func TestAgentOverTelegram(t *testing.T) {
 	for _, tl := range reqs[0].Tools {
 		offered = append(offered, tl["function"].(map[string]any)["name"].(string))
 	}
-	want := "cells.get,cells.set,host.stats,journal.search,language.set,logs.search,memory.audit,memory.forget,memory.read,memory.recall,memory.write," +
-		"message.send,persona.propose,plan.show,plan.step,schedule.create,schedule.delete,schedule.list,schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
+	want := "cells.get,cells.list,cells.set,host.stats,journal.search,language.set,logs.search,memory.audit,memory.forget,memory.read,memory.recall,memory.write," +
+		"message.send,module.build,module.install,module.status,persona.propose,plan.show,plan.step,schedule.create,schedule.delete,schedule.list,schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
 	if _, err := exec.LookPath("git"); err != nil {
-		want = "cells.get,cells.set,host.stats,journal.search,language.set,logs.search,message.send,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
+		want = "cells.get,cells.list,cells.set,host.stats,journal.search,language.set,logs.search,message.send,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
 			"schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
 	}
 	// host.exec is on offer only where the sandbox is ready (R-CMD-1).
@@ -331,14 +325,9 @@ func TestPressFeedbackOrderOverTelegram(t *testing.T) {
 	model.CallTool("message.send", `{"conv":"telegram:user:42","text":"the effect"}`)
 	model.Reply("I asked you.")
 	model.Reply("Sent.")
-	catalog, err := rules.LoadCatalog(strings.NewReader("providers:\n  - {name: or, type: openai, base_url: " + model.URL() +
-		", key_env: OR_KEY}\nmodels:\n  - {provider: or, name: m1, tier: smart, tools: true, context: 64000}\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	cfg := testConfig(t)
 	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
-	cfg.Agent = AgentSettings{Catalog: &catalog, Keys: map[string]string{"or": "sk-test"}, DailyBudgetUSD: 1, TZ: time.UTC,
+	cfg.Agent = AgentSettings{Models: orModels(t, model.URL(), "m1"), Keys: map[string]string{"or": "sk-test"}, DailyBudgetUSD: 1, TZ: time.UTC,
 		Workspace: t.TempDir()}
 	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
 

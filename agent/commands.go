@@ -60,14 +60,21 @@ func (a *Agent) commandTable() []commandEntry {
 		{"/status", a.showStatus, map[transport.Lang]string{
 			transport.LangDefault: "How the node is doing", transport.LangRussian: "Как дела у ноды",
 			transport.LangUkrainian: "Як справи у вузла"}},
+		{"/restart", a.restart, map[transport.Lang]string{
+			transport.LangDefault:   "Restart the node: settings apply",
+			transport.LangRussian:   "Перезапустить ноду: настройки применятся",
+			transport.LangUkrainian: "Перезапустити вузол: налаштування застосуються"}},
 		{"/metrics", a.showMetrics, map[transport.Lang]string{
 			transport.LangDefault:   "Agent metrics as a picture: /metrics [all | ganglion | runtime | process | filter]",
 			transport.LangRussian:   "Метрики агента картинкой: /metrics [all | ganglion | runtime | process | фильтр]",
 			transport.LangUkrainian: "Метрики агента картинкою: /metrics [all | ganglion | runtime | process | фільтр]"}},
 		{"/modules", a.modules, map[transport.Lang]string{
-			transport.LangDefault:   "Modules: /modules update or rollback <name>",
-			transport.LangRussian:   "Модули: /modules update или rollback <имя>",
-			transport.LangUkrainian: "Модулі: /modules update або rollback <назва>"}},
+			transport.LangDefault:   "Modules: /modules, then /modules <name>, config, off, on, remove or rollback",
+			transport.LangRussian:   "Модули: /modules, затем /modules <имя>, config, off, on, remove или rollback",
+			transport.LangUkrainian: "Модулі: /modules, потім /modules <назва>, config, off, on, remove або rollback"}},
+		{"/cells", a.listCells, map[transport.Lang]string{
+			transport.LangDefault: "Cells: sensors and switches with their values", transport.LangRussian: "Ячейки: датчики и выключатели со значениями",
+			transport.LangUkrainian: "Комірки: датчики та вимикачі зі значеннями"}},
 		{"/commands", a.commandsSwitch, map[transport.Lang]string{
 			transport.LangDefault:   "Host commands: /commands on or off",
 			transport.LangRussian:   "Команды на компьютере: /commands on или off",

@@ -33,7 +33,7 @@ func noCalls() int { return 0 }
 func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.ChatRequest, rec *turns.Turn, ran callCount) (provider.ChatResponse, turns.Outcome) {
 	cands, err := a.d.Router.Route(ctx, task)
 	if err != nil {
-		a.log.Error("agent: no model fits", "conv", rec.Conv, "kind", task.Kind, "err", err)
+		a.log.Error("agent: no model fits", "conv", rec.Conv, "kind", string(task.Purpose), "err", err)
 		return provider.ChatResponse{}, turns.OutcomeNoModel
 	}
 	firstFail := "" // the first candidate's error kind, for a fallback
@@ -47,7 +47,7 @@ func (a *Agent) call(ctx context.Context, task router.TaskReq, req provider.Chat
 			firstFail = cmp.Or(firstFail, "no_provider")
 			continue
 		}
-		req.Model = c.Model
+		req.Model, req.Effort = c.Model, c.Effort
 		before := ran()
 		resp, err := a.try(ctx, p, c, task, req)
 		if errors.Is(err, errAdditionWaiting) {
@@ -96,7 +96,7 @@ func (a *Agent) logFailure(rec *turns.Turn, c router.Candidate, err error) {
 // error.
 func (a *Agent) try(ctx context.Context, p provider.Provider, c router.Candidate, task router.TaskReq, req provider.ChatRequest) (provider.ChatResponse, error) {
 	spanCtx, span := a.in.tracer.Start(ctx, "model.call", trace.WithAttributes(
-		attribute.String("provider", c.Provider), attribute.String("model", c.Model), attribute.String("task", string(task.Kind))))
+		attribute.String("provider", c.Provider), attribute.String("model", c.Model), attribute.String("task", string(task.Purpose))))
 	callCtx, cancel := context.WithTimeout(spanCtx, a.cfg.CallTimeout)
 	started := time.Now()
 	resp, err := p.Chat(callCtx, req)

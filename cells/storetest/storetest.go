@@ -172,4 +172,60 @@ func Run(t *testing.T, newStore func(t *testing.T) cells.Store) {
 			t.Fatalf("list = %+v (%v)", l, err)
 		}
 	})
+
+	t.Run("owner and about", func(t *testing.T) {
+		s := newStore(t)
+		c := cells.Cell{ID: "deye-reader.soc", Kind: cells.KindSensor, Owner: "deye-reader", About: "soc", Version: 1, Updated: t0}
+		_, _ = s.Create(ctx, c, "test")
+		_, _ = s.Create(ctx, switchCell("load.a"), "test")
+		got, err := s.Get(ctx, "deye-reader.soc")
+		if err != nil || got.Owner != "deye-reader" || got.About != "soc" {
+			t.Fatalf("got %+v (%v)", got, err)
+		}
+		if err := s.SetOwner(ctx, "load.a", "m", "about"); err != nil {
+			t.Fatal(err)
+		}
+		got, _ = s.Get(ctx, "load.a")
+		if got.Owner != "m" || got.About != "about" || got.Version != 1 {
+			t.Fatalf("after SetOwner %+v", got)
+		}
+		if err := s.SetOwner(ctx, "nope", "m", ""); !errors.Is(err, cells.ErrNotFound) {
+			t.Fatalf("SetOwner missing = %v", err)
+		}
+		n, err := s.Disown(ctx, "m")
+		if err != nil || n != 1 {
+			t.Fatalf("Disown = %d, %v", n, err)
+		}
+		got, _ = s.Get(ctx, "load.a")
+		if got.Owner != "" || got.About != "about" {
+			t.Fatalf("after Disown %+v", got)
+		}
+		if l, _ := s.List(ctx); len(l) != 2 || l[0].Owner != "deye-reader" {
+			t.Fatalf("list = %+v", l)
+		}
+	})
+
+	t.Run("history since", func(t *testing.T) {
+		s := newStore(t)
+		_, _ = s.Create(ctx, switchCell("load.a"), "test")
+		_, _ = s.Create(ctx, switchCell("load.b"), "test")
+		for i := range 4 {
+			ch := change("load.a", "reported", `"on"`)
+			ch.At = t0.Add(time.Duration(i+1) * time.Minute)
+			_, _ = s.Update(ctx, switchCell("load.a"), int64(i+1), ch)
+			_, _ = s.Update(ctx, switchCell("load.b"), int64(i+1), ch)
+		}
+		got, err := s.HistorySince(ctx, "load.a", t0.Add(2*time.Minute).UnixMilli(), 10)
+		if err != nil || len(got) != 3 || got[0].Version != 3 || got[2].Version != 5 {
+			t.Fatalf("since = %+v (%v)", got, err)
+		}
+		for _, c := range got {
+			if c.CellID != "load.a" {
+				t.Fatalf("foreign change %+v", c)
+			}
+		}
+		if got, _ = s.HistorySince(ctx, "load.a", t0.UnixMilli(), 2); len(got) != 2 || got[0].Version != 1 {
+			t.Fatalf("limited = %+v", got)
+		}
+	})
 }

@@ -27,12 +27,21 @@ func Guard() do.Provider[*guard.Guard] {
 	}
 }
 
-// Memory provides the facts in the workspace's git repository, created
-// at start when it is not one yet; recall searches the session archive.
-// gitrepo.ErrNoGit when the git binary is missing.
+// Workspace provides the agent's workspace, a git repository created at
+// start when it is not one yet (ADR-0033): memory and the modules' sources
+// live in it. gitrepo.ErrNoGit when the git binary is missing.
+func Workspace() do.Provider[*gitrepo.Repo] {
+	return func(i do.Injector) (*gitrepo.Repo, error) {
+		return gitrepo.Open(do.MustInvoke[Startup](i), do.MustInvoke[Bootstrap](i).Agent.Workspace)
+	}
+}
+
+// Memory provides the facts in the workspace's git repository; recall
+// searches the session archive. gitrepo.ErrNoGit when the git binary is
+// missing.
 func Memory() do.Provider[*memory.Memory] {
 	return func(i do.Injector) (*memory.Memory, error) {
-		repo, err := gitrepo.Open(do.MustInvoke[Startup](i), do.MustInvoke[Bootstrap](i).Agent.Workspace)
+		repo, err := do.Invoke[*gitrepo.Repo](i)
 		if err != nil {
 			return nil, err
 		}

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -10,40 +9,41 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/buildinfo"
+	"github.com/igorrius/ganglion/internal/memlimit"
 	"github.com/igorrius/ganglion/internal/redact"
+	"github.com/igorrius/ganglion/internal/rustenv"
 	"github.com/igorrius/ganglion/logfile"
 	"github.com/igorrius/ganglion/node"
-	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/secrets"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/telemetry"
 	"github.com/urfave/cli/v3"
 )
 
-func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
+func runCommand(out io.Writer, start startFunc) *cli.Command {
 	var v flags.Run
-	def := agent.DefaultConfig()
 	return &cli.Command{
 		Name:  "run",
 		Usage: "run a node with the given roles until a signal",
-		Description: "Settings come from flags or their environment variables. Secrets never are flags:\n" +
-			"TELEGRAM_BOT_TOKEN, BRAVE_API_KEY and each provider's key_env are read from the variable or from <NAME>_FILE.",
-		Flags: v.Flags(def.DailyTurns, def.DailyTokens, def.SessionIdle),
+		Description: "Settings come from ganglion.yaml (--config; default: beside the database). Secrets never are in it:\n" +
+			"the file names each one as env:NAME, and the node reads NAME or the file named by NAME_FILE.",
+		Flags: v.Flags(),
 		Action: func(ctx context.Context, _ *cli.Command) error {
 			roles, err := node.ParseRoles(v.Roles)
 			if err != nil {
 				return err
 			}
-			b, err := bootstrap(v, secrets.OSEnv(), os.ReadFile)
+			b, err := bootstrap(v, secrets.OSEnv(), os.Getenv, os.ReadFile)
 			if err != nil {
 				return err
 			}
+			b.MemoryLimit = memlimit.Apply(b.MemoryLimit)
 			in := buildinfo.Read()
-			logger, closeLogs, err := newLogger(out, root.Level(), b)
+			logger, closeLogs, err := newLogger(out, logLevel(b.Settings.Log.Level), b)
 			if err != nil {
 				return err
 			}
@@ -63,9 +63,16 @@ func runCommand(root *flags.Root, out io.Writer, start startFunc) *cli.Command {
 	}
 }
 
-// newLogger logs as text to out and, unless --log-dir is off, as JSON
-// lines to the rotated files on disk (R-OBS-6, ADR-0043). Both sides
-// carry trace ids and hide the secrets the node read and the patterns of
+// logLevel is log.level as a slog level; settings checked the value.
+func logLevel(v string) slog.Level {
+	var l slog.Level
+	_ = l.UnmarshalText([]byte(v))
+	return l
+}
+
+// newLogger logs as text to out and, unless log.dir is off, as JSON lines
+// to the rotated files on disk (R-OBS-6, ADR-0043). Both sides carry trace
+// ids and hide the secrets the node read and the patterns of
 // redact.String. The disk comes first, so a line on stdout is already in
 // the file when a kill -9 lands.
 func newLogger(out io.Writer, level slog.Level, b config.Bootstrap) (*slog.Logger, func(), error) {
@@ -79,89 +86,108 @@ func newLogger(out io.Writer, level slog.Level, b config.Bootstrap) (*slog.Logge
 	}
 	rot, err := logfile.Open(logfile.DefaultConfig(b.LogDir), time.Now)
 	if err != nil {
-		return nil, nil, fmt.Errorf("GANGLION_LOG_DIR: %w", err)
+		return nil, nil, fmt.Errorf("%s: log.dir: %w", settings.FileName, err)
 	}
 	return slog.New(slog.NewMultiHandler(wrap(slog.NewJSONHandler(rot, opts)), stdout)), func() { _ = rot.Close() }, nil
 }
 
-// bootstrap turns the flags into the node's bootstrap settings, reading
-// the secrets and the model catalogue.
-func bootstrap(v flags.Run, src secrets.Source, readFile func(string) ([]byte, error)) (config.Bootstrap, error) {
-	b := config.Bootstrap{DB: v.DB, Languages: v.Languages, BotAPIURL: v.TelegramAPIURL, Admin: v.Admin, MetricsAddr: v.MetricsAddr, TelegramReply: v.TelegramReply, TelegramRich: v.TelegramRich == "on",
-		ReactionAfter: v.ReactionAfter, ReactionDwell: v.ReactionDwell}
-	b.ModulesDir = filepath.Join(filepath.Dir(v.DB), "modules")
+// bootstrap reads the config file and the secrets it references into
+// config.Bootstrap. A retired variable fails first: a stale deploy must
+// not run on defaults (R-CFG-5).
+func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read func(string) ([]byte, error)) (config.Bootstrap, error) {
+	if err := settings.Retired(getenv); err != nil {
+		return config.Bootstrap{}, err
+	}
+	f, err := loadSettings(v.Config, v.DB, read)
+	if err != nil {
+		return config.Bootstrap{}, err
+	}
+	limit := memlimit.Decide(getenv("GOMEMLIMIT"), uint64(f.Node.MemoryLimit), read)
+	b, err := fromFile(f, v.DB, limit, src)
+	if err != nil {
+		return config.Bootstrap{}, err
+	}
+	b.Build = rustenv.LocalFromEnv(getenv)
+	b.SettingsPath, b.Secrets = settingsPath(v.Config, v.DB), src
+	return b, nil
+}
+
+// loadSettings reads the file the operator named, which must exist, or
+// else the one beside the database at db, which may be missing (R-CFG-1).
+func loadSettings(named, db string, read settings.ReadFunc) (settings.File, error) {
+	if named != "" {
+		return settings.Load(named, read)
+	}
+	return settings.LoadOptional(settingsPath(named, db), read)
+}
+
+// settingsPath is the file the node reads its settings from: the one the
+// operator named, else the one beside the database at db.
+func settingsPath(named, db string) string {
+	if named != "" {
+		return named
+	}
+	return filepath.Join(filepath.Dir(db), settings.FileName)
+}
+
+// fromFile maps the file to the node's bootstrap settings for the
+// database at db, with the decided memory limit, reading the secrets
+// through src.
+func fromFile(f settings.File, db string, limit memlimit.Limit, src secrets.Source) (config.Bootstrap, error) {
+	b := config.Bootstrap{DB: db, Languages: f.Agent.Languages, BotAPIURL: f.Telegram.APIURL, Admin: f.Telegram.Admin,
+		MetricsAddr: f.Metrics.Addr, TelegramReply: f.Telegram.Reply, TelegramRich: f.Telegram.Rich,
+		ReactionAfter: time.Duration(f.Telegram.Reactions.After), ReactionDwell: time.Duration(f.Telegram.Reactions.Dwell),
+		SandboxDeny: f.Sandbox.Deny, SandboxHideNames: f.Sandbox.HideNames,
+		ModulesDir:  filepath.Join(filepath.Dir(db), "modules"),
+		MemoryLimit: limit, Settings: f}
 	// Absolute: the CLI runs inside it, and the sandbox, the janitor and
 	// host.stats must all name the same folder.
 	var err error
-	if b.ClaudeDir, err = filepath.Abs(filepath.Join(filepath.Dir(v.DB), "claude")); err != nil {
+	if b.ClaudeDir, err = filepath.Abs(filepath.Join(filepath.Dir(db), "claude")); err != nil {
 		return config.Bootstrap{}, err
 	}
-	b.SandboxDeny = filepath.SplitList(v.SandboxDeny)
-	b.SandboxHideNames = v.SandboxHideNames == "on"
-	if dir, on := flags.LogDir(v.DB, v.LogDir); on {
+	if dir, on := f.LogDir(db); on {
 		b.LogDir = dir
 	}
-	if b.BotToken, err = src.Secret("TELEGRAM_BOT_TOKEN"); err != nil {
+	if b.BotToken, err = f.Telegram.Token.Resolve(src); err != nil {
 		return config.Bootstrap{}, err
 	}
-	tz, err := time.LoadLocation(v.TZ) // checked by the flag
-	if err != nil {
-		return config.Bootstrap{}, fmt.Errorf("GANGLION_TZ: %w", err)
-	}
-	idle, err := flags.Idle(v.SessionIdle)
-	if err != nil {
-		return config.Bootstrap{}, fmt.Errorf("GANGLION_SESSION_IDLE: %w", err)
-	}
-	b.Agent = config.AgentSettings{Workspace: v.Workspace, DailyBudgetUSD: v.DailyBudgetUSD, DailyTurns: v.DailyTurns,
-		DailyTokens: v.DailyTokens, SessionIdle: idle, TZ: tz, SearchOff: v.Search == "off"}
-	if b.Agent.BraveKey, err = src.Secret("BRAVE_API_KEY"); err != nil {
-		return config.Bootstrap{}, err
-	}
-	if v.ModelsFile == "" {
-		return b, nil
-	}
-	b.Agent.Catalog, b.Agent.Keys, err = catalogue(v.ModelsFile, src, readFile)
+	b.Agent, err = agentSettings(f, src)
 	return b, err
 }
 
-// catalogue loads the model catalogue and its providers' keys. A provider
-// whose key_env is not set fails the start.
-func catalogue(path string, src secrets.Source, readFile func(string) ([]byte, error)) (*rules.Catalog, map[string]string, error) {
-	data, err := readFile(path)
+// agentSettings maps the file's agent and models sections, reading the
+// search key and the providers' keys through src.
+func agentSettings(f settings.File, src secrets.Source) (config.AgentSettings, error) {
+	tz, err := time.LoadLocation(f.Node.TZ) // checked by settings
 	if err != nil {
-		return nil, nil, fmt.Errorf("GANGLION_MODELS_FILE: %w", err)
+		return config.AgentSettings{}, fmt.Errorf("%s: node.tz: %w", settings.FileName, err)
 	}
-	cat, err := rules.LoadCatalog(bytes.NewReader(data))
-	if err != nil {
-		return nil, nil, fmt.Errorf("GANGLION_MODELS_FILE %s: %w", path, err)
+	l := f.Agent.Limits
+	a := config.AgentSettings{Workspace: f.Agent.Workspace, DailyBudgetUSD: float64(l.DailyBudgetUSD), DailyTurns: int(l.DailyTurns),
+		DailyTokens: int(l.DailyTokens), SessionIdle: time.Duration(f.Agent.SessionIdle), TZ: tz, SearchOff: f.Agent.Search.Mode == "off",
+		Models: f.Models}
+	if a.BraveKey, err = f.Agent.Search.BraveKey.Resolve(src); err != nil {
+		return config.AgentSettings{}, err
 	}
-	keys := map[string]string{}
-	for _, p := range cat.Providers {
-		if p.KeyEnv == "" {
-			continue
-		}
-		key, err := src.Secret(p.KeyEnv)
-		if err != nil {
-			return nil, nil, err
-		}
-		if key == "" {
-			return nil, nil, fmt.Errorf("%s (key_env of provider %s) is not set; set it or %s_FILE", p.KeyEnv, p.Name, p.KeyEnv)
-		}
-		keys[p.Name] = key
+	if f.Models != nil {
+		a.Keys, err = f.Models.Keys(src)
 	}
-	return &cat, keys, nil
+	return a, err
 }
 
 // announce says which optional parts the settings turn on or leave off.
 func announce(logger *slog.Logger, b config.Bootstrap) {
-	if cat := b.Agent.Catalog; cat != nil {
-		logger.Info("node: agent on", "providers", len(cat.Providers), "models", len(cat.Models))
+	if m := b.Agent.Models; m != nil {
+		logger.Info("node: agent on", "providers", len(m.Providers), "models", len(m.Models))
 	} else {
-		logger.Warn("node: no GANGLION_MODELS_FILE; the agent is off and the bot echoes")
+		logger.Warn("node: no models section in " + settings.FileName + "; the agent is off and the bot echoes")
 	}
 	if b.BotToken == "" {
-		logger.Warn("node: no TELEGRAM_BOT_TOKEN; the Telegram transport is off")
+		logger.Warn("node: no " + b.Settings.Telegram.Token.Name() + "; the Telegram transport is off")
 	}
+	l := b.MemoryLimit
+	logger.Info("node: memory limit", "bytes", l.Bytes, "source", string(l.Source))
 }
 
 // startTelemetry serves metrics and returns the stop. Watching the node

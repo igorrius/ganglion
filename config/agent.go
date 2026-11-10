@@ -14,6 +14,7 @@ import (
 	"github.com/igorrius/ganglion/diag"
 	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/language"
+	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/plan"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider"
@@ -24,6 +25,7 @@ import (
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/texts"
@@ -96,7 +98,12 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Persona:       agent.PersonaDir(b.Agent.Workspace),
 		Facts:         do.MustInvoke[Remembering](i).Facts,
 		SystemJobs:    do.MustInvoke[Remembering](i).Jobs,
+		Restart:       do.MustInvoke[agent.RestartFunc](i),
 		Modules:       do.MustInvoke[agent.Modules](i),
+		Local:         do.MustInvoke[*modhost.Host](i),
+		Cells:         do.MustInvoke[*cells.Service](i),
+		Buttons:       do.MustInvoke[*pending.Store](i),
+		ModuleCron:    do.MustInvoke[*modhost.Host](i).RunCron,
 		Switch:        do.MustInvoke[*host.Switch](i),
 		Commands:      do.MustInvoke[*host.Runner](i),
 		Skills:        do.MustInvoke[Skilled](i).Set,
@@ -150,10 +157,13 @@ func Translator() do.Provider[*language.Translator] {
 }
 
 // Tools provides the tool registry. Each tool joins by one line in
-// toolHandlers.
+// toolHandlers; the tools of the owner's modules come and go with them.
 func Tools() do.Provider[*tool.Registry] {
 	return func(i do.Injector) (*tool.Registry, error) {
-		return tool.NewRegistry(router.Local{}, toolHandlers(i)...)
+		return tool.NewRegistryWith(router.Local{}, []tool.RegistryOption{
+			tool.WithDynamic(do.MustInvoke[*modhost.Host](i).Handlers),
+			tool.WithRegistryLogger(do.MustInvoke[*slog.Logger](i)),
+		}, toolHandlers(i)...)
 	}
 }
 
@@ -162,7 +172,8 @@ func toolHandlers(i do.Injector) []tool.Handler {
 	cs := do.MustInvoke[*cells.Service](i)
 	return append([]tool.Handler{
 		builtin.NewMessageSend(do.MustInvoke[builtin.Convs](i)),
-		builtin.NewCellsGet(cs),
+		builtin.NewCellsGet(cs, time.Now),
+		builtin.NewCellsList(cs, time.Now),
 		builtin.NewCellsSet(cs),
 		builtin.NewScheduleCreate(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleList(do.MustInvoke[builtin.Scheduling](i)),
@@ -174,7 +185,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
 		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i), do.MustInvoke[*builtin.HostExec](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
-		metricsTools(do.MustInvoke[Bootstrap](i)))...)
+		do.MustInvoke[Moduling](i).Tools, metricsTools(do.MustInvoke[Bootstrap](i)))...)
 }
 
 // metricsTools is metrics.show when the command line gave a renderer.
@@ -193,17 +204,12 @@ type Skilled struct {
 }
 
 // Skills loads the built-in and the workspace skills; a script never
-// gets a provider's key (R-RTR-5, ADR-0042).
+// gets a variable that holds one of the node's secrets (R-RTR-5,
+// ADR-0042).
 func Skills() do.Provider[Skilled] {
 	return func(i do.Injector) (Skilled, error) {
 		b := do.MustInvoke[Bootstrap](i)
-		var deny []string
-		if cat := b.Agent.Catalog; cat != nil {
-			for _, p := range cat.Providers {
-				deny = append(deny, p.KeyEnv)
-			}
-		}
-		set, problems, err := skills.Load(skills.Builtin, b.Agent.Workspace, deny)
+		set, problems, err := skills.Load(skills.Builtin, b.Agent.Workspace, nodeSecrets(b))
 		if err != nil {
 			return Skilled{}, err
 		}
@@ -217,6 +223,19 @@ func Skills() do.Provider[Skilled] {
 		box := do.MustInvoke[*sandbox.Sandbox](i)
 		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg, box), runs, sandboxGate{box}), Problems: problems}, nil
 	}
+}
+
+// nodeSecrets are the node's own secrets: every secret reference of the
+// file, and the providers' keys of models set without a file (the lab),
+// sorted and each once. A skill script may not list them, and no module is
+// granted one.
+func nodeSecrets(b Bootstrap) []string {
+	deny := b.Settings.SecretNames()
+	if m := b.Agent.Models; m != nil {
+		deny = append(deny, m.KeyNames()...)
+	}
+	slices.Sort(deny)
+	return slices.Compact(deny)
 }
 
 // Diagnostics provides the diagnostic searches over the node's own
@@ -271,12 +290,13 @@ func Convs() do.Provider[builtin.Convs] {
 	}
 }
 
-// Router provides the rules router over the catalogue, with the daily
-// budget from the turn trace.
+// Router provides the rules router over the models and their purposes,
+// with the daily budget from the turn trace.
 func Router() do.Provider[router.Router] {
 	return func(i do.Injector) (router.Router, error) {
 		b, tl := do.MustInvoke[Bootstrap](i), do.MustInvoke[*turns.Log](i)
-		return rules.New(b.Agent.Catalog.RouterModels(), rules.WithBudget(tl, b.Agent.DailyBudgetUSD, b.Agent.TZ))
+		return rules.New(b.Agent.Models.RouterModels(), b.Agent.Models.RouterPurposes(),
+			rules.WithBudget(tl, b.Agent.DailyBudgetUSD, b.Agent.TZ))
 	}
 }
 
@@ -289,23 +309,23 @@ func claudeOptions(dir string, opts ...claudecli.Option) []claudecli.Option {
 	return append(opts, claudecli.WithWorkDir(dir))
 }
 
-// providerFactories build a model provider of each catalogue type from
-// its definition and its API key.
-var providerFactories = map[string]func(p rules.ProviderDef, key, claudeDir string) provider.Provider{
-	rules.TypeOpenAI: func(p rules.ProviderDef, key, _ string) provider.Provider {
+// providerFactories build a model provider of each type from its
+// definition and its API key.
+var providerFactories = map[string]func(p settings.Provider, key, claudeDir string) provider.Provider{
+	settings.TypeOpenAI: func(p settings.Provider, key, _ string) provider.Provider {
 		return openai.New(p.Name, p.BaseURL, key)
 	},
-	rules.TypeClaudeCLI: func(p rules.ProviderDef, _, claudeDir string) provider.Provider {
+	settings.TypeClaudeCLI: func(p settings.Provider, _, claudeDir string) provider.Provider {
 		return claudecli.New(p.Name, claudeOptions(claudeDir, claudecli.WithCommand(p.Command))...)
 	},
 }
 
-// Providers provides the catalogue's providers by name.
+// Providers provides the models section's providers by name.
 func Providers() do.Provider[map[string]provider.Provider] {
 	return func(i do.Injector) (map[string]provider.Provider, error) {
 		b := do.MustInvoke[Bootstrap](i)
 		out := map[string]provider.Provider{}
-		for _, p := range b.Agent.Catalog.Providers {
+		for _, p := range b.Agent.Models.Providers {
 			build, ok := providerFactories[p.Type]
 			if !ok {
 				return nil, fmt.Errorf("config: provider %s: unknown type %q", p.Name, p.Type)

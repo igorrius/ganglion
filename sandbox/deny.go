@@ -31,10 +31,12 @@ var homeAutorun = []string{
 // not where an owner keeps one.
 var skipped = []string{".git", "node_modules", ".cache", ".cargo", ".rustup", "go"}
 
-// NodeFiles are the node's own files: its binary, data, logs, modules and
-// the claude CLI work folder (its prompts and, during a call, the MCP
-// bridge socket) and workspace.
-type NodeFiles struct{ Binary, DB, LogDir, ModulesDir, ClaudeDir, Workspace, Languages string }
+// NodeFiles are the node's own files: its binary, data, settings file,
+// logs, modules and the claude CLI work folder (its prompts and, during a
+// call, the MCP bridge socket) and workspace.
+type NodeFiles struct {
+	Binary, DB, Settings, LogDir, ModulesDir, ClaudeDir, Workspace, Languages string
+}
 
 // HomeSecrets is the default list under home: the secret stores and the
 // files that run at the owner's next login; none when home is unknown.
@@ -52,7 +54,10 @@ func HomeSecrets(home string) []string {
 // DenyList is every path a command may neither read nor write: the node's
 // binary (a command that replaced it would run unconfined as the next
 // helper), its data folder (or, when the database lies in the working
-// folder, home or "/", the database with its journal files), logs, modules,
+// folder, home or "/", the database with its journal files and its lock),
+// its settings file wherever it lies (a command that rewrote it would set
+// the admins, the providers' commands and the deny list at the next
+// restart), logs, modules,
 // workspace and language files, each <NAME>_FILE secret in environ, the
 // owner's secret stores and autorun files under home, and extra. A path that
 // does not exist yet is kept: it is denied when it appears. Each is made
@@ -60,7 +65,7 @@ func HomeSecrets(home string) []string {
 // sees real paths; build the list again for each command, so a store that
 // became a symlink is followed.
 func DenyList(home, cwd string, node NodeFiles, environ, extra []string) []string {
-	raw := slices.Concat([]string{node.Binary}, dataFiles(node.DB, cwd, home),
+	raw := slices.Concat([]string{node.Binary, node.Settings}, dataFiles(node.DB, cwd, home),
 		[]string{node.LogDir, node.ModulesDir, node.ClaudeDir, node.Workspace, node.Languages})
 	for _, kv := range environ {
 		if name, v, ok := strings.Cut(kv, "="); ok && strings.HasSuffix(name, "_FILE") && v != "" {
@@ -81,8 +86,9 @@ func DenyList(home, cwd string, node NodeFiles, environ, extra []string) []strin
 }
 
 // dataFiles is the database's folder, unless that folder is also where
-// other work lives (the working folder, home, "/"): then the database and
-// its journal files.
+// other work lives (the working folder, home, "/"): then the database, its
+// journal files and its lock (node.LockDB), which a command that held it
+// would keep the node from starting with.
 func dataFiles(db, cwd, home string) []string {
 	if db == "" {
 		return nil
@@ -95,7 +101,7 @@ func dataFiles(db, cwd, home string) []string {
 	if dir != filepath.Clean(cwd) && dir != filepath.Clean(home) && dir != "/" {
 		return []string{dir}
 	}
-	return []string{abs, abs + "-wal", abs + "-shm", abs + "-journal"}
+	return []string{abs, abs + "-wal", abs + "-shm", abs + "-journal", abs + ".lock"}
 }
 
 // resolve is p absolute, with the symlinks of its longest existing prefix

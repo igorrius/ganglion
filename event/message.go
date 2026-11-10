@@ -101,6 +101,21 @@ type Schedule struct {
 	Scheduled int64  `json:"scheduled_ms"` // the slot, Unix ms; for a run now, when it was asked
 }
 
+// Module is the payload of an event of kind "module": what happened to a
+// module of the owner's, in the node's own words, for the admin it goes
+// to (ruling 10 of the M4b plan). Nothing in it is the module's text: Kind
+// is one of the node's kinds and Detail is the node's description, so the
+// agent's note of it is not outside content (R-RUN-14).
+type Module struct {
+	Module    string `json:"module"`    // the full name, "local/deye-reader"
+	Version   string `json:"version"`   // the manifest's version
+	Kind      string `json:"kind"`      // module.exception, auth_failed, stale, module.crashloop, module.format
+	Detail    string `json:"detail"`    // the node's words only
+	At        int64  `json:"at_ms"`     // when it happened, Unix ms
+	Principal string `json:"principal"` // the admin the turn is for: who installed the module
+	Transport string `json:"transport"` // where the answer goes
+}
+
 // CommandDone is the payload of an event of kind "command.done": the call
 // key of the command, whose outcome the runner stored.
 type CommandDone struct {

@@ -1,12 +1,12 @@
-// Package rules is the P1 router: hard filters, tier preference, a daily
-// budget and a cooldown for rate-limited models, then price and latency
-// (docs/spec.md, 7.3, R-RTR-1 and R-RTR-2).
+// Package rules is the P1 router: each purpose's ordered list of models,
+// hard filters, a daily budget and a cooldown for rate-limited models
+// (docs/spec.md, 7.3, R-RTR-1, R-RTR-2 and R-RTR-6).
 package rules
 
 import (
-	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -32,9 +32,11 @@ type Budget interface {
 	SpentSince(ctx context.Context, t time.Time) (usd float64, err error)
 }
 
-// Router is a router.Router over a fixed catalogue.
+// Router is a router.Router over a fixed catalogue and its purposes.
 type Router struct {
 	models   []router.Model
+	byID     map[string]router.Model
+	purposes map[router.Purpose][]router.Choice
 	now      func() time.Time
 	budget   Budget
 	daily    float64
@@ -53,8 +55,10 @@ type Option func(*Router)
 // WithClock sets the clock; the default is time.Now.
 func WithClock(now func() time.Time) Option { return func(r *Router) { r.now = now } }
 
-// WithBudget drops paid smart models once b reports dailyUSD spent since
-// the start of the day in loc, unless the task asks for smart.
+// WithBudget sets the daily budget: over b's daily budget, a turn keeps
+// free and local models only, whatever its purpose. The day starts at
+// midnight in loc; the calls outside a turn are housekeeping and are not
+// cut.
 func WithBudget(b Budget, dailyUSD float64, loc *time.Location) Option {
 	return func(r *Router) { r.budget, r.daily, r.loc = b, dailyUSD, loc }
 }
@@ -62,15 +66,23 @@ func WithBudget(b Budget, dailyUSD float64, loc *time.Location) Option {
 // WithCooldown sets the minimum cooldown after a rate limit.
 func WithCooldown(d time.Duration) Option { return func(r *Router) { r.cooldown = d } }
 
-// New returns a router over models, in catalogue order.
-func New(models []router.Model, opts ...Option) (*Router, error) {
-	r := &Router{models: slices.Clone(models), now: time.Now, loc: time.UTC, cooldown: DefaultCooldown, cooling: map[string]time.Time{}}
+// New returns a router over models with each purpose's ordered list.
+// Every choice must name a model; settings checks this first, and New
+// checks it again so a router is never built over a dangling id.
+func New(models []router.Model, purposes map[router.Purpose][]router.Choice, opts ...Option) (*Router, error) {
+	r := &Router{byID: map[string]router.Model{}, purposes: purposes, now: time.Now, loc: time.UTC,
+		cooldown: DefaultCooldown, cooling: map[string]time.Time{}, models: slices.Clone(models)}
 	for _, o := range opts {
 		o(r)
 	}
-	for _, m := range r.models {
-		if m.Tier != router.TierCheap && m.Tier != router.TierSmart {
-			return nil, errors.New("rules: model " + m.Provider + "/" + m.Name + ": tier must be cheap or smart")
+	for _, m := range models {
+		r.byID[m.ID] = m
+	}
+	for p, list := range purposes {
+		for _, c := range list {
+			if _, ok := r.byID[c.Model]; !ok {
+				return nil, fmt.Errorf("rules: purpose %s names no model %q", p, c.Model)
+			}
 		}
 	}
 	return r, nil
@@ -91,39 +103,33 @@ func fits(m router.Model, t router.TaskReq) bool {
 
 func price(m router.Model) float64 { return m.Caps.PriceInMTok + m.Caps.PriceOutMTok }
 
-// Route implements router.Router: the models that fit the task, the
-// task's tier first, cooling models last, then by price, latency and
-// catalogue order.
+// Route implements router.Router: the purpose's list in order, without the
+// models that do not fit the task; over budget, a turn keeps free and
+// local models only; cooling models move to the end.
 func (r *Router) Route(ctx context.Context, t router.TaskReq) ([]router.Candidate, error) {
-	picked := r.pick(t, r.overBudget(ctx))
-	if len(picked) == 0 {
+	over := t.Turn && r.overBudget(ctx)
+	var out, cooling []router.Candidate
+	now := r.now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, c := range r.purposes[t.Purpose] {
+		m := r.byID[c.Model]
+		if !fits(m, t) || (over && price(m) > 0 && !m.Caps.Local) {
+			continue
+		}
+		cand := router.Candidate{Provider: m.Provider, Model: m.Name, Effort: c.Effort,
+			PriceInMTok: m.Caps.PriceInMTok, PriceOutMTok: m.Caps.PriceOutMTok}
+		if r.cooling[key(m.Provider, m.Name)].After(now) {
+			cooling = append(cooling, cand)
+			continue
+		}
+		out = append(out, cand)
+	}
+	out = append(out, cooling...)
+	if len(out) == 0 {
 		return nil, router.ErrNoCandidate
 	}
-	r.rank(picked, taskTier(t))
-	out := make([]router.Candidate, len(picked))
-	for i, p := range picked {
-		out[i] = router.Candidate{Provider: p.m.Provider, Model: p.m.Name, PriceInMTok: p.m.Caps.PriceInMTok, PriceOutMTok: p.m.Caps.PriceOutMTok}
-	}
 	return out, nil
-}
-
-// ranked is a model with its catalogue position, the last tie-breaker.
-type ranked struct {
-	m     router.Model
-	order int
-}
-
-// taskTier is the tier a task prefers: its own, or smart for a message
-// and cheap for anything else.
-func taskTier(t router.TaskReq) router.Tier {
-	switch {
-	case t.Tier != "":
-		return t.Tier
-	case t.Kind == router.TaskMessage:
-		return router.TierSmart
-	default:
-		return router.TierCheap
-	}
 }
 
 // overBudget reports whether today's spend has reached the daily budget.
@@ -134,48 +140,6 @@ func (r *Router) overBudget(ctx context.Context) bool {
 	}
 	spent, err := r.budget.SpentSince(ctx, clock.DayStart(r.now(), r.loc))
 	return err == nil && spent >= r.daily
-}
-
-// pick keeps the models that fit the task; over budget, paid cloud smart
-// models drop out unless the task asks for smart.
-func (r *Router) pick(t router.TaskReq, overBudget bool) []ranked {
-	var picked []ranked
-	for i, m := range r.models {
-		if !fits(m, t) {
-			continue
-		}
-		if overBudget && t.Tier != router.TierSmart && m.Tier == router.TierSmart && price(m) > 0 && !m.Caps.Local {
-			continue
-		}
-		picked = append(picked, ranked{m, i})
-	}
-	return picked
-}
-
-// rank orders picked: the preferred tier before the other, models not
-// cooling before cooling ones, then cheaper, faster and earlier.
-func (r *Router) rank(picked []ranked, tier router.Tier) {
-	now := r.now()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	group := func(x ranked) int {
-		g := 0
-		if x.m.Tier != tier {
-			g = 1
-		}
-		if r.cooling[key(x.m.Provider, x.m.Name)].After(now) {
-			g += 2
-		}
-		return g
-	}
-	slices.SortStableFunc(picked, func(a, b ranked) int {
-		return cmp.Or(
-			cmp.Compare(group(a), group(b)),
-			cmp.Compare(price(a.m), price(b.m)),
-			cmp.Compare(a.m.Caps.Latency, b.m.Caps.Latency),
-			cmp.Compare(a.order, b.order),
-		)
-	})
 }
 
 // Report implements router.Router: a rate limit sends the model to the

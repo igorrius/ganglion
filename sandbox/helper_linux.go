@@ -17,33 +17,46 @@ import (
 // no_new_privs, confines itself with Landlock and execs the command, on
 // one locked thread, so the flag and the domain are the ones exec carries.
 // It returns only when that fails, with exitSetup: the command never ran.
+// For a spec with Reap it supervises instead, and returns the command's
+// exit code (supervise).
 func Helper() int {
 	runtime.LockOSThread()
-	if err := helper(); err != nil {
-		fmt.Fprintln(os.Stderr, "ganglion sandbox:", err)
-		return exitSetup
+	sp, err := readSpec()
+	if err == nil && sp.Reap {
+		return supervise(sp)
 	}
-	return 0 // unreachable: exec replaced the process, or the self-test exited
+	if err == nil {
+		err = confine(sp)
+	}
+	fmt.Fprintln(os.Stderr, "ganglion sandbox:", err)
+	return exitSetup
 }
 
-func helper() error {
+// readSpec reads the spec the node wrote on fd 3.
+func readSpec() (spec, error) {
 	f := os.NewFile(specFD, "sandbox-spec")
 	var sp spec
 	err := json.NewDecoder(f).Decode(&sp)
 	_ = f.Close()
 	if err != nil {
-		return fmt.Errorf("spec: %w", err)
+		return spec{}, fmt.Errorf("spec: %w", err)
 	}
 	if len(sp.Argv) == 0 && sp.Try == "" {
-		return errors.New("spec: no command")
+		return spec{}, errors.New("spec: no command")
 	}
+	return sp, nil
+}
+
+// confine sets no_new_privs, Landlock and seccomp on this thread and execs
+// the command, or runs the self-test; it returns only on a failure.
+func confine(sp spec) error {
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return fmt.Errorf("no_new_privs: %w", err)
 	}
-	if err := restrict(sp.ABI, sp.Grants); err != nil {
+	if err := restrict(sp.ABI, sp.Grants, sp.Confine); err != nil {
 		return err
 	}
-	if err := refuseUnixSockets(); err != nil {
+	if err := refuseUnixSockets(sp.Confine); err != nil {
 		return err
 	}
 	if sp.Try != "" {

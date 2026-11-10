@@ -116,6 +116,47 @@ func TestMCPNoStdoutNoise(t *testing.T) {
 	}
 }
 
+// config.show lists the file: secrets only as their variable and whether it
+// is set, models by id and the purposes in order.
+func TestMCPConfigShowsTheFile(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("OPENROUTER_API_KEY", "sk-or-very-secret")
+	t.Setenv("TELEGRAM_BOT_TOKEN", "7001:AAAAbbbbCCCCddddEEEEffffGGGGhhhhIII")
+	db := nodeDB(t)
+	cfg := writeConfig(t, filepath.Dir(db), quiet+"telegram: {admin: telegram:user:42}\n"+models)
+	answers, _ := mcpSession(t, []string{"--db", db, "--config", cfg}, 2, mcpInit,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"config_show","arguments":{}}}`)
+	if len(answers) != 2 {
+		t.Fatalf("answers %v", answers)
+	}
+	raw, _ := json.Marshal(answers[1])
+	for _, secret := range []string{"sk-or-very-secret", "AAAAbbbb"} {
+		if strings.Contains(string(raw), secret) {
+			t.Fatalf("config_show shows a secret: %s", raw)
+		}
+	}
+	for _, want := range []string{"env:OPENROUTER_API_KEY (set)", "env:BRAVE_API_KEY (unset)", "env:TELEGRAM_BOT_TOKEN (set)",
+		"telegram:user:42", "chat: haiku (high), some", "some openrouter/some/model"} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("config_show lacks %q: %s", want, raw)
+		}
+	}
+}
+
+// A config path given with --config must exist, as for run (R-CFG-1):
+// config.show says so instead of showing the defaults as the node's.
+func TestMCPConfigShowsAMissingNamedFile(t *testing.T) {
+	clearEnv(t)
+	db := nodeDB(t)
+	missing := filepath.Join(filepath.Dir(db), "gangilon.yaml")
+	answers, _ := mcpSession(t, []string{"--db", db, "--config", missing}, 2, mcpInit,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"config_show","arguments":{}}}`)
+	raw, _ := json.Marshal(answers)
+	if !strings.Contains(string(raw), "gangilon.yaml: no such file") {
+		t.Fatalf("config_show does not name the missing file: %s", raw)
+	}
+}
+
 func TestMCPMissingDatabase(t *testing.T) {
 	clearEnv(t)
 	var out, errOut bytes.Buffer

@@ -1,0 +1,15 @@
+name: deye-reader
+version: 1
+triggers:
+  - cron: "*/30 * * * *"
+  - tool: status
+    about: "Battery state of charge of the inverter."
+    output: {ok: boolean, value: integer, at_ms: integer}
+cells:
+  report:
+    soc: {kind: sensor, type: integer, about: "Battery state of charge, %"}
+config:
+  op_cron: {type: string, default: '{"op":"fail","value":"credentials refused"}'}
+  op_tool_status: {type: string, default: '{"op":"cell_get","name":"soc"}'}
+escalate:
+  - on: auth_failed

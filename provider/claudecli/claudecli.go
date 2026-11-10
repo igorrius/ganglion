@@ -190,8 +190,11 @@ func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.C
 		return provider.ChatResponse{}, c.fail(provider.KindUnavailable, "system prompt: "+err.Error())
 	}
 	defer cleanup()
-	args := []string{"-p", "--model", req.Model, "--output-format", "json", "--no-session-persistence",
-		"--tools", "", "--strict-mcp-config"}
+	args := []string{"-p", "--model", req.Model}
+	if req.Effort != "" {
+		args = append(args, "--effort", string(req.Effort))
+	}
+	args = append(args, "--output-format", "json", "--no-session-persistence", "--tools", "", "--strict-mcp-config")
 	if len(req.Tools) > 0 {
 		b, err := c.bridge(ctx, dir, req)
 		if err != nil {

@@ -16,7 +16,7 @@ import (
 //go:embed *.schema.json
 var files embed.FS
 
-// Get returns a schema by file name, e.g. "models.schema.json".
+// Get returns a schema by file name, e.g. "node.schema.json".
 func Get(name string) ([]byte, error) { return files.ReadFile(name) }
 
 // Object describes one object of a schema: its property names, required

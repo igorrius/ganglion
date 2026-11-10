@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"maps"
 	"slices"
 	"time"
 
@@ -48,6 +49,14 @@ type NameFunc func(ctx context.Context, principal string) (string, error)
 // handled again.
 type SystemJob func(ctx context.Context, sp texts.Speaker) (string, error)
 
+// ModuleCronFunc runs a module of the owner's on its cron job
+// (schedule.KindModule): no model, no message (R-RUN-12). An error is the
+// node's own failure, logged; the module's failures are its host's to count.
+type ModuleCronFunc func(ctx context.Context, module string) error
+
+// NoModuleCron is the ModuleCronFunc of a node that hosts no modules.
+func NoModuleCron(context.Context, string) error { return nil }
+
 // Deps are the agent's collaborators. All are required except Middleware,
 // QuickActions, SystemJobs, Facts, Inbox, Plans, Status, Now and Log; the composition root
 // passes no-op implementations where a part is off (ADR-0028).
@@ -76,6 +85,8 @@ type Deps struct {
 	Jobs         Jobs // scheduled jobs, read when their time comes
 	// SystemJobs are the system jobs' code by job id (builtin.AuditJobID).
 	SystemJobs map[string]SystemJob
+	// ModuleCron runs a module's cron job (modhost); NoModuleCron when unset.
+	ModuleCron ModuleCronFunc
 	IsAdmin    AdminFunc
 	// Names are the access list's names, for the line that tells a task
 	// run who receives its answer (ruling R41).
@@ -87,9 +98,21 @@ type Deps struct {
 	// Facts is the memory's index, shown to admins only (design section
 	// 4, rule 8); NoFacts when unset.
 	Facts FactsFunc
+	// Restart ends the node so its supervisor starts it again, for
+	// /restart (R-CFG-6); a no-op when unset.
+	Restart RestartFunc
 	// Modules updates and rolls back the node's modules for /modules
 	// (R-RUN-8); NoModules when unset.
 	Modules Modules
+	// Local runs the owner's modules for /modules (R-RUN-10); NoLocalModules
+	// when unset.
+	Local LocalModules
+	// Cells are read by /cells and its History button (R-RUN-11); NoCells
+	// when unset.
+	Cells CellsView
+	// Buttons stores the History buttons of /cells; NoButtons, and no buttons,
+	// when unset.
+	Buttons Buttons
 	// Skills are listed in an admin's system prompt, and the one the
 	// model reads routes the rest of the turn (R-RTR-4); none when unset.
 	Skills Skills
@@ -180,6 +203,28 @@ type Agent struct {
 	tool     tool.Func
 }
 
+// withOwnModules gives the parts of /modules and /cells their
+// no-op defaults; the quick actions are a copy, so the agent adds its own.
+func withOwnModules(d Deps) Deps {
+	if d.Modules == nil {
+		d.Modules = NoModules{}
+	}
+	if d.Local == nil {
+		d.Local = NoLocalModules{}
+	}
+	if d.Buttons == nil {
+		d.Buttons = NoButtons{}
+	}
+	if d.Cells == nil {
+		d.Cells = NoCells{}
+	}
+	d.QuickActions = maps.Clone(d.QuickActions)
+	if d.QuickActions == nil {
+		d.QuickActions = map[string]pending.QuickAction{}
+	}
+	return d
+}
+
 // New returns an agent.
 func New(cfg Config, d Deps) *Agent {
 	if d.Now == nil {
@@ -197,9 +242,10 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Texts == nil {
 		d.Texts = texts.Shipped()
 	}
-	if d.Modules == nil {
-		d.Modules = NoModules{}
+	if d.Restart == nil {
+		d.Restart = func() {}
 	}
+	d = withOwnModules(d)
 	if d.Inbox == nil {
 		d.Inbox = NoInbox{}
 	}
@@ -208,6 +254,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Commands == nil {
 		d.Commands = NoCommands{}
+	}
+	if d.ModuleCron == nil {
+		d.ModuleCron = NoModuleCron
 	}
 	if d.Plans == nil {
 		d.Plans = NoPlans{}
@@ -225,6 +274,7 @@ func New(cfg Config, d Deps) *Agent {
 		cfg.Location = time.UTC
 	}
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
+	a.d.QuickActions[ActionCellHistory] = a.historyButton
 	a.stages = []stage{a.resume, a.scheduled, a.dropStale, a.idle, a.command, a.limits, a.answer, a.compactHistory}
 	a.commands = map[string]command{}
 	for _, c := range a.commandTable() {
@@ -276,6 +326,14 @@ var payloads = map[event.Kind]func(t *turn) bool{
 	},
 	event.KindCommandDone: func(t *turn) bool {
 		return json.Unmarshal(t.event.Payload, &t.command) == nil && t.command.Key != ""
+	},
+	event.KindModule: func(t *turn) bool {
+		m := &t.module
+		if json.Unmarshal(t.event.Payload, m) != nil || m.Module == "" || m.Principal == "" {
+			return false
+		}
+		t.msg = event.Message{From: m.Principal}
+		return true
 	},
 }
 

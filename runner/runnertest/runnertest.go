@@ -6,6 +6,7 @@ package runnertest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -25,6 +26,8 @@ import (
 // Instance is a loaded module.
 type Instance interface {
 	Handle(ctx context.Context, in pdk.Input) (pdk.Output, error)
+	Init(ctx context.Context) error
+	Health(ctx context.Context) error
 	Close(ctx context.Context) error
 }
 
@@ -54,7 +57,8 @@ type env struct {
 	wasm     []byte
 	manifest runner.Manifest
 	secrets  map[string]string
-	state    *runner.MemState
+	state    runner.State
+	cells    *fakeCells
 	logs     syncBuffer
 }
 
@@ -64,6 +68,8 @@ func (e *env) instance(t *testing.T) Instance {
 	inst, err := e.load(ctx, e.wasm, e.manifest, runner.Deps{
 		Secrets: func(n string) (string, bool) { v, ok := e.secrets[n]; return v, ok },
 		State:   e.state,
+		Cells:   e.cells,
+		Prefix:  "probe-mod",
 		HTTP:    http.DefaultClient,
 		Logger:  slog.New(slog.NewTextHandler(&e.logs, nil)),
 	})
@@ -108,6 +114,7 @@ func Run(t *testing.T, load Loader, probe []byte) {
 			},
 			secrets: map[string]string{},
 			state:   runner.NewMemState(),
+			cells:   &fakeCells{values: map[string]cellValue{}},
 		}
 	}
 
@@ -162,7 +169,7 @@ func Run(t *testing.T, load Loader, probe []byte) {
 
 	t.Run("config from the manifest", func(t *testing.T) {
 		e := fresh()
-		e.manifest.Config = map[string]string{"inverter_sn": "123"}
+		e.manifest.ConfigValues = map[string]string{"inverter_sn": "123"}
 		r := result(t, call(t, e.instance(t), `{"op":"config","name":"inverter_sn"}`))
 		if r["ok"] != true || r["value"] != "123" {
 			t.Fatalf("config = %v, want 123", r)
@@ -216,8 +223,8 @@ func Run(t *testing.T, load Loader, probe []byte) {
 		inst := e.instance(t)
 		start := time.Now()
 		_, err := inst.Handle(context.Background(), pdk.Input{Trigger: "cron", Payload: json.RawMessage(`{"op":"spin"}`)})
-		if err == nil {
-			t.Fatal("spinning module returned no error")
+		if !errors.Is(err, runner.ErrTimeout) {
+			t.Fatalf("spinning module returned %v, want runner.ErrTimeout", err)
 		}
 		if d := time.Since(start); d > 3*time.Second {
 			t.Fatalf("Handle took %v, want it stopped near the 200 ms timeout", d)
@@ -230,11 +237,14 @@ func Run(t *testing.T, load Loader, probe []byte) {
 		e.manifest.Limits.Memory = 32 << 20
 		inst := e.instance(t)
 		_, err := inst.Handle(context.Background(), pdk.Input{Trigger: "cron", Payload: json.RawMessage(`{"op":"alloc","mib":64}`)})
-		if err == nil {
-			t.Fatal("allocating 64 MiB under a 32 MiB limit succeeded")
+		if err == nil || errors.Is(err, runner.ErrTimeout) {
+			t.Fatalf("allocating 64 MiB under a 32 MiB limit: %v, want a trap", err)
 		}
 		call(t, inst, `{"op":"echo"}`)
 	})
+
+	runCellTests(t, fresh)
+	runLifecycleTests(t, fresh)
 }
 
 // syncBuffer is a strings.Builder safe for concurrent log writes.

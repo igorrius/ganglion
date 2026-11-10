@@ -11,10 +11,13 @@ import (
 // Grant is a path a command may reach, with everything beneath it when Dir.
 // A List grant is a folder split around a denied path: it and every folder
 // beneath may be listed, and nothing else (Landlock's READ_DIR, ADR-0057).
+// A Write grant is where a confined command may write (Confined, ADR-0064);
+// for any other command every grant but a List grant writes.
 type Grant struct {
-	Path string
-	Dir  bool
-	List bool
+	Path  string
+	Dir   bool
+	List  bool
+	Write bool
 }
 
 // Lister lists a folder's entries without following symlinks (os.ReadDir).
@@ -32,6 +35,33 @@ type Lister func(dir string) ([]fs.DirEntry, error)
 // with no symlink in them (DenyList).
 func Grants(deny []string, list Lister, hideNames bool) ([]Grant, error) {
 	return splitter{deny: deny, list: list, hideNames: hideNames}.split("/")
+}
+
+// WriteGrants is where a confined command may write: each folder of write
+// with everything beneath it, split around deny as Grants splits "/", so a
+// denied path inside stays denied. A folder of write that is denied, or lies
+// in a denied folder, is an error: it cannot be written, and the command would
+// fail in a way its caller cannot explain. write and deny hold clean absolute
+// paths with no symlink in them.
+func WriteGrants(write, deny []string, list Lister, hideNames bool) ([]Grant, error) {
+	var out []Grant
+	for _, root := range write {
+		if !path.IsAbs(root) || path.Clean(root) != root {
+			return nil, fmt.Errorf("sandbox: %q is not a clean absolute path", root)
+		}
+		if slices.ContainsFunc(deny, func(d string) bool { return d == root || under(root, d) }) {
+			return nil, fmt.Errorf("sandbox: %s is denied, so it cannot be written", root)
+		}
+		gs, err := splitter{deny: deny, list: list, hideNames: hideNames}.split(root)
+		if err != nil {
+			return nil, err
+		}
+		for i := range gs {
+			gs[i].Write = !gs[i].List
+		}
+		out = append(out, gs...)
+	}
+	return out, nil
 }
 
 // splitter is what Grants splits by.

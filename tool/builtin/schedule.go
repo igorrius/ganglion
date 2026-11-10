@@ -275,10 +275,11 @@ const toolWebFetch = "web.fetch"
 var neverGranted = []string{toolMemoryWrite, toolMemoryForget, toolPersonaPropose, toolLanguageSet}
 
 // ungrantable reports whether a grant may never name the tool: the
-// schedule tools (a task does not schedule or delete jobs) and
+// schedule tools (a task does not schedule or delete jobs), the module tools
+// (a module is built and installed only with the owner at hand, R-RUN-9) and
 // neverGranted. This is the one list of such tools.
 func ungrantable(name string) bool {
-	return strings.HasPrefix(name, "schedule.") || slices.Contains(neverGranted, name)
+	return strings.HasPrefix(name, "schedule.") || strings.HasPrefix(name, "module.") || slices.Contains(neverGranted, name)
 }
 
 // grantTools checks the tools of a grant and returns them sorted, once

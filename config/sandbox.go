@@ -33,7 +33,7 @@ func Sandbox() do.Provider[*sandbox.Sandbox] {
 			return nil, err
 		}
 		home, _ := os.UserHomeDir() // none: no home secrets to deny, and HOME=/
-		node := sandbox.NodeFiles{Binary: binary, DB: b.DB, LogDir: b.LogDir, ModulesDir: b.ModulesDir, ClaudeDir: b.ClaudeDir,
+		node := sandbox.NodeFiles{Binary: binary, DB: b.DB, Settings: settingsFile(b), LogDir: b.LogDir, ModulesDir: b.ModulesDir, ClaudeDir: b.ClaudeDir,
 			Workspace: b.Agent.Workspace, Languages: b.Languages}
 		environ := os.Environ()
 		p := sandbox.Policy{

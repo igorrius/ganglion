@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/igorrius/ganglion/master/schemas/node.schema.json",
+  "title": "ganglion.yaml",
+  "description": "ganglion.yaml: everything an operator chooses (spec 7.14, ADR-0059). Secrets appear only as env:NAME. The Go loader settings.Parse is the validator; this schema is for editors, docs and the agent. Every section has a default, so a missing or empty file is a working node.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "node": { "description": "The process-wide settings.", "$ref": "#/$defs/node" },
+    "log": { "description": "Where and how much the node logs.", "$ref": "#/$defs/log" },
+    "metrics": { "description": "The Prometheus endpoint.", "$ref": "#/$defs/metrics" },
+    "telegram": { "description": "The Telegram transport.", "$ref": "#/$defs/telegram" },
+    "agent": { "description": "The conversation agent's own settings.", "$ref": "#/$defs/agent" },
+    "sandbox": { "description": "What the command sandbox hides and denies.", "$ref": "#/$defs/sandbox" },
+    "models": { "description": "The models by purpose. Missing means the agent is off: there is no model to talk to.", "$ref": "#/$defs/models" },
+    "modules": {
+      "description": "The modules the node runs and their configuration. Missing means none; module.install writes this list (M4b).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/module" }
+    }
+  },
+  "$defs": {
+    "secretRef": {
+      "description": "A secret by reference: env:NAME reads the variable NAME, or the file named by NAME_FILE. A literal secret is refused.",
+      "type": "string",
+      "pattern": "^env:[A-Z_][A-Z0-9_]*$"
+    },
+    "duration": {
+      "description": "A Go duration such as 90s or 6h, or off (0).",
+      "type": "string",
+      "pattern": "^(off|([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$"
+    },
+    "count": {
+      "description": "A whole number of 0 or more, or off (0).",
+      "oneOf": [ { "type": "integer", "minimum": 0 }, { "const": "off" } ]
+    },
+    "money": {
+      "description": "US dollars, 0 or more, or off (0).",
+      "oneOf": [ { "type": "number", "minimum": 0 }, { "const": "off" } ]
+    },
+    "size": {
+      "description": "A byte size such as 400MiB; a bare number is bytes.",
+      "type": "string",
+      "pattern": "^[0-9]+(KiB|MiB|GiB)?$"
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "memory_limit": {
+          "description": "The node's soft memory limit (GOMEMLIMIT). Without it the node takes about 80 % of its container's limit, or none. Set it when the container is sized for module builds. A GOMEMLIMIT set in the environment wins.",
+          "$ref": "#/$defs/size"
+        },
+        "tz": {
+          "description": "The IANA time zone that decides where a day starts (daily limits, schedules).",
+          "type": "string",
+          "default": "Europe/Kyiv"
+        }
+      }
+    },
+    "log": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "description": "The least severe level written.",
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info"
+        },
+        "dir": {
+          "description": "The directory of the rotated log files. Missing puts them in a logs directory beside the database; off writes no files (the log still goes to stderr).",
+          "type": "string"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "addr": {
+          "description": "The listen address host:port of the Prometheus endpoint; off runs no endpoint.",
+          "type": "string",
+          "default": "127.0.0.1:9464"
+        }
+      }
+    },
+    "telegram": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "token": {
+          "description": "The bot token, as env:NAME. Without the variable set the Telegram transport does not start.",
+          "$ref": "#/$defs/secretRef",
+          "default": "env:TELEGRAM_BOT_TOKEN"
+        },
+        "api_url": {
+          "description": "The Bot API's base address; change it for a local Bot API server or a test double.",
+          "type": "string",
+          "format": "uri",
+          "default": "https://api.telegram.org"
+        },
+        "admin": {
+          "description": "The principal that is admin from the first start, as telegram:user:<id>. Missing seeds no admin.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*:user:[0-9A-Za-z_.-]+$"
+        },
+        "reply": {
+          "description": "When the bot answers in a group: auto (when addressed), always, or off (never).",
+          "type": "string",
+          "enum": ["auto", "always", "off"],
+          "default": "auto"
+        },
+        "rich": {
+          "description": "Turn the agent's Markdown into Telegram formatting; false sends plain text.",
+          "type": "boolean",
+          "default": true
+        },
+        "reactions": { "description": "The bot's reaction to a message while it works.", "$ref": "#/$defs/reactions" }
+      }
+    },
+    "reactions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "description": "How long a turn runs before the bot first reacts to the message; off means it never reacts.",
+          "$ref": "#/$defs/duration",
+          "default": "8s"
+        },
+        "dwell": {
+          "description": "How long a reaction stays before the next one replaces it.",
+          "$ref": "#/$defs/duration",
+          "default": "3s"
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workspace": {
+          "description": "The directory of the agent's files (persona, memory); must not be empty.",
+          "type": "string",
+          "minLength": 1,
+          "default": "workspace"
+        },
+        "languages": {
+          "description": "The directory of the language files. Missing puts them beside the database.",
+          "type": "string"
+        },
+        "session_idle": {
+          "description": "The silence after which a conversation starts afresh; off never starts afresh by silence.",
+          "$ref": "#/$defs/duration",
+          "default": "6h"
+        },
+        "limits": {
+          "description": "What one day of conversation may use. The word off turns every limit off; a missing key keeps the default of that limit, and 0 or off in a limit turns that one off.",
+          "oneOf": [ { "const": "off" }, { "$ref": "#/$defs/limits" } ]
+        },
+        "search": { "description": "The web search the agent may use.", "$ref": "#/$defs/search" }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "daily_budget_usd": {
+          "description": "The most US dollars of model cost a day; 0 or off is no cap.",
+          "$ref": "#/$defs/money",
+          "default": 1
+        },
+        "daily_turns": {
+          "description": "The most turns a day; 0 or off is no cap.",
+          "$ref": "#/$defs/count",
+          "default": 300
+        },
+        "daily_tokens": {
+          "description": "The most tokens a day; 0 or off is no cap.",
+          "$ref": "#/$defs/count",
+          "default": 1000000
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "description": "auto uses web search when a search key is set; off gives the agent no search.",
+          "type": "string",
+          "enum": ["auto", "off"],
+          "default": "auto"
+        },
+        "brave_key": {
+          "description": "The Brave Search API key, as env:NAME. With the variable unset, search is unavailable in auto mode.",
+          "$ref": "#/$defs/secretRef",
+          "default": "env:BRAVE_API_KEY"
+        }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deny": {
+          "description": "Extra paths the command sandbox refuses, on top of its built-in list. Missing adds none.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "hide_names": {
+          "description": "Hide the names of denied paths too, so a listing does not show they exist.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "providers": {
+          "description": "The model providers the node calls.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/provider" }
+        },
+        "models": {
+          "description": "The providers' models that the purposes may name.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/model" }
+        },
+        "purposes": { "description": "For each purpose, the models it tries in order.", "$ref": "#/$defs/purposes" }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "description": "How the models name this provider.", "type": "string", "minLength": 1 },
+        "type": {
+          "description": "openai is the Chat Completions API (OpenAI, OpenRouter, Ollama, ...); claude-cli is an unmodified claude -p (ADR-0021). Missing means openai.",
+          "type": "string",
+          "enum": ["openai", "claude-cli"],
+          "default": "openai"
+        },
+        "base_url": {
+          "description": "An openai provider's API address, such as https://openrouter.ai/api/v1.",
+          "type": "string",
+          "format": "uri"
+        },
+        "key": {
+          "description": "The API key, as env:NAME. Only a provider on localhost goes without one; claude-cli takes none.",
+          "$ref": "#/$defs/secretRef"
+        },
+        "command": {
+          "description": "The claude-cli binary. Missing means claude on the PATH.",
+          "type": "string"
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "name"],
+      "properties": {
+        "id": { "description": "How the purposes name the model. Missing means name.", "type": "string" },
+        "provider": { "description": "The name of the provider that serves the model.", "type": "string", "minLength": 1 },
+        "name": { "description": "The provider's own name for the model.", "type": "string", "minLength": 1 },
+        "tools": { "description": "The model can call tools; the agent needs this of a chat model.", "type": "boolean", "default": false },
+        "vision": { "description": "The model reads images.", "type": "boolean", "default": false },
+        "local": { "description": "The data stays on the owner's hardware.", "type": "boolean", "default": false },
+        "context": { "description": "The model's context window in tokens. Missing means unknown.", "type": "integer", "minimum": 0 },
+        "price_in": { "description": "US dollars per million input tokens; 0 or missing for local and subscription models.", "type": "number", "minimum": 0 },
+        "price_out": { "description": "US dollars per million output tokens; 0 or missing for local and subscription models.", "type": "number", "minimum": 0 },
+        "latency_ms": { "description": "The model's typical latency in milliseconds. Missing means unknown.", "type": "integer", "minimum": 0 }
+      }
+    },
+    "choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model"],
+      "properties": {
+        "model": { "description": "A model's id.", "type": "string", "minLength": 1 },
+        "effort": {
+          "description": "The reasoning effort. Missing leaves the provider's default. An openai provider takes low, medium and high; claude-cli takes all five.",
+          "type": "string",
+          "enum": ["low", "medium", "high", "xhigh", "max"]
+        }
+      }
+    },
+    "purposes": {
+      "description": "Each purpose lists its models in the order they are tried. A missing check, compact or translate uses chat's list; a missing code means no code model.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chat": { "description": "The model that answers the owner; required when models is set.", "type": "array", "items": { "$ref": "#/$defs/choice" } },
+        "check": { "description": "The memory check after a turn. Missing uses chat's list.", "type": "array", "items": { "$ref": "#/$defs/choice" } },
+        "compact": { "description": "Compaction of a long conversation. Missing uses chat's list.", "type": "array", "items": { "$ref": "#/$defs/choice" } },
+        "translate": { "description": "Translation of the node's own messages. Missing uses chat's list.", "type": "array", "items": { "$ref": "#/$defs/choice" } },
+        "code": { "description": "Writing module code. Missing means none: the node does not write code.", "type": "array", "items": { "$ref": "#/$defs/choice" } }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "description": "The module's name.", "type": "string", "minLength": 1 },
+        "config": { "description": "The module's own settings, checked against its manifest. Missing means none.", "type": "object" },
+        "off": { "description": "Keep the module installed but not running.", "type": "boolean", "default": false }
+      }
+    }
+  }
+}

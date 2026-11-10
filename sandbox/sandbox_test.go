@@ -27,6 +27,9 @@ func TestNewIsOffForEachMissingPiece(t *testing.T) {
 			if _, err := s.Command(t.Context(), []string{"true"}, "/"); !errors.Is(err, ErrOff) {
 				t.Fatalf("Command on an off sandbox: %v, want ErrOff", err)
 			}
+			if _, err := s.Confined(t.Context(), []string{"/tmp"}, []string{"true"}, "/"); !errors.Is(err, ErrOff) {
+				t.Fatalf("Confined on an off sandbox: %v, want ErrOff", err)
+			}
 		})
 	}
 }

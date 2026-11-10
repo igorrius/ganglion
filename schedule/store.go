@@ -63,8 +63,22 @@ func (s *Store) Ensure(ctx context.Context, j Job) error {
 // admin win at every start (ruling R36). ErrInvalid for any other job,
 // ErrExists when the id belongs to a job that is not a system job.
 func (s *Store) EnsureSystem(ctx context.Context, j Job) error {
-	if j.Kind != KindSystem || !j.System {
-		return fmt.Errorf("%w %s: not a system job", ErrInvalid, j.ID)
+	return s.upsertNodeJob(ctx, j, KindSystem)
+}
+
+// EnsureModule stores module job j (Kind KindModule, System set, Text the
+// module's full name), or replaces the stored node job of its id with it,
+// a deleted one too: the module's manifest and its owner win whenever the
+// module is loaded (ruling 9 of the M4b plan). ErrInvalid for any other
+// job, ErrExists when the id belongs to a job the node did not make.
+func (s *Store) EnsureModule(ctx context.Context, j Job) error {
+	return s.upsertNodeJob(ctx, j, KindModule)
+}
+
+// upsertNodeJob stores or replaces j, a job the node makes of kind.
+func (s *Store) upsertNodeJob(ctx context.Context, j Job, kind Kind) error {
+	if j.Kind != kind || !j.System {
+		return fmt.Errorf("%w %s: not a %s job of the node", ErrInvalid, j.ID, kind)
 	}
 	if err := j.validate(); err != nil {
 		return err
@@ -82,6 +96,18 @@ func (s *Store) EnsureSystem(ctx context.Context, j Job) error {
 	}
 	if n, err := res.RowsAffected(); err != nil || n == 0 {
 		return fmt.Errorf("schedule: ensure %s: %w", j.ID, ErrExists)
+	}
+	return nil
+}
+
+// DeleteModule marks every live job of the module called module deleted,
+// so none fires again: the module was turned off, removed or disabled.
+// Its runs stay recorded, so an EnsureModule later does not run a missed
+// slot twice.
+func (s *Store) DeleteModule(ctx context.Context, module string) error {
+	if _, err := s.db.ExecContext(ctx, `UPDATE schedule_jobs SET deleted = 1, deleted_by = 'node'
+		WHERE kind = ? AND system = 1 AND text = ? AND deleted = 0`, string(KindModule), module); err != nil {
+		return fmt.Errorf("schedule: delete the jobs of %s: %w", module, err)
 	}
 	return nil
 }

@@ -18,7 +18,7 @@ var (
 	ErrInvalidID    = errors.New("cells: invalid id")
 )
 
-var idPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$`)
+var idPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)*$`)
 
 // Def declares a cell, usually from the node config.
 type Def struct {
@@ -33,6 +33,8 @@ type Service struct {
 	store    Store
 	now      func() time.Time
 	backends map[string]Backend
+
+	ownMu sync.Mutex // serialises ownership changes
 
 	mu   sync.Mutex
 	wake chan struct{} // closed and replaced after every write
@@ -98,6 +100,67 @@ func (s *Service) Define(ctx context.Context, d Def) error {
 		s.signal()
 	}
 	return err
+}
+
+// OwnedDef declares a cell a module reports (R-RUN-11).
+type OwnedDef struct {
+	ID, Owner, About string
+	Kind             Kind // a sensor in M4
+}
+
+// DefineOwned creates the cell, or takes an ownerless one (its history
+// stays), or checks an existing one of the same owner (the kind must match;
+// about is updated). A cell of another owner is ErrOwned.
+func (s *Service) DefineOwned(ctx context.Context, d OwnedDef) error {
+	if !idPattern.MatchString(d.ID) {
+		return fmt.Errorf("%w: %q", ErrInvalidID, d.ID)
+	}
+	if d.Owner == "" {
+		return fmt.Errorf("%w: %s needs an owner", ErrInvalidValue, d.ID)
+	}
+	if d.Kind != KindSensor {
+		return fmt.Errorf("%w: a module cell is a sensor, not a %q (%s)", ErrWrongKind, d.Kind, d.ID)
+	}
+	s.ownMu.Lock()
+	defer s.ownMu.Unlock()
+	_, err := s.store.Create(ctx, Cell{ID: d.ID, Kind: d.Kind, Owner: d.Owner, About: d.About, Version: 1, Updated: s.now().UTC()}, "module:"+d.Owner)
+	if err == nil {
+		s.signal()
+		return nil
+	}
+	if !errors.Is(err, ErrExists) {
+		return err
+	}
+	cur, err := s.store.Get(ctx, d.ID)
+	if err != nil {
+		return err
+	}
+	switch {
+	case cur.Owner != "" && cur.Owner != d.Owner:
+		return fmt.Errorf("%w: %s belongs to %q", ErrOwned, d.ID, cur.Owner)
+	case cur.Kind != d.Kind:
+		return fmt.Errorf("%w: %s is a %s, not a %s", ErrConflict, d.ID, cur.Kind, d.Kind)
+	}
+	return s.store.SetOwner(ctx, d.ID, d.Owner, d.About)
+}
+
+// Disown clears the owner of every cell of owner; the cells and their
+// history stay. It returns how many cells it freed.
+func (s *Service) Disown(ctx context.Context, owner string) (int, error) {
+	s.ownMu.Lock()
+	defer s.ownMu.Unlock()
+	return s.store.Disown(ctx, owner)
+}
+
+// List returns all cells sorted by ID.
+func (s *Service) List(ctx context.Context) ([]Cell, error) {
+	return s.store.List(ctx)
+}
+
+// HistorySince returns changes of a cell at or after since, oldest first, at
+// most limit.
+func (s *Service) HistorySince(ctx context.Context, id string, since time.Time, limit int) ([]Change, error) {
+	return s.store.HistorySince(ctx, id, since.UnixMilli(), limit)
 }
 
 // Get returns a cell.

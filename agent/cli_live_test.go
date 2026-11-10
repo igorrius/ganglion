@@ -51,7 +51,8 @@ func TestLiveClaudeToolsThroughBridge(t *testing.T) {
 		Loc: time.UTC, Now: now})
 	e := newConfirmEnvOn(t, base, list)
 	e.a.cfg.CallTimeout, e.a.cfg.TurnTimeout = 2*time.Minute, 3*time.Minute
-	r, err := rules.New([]router.Model{{Provider: "claude", Name: "haiku", Tier: router.TierCheap, Caps: router.ModelCaps{Tools: true}}})
+	r, err := rules.New([]router.Model{{ID: "haiku", Provider: "claude", Name: "haiku", Caps: router.ModelCaps{Tools: true}}},
+		map[router.Purpose][]router.Choice{router.PurposeChat: {{Model: "haiku"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

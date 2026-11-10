@@ -167,40 +167,114 @@ sequenceDiagram
     end
 ```
 
-## Module tick and escalation (P0–P1)
+## A module run on cron (P1)
 
-The Deye monitor as a reflex: no model in the normal path.
+The Deye reader as a reflex: no model in the normal path (R-RUN-12). The
+module's cron line is a `module` job of the admin who installed it; its
+event reaches the agent only to be handed to the module host.
 
 ```mermaid
 sequenceDiagram
-    participant C as Runner scheduler
-    participant W as wazero
+    autonumber
+    participant S as Scheduler
+    participant Q as Inbox
+    participant A as Agent (admin's chat)
+    participant H as Module host
+    participant R as Runner (wazero)
     participant D as deye-reader module
-    participant H as Host functions
-    participant API as DeyeCloud
-    participant Core as Core
-    participant LLM as Model
+    participant C as Cells
+    participant J as Module journal
 
-    C->>W: trigger cron
-    W->>D: handle(cron, nil)
-    D->>H: secret.get(DEYE_APP_ID)
-    D->>H: http.fetch(deyecloud)
-    H->>API: HTTPS, allowed domain only
-    API-->>H: SOC, grid status
-    D->>H: state.put(last sample)
-    D->>H: event.emit(battery.changed)
-    H->>Core: event, no model involved
-    alt auth error or unexpected data
-        D->>H: event.emit(module.exception)
-        H->>Core: escalation
-        Core->>LLM: investigate
-        LLM-->>Core: explanation or a new module version
+    S->>Q: Put(schedule event, job module:local/deye-reader:0)
+    Q->>A: turn (kind schedule, job kind module)
+    A->>H: ModuleCron("local/deye-reader"), no model, no reply
+    H->>R: Handle(trigger cron)
+    R->>D: handle
+    D->>R: http.fetch, secret.get (only what the manifest grants)
+    D->>R: cell_report("soc", 78)
+    R->>R: declared under cells.report? fits its type?
+    R->>H: CellPort.Report("deye-reader.soc")
+    H->>C: owned by local/deye-reader? Report
+    D-->>R: OK
+    R-->>H: answer
+    H->>J: Count(run)
+```
+
+## A module tool call (P1)
+
+The agent calls `deye-reader.status` like any read tool; the answer is
+the data its manifest promised, checked, and outside content only when it
+holds a string (R-RUN-13). A failure reaches the model in the node's words
+(R-RUN-14).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as Model
+    participant P as Policies
+    participant T as Tool registry
+    participant H as Module host
+    participant R as Runner
+    participant D as Module
+
+    M->>P: deye-reader.status {}
+    P->>T: Lookup: fixed tools, then the host's (a fixed name wins)
+    P->>H: run (read, auto, admin only)
+    H->>R: Handle(trigger tool:status)
+    R->>D: handle
+    D-->>R: result JSON
+    R->>R: check against the trigger's output
+    alt fits
+        R-->>H: result
+        H-->>M: JSON, External if it holds a string
+    else contract break, trap, timeout or failure
+        R-->>H: module.format (node's words) or an error
+        H-->>M: "deye-reader.status: field soc: expected integer, got string"
+        Note over H: the module's own text goes to the log only
     end
 ```
 
-## Load-shedding flow (P1)
+## A module's escalation (P1)
 
-The first real flow (spec section 8): staged shedding of loads by battery
+A failure of a run nobody watched (a cron run, `init` at load) whose kind
+the manifest escalates, a contract break or a crash loop becomes one turn
+in the installing admin's private chat, at most one of a kind for a module
+until it recovers (design section 8.4, owner rulings of 2026-11-10). A tool
+call that fails inside a turn is not escalated: that turn has the node's
+words and hint for it already.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as Module host
+    participant St as Settings file
+    participant S as Scheduler jobs
+    participant Q as Inbox
+    participant A as Agent
+    participant LLM as Model
+    participant O as Owner
+
+    H->>H: count the failure in the last hour
+    opt a cron run or init, kind escalates, no episode of it open (escalate list, module.format)
+        H->>Q: Put(module event, key module:NAME:KIND:SHA:OPENED, once per episode)
+    end
+    opt fifth failure within an hour
+        H->>H: unload; its tools leave the registry
+        H->>St: off: true, comment crashloop
+        H->>S: delete its jobs
+        H->>Q: Put(module event, kind module.crashloop)
+    end
+    Q->>A: turn in the admin's private chat
+    A->>A: note "[module] deye-reader: auth_failed (version 3, 14:30). (the node's detail and hint)"
+    A->>LLM: chat purpose, with tools
+    LLM-->>A: explanation and a proposal
+    A->>O: reply
+```
+
+## Load-shedding flow (planned, after P1)
+
+Moved out of P1 by [ADR-0058](../adr/0058-load-shedding-leaves-p1.md); kept
+as the first flow for the flow engine (spec 9.6): staged shedding of loads by battery
 state of charge during a power cut. The flow sets the desired state of load
 cells; their backend (`virtual` in P1, Tuya plugs later) makes it real, and a
 Telegram notifier observes the changes ([ADR-0014](../adr/0014-state-cells.md)).

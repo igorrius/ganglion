@@ -5,6 +5,7 @@ package config
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -12,13 +13,15 @@ import (
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/host"
+	"github.com/igorrius/ganglion/modhost"
+	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/provider/claudecli"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
-	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/web"
@@ -28,7 +31,7 @@ import (
 // LabOptions are what chatlab changes in a node (ADR-0048). Nothing here
 // reaches the ganglion binary: TestLabStaysOutOfTheBinary holds that.
 type LabOptions struct {
-	Catalog    rules.Catalog
+	Models     settings.Models
 	Keys       map[string]string
 	Relay      string // the ganglion binary the claude CLI starts as its MCP server
 	Resolver   web.Resolver
@@ -38,6 +41,17 @@ type LabOptions struct {
 	// Wrap goes around every provider, to count tokens; nil leaves them as
 	// they are.
 	Wrap func(provider.Provider) provider.Provider
+	// Modules are installed, as the owner's admin's, before the node runs:
+	// a module a scenario needs without building it (a build is slow and
+	// needs a toolchain).
+	Modules []LabModule
+}
+
+// LabModule is a built module a lab node has installed from the start.
+type LabModule struct {
+	Name     string // the short name, as in local/<name>
+	Wasm     []byte
+	Manifest []byte
 }
 
 // LabNode is a built container: what chatlab runs and looks at, so only this
@@ -62,6 +76,9 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 	if err != nil {
 		return nil, err
 	}
+	if err := installLabModules(ctx, i, b.Admin, o.Modules); err != nil {
+		return nil, err
+	}
 	scheduler := do.MustInvoke[*schedule.Scheduler](i)
 	return &LabNode{DB: do.MustInvoke[Database](i).DB, Journal: do.MustInvoke[*journal.Journal](i), Components: components,
 		Tick: scheduler.Tick,
@@ -70,6 +87,22 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 		},
 		Shutdown: func(ctx context.Context) { _ = i.ShutdownWithContext(ctx) },
 	}, nil
+}
+
+// installLabModules installs each of mods as a local module by admin, so its
+// tools, cells and cron job exist when the node starts.
+func installLabModules(ctx context.Context, i do.Injector, admin string, mods []LabModule) error {
+	for _, m := range mods {
+		b := modstore.Build{Module: modstore.LocalPrefix + m.Name, Wasm: m.Wasm, Manifest: m.Manifest, Language: "go", By: admin}
+		o, err := do.MustInvoke[*modstore.Store](i).InstallLocal(ctx, b, modstore.Digest(b.Wasm, b.Manifest))
+		if err != nil || o.Result != modstore.ResultInstalled {
+			return fmt.Errorf("lab: install module %s: %v %v", m.Name, o.Result, err)
+		}
+		if err := do.MustInvoke[*modhost.Host](i).Reload(ctx, b.Module); err != nil {
+			return fmt.Errorf("lab: start module %s: %w", m.Name, err)
+		}
+	}
+	return nil
 }
 
 // applyLabHousekeeping gives the lab its housekeepers: the journal's prune,
@@ -122,9 +155,9 @@ func applyLab(i do.Injector, o LabOptions) {
 	do.Override(i, func(i do.Injector) (map[string]provider.Provider, error) {
 		claudeDir := do.MustInvoke[Bootstrap](i).ClaudeDir
 		out := map[string]provider.Provider{}
-		for _, p := range o.Catalog.Providers {
+		for _, p := range o.Models.Providers {
 			var built provider.Provider
-			if p.Type == rules.TypeClaudeCLI {
+			if p.Type == settings.TypeClaudeCLI {
 				built = claudecli.New(p.Name, claudeOptions(claudeDir, claudecli.WithCommand(p.Command), claudecli.WithRelay(o.Relay))...)
 			} else {
 				built = providerFactories[p.Type](p, o.Keys[p.Name], claudeDir)

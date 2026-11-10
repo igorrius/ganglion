@@ -123,14 +123,14 @@ func (g *Guard) CheckPersona(ctx context.Context, persona string) (Verdict, erro
 	return v, err
 }
 
-// check asks the cheap models in the router's order until one answers:
+// check asks the check purpose's models in the router's order until one answers:
 // the fixed prompt, the text wrapped as data, no tools, no history.
 func (g *Guard) check(ctx context.Context, prompt, source, data string) (Verdict, error) {
 	unavailable := Verdict{Reason: ReasonUnavailable}
 	if err := ctx.Err(); err != nil {
 		return unavailable, err
 	}
-	cands, err := g.router.Route(ctx, router.TaskReq{Tier: router.TierCheap, Kind: router.TaskGuard})
+	cands, err := g.router.Route(ctx, router.TaskReq{Purpose: router.PurposeCheck})
 	if err != nil {
 		g.log.Warn("guard: no model for the check", "err", err)
 		return unavailable, nil
@@ -159,7 +159,7 @@ func (g *Guard) ask(ctx context.Context, c router.Candidate, msgs []provider.Mes
 		return "", false
 	}
 	cctx, cancel := context.WithTimeout(ctx, g.timeout)
-	resp, err := p.Chat(cctx, provider.ChatRequest{Model: c.Model, Messages: msgs})
+	resp, err := p.Chat(cctx, provider.ChatRequest{Model: c.Model, Effort: c.Effort, Messages: msgs})
 	cancel()
 	if err == nil && strings.TrimSpace(resp.Message.Content) == "" {
 		err = &provider.Error{Provider: c.Provider, Kind: provider.KindUnavailable, Msg: "empty answer"}

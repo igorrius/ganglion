@@ -114,3 +114,47 @@ func (s *MemStore) PendingRequestsBefore(_ context.Context, t time.Time) ([]Cell
 	slices.SortFunc(out, func(a, b Cell) int { return strings.Compare(a.ID, b.ID) })
 	return out, nil
 }
+
+// HistorySince implements Store.
+func (s *MemStore) HistorySince(_ context.Context, id string, sinceMS int64, limit int) ([]Change, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []Change
+	for _, ch := range s.changes {
+		if len(out) >= limit {
+			break
+		}
+		if ch.CellID == id && ch.At.UnixMilli() >= sinceMS {
+			out = append(out, ch)
+		}
+	}
+	return out, nil
+}
+
+// SetOwner implements Store.
+func (s *MemStore) SetOwner(_ context.Context, id, owner, about string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.cells[id]
+	if !ok {
+		return ErrNotFound
+	}
+	c.Owner, c.About = owner, about
+	s.cells[id] = c
+	return nil
+}
+
+// Disown implements Store.
+func (s *MemStore) Disown(_ context.Context, owner string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, c := range s.cells {
+		if c.Owner == owner {
+			c.Owner = ""
+			s.cells[id] = c
+			n++
+		}
+	}
+	return n, nil
+}

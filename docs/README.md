@@ -6,8 +6,26 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** M3d is done (closed 2026-11-09). Next is the merge of `m3d-commands`, then M4 (reflexes: runner
-  and Deye) per the [phase plan](plans/p1-all-in-one.md).
+- **Next:** M4c, reflex modules: a `notify` capability for modules and
+  the agent writing module source in the workspace, first reflex
+  `deye-alerts` (thresholds 90…30 %, below 30 % every 5 %, full charge, a
+  data failure once), so routine reactions run without a model (owner,
+  2026-11-10). Design next, no document yet. The Railway deploy (the image
+  and [deploy-railway.md](deploy-railway.md) are ready; Landlock ABI 3 or
+  newer and hard links on the volume still to check) stays open as board
+  card G-121.
+- **M4 closed (2026-11-10):** M4a (config, models by purpose) and M4b
+  ([plan](plans/p1-m4b-modules.md)) are done and merged; ADRs 0059–0064
+  are Accepted. The owner's live check on the test bot passed: the agent
+  imported, built and installed `local/deye-reader` through the install
+  window, cron wrote the cells without a model call, `/modules`, `/cells`
+  and `module.status` work, a second version installed, and the module
+  came back after a restart. Memory after 1,000 agent turns with tools is
+  about 3 MB above M4a (the owner accepted it). M4 was designed on
+  2026-11-09 ([design](plans/p1-m4-reflexes-design.md),
+  [phase plan](plans/p1-all-in-one.md)). Load shedding and the two-week
+  clock of the gate left P1
+  ([ADR-0058](adr/0058-load-shedding-leaves-p1.md)).
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
   - 0.2 Deye reader in WASM on wazero: matched `deye.py` on the live API,
@@ -288,7 +306,7 @@ Start here when coming back to the project.
       not dumpable, and `ps` still sees the machine (owner);
     - denied for each command: the node's binary, data, logs, modules and workspace, `*_FILE`
       secrets, the owner's secret stores, shell histories and the files that run at login,
-      `.env` files three folders deep, `GANGLION_SANDBOX_DENY`; 59 paths on the owner's machine;
+      `.env` files three folders deep, `sandbox.deny`; 59 paths on the owner's machine;
     - checks at start and a self-test; off with a reason in `/status` and the log (not Linux, root,
       no Landlock, dumpable, self-test); signals not limited, so `kill` will reach the owner's
       processes (owner);
@@ -316,7 +334,7 @@ Start here when coming back to the project.
       for an hour; commands in a task's grant, listed with their folders and lines;
     - skill scripts run in the command sandbox, from a copy of their skill, and only while it is on;
     - the kill switch `tools.host_exec` and an admin's `/commands on|off`, with its line in `/status`;
-    - commands may list the folders the sandbox splits; `GANGLION_SANDBOX_HIDE_NAMES=on` hides the names
+    - commands may list the folders the sandbox splits; `sandbox.hide_names: true` hides the names
       ([ADR-0057](adr/0057-commands-may-list-split-folders.md));
     - scripted acceptance: seven mech-host chatlab scenarios, 3 of 3 runs each, the end-to-end sandbox test
       (`config/hostexec_accept_test.go`) and the task-grant test; the branch's reviews found gaps in the
@@ -358,6 +376,24 @@ Start here when coming back to the project.
     - open: Railway and a Pi are still to measure; Docker does not work from commands below Landlock ABI 9
       (commands are classed and asked for as designed, then fail to reach the daemon); `make lab-faults` was
       not run; the merge.
+  - **M4a, config and models by purpose, done (2026-11-09)** on branch `m4-reflexes`, checked live on
+    the test bot by the owner (turns, `/status`, memory, `/restart` with exit 75) ([plan](plans/p1-m4a-config.md), tasks 4.1 and 4.2,
+    [ADR-0059](adr/0059-node-config-file.md), [ADR-0060](adr/0060-models-by-purpose.md)):
+    - one config file, `ganglion.yaml`, with `schemas/node.schema.json`; a secret is written as `env:NAME`,
+      never in the file; parsing is strict and a bad file fails the start naming the path;
+    - the retired variables (`GANGLION_TZ` and the rest) fail the start with a hint to the new key;
+    - models by purpose (`chat`, `check`, ...), each with an order and an effort; the tools and the live
+      scripts read example files;
+    - `GOMEMLIMIT` comes from the environment, `node.memory_limit` or the container's cgroup, in that order;
+      in a 256 MB container with no setting it is 214,748,364 bytes (`source=cgroup`), with
+      `GOMEMLIMIT=100MiB` `source=env`, with `memory_limit: 120MiB` `source=config`;
+    - `/restart` ends the node with exit code 75 for its supervisor to start again;
+    - measured (`make memory`, ADR-0056), against M3d: binary 46.9 MB (47.0); the agent with tools 39.2 MB
+      idle, 44.8 MB after 1,000 turns (45.1 and 47.4); with `host.exec` 39.4 and 45.8 MB (45.1 and 50.7);
+      echo 41.6 and 43.4 MB (39.2 and 44.0); the agent without tools 44.8 and 48.1 MB (45.2 and 48.9);
+      50 `/metrics` pictures 110 MB, the hostile page peak 111 MB, as before: no growth over 2 MB;
+    - open: the owner's live check on the test bot (a turn, `/status` models in the `chat` order,
+      `/restart` under a supervisor, the check on Haiku).
   - Scope stays one operator, one agent, one bot (spec 14). Voice
     messages and PDF generation went to "Not now".
   - Deferred minors from the reviews:
@@ -473,7 +509,7 @@ Start here when coming back to the project.
       - `TMPDIR` is assumed outside the deny list; a failed start after `Begin` leaves its key begun;
       - `mech-host-forbidden` counts two forbidden calls without telling `sudo` from `systemd-run`;
       - the injection scenario's second facts repeat the first; the background scenario's second reply proves little;
-      - `cmd/run.go` compares `GANGLION_SANDBOX_HIDE_NAMES` with a literal `"on"`; a long doc line in `grants.go`;
+      - a long doc line in `grants.go`;
       - the Landlock write checks assert only a non-zero exit.
       - from the live check (not M3d code): the agent asked two separate questions instead of showing a plan
         until told to, and did not tick the plan's steps after the work (the plan is a prompt directive);
@@ -498,7 +534,7 @@ is needed for tests: they run against a fake Bot API.
   token is `TELEGRAM_TEST_BOT_TOKEN`. Two runs at once get `409 Conflict`,
   and the older one stops polling (R-DLV-8).
 - **Your Telegram user id:** needed for the admin entry in the access list
-  (`GANGLION_ADMIN=telegram:user:<id>`); strangers get no reply. Any
+  (`telegram.admin: telegram:user:<id>` in the settings file); strangers get no reply. Any
   "user info" bot shows it, or the `from.id` of your message in
   `getUpdates`.
 - **Running locally:** a `.env` file in the repository root (git-ignored); copy
@@ -506,8 +542,12 @@ is needed for tests: they run against a fake Bot API.
 
   ```sh
   TELEGRAM_TEST_BOT_TOKEN=<token from @BotFather>
-  GANGLION_ADMIN=telegram:user:<your id>
   ```
+
+  Settings go in `ganglion.local.yaml` (git-ignored): copy
+  [`ganglion.example.yaml`](../ganglion.example.yaml) and set `telegram.admin` to
+  `telegram:user:<your id>`. For `make live-echo`, set it in
+  [`examples/ganglion.echo.yaml`](../examples/ganglion.echo.yaml) instead.
 
 - **Running in a Claude Code cloud session:** a local `.env` does not reach
   the container. In the cloud environment's settings (the environment menu
@@ -515,9 +555,8 @@ is needed for tests: they run against a fake Bot API.
   1. Network access: add `api.telegram.org` to Allowed domains, keeping
      "Allow package managers" ticked
      ([docs](https://code.claude.com/docs/en/cloud-environments#network-access)).
-  2. Add `TELEGRAM_TEST_BOT_TOKEN` and `GANGLION_ADMIN` as secrets or
-     environment variables. A new session picks them up. Never paste the
-     token into the chat.
+  2. Add `TELEGRAM_TEST_BOT_TOKEN` as a secret or environment variable. A new session picks it up.
+     Never paste the token into the chat. Settings go in a `ganglion.yaml` the session can read.
 
 ## Installing a skill
 
@@ -548,7 +587,7 @@ now only an admin can ask), then their Telegram's, then English. English, Russia
 language in the table is translated once by the cheap model, and each person is told so once.
 
 To correct a text, put `<code>.yaml` in the `languages/` directory beside the database
-(`GANGLION_LANGUAGES` moves it, but never into the workspace), with the keys you want from
+(`agent.languages` moves it, but never into the workspace), with the keys you want from
 `texts/lang/en.yaml`, and restart. A text keeps its `{placeholders}` and adds no links, mentions or
 Markdown; one that does not is logged and left out. Your file comes before a shipped file and a
 translation, key by key.
@@ -611,6 +650,16 @@ Suggested path after a long break: this page → the
 [one-picture overview](architecture/README.md#the-idea-in-one-picture) →
 [containers](architecture/02-containers.md) → the current phase in the
 [spec](spec.md#10-plan-phases-and-gates) → the [code map](architecture/05-code-map.md).
+
+## Deploy on Railway
+
+The image is built from the [`Dockerfile`](../Dockerfile): the node, Rust with
+`wasm32-wasip1` in `/opt/rust`, an unprivileged user `ganglion` (uid 10001)
+and a volume at `/data` that holds `ganglion.yaml` and the database. The
+owner sets up the service, the volume, the variables (`TELEGRAM_BOT_TOKEN` of
+the test bot, `DEYE_*`, a provider key) and the restart policy by the
+[runbook](deploy-railway.md). Module builds need Linux 6.2 or later (Landlock
+ABI 3).
 
 ## Reading in Obsidian
 

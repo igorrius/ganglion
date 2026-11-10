@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=schemas/node.schema.json
+# ganglion.yaml: everything an operator chooses (ADR-0059). Copy this file to
+# ganglion.yaml (or ganglion.local.yaml, which git ignores) and change what you
+# need. Every key is optional; the values below are the defaults unless a
+# comment says otherwise. A secret is never written here: it is env:NAME, the
+# variable (or NAME_FILE) that holds it, usually set in .env.
+
+node:
+  # The soft memory limit of the node (GOMEMLIMIT). Without it the node takes
+  # about 80 % of its container's limit, or none. Set it when the container is
+  # sized for module builds. A GOMEMLIMIT set in the environment wins.
+  # memory_limit: 400MiB
+  # The IANA time zone that decides where a day starts.
+  tz: Europe/Kyiv
+
+log:
+  # debug, info, warn or error.
+  level: info
+  # The directory of the rotated log files. Missing puts them beside the
+  # database; off writes no files.
+  # dir: /var/log/ganglion
+
+metrics:
+  # The Prometheus endpoint, host:port; off runs none.
+  addr: 127.0.0.1:9464
+
+telegram:
+  # The bot token; the transport does not start without the variable set.
+  token: env:TELEGRAM_BOT_TOKEN
+  # The Bot API's base address.
+  api_url: https://api.telegram.org
+  # The admin from the first start, as telegram:user:<id>. Missing seeds none.
+  # admin: telegram:user:123456789
+  # When the bot answers in a group: auto (when addressed), always or off.
+  reply: auto
+  # Turn Markdown into Telegram formatting.
+  rich: true
+  reactions:
+    # How long a turn runs before the bot first reacts; off means never.
+    after: 8s
+    # How long a reaction stays before the next one.
+    dwell: 3s
+
+agent:
+  # The directory of the agent's persona and memory.
+  workspace: workspace
+  # The directory of the language files. Missing puts them beside the database.
+  # languages: languages
+  # The silence after which a conversation starts afresh; off never does.
+  session_idle: 6h
+  # What one day of conversation may use; 0 or off in a limit turns that one
+  # off, and `limits: off` turns all of them off.
+  limits:
+    daily_budget_usd: 1
+    daily_turns: 300
+    daily_tokens: 1000000
+  search:
+    # auto uses web search when a key is set; off gives the agent none.
+    mode: auto
+    brave_key: env:BRAVE_API_KEY
+
+sandbox:
+  # Extra paths the command sandbox refuses, on top of its built-in list.
+  deny: []
+  # Hide the names of denied paths too.
+  hide_names: false
+
+# The models by purpose (ADR-0060). Without this section the agent is off.
+models:
+  providers:
+    # The claude CLI installed and logged in on this machine (no key).
+    - {name: claude, type: claude-cli}
+    # Any OpenAI-compatible API; uncomment and set OPENROUTER_API_KEY in .env.
+    # - {name: openrouter, type: openai, base_url: https://openrouter.ai/api/v1, key: env:OPENROUTER_API_KEY}
+
+  models:
+    # id is what the purposes name; tools says the model can call tools,
+    # context is its window in tokens; price_in and price_out are US dollars
+    # per million tokens (0 for subscription and local models).
+    - {id: sonnet, provider: claude, name: sonnet, tools: true, context: 200000}
+    - {id: haiku, provider: claude, name: haiku, tools: true, context: 200000}
+    - {id: opus, provider: claude, name: opus, tools: true, context: 200000}
+    # - {id: flash, provider: openrouter, name: deepseek/deepseek-v4.1-flash, tools: true, context: 1048576, price_in: 0.045, price_out: 0.5}
+
+  # Each purpose lists its models in the order they are tried; effort is low,
+  # medium or high (an openai provider) and also xhigh or max (claude-cli).
+  # check, compact and translate use chat's list when they have none of
+  # their own; code has no fallback.
+  purposes:
+    chat:    [{model: sonnet, effort: medium}, {model: haiku}]
+    check:   [{model: haiku, effort: low}, {model: sonnet, effort: low}]
+    compact: [{model: haiku}]
+    code:    [{model: opus, effort: high}, {model: sonnet, effort: high}]
+
+# The modules the node runs and their configuration. module.install writes this
+# list (M4b); leave it empty until then.
+modules: []

@@ -49,3 +49,10 @@ func (e Env) Secret(name string) (string, error) {
 	}
 	return v, nil
 }
+
+// None is the Source of a node that reads no secrets beyond its file's:
+// every secret is unset.
+type None struct{}
+
+// Secret implements Source.
+func (None) Secret(string) (string, error) { return "", nil }

@@ -134,11 +134,11 @@ type frontmatter struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 	Model       struct {
-		Tier    router.Tier `yaml:"tier"`
-		Tools   bool        `yaml:"tools"`
-		Context string      `yaml:"context"`
-		Vision  bool        `yaml:"vision"`
-		Privacy string      `yaml:"privacy"`
+		Purpose router.Purpose `yaml:"purpose"`
+		Tools   bool           `yaml:"tools"`
+		Context string         `yaml:"context"`
+		Vision  bool           `yaml:"vision"`
+		Privacy string         `yaml:"privacy"`
 	} `yaml:"model"`
 	Script *struct {
 		Run     string   `yaml:"run"`
@@ -150,7 +150,7 @@ type frontmatter struct {
 
 // Load reads the built-in skills from builtin (builtin/<name>/SKILL.md)
 // and the owner's from workspace/skills. deny names variables a script
-// may never get besides the fixed patterns: each provider's key_env.
+// may never get besides the fixed patterns: the variable each provider's `key:` names.
 func Load(builtin fs.FS, workspace string, deny []string) (Set, []Problem, error) {
 	set := Set{byName: map[string]Skill{}}
 	var problems []Problem
@@ -255,12 +255,12 @@ func parse(dirName string, src []byte) (Skill, error) {
 	case strings.TrimSpace(fm.Description) == "":
 		return Skill{}, errors.New("description is empty")
 	}
-	if err := checkModel(fm.Model.Tier, fm.Model.Context, fm.Model.Privacy); err != nil {
+	if err := checkModel(fm.Model.Purpose, fm.Model.Context, fm.Model.Privacy); err != nil {
 		return Skill{}, err
 	}
 	desc := strings.Join(strings.Fields(fm.Description), " ") // one line in the index
 	sk := Skill{Name: fm.Name, Description: desc, Body: strings.TrimSpace(string(body)),
-		Model: router.TaskReq{Tier: fm.Model.Tier, Tools: fm.Model.Tools, Context: fm.Model.Context, Vision: fm.Model.Vision,
+		Model: router.TaskReq{Purpose: fm.Model.Purpose, Tools: fm.Model.Tools, Context: fm.Model.Context, Vision: fm.Model.Vision,
 			Privacy: fm.Model.Privacy}}
 	if s := fm.Script; s != nil {
 		sc := Script{Run: s.Run, Effects: s.Effects, Env: s.Env, Timeout: defaultTimeout}
@@ -287,10 +287,12 @@ const PrivacyLocalOnly = "local-only"
 
 // checkModel refuses a model block value the router would not read: a
 // typo must not fail open (privacy: local would route to the cloud).
-func checkModel(tier router.Tier, context, privacy string) error {
+func checkModel(purpose router.Purpose, context, privacy string) error {
 	switch {
-	case tier != "" && tier != router.TierCheap && tier != router.TierSmart:
-		return fmt.Errorf("model.tier %q: want cheap or smart", tier)
+	case purpose != "" && !slices.Contains(router.Purposes, purpose):
+		return fmt.Errorf("model.purpose %q: want one of %v", purpose, router.Purposes)
+	case purpose == router.PurposeCode:
+		return fmt.Errorf("model.purpose %q: no skill may ask for it until P3", purpose)
 	case context != "" && context != "short" && context != "long":
 		return fmt.Errorf("model.context %q: want short or long", context)
 	case privacy != "" && privacy != PrivacyLocalOnly:

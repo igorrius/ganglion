@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/igorrius/ganglion/router/rules"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -23,7 +23,7 @@ const DefaultTurnLimit = 6 * time.Minute
 // RunOptions say what a run does.
 type RunOptions struct {
 	Scenarios []Scenario
-	Catalog   rules.Catalog
+	Models    settings.Models
 	Keys      map[string]string
 	Relay     string
 	Judge     *Judge        // nil: judge steps are not run
@@ -79,7 +79,7 @@ func runRepeat(ctx context.Context, o RunOptions, s Scenario) Repeat {
 		return Repeat{NotRun: why}
 	}
 	before := o.Tokens.Total()
-	n, err := Start(ctx, NodeOptions{Catalog: o.Catalog, Keys: o.Keys, Relay: o.Relay, Scenario: s, Tokens: o.Tokens})
+	n, err := Start(ctx, NodeOptions{Models: o.Models, Keys: o.Keys, Relay: o.Relay, Scenario: s, Tokens: o.Tokens})
 	if err != nil {
 		return Repeat{NotRun: "the node did not start: " + err.Error()}
 	}
@@ -104,8 +104,8 @@ func missingTool(o RunOptions, s Scenario) string {
 	if s.Model == ModelScripted {
 		return ""
 	}
-	for _, p := range o.Catalog.Providers {
-		if p.Type != rules.TypeClaudeCLI {
+	for _, p := range o.Models.Providers {
+		if p.Type != settings.TypeClaudeCLI {
 			continue
 		}
 		if _, err := os.Stat(o.Relay); err != nil {
@@ -288,7 +288,7 @@ func otherModel(attempts []turns.Attempt, steps int, main string) string {
 func (r *repeatRun) finish(ctx context.Context, s Scenario) {
 	main := ModelScripted
 	if s.Model != ModelScripted {
-		main = MainModel(r.o.Catalog)
+		main = MainModel(r.o.Models)
 	}
 	if v, err := ReadView(ctx, r.n, nil); err == nil {
 		r.log.WriteString("\nJournal:\n" + journalLines(v))

@@ -24,7 +24,9 @@ import (
 
 // Handler handles one event: the replies to send and the conversation
 // state to store. An error leaves the event to be handled again once its
-// lease runs out.
+// lease runs out. A nil error is stored even while the node stops, so a
+// handler whose ctx ended mid-turn must return an error, or a turn cut
+// short is stored as done.
 type Handler func(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error)
 
 // Defaults.
@@ -212,14 +214,28 @@ func (l *Loop) spent(lease queue.Lease) bool {
 		(l.maxInterrupted > 0 && lease.Interrupted > l.maxInterrupted)
 }
 
+// completeTimeout bounds storing a finished turn after the node was asked
+// to stop.
+const completeTimeout = 5 * time.Second
+
+// complete stores a finished turn on the live ctx. It does so even when the
+// node is being stopped, then on a ctx of its own bounded by
+// completeTimeout: a turn that ended the node itself (/restart) must not
+// run again after the start.
 func (l *Loop) complete(ctx context.Context, log *slog.Logger, lease queue.Lease, out []event.Outgoing, st queue.StateUpdate) {
-	switch err := l.q.Complete(ctx, lease, out, st); {
+	cctx, cancel := ctx, context.CancelFunc(func() {})
+	if ctx.Err() != nil {
+		cctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), completeTimeout)
+	}
+	defer cancel()
+	switch err := l.q.Complete(cctx, lease, out, st); {
 	case errors.Is(err, queue.ErrLeaseLost):
 		log.Warn("core: lease lost; the turn's replies are dropped")
+	case err != nil && ctx.Err() != nil:
+		// A /restart whose turn is not stored runs again after the start.
+		log.Warn("core: complete failed while the node stops; the turn runs again after the start", "err", err)
 	case err != nil:
-		if ctx.Err() == nil {
-			log.Error("core: complete failed", "err", err)
-		}
+		log.Error("core: complete failed", "err", err)
 	default:
 		log.Debug("core: turn done", "replies", len(out))
 	}

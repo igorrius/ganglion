@@ -28,7 +28,7 @@ type ProcessStart time.Time
 // Core is the core role: storage, delivery, the turn loop and the agent.
 var Core = do.Package(
 	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Languages()), do.Lazy(Texts()), do.Lazy(Admins()),
-	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(Modules()), do.Lazy(ModuleAdmin()), do.Lazy(HTML2MD()), do.Lazy(Fetcher()), do.Lazy(Read()), do.Lazy(Diagnostics()), do.Lazy(Skills()), do.Lazy(Plans()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Sandbox()), do.Lazy(Places()), do.Lazy(Janitor()), do.Lazy(Stats()), do.Lazy(Runner()), do.Lazy(Switch()), do.Lazy(HostExec()), do.Lazy(StatusSources()), do.Lazy(Agent()),
+	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Workspace()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(ModuleTools()), do.Lazy(Modules()), do.Lazy(ModuleAdmin()), do.Lazy(ModuleHost()), do.Lazy(HTML2MD()), do.Lazy(Fetcher()), do.Lazy(Read()), do.Lazy(Diagnostics()), do.Lazy(Skills()), do.Lazy(Plans()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Sandbox()), do.Lazy(Builder()), do.Lazy(Places()), do.Lazy(Janitor()), do.Lazy(Stats()), do.Lazy(Runner()), do.Lazy(Switch()), do.Lazy(HostExec()), do.Lazy(StatusSources()), do.Lazy(Agent()),
 	do.Lazy(Translator()), do.Lazy(Telegram()), do.Lazy(TelegramHealth()), do.Lazy(Reactor()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
 	// Extension points: the interface, then each implementation under its name.
 	do.Lazy(Handler()), do.LazyNamed(handlerAgent, AgentHandler()), do.EagerNamed(handlerEcho, core.Handler(core.EchoHandler)),
@@ -54,6 +54,8 @@ func New(ctx context.Context, b Bootstrap, logger *slog.Logger) *do.RootScope {
 		do.ProvideValue(i, b)
 		do.ProvideValue(i, logger)
 		do.ProvideValue(i, ProcessStart(time.Now()))
+		// A node that nothing supervises has no restart; Run replaces it.
+		do.ProvideValue(i, agent.RestartFunc(func() {}))
 	}, Core)
 }
 
@@ -61,7 +63,10 @@ func New(ctx context.Context, b Bootstrap, logger *slog.Logger) *do.RootScope {
 // shuts the container down, closing resources in reverse dependency
 // order.
 func Run(ctx context.Context, roles []node.Role, b Bootstrap, logger *slog.Logger) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	i := New(ctx, b, logger)
+	do.OverrideValue(i, agent.RestartFunc(func() { cancel(node.ErrRestart) }))
 	defer func() {
 		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
@@ -101,9 +106,9 @@ const (
 	watchNone          = "watch.none"          // no transport in /status
 )
 
-// agentOn reports whether the settings turn the agent on: a model
-// catalogue is set.
-func agentOn(b Bootstrap) bool { return b.Agent.Catalog != nil }
+// agentOn reports whether the settings turn the agent on: the file has a
+// models section.
+func agentOn(b Bootstrap) bool { return b.Agent.Models != nil }
 
 // telegramOn reports whether the settings turn Telegram on: a bot token
 // is set.

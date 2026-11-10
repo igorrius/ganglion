@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../schemas/node.schema.json
+# What make accept, make live-agent and chatlab run on (ADR-0059, ADR-0060): the
+# claude CLI's models and nothing else, no files and no metrics endpoint. Keys
+# never go here: a provider's key is env:NAME, the variable (or NAME_FILE) that
+# holds it.
+metrics: {addr: off}
+log: {dir: off}
+
+models:
+  providers:
+    # The claude CLI installed and logged in on this machine (no key).
+    - {name: claude, type: claude-cli}
+
+  models:
+    # ADR-0047: Sonnet answers; Haiku does compaction and the memory check, and
+    # takes over when Sonnet is out of limits. Both get the agent's tools over
+    # the MCP bridge (ADR-0036).
+    - {id: sonnet, provider: claude, name: sonnet, tools: true, context: 200000}
+    - {id: haiku, provider: claude, name: haiku, tools: true, context: 200000}
+
+  purposes:
+    chat:    [{model: sonnet, effort: medium}, {model: haiku}]
+    check:   [{model: haiku, effort: low}, {model: sonnet, effort: low}]
+    compact: [{model: haiku}]

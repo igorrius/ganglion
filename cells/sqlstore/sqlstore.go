@@ -37,7 +37,7 @@ func New(ctx context.Context, db *sql.DB) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-const cellColumns = `id, kind, backend, desired, reported, reported_cause, version, updated_ms, expires_ms`
+const cellColumns = `id, kind, backend, desired, reported, reported_cause, version, updated_ms, expires_ms, owner, about`
 
 func ms(t time.Time) int64 {
 	if t.IsZero() {
@@ -69,7 +69,7 @@ func scanCell(r scanner) (cells.Cell, error) {
 		desired, reported  sql.NullString
 		updated, expiresMS int64
 	)
-	if err := r.Scan(&c.ID, &kind, &c.Backend, &desired, &reported, &cause, &c.Version, &updated, &expiresMS); err != nil {
+	if err := r.Scan(&c.ID, &kind, &c.Backend, &desired, &reported, &cause, &c.Version, &updated, &expiresMS, &c.Owner, &c.About); err != nil {
 		return cells.Cell{}, err
 	}
 	c.Kind, c.ReportedCause = cells.Kind(kind), cells.Cause(cause)
@@ -101,8 +101,8 @@ func (s *Store) Create(ctx context.Context, c cells.Cell, src string) (cells.Cha
 		return cells.Change{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	_, err = tx.ExecContext(ctx, `INSERT INTO cells (`+cellColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.ID, string(c.Kind), c.Backend, raw(c.Desired), raw(c.Reported), string(c.ReportedCause), c.Version, ms(c.Updated), ms(c.Expires))
+	_, err = tx.ExecContext(ctx, `INSERT INTO cells (`+cellColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.ID, string(c.Kind), c.Backend, raw(c.Desired), raw(c.Reported), string(c.ReportedCause), c.Version, ms(c.Updated), ms(c.Expires), c.Owner, c.About)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return cells.Change{}, cells.ErrExists
@@ -219,6 +219,33 @@ func (s *Store) ChangesSince(ctx context.Context, seq int64, limit int) ([]cells
 // History implements cells.Store.
 func (s *Store) History(ctx context.Context, id string, limit int) ([]cells.Change, error) {
 	return s.queryChanges(ctx, `SELECT `+changeColumns+` FROM cell_changes WHERE cell_id = ? ORDER BY seq DESC LIMIT ?`, id, limit)
+}
+
+// HistorySince implements cells.Store.
+func (s *Store) HistorySince(ctx context.Context, id string, sinceMS int64, limit int) ([]cells.Change, error) {
+	return s.queryChanges(ctx, `SELECT `+changeColumns+` FROM cell_changes WHERE cell_id = ? AND at_ms >= ? ORDER BY seq LIMIT ?`, id, sinceMS, limit)
+}
+
+// SetOwner implements cells.Store.
+func (s *Store) SetOwner(ctx context.Context, id, owner, about string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE cells SET owner = ?, about = ? WHERE id = ?`, owner, about, id)
+	if err != nil {
+		return fmt.Errorf("sqlstore: set owner of %s: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return cells.ErrNotFound
+	}
+	return nil
+}
+
+// Disown implements cells.Store.
+func (s *Store) Disown(ctx context.Context, owner string) (int, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE cells SET owner = '' WHERE owner = ?`, owner)
+	if err != nil {
+		return 0, fmt.Errorf("sqlstore: disown %s: %w", owner, err)
+	}
+	n, err := res.RowsAffected()
+	return int(n), err
 }
 
 // PendingRequestsBefore implements cells.Store.

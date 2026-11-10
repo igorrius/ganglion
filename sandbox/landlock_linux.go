@@ -47,26 +47,39 @@ func rights(abi int) uint64 {
 // kernel that knows less accepts it while the fields it does not know are 0.
 type rulesetAttr struct{ handledAccessFS, handledAccessNet, scoped uint64 }
 
+// readRights are what a confined command may do where it may not write
+// (ADR-0064): run, read and list. Device ioctls go with writing: a build
+// needs none outside its folder.
+const readRights = unix.LANDLOCK_ACCESS_FS_EXECUTE | unix.LANDLOCK_ACCESS_FS_READ_FILE |
+	unix.LANDLOCK_ACCESS_FS_READ_DIR
+
 // scopes is what the domain keeps to itself from ABI 6 on: abstract Unix
-// sockets, so a command cannot reach a listener outside the sandbox by name.
-func scopes(abi int) uint64 {
+// sockets, so a command cannot reach a listener outside the sandbox by name,
+// and for a confined command signals too, so it cannot kill the helper that
+// reaps what it leaves (ADR-0064). host.exec keeps signals open: kill must
+// reach the owner's processes (ADR-0039).
+func scopes(abi int, confine bool) uint64 {
 	if abi < 6 {
 		return 0
+	}
+	if confine {
+		return unix.LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET | unix.LANDLOCK_SCOPE_SIGNAL
 	}
 	return unix.LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET
 }
 
-// restrict confines the calling thread, and what it execs, to grants.
-func restrict(abi int, grants []Grant) error {
+// restrict confines the calling thread, and what it execs, to grants; a
+// confined command writes only through its Write grants.
+func restrict(abi int, grants []Grant, confine bool) error {
 	handled := rights(abi)
-	attr := rulesetAttr{handledAccessFS: handled, scoped: scopes(abi)}
+	attr := rulesetAttr{handledAccessFS: handled, scoped: scopes(abi, confine)}
 	fd, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, uintptr(unsafe.Pointer(&attr)), unsafe.Sizeof(attr), 0)
 	if errno != 0 {
 		return fmt.Errorf("landlock_create_ruleset: %w", errno)
 	}
 	defer func() { _ = unix.Close(int(fd)) }()
 	for _, g := range grants {
-		if err := addRule(int(fd), g, handled); err != nil {
+		if err := addRule(int(fd), g, handled, confine); err != nil {
 			return err
 		}
 	}
@@ -76,7 +89,7 @@ func restrict(abi int, grants []Grant) error {
 	return nil
 }
 
-func addRule(ruleset int, g Grant, handled uint64) error {
+func addRule(ruleset int, g Grant, handled uint64, confine bool) error {
 	p, err := unix.Open(g.Path, unix.O_PATH|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if errors.Is(err, unix.ENOENT) {
 		return nil // gone since it was listed: nothing to grant
@@ -85,7 +98,7 @@ func addRule(ruleset int, g Grant, handled uint64) error {
 		return fmt.Errorf("open %s: %w", g.Path, err)
 	}
 	defer func() { _ = unix.Close(p) }()
-	attr := unix.LandlockPathBeneathAttr{Allowed_access: access(g, handled), Parent_fd: int32(p)}
+	attr := unix.LandlockPathBeneathAttr{Allowed_access: access(g, handled, confine), Parent_fd: int32(p)}
 	if _, _, errno := unix.Syscall6(unix.SYS_LANDLOCK_ADD_RULE, uintptr(ruleset), unix.LANDLOCK_RULE_PATH_BENEATH,
 		uintptr(unsafe.Pointer(&attr)), 0, 0, 0); errno != 0 {
 		return fmt.Errorf("landlock_add_rule %s: %w", g.Path, errno)
@@ -94,15 +107,20 @@ func addRule(ruleset int, g Grant, handled uint64) error {
 }
 
 // access is what g grants of handled: listing alone for a List grant
-// (ADR-0057), a file's rights for a file, all of them for a folder.
-func access(g Grant, handled uint64) uint64 {
+// (ADR-0057), a file's rights for a file, all of them for a folder; for a
+// confined command, reading alone where g is not a Write grant (ADR-0064).
+func access(g Grant, handled uint64, confine bool) uint64 {
+	r := handled
 	switch {
 	case g.List:
 		return handled & unix.LANDLOCK_ACCESS_FS_READ_DIR
-	case !g.Dir:
-		return handled & fileRights
+	case confine && !g.Write:
+		r &= readRights
 	}
-	return handled
+	if !g.Dir {
+		r &= fileRights
+	}
+	return r
 }
 
 // specFile is sp as JSON in an anonymous memory file, read from its start.

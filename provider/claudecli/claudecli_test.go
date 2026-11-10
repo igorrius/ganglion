@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/router"
 )
 
 // The test binary doubles as a fake claude: FAKE_CLAUDE selects what it
@@ -441,5 +442,28 @@ func TestRelativeWorkDirGivesAnAbsolutePromptPath(t *testing.T) {
 	}
 	if got.System == "" {
 		t.Fatal("the CLI could not read the system prompt file")
+	}
+}
+
+// TestEffortIsAnArgument: an effort goes to the CLI as --effort; none
+// leaves the CLI's default.
+func TestEffortIsAnArgument(t *testing.T) {
+	for effort, want := range map[router.Effort]bool{router.EffortHigh: true, "": false} {
+		c, rec := fake(t, "ok")
+		if _, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Effort: effort, Messages: history}); err != nil {
+			t.Fatal(err)
+		}
+		raw, err := os.ReadFile(rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got recorded
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatal(err)
+		}
+		i := slices.Index(got.Args, "--effort")
+		if has := i >= 0 && i+1 < len(got.Args) && got.Args[i+1] == string(effort); has != want || (!want && i >= 0) {
+			t.Fatalf("effort %q: args %q", effort, got.Args)
+		}
 	}
 }

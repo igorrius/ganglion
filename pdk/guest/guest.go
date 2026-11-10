@@ -44,6 +44,12 @@ func hostSecretGet(ptr, size uint32) int32
 //go:wasmimport ganglion config_get
 func hostConfigGet(ptr, size uint32) int32
 
+//go:wasmimport ganglion cell_report
+func hostCellReport(nptr, nsize, vptr, vsize uint32) int32
+
+//go:wasmimport ganglion cell_get
+func hostCellGet(ptr, size uint32) int32
+
 func ptr(b []byte) uint32 {
 	if len(b) == 0 {
 		return 0
@@ -107,6 +113,39 @@ func (wasmHost) StatePut(key, value string) {
 	hostStatePut(ptr(k), uint32(len(k)), ptr(v), uint32(len(v)))
 	runtime.KeepAlive(k)
 	runtime.KeepAlive(v)
+}
+
+func (wasmHost) CellReport(name string, value any) error {
+	v, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	n := []byte(name)
+	code := hostCellReport(ptr(n), uint32(len(n)), ptr(v), uint32(len(v)))
+	runtime.KeepAlive(n)
+	runtime.KeepAlive(v)
+	switch code {
+	case 0:
+		return nil
+	case -2:
+		return pdk.ErrCellType
+	}
+	return pdk.ErrCellDenied
+}
+
+func (wasmHost) CellGet(id string) (json.RawMessage, time.Time, bool) {
+	raw, ok := lookup(func(p, n uint32) int32 { return hostCellGet(p, n) }, id)
+	if !ok {
+		return nil, time.Time{}, false
+	}
+	var c struct {
+		Value json.RawMessage `json:"value"`
+		AtMs  int64           `json:"at_ms"`
+	}
+	if err := json.Unmarshal([]byte(raw), &c); err != nil {
+		return nil, time.Time{}, false
+	}
+	return c.Value, time.UnixMilli(c.AtMs), true
 }
 
 func (wasmHost) Now() time.Time { return time.UnixMilli(hostNowMs()) }

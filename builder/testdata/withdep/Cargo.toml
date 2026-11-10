@@ -1,0 +1,15 @@
+[package]
+name = "withdep"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+itoa = "1"
+
+[profile.release]
+opt-level = "z"
+panic = "abort"

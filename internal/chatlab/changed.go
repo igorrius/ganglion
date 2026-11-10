@@ -17,7 +17,7 @@ import (
 // model. A change here recommends a full run; it never starts one, as that takes
 // about 900,000 tokens and is decided, not automatic (owner, 2026-11-04).
 var SharedFiles = []string{
-	"models.example.yaml",
+	"examples/ganglion.lab.yaml",
 	"agent/prompt.go",
 	"agent/stages.go",
 	"agent/compact.go",

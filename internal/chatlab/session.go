@@ -56,7 +56,7 @@ func RunSession(ctx context.Context, o SessionOptions) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	s := &session{o: o, n: n, stop: cancel,
-		run: &repeatRun{o: RunOptions{TurnLimit: o.TurnLimit, Catalog: o.Node.Catalog}, n: n}}
+		run: &repeatRun{o: RunOptions{TurnLimit: o.TurnLimit, Models: o.Node.Models}, n: n}}
 	s.seen.Store(time.Now().UnixNano())
 	go s.watchIdle(ctx)
 	return Serve(ctx, SocketIn(o.Dir), s.handle)

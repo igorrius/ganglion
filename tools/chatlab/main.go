@@ -21,15 +21,15 @@ import (
 
 	"github.com/igorrius/ganglion/internal/chatlab"
 	"github.com/igorrius/ganglion/provider/claudecli"
-	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sandbox"
+	"github.com/igorrius/ganglion/settings"
 )
 
 const usage = `usage:
-  chatlab run [names...] [--all] [--max-tokens 1500000] [--judge sonnet] [--models <file>] [--repeat n] [--dir <scenarios>]
+  chatlab run [names...] [--all] [--max-tokens 1500000] [--judge sonnet] [--config <file>] [--repeat n] [--dir <scenarios>]
   chatlab skip-full
   chatlab mark <names...>
-  chatlab start [--persona <dir>] [--models <file>]
+  chatlab start [--persona <dir>] [--config <file>]
   chatlab say "..."
   chatlab send <name> [--type <mime>] [--size <bytes>] [--caption "..."]
   chatlab press "Approve"
@@ -148,12 +148,12 @@ func runScenarios(ctx context.Context, args []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defaultModels := filepath.Join(root, "models.example.yaml")
+	defaultModels := filepath.Join(root, "examples", "ganglion.lab.yaml")
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	all := fs.Bool("all", false, "run everything, not only what changed: about 900,000 tokens")
 	maxTokens := fs.Int("max-tokens", 1_500_000, "stop starting repeats past this many tokens")
 	judge := fs.String("judge", chatlab.DefaultJudgeModel, "the judge's model, through the claude CLI")
-	models := fs.String("models", defaultModels, "the catalogue under test")
+	models := fs.String("config", defaultModels, "a settings file whose models section is under test")
 	repeat := fs.Int("repeat", 0, "repeats of each scenario instead of its own number")
 	dir := fs.String("dir", filepath.Join(root, "tools", "chatlab", "scenarios"), "where the scenarios are")
 	names, err := flagsLast(fs, args)
@@ -164,7 +164,7 @@ func runScenarios(ctx context.Context, args []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	cat, keys, err := loadCatalog(*models)
+	cat, keys, err := loadModels(*models)
 	if err != nil {
 		return 0, err
 	}
@@ -185,7 +185,7 @@ func runScenarios(ctx context.Context, args []string) (int, error) {
 		}
 	}
 	tokens := &chatlab.Counter{}
-	r := chatlab.RunAll(ctx, chatlab.RunOptions{Scenarios: scenarios, Catalog: cat, Keys: keys, Relay: filepath.Join(root, "bin", "ganglion"),
+	r := chatlab.RunAll(ctx, chatlab.RunOptions{Scenarios: scenarios, Models: cat, Keys: keys, Relay: filepath.Join(root, "bin", "ganglion"),
 		Judge: chatlab.NewJudge(tokens.Wrap(claudecli.New("judge")), *judge), MaxTokens: *maxTokens, Repeat: *repeat, Tokens: tokens})
 	r.Untouched = untouched
 	if keep {
@@ -227,24 +227,28 @@ func remember(root string, rec *chatlab.Record, scenarios []chatlab.Scenario, r 
 	return rec.Save(recordFile(root))
 }
 
-func loadCatalog(path string) (rules.Catalog, map[string]string, error) {
-	f, err := os.Open(path)
+// loadModels reads the models section of the settings file at path and the
+// providers' keys; a file without one is an error.
+func loadModels(path string) (settings.Models, map[string]string, error) {
+	src, err := os.ReadFile(path)
 	if err != nil {
-		return rules.Catalog{}, nil, err
+		return settings.Models{}, nil, err
 	}
-	defer func() { _ = f.Close() }()
-	cat, err := rules.LoadCatalog(f)
+	f, err := settings.Parse(src)
 	if err != nil {
-		return rules.Catalog{}, nil, fmt.Errorf("%s: %w", path, err)
+		return settings.Models{}, nil, fmt.Errorf("%s: %w", path, err)
 	}
-	keys, err := chatlab.KeysFor(cat)
-	return cat, keys, err
+	if f.Models == nil {
+		return settings.Models{}, nil, fmt.Errorf("%s: no models section", path)
+	}
+	keys, err := chatlab.KeysFor(*f.Models)
+	return *f.Models, keys, err
 }
 
 // sessionFlags are what start hands to the session's server.
 func sessionFlags(fs *flag.FlagSet, root string) (persona, models *string) {
 	persona = fs.String("persona", chatlab.PersonaDefault, "a directory with the persona's files")
-	models = fs.String("models", filepath.Join(root, "models.example.yaml"), "the catalogue under test")
+	models = fs.String("config", filepath.Join(root, "examples", "ganglion.lab.yaml"), "a settings file whose models section is under test")
 	return persona, models
 }
 
@@ -271,7 +275,7 @@ func startSession(args []string) error {
 			return err
 		}
 		defer func() { _ = log.Close() }()
-		cmd := exec.Command(exe, "serve", "--dir", dir, "--persona", *persona, "--models", *models) //nolint:gosec,noctx // this program, outliving this call
+		cmd := exec.Command(exe, "serve", "--dir", dir, "--persona", *persona, "--config", *models) //nolint:gosec,noctx // this program, outliving this call
 		cmd.Stdout, cmd.Stderr, cmd.Dir = log, log, root
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		if err := cmd.Start(); err != nil {
@@ -297,7 +301,7 @@ func serveSession(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cat, keys, err := loadCatalog(*models)
+	cat, keys, err := loadModels(*models)
 	if err != nil {
 		return err
 	}
@@ -310,7 +314,7 @@ func serveSession(ctx context.Context, args []string) error {
 		scenario.Dir, scenario.Persona = filepath.Dir(abs), filepath.Base(abs)
 	}
 	return chatlab.RunSession(ctx, chatlab.SessionOptions{Dir: *dir, Scenarios: filepath.Join(root, "tools", "chatlab", "scenarios"),
-		Node: chatlab.NodeOptions{Catalog: cat, Keys: keys, Relay: filepath.Join(root, "bin", "ganglion"), Scenario: scenario, Tokens: &chatlab.Counter{}}})
+		Node: chatlab.NodeOptions{Models: cat, Keys: keys, Relay: filepath.Join(root, "bin", "ganglion"), Scenario: scenario, Tokens: &chatlab.Counter{}}})
 }
 
 // sessionRequest turns the command line into a request.

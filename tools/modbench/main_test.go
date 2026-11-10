@@ -17,8 +17,12 @@ import (
 	"github.com/igorrius/ganglion/internal/testinputs"
 )
 
+// exampleManifest is the manifest of the Rust example, which the Go
+// reference reader runs under too.
+const exampleManifest = "../../examples/modules/deye-reader/manifest.yaml"
+
 func TestReplayServesRecordedBodiesWithCurrentTime(t *testing.T) {
-	h, err := newReplay([]byte(`{"/v1/a": {"ts": __NOW__}, "/v1/b": "plain"}`))
+	h, err := newReplay([]byte(`[{"path": "/v1/a", "body": {"ts": __NOW__}}, {"path": "/v1/b", "body": "plain"}]`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,6 +50,31 @@ func TestReplayServesRecordedBodiesWithCurrentTime(t *testing.T) {
 	}
 }
 
+func TestReplayEntriesSetTheirStatusAndHeaders(t *testing.T) {
+	h, err := newReplay([]byte(`[{"path": "/v1/latest", "status": 429, "headers": {"Retry-After": "120"}}]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/v1/latest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests || resp.Header.Get("Retry-After") != "120" {
+		t.Fatalf("answer = %d, Retry-After %q; want 429 and 120", resp.StatusCode, resp.Header.Get("Retry-After"))
+	}
+}
+
+func TestAReplayWithARepeatedPathIsRefused(t *testing.T) {
+	for _, src := range []string{`[{"path": "/a"}, {"path": "/a"}]`, `[{"body": 1}]`, `{"/a": 1}`} {
+		if _, err := newReplay([]byte(src)); err == nil {
+			t.Errorf("%s: no error", src)
+		}
+	}
+}
+
 func TestRedirectSendsEveryHostToTheReplayServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, r.URL.Path+"?"+r.URL.RawQuery)
@@ -65,16 +94,13 @@ func TestRedirectSendsEveryHostToTheReplayServer(t *testing.T) {
 
 func TestBenchDeyeModuleEndToEnd(t *testing.T) {
 	dir := t.TempDir()
-	testinputs.Build(t, "../../modules/deye/wasm", "GOOS=wasip1", "GOARCH=wasm")
 	wasm := filepath.Join(dir, "deye.wasm")
-	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", wasm, "../../modules/deye/wasm")
-	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm")
-	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, b)
+	if err := os.WriteFile(wasm, buildReference(t), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
 	err := run(context.Background(), []string{
-		"-wasm", wasm, "-manifest", "../../modules/deye/deye-reader.yaml",
+		"-wasm", wasm, "-manifest", exampleManifest,
 		"-replay", "testdata/deye-replay.json", "-config", "inverter_sn=2400000001", "-n", "5",
 	}, &stdout, &stderr)
 	if err != nil {
@@ -93,6 +119,24 @@ func TestBenchDeyeModuleEndToEnd(t *testing.T) {
 	if !strings.Contains(r.LastResult, `"soc"`) {
 		t.Fatalf("last result %q lacks a sample", r.LastResult)
 	}
+}
+
+// buildReference builds the Go reference reader, internal/deyeref, as a
+// module.
+func buildReference(t *testing.T) []byte {
+	t.Helper()
+	testinputs.Build(t, "../../internal/deyeref/wasm", "GOOS=wasip1", "GOARCH=wasm")
+	wasm := filepath.Join(t.TempDir(), "deyeref.wasm")
+	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", wasm, "../../internal/deyeref/wasm")
+	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, b)
+	}
+	b, err := os.ReadFile(wasm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func TestBenchToolModuleWithASavedPage(t *testing.T) {

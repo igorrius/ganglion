@@ -22,8 +22,8 @@ import (
 
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider/providertest"
-	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/runner"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/telemetry"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 	"github.com/igorrius/ganglion/web"
@@ -40,7 +40,7 @@ const (
 
 // measureNodeConfig is what TestMeasureNode is started with.
 type measureNodeConfig struct {
-	DB, Workspace, BotAPIURL, Catalog, Page string
+	DB, Workspace, BotAPIURL, Models, Page string
 }
 
 // hostileShapes are the costliest 1 MiB pages for html2md (ADR-0035):
@@ -110,8 +110,8 @@ func measureHostile(t *testing.T, html string) {
 	dir := t.TempDir()
 	cfg, err := json.Marshal(measureNodeConfig{
 		DB: filepath.Join(dir, "node.db"), Workspace: filepath.Join(dir, "workspace"), BotAPIURL: fake.URL(), Page: page.Listener.Addr().String(),
-		Catalog: "providers:\n  - {name: fake, type: openai, base_url: " + model.URL() + ", key_env: FAKE_KEY}\n" +
-			"models:\n  - {provider: fake, name: m, tier: smart, tools: true, context: 64000}\n",
+		Models: "models:\n  providers: [{name: fake, type: openai, base_url: \"" + model.URL() + "\", key: env:FAKE_KEY}]\n" +
+			"  models: [{provider: fake, name: m, tools: true, context: 64000}]\n  purposes: {chat: [{model: m}]}\n",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -167,12 +167,12 @@ func TestMeasureNode(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &c); err != nil {
 		t.Fatal(err)
 	}
-	cat, err := rules.LoadCatalog(strings.NewReader(c.Catalog))
+	f, err := settings.Parse([]byte(c.Models))
 	if err != nil {
 		t.Fatal(err)
 	}
 	b := Bootstrap{DB: c.DB, BotToken: crashTokenForMeasure, BotAPIURL: c.BotAPIURL, Admin: "telegram:user:42",
-		Agent: AgentSettings{Catalog: &cat, Keys: map[string]string{"fake": measureKey}, Workspace: c.Workspace,
+		Agent: AgentSettings{Models: f.Models, Keys: map[string]string{"fake": measureKey}, Workspace: c.Workspace,
 			DailyBudgetUSD: 1, TZ: time.UTC, SearchOff: true}}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
 	defer stop()

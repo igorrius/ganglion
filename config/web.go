@@ -77,7 +77,7 @@ type Reading struct {
 }
 
 // Read provides the web tools. The search backend is Brave with a key,
-// DuckDuckGo without one; GANGLION_SEARCH=off leaves web.search out.
+// DuckDuckGo without one; agent.search.mode: off leaves web.search out.
 func Read() do.Provider[Reading] {
 	return func(i do.Injector) (Reading, error) {
 		tools := []tool.Handler{builtin.NewWebFetch(do.MustInvoke[*web.Fetcher](i))}

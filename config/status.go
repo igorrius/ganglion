@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/host"
+	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/sandbox"
@@ -28,6 +29,7 @@ func StatusSources() do.Provider[[]status.Source] {
 			do.MustInvoke[*sqlqueue.Queue](i),
 			skills.Refused{Problems: sk.Problems, Loaded: len(sk.Set.Names()), Since: start},
 			do.MustInvoke[*modstore.Store](i),
+			do.MustInvoke[*modhost.Host](i),
 			do.MustInvoke[*schedule.Scheduler](i),
 			do.MustInvoke[*sandbox.Sandbox](i),
 			do.MustInvoke[*host.Switch](i),
