@@ -16,11 +16,18 @@ func TestHostExecCanBeGranted(t *testing.T) {
 	}
 }
 
-// A module is imported, built and installed only with the owner at hand.
-func TestModuleToolsCannotBeGranted(t *testing.T) {
-	for _, name := range []string{ModuleImportTool, ModuleBuildTool, ModuleInstallTool, ModuleStatusTool, ModuleWriteTool, ModuleReadTool} {
+// A module is imported, built, installed and written only with the owner at
+// hand; the reads module.status and module.read may be granted (owner,
+// 2026-11-10).
+func TestModuleToolsGrantRules(t *testing.T) {
+	for _, name := range []string{ModuleImportTool, ModuleBuildTool, ModuleInstallTool, ModuleWriteTool} {
 		if !ungrantable(name) {
 			t.Fatalf("a task can be granted %s", name)
+		}
+	}
+	for _, name := range []string{ModuleStatusTool, ModuleReadTool} {
+		if ungrantable(name) {
+			t.Fatalf("a task cannot be granted %s", name)
 		}
 	}
 }

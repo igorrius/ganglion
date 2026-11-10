@@ -874,6 +874,10 @@ human); module install — tests + reviewer + admin.
     gets one notice with the reason, not a button on every run.
   - A task runs as its creator, with the creator's rights. Its
     instruction and grant cannot be changed by what a run reads.
+  - A task may be granted the read-only `module.status` and `module.read`,
+    never the tools that build, install, import or write a module
+    (`module.build`, `module.install`, `module.import`, `module.write`;
+    R-RUN-9, owner, 2026-11-10).
 - **R-POL-9.** A question stays open, whole, until it is answered. Once answered
   or expired it **folds**, so the chat keeps the record of what was decided and
   stops being in the way:

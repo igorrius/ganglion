@@ -71,6 +71,7 @@ func TestDecide(t *testing.T) {
 		{"family principal on an admin-only tool", read, with(base(), func(c *tool.Call) { c.Admin = false }), tool.PolicyForbidden, journal.DecisionForbidden},
 		{"family principal on an open tool", tool.Spec{Name: "clock", Class: tool.ClassRead, Policy: tool.PolicyAuto}, with(base(), func(c *tool.Call) { c.Admin = false }), tool.PolicyAuto, journal.DecisionAllowed},
 		{"grant: tool not granted", spec("memory.write", tool.ClassRead, tool.PolicyAuto), with(base(), func(c *tool.Call) { c.Grant = grant }), tool.PolicyForbidden, journal.DecisionOutOfGrant},
+		{"grant: a granted module read runs for the creator", spec("module.status", tool.ClassRead, tool.PolicyAuto), with(base(), func(c *tool.Call) { c.Grant = &tool.Grant{Tools: []string{"module.status", "module.read"}} }), tool.PolicyAuto, journal.DecisionAllowed},
 		{"grant: tool granted", read, with(base(), func(c *tool.Call) { c.Grant = grant }), tool.PolicyAuto, journal.DecisionAllowed},
 		{"grant: fetch on a granted host", fetch, with(base(), func(c *tool.Call) { c.Grant = grant; c.Args = args("url", "HTTPS://EXAMPLE.com:443/a#x") }), tool.PolicyAuto, journal.DecisionAllowed},
 		{"grant: fetch on another host", fetch, with(base(), func(c *tool.Call) { c.Grant = grant; c.Args = args("url", "https://evil.example.org/") }), tool.PolicyForbidden, journal.DecisionOutOfGrant},

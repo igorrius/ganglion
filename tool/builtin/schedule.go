@@ -276,11 +276,16 @@ var neverGranted = []string{toolMemoryWrite, toolMemoryForget, toolPersonaPropos
 
 // ungrantable reports whether a grant may never name the tool: the
 // schedule tools (a task does not schedule or delete jobs), the module tools
-// (a module is built and installed only with the owner at hand, R-RUN-9) and
-// neverGranted. This is the one list of such tools.
+// that change the system (a module is imported, built, installed or written
+// only with the owner at hand, R-RUN-9; the reads module.status and
+// module.read are grantable, owner 2026-11-10) and neverGranted. This is the
+// one list of such tools.
 func ungrantable(name string) bool {
-	return strings.HasPrefix(name, "schedule.") || strings.HasPrefix(name, "module.") || slices.Contains(neverGranted, name)
+	return strings.HasPrefix(name, "schedule.") || slices.Contains(moduleChanging, name) || slices.Contains(neverGranted, name)
 }
+
+// moduleChanging are the module tools no grant may name.
+var moduleChanging = []string{ModuleImportTool, ModuleBuildTool, ModuleInstallTool, ModuleWriteTool}
 
 // grantTools checks the tools of a grant and returns them sorted, once
 // each.
