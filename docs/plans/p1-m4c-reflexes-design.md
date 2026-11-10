@@ -358,6 +358,12 @@ background job of the node, `host.exec` included.
   after a 30 s poll. For a build the turn gets a note with the build's
   answer, clean or outside content by the provenance rule (section 6),
   and the agent goes on: it fixes and builds again, or offers the window.
+  The note resumes the agent at the build call's own depth, since the build
+  is the node's work; instead at most 5 builds of a module run in a row in
+  a conversation before a person writes there again (owner, 2026-11-10).
+  Each build's answer and its outside-content flag are kept in a record
+  file under `<data>/modules/build-jobs/`, out of the command sandbox's
+  reach, which the resumed turn reads.
 - **The model knows what runs.** Every turn of the conversation carries a
   node note listing its running jobs (`[jobs] build battery-alerts 0:45`);
   it is not stored in history. Asked "how is it going?", the agent answers

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/internal/transcript"
 	bg "github.com/igorrius/ganglion/jobs"
@@ -16,10 +17,12 @@ import (
 	"github.com/igorrius/ganglion/turns"
 )
 
-// Builds reads the module builds that ran in the background
-// (builtin.BuildQueue).
+// Builds reads the module builds that ran in the background and hears when a
+// person writes in a conversation, which lets its modules be built again
+// (builtin.BuildQueue, MaxBuildsInARow).
 type Builds interface {
 	Outcome(ctx context.Context, key string) (builtin.BuildOutcome, error)
+	OwnerSpoke(conv string)
 }
 
 // NoBuilds is the Builds of a node without module builds.
@@ -28,6 +31,19 @@ type NoBuilds struct{}
 // Outcome implements Builds.
 func (NoBuilds) Outcome(context.Context, string) (builtin.BuildOutcome, error) {
 	return builtin.BuildOutcome{}, builtin.ErrNoBuildJob
+}
+
+// OwnerSpoke implements Builds.
+func (NoBuilds) OwnerSpoke(string) {}
+
+// ownerSpoke tells the build queue that a person wrote in the conversation:
+// the count of builds in a row starts afresh (owner, 2026-11-10). A build's
+// own turn, a press or a scheduled run is not a person's message.
+func (a *Agent) ownerSpoke(_ context.Context, t *turn) (bool, error) {
+	if t.event.Kind == event.KindMessage {
+		a.d.Builds.OwnerSpoke(t.event.Conv)
+	}
+	return false, nil
 }
 
 // bgOpen are the states of a job that has not ended.
@@ -44,7 +60,10 @@ const buildFinishedPrefix = "[build finished] "
 // background (R-RUN-9, ADR-0069), as commandDone does a host command's: the
 // build's answer joins the history, as outside data only when the build
 // says so (the provenance rule, R-RUN-17), and the model goes on with its
-// tools, one level deeper, to fix the source and build again or to install.
+// tools at the depth of the call that asked for the build (owner,
+// 2026-11-10: the build is the node's work, not the agent calling itself;
+// MaxBuildsInARow ends a loop that does not converge), to fix the source and
+// build again or to install.
 // A build the session no longer waits for gets one fixed line and no model
 // turn; a build of another conversation does nothing here.
 func (a *Agent) moduleBuilt(ctx context.Context, t *turn) error {
@@ -91,7 +110,7 @@ func (a *Agent) continueBuild(ctx context.Context, t *turn, o builtin.BuildOutco
 		return nil
 	}
 	t.record.Outcome = turns.OutcomeOK
-	t.depth = o.Depth + 1
+	t.depth = o.Depth
 	if done, err := a.converse(ctx, t, note); err != nil || done {
 		return err
 	}

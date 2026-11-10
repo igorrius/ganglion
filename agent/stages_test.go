@@ -96,3 +96,11 @@ func TestGiveUpApologisesAndAlertsAdmins(t *testing.T) {
 		t.Errorf("alert %+v", out[1])
 	}
 }
+
+// A zero timeout is never meant: New keeps the default for it.
+func TestZeroTimeoutsKeepTheDefaults(t *testing.T) {
+	a := New(Config{MaxSteps: 8}, newEnv(t, Config{}, nil).deps)
+	if d := DefaultConfig(); a.cfg.CallTimeout != d.CallTimeout || a.cfg.TurnTimeout != d.TurnTimeout {
+		t.Fatalf("config %+v", a.cfg)
+	}
+}

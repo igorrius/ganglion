@@ -11,24 +11,36 @@ import (
 	"github.com/igorrius/ganglion/event"
 	bg "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 )
 
 // fakeBuilds are the build queue's records in memory.
 type fakeBuilds map[string]builtin.BuildOutcome
 
-func (f fakeBuilds) Outcome(_ context.Context, key string) (builtin.BuildOutcome, error) {
-	o, ok := f[key]
+// buildsFake is the build queue: its records and the conversations a person
+// wrote in.
+type buildsFake struct {
+	m     fakeBuilds
+	spoke []string
+}
+
+func (f *buildsFake) Outcome(_ context.Context, key string) (builtin.BuildOutcome, error) {
+	o, ok := f.m[key]
 	if !ok {
 		return builtin.BuildOutcome{}, builtin.ErrNoBuildJob
 	}
 	return o, nil
 }
 
+func (f *buildsFake) OwnerSpoke(conv string) { f.spoke = append(f.spoke, conv) }
+
 // withBuilds gives e's agent the builds f.
-func (e *env) withBuilds(f fakeBuilds) {
-	e.deps.Builds = f
+func (e *env) withBuilds(f fakeBuilds) *buildsFake {
+	b := &buildsFake{m: f}
+	e.deps.Builds = b
 	e.a = New(overDefaults(Config{}), e.deps)
+	return b
 }
 
 // builtEvent is the event the build queue puts when build key ends in conv.
@@ -50,7 +62,9 @@ func cleanBuild() builtin.BuildOutcome {
 
 // R-RUN-9, ADR-0069: a build's end resumes its conversation with a note of
 // its answer; the agent's own source does not taint, and the model goes on
-// with its tools one level deeper, to fix it and build again.
+// with its tools at the build call's own depth (owner, 2026-11-10: the build
+// is the node's work, not the agent calling itself), to fix it and build
+// again.
 func TestABuildThatEndsResumesItsConversation(t *testing.T) {
 	clock := newClock()
 	e := newEnv(t, Config{}, registry(t, clock))
@@ -73,7 +87,7 @@ func TestABuildThatEndsResumesItsConversation(t *testing.T) {
 		strings.Contains(first, "<external") {
 		t.Fatalf("the model read %q", first)
 	}
-	if len(clock.calls) != 1 || clock.calls[0].Depth != 2 || clock.calls[0].Tainted {
+	if len(clock.calls) != 1 || clock.calls[0].Depth != 1 || clock.calls[0].Tainted {
 		t.Fatalf("calls %+v", clock.calls)
 	}
 }
@@ -182,5 +196,112 @@ func TestResumeKeepsOnlyRunningBuilds(t *testing.T) {
 	e.turn(t, message(owner, "Igor", "/resume 1"))
 	if st := e.state(t); st.Session != "A" || !slices.Equal(st.Commands, []string{running.Key}) {
 		t.Fatalf("state %+v", st)
+	}
+}
+
+// buildTool is module.build as the agent sees it: each call queues a build
+// that has already failed, recorded at the call's depth.
+type buildTool struct {
+	fakeTool
+	builds fakeBuilds
+}
+
+func (b *buildTool) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
+	_, _ = b.fakeTool.Run(ctx, c)
+	key := fmt.Sprintf("build:battery-alerts:%d", len(b.calls))
+	b.builds[key] = builtin.BuildOutcome{Key: key, Module: "battery-alerts", Conv: c.Conv, Transport: c.Transport, Principal: c.Principal,
+		Depth: c.Depth, State: bg.StateFailed, Answer: `{"error":"the build failed","log_tail":"error[E0308]: src/logic.rs:3:5"}`}
+	return tool.Result{Text: `{"building":"battery-alerts"}`, Job: key}, nil
+}
+
+// Owner's ruling (2026-11-10): the depth does not grow with each build, so
+// three failed builds in a row each resume the agent and a fourth build is
+// still allowed under the real policy's depth limit.
+func TestFailedBuildsInARowKeepTheDepth(t *testing.T) {
+	builds := fakeBuilds{}
+	bt := &buildTool{builds: builds}
+	bt.name = "module.build"
+	e := newConfirmEnv(t, bt)
+	e.withBuilds(builds)
+	e.smart.push(callTool("module.build"), say("It builds."))
+	e.turn(t, message(owner, "Igor", "make me a reflex"))
+	for i := 1; i <= 3; i++ {
+		e.smart.push(callTool("module.build"), say("I fixed it and build again."))
+		e.turn(t, builtEvent("telegram:42", fmt.Sprintf("build:battery-alerts:%d", i), "battery-alerts"))
+	}
+	if len(bt.calls) != 4 {
+		t.Fatalf("module.build ran %d times, want 4", len(bt.calls))
+	}
+	for i, c := range bt.calls {
+		if c.Depth != 0 {
+			t.Fatalf("call %d at depth %d", i+1, c.Depth)
+		}
+	}
+	if st := e.state(t); len(st.Commands) != 1 || st.Commands[0] != "build:battery-alerts:4" {
+		t.Fatalf("commands %v", st.Commands)
+	}
+}
+
+// A person's message in the conversation tells the queue, which starts the
+// count of builds in a row afresh; a build's own turn does not.
+func TestAPersonsMessageResetsTheBuildCount(t *testing.T) {
+	e := newEnv(t, Config{}, registry(t, newClock()))
+	b := e.withBuilds(fakeBuilds{buildKey: cleanBuild()})
+	e.setState("telegram:42", State{Session: "s", Started: t0, Last: t0, Commands: []string{buildKey}})
+	e.smart.push(say("Fixing."))
+	e.turn(t, builtEvent("telegram:42", buildKey, "battery-alerts"))
+	if len(b.spoke) != 0 {
+		t.Fatalf("a build's turn reset the count: %v", b.spoke)
+	}
+	e.smart.push(say("hi"))
+	e.turn(t, message(owner, "Igor", "go on"))
+	if !slices.Equal(b.spoke, []string{"telegram:42"}) {
+		t.Fatalf("spoke %v", b.spoke)
+	}
+}
+
+// Over the daily limit a build's note joins the history without a model
+// turn, and the build is taken off the list.
+func TestABuildOverTheDailyLimitOnlyNotes(t *testing.T) {
+	e := newEnv(t, Config{DailyTurns: 1}, registry(t, newClock()))
+	e.withBuilds(fakeBuilds{buildKey: cleanBuild()})
+	e.a = New(overDefaults(Config{DailyTurns: 1}), e.deps)
+	e.smart.push(say("hi"))
+	e.turn(t, message(owner, "Igor", "hello"))
+	st := e.state(t)
+	st.Commands = []string{buildKey}
+	e.setState("telegram:42", st)
+	calls := len(e.smart.requests())
+	e.turn(t, builtEvent("telegram:42", buildKey, "battery-alerts"))
+	if len(e.smart.requests()) != calls {
+		t.Fatal("the model was called over the daily limit")
+	}
+	st = e.state(t)
+	if last := st.Messages[len(st.Messages)-1]; !strings.HasPrefix(last.Content, "[build finished] battery-alerts: ") || len(st.Commands) != 0 {
+		t.Fatalf("history ends %+v, commands %v", last, st.Commands)
+	}
+}
+
+// A build a scheduled task asked for resumes as a turn of that task, under
+// its grant.
+func TestABuildInATaskResumesUnderTheTaskGrant(t *testing.T) {
+	clock := newClock()
+	e := newConfirmEnv(t, clock)
+	j := rates()
+	e.jobs[j.ID] = j
+	o := cleanBuild()
+	o.Conv = "task:j1"
+	e.withBuilds(fakeBuilds{buildKey: o})
+	e.setState("task:j1", State{Session: "s", Started: t0, Last: t0, Commands: []string{buildKey}})
+	e.smart.push(callTool("clock"), say("Built."))
+	e.turn(t, builtEvent("task:j1", buildKey, "battery-alerts"))
+	if len(clock.calls) != 1 || clock.calls[0].Grant == nil || clock.calls[0].Conv != "task:j1" {
+		t.Fatalf("calls %+v", clock.calls)
+	}
+	if got := lastUserRaw(e.smart.requests()[0]); !strings.HasPrefix(got, "[build finished] battery-alerts: ") {
+		t.Fatalf("the task's build turn read %q", got)
+	}
+	if st := e.stateOf(t, "task:j1"); len(st.Commands) != 0 {
+		t.Fatalf("task state %+v", st)
 	}
 }

@@ -847,6 +847,10 @@ type ModuleBuilt struct {
   build, `<data>/modules/build-jobs/`, beside the builds and the provenance records, not in the
   job's row: `jobs` stays generic, and the queue's restart path (interrupted, not yet told) reads
   only its own records. `module.built` carries the module's short name.
+  Fix round 1 (owner, 2026-11-10): the `module.built` turn converses at the build call's own depth,
+  not + 1, and a 6th build of a module in a row without a person's message in the conversation is
+  refused ("<name> was built 5 times in a row; ask the owner before building again"; the count is
+  in memory per conversation and module, so a restart resets it).
 
 - [x] **Step 1: Failing tests:** `module.build` answers at once with a job and a card; the build's
   end puts `module.built` and ends the card; the note is clean for an own folder and tainted

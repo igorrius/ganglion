@@ -50,3 +50,15 @@ func testTimeouts() Timeouts {
 	a := settings.Default().Agent
 	return Timeouts{Call: time.Duration(a.CallTimeout), Turn: time.Duration(a.TurnTimeout), Handler: a.HandlerTimeout()}
 }
+
+// A bootstrap without timeouts (a caller that forgot them) runs with the
+// defaults, not with turns that end at once.
+func TestZeroTimeoutsRunWithTheDefaults(t *testing.T) {
+	b := agentConfig(t)
+	b.Timeouts = Timeouts{}
+	i := New(context.Background(), b, slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	if got := do.MustInvoke[*core.Loop](i).TurnTimeout(); got != core.DefaultTurnTimeout {
+		t.Fatalf("the loop's turn timeout %v", got)
+	}
+}

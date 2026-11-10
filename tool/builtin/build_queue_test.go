@@ -69,17 +69,29 @@ func (f *fakeBuildJobs) endOf(key string) jobs.State {
 	return f.ended[key]
 }
 
-// puts collects the events the queue puts.
+// puts collects the events the queue puts. The first fail puts fail; tried,
+// when set, hears of every put.
 type puts struct {
-	mu  sync.Mutex
-	evs []event.Event
+	mu    sync.Mutex
+	evs   []event.Event
+	fail  int
+	tried chan error
 }
 
 func (p *puts) put(_ context.Context, e event.Event) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.evs = append(p.evs, e)
-	return nil
+	var err error
+	if p.fail > 0 {
+		p.fail--
+		err = errors.New("the inbox is down")
+	} else {
+		p.evs = append(p.evs, e)
+	}
+	if p.tried != nil {
+		p.tried <- err
+	}
+	return err
 }
 
 func (p *puts) all() []event.Event {
@@ -88,11 +100,20 @@ func (p *puts) all() []event.Event {
 	return append([]event.Event(nil), p.evs...)
 }
 
-// newQueue is a build queue over dir with the fakes.
+// newQueue is a build queue over dir with the fakes; its retell pass never
+// comes.
 func newQueue(dir string, j builtin.BuildJobs, p *puts) *builtin.BuildQueue {
-	return builtin.NewBuildQueue(builtin.BuildQueueDeps{Dir: dir, Jobs: j, Put: p.put,
-		Now: func() time.Time { return time.Unix(1_800_000_000, 0) }, Log: slog.New(slog.DiscardHandler)})
+	return newQueueAfter(dir, j, p, func(time.Duration) <-chan time.Time { return nil })
 }
+
+// newQueueAfter is newQueue whose passes come from after.
+func newQueueAfter(dir string, j builtin.BuildJobs, p *puts, after func(time.Duration) <-chan time.Time) *builtin.BuildQueue {
+	return builtin.NewBuildQueue(builtin.BuildQueueDeps{Dir: dir, Jobs: j, Put: p.put,
+		Now: func() time.Time { return time.Unix(1_800_000_000, 0) }, After: after, Log: slog.New(slog.DiscardHandler)})
+}
+
+// jobsDir is the build records' folder of e.
+func (e *moduleEnv) jobsDir() string { return filepath.Join(filepath.Dir(e.m.Builds), "build-jobs") }
 
 // startBuild calls module.build with args as a call of its own and returns
 // its immediate answer.
@@ -331,7 +352,7 @@ func TestARestartDuringABuildEndsItAsInterruptedAndTellsTheAgent(t *testing.T) {
 	}
 	// The node stops here; a new process starts over the same folder.
 	j, p := newFakeBuildJobs(), &puts{}
-	q := newQueue(filepath.Join(filepath.Dir(e.m.Builds), "build-jobs"), j, p)
+	q := newQueue(e.jobsDir(), j, p)
 	if err := q.Recover(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +366,7 @@ func TestARestartDuringABuildEndsItAsInterruptedAndTellsTheAgent(t *testing.T) {
 	if q.Step(context.Background()) {
 		t.Fatal("the interrupted build ran after the restart")
 	}
-	if err := newQueue(filepath.Join(filepath.Dir(e.m.Builds), "build-jobs"), j, p).Recover(context.Background()); err != nil {
+	if err := newQueue(e.jobsDir(), j, p).Recover(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if evs := p.all(); len(evs) != 1 {
@@ -372,5 +393,113 @@ func TestEachCallIsABuildOfItsOwn(t *testing.T) {
 	}
 	if len(keys) != 2 || len(e.b.built) != 2 {
 		t.Fatalf("keys %v, built %d", keys, len(e.b.built))
+	}
+}
+
+// Owner's ruling (2026-11-10): at most MaxBuildsInARow builds of a module in
+// a row in a conversation without a person's message there; the next is
+// refused in the node's words, and a message from the owner starts the count
+// afresh. Another module and another conversation count apart.
+func TestBuildsInARowAreCappedUntilTheOwnerWrites(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "deye-reader")
+	e.source(t, "other")
+	e.b.err, e.b.log = errors.New("builder: building deye-reader: exit status 101"), "error[E0308]"
+	for i := range builtin.MaxBuildsInARow {
+		res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+		if err != nil {
+			t.Fatalf("build %d: %v", i+1, err)
+		}
+		e.runBuild(t, res.Job)
+	}
+	const want = "deye-reader was built 5 times in a row; ask the owner before building again"
+	if _, err := e.startBuild(t, `{"name":"deye-reader"}`); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("the sixth build: %v", err)
+	}
+	if res, err := e.startBuild(t, `{"name":"other"}`); err != nil {
+		t.Fatalf("another module: %v", err)
+	} else {
+		e.runBuild(t, res.Job)
+	}
+	e.m.Queue.OwnerSpoke("telegram:7")
+	if _, err := e.startBuild(t, `{"name":"deye-reader"}`); err == nil {
+		t.Fatal("a message in another conversation reset the count")
+	}
+	e.m.Queue.OwnerSpoke("telegram:42")
+	res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+	if err != nil {
+		t.Fatalf("after the owner wrote: %v", err)
+	}
+	e.runBuild(t, res.Job)
+}
+
+// A module.built whose put failed is put again by the queue's next pass, not
+// only at the next start.
+func TestAFailedAnnouncementIsPutAgainByTheNextPass(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "deye-reader")
+	e.b.art = artifact(deyeManifest, 1024, 1)
+	p := &puts{fail: 1, tried: make(chan error, 4)}
+	tick := make(chan time.Time)
+	e.m.Queue = newQueueAfter(e.jobsDir(), e.jobs, p, func(time.Duration) <-chan time.Time { return tick })
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan error, 1)
+	go func() { stopped <- e.m.Queue.Run(ctx) }()
+	if _, err := e.startBuild(t, `{"name":"deye-reader"}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-p.tried; err == nil {
+		t.Fatal("the first put did not fail")
+	}
+	tick <- time.Time{}
+	if err := <-p.tried; err != nil {
+		t.Fatalf("the pass's put: %v", err)
+	}
+	tick <- time.Time{} // told: the next pass puts nothing
+	cancel()
+	if err := <-stopped; err != nil {
+		t.Fatal(err)
+	}
+	if evs := p.all(); len(evs) != 1 || evs[0].Kind != event.KindModuleBuilt {
+		t.Fatalf("events %+v", evs)
+	}
+}
+
+// A build the stopping node cut short stays running and untold; the next
+// start ends that running record as interrupted and tells the agent.
+func TestABuildCutShortByShutdownIsToldAtTheNextStart(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "deye-reader")
+	e.b.art = artifact(deyeManifest, 1024, 1)
+	e.b.running, e.b.gate = make(chan string, 1), make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan error, 1)
+	go func() { stopped <- e.m.Queue.Run(ctx) }()
+	res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-e.b.running
+	cancel()
+	close(e.b.gate)
+	if err := <-stopped; err != nil {
+		t.Fatal(err)
+	}
+	if o, err := e.m.Queue.Outcome(context.Background(), res.Job); err != nil || o.State != jobs.StateRunning {
+		t.Fatalf("after the stop: %+v, %v", o, err)
+	}
+	if len(e.puts.all()) != 0 || e.jobs.endOf(res.Job) != "" {
+		t.Fatal("a build cut short was told or its card ended")
+	}
+	p := &puts{}
+	q := newQueue(e.jobsDir(), newFakeBuildJobs(), p)
+	if err := q.Recover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if o, _ := q.Outcome(context.Background(), res.Job); o.State != jobs.StateInterrupted || !strings.Contains(o.Answer, "interrupted") {
+		t.Fatalf("after the start: %+v", o)
+	}
+	if evs := p.all(); len(evs) != 1 || evs[0].Kind != event.KindModuleBuilt {
+		t.Fatalf("events %+v", evs)
 	}
 }

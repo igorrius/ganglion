@@ -32,7 +32,8 @@ func (*ModuleBuild) Spec() tool.Spec {
 			"the chat shows the build's progress, and the result comes back as a note when it ends. It installs nothing: the note gives " +
 			"the build's digest, language, size, version and the rights its manifest asks for, what they add to the installed version's, " +
 			"and why the node would refuse it. module.install with that digest asks the owner. A failed build's note gives the end of " +
-			"its log. One build runs at a time; a module being built cannot be built or written until its note comes.",
+			"its log. One build runs at a time; a module being built cannot be built or written until its note comes, and after 5 " +
+			"builds of a module in a row the node refuses another until the owner writes.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"name":{"type":"string","description":"the module's folder under modules/ in the workspace"},` +
 			`"note":{"type":"string","description":"one line on what changed, kept in the module's journal"}},` +

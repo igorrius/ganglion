@@ -48,6 +48,8 @@ you.
    tell the owner the build runs; do not call `module.build` or `module.write` on the module
    again until its note comes (the node refuses both meanwhile). Read the diagnostics in the
    note: they name your files and lines. Fix and build again.
+   After 5 builds of the module in a row the node refuses another until the owner writes: stop,
+   tell the owner what fails and ask how to go on.
    The node's build does not run the module's tests; the owner and CI do. Read your tests back
    with `module.read` and keep the logic simple enough to check by reading.
 5. When the note shows a clean build, `module.install` with its digest. The owner sees what the module

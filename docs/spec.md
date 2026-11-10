@@ -773,8 +773,10 @@ escalate:                    # when to call the model
   diagnostics about the module's own files. Any other change to the folder
   makes those answers outside content again (R-RUN-13). `module.build` runs
   in the background (R-LIVE-9): it answers at once, one build runs at a
-  time per node, and the build's answer comes back as a note when it ends;
-  the module cannot be built or written again until then. They are clean only
+  time per node, and the build's answer comes back as a note when it ends,
+  at the depth of the call that asked for it; the module cannot be built or
+  written again until then, and a conversation may build one module at most
+  5 times in a row before a person writes there again (owner, 2026-11-10). They are clean only
   while the module's `Cargo.lock` lists, besides its own package, only
   crates.io crates that one of the node's examples locks with the same
   version and checksum; a missing or unreadable lock, or any other

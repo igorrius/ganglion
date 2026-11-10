@@ -293,15 +293,29 @@ func New(cfg Config, d Deps) *Agent {
 	if cfg.Location == nil {
 		cfg.Location = time.UTC
 	}
+	cfg = withTimeouts(cfg)
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
 	a.d.QuickActions[ActionCellHistory] = a.historyButton
-	a.stages = []stage{a.resume, a.scheduled, a.dropStale, a.idle, a.command, a.limits, a.answer, a.compactHistory}
+	a.stages = []stage{a.resume, a.scheduled, a.ownerSpoke, a.dropStale, a.idle, a.command, a.limits, a.answer, a.compactHistory}
 	a.commands = map[string]command{}
 	for _, c := range a.commandTable() {
 		a.commands[c.word] = c.run
 	}
 	a.tool = tool.Chain(d.Tools.Run, slices.Concat([]tool.Middleware{a.traced}, d.Middleware, []tool.Middleware{d.Policy})...)
 	return a
+}
+
+// withTimeouts keeps the default of a zero timeout: a call or a turn with
+// no time at all is never meant, and it would fail every turn silently.
+func withTimeouts(cfg Config) Config {
+	d := DefaultConfig()
+	if cfg.CallTimeout <= 0 {
+		cfg.CallTimeout = d.CallTimeout
+	}
+	if cfg.TurnTimeout <= 0 {
+		cfg.TurnTimeout = d.TurnTimeout
+	}
+	return cfg
 }
 
 // withBackground fills the readers of the work that runs outside a turn

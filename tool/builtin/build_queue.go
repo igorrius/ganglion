@@ -126,8 +126,25 @@ type BuildQueueDeps struct {
 	Jobs BuildJobs
 	Put  PutEventFunc
 	Now  func() time.Time
-	Log  *slog.Logger
+	// After is the timer between two passes that tell the ended builds
+	// whose module.built was not put (time.After).
+	After func(time.Duration) <-chan time.Time
+	Log   *slog.Logger
 }
+
+// RetellEvery is how often the queue tries again to put the module.built
+// of an ended build whose put failed, as the host runner's pass does.
+const RetellEvery = 30 * time.Second
+
+// MaxBuildsInARow is how many builds of one module a conversation may ask
+// for in a row without a message from a person (owner, 2026-11-10): a
+// build's end resumes the agent at the build call's own depth, so this cap,
+// not the depth limit, ends a write → build → fix loop that does not
+// converge.
+const MaxBuildsInARow = 5
+
+// streakKey is a module in a conversation.
+type streakKey struct{ conv, module string }
 
 // BuildQueue runs module builds in the background, one at a time in the
 // order they were asked for (R-RUN-9, ADR-0069, ruling 16 of M4c): a build
@@ -141,21 +158,26 @@ type BuildQueue struct {
 	mu      sync.Mutex
 	waiting []*buildTask
 	busy    map[string]string // module → the key of its build, running or waiting
+	// streak counts the builds asked for in a row per conversation and
+	// module since a person's last message there; in memory, so a restart
+	// starts it afresh.
+	streak map[streakKey]int
 }
 
 // NewBuildQueue returns a build queue over d.
 func NewBuildQueue(d BuildQueueDeps) *BuildQueue {
-	return &BuildQueue{d: d, wake: make(chan struct{}, 1), busy: map[string]string{}}
+	return &BuildQueue{d: d, wake: make(chan struct{}, 1), busy: map[string]string{}, streak: map[streakKey]int{}}
 }
 
 // Name implements node.Component.
 func (*BuildQueue) Name() string { return "builds" }
 
 // Run tells the agent of the builds a stopped node left, then runs the
-// builds it is given, one at a time, until ctx ends. A build runs under
-// ctx, not under the call that asked for it, and within the builder's own
-// time limit; when the node stops, the build stops with it and the next
-// start tells it as interrupted.
+// builds it is given, one at a time, until ctx ends, and every RetellEvery
+// puts again the module.built of an ended build whose put failed. A build
+// runs under ctx, not under the call that asked for it, and within the
+// builder's own time limit; when the node stops, the build stops with it
+// and the next start tells it as interrupted.
 func (q *BuildQueue) Run(ctx context.Context) error {
 	if err := q.recover(ctx); err != nil {
 		q.logErr(ctx, "builds: the builds a stopped node left were not told", err)
@@ -170,8 +192,41 @@ func (q *BuildQueue) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-q.wake:
+		case <-q.d.After(RetellEvery):
+			q.retell(ctx)
 		}
 	}
+}
+
+// retell puts the module.built of every ended build not yet told.
+func (q *BuildQueue) retell(ctx context.Context) {
+	recs, err := q.list()
+	if err != nil {
+		q.logErr(ctx, "builds: the ended builds were not read", err)
+		return
+	}
+	for _, rec := range recs {
+		if !rec.open() && !rec.Told {
+			q.tell(ctx, rec)
+		}
+	}
+}
+
+// OwnerSpoke starts the count of builds in a row afresh for every module of
+// conv: a person wrote there (MaxBuildsInARow).
+func (q *BuildQueue) OwnerSpoke(conv string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for k := range q.streak {
+		if k.conv == conv {
+			delete(q.streak, k)
+		}
+	}
+}
+
+// errTooManyBuilds refuses a build past MaxBuildsInARow.
+func errTooManyBuilds(name string) error {
+	return fmt.Errorf("%s was built %d times in a row; ask the owner before building again", name, MaxBuildsInARow)
 }
 
 // errBeingBuilt refuses work on a module whose build runs or waits.
@@ -188,15 +243,29 @@ func (q *BuildQueue) Building(name string) bool {
 }
 
 // submit queues rec's build and starts its card: running when no other build
-// runs or waits, else queued. A module whose build runs or waits is refused;
-// a key that has a record already (the same call asked again) queues nothing.
+// runs or waits, else queued. A module whose build runs or waits is refused,
+// and so is one built MaxBuildsInARow times in a row in rec's conversation;
+// a key that has a record already (the same call asked again) queues
+// nothing. The module is reserved under the lock and the record written
+// outside it; a write that fails gives the reservation back.
 func (q *BuildQueue) submit(ctx context.Context, rec jobRecord, work buildWork) error {
-	q.mu.Lock()
-	state, err := q.enqueue(rec, work)
-	q.mu.Unlock()
+	if _, err := q.load(rec.Key); err == nil {
+		return nil
+	} else if !errors.Is(err, ErrNoBuildJob) {
+		return err
+	}
+	state, err := q.reserve(rec)
 	if err != nil || state == "" {
 		return err
 	}
+	rec.State, rec.Started = jobs.StateQueued, q.d.Now().UnixMilli()
+	if err := q.save(rec); err != nil {
+		q.release(rec)
+		return err
+	}
+	q.mu.Lock()
+	q.waiting = append(q.waiting, &buildTask{rec: rec, work: work})
+	q.mu.Unlock()
 	if err := q.d.Jobs.Start(ctx, rec.card(state)); err != nil {
 		// The card is a sign of life, not the build: its end still comes.
 		q.logErr(ctx, "builds: a build's card failed to start or waits for the next tick", err, "key", rec.Key)
@@ -208,31 +277,40 @@ func (q *BuildQueue) submit(ctx context.Context, rec jobRecord, work buildWork) 
 	return nil
 }
 
-// enqueue stores rec as queued and puts it in line, under q.mu; state is the
-// card's first state, "" when the key was queued before.
-func (q *BuildQueue) enqueue(rec jobRecord, work buildWork) (jobs.State, error) {
+// reserve takes rec's module for its build and counts it in the streak;
+// state is the card's first state, "" when the key is reserved already.
+func (q *BuildQueue) reserve(rec jobRecord) (jobs.State, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	if key, ok := q.busy[rec.Module]; ok {
 		if key == rec.Key {
 			return "", nil
 		}
 		return "", errBeingBuilt(rec.Module)
 	}
-	if _, err := q.load(rec.Key); err == nil {
-		return "", nil
-	} else if !errors.Is(err, ErrNoBuildJob) {
-		return "", err
+	sk := streakKey{rec.Conv, rec.Module}
+	if q.streak[sk] >= MaxBuildsInARow {
+		return "", errTooManyBuilds(rec.Module)
 	}
 	state := jobs.StateQueued
 	if len(q.waiting) == 0 && len(q.busy) == 0 {
 		state = jobs.StateRunning
 	}
-	rec.State, rec.Started = jobs.StateQueued, q.d.Now().UnixMilli()
-	if err := q.save(rec); err != nil {
-		return "", err
-	}
 	q.busy[rec.Module] = rec.Key
-	q.waiting = append(q.waiting, &buildTask{rec: rec, work: work})
+	q.streak[sk]++
 	return state, nil
+}
+
+// release gives back the reservation of rec's build that was not queued.
+func (q *BuildQueue) release(rec jobRecord) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.busy[rec.Module] == rec.Key {
+		delete(q.busy, rec.Module)
+	}
+	if sk := (streakKey{rec.Conv, rec.Module}); q.streak[sk] > 0 {
+		q.streak[sk]--
+	}
 }
 
 // next runs the build first in line and reports whether there was one.
@@ -289,7 +367,7 @@ func (q *BuildQueue) finish(ctx context.Context, rec jobRecord, end buildEnd) {
 }
 
 // tell puts rec's module.built event and marks it told. A failed put is
-// tried again at the next start.
+// tried again at the next pass (retell) or start.
 func (q *BuildQueue) tell(ctx context.Context, rec jobRecord) {
 	if err := q.d.Put(ctx, builtEvent(rec, q.d.Now())); err != nil {
 		q.logErr(ctx, "builds: the end of a build was not announced", err, "key", rec.Key)

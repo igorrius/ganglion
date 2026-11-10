@@ -105,7 +105,7 @@ func Builds() do.Provider[*builtin.BuildQueue] {
 	return func(i do.Injector) (*builtin.BuildQueue, error) {
 		b := do.MustInvoke[Bootstrap](i)
 		return builtin.NewBuildQueue(builtin.BuildQueueDeps{Dir: buildJobsDir(b), Jobs: do.MustInvoke[*bgjobs.Registry](i),
-			Put: do.MustInvoke[*sqlqueue.Queue](i).Put, Now: time.Now, Log: do.MustInvoke[*slog.Logger](i)}), nil
+			Put: do.MustInvoke[*sqlqueue.Queue](i).Put, Now: time.Now, After: time.After, Log: do.MustInvoke[*slog.Logger](i)}), nil
 	}
 }
 

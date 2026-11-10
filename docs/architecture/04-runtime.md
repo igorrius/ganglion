@@ -204,11 +204,16 @@ the card's count. Its end stores the answer `module.build` gave before
 builds ran in the background (the same JSON; outside content unless the
 folder was the node's own before and after the build, ADR-0068), ends the
 card and puts `module.built` into the conversation's inbox at once. That
-event resumes the conversation as `command.done` does, one level deeper:
+event resumes the conversation as `command.done` does, but at the build
+call's own depth (the build is the node's work; owner, 2026-11-10):
 the note `[build finished] <module>: <answer>` taints only when the answer
 is outside content, and the agent fixes the source and builds again, or
-calls `module.install` with the digest. A session that moved on gets one
-fixed line. A restart ends a build it finds open as interrupted, in the
+calls `module.install` with the digest. Since the depth does not grow, a
+loop that does not converge is ended by a count instead: a conversation may
+build one module at most 5 times in a row (in memory per conversation and
+module); the next build is refused until a person writes there. A
+`module.built` whose put failed is put again by the queue's pass every
+30 s. A session that moved on gets one fixed line. A restart ends a build it finds open as interrupted, in the
 node's words, and puts `module.built` so the agent is told; the job
 registry edits its card once.
 
