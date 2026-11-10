@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m4c-notify-limit
+why: >-
+  M4c check 2 (R-RUN-16): a listener granted one message a day sends the first and no more; the owner gets one
+  node line about the limit that day, however many runs follow.
+covers:
+  - modhost/**
+  - config/modhost.go
+  - agent/module_event.go
+  - agent/module_notify.go
+  - agent/module_trigger.go
+  - schedule/**
+repeat: 1
+model: scripted
+modules:
+  - {name: producer, manifest: modules/producer.yaml}
+  - {name: listener, manifest: modules/listener-limited.yaml}
+script:
+  # Never played: the scripted model is not to be called (model_calls: 0 proves it); the loader needs a script.
+  - {say: "No model turn should happen."}
+steps:
+  - advance: {scheduler: 31m}
+  - facts:
+      replies: 1
+      reply: {contains: "the reading changed"}
+  - advance: {scheduler: 31m}
+  - facts:
+      replies: 1
+      reply: {contains: "reached its limit of 1 messages today"}
+      model_calls: 0
+  - advance: {scheduler: 31m}
+  - facts: {replies: 0, model_calls: 0}

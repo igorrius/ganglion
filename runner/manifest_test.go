@@ -140,3 +140,41 @@ func TestParseMemorySizes(t *testing.T) {
 		t.Error("size.Parse accepted an overflowing value")
 	}
 }
+
+func TestParseManifestCellTriggerAndNotify(t *testing.T) {
+	src := "name: x\ncapabilities:\n  notify: {per_day: 5}\ncells:\n  read: [p.soc, p.grid]\ntriggers:\n  - cell: [p.soc]\n"
+	m, err := ParseManifest([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Listens(); !slices.Equal(got, []string{"p.soc"}) {
+		t.Fatalf("Listens = %v", got)
+	}
+	if m.Capabilities.Notify == nil || m.Capabilities.Notify.PerDay != 5 {
+		t.Fatalf("notify = %+v", m.Capabilities.Notify)
+	}
+	if got := (Manifest{}).Listens(); got != nil {
+		t.Fatalf("Listens of none = %v", got)
+	}
+}
+
+func TestParseManifestRejectsCellTriggerAndNotify(t *testing.T) {
+	cases := map[string]struct{ src, want string }{
+		"not read":   {"triggers:\n  - cell: [p.soc]\n", `trigger 0: cell "p.soc" is not in cells.read`},
+		"own cell":   {"cells:\n  read: [x.a]\ntriggers:\n  - cell: [x.a]\n", `trigger 0: a module cannot listen to its own cell "x.a"`},
+		"two kinds":  {"cells:\n  read: [p.a]\ntriggers:\n  - cron: \"* * * * *\"\n    cell: [p.a]\n", "exactly one of cron, tool, cell"},
+		"tool+cell":  {"cells:\n  read: [p.a]\ntriggers:\n  - tool: t\n    cell: [p.a]\n", "exactly one of cron, tool, cell"},
+		"none":       {"triggers:\n  - about: x\n", "exactly one of cron, tool, cell"},
+		"second":     {"cells:\n  read: [p.a, p.b]\ntriggers:\n  - cell: [p.a]\n  - cell: [p.b]\n", "one cell trigger"},
+		"notify 0":   {"capabilities:\n  notify: {per_day: 0}\n", "notify.per_day must be 1..100"},
+		"notify 101": {"capabilities:\n  notify: {per_day: 101}\n", "notify.per_day must be 1..100"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := ParseManifest([]byte("name: x\n" + tc.src))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want one containing %q", err, tc.want)
+			}
+		})
+	}
+}

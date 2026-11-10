@@ -12,6 +12,7 @@ host/stats.go
 host/switch.go
 host/telemetry.go
 access/**
+agent/background.go
 agent/cells.go
 agent/commands.go
 agent/config.go
@@ -53,9 +54,11 @@ internal/size/**
 internal/text/**
 internal/transcript/**
 internal/urlnorm/**
+jobs/**
 logfile/**
 modstore/card.go
 modstore/journal.go
+modstore/notify.go
 modstore/store.go
 modstore/release/**
 modules/html2md/**
@@ -75,6 +78,7 @@ router/rules/**
 runner/cells.go
 runner/contract.go
 runner/manifest.go
+runner/notify.go
 runner/memory_mmap.go
 runner/runner.go
 runner/state.go
@@ -89,6 +93,7 @@ tool/args.go
 tool/tool.go
 tool/builtin/diag.go
 tool/builtin/message.go
+tool/builtin/module_read.go
 tool/builtin/module_status.go
 tool/builtin/persona.go
 tool/builtin/question.go

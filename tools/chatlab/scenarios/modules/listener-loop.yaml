@@ -1,0 +1,12 @@
+# Named producer on purpose: reflex-template listens to producer.value, so this module listening to
+# reflex-template.alert closes the loop that m4c-loop-refused expects the node to refuse.
+name: producer
+version: 1
+triggers:
+  - cell: [reflex-template.alert]
+capabilities:
+  notify: {per_day: 5}
+cells:
+  read: [reflex-template.alert]
+config:
+  op_cell: {type: string, default: '{"op":"notify","value":"never"}'}

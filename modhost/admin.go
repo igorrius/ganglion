@@ -8,7 +8,9 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 
+	"github.com/igorrius/ganglion/internal/clock"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/settings"
@@ -121,6 +123,9 @@ func (h *Host) Card(ctx context.Context, name string) (modstore.Card, error) {
 	if err != nil || !ok {
 		return c, err
 	}
+	if err := h.reflexCard(ctx, &c, module, m); err != nil {
+		return modstore.Card{}, err
+	}
 	mods, err := h.d.Settings.Modules()
 	if err != nil {
 		return modstore.Card{}, fmt.Errorf("modhost: %w", err)
@@ -135,6 +140,39 @@ func (h *Host) Card(ctx context.Context, name string) (modstore.Card, error) {
 		c.Config = append(c.Config, line)
 	}
 	return c, nil
+}
+
+// reflexCard fills what c shows of reactions: the cells the module listens
+// to, the running modules that listen to its cells, and its messages today
+// against its limit.
+func (h *Host) reflexCard(ctx context.Context, c *modstore.Card, module string, m runner.Manifest) error {
+	c.ReactsTo, c.Feeds = m.Listens(), h.feeds(module)
+	if n := m.Capabilities.Notify; n != nil {
+		c.NotifyPerDay = n.PerDay
+		sent, err := h.d.Store.NotifiedOn(ctx, module, clock.DayStart(h.d.Now(), h.d.Location))
+		if err != nil {
+			return fmt.Errorf("modhost: %w", err)
+		}
+		c.NotifiedToday = sent
+	}
+	return nil
+}
+
+// feeds are the short names, sorted, of the running modules whose cell
+// triggers listen to a cell of module (a cell id starts with its owner's
+// short name and a dot).
+func (h *Host) feeds(module string) []string {
+	prefix := modstore.ShortName(module) + "."
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	var out []string
+	for name, l := range h.running {
+		if name != module && slices.ContainsFunc(l.m.Listens(), func(id string) bool { return strings.HasPrefix(id, prefix) }) {
+			out = append(out, l.short)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // manifestOf is the active version's manifest; false when none is active.

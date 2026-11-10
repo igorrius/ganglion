@@ -99,13 +99,19 @@ type user struct {
 
 // sendParams are the parameters of sendMessage that we use.
 type sendParams struct {
-	ChatID              int64            `json:"chat_id"`
-	MessageThreadID     int64            `json:"message_thread_id,omitempty"`
-	Text                string           `json:"text"`
-	Entities            []entity         `json:"entities,omitempty"`
-	DisableNotification bool             `json:"disable_notification,omitempty"`
-	ReplyParameters     *replyParameters `json:"reply_parameters,omitempty"`
-	ReplyMarkup         *inlineMarkup    `json:"reply_markup,omitempty"`
+	ChatID              int64               `json:"chat_id"`
+	MessageThreadID     int64               `json:"message_thread_id,omitempty"`
+	Text                string              `json:"text"`
+	Entities            []entity            `json:"entities,omitempty"`
+	DisableNotification bool                `json:"disable_notification,omitempty"`
+	ReplyParameters     *replyParameters    `json:"reply_parameters,omitempty"`
+	ReplyMarkup         *inlineMarkup       `json:"reply_markup,omitempty"`
+	LinkPreviewOptions  *linkPreviewOptions `json:"link_preview_options,omitempty"`
+}
+
+// linkPreviewOptions are the options of a message's link preview that we use.
+type linkPreviewOptions struct {
+	IsDisabled bool `json:"is_disabled"`
 }
 
 // richParams are the parameters of sendRichMessage that we use.

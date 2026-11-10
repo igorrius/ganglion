@@ -79,7 +79,7 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 		t.made, t.replyConv = event.OriginSystem, j.Conv
 		return true, a.system(ctx, t, j)
 	case schedule.KindModule:
-		a.moduleCron(ctx, j)
+		a.moduleCron(ctx, j, t.event.IdemKey)
 		return true, nil
 	default:
 		a.log.Warn("agent: scheduled job of an unknown kind", "job", j.ID, "kind", j.Kind)
@@ -135,11 +135,12 @@ func (a *Agent) system(ctx context.Context, t *turn, j schedule.Job) error {
 }
 
 // moduleCron runs a module's cron job: the module's host does the work,
-// without a model and without a message (R-RUN-12). A failure of the node
-// is logged and not tried again: the next slot runs the module anyway, and
-// a retried event would run it twice.
-func (a *Agent) moduleCron(ctx context.Context, j schedule.Job) {
-	if err := a.d.ModuleCron(ctx, j.Text); err != nil {
+// without a model and without a message (R-RUN-12). The run is the
+// schedule event's idempotency key, the slot (ruling 3 of M4c). A failure
+// of the node is logged and not tried again: the next slot runs the module
+// anyway, and a retried event would run it twice.
+func (a *Agent) moduleCron(ctx context.Context, j schedule.Job, run string) {
+	if err := a.d.ModuleCron(ctx, j.Text, run); err != nil {
 		a.log.Warn("agent: module cron run failed", "job", j.ID, "module", j.Text, "err", err)
 	}
 }

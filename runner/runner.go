@@ -56,6 +56,8 @@ type Deps struct {
 	// Cells is the port for cell_report and cell_get; a module with no cells
 	// needs none.
 	Cells CellPort
+	// Notify is the port for notify; nil means every call is denied.
+	Notify NotifyPort
 	// Prefix is the module's short name, the owner part of its cell ids
 	// ("deye-reader" for deye-reader.soc). It defaults to the manifest's name.
 	Prefix string
@@ -267,6 +269,9 @@ func (m *Module) instantiateHost(ctx context.Context) error {
 		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
 		return m.cellGet(ctx, readString(mod, p, n))
 	}).Export("cell_get").
+		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
+		return m.notify(ctx, readString(mod, p, n))
+	}).Export("notify").
 		NewFunctionBuilder().WithFunc(func(_ context.Context, mod api.Module, p, n uint32) int32 {
 		v, ok := m.manifest.ConfigValues[readString(mod, p, n)]
 		return m.offer(v, ok)

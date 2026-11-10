@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m4c-loop-refused
+why: >-
+  M4c check 3 (R-RUN-15): the node refuses an install whose cell triggers would close a loop with an active
+  module (producer listens to reflex-template, reflex-template listens to producer).
+covers:
+  - modstore/chains.go
+  - modstore/local.go
+  - tool/builtin/module_install.go
+  - tool/builtin/module_import.go
+  - tool/builtin/module_build.go
+  - tool/builtin/build_queue.go
+  - config/builder.go
+  - builder/**
+  - internal/rustenv/**
+  - examples/modules/reflex-template/**
+repeat: 1
+model: scripted
+modules:
+  - {name: producer, manifest: modules/listener-loop.yaml}
+script:
+  - {tool: module.import, args: '{"from":"reflex-template","name":"reflex-template"}'}
+  - {say: "The copy waits for your press."}
+  - {tool: module.build, args: '{"name":"reflex-template","note":"loop check"}'}
+  - {say: "The build runs in the background."}
+  - {tool: module.install, args: '{"build":"$BUILD","note":"loop check"}'}
+  - {say: "The install was refused."}
+steps:
+  - say: "Build and install reflex-template"
+  - press: Approve
+  - facts:
+      journal:
+        - {tool: module.build, decision: allowed, count: 1}
+        - {tool: module.install, err_contains: "would form a loop", count: 1}
+        - {tool: module.install, decision: approved, count: 0}
+      history: {contains: "reflex-template → producer → reflex-template"}
+      absent:
+        - modules/local/reflex-template

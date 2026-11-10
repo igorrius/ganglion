@@ -63,7 +63,7 @@ func TestStartLoadsActiveModulesAndSkipsOffOnes(t *testing.T) {
 func TestCronReportsACellAndAToolAnswers(t *testing.T) {
 	e := newEnv(t, active(t, "local/probe", probeManifest))
 	e.start(t)
-	if err := e.host.RunCron(context.Background(), "local/probe"); err != nil {
+	if err := e.host.RunCron(context.Background(), "local/probe", "slot"); err != nil {
 		t.Fatal(err)
 	}
 	c, err := e.cells.Get(context.Background(), "probe.soc")
@@ -241,7 +241,7 @@ func TestFiveFailuresInAnHourDisableTheModule(t *testing.T) {
 	if err := call(); err == nil || !strings.Contains(err.Error(), "not running") {
 		t.Fatalf("sixth call: %v", err)
 	}
-	if err := e.host.RunCron(context.Background(), "local/probe"); err != nil {
+	if err := e.host.RunCron(context.Background(), "local/probe", "slot"); err != nil {
 		t.Fatal(err)
 	}
 	if e.store.runs() != runs {
@@ -427,7 +427,7 @@ func TestASuccessAndAFailureSettlingAtOnceAgree(t *testing.T) {
 		h.Run(context.Background(), tool.Call{Name: h.Spec().Name, Args: json.RawMessage(`{}`), Admin: true}) //nolint:errcheck // either outcome is fine
 	}
 	e.state.Put("probe", "op_cron", cronFails)
-	bad := func() { e.host.RunCron(context.Background(), "local/probe") } //nolint:errcheck // its failure is the point
+	bad := func() { e.host.RunCron(context.Background(), "local/probe", "slot") } //nolint:errcheck // its failure is the point
 	for range 40 {
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -514,7 +514,7 @@ func TestACronRunWritesOnlyAnOwnedCell(t *testing.T) {
 	if _, err := e.cells.Disown(context.Background(), "local/probe"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.host.RunCron(context.Background(), "local/probe"); err != nil {
+	if err := e.host.RunCron(context.Background(), "local/probe", "slot"); err != nil {
 		t.Fatal(err)
 	}
 	if c, _ := e.cells.Get(context.Background(), "probe.soc"); c.Reported != nil {

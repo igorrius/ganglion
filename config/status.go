@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/host"
+	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
@@ -33,6 +34,7 @@ func StatusSources() do.Provider[[]status.Source] {
 			do.MustInvoke[*schedule.Scheduler](i),
 			do.MustInvoke[*sandbox.Sandbox](i),
 			do.MustInvoke[*host.Switch](i),
+			do.MustInvoke[*bgjobs.Registry](i),
 		}
 		return append(sources, do.MustInvoke[Watched](i)...), nil
 	}

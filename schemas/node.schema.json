@@ -154,6 +154,16 @@
           "$ref": "#/$defs/duration",
           "default": "6h"
         },
+        "call_timeout": {
+          "description": "How long one model call may take. On the claude CLI route one call runs every tool call of its turn. Above 0 and not longer than turn_timeout.",
+          "$ref": "#/$defs/duration",
+          "default": "3m"
+        },
+        "turn_timeout": {
+          "description": "How long a whole turn may take. The node's handler gets a minute more, which must stay below the queue's lease of 10m, so at most just under 9m.",
+          "$ref": "#/$defs/duration",
+          "default": "5m"
+        },
         "limits": {
           "description": "What one day of conversation may use. The word off turns every limit off; a missing key keeps the default of that limit, and 0 or off in a limit turns that one off.",
           "oneOf": [ { "const": "off" }, { "$ref": "#/$defs/limits" } ]

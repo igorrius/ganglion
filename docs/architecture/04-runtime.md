@@ -120,16 +120,24 @@ sequenceDiagram
 A host command still running after the short wait (20 s) does not hold its
 turn open either (R-CMD-4). The call answers "still running" and the turn
 ends with the command's key in the state, which keeps the plan open. The
-command goes on under the runner. Its end is put into the conversation's
-inbox once as a `command.done` event, by the runner's announce pass every
-30 s (not at the moment it ends), and that event resumes the
-conversation as a press does: the outcome is outside data, the model has
-its tools, and its calls run one level deeper. A command of a scheduled
-task resumes as a turn of that task, under its grant (ruling 7 of the M3d
-plan). The session may have moved on by then (`/new`, or the idle cut).
-Then the conversation gets one fixed line, without a model, and the output
-stays out of the new session. A call whose context ends while it waits
-(the turn's clock) leaves its command in the background the same way.
+command goes on under the runner as a background job (R-LIVE-9,
+ADR-0069): the moment it goes to the background the job registry sends
+its card, a message with the node's words, the approved argv and the
+time, and edits it in place through the outbox every 10 s while it runs.
+Every turn of the conversation meanwhile carries a note of its running
+jobs that the history does not keep, and `/status` lists them. Its end
+edits the card once more (done, failed, or interrupted by a restart) and
+is put into the conversation's inbox at once as a `command.done` event;
+the runner's announce pass every 30 s stays as the fallback for an end
+whose announcement failed. That event resumes the conversation as a press
+does: the outcome is outside data, the model has its tools, and its calls
+run one level deeper. A command of a scheduled task resumes as a turn of
+that task, under its grant (ruling 7 of the M3d plan). The session may
+have moved on by then (`/new`, or the idle cut). Then the conversation
+gets one fixed line, without a model, and the output stays out of the new
+session. A call whose context ends while it waits (the turn's clock)
+leaves its command in the background the same way. A restart ends the
+jobs it found open as interrupted and edits their cards once.
 
 ```mermaid
 sequenceDiagram
@@ -140,6 +148,7 @@ sequenceDiagram
     participant M as Model
     participant X as host.exec
     participant R as Runner
+    participant J as Jobs
 
     P->>Q: "how big is ~/project?"
     Q->>A: lease
@@ -148,14 +157,26 @@ sequenceDiagram
     A->>X: call (key turn_id + n)
     X->>R: Exec: row "running", command in the sandbox
     Note over X,R: 20 s pass, or the call's context ends
+    R->>J: Start(command, key, argv)
+    J->>Q: Enqueue(card, idemKey job:<key>:card)
     R-->>X: not done: background
     X-->>A: "still running", Job = key
     A->>M: call with the result
     M-->>A: "it runs; I'll tell you"
     A->>Q: Complete(answer, Commands += key)
-    Note over R: the command ends; its row is "done", not announced yet
-    Note over R: the announce pass, every 30 s
-    R->>Q: Put(command.done, idemKey command:<key>:done)
+    loop every 10 s while it runs
+        J->>Q: Enqueue(edit job:<key>:card:v<N>, EditOf job:<key>:card, "⚙️ du -sh ~/project · command · 0:40")
+    end
+    opt another message meanwhile
+        Q->>A: lease
+        A->>J: Running(conv)
+        A->>M: call with "[jobs] running: command du -sh ~/project 0:50", not stored
+    end
+    Note over R: the command ends; its row is "done"
+    R->>J: End(key, done)
+    J->>Q: Enqueue(last edit: "✅ … done in 1:05")
+    R->>Q: Put(command.done, idemKey command:<key>:done), at once
+    Note over R: the announce pass every 30 s puts it if this failed
     Q->>A: lease
     A->>R: Get(key): argv, outcome, principal, depth
     alt the session lists the key
@@ -164,6 +185,80 @@ sequenceDiagram
         A->>Q: Complete(answer, Commands -= key, tainted)
     else the session moved on
         A->>Q: Complete("The command … finished after this conversation moved on.")
+    end
+```
+
+## A module build (P1)
+
+A module build takes a minute or more, longer than a model call may wait,
+so `module.build` never builds inside its turn (R-RUN-9, ADR-0069). The
+call checks the module, refuses one whose build runs or waits ("<name> is
+being built; wait for its result", and `module.write` refuses the same),
+stores a record of the build under `<data>/modules/build-jobs`, starts its
+card and answers at once with the job's key, which the session keeps. The
+build queue, a node component, runs one build at a time in the order they
+were asked for; a build that waits has a card that says so, and the card
+starts counting when it runs. The build runs under the queue's context
+within the builder's own 10 min limit, and cargo's "Compiling" lines move
+the card's count. Its end stores the answer `module.build` gave before
+builds ran in the background (the same JSON; outside content unless the
+folder was the node's own before and after the build, ADR-0068), ends the
+card and puts `module.built` into the conversation's inbox at once. That
+event resumes the conversation as `command.done` does, but at the build
+call's own depth (the build is the node's work; owner, 2026-11-10):
+the note `[build finished] <module>: <answer>` taints only when the answer
+is outside content, and the agent fixes the source and builds again, or
+calls `module.install` with the digest. Since the depth does not grow, a
+loop that does not converge is ended by a count instead: a conversation may
+build one module at most 5 times in a row (in memory per conversation and
+module); the next build is refused until a person writes there. A
+`module.built` whose put failed is put again by the queue's pass every
+30 s. A session that moved on gets one fixed line. A restart ends a build it finds open as interrupted, in the
+node's words, and puts `module.built` so the agent is told; the job
+registry edits its card once.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Q as Inbox / outbox
+    participant A as Agent
+    participant M as Model
+    participant T as module.build
+    participant B as Build queue
+    participant R as Builder
+    participant J as Jobs
+
+    Q->>A: lease (a message, or a note that resumed the conversation)
+    A->>M: call
+    M-->>A: module.build battery-alerts
+    A->>T: call (key turn_id + n)
+    T->>B: submit: refused while battery-alerts builds or waits
+    B->>B: record build:battery-alerts:<hash> "queued"
+    B->>J: Start(build, running or queued)
+    J->>Q: Enqueue(card)
+    T-->>A: {"building", "job", "next"}, Job = key
+    A->>M: call with the answer
+    M-->>A: "it builds; I'll tell you"
+    A->>Q: Complete(answer, Commands += key)
+    B->>J: Start(running): the card counts from now
+    B->>R: Build(source, Progress)
+    loop every 10 s while it runs
+        R-->>J: Progress(crates built)
+        J->>Q: Enqueue(edit: "🔨 battery-alerts · build · 0:45 · crates built: 14")
+    end
+    R-->>B: wasm + manifest, or the log
+    B->>B: save the build, plan it, record the answer and whether it is outside content
+    B->>J: End(done or failed)
+    J->>Q: Enqueue(last edit: "✅ … built in 1:32")
+    B->>Q: Put(module.built, idemKey <key>:built), at once
+    Q->>A: lease
+    A->>B: Outcome(key): conversation, principal, depth, answer
+    alt the session lists the key
+        A->>M: "[build finished] battery-alerts: {…}", with tools
+        M-->>A: module.install <digest>, or a fix and module.build again
+        A->>Q: Complete(Commands -= key)
+    else the session moved on
+        A->>Q: Complete("The build of battery-alerts finished after this conversation moved on.")
     end
 ```
 
@@ -198,6 +293,93 @@ sequenceDiagram
     D-->>R: OK
     R-->>H: answer
     H->>J: Count(run)
+```
+
+## A module started by another module's cells (P1)
+
+A run that wrote cells starts every running module that listens to any of
+them, through the node's inbox, with no model and no turn (R-RUN-15,
+[ADR-0065](../adr/0065-cell-triggers-through-the-inbox.md)). The run is
+identified by the slot of a cron run, the key of a tool call or the id of
+a trigger event, so a run delivered again puts no second event; a chain
+stops past depth 4. The listener's run is unattended, like cron: counted,
+escalated, towards the crash loop.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as deye-reader run
+    participant H as Module host
+    participant Q as Inbox
+    participant A as Agent.Handle
+    participant L as deye-alerts module
+
+    P->>H: cell_report soc, grid (noted in the run's context)
+    Note over H: the run ends: settle (count, escalate, crash loop)
+    H->>H: running listeners of the cells written, not the producer
+    alt depth + 1 at most 4
+        H->>Q: Put(module.trigger, conv module:deye-alerts, key trigger:local/deye-alerts:local/deye-reader:RUN, cells sorted, depth)
+    else deeper
+        H->>H: no event; a log line once per build
+        H->>Q: Put(module.notify, node line chain, key notify:local/deye-reader:chain:SHA)
+    end
+    Q->>A: kind module.trigger, before begin: no state, no turn, no model
+    A->>H: RunTrigger(payload, event id)
+    H->>L: Handle(trigger cell, cells and producer)
+    L->>H: cell_get(deye-reader.soc), ...
+    H->>H: settle as unattended; fan out its own cells, depth + 1
+    H-->>A: nil (a failure is the supervisor's); an error only when the run could not start
+    A-->>Q: acknowledged, or retried after the lease on an error
+```
+
+## A module writes to its owner (P1)
+
+A module granted `notify: {per_day: N}` writes plain text to the private
+chat of the admin who installed it, with no model (R-RUN-16,
+[ADR-0066](../adr/0066-notify-capability.md)). The port counts the message
+for the day in the node's time zone before it puts the event; the agent
+writes the node's note into the history and the message into the outbox,
+which the queue stores together. The model never sees the text (R-RUN-13);
+the message carries a tainted origin, so a reply that quotes it brings it
+in as outside content. `init` and `health` carry no run: notify there
+answers "not here" and sends nothing. When the node cannot count or put the
+message (its store or inbox fails), notify answers "limit" too: nothing was
+sent. The note does not move the session's last activity, so a module
+writing all day never keeps a session (or its taint) alive.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as deye-alerts run
+    participant R as Runner
+    participant H as Notify port (module host)
+    participant St as modstore notify_days
+    participant Q as Inbox
+    participant A as Agent.Handle
+    participant O as Outbox
+
+    M->>R: notify(text)
+    R->>R: granted? cut at 1000 characters
+    R->>H: Notify(ctx with the run, text)
+    alt no run (init, health)
+        H-->>M: -3 not here
+    else a run
+        H->>St: CountNotify(module, day in the node's zone)
+        alt count at most per_day
+            H->>Q: Put(module.notify, conv: the owner's private chat, key notify:local/deye-alerts:RUN:N)
+            H-->>M: 0 sent
+        else over the limit
+            opt the limit line not sent today
+                H->>Q: Put(module.notify, node line limit, key notify:local/deye-alerts:limit:DAY)
+                H->>St: MarkLimited
+            end
+            H-->>M: -2 limit
+        end
+    end
+    Q->>A: kind module.notify, through begin, no model
+    A->>A: note "[module] deye-alerts notified you at 14:30" (a node line adds none)
+    A->>O: "deye-alerts: <text escaped>", no preview, tainted system origin
+    Note over A,O: the state with the note and the message are stored in one transaction
 ```
 
 ## A module tool call (P1)

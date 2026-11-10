@@ -124,7 +124,8 @@ type JournalFact struct {
 	Tool           string `yaml:"tool"`
 	Decision       string `yaml:"decision"`
 	ResultContains string `yaml:"result_contains"`
-	Count          *int   `yaml:"count"` // nil: at least one
+	ErrContains    string `yaml:"err_contains"` // the call failed with an error holding this
+	Count          *int   `yaml:"count"`        // nil: at least one
 }
 
 // Text is a check on a piece of text.
@@ -153,8 +154,9 @@ type Facts struct {
 	Taken           *int          `yaml:"taken"`            // messages that joined a running turn so far
 	Replies         *int          `yaml:"replies"`          // the model's messages since the last action
 	Jobs            *JobFact      `yaml:"jobs"`
-	Tainted         *bool         `yaml:"tainted"` // the chat's session holds outside content
-	Absent          []string      `yaml:"absent"`  // paths under the node's folder (workspace/…) that must not exist
+	Tainted         *bool         `yaml:"tainted"`     // the chat's session holds outside content
+	ModelCalls      *int          `yaml:"model_calls"` // calls the node made to a model since it started
+	Absent          []string      `yaml:"absent"`      // paths under the node's folder (workspace/…) that must not exist
 }
 
 var nameRE = regexp.MustCompile(`^[a-z0-9-]+$`)
@@ -361,5 +363,5 @@ func (st Step) check() error {
 func (f *Facts) empty() bool {
 	return len(f.Journal) == 0 && len(f.NoJournal) == 0 && f.Questions == nil && f.MessageReplaced == "" && f.Question == nil &&
 		f.Reply == nil && f.History == nil && f.Memory == nil && f.Files == nil && f.Jobs == nil && f.Taken == nil && f.Replies == nil &&
-		f.Tainted == nil && len(f.Absent) == 0
+		f.Tainted == nil && f.ModelCalls == nil && len(f.Absent) == 0
 }

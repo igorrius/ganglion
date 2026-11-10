@@ -3,6 +3,7 @@ package settings_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/igorrius/ganglion/settings"
 )
@@ -57,6 +58,35 @@ func TestMoneyRefusesNaNAndInf(t *testing.T) {
 		_, err := settings.Parse([]byte("agent:\n  limits: {daily_budget_usd: " + v + "}\n"))
 		if err == nil || !strings.Contains(err.Error(), "agent.limits.daily_budget_usd") {
 			t.Errorf("%s: err = %v", v, err)
+		}
+	}
+}
+
+// Ruling 17 of M4c: a model call gets 3 min and a turn 5 min by default;
+// the node's handler gets the turn's plus a minute, which must stay below
+// the queue's lease, or the node does not start.
+func TestTurnTimeouts(t *testing.T) {
+	d := settings.Default().Agent
+	if time.Duration(d.CallTimeout) != 3*time.Minute || time.Duration(d.TurnTimeout) != 5*time.Minute || d.HandlerTimeout() != 6*time.Minute {
+		t.Fatalf("defaults %v, %v, %v", d.CallTimeout, d.TurnTimeout, d.HandlerTimeout())
+	}
+	f, err := settings.Parse([]byte("agent:\n  call_timeout: 90s\n  turn_timeout: 8m\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if time.Duration(f.Agent.CallTimeout) != 90*time.Second || f.Agent.HandlerTimeout() != 9*time.Minute {
+		t.Fatalf("got %+v", f.Agent)
+	}
+	for src, path := range map[string]string{
+		"agent:\n  turn_timeout: 9m\n":                     "agent.turn_timeout",
+		"agent:\n  turn_timeout: 1h\n":                     "agent.turn_timeout",
+		"agent:\n  turn_timeout: off\n":                    "agent.turn_timeout",
+		"agent:\n  call_timeout: off\n":                    "agent.call_timeout",
+		"agent:\n  call_timeout: 6m\n  turn_timeout: 5m\n": "agent.call_timeout",
+		"agent:\n  call_timeout: soon\n":                   "agent.call_timeout",
+	} {
+		if _, err := settings.Parse([]byte(src)); err == nil || !strings.Contains(err.Error(), path) {
+			t.Errorf("%q: err = %v, want %s", src, err, path)
 		}
 	}
 }

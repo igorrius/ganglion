@@ -48,6 +48,12 @@ agent:
   # languages: languages
   # The silence after which a conversation starts afresh; off never does.
   session_idle: 6h
+  # How long one model call may take; on the claude CLI route one call runs
+  # every tool call of its turn. Not longer than turn_timeout.
+  call_timeout: 3m
+  # How long a whole turn may take. The node's handler gets a minute more,
+  # which must stay below the queue's lease of 10m.
+  turn_timeout: 5m
   # What one day of conversation may use; 0 or off in a limit turns that one
   # off, and `limits: off` turns all of them off.
   limits:

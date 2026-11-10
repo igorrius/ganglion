@@ -542,3 +542,15 @@ func (s *syncLog) String() string {
 	defer s.mu.Unlock()
 	return s.b.String()
 }
+
+// A zero or negative turn timeout is never meant: the loop keeps its default.
+func TestAZeroTurnTimeoutKeepsTheDefault(t *testing.T) {
+	for _, d := range []time.Duration{0, -time.Second} {
+		if got := NewLoop(nil, nil, EchoHandler, slog.New(slog.DiscardHandler), WithTurnTimeout(d)).TurnTimeout(); got != DefaultTurnTimeout {
+			t.Fatalf("WithTurnTimeout(%v): %v", d, got)
+		}
+	}
+	if got := NewLoop(nil, nil, EchoHandler, slog.New(slog.DiscardHandler), WithTurnTimeout(time.Minute)).TurnTimeout(); got != time.Minute {
+		t.Fatalf("got %v", got)
+	}
+}

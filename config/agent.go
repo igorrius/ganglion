@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/diag"
 	"github.com/igorrius/ganglion/host"
+	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/plan"
@@ -69,6 +70,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 	b := do.MustInvoke[Bootstrap](i)
 	cfg := agent.DefaultConfig()
 	cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
+	cfg.CallTimeout, cfg.TurnTimeout = b.Timeouts.Call, b.Timeouts.Turn
 	cfg.Home = commandHome()
 	return cfg, agent.Deps{
 		States:    do.MustInvoke[*sqlqueue.Queue](i),
@@ -104,8 +106,11 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Cells:         do.MustInvoke[*cells.Service](i),
 		Buttons:       do.MustInvoke[*pending.Store](i),
 		ModuleCron:    do.MustInvoke[*modhost.Host](i).RunCron,
+		ModuleTrigger: do.MustInvoke[*modhost.Host](i).RunTrigger,
 		Switch:        do.MustInvoke[*host.Switch](i),
 		Commands:      do.MustInvoke[*host.Runner](i),
+		Builds:        do.MustInvoke[*builtin.BuildQueue](i),
+		Background:    do.MustInvoke[*bgjobs.Registry](i),
 		Skills:        do.MustInvoke[Skilled](i).Set,
 		StatusSources: do.MustInvoke[[]status.Source](i),
 		Log:           do.MustInvoke[*slog.Logger](i),

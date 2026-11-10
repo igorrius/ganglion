@@ -402,6 +402,15 @@ Live turns ([design](plans/p1-live-turns-design.md);
   closes the earlier ones nobody closed, and ⏭ means a line nobody reached or the model
   skipped. It displays and approves nothing: policies decide. M3d adds its one press
   (R-CMD-7).
+- **R-LIVE-9.** Work the node runs outside a turn is a background job: a module build
+  (always) and a host command past its wait (R-CMD-4). Each job has one card in the chat,
+  a message the node sends when the job starts and edits in place every 10 s without a
+  model (`🔨 battery-alerts · build · 0:45 · crates built: 14`), ending as done, failed or
+  interrupted by a restart; it carries only the node's words, the job's title and counts.
+  The job's end resumes the conversation at once. Every turn of the conversation carries
+  a node note listing its running jobs, not stored in history, and `/status` lists them
+  (R-OBS-11). The chat stays usable meanwhile; only work on the same module waits (M4c,
+  owner, 2026-11-10, [ADR-0069](adr/0069-background-jobs-with-a-live-card.md)).
 
 ### 7.3. Model router
 
@@ -557,6 +566,7 @@ and `health` are planned for P1, with the supervisor). It sees only the host fun
 | `secret.get` | Secrets from an allowed list; the model never sees them |
 | `config.get` | Values from the manifest's `config` block (e.g. a device serial number) |
 | `now` | Current time |
+| `notify` | A message to the owner's private chat, within a daily limit (R-RUN-16) |
 
 Example manifest (M4 form,
 [ADR-0062](adr/0062-cells-owned-by-modules.md)):
@@ -727,6 +737,53 @@ escalate:                    # when to call the model
   timeout and a trap (owner, 2026-11-10). The module's own error text goes
   to the node's log on every failed run, whatever the verdict.
 
+- **R-RUN-15.** A module can run when cells it listens to change
+  (`triggers: - cell: [deye-reader.soc, …]`), with no model (M4c,
+  [ADR-0065](adr/0065-cell-triggers-through-the-inbox.md)). Every cell a
+  trigger names is in `cells.read`; a module never listens to its own
+  cells, and the install and a rollback refuse a loop between modules. When a run that
+  wrote cells ends, the host puts one `module.trigger` event per listening
+  module into the inbox, keyed by listener, producer and run, so it
+  survives a restart and is never doubled; the node routes it to the
+  module host. The listener reads the values with `cell_get`. The chain's
+  depth travels in the event, and above 4 the host stops it and tells the
+  owner. Runs from triggers are unattended, supervised and escalated like
+  cron (R-RUN-12). The window says "Reacts to: …"; the cards show the
+  chain both ways ("Reacts to", "Feeds").
+- **R-RUN-16.** A module granted `notify: {per_day: N}` writes plain text
+  to the private chat of the admin who installed it, through the outbox
+  (M4c, [ADR-0066](adr/0066-notify-capability.md)). The node prefixes the
+  module's name, escapes Markdown, adds no buttons or previews and cuts the
+  text at 1000 characters. `N` is at most 100 a day in the node's time
+  zone; over it nothing is sent, the module gets the code "limit" and the
+  owner one node line that day. A repeated run sends nothing twice. The
+  model gets a node note without the text (`[module] deye-alerts notified
+  you at 14:30`), which does not taint. The window says "Writes to you: up
+  to N messages a day". Other targets wait in "Not now".
+- **R-RUN-17.** The agent writes a module's source with `module.write`
+  (one file in `workspace/modules/<name>/`, relative path without `..`,
+  hidden segments, `target/` or symlinks, at most 256 KB a file, 16 MB and
+  200 files a module, a workspace commit per write, no press) and reads it
+  with `module.read` (M4c,
+  [ADR-0067](adr/0067-agent-writes-module-source.md)). `module.write` is
+  refused in a tainted session (R-POL-6). The node records each module
+  file's digest as its own tools left it (`module.import` of an example,
+  `module.write` from a clean session); a build or a read of a folder that
+  matches its record does not taint, and the build then keeps only rustc's
+  diagnostics about the module's own files. Any other change to the folder
+  makes those answers outside content again (R-RUN-13). `module.build` runs
+  in the background (R-LIVE-9): it answers at once, one build runs at a
+  time per node, and the build's answer comes back as a note when it ends,
+  at the depth of the call that asked for it; the module cannot be built or
+  written again until then, and a conversation may build one module at most
+  5 times in a row before a person writes there again (owner, 2026-11-10,
+  [ADR-0070](adr/0070-builds-in-a-row-instead-of-depth.md)). They are clean only
+  while the module's `Cargo.lock` lists, besides its own package, only
+  crates.io crates that one of the node's examples locks with the same
+  version and checksum; a missing or unreadable lock, or any other
+  dependency, keeps them outside content
+  ([ADR-0068](adr/0068-vouch-for-module-source-per-file-and-vetted-crates.md)).
+
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation
 on a Pi is pending:
@@ -818,6 +875,10 @@ human); module install — tests + reviewer + admin.
     gets one notice with the reason, not a button on every run.
   - A task runs as its creator, with the creator's rights. Its
     instruction and grant cannot be changed by what a run reads.
+  - A task may be granted the read-only `module.status` and `module.read`,
+    never the tools that build, install, import or write a module
+    (`module.build`, `module.install`, `module.import`, `module.write`;
+    R-RUN-9, owner, 2026-11-10).
 - **R-POL-9.** A question stays open, whole, until it is answered. Once answered
   or expired it **folds**, so the chat keeps the record of what was decided and
   stops being in the way:
@@ -1104,7 +1165,8 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   its daemon over a Unix socket, so below Landlock ABI 9 Docker commands
   fail from the sandbox.
 - **R-CMD-4.** A command longer than a short wait continues in the
-  background; its completion resumes the conversation with the result.
+  background as a job with a live card (R-LIVE-9); its completion resumes
+  the conversation with the result at once.
   Commands have a hard time limit, their own process group and a cap on
   how many run at once.
 - **R-CMD-5.** `host.stats` reports, without a subprocess: memory (total,
@@ -1351,7 +1413,8 @@ it then runs on its own.
    rewrite does not pay. The model uses the `code` purpose (R-RTR-6).
 3. The build goes through the `Builder` interface of R-RUN-9: the core
    node builds unless a worker marked `builder` exists. The build path and
-   the install window come in M4; P3 adds the model writing the source.
+   the install window come in M4; M4c adds the model writing the source
+   (R-RUN-17, [ADR-0067](adr/0067-agent-writes-module-source.md)).
 4. Sandbox tests → summary in Telegram (what it does, which permissions,
    test results, diff) → "Install" / "Reject" buttons.
 5. The module is signed and rolled out via desired state.
@@ -1581,7 +1644,10 @@ from source, and cells owned by modules
 2026-11-10, ADRs 0059–0063 Accepted. M4c, reflex modules, follows: a
 `notify` capability for modules and the agent writing module source in the
 workspace, first `deye-alerts`, so routine reactions run without a model
-(owner, 2026-11-10; design next).
+(owner, 2026-11-10; [M4c design](plans/p1-m4c-reflexes-design.md),
+ADRs 0065–0070, R-RUN-15–17, R-LIVE-9). M4c closed 2026-11-10: the agent
+wrote, built in the background and installed `battery-alerts`, and its alert
+reached the owner with no model call.
 
 Acceptance:
 
@@ -1747,6 +1813,16 @@ Reviewed at each gate.
     weigh in its own brainstorm: one press for a plan's listed URLs (as R-CMD-7 does for
     commands), an approval for a host and path with the parameter values shown, or the model's
     verdict only in a clean session (R-POL-6).
+- `notify` targets beyond the owner's private chat: channels, groups and
+  topics in a group, such as the family chat's topic "K7"; they come with
+  multi-channel delivery and need their own ADR (owner, 2026-11-10,
+  [ADR-0066](adr/0066-notify-capability.md)).
+- A module asking a model, the cheapest one, to word a message or for a
+  light analysis: the module would write a prompt and spend the owner's
+  limits, so it is its own security boundary, designed when the first
+  module needs it. The ideal module needs no model (owner, 2026-11-10).
+- Deleting a module's source file with a tool (`module.write` only writes;
+  M4c).
 - Hooks and pipelines: an internal n8n (owner, 2026-11-03). M4c takes the first
   step: reflex modules with a `notify` capability; the rest stays here.
   - **Hooks** are module triggers on the node's own events, beside `cron`

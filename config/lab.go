@@ -22,6 +22,7 @@ import (
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/settings"
+	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/web"
@@ -106,8 +107,8 @@ func installLabModules(ctx context.Context, i do.Injector, admin string, mods []
 }
 
 // applyLabHousekeeping gives the lab its housekeepers: the journal's prune,
-// an expirer that looks every 250 ms, and the runner of host commands, which
-// waits labCommandWait and announces every labPass. The janitor stays out,
+// an expirer that looks every 250 ms, the runner of host commands, which
+// waits labCommandWait and announces every labPass, and the build queue. The janitor stays out,
 // since it would clean the developer's own temporary folders, and so does the
 // translator, as before.
 func applyLabHousekeeping(i do.Injector) {
@@ -123,6 +124,7 @@ func applyLabHousekeeping(i do.Injector) {
 			journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: logger},
 			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger, pending.WithAfter(fast)),
 			do.MustInvoke[*host.Runner](i),
+			do.MustInvoke[*builtin.BuildQueue](i),
 		}, nil
 	})
 }

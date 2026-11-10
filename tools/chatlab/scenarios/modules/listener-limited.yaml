@@ -1,0 +1,10 @@
+name: listener
+version: 1
+triggers:
+  - cell: [producer.value]
+capabilities:
+  notify: {per_day: 1}
+cells:
+  read: [producer.value]
+config:
+  op_cell: {type: string, default: '{"op":"notify","value":"the reading changed"}'}

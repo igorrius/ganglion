@@ -98,6 +98,13 @@ func newSchedEnv(t *testing.T) *schedEnv {
 		"memory.write":    {Name: "memory.write", Class: tool.ClassSideEffect, Policy: tool.PolicyAuto},
 		"persona.propose": {Name: "persona.propose", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm},
 		"schedule.delete": {Name: "schedule.delete", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm},
+		// The module tools: two read, the rest change the system.
+		"module.status":  {Name: "module.status", Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true},
+		"module.read":    {Name: "module.read", Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true},
+		"module.build":   {Name: "module.build", Class: tool.ClassSideEffect, Policy: tool.PolicyAuto, AdminOnly: true},
+		"module.install": {Name: "module.install", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm, AdminOnly: true},
+		"module.import":  {Name: "module.import", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm, AdminOnly: true},
+		"module.write":   {Name: "module.write", Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm, AdminOnly: true},
 	}}
 	e.sc = builtin.Scheduling{
 		Jobs:    st,
@@ -172,6 +179,10 @@ func TestScheduleCreateValidates(t *testing.T) {
 		"a forbidden tool":                 `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["shell.exec"]}}`,
 		"a task that schedules":            `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["schedule.create"]}}`,
 		"a task that deletes":              `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["schedule.delete"]}}`,
+		"a task that builds":               `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["module.status","module.build"]}}`,
+		"a task that installs":             `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["module.install"]}}`,
+		"a task that imports":              `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["module.import"]}}`,
+		"a task that writes a module":      `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["module.write"]}}`,
 		"a task that remembers":            `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["memory.write"]}}`,
 		"a task that forgets":              `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["memory.forget"]}}`,
 		"a task that proposes the persona": `{"kind":"task","cron":"0 * * * *","text":"x","grant":{"tools":["persona.propose"]}}`,
@@ -201,6 +212,17 @@ func TestScheduleCreateValidates(t *testing.T) {
 	}
 	if list, _ := e.jobs.List(context.Background(), me); len(list) != 0 {
 		t.Fatalf("invalid jobs stored: %+v", list)
+	}
+}
+
+// A task may read modules (owner, 2026-11-10): module.status and
+// module.read are grantable.
+func TestScheduleCreateGrantsModuleReads(t *testing.T) {
+	e := newSchedEnv(t)
+	create := builtin.NewScheduleCreate(e.sc)
+	c := call("schedule.create", `{"kind":"task","cron":"0 * * * *","text":"analyse the modules","grant":{"tools":["module.status","module.read"]}}`)
+	if _, err := create.Run(context.Background(), c); err != nil {
+		t.Fatalf("a grant of module.status and module.read: %v", err)
 	}
 }
 

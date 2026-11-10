@@ -114,11 +114,11 @@ func (a *Agent) commandAsTask(ctx context.Context, t *turn) (bool, error) {
 	return false, a.asTask(ctx, t, j)
 }
 
-// dropStaleCommands keeps the listed commands whose end is still to be told:
-// those running, and those that ended in the background, whose command.done
-// event resumes them and takes them off the list (it may still be on its way
-// to the inbox). A row that is gone, or a command whose call was told its end,
-// is dropped.
+// dropStaleCommands keeps the listed commands and builds whose end is still
+// to be told: those running, and those that ended in the background, whose
+// command.done or module.built event resumes them and takes them off the
+// list (it may still be on its way to the inbox). A row that is gone, or a
+// command whose call was told its end, is dropped.
 func (a *Agent) dropStaleCommands(ctx context.Context, t *turn) error {
 	if len(t.state.Commands) == 0 {
 		return nil
@@ -144,14 +144,38 @@ func (a *Agent) dropStaleCommands(ctx context.Context, t *turn) error {
 }
 
 // toBeTold reports whether key's command ended in the background, so its
-// command.done event is still to come or to be handled.
+// command.done event is still to come or to be handled, or whether key is a
+// build whose module.built is (buildToBeTold).
 func (a *Agent) toBeTold(ctx context.Context, key string) (bool, error) {
 	j, err := a.d.Commands.Get(ctx, key)
 	switch {
 	case errors.Is(err, host.ErrNoJob):
-		return false, nil
+		return a.buildToBeTold(ctx, key)
 	case err != nil:
 		return false, fmt.Errorf("agent: command %s: %w", key, err)
 	}
 	return j.Background, nil
+}
+
+// stillRunning keeps the keys among keys whose command or build still runs
+// or waits: a session /resume brings back keeps only those (an ended one was
+// told as late).
+func (a *Agent) stillRunning(ctx context.Context, keys []string) ([]string, error) {
+	running, err := a.d.Commands.Running(ctx, keys)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, k := range keys {
+		ok := slices.Contains(running, k)
+		if !ok {
+			if ok, err = a.buildRunning(ctx, k); err != nil {
+				return nil, err
+			}
+		}
+		if ok {
+			out = append(out, k)
+		}
+	}
+	return out, nil
 }

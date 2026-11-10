@@ -40,7 +40,7 @@ func (h *Host) Check(ctx context.Context, b modstore.Build, cfg map[string]any) 
 	g := h.newGiven(m)
 	log := h.moduleLog(g)
 	mod, err := runner.Load(ctx, b.Wasm, m, runner.Deps{Secrets: h.secret(b.Module, g), State: runner.NewMemState(),
-		Cells: checkCells{cellPort{cells: h.d.Cells, module: b.Module, prefix: short}}, Prefix: short, Logger: log})
+		Cells: checkCells{cellPort{cells: h.d.Cells, module: b.Module, prefix: short}}, Notify: checkNotify{}, Prefix: short, Logger: log})
 	if err != nil {
 		h.d.Log.Warn("modhost: a build does not load", "module", b.Module, "err", err)
 		return fmt.Errorf("%w: it does not load on this node", ErrCheckFailed)
@@ -62,6 +62,13 @@ type checkCells struct{ cellPort }
 func (checkCells) Report(context.Context, string, json.RawMessage, string) error {
 	return errCheckReport
 }
+
+// checkNotify is the notify port of a build under check: its health run is
+// no run of the module's, so it sends nothing (ruling 3 of M4c).
+type checkNotify struct{}
+
+// Notify implements runner.NotifyPort: not in this run.
+func (checkNotify) Notify(context.Context, string) runner.NotifyCode { return runner.NotifyNotHere }
 
 // lifecycleKind is the kind an init or health failure is told by: the kind
 // the module reported when it may report it, else KindException.

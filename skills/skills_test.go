@@ -132,6 +132,32 @@ func TestEmbeddedBuiltinsLoad(t *testing.T) {
 	}
 }
 
+// The module-writing skill is a built-in with no script, and it carries the
+// two mandatory instructions of spec 9.4 word for word and names the tools
+// of the loop.
+func TestModuleWritingSkill(t *testing.T) {
+	set, problems, err := Load(Builtin, t.TempDir(), nil)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("%v\n%s", err, reasons(problems))
+	}
+	sk, ok := set.Get("module-writing")
+	if !ok || !sk.Builtin || sk.Script != nil || sk.Description == "" {
+		t.Fatalf("module-writing %+v", sk)
+	}
+	for _, want := range []string{
+		"The system you are changing is what you run on as an agent. Be careful not to break it: if it\nbreaks, you stop working.",
+		"A module does its one task fully and hands the system contract data.",
+		"the\nmodel works after the module on clean, prepared data, or not at all.",
+		"module.import", "reflex-template", "module.read", "module.write", "module.build", "module.install",
+		// The build runs in the background and its end comes back as a note (ADR-0069).
+		"The build runs in the background", "a card in the\n   chat shows", "[build finished] <name>",
+	} {
+		if !strings.Contains(sk.Body, want) {
+			t.Errorf("the body lacks %q", want)
+		}
+	}
+}
+
 // Review finding 1: the default workspace is relative; a script is run
 // by its absolute path.
 func TestRelativeWorkspaceScriptRuns(t *testing.T) {

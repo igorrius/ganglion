@@ -30,7 +30,7 @@ const testToken = "7001:test-secret"
 
 func testConfig(t *testing.T) Bootstrap {
 	t.Helper()
-	return Bootstrap{DB: filepath.Join(t.TempDir(), "node.db"), BotAPIURL: "http://127.0.0.1:1"}
+	return Bootstrap{DB: filepath.Join(t.TempDir(), "node.db"), BotAPIURL: "http://127.0.0.1:1", Timeouts: testTimeouts()}
 }
 
 type running struct {
@@ -275,7 +275,7 @@ func TestAgentOverTelegram(t *testing.T) {
 		offered = append(offered, tl["function"].(map[string]any)["name"].(string))
 	}
 	want := "cells.get,cells.list,cells.set,host.stats,journal.search,language.set,logs.search,memory.audit,memory.forget,memory.read,memory.recall,memory.write," +
-		"message.send,module.build,module.install,module.status,persona.propose,plan.show,plan.step,schedule.create,schedule.delete,schedule.list,schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
+		"message.send,module.build,module.install,module.read,module.status,module.write,persona.propose,plan.show,plan.step,schedule.create,schedule.delete,schedule.list,schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
 	if _, err := exec.LookPath("git"); err != nil {
 		want = "cells.get,cells.list,cells.set,host.stats,journal.search,language.set,logs.search,message.send,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
 			"schedule.run_now,skill.read,turns.failed,web.fetch,web.search"

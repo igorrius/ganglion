@@ -106,6 +106,26 @@ jobs:
           cargo clippy --locked --target wasm32-wasip1 -- -D warnings
           cargo test --locked
 
+  # The reflex template (R-RUN-15..17): the agent copies it to make reflex
+  # modules. Its rules run here on a fake host; the node's builder builds it
+  # in the test job (make test-net runs TestTheReflexTemplate in modhost).
+  reflex-template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: wasm32-wasip1
+          components: rustfmt, clippy
+      - name: Format, lint and unit tests
+        working-directory: examples/modules/reflex-template
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --target wasm32-wasip1 -- -D warnings
+          cargo test --locked
+
   # The html2md module (ADR-0035) is committed as html2md.wasm; the test
   # job above runs its fixture tests against that file. This job rebuilds
   # it from the Rust sources with the pinned toolchain, runs the module's

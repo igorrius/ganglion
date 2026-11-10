@@ -40,7 +40,7 @@ func TestRunStagesStopsAtAnError(t *testing.T) {
 
 func TestDefaultConfig(t *testing.T) {
 	c := DefaultConfig()
-	want := Config{MaxSteps: 8, TurnTimeout: 2 * time.Minute, CallTimeout: 60 * time.Second, HistoryTokens: 6000,
+	want := Config{MaxSteps: 8, TurnTimeout: 5 * time.Minute, CallTimeout: 3 * time.Minute, HistoryTokens: 6000,
 		KeepRecent: 12, DailyTurns: 300, DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, Location: time.UTC}
 	if c != want {
 		t.Fatalf("DefaultConfig() = %+v\nwant %+v", c, want)
@@ -94,5 +94,13 @@ func TestGiveUpApologisesAndAlertsAdmins(t *testing.T) {
 	}
 	if out[1].IdemKey != "alert:give-up:"+ev.ID+":telegram:user:1" || out[1].Text != "Gave up on event "+ev.ID+" in "+ev.Conv+" after 3 attempts." {
 		t.Errorf("alert %+v", out[1])
+	}
+}
+
+// A zero timeout is never meant: New keeps the default for it.
+func TestZeroTimeoutsKeepTheDefaults(t *testing.T) {
+	a := New(Config{MaxSteps: 8}, newEnv(t, Config{}, nil).deps)
+	if d := DefaultConfig(); a.cfg.CallTimeout != d.CallTimeout || a.cfg.TurnTimeout != d.TurnTimeout {
+		t.Fatalf("config %+v", a.cfg)
 	}
 }

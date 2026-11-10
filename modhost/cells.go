@@ -36,8 +36,13 @@ func (p cellPort) Report(ctx context.Context, id string, v json.RawMessage, _ st
 	if c.Owner != p.module {
 		return errNotOwn
 	}
-	_, err = p.cells.Report(ctx, id, v, cells.CauseExternal, "module:"+p.module)
-	return err
+	if _, err = p.cells.Report(ctx, id, v, cells.CauseExternal, "module:"+p.module); err != nil {
+		return err
+	}
+	if r, ok := runOf(ctx); ok { // the run's listeners start when it ends (R-RUN-15)
+		r.wrote.add(id)
+	}
+	return nil
 }
 
 // Get implements runner.CellPort: the cell's reported value and when it

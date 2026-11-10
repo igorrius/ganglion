@@ -316,3 +316,25 @@ func TestRichOffWideTableIsDelivered(t *testing.T) {
 		t.Fatal("nothing sent")
 	}
 }
+
+// R-RUN-16: a module's message (NoPreview) shows no link preview and is
+// never a rich message, even with the structure of one; other messages
+// keep Telegram's previews.
+func TestNoPreviewIsOrdinaryWithoutPreview(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newRichTransport(t, fake)
+	for _, text := range []string{tableMD, "see https://example.com"} {
+		msg := richOut(text)
+		msg.NoPreview = true
+		if _, err := tr.Send(context.Background(), msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := tr.Send(context.Background(), richOut("see https://example.com")); err != nil {
+		t.Fatal(err)
+	}
+	sent := fake.Sent()
+	if len(sent) != 3 || sent[0].Rich || !sent[0].NoPreview || sent[1].Rich || !sent[1].NoPreview || sent[2].NoPreview {
+		t.Fatalf("sent %+v", sent)
+	}
+}

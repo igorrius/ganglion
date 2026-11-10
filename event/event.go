@@ -32,6 +32,17 @@ const (
 	// KindModule is a module of the owner's that needs the agent: an
 	// escalation the node words itself (R-RUN-14); its payload is a Module.
 	KindModule Kind = "module"
+	// KindModuleTrigger starts a module that listens to cells another
+	// module's run wrote (R-RUN-15, ADR-0065); its payload is a
+	// ModuleTrigger. It runs the module with no model and no turn.
+	KindModuleTrigger Kind = "module.trigger"
+	// KindModuleNotify is a module's text for its owner (R-RUN-16,
+	// ADR-0066).
+	KindModuleNotify Kind = "module.notify"
+	// KindModuleBuilt is the end of a module build that ran in the
+	// background (R-RUN-9, ADR-0069); its payload is a ModuleBuilt. It
+	// resumes the conversation whose call asked for the build.
+	KindModuleBuilt Kind = "module.built"
 )
 
 // SourceModule is the Source of the events the node puts for the owner's
@@ -97,6 +108,9 @@ type Outgoing struct {
 	Folded string `json:",omitempty"`
 	// Origin is where the message came from (R-DLV-14); nil until it is stored.
 	Origin *Origin `json:",omitempty"`
+	// NoPreview shows no link preview and sends the message as an ordinary
+	// one, never a rich one: a module's message (R-RUN-16).
+	NoPreview bool `json:",omitempty"`
 }
 
 // Stage is where the work on a person's message stands (R-LIVE-7). The agent

@@ -45,8 +45,8 @@ func TestCoreContainerBuildsAndShutsDown(t *testing.T) {
 	}{
 		"echo, no transport":  {components: 3},
 		"echo over Telegram":  {token: testToken, admin: "telegram:user:42", components: 4},
-		"agent over Telegram": {token: testToken, admin: "telegram:user:42", agent: true, components: 12},
-		"agent, no transport": {agent: true, components: 10},
+		"agent over Telegram": {token: testToken, admin: "telegram:user:42", agent: true, components: 14},
+		"agent, no transport": {agent: true, components: 12},
 	} {
 		t.Run(name, func(t *testing.T) {
 			b := testConfig(t)
@@ -122,7 +122,7 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 		// on offer only where the node finds its examples folder, which a
 		// test's folder has not.
 		want = append(want, "memory.audit", "memory.forget", "memory.read", "memory.recall", "memory.write", "persona.propose",
-			"module.build", "module.install", "module.status")
+			"module.build", "module.install", "module.read", "module.status", "module.write")
 	}
 	// host.exec is registered always and on offer only while the sandbox is
 	// ready (R-CMD-1, R-CMD-3).

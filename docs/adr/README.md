@@ -70,6 +70,12 @@ considered, how they compare, the decision and its consequences. See
 | [0062](0062-cells-owned-by-modules.md) | Let modules own the cells they declare, and prefix cell and tool names with the module's name (extends 0014) | Accepted | 2026-11-10 |
 | [0063](0063-module-language.md) | Write modules in Rust by default, TinyGo when Go code already exists, standard Go only when neither fits | Accepted | 2026-11-10 |
 | [0064](0064-builds-write-only-their-temp-folder.md) | Let a module's build write only its own temporary folder, and kill what it leaves running (refines 0039) | Accepted | 2026-11-09 |
+| [0065](0065-cell-triggers-through-the-inbox.md) | Start a module when cells it listens to change, with the event carried by the node's inbox | Accepted | 2026-11-10 |
+| [0066](0066-notify-capability.md) | Let a module write to the owner's private chat through a `notify` capability with a daily limit | Accepted | 2026-11-10 |
+| [0067](0067-agent-writes-module-source.md) | Let the agent write a module's source in the workspace without a press, from a clean session only (moves a part of 0061 from P3) | Accepted | 2026-11-10 |
+| [0068](0068-vouch-for-module-source-per-file-and-vetted-crates.md) | Vouch for module source per file and only with the examples' crates (refines 0067) | Accepted | 2026-11-10 |
+| [0069](0069-background-jobs-with-a-live-card.md) | Run long node work as background jobs with a live card the node edits | Accepted | 2026-11-10 |
+| [0070](0070-builds-in-a-row-instead-of-depth.md) | Bound the agent's fix-and-rebuild loop by builds in a row, not by turn depth (refines 0069) | Accepted | 2026-11-10 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

@@ -124,3 +124,14 @@ func TestCheckAbsent(t *testing.T) {
 		t.Fatalf("a view with no way to look failed: %v", got)
 	}
 }
+
+func TestModelCalls(t *testing.T) {
+	none, one := 0, 1
+	v := View{ModelCalls: 1}
+	if got := Check(Facts{ModelCalls: &one}, v); len(got) != 0 {
+		t.Fatalf("a matching count failed: %v", got)
+	}
+	if got := Check(Facts{ModelCalls: &none}, v); len(got) != 1 {
+		t.Fatalf("a model call was not found: %v", got)
+	}
+}

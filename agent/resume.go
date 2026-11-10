@@ -43,8 +43,9 @@ const (
 const ()
 
 // resume handles a press of a button, the expiry of a pending call, the
-// end of a host command in the background and a module's escalation, and
-// ends the turn; a message goes on to the next stages (ADR-0032, R-CMD-4).
+// end of a host command or a module build in the background, a module's
+// escalation and a module's message, and ends the turn; a message goes on to the next
+// stages (ADR-0032, R-CMD-4).
 func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 	switch t.event.Kind {
 	case event.KindDecision:
@@ -53,9 +54,14 @@ func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 		return true, a.expired(ctx, t)
 	case event.KindCommandDone:
 		return true, a.commandDone(ctx, t)
+	case event.KindModuleBuilt:
+		return true, a.moduleBuilt(ctx, t)
 	case event.KindModule:
 		return true, a.moduleEvent(ctx, t)
+	case event.KindModuleNotify:
+		return true, a.moduleNotifyEvent(ctx, t)
 	case event.KindMessage, event.KindSchedule:
+	case event.KindModuleTrigger: // never here: Handle runs a trigger before begin
 	}
 	return false, nil
 }
@@ -176,6 +182,18 @@ func (t *turn) note(text string) {
 	}
 	t.state.Messages = append(t.state.Messages, provider.Message{Role: provider.RoleUser, Content: text})
 	t.state.Last = t.now
+}
+
+// noteQuiet adds a note as note does but leaves Last as it was, unless the
+// note opens the session: a module's note is no exchange with the person,
+// so it must not keep the session, and its taint, alive past SessionIdle
+// (R-RUN-16).
+func (t *turn) noteQuiet(text string) {
+	last, opens := t.state.Last, t.state.Session == ""
+	t.note(text)
+	if !opens {
+		t.state.Last = last
+	}
 }
 
 // confirmed acknowledges the press, runs an approved call or declines a

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/cells"
@@ -27,6 +28,8 @@ const (
 	ModuleBuildTool   = "module.build"
 	ModuleInstallTool = "module.install"
 	ModuleStatusTool  = "module.status"
+	ModuleWriteTool   = "module.write"
+	ModuleReadTool    = "module.read"
 )
 
 // modulesFolder is the workspace folder that holds the modules' sources.
@@ -93,14 +96,29 @@ type Modules struct {
 	// Examples is the folder of example modules module.import copies from
 	// (examples/modules in a checkout, /app/examples/modules in the image).
 	Examples string
+	// Provenance is the folder of the records of each module folder as the
+	// node's own tools left it: <data>/modules/provenance, outside the
+	// workspace and the command sandbox's reach (ruling 7 of M4c, R-RUN-17).
+	Provenance string
+	// Now is the clock the records are stamped with.
+	Now func() time.Time
+	// Queue runs the builds in the background, one at a time (ADR-0069).
+	Queue *BuildQueue
+
+	// locks serialises the writes to each module's folder; NewModuleTools
+	// makes it, one for all the tools it returns.
+	locks *moduleLocks
 }
 
-// NewModuleTools returns module.import, module.build, module.install and
-// module.status over m: the agent copies an example into the workspace,
-// builds it, the owner approves its rights with one press (R-RUN-9,
-// ADR-0061), and the agent reads how an installed module stands.
+// NewModuleTools returns module.import, module.write, module.read,
+// module.build, module.install and module.status over m: the agent copies an
+// example into the workspace, writes and reads its source (R-RUN-17,
+// ADR-0067), builds it, the owner approves its rights with one press
+// (R-RUN-9, ADR-0061), and the agent reads how an installed module stands.
 func NewModuleTools(m Modules) []tool.Handler {
-	return []tool.Handler{&ModuleImport{m: m}, &ModuleBuild{m: m}, &ModuleInstall{m: m}, &ModuleStatus{m: m}}
+	m.locks = newModuleLocks()
+	return []tool.Handler{&ModuleImport{m: m}, &ModuleWrite{m: m}, &ModuleRead{m: m}, &ModuleBuild{m: m}, &ModuleInstall{m: m},
+		&ModuleStatus{m: m}}
 }
 
 // moduleName checks the name of a module's source folder: the short name of
@@ -151,22 +169,40 @@ func (m Modules) sourcesDir(create bool) (string, error) {
 
 // sourceDir is the source folder of module name: exactly
 // <workspace>/modules/<name>, a folder, not a symlink, and inside the
-// workspace's modules folder once resolved.
-func (m Modules) sourceDir(name string) (string, error) {
+// workspace's modules folder once resolved. Its errors are in tool's words.
+func (m Modules) sourceDir(tool, name string) (string, error) {
+	dir, err := m.moduleFolder(name)
+	switch {
+	case errors.Is(err, errNoModules):
+		return "", fmt.Errorf("%s: the workspace has no modules folder; %s copies an example there", tool, ModuleImportTool)
+	case errors.Is(err, fs.ErrNotExist):
+		return "", fmt.Errorf("%s: there is no modules/%s in the workspace; %s copies an example there", tool, name, ModuleImportTool)
+	case err != nil:
+		return "", fmt.Errorf("%s: %w", tool, err)
+	}
+	return dir, nil
+}
+
+// errNoModules is a workspace without its modules folder.
+var errNoModules = errors.New("the workspace has no modules folder")
+
+// moduleFolder is <workspace>/modules/<name>, checked as sourceDir says;
+// errNoModules without the modules folder, fs.ErrNotExist without the
+// module's.
+func (m Modules) moduleFolder(name string) (string, error) {
 	base, err := m.sourcesDir(false)
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("%s: the workspace has no modules folder; %s copies an example there", ModuleBuildTool, ModuleImportTool)
+		return "", errNoModules
 	}
 	if err != nil {
-		return "", fmt.Errorf("%s: the workspace's modules folder: %w", ModuleBuildTool, err)
+		return "", fmt.Errorf("the workspace's modules folder: %w", err)
 	}
 	dir := filepath.Join(base, name)
-	err = realDir(dir, dir)
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("%s: there is no modules/%s in the workspace; %s copies an example there", ModuleBuildTool, name, ModuleImportTool)
-	}
-	if err != nil {
-		return "", fmt.Errorf("%s: modules/%s: %w", ModuleBuildTool, name, err)
+	if err := realDir(dir, dir); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+		return "", fmt.Errorf("modules/%s: %w", name, err)
 	}
 	return dir, nil
 }

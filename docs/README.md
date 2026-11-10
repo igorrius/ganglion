@@ -6,14 +6,27 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** M4c, reflex modules: a `notify` capability for modules and
-  the agent writing module source in the workspace, first reflex
-  `deye-alerts` (thresholds 90…30 %, below 30 % every 5 %, full charge, a
-  data failure once), so routine reactions run without a model (owner,
-  2026-11-10). Design next, no document yet. The Railway deploy (the image
+- **Next:** memory by topic (board card G-138): facts and the owner's
+  corrections kept during the conversation in topic files, found when the
+  live check showed the agent forgetting a correction; a brainstorm first.
+  The Railway deploy (the image
   and [deploy-railway.md](deploy-railway.md) are ready; Landlock ABI 3 or
   newer and hard links on the volume still to check) stays open as board
   card G-121.
+- **M4c closed (2026-11-10):** reflex modules
+  ([design](plans/p1-m4c-reflexes-design.md),
+  [plan](plans/p1-m4c-reflexes.md), ADRs 0065–0070 Accepted). A module runs
+  when cells it listens to change (through the inbox, no model, loops
+  refused, chains stop at depth 4); `notify` writes to the owner's private
+  chat within a daily limit while the model gets only a node note; the
+  agent writes module source with `module.write` from a clean session, and
+  a build answer is clean only for files the node wrote and the examples'
+  crates; builds and long host commands run as background jobs with a live
+  card (R-LIVE-9). Live check: from one message the agent wrote, built and
+  offered `battery-alerts`; after the press, at 23:00 `deye-reader`'s cell
+  write started it and its alert reached the owner about 0.1 s later with
+  no model call. Scheduled tasks may now read modules (`module.status`,
+  `module.read`). Open: the board cards G-134–G-139.
 - **M4 closed (2026-11-10):** M4a (config, models by purpose) and M4b
   ([plan](plans/p1-m4b-modules.md)) are done and merged; ADRs 0059–0064
   are Accepted. The owner's live check on the test bot passed: the agent

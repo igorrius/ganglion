@@ -21,6 +21,9 @@ type Bootstrap struct {
 	BotAPIURL string // telegram.api_url, default "https://api.telegram.org"
 	Admin     string // telegram.admin, e.g. "telegram:user:123"; seeded as admin at start
 	Agent     AgentSettings
+	// Timeouts bound a turn, its model calls and the node's handler
+	// (agent.call_timeout, agent.turn_timeout; ruling 17 of M4c).
+	Timeouts Timeouts
 	// MetricsAddr is metrics.addr: where /metrics and the promtop
 	// dashboard are served (default 127.0.0.1:9464), or "off" (ADR-0026).
 	MetricsAddr string
@@ -85,6 +88,14 @@ func (b Bootstrap) SecretValues() []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// Timeouts are how long the agent's work may take: the settings check that
+// the handler's stays below the queue's lease.
+type Timeouts struct {
+	Call    time.Duration // agent.call_timeout, default 3m: one model call
+	Turn    time.Duration // agent.turn_timeout, default 5m: a whole turn
+	Handler time.Duration // the turn's plus settings.HandlerSlack: the loop's limit on the node's handler
 }
 
 // AgentSettings turns the agent on. Without models the core echoes, as in

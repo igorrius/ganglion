@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/hostcmd"
 	"github.com/igorrius/ganglion/internal/procgroup"
+	"github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/sqlitedb"
 )
@@ -26,6 +28,22 @@ var migrations embed.FS
 type Starter interface {
 	Command(ctx context.Context, argv []string, dir string, env ...string) (*exec.Cmd, error)
 }
+
+// Jobs shows a background command to the person (jobs.Registry): its card
+// from the moment its call goes on without it, until its end.
+type Jobs interface {
+	Start(ctx context.Context, j jobs.Job) error
+	End(ctx context.Context, key string, s jobs.State) error
+}
+
+// NoJobs shows no background command.
+type NoJobs struct{}
+
+// Start implements Jobs.
+func (NoJobs) Start(context.Context, jobs.Job) error { return nil }
+
+// End implements Jobs.
+func (NoJobs) End(context.Context, string, jobs.State) error { return nil }
 
 // PutFunc stores an event in the inbox; a stored IdemKey is a no-op.
 type PutFunc func(ctx context.Context, e event.Event) error
@@ -129,6 +147,12 @@ type Runner struct {
 	log   *slog.Logger
 	base  chan context.Context // holds the running component's context once
 	tel   runnerTelemetry
+	jobs  Jobs
+
+	// bg orders a command's move to the background against its end, so a
+	// card starts only for a command that has not ended, and ends after it
+	// started.
+	bg sync.Mutex
 
 	mu      sync.Mutex // guards stopped and the calls to cmds.Add
 	stopped bool
@@ -147,6 +171,10 @@ func WithRunnerClock(now func() time.Time, after func(time.Duration) <-chan time
 	return func(r *Runner) { r.now, r.after = now, after }
 }
 
+// WithJobs sets the background jobs: a command past its wait gets a card,
+// edited until it ends (R-LIVE-9). The default shows none.
+func WithJobs(j Jobs) RunnerOption { return func(r *Runner) { r.jobs = j } }
+
 // WithRunnerLog sets the logger.
 func WithRunnerLog(l *slog.Logger) RunnerOption { return func(r *Runner) { r.log = l } }
 
@@ -164,7 +192,7 @@ func NewRunner(ctx context.Context, db *sql.DB, start Starter, put PutFunc, lim 
 	}
 	r := &Runner{db: db, start: start, put: put, lim: lim, slots: make(chan struct{}, lim.Parallel),
 		hide: func(s string) string { return s }, now: time.Now, after: time.After,
-		log: slog.New(slog.DiscardHandler), base: make(chan context.Context, 1)}
+		log: slog.New(slog.DiscardHandler), base: make(chan context.Context, 1), jobs: NoJobs{}}
 	for _, o := range opts {
 		o(r)
 	}
@@ -269,29 +297,54 @@ func (r *Runner) seen(ctx context.Context, j Job, err error) (Answer, error) {
 	return r.detach(ctx, j.Key, nil)
 }
 
-// detach marks a running command background, so its end is announced. A
-// command that ended first is answered from its row: done, unless another
-// call of its key sent it to the background first, when the event tells
-// its end.
+// detach marks a running command background, so its end is announced, and
+// starts its card. A command that ended first is answered from its row: done,
+// unless another call of its key sent it to the background first, when the
+// event tells its end.
 func (r *Runner) detach(ctx context.Context, key string, ended <-chan Job) (Answer, error) {
-	res, err := r.db.ExecContext(ctx, `UPDATE host_jobs SET background = 1 WHERE key = ? AND state = 'running'`, key)
-	if err != nil {
-		return Answer{}, fmt.Errorf("host: detach %s: %w", key, err)
-	}
-	if n, _ := res.RowsAffected(); n == 1 {
-		j, err := r.Get(ctx, key)
+	j, moved, err := r.background(ctx, key)
+	if err != nil || moved {
 		return Answer{Job: j}, err
 	}
 	if ended != nil {
 		j := <-ended
 		return Answer{Job: j, Done: !j.Background}, nil
 	}
-	j, err := r.Get(ctx, key)
+	j, err = r.Get(ctx, key)
 	return Answer{Job: j, Done: !j.Background}, err
+}
+
+// background marks key's command background while it runs and starts its
+// card; moved is false when it ended first. A key sent to the background
+// again starts no second card (jobs.Registry.Start).
+func (r *Runner) background(ctx context.Context, key string) (j Job, moved bool, err error) {
+	r.bg.Lock()
+	defer r.bg.Unlock()
+	res, err := r.db.ExecContext(ctx, `UPDATE host_jobs SET background = 1 WHERE key = ? AND state = 'running'`, key)
+	if err != nil {
+		return Job{}, false, fmt.Errorf("host: detach %s: %w", key, err)
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return Job{}, false, nil
+	}
+	if j, err = r.Get(ctx, key); err != nil {
+		return Job{}, true, err
+	}
+	card := jobs.Job{Key: j.Key, Kind: jobs.KindCommand, Conv: j.Conv, Transport: j.Transport, Principal: j.Principal,
+		Title: hostcmd.Show(j.Argv), Started: j.Started, State: jobs.StateRunning}
+	if err := r.jobs.Start(ctx, card); err != nil {
+		// The card is a sign of life, not the command: its end still comes.
+		// The job's row may be stored with its card refused, which the
+		// registry then sends at its next tick.
+		r.logErr(ctx, "host: a background command's card failed to start or waits for the next tick", err, "key", key)
+	}
+	return j, true, nil
 }
 
 // execute runs the command and stores how it ended, then hands the row to
 // the call, which may have gone on: ended holds one, so this never blocks.
+// A command in the background ends its card and is announced at once; the
+// pass is the fallback for an end whose announcement failed.
 func (r *Runner) execute(base context.Context, q Request, ended chan<- Job) {
 	text, how := r.runOne(base, q)
 	ctx := context.WithoutCancel(base)
@@ -299,7 +352,12 @@ func (r *Runner) execute(base context.Context, q Request, ended chan<- Job) {
 	if how == outcomeInterrupted {
 		state = JobInterrupted
 	}
+	r.bg.Lock()
 	j, err := r.end(ctx, q.Key, state, text)
+	if err == nil && j.Background {
+		r.finish(ctx, j, how)
+	}
+	r.bg.Unlock()
 	if err != nil {
 		// The waiting call still gets the outcome; a call that already went
 		// on never hears of it, and its row stays running until a restart
@@ -310,6 +368,27 @@ func (r *Runner) execute(base context.Context, q Request, ended chan<- Job) {
 	}
 	r.tel.ended(ctx, how, j.Ended.Sub(j.Started))
 	ended <- j
+}
+
+// finish ends a background command's card and puts its command.done event.
+func (r *Runner) finish(ctx context.Context, j Job, how outcome) {
+	if err := r.jobs.End(ctx, j.Key, cardState(how)); err != nil {
+		r.logErr(ctx, "host: a background command's card was not ended", err, "key", j.Key)
+	}
+	r.announce(ctx, j)
+}
+
+// cardState is how a command's card ends.
+func cardState(how outcome) jobs.State {
+	switch how {
+	case outcomeOK:
+		return jobs.StateDone
+	case outcomeInterrupted:
+		return jobs.StateInterrupted
+	case outcomeFailed, outcomeTimeout, outcomeNotRun:
+		return jobs.StateFailed
+	}
+	return jobs.StateFailed
 }
 
 // runOne waits for a slot, then runs the command in its own process group

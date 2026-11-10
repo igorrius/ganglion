@@ -28,6 +28,21 @@ type Abilities map[Language]string
 type Source struct {
 	Name string // short name, e.g. "deye-reader"
 	Dir  string // the folder in the workspace
+	// Progress is told how many crates the build has compiled so far, as
+	// cargo prints its "Compiling" lines, for the job's card (R-LIVE-9); nil
+	// tells nobody. It is called from the build's output copying, so it must
+	// not block.
+	Progress ProgressFunc
+}
+
+// ProgressFunc is told the count of crates compiled so far.
+type ProgressFunc func(crates int)
+
+// report tells p the count n; a nil p is told nothing.
+func (p ProgressFunc) report(n int) {
+	if p != nil {
+		p(n)
+	}
 }
 
 // Artifact is what a build made.

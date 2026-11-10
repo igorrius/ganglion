@@ -765,3 +765,41 @@ func TestABuildWritesOnlyItsFolderAndLeavesNoProcess(t *testing.T) {
 	}
 	leftNothing(t, b)
 }
+
+// A build the caller's deadline stopped says so, and how long it ran: "ran
+// past" is only for the builder's own limit (design section 10).
+func TestACallersDeadlineIsNotTheBuildersLimit(t *testing.T) {
+	buildTemp(t)
+	cfg := testConfig()
+	cfg.Timeout = time.Hour
+	fake := &fakeStarter{wasm: []byte("w"), exit: "sleep 30"}
+	l := newLocal(fake, cfg)
+	clock := time.Unix(1_800_000_000, 0)
+	l.now = func() time.Time { clock = clock.Add(10 * time.Second); return clock } // every look is 10 s later
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	_, _, err := l.Build(ctx, Source{Name: "m", Dir: source(t, rustFiles)})
+	if err == nil || strings.Contains(err.Error(), "ran past") || !strings.Contains(err.Error(), "the caller stopped it after 10s") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+// Cargo's "Compiling" lines on stderr reach Progress as a running count;
+// other lines do not count.
+func TestCompilingLinesReachProgress(t *testing.T) {
+	buildTemp(t)
+	fake := &fakeStarter{wasm: []byte("w"), exit: `printf '   Compiling a v1.0.0\nwarning: x\n' >&2; ` +
+		`printf '   Compil' >&2; printf 'ing b v2.0.0\nCompiling c v3\n  Downloaded d\n' >&2`}
+	var seen []int
+	src := Source{Name: "m", Dir: source(t, rustFiles), Progress: func(n int) { seen = append(seen, n) }}
+	if _, _, err := newLocal(fake, testConfig()).Build(t.Context(), src); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(seen, []int{1, 2, 3}) {
+		t.Fatalf("progress %v", seen)
+	}
+	// No Progress is fine.
+	if _, _, err := newLocal(fake, testConfig()).Build(t.Context(), Source{Name: "m", Dir: source(t, rustFiles)}); err != nil {
+		t.Fatal(err)
+	}
+}

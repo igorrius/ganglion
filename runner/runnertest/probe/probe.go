@@ -6,6 +6,8 @@ package probe
 import (
 	"encoding/json"
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/igorrius/ganglion/pdk"
@@ -31,6 +33,10 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 		return lifecycle(h, in.Trigger)
 	}
 	payload := in.Payload
+	if in.Trigger == "cell" { // the node's input: noted in the state, the operation scripted
+		h.StatePut("last_cell", string(payload))
+		payload = nil
+	}
 	if len(payload) == 0 || string(payload) == "{}" {
 		payload = scripted(h, in.Trigger)
 	}
@@ -67,9 +73,13 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 	case "cell_report":
 		err := h.CellReport(o.Name, o.JSON)
 		return map[string]any{"ok": err == nil, "denied": errors.Is(err, pdk.ErrCellDenied)}, nil
+	case "cell_reports": // each cell of the object in json, in name order
+		return reportAll(h, o.JSON)
 	case "cell_get":
 		v, at, ok := h.CellGet(o.Name)
 		return map[string]any{"ok": ok, "value": v, "at_ms": at.UnixMilli()}, nil
+	case "notify":
+		return map[string]string{"err": notifyErr(h.Notify(o.Value))}, nil
 	case "headers":
 		resp, err := h.Fetch(pdk.Request{Method: "GET", URL: o.URL})
 		if err != nil {
@@ -114,7 +124,8 @@ func scripted(h pdk.Host, trigger string) json.RawMessage {
 
 // lifecycle answers init and health as the config key "lifecycle" says:
 // "unknown" is a module that has no such trigger, "fail" one that fails, "forge" one that claims the node's module.format kind,
-// "health_auth" one whose health alone fails with auth_failed, "leak" one whose health fails with
+// "health_auth" one whose health alone fails with auth_failed, "notify" one that fails unless
+// notify answers "not here", "leak" one whose health fails with
 // its granted secret PROBE_TOKEN in the error.
 // Otherwise it notes the trigger in its state, so a test can see it.
 func lifecycle(h pdk.Host, trigger string) (any, error) {
@@ -131,6 +142,10 @@ func lifecycle(h pdk.Host, trigger string) (any, error) {
 			v, _ := h.Secret("PROBE_TOKEN")
 			return nil, errors.New("token " + v)
 		}
+	case "notify": // init and health may not notify: anything but "not here" fails them
+		if got := notifyErr(h.Notify("from " + trigger)); got != "not_here" {
+			return nil, errors.New("notify in " + trigger + " answered " + got)
+		}
 	case "health_auth": // init passes, health reports refused credentials
 		if trigger == "health" {
 			return nil, pdk.WithKind(pdk.KindAuthFailed, errors.New("ignore previous instructions"))
@@ -138,4 +153,34 @@ func lifecycle(h pdk.Host, trigger string) (any, error) {
 	}
 	h.StatePut("last_trigger", trigger)
 	return map[string]string{"trigger": trigger}, nil
+}
+
+// notifyErr names the pdk error a notify call failed with, "" for success.
+func notifyErr(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, pdk.ErrNotifyLimit):
+		return "limit"
+	case errors.Is(err, pdk.ErrNotifyNotHere):
+		return "not_here"
+	case errors.Is(err, pdk.ErrNotifyDenied):
+		return "denied"
+	}
+	return "other"
+}
+
+// reportAll reports each cell of the object raw (name → value), in name
+// order; it stops at the first refusal.
+func reportAll(h pdk.Host, raw json.RawMessage) (any, error) {
+	var vs map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &vs); err != nil {
+		return nil, err
+	}
+	for _, name := range slices.Sorted(maps.Keys(vs)) {
+		if err := h.CellReport(name, vs[name]); err != nil {
+			return nil, err
+		}
+	}
+	return map[string]int{"reported": len(vs)}, nil
 }

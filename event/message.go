@@ -116,6 +116,53 @@ type Module struct {
 	Transport string `json:"transport"` // where the answer goes
 }
 
+// ModuleTrigger is the payload of an event of kind "module.trigger": a run
+// of Producer wrote cells that Module listens to (R-RUN-15, ADR-0065). The
+// module host puts one per listener and producer run, keyed by both and
+// Run, so a run delivered again starts nobody twice. Nothing in it is a
+// module's text: names and cell ids are the node's.
+type ModuleTrigger struct {
+	Module   string   `json:"module"`   // the listener, full name
+	Producer string   `json:"producer"` // full name
+	Run      string   `json:"run"`      // the producer's run identity
+	Cells    []string `json:"cells"`    // the listened cells it wrote, sorted
+	Depth    int      `json:"depth"`    // 1 for a trigger from a cron or tool run
+}
+
+// NotifyNode is what a module.notify event carries instead of a module's
+// text: a closed set of the node's own lines.
+type NotifyNode string
+
+// What a module.notify event carries.
+const (
+	NotifyText      NotifyNode = ""      // the module's text
+	NotifyLimitLine NotifyNode = "limit" // the node's line: the module reached its daily limit
+	NotifyChainLine NotifyNode = "chain" // the node's line: a chain of its cells went deeper than 4 and stopped
+)
+
+// ModuleNotify is the payload of an event of kind "module.notify": a
+// module's message for the admin who installed it, or a node line about
+// the module (R-RUN-16, ADR-0066). Text is the module's own, cut to 1000
+// characters: outside content, which goes to the owner escaped and never
+// to the model; the history gets the node's note without it.
+type ModuleNotify struct {
+	Module    string     `json:"module"`    // full name
+	Text      string     `json:"text"`      // the module's text, cut; "" for a node line
+	Node      NotifyNode `json:"node"`      // a node line instead of the text
+	PerDay    int        `json:"per_day"`   // the manifest's daily limit
+	At        int64      `json:"at_ms"`     // when the module wrote it, Unix ms
+	Principal string     `json:"principal"` // the admin it goes to
+	Transport string     `json:"transport"` // where it goes
+}
+
+// ModuleBuilt is the payload of an event of kind "module.built": the job
+// key of a build that ended, whose answer the build queue stored, and the
+// module's short name.
+type ModuleBuilt struct {
+	Key    string `json:"key"`    // the job's key
+	Module string `json:"module"` // the module's short name
+}
+
 // CommandDone is the payload of an event of kind "command.done": the call
 // key of the command, whose outcome the runner stored.
 type CommandDone struct {

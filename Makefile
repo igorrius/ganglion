@@ -14,7 +14,7 @@ test:
 # out of go test ./... and never cached (docs/conventions.md, section 9). They
 # skip without Rust's wasm32-wasip1 target or the command sandbox.
 test-net:
-	GANGLION_NET_TESTS=1 go test -count=1 -timeout 20m -run 'TestTheRustExample|TestARealRustModuleWithADependencyBuilds' -v ./tools/modbench/ ./builder/
+	GANGLION_NET_TESTS=1 go test -count=1 -timeout 20m -run 'TestTheRustExample|TestARealRustModuleWithADependencyBuilds|TestTheReflexTemplate' -v ./tools/modbench/ ./builder/ ./modhost/
 	GANGLION_NET_TESTS=1 go test -count=1 -timeout 20m -tags lab -run 'TestShippedScriptedScenariosPass' -v ./internal/chatlab/
 
 lint:

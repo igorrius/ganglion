@@ -24,8 +24,8 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		MaxSteps:      8,
-		TurnTimeout:   2 * time.Minute,
-		CallTimeout:   60 * time.Second,
+		TurnTimeout:   5 * time.Minute,
+		CallTimeout:   3 * time.Minute,
 		HistoryTokens: 6000,
 		KeepRecent:    12,
 		DailyTurns:    300,

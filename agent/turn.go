@@ -47,7 +47,9 @@ type turn struct {
 	toolResult event.ToolResult
 	command    event.CommandDone
 	schedule   event.Schedule
-	module     event.Module // the escalation of a KindModule event
+	module     event.Module       // the escalation of a KindModule event
+	notify     event.ModuleNotify // the message of a KindModuleNotify event
+	built      event.ModuleBuilt  // the build of a KindModuleBuilt event
 	// transport and replyConv are where the answer goes: the event's
 	// source and conversation, or for a scheduled job its owner's
 	// transport and the job's reply target.
@@ -65,6 +67,9 @@ type turn struct {
 	noTools bool
 	// deadline is when the turn's clock runs out (R-LIVE-6).
 	deadline time.Time
+	// jobs is the note of the conversation's background jobs, built when the
+	// model is first asked; "" when nothing runs (R-LIVE-9).
+	jobs string
 	// taken are the events the turn took from behind it; Complete marks them
 	// done with it (R-LIVE-1).
 	taken []string

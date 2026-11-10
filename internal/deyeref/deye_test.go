@@ -62,6 +62,7 @@ func (h *fakeHost) CellGet(string) (json.RawMessage, time.Time, bool) {
 	return nil, time.Time{}, false
 }
 func (h *fakeHost) Secret(n string) (string, bool) { v, ok := h.secrets[n]; return v, ok && v != "" }
+func (h *fakeHost) Notify(string) error            { return pdk.ErrNotifyDenied }
 func (h *fakeHost) Config(string) (string, bool)   { return "", false }
 func (h *fakeHost) Now() time.Time                 { return now }
 func (h *fakeHost) Log(string)                     {}

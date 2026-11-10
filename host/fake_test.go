@@ -2,12 +2,14 @@ package host
 
 import (
 	"context"
+	"maps"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/jobs"
 )
 
 // shell runs argv as one shell script, for tests: "sleep 1; echo hi". It
@@ -66,4 +68,35 @@ func (g gate) after(d time.Duration) <-chan time.Time {
 		return g.pass
 	}
 	return g.wait
+}
+
+// cards records the background jobs the runner shows (jobs.Registry).
+type cards struct {
+	mu      sync.Mutex
+	started []jobs.Job
+	ended   map[string]jobs.State
+}
+
+func (c *cards) Start(_ context.Context, j jobs.Job) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.started = append(c.started, j)
+	return nil
+}
+
+func (c *cards) End(_ context.Context, key string, s jobs.State) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.ended == nil {
+		c.ended = map[string]jobs.State{}
+	}
+	c.ended[key] = s
+	return nil
+}
+
+// seen are the started jobs and the ended states.
+func (c *cards) seen() ([]jobs.Job, map[string]jobs.State) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]jobs.Job(nil), c.started...), maps.Clone(c.ended)
 }

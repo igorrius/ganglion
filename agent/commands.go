@@ -198,7 +198,7 @@ func (a *Agent) resumeSession(ctx context.Context, t *turn, arg string) error {
 		return err
 	}
 	if len(chosen.Commands) > 0 {
-		if chosen.Commands, err = a.d.Commands.Running(ctx, chosen.Commands); err != nil {
+		if chosen.Commands, err = a.stillRunning(ctx, chosen.Commands); err != nil {
 			return err
 		}
 	}

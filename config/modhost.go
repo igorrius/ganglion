@@ -42,6 +42,7 @@ func ModuleHost() do.Provider[*modhost.Host] {
 			Settings:    settings.ModulesFile{Path: settingsFile(b)},
 			Admins:      do.MustInvoke[alert.Admins](i),
 			Now:         time.Now,
+			Location:    b.Agent.TZ,
 			Log:         logger,
 		})
 		h.Start(do.MustInvoke[Startup](i))
@@ -67,8 +68,9 @@ func settingsFile(b Bootstrap) string {
 	return filepath.Join(filepath.Dir(b.DB), settings.FileName)
 }
 
-// Moduling is the module tools the agent has: module.import, module.build
-// and module.install, or none of them when the workspace has no git.
+// Moduling is the module tools the agent has: module.import, module.write,
+// module.read, module.build, module.install and module.status, or none of
+// them when the workspace has no git.
 type Moduling struct {
 	Tools []tool.Handler
 }
@@ -98,6 +100,9 @@ func ModuleTools() do.Provider[Moduling] {
 			Host:        do.MustInvoke[*modhost.Host](i),
 			Builds:      buildsDir(b),
 			Examples:    examplesDir(b),
+			Provenance:  provenanceDir(b),
+			Now:         time.Now,
+			Queue:       do.MustInvoke[*builtin.BuildQueue](i),
 		})}, nil
 	}
 }
@@ -105,6 +110,15 @@ func ModuleTools() do.Provider[Moduling] {
 // buildsDir is where builds wait to be installed: builds/ in the modules
 // folder, swept by the janitor (ruling 6 of M4b).
 func buildsDir(b Bootstrap) string { return filepath.Join(b.ModulesDir, "builds") }
+
+// provenanceDir is where the node records each module folder as its own
+// tools left it: provenance/ in the modules folder, beside the builds and
+// out of the command sandbox's reach (ruling 7 of M4c).
+func provenanceDir(b Bootstrap) string { return filepath.Join(b.ModulesDir, "provenance") }
+
+// buildJobsDir is where the build queue keeps a record of each build and
+// its answer: build-jobs/ in the modules folder, beside the builds.
+func buildJobsDir(b Bootstrap) string { return filepath.Join(b.ModulesDir, "build-jobs") }
 
 // imageExamples is where the container image keeps the example modules.
 const imageExamples = "/app/examples/modules"

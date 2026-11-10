@@ -72,9 +72,17 @@ func (t *ModuleImport) Run(ctx context.Context, c tool.Call) (tool.Result, error
 	if err != nil {
 		return tool.Result{}, err
 	}
+	defer t.m.locks.lock(a.Name)()
+	if err := t.free(a.Name); err != nil {
+		return tool.Result{}, fmt.Errorf("%s: %w", ModuleImportTool, err)
+	}
 	commit, err := t.copyIn(ctx, src, a.Name)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("%s: %w", ModuleImportTool, err)
+	}
+	if err := t.m.recordFolder(a.Name, originExample+filepath.Base(src)); err != nil {
+		return tool.Result{}, fmt.Errorf("%s: copied %s as modules/%s (commit %s), but could not note the folder as the node's own, "+
+			"so its builds stay outside content: %w", ModuleImportTool, src, a.Name, shortCommit(commit), err)
 	}
 	return tool.Result{Text: fmt.Sprintf("copied %s into the workspace as modules/%s (commit %s); module.build {\"name\": %q} builds it",
 		src, a.Name, shortCommit(commit), a.Name)}, nil

@@ -37,8 +37,8 @@ type State struct {
 	LocalOnly bool
 	// Pending are the ids of calls awaiting the owner's confirmation.
 	Pending []string
-	// Commands are the keys of host commands still running in the
-	// background (R-CMD-4).
+	// Commands are the keys of the session's background jobs whose end is
+	// still to be told: host commands (R-CMD-4) and module builds (R-RUN-9).
 	Commands []string
 }
 

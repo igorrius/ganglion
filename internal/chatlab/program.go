@@ -44,13 +44,16 @@ func (p *program) clean() {
 
 // Counter counts the tokens of a run, for its cap. It sits around every
 // provider, so turns, the memory check and compaction all count.
-type Counter struct{ n atomic.Int64 }
+type Counter struct{ n, calls atomic.Int64 }
 
 // Wrap counts every call of p.
 func (c *Counter) Wrap(p provider.Provider) provider.Provider { return counted{p, c} }
 
 // Add counts n tokens spent outside the node, by the judge.
 func (c *Counter) Add(n int) { c.n.Add(int64(n)) }
+
+// Calls is how many model calls were counted so far.
+func (c *Counter) Calls() int { return int(c.calls.Load()) }
 
 // Total is the tokens counted so far.
 func (c *Counter) Total() int { return int(c.n.Load()) }
@@ -61,6 +64,7 @@ type counted struct {
 }
 
 func (p counted) Chat(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+	p.c.calls.Add(1)
 	resp, err := p.Provider.Chat(ctx, req)
 	p.c.Add(resp.Usage.InputTokens + resp.Usage.OutputTokens)
 	return resp, err

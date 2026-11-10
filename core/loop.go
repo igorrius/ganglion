@@ -34,7 +34,7 @@ const (
 	DefaultLease       = 10 * time.Minute
 	DefaultPoll        = 30 * time.Second
 	DefaultWorkers     = 4
-	DefaultTurnTimeout = 3 * time.Minute
+	DefaultTurnTimeout = 6 * time.Minute
 	DefaultMaxAttempts = 3
 	// DefaultMaxInterrupted bounds a crash loop: each restart reruns the turn
 	// from its start and pays for its model calls again.
@@ -79,8 +79,18 @@ func WithPoll(d time.Duration) Option { return func(l *Loop) { l.poll = d } }
 func WithWorkers(n int) Option { return func(l *Loop) { l.workers = max(n, 1) } }
 
 // WithTurnTimeout bounds the handler's context; keep it below the lease.
-// The default is DefaultTurnTimeout.
-func WithTurnTimeout(d time.Duration) Option { return func(l *Loop) { l.turnTimeout = d } }
+// The default is DefaultTurnTimeout, which a zero or negative d keeps: a turn
+// with no time at all is never meant.
+func WithTurnTimeout(d time.Duration) Option {
+	return func(l *Loop) {
+		if d > 0 {
+			l.turnTimeout = d
+		}
+	}
+}
+
+// TurnTimeout is how long the handler may take over one event.
+func (l *Loop) TurnTimeout() time.Duration { return l.turnTimeout }
 
 // GiveUp returns the replies for an event that failed every one of its
 // attempts; the event is completed with them instead of being retried.

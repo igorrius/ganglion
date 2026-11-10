@@ -50,6 +50,9 @@ func hostCellReport(nptr, nsize, vptr, vsize uint32) int32
 //go:wasmimport ganglion cell_get
 func hostCellGet(ptr, size uint32) int32
 
+//go:wasmimport ganglion notify
+func hostNotify(ptr, size uint32) int32
+
 func ptr(b []byte) uint32 {
 	if len(b) == 0 {
 		return 0
@@ -146,6 +149,21 @@ func (wasmHost) CellGet(id string) (json.RawMessage, time.Time, bool) {
 		return nil, time.Time{}, false
 	}
 	return c.Value, time.UnixMilli(c.AtMs), true
+}
+
+func (wasmHost) Notify(text string) error {
+	b := []byte(text)
+	code := hostNotify(ptr(b), uint32(len(b)))
+	runtime.KeepAlive(b)
+	switch code {
+	case 0:
+		return nil
+	case -2:
+		return pdk.ErrNotifyLimit
+	case -3:
+		return pdk.ErrNotifyNotHere
+	}
+	return pdk.ErrNotifyDenied
 }
 
 func (wasmHost) Now() time.Time { return time.UnixMilli(hostNowMs()) }

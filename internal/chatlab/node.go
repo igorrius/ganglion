@@ -74,6 +74,8 @@ type Node struct {
 	logs     string
 	pending  atomic.Int64 // how far the confirmations' clock is ahead, ns
 	sched    atomic.Int64 // how far the scheduler's clock is ahead, ns
+	tokens   *Counter     // counts the node's model calls
+	calls0   int          // the counter's calls when this node started
 }
 
 // Start runs a node for o. Stop ends it and removes its directory.
@@ -83,7 +85,10 @@ func Start(ctx context.Context, o NodeOptions) (n *Node, err error) {
 		return nil, fmt.Errorf("chatlab: %w", err)
 	}
 	closers := &program{}
-	n = &Node{dir: dir, ws: filepath.Join(dir, "workspace"), logs: filepath.Join(dir, "logs"), done: make(chan error, 1), closers: closers}
+	n = &Node{dir: dir, ws: filepath.Join(dir, "workspace"), logs: filepath.Join(dir, "logs"), done: make(chan error, 1), closers: closers, tokens: o.Tokens}
+	if o.Tokens != nil {
+		n.calls0 = o.Tokens.Calls()
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("chatlab: %v", r)
@@ -147,7 +152,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	b := config.Bootstrap{Examples: examplesFolder(), DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
 		Admin: fmt.Sprintf("telegram:user:%d", labChat), Build: rustenv.LocalFromEnv(os.Getenv), Secrets: labSecrets(), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
 		Agent: config.AgentSettings{Models: &models, Keys: keys, Workspace: n.ws, DailyBudgetUSD: 1, DailyTurns: 300,
-			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}}
+			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}, Timeouts: labTimeouts()}
 	rot, err := logfile.Open(logfile.DefaultConfig(n.logs), time.Now)
 	if err != nil {
 		return fmt.Errorf("chatlab: logs: %w", err)
@@ -429,11 +434,20 @@ func (n *Node) Advance(clock string, d time.Duration) error {
 }
 
 // busyQuery counts what the node has left to do: events in the inbox,
-// messages in the outbox, and background commands whose command.done event
-// the node has not put yet, which then resumes the conversation.
+// messages in the outbox, background commands whose command.done event the
+// node has not put yet, and background jobs still running or waiting (a
+// module build, whose module.built event then resumes the conversation).
 const busyQuery = `SELECT (SELECT count(*) FROM inbox WHERE status = 'pending') +
 	(SELECT count(*) FROM outbox WHERE status = 'pending') +
-	(SELECT count(*) FROM host_jobs WHERE background = 1 AND announced = 0)`
+	(SELECT count(*) FROM host_jobs WHERE background = 1 AND announced = 0) +
+	(SELECT count(*) FROM background_jobs WHERE state IN ('queued', 'running'))`
+
+// labTimeouts are the node's default timeouts, as the command line maps
+// them from the settings.
+func labTimeouts() config.Timeouts {
+	a := settings.Default().Agent
+	return config.Timeouts{Call: time.Duration(a.CallTimeout), Turn: time.Duration(a.TurnTimeout), Handler: a.HandlerTimeout()}
+}
 
 // Quiet waits until the node took the peer's last action and has nothing
 // left to do (busyQuery) on three looks in a row.
@@ -494,6 +508,14 @@ func (n *Node) Stop(ctx context.Context) error {
 	return n.stopErr
 }
 
+// modelCalls is how many calls the node has made to a model since it started.
+func (n *Node) modelCalls() int {
+	if n.tokens == nil {
+		return 0
+	}
+	return n.tokens.Calls() - n.calls0
+}
+
 // ReadView reads what a facts step checks; last is the model's words since
 // the last action.
 func ReadView(ctx context.Context, n *Node, last []Message) (View, error) {
@@ -501,7 +523,7 @@ func ReadView(ctx context.Context, n *Node, last []Message) (View, error) {
 	if err != nil {
 		return View{}, fmt.Errorf("chatlab: journal: %w", err)
 	}
-	v := View{Journal: entries, Messages: n.peer.Messages(), Last: last, Memory: map[string]string{}, Jobs: map[string]int{},
+	v := View{ModelCalls: n.modelCalls(), Journal: entries, Messages: n.peer.Messages(), Last: last, Memory: map[string]string{}, Jobs: map[string]int{},
 		Exists: func(rel string) bool {
 			_, err := os.Lstat(filepath.Join(n.dir, rel))
 			return err == nil
