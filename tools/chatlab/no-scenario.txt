@@ -76,6 +76,7 @@ router/rules/**
 runner/cells.go
 runner/contract.go
 runner/manifest.go
+runner/notify.go
 runner/memory_mmap.go
 runner/runner.go
 runner/state.go

@@ -70,6 +70,8 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 	case "cell_get":
 		v, at, ok := h.CellGet(o.Name)
 		return map[string]any{"ok": ok, "value": v, "at_ms": at.UnixMilli()}, nil
+	case "notify":
+		return map[string]string{"err": notifyErr(h.Notify(o.Value))}, nil
 	case "headers":
 		resp, err := h.Fetch(pdk.Request{Method: "GET", URL: o.URL})
 		if err != nil {
@@ -138,4 +140,19 @@ func lifecycle(h pdk.Host, trigger string) (any, error) {
 	}
 	h.StatePut("last_trigger", trigger)
 	return map[string]string{"trigger": trigger}, nil
+}
+
+// notifyErr names the pdk error a notify call failed with, "" for success.
+func notifyErr(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, pdk.ErrNotifyLimit):
+		return "limit"
+	case errors.Is(err, pdk.ErrNotifyNotHere):
+		return "not_here"
+	case errors.Is(err, pdk.ErrNotifyDenied):
+		return "denied"
+	}
+	return "other"
 }

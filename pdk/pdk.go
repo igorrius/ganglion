@@ -36,11 +36,23 @@ type Host interface {
 	// another by the full id its manifest lists under cells.read. at is when
 	// the cell last changed.
 	CellGet(id string) (value json.RawMessage, at time.Time, ok bool)
+	// Notify sends text to the module's owner. It fails with ErrNotifyDenied
+	// when the manifest grants no notify, ErrNotifyLimit when today's limit
+	// is used up and ErrNotifyNotHere in a run that sends nothing (init,
+	// health). The host cuts the text at 1000 characters.
+	Notify(text string) error
 	// Now returns the current time.
 	Now() time.Time
 	// Log writes a line to the runner's log.
 	Log(msg string)
 }
+
+// Errors of Host.Notify.
+var (
+	ErrNotifyDenied  = errors.New("notify is not granted")
+	ErrNotifyLimit   = errors.New("today's notify limit is used up")
+	ErrNotifyNotHere = errors.New("notify does nothing in this run")
+)
 
 // Request is an HTTP request made through the host.
 type Request struct {
@@ -61,7 +73,7 @@ type Response struct {
 
 // Input is what the runner passes to a module's handle export.
 type Input struct {
-	Trigger string          `json:"trigger"`           // "cron", "tool:<name>", "event:<kind>", "init", "health"
+	Trigger string          `json:"trigger"`           // "cron", "tool:<name>", "cell", "event:<kind>", "init", "health"
 	Payload json.RawMessage `json:"payload,omitempty"` // trigger-specific data
 }
 
