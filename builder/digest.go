@@ -2,8 +2,8 @@ package builder
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -48,7 +48,7 @@ func walkSource(src string, visit func(rel string, d fs.DirEntry) error) error {
 }
 
 // SourceFiles lists the regular files of dir that a build copies, in the
-// order SourceDigest hashes them.
+// order SourceDigests reads them.
 func SourceFiles(dir string) ([]SourceFile, error) {
 	var out []SourceFile
 	err := walkSource(dir, func(rel string, d fs.DirEntry) error {
@@ -68,57 +68,58 @@ func SourceFiles(dir string) ([]SourceFile, error) {
 	return out, nil
 }
 
-// SourceDigest hashes a module folder as CopySource would copy it: regular
-// files in path order (skipping the top-level target and .git), each as its
-// relative path, a zero byte, its length and its bytes, in sha256, in hex.
-// A symlink or a device is an error. The node compares it with the record
-// of the folder as its own tools left it (R-RUN-17).
-func SourceDigest(dir string) (string, error) {
+// FileDigest is the sha256 of a file's bytes, in hex: what SourceDigests
+// holds for it.
+func FileDigest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// SourceDigests digests a module folder as CopySource would copy it: each
+// regular file (skipping the top-level target and .git) by its relative
+// path, with slashes, to the sha256 of its bytes, in hex. A symlink or a
+// device is an error. The node compares it with the record of the folder as
+// its own tools left it, file by file (R-RUN-17).
+func SourceDigests(dir string) (map[string]string, error) {
 	files, err := SourceFiles(dir)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return "", fmt.Errorf("builder: digest source: %w", err)
+		return nil, fmt.Errorf("builder: digest source: %w", err)
 	}
 	defer func() { _ = root.Close() }()
-	h := sha256.New()
+	out := make(map[string]string, len(files))
 	for _, f := range files {
-		if err := hashFile(h, root, f); err != nil {
-			return "", fmt.Errorf("builder: digest source: %s: %w", f.Path, err)
+		d, err := hashFile(root, f)
+		if err != nil {
+			return nil, fmt.Errorf("builder: digest source: %s: %w", f.Path, err)
 		}
+		out[f.Path] = d
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return out, nil
 }
 
-// hashFile writes f's framing and bytes into h. A file that is no longer a
-// regular file of the size listed is an error: the folder changed under the
-// walk.
-func hashFile(h io.Writer, root *os.Root, f SourceFile) error {
+// hashFile is the digest of f's bytes. A file that is no longer a regular
+// file of the size listed is an error: the folder changed under the walk.
+func hashFile(root *os.Root, f SourceFile) (string, error) {
 	in, err := root.Open(filepath.FromSlash(f.Path))
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() { _ = in.Close() }()
 	info, err := in.Stat()
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !info.Mode().IsRegular() || info.Size() != f.Size {
-		return fmt.Errorf("changed while it was read")
+		return "", errors.New("changed while it was read")
 	}
-	var size [8]byte
-	binary.BigEndian.PutUint64(size[:], uint64(f.Size)) //nolint:gosec // a file's size is not negative
-	if _, err := io.WriteString(h, f.Path); err != nil {
-		return err
-	}
-	if _, err := h.Write(append([]byte{0}, size[:]...)); err != nil {
-		return err
-	}
+	h := sha256.New()
 	n, err := io.CopyN(h, in, f.Size)
 	if err != nil || n != f.Size {
-		return fmt.Errorf("changed while it was read")
+		return "", errors.New("changed while it was read")
 	}
-	return nil
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

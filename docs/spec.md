@@ -762,7 +762,11 @@ escalate:                    # when to call the model
   `module.write` from a clean session); a build or a read of a folder that
   matches its record does not taint, and the build then keeps only rustc's
   diagnostics about the module's own files. Any other change to the folder
-  makes those answers outside content again (R-RUN-13).
+  makes those answers outside content again (R-RUN-13). They are clean only
+  while the module's `Cargo.lock` lists, besides its own package, only
+  crates.io crates that one of the node's examples locks with the same
+  version and checksum; a missing or unreadable lock, or any other
+  dependency, keeps them outside content.
 
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation

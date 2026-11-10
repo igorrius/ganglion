@@ -1,6 +1,8 @@
 package builder_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"maps"
 	"os"
 	"path/filepath"
@@ -27,13 +29,19 @@ func tree(t *testing.T, files map[string]string) string {
 	return dir
 }
 
+// digestOf is the folder's digests, one "path=digest" line each, sorted.
 func digestOf(t *testing.T, dir string) string {
 	t.Helper()
-	d, err := builder.SourceDigest(dir)
+	d, err := builder.SourceDigests(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return d
+	var lines []string
+	for p, h := range d {
+		lines = append(lines, p+"="+h)
+	}
+	slices.Sort(lines)
+	return strings.Join(lines, "\n")
 }
 
 var moduleFiles = map[string]string{
@@ -45,8 +53,21 @@ var moduleFiles = map[string]string{
 
 func TestTheDigestIsStable(t *testing.T) {
 	a, b := digestOf(t, tree(t, moduleFiles)), digestOf(t, tree(t, moduleFiles))
-	if a != b || len(a) != 64 {
+	if a != b {
 		t.Fatalf("two folders of the same files: %s and %s", a, b)
+	}
+	d, err := builder.SourceDigests(tree(t, moduleFiles))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for p, text := range moduleFiles {
+		sum := sha256.Sum256([]byte(text))
+		if d[p] != hex.EncodeToString(sum[:]) || builder.FileDigest([]byte(text)) != d[p] {
+			t.Fatalf("%s: %s", p, d[p])
+		}
+	}
+	if len(d) != len(moduleFiles) {
+		t.Fatalf("digests %v", d)
 	}
 	dir := tree(t, moduleFiles)
 	first := digestOf(t, dir)
@@ -101,7 +122,7 @@ func TestTheDigestRefusesASymlink(t *testing.T) {
 			if err := os.Symlink("/etc", filepath.Join(dir, filepath.FromSlash(link))); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := builder.SourceDigest(dir); err == nil || !strings.Contains(err.Error(), filepath.FromSlash(link)) {
+			if _, err := builder.SourceDigests(dir); err == nil || !strings.Contains(err.Error(), filepath.FromSlash(link)) {
 				t.Fatalf("error = %v, want one naming %s", err, link)
 			}
 		})
@@ -111,7 +132,7 @@ func TestTheDigestRefusesASymlink(t *testing.T) {
 	if err := os.Symlink(dir, link); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := builder.SourceDigest(link); err == nil {
+	if _, err := builder.SourceDigests(link); err == nil {
 		t.Fatal("a symlinked folder was digested")
 	}
 }

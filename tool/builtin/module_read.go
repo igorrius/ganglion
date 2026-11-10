@@ -92,14 +92,14 @@ func listFiles(dir string) (string, error) {
 // readSource is the text of the file rel in dir: a regular file reached
 // with no symlink on the way, at most maxWriteFile bytes, valid UTF-8.
 func readSource(dir, rel string) (string, error) {
-	if _, err := cleanPath(dir, rel); err != nil {
-		return "", err
-	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = root.Close() }()
+	if err := cleanPath(root, rel); err != nil {
+		return "", err
+	}
 	f, err := root.Open(filepath.FromSlash(rel))
 	if err != nil {
 		return "", fmt.Errorf("there is no %s in the module's folder", rel)

@@ -225,6 +225,11 @@ the session and stop the loop. The fix (owner approved the principle):
 - Any other change to the folder (a command, the owner's editor) breaks
   the match, and the answer taints as today. `module.read` follows the
   same rule.
+- The answer is clean only while the module's `Cargo.lock` lists, besides
+  the module's own package, only crates.io crates (name, version and
+  checksum) that an example's `Cargo.lock` lists too, since a dependency's
+  build script or macro can write any text into the build's output (owner,
+  2026-11-10).
 
 ### What the agent sees
 

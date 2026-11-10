@@ -102,6 +102,10 @@ type Modules struct {
 	Provenance string
 	// Now is the clock the records are stamped with.
 	Now func() time.Time
+
+	// locks serialises the writes to each module's folder; NewModuleTools
+	// makes it, one for all the tools it returns.
+	locks *moduleLocks
 }
 
 // NewModuleTools returns module.import, module.write, module.read,
@@ -110,6 +114,7 @@ type Modules struct {
 // ADR-0067), builds it, the owner approves its rights with one press
 // (R-RUN-9, ADR-0061), and the agent reads how an installed module stands.
 func NewModuleTools(m Modules) []tool.Handler {
+	m.locks = newModuleLocks()
 	return []tool.Handler{&ModuleImport{m: m}, &ModuleWrite{m: m}, &ModuleRead{m: m}, &ModuleBuild{m: m}, &ModuleInstall{m: m},
 		&ModuleStatus{m: m}}
 }

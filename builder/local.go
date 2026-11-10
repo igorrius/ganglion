@@ -420,7 +420,7 @@ func readOpened(f *os.File, limit int64) ([]byte, error) {
 }
 
 // CopySource copies the regular files of src into dst without the top-level
-// target and .git folders (walkSource, which SourceDigest walks too): the
+// target and .git folders (walkSource, which SourceDigests walks too): the
 // copy a build makes, and the one module.import makes of an example into the
 // workspace. A symlink (src itself included), a device, or more than limit
 // bytes is refused; dst may exist.

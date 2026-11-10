@@ -88,10 +88,14 @@ session, builds it, fixes its own compile errors and ends at the install window.
 7. **Provenance lives in `<data>/modules/provenance/<name>.json`** (`{"digest","origin","at"}`),
    written atomically, beside the builds, outside the workspace and the command sandbox's reach.
    The digest walk is `builder.SourceDigest`, beside `CopySource`, so both skip the same files.
+   (Task 6 fix round 1: a digest per file, `{"files":{"<path>":"<sha256>"},"origin","at"}` through
+   `builder.SourceDigests`; an import records every file, a write only its own, so a write does not
+   bless another file's change.)
 8. **The clean log** keeps blocks that start with `error` or `warning` and name a path under
    `src/`, or `Cargo.toml`, or `manifest.yaml`; it drops `warning: <crate>@<version>:` lines
    (dependencies' build scripts) and everything else from cargo. When nothing is kept, the
-   answer says "the build failed; no diagnostic names the module's own files".
+   answer says "the build failed; no diagnostic names the module's own files". (owner,
+   2026-11-10: and the lock lists only crates of the examples' locks.)
 9. **`module.write` is `ClassRead`, `PolicyAuto`, `AdminOnly`**, and refuses in `Run` when
    `c.Tainted`, as `persona.propose` does. `ClassSideEffect` would ask for a press, which the
    owner ruled out.
