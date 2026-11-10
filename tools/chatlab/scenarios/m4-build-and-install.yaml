@@ -13,6 +13,7 @@ covers:
   - config/builder.go
   - config/modhost.go
   - builder/**
+  - internal/rustenv/**
   - modstore/install.go
   - modstore/local.go
   - modhost/**

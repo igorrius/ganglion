@@ -27,6 +27,9 @@ steps:
   - advance: {scheduler: 31m}
   - facts: {replies: 0}
   - advance: {scheduler: 31m}
-  - facts: {replies: 1, reply: {contains: "turned it off"}}
+  - facts:
+      replies: 1
+      reply: {contains: "turned it off"}
+      history: {contains: "[module] deye-reader: module.crashloop"}
   - advance: {scheduler: 31m}
   - facts: {replies: 0}

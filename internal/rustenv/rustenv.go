@@ -1,4 +1,6 @@
-package builder
+// Package rustenv finds the Rust toolchain a node builds modules with, from
+// the environment its caller passes in: the builder package reads none.
+package rustenv
 
 import (
 	"context"
@@ -7,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/igorrius/ganglion/builder"
 )
 
 // toolchainTimeout bounds asking rustc for its toolchain at start.
@@ -17,8 +21,8 @@ const toolchainTimeout = 30 * time.Second
 // toolchain every build is pinned to (toolchain). The build runs with a
 // temporary HOME, so the toolchain folder must be named. No cargo leaves
 // Cargo empty: the node builds nothing.
-func LocalFromEnv(getenv func(string) string) LocalConfig {
-	cfg := DefaultLocalConfig()
+func LocalFromEnv(getenv func(string) string) builder.LocalConfig {
+	cfg := builder.DefaultLocalConfig()
 	home, _ := os.UserHomeDir()
 	if cargo, err := exec.LookPath("cargo"); err == nil {
 		cfg.Cargo = cargo

@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/buildinfo"
 	"github.com/igorrius/ganglion/internal/memlimit"
 	"github.com/igorrius/ganglion/internal/redact"
+	"github.com/igorrius/ganglion/internal/rustenv"
 	"github.com/igorrius/ganglion/logfile"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/sandbox"
@@ -107,7 +107,7 @@ func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read
 	if err != nil {
 		return config.Bootstrap{}, err
 	}
-	b.Build = builder.LocalFromEnv(getenv)
+	b.Build = rustenv.LocalFromEnv(getenv)
 	b.SettingsPath, b.Secrets = settingsPath(v.Config, v.DB), src
 	return b, nil
 }

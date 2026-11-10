@@ -23,8 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/config"
+	"github.com/igorrius/ganglion/internal/rustenv"
 	"github.com/igorrius/ganglion/logfile"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider/providertest"
@@ -145,7 +145,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 		return err
 	}
 	b := config.Bootstrap{Examples: examplesFolder(), DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
-		Admin: fmt.Sprintf("telegram:user:%d", labChat), Build: builder.LocalFromEnv(os.Getenv), Secrets: labSecrets(), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
+		Admin: fmt.Sprintf("telegram:user:%d", labChat), Build: rustenv.LocalFromEnv(os.Getenv), Secrets: labSecrets(), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
 		Agent: config.AgentSettings{Models: &models, Keys: keys, Workspace: n.ws, DailyBudgetUSD: 1, DailyTurns: 300,
 			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}}
 	rot, err := logfile.Open(logfile.DefaultConfig(n.logs), time.Now)
