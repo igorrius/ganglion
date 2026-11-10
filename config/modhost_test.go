@@ -79,7 +79,7 @@ func TestTheNodeHostsALocalModule(t *testing.T) {
 	if err != nil || j.Kind != schedule.KindModule || j.Owner != "telegram:user:42" || j.Deleted {
 		t.Fatalf("job %+v, %v", j, err)
 	}
-	if err := agentDeps(i).ModuleCron(ctx, "local/probe"); err != nil {
+	if err := agentDeps(i).ModuleCron(ctx, "local/probe", "slot"); err != nil {
 		t.Fatal(err)
 	}
 	if c, err := do.MustInvoke[*cells.Service](i).Get(ctx, "probe.soc"); err != nil || string(c.Reported) != "87" || c.Owner != "local/probe" {

@@ -15,7 +15,7 @@ func TestModuleMetrics(t *testing.T) {
 	rec := telemetrytest.Install(t)
 	e := newEnv(t, active(t, "local/probe", probeManifest))
 	e.start(t)
-	if err := e.host.RunCron(context.Background(), "local/probe"); err != nil {
+	if err := e.host.RunCron(context.Background(), "local/probe", "slot"); err != nil {
 		t.Fatal(err)
 	}
 	for range 2 { // counted, never escalated: the calling turn has the words

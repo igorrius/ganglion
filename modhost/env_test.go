@@ -490,7 +490,7 @@ const (
 func (e *env) cron(t *testing.T, op string) {
 	t.Helper()
 	e.state.Put("probe", "op_cron", op)
-	if err := e.host.RunCron(context.Background(), "local/probe"); err != nil {
+	if err := e.host.RunCron(context.Background(), "local/probe", "slot"); err != nil {
 		t.Fatal(err)
 	}
 }

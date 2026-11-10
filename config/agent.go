@@ -104,6 +104,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Cells:         do.MustInvoke[*cells.Service](i),
 		Buttons:       do.MustInvoke[*pending.Store](i),
 		ModuleCron:    do.MustInvoke[*modhost.Host](i).RunCron,
+		ModuleTrigger: do.MustInvoke[*modhost.Host](i).RunTrigger,
 		Switch:        do.MustInvoke[*host.Switch](i),
 		Commands:      do.MustInvoke[*host.Runner](i),
 		Skills:        do.MustInvoke[Skilled](i).Set,

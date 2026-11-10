@@ -56,6 +56,7 @@ func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 	case event.KindModule:
 		return true, a.moduleEvent(ctx, t)
 	case event.KindMessage, event.KindSchedule:
+	case event.KindModuleTrigger, event.KindModuleNotify: // never here: Handle runs a trigger before begin, and begin reads no notify
 	}
 	return false, nil
 }

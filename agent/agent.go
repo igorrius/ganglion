@@ -50,12 +50,24 @@ type NameFunc func(ctx context.Context, principal string) (string, error)
 type SystemJob func(ctx context.Context, sp texts.Speaker) (string, error)
 
 // ModuleCronFunc runs a module of the owner's on its cron job
-// (schedule.KindModule): no model, no message (R-RUN-12). An error is the
-// node's own failure, logged; the module's failures are its host's to count.
-type ModuleCronFunc func(ctx context.Context, module string) error
+// (schedule.KindModule): no model, no message (R-RUN-12). run is the run's
+// identity, the schedule event's idempotency key, under which the cell
+// triggers it causes are put once (R-RUN-15). An error is the node's own
+// failure, logged; the module's failures are its host's to count.
+type ModuleCronFunc func(ctx context.Context, module, run string) error
 
 // NoModuleCron is the ModuleCronFunc of a node that hosts no modules.
-func NoModuleCron(context.Context, string) error { return nil }
+func NoModuleCron(context.Context, string, string) error { return nil }
+
+// ModuleTriggerFunc runs the listener of a module.trigger event once, as
+// the run with the event's id (R-RUN-15, ADR-0065): no model, no turn. A
+// run that failed is no error (its host counts it); an error is a run the
+// host could not start, and the event is tried again.
+type ModuleTriggerFunc func(ctx context.Context, e event.ModuleTrigger, id string) error
+
+// NoModuleTrigger is the ModuleTriggerFunc of a node that hosts no modules:
+// the event is acknowledged and dropped.
+func NoModuleTrigger(context.Context, event.ModuleTrigger, string) error { return nil }
 
 // Deps are the agent's collaborators. All are required except Middleware,
 // QuickActions, SystemJobs, Facts, Inbox, Plans, Status, Now and Log; the composition root
@@ -87,7 +99,10 @@ type Deps struct {
 	SystemJobs map[string]SystemJob
 	// ModuleCron runs a module's cron job (modhost); NoModuleCron when unset.
 	ModuleCron ModuleCronFunc
-	IsAdmin    AdminFunc
+	// ModuleTrigger runs a module whose listened cells changed (modhost);
+	// NoModuleTrigger when unset.
+	ModuleTrigger ModuleTriggerFunc
+	IsAdmin       AdminFunc
 	// Names are the access list's names, for the line that tells a task
 	// run who receives its answer (ruling R41).
 	Names   NameFunc
@@ -203,9 +218,16 @@ type Agent struct {
 	tool     tool.Func
 }
 
-// withOwnModules gives the parts of /modules and /cells their
-// no-op defaults; the quick actions are a copy, so the agent adds its own.
+// withOwnModules gives the parts of /modules and /cells and the module
+// runs their no-op defaults; the quick actions are a copy, so the agent
+// adds its own.
 func withOwnModules(d Deps) Deps {
+	if d.ModuleCron == nil {
+		d.ModuleCron = NoModuleCron
+	}
+	if d.ModuleTrigger == nil {
+		d.ModuleTrigger = NoModuleTrigger
+	}
 	if d.Modules == nil {
 		d.Modules = NoModules{}
 	}
@@ -255,9 +277,6 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Commands == nil {
 		d.Commands = NoCommands{}
 	}
-	if d.ModuleCron == nil {
-		d.ModuleCron = NoModuleCron
-	}
 	if d.Plans == nil {
 		d.Plans = NoPlans{}
 	}
@@ -287,8 +306,12 @@ func New(cfg Config, d Deps) *Agent {
 // Handle implements core.Handler: it runs the turn's stages and returns
 // the replies and the new state. It answers text messages, button
 // presses, the expiry of pending calls, scheduled jobs and the end of host
-// commands that went on in the background; other events are left alone.
+// commands that went on in the background; a module trigger runs its
+// module with no turn at all; other events are left alone.
 func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
+	if e.Kind == event.KindModuleTrigger {
+		return nil, queue.StateUpdate{}, a.moduleTrigger(ctx, e) // no begin, no turn, no state
+	}
 	t, ok, err := a.begin(ctx, e)
 	if err != nil || !ok {
 		a.endWithoutTurn(e)

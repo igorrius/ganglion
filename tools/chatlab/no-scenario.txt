@@ -17,6 +17,7 @@ agent/commands.go
 agent/config.go
 agent/limits.go
 agent/model.go
+agent/module_trigger.go
 agent/modules.go
 agent/persona.go
 agent/restart.go

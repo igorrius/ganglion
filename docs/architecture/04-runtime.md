@@ -200,6 +200,42 @@ sequenceDiagram
     H->>J: Count(run)
 ```
 
+## A module started by another module's cells (P1)
+
+A run that wrote cells starts every running module that listens to any of
+them, through the node's inbox, with no model and no turn (R-RUN-15,
+[ADR-0065](../adr/0065-cell-triggers-through-the-inbox.md)). The run is
+identified by the slot of a cron run, the key of a tool call or the id of
+a trigger event, so a run delivered again puts no second event; a chain
+stops past depth 4. The listener's run is unattended, like cron: counted,
+escalated, towards the crash loop.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as deye-reader run
+    participant H as Module host
+    participant Q as Inbox
+    participant A as Agent.Handle
+    participant L as deye-alerts module
+
+    P->>H: cell_report soc, grid (noted in the run's context)
+    Note over H: the run ends: settle (count, escalate, crash loop)
+    H->>H: running listeners of the cells written, not the producer
+    alt depth + 1 at most 4
+        H->>Q: Put(module.trigger, conv module:deye-alerts, key trigger:local/deye-alerts:local/deye-reader:RUN, cells sorted, depth)
+    else deeper
+        H->>H: no event; a log line once per build
+    end
+    Q->>A: kind module.trigger, before begin: no state, no turn, no model
+    A->>H: RunTrigger(payload, event id)
+    H->>L: Handle(trigger cell, cells and producer)
+    L->>H: cell_get(deye-reader.soc), ...
+    H->>H: settle as unattended; fan out its own cells, depth + 1
+    H-->>A: nil (a failure is the supervisor's); an error only when the run could not start
+    A-->>Q: acknowledged, or retried after the lease on an error
+```
+
 ## A module tool call (P1)
 
 The agent calls `deye-reader.status` like any read tool; the answer is

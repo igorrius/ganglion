@@ -29,12 +29,13 @@ func authFailed() event.Module {
 }
 
 // A module's cron job runs the module through ModuleCron, with no model
-// and no message (R-RUN-12).
+// and no message (R-RUN-12); the run is the schedule event's idempotency
+// key, the slot, so its cell triggers are put once (ruling 3).
 func TestModuleJobCallsModuleCronAndSendsNothing(t *testing.T) {
 	e := newEnv(t, Config{}, nil)
-	var ran []string
-	e.deps.ModuleCron = func(_ context.Context, module string) error {
-		ran = append(ran, module)
+	var ran, runs []string
+	e.deps.ModuleCron = func(_ context.Context, module, run string) error {
+		ran, runs = append(ran, module), append(runs, run)
 		return nil
 	}
 	e.a = New(overDefaults(Config{}), e.deps)
@@ -47,6 +48,9 @@ func TestModuleJobCallsModuleCronAndSendsNothing(t *testing.T) {
 	}
 	if strings.Join(ran, ",") != "local/deye-reader" {
 		t.Fatalf("ModuleCron ran %v", ran)
+	}
+	if len(runs) != 1 || runs[0] != ev.IdemKey {
+		t.Fatalf("run %v, want the event's key %q", runs, ev.IdemKey)
 	}
 	if n := len(e.smart.requests()) + len(e.cheap.requests()); n != 0 {
 		t.Fatalf("%d model calls for a module run", n)

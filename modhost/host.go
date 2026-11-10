@@ -103,7 +103,8 @@ type Host struct {
 	stopped map[string]stop
 	off     map[string]bool
 	fails   map[string][]time.Time
-	unread  time.Time // when Start could not read the store or the settings; zero when it could
+	unread  time.Time       // when Start could not read the store or the settings; zero when it could
+	stops   map[string]bool // the builds (sha) whose chain stopped past maxDepth, told once
 
 	episodeMu sync.Mutex                 // held across the store's calls on episodes, so the cache and the store change together
 	episodes  map[string]map[Kind]string // module → kind → the sha of its open episode, a cache of the store's
@@ -113,7 +114,7 @@ type Host struct {
 // New returns a host with no module running; Start loads them.
 func New(d Deps) *Host {
 	h := &Host{d: d, in: newInstruments(), running: map[string]*loaded{}, stopped: map[string]stop{},
-		off: map[string]bool{}, fails: map[string][]time.Time{}, episodes: map[string]map[Kind]string{}, clean: map[string]bool{}}
+		off: map[string]bool{}, fails: map[string][]time.Time{}, stops: map[string]bool{}, episodes: map[string]map[Kind]string{}, clean: map[string]bool{}}
 	h.tools.Store(&[]tool.Handler{})
 	return h
 }

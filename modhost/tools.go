@@ -17,11 +17,13 @@ type trigger string
 const (
 	triggerCron trigger = "cron"
 	triggerTool trigger = "tool"
+	triggerCell trigger = "cell" // cells it listens to changed (R-RUN-15)
 )
 
-// unattended reports whether nobody watches a run of t: a cron run's
-// failure is escalated, a tool call's is the calling turn's to tell.
-func (t trigger) unattended() bool { return t == triggerCron }
+// unattended reports whether nobody watches a run of t: a cron or a cell
+// trigger's failure is escalated, a tool call's is the calling turn's to
+// tell.
+func (t trigger) unattended() bool { return t != triggerTool }
 
 // noArgs is the input schema of a module's tool: it takes no arguments.
 var noArgs = json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
@@ -69,14 +71,14 @@ func (h *Host) toolsOf(l *loaded) []tool.Handler {
 // errNotRunning is a call of a module that is not running.
 var errNotRunning = errors.New("the module is not running")
 
-// runTool runs one tool call and settles it.
+// runTool runs one tool call, as the run of the call's key, and settles it.
 func (h *Host) runTool(ctx context.Context, t moduleTool, c tool.Call) (tool.Result, error) {
-	r, ok := h.call(ctx, t.module, pdk.Input{Trigger: t.trigger, Payload: c.Args})
+	r, ok := h.call(ctx, t.module, pdk.Input{Trigger: t.trigger, Payload: c.Args}, newRun(c.Key(), triggerTool, 0))
 	if !ok {
 		return tool.Result{}, errors.New(t.spec.Name + ": " + errNotRunning.Error())
 	}
 	o := judge(r.out, r.err, t.spec.Name)
-	disabled, serr := h.settle(ctx, r.l, triggerTool, o)
+	disabled, serr := h.finish(ctx, r, o)
 	if serr != nil {
 		h.d.Log.Error("modhost: disabling a module failed", "module", r.l.name, "err", serr)
 	}
@@ -101,35 +103,48 @@ func toolError(name, short string, o outcome, disabled bool) string {
 	return msg
 }
 
-// RunCron runs module's cron trigger and settles it, with no model
-// (R-RUN-12). A module that is not running does nothing; an error is the
-// node's failure to disable a crash-looping module.
-func (h *Host) RunCron(ctx context.Context, module string) error {
-	r, ok := h.call(ctx, module, pdk.Input{Trigger: string(triggerCron)})
+// RunCron runs module's cron trigger as the run id, the schedule event's
+// idempotency key (ruling 3 of M4c), and settles it, with no model
+// (R-RUN-12); the cells it wrote start their listeners (R-RUN-15). A module
+// that is not running does nothing; an error is the node's failure to
+// disable a crash-looping module.
+func (h *Host) RunCron(ctx context.Context, module, id string) error {
+	r, ok := h.call(ctx, module, pdk.Input{Trigger: string(triggerCron)}, newRun(id, triggerCron, 0))
 	if !ok {
 		h.d.Log.Info("modhost: the cron job of a module that is not running", "module", module)
 		return nil
 	}
-	_, err := h.settle(ctx, r.l, triggerCron, judge(r.out, r.err, r.l.short+" cron"))
+	_, err := h.finish(ctx, r, judge(r.out, r.err, r.l.short+" cron"))
 	return err
 }
 
-// ran is one call of a module: the module, its answer, the runner's error.
+// ran is one call of a module: the module, the run, its answer, the
+// runner's error.
 type ran struct {
 	l   *loaded
+	run run
 	out pdk.Output
 	err error
 }
 
-// call runs one call of module, holding h.mu for reading so it is not
-// unloaded meanwhile; ok is false when it is not running.
-func (h *Host) call(ctx context.Context, module string, in pdk.Input) (ran, bool) {
+// call runs one call of module as run r, holding h.mu for reading so it is
+// not unloaded meanwhile; ok is false when it is not running. The call's
+// context carries r, so the host functions' ports see it.
+func (h *Host) call(ctx context.Context, module string, in pdk.Input, r run) (ran, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	l, ok := h.running[module]
 	if !ok {
 		return ran{}, false
 	}
-	out, err := l.mod.Handle(ctx, in)
-	return ran{l: l, out: out, err: err}, true
+	out, err := l.mod.Handle(withRun(ctx, r), in)
+	return ran{l: l, run: r, out: out, err: err}, true
+}
+
+// finish settles a run judged o and then starts the listeners of the cells
+// it wrote, failed or not: the cells changed either way.
+func (h *Host) finish(ctx context.Context, r ran, o outcome) (disabled bool, err error) {
+	disabled, err = h.settle(ctx, r.l, r.run.Trigger, o)
+	h.fanOut(ctx, r.l, r.run)
+	return disabled, err
 }

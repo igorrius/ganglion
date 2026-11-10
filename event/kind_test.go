@@ -10,11 +10,14 @@ import (
 // Kinds are stored in the inbox: their values must never change.
 func TestKindValues(t *testing.T) {
 	for kind, want := range map[event.Kind]string{
-		event.KindMessage:     "message",
-		event.KindDecision:    "decision",
-		event.KindToolResult:  "tool.result",
-		event.KindSchedule:    "schedule",
-		event.KindCommandDone: "command.done",
+		event.KindMessage:       "message",
+		event.KindDecision:      "decision",
+		event.KindToolResult:    "tool.result",
+		event.KindSchedule:      "schedule",
+		event.KindCommandDone:   "command.done",
+		event.KindModule:        "module",
+		event.KindModuleTrigger: "module.trigger",
+		event.KindModuleNotify:  "module.notify",
 	} {
 		if string(kind) != want {
 			t.Errorf("kind %q, want %q", kind, want)

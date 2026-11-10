@@ -6,6 +6,8 @@ package probe
 import (
 	"encoding/json"
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/igorrius/ganglion/pdk"
@@ -31,6 +33,10 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 		return lifecycle(h, in.Trigger)
 	}
 	payload := in.Payload
+	if in.Trigger == "cell" { // the node's input: noted in the state, the operation scripted
+		h.StatePut("last_cell", string(payload))
+		payload = nil
+	}
 	if len(payload) == 0 || string(payload) == "{}" {
 		payload = scripted(h, in.Trigger)
 	}
@@ -67,6 +73,8 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 	case "cell_report":
 		err := h.CellReport(o.Name, o.JSON)
 		return map[string]any{"ok": err == nil, "denied": errors.Is(err, pdk.ErrCellDenied)}, nil
+	case "cell_reports": // each cell of the object in json, in name order
+		return reportAll(h, o.JSON)
 	case "cell_get":
 		v, at, ok := h.CellGet(o.Name)
 		return map[string]any{"ok": ok, "value": v, "at_ms": at.UnixMilli()}, nil
@@ -155,4 +163,19 @@ func notifyErr(err error) string {
 		return "denied"
 	}
 	return "other"
+}
+
+// reportAll reports each cell of the object raw (name → value), in name
+// order; it stops at the first refusal.
+func reportAll(h pdk.Host, raw json.RawMessage) (any, error) {
+	var vs map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &vs); err != nil {
+		return nil, err
+	}
+	for _, name := range slices.Sorted(maps.Keys(vs)) {
+		if err := h.CellReport(name, vs[name]); err != nil {
+			return nil, err
+		}
+	}
+	return map[string]int{"reported": len(vs)}, nil
 }
