@@ -1,6 +1,6 @@
 # ADR-0066: Let a module write to the owner's private chat through a `notify` capability with a daily limit
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-1, R-RUN-13, R-RUN-16), [7.1](../spec.md#71-guaranteed-delivery), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-6); [M4c design](../plans/p1-m4c-reflexes-design.md) section 5; [ADR-0049](0049-three-gaps-where-outside-text-and-private-data-cross.md)

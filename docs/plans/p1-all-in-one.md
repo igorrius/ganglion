@@ -291,10 +291,10 @@ are [p1-m4a-config.md](p1-m4a-config.md) (4.1, 4.2) and `p1-m4b-modules.md`
 writing module source in the workspace; the first reflex is `deye-alerts`
 (thresholds 90…30 %, below 30 % every 5 %, full charge, a data failure once),
 so routine reactions run without a model (owner, 2026-11-10). Designed
-2026-11-10 ([design](p1-m4c-reflexes-design.md), ADRs 0065–0067 Proposed,
+2026-11-10 ([design](p1-m4c-reflexes-design.md), ADRs 0065–0067 Accepted,
 R-RUN-15–17): cell triggers through the inbox, `notify` to the owner's private
 chat, `module.write` from a clean session, a reflex template and a
-module-writing skill. The step-by-step plan is next.
+module-writing skill. Step-by-step plan: [p1-m4c-reflexes.md](p1-m4c-reflexes.md).
 
 | Task | Done when |
 |---|---|
