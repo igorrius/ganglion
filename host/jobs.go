@@ -130,15 +130,18 @@ func (r *Runner) interrupt(ctx context.Context) error {
 
 // pass stores the command.done event of each background command that
 // ended and is not announced yet, then prunes old rows. A failed put is
-// logged and tried again on the next pass.
+// logged and tried again on the next pass. It holds bg, so a command's own
+// announcement at its end and the pass's never both put it.
 func (r *Runner) pass(ctx context.Context) {
-	jobs, err := r.unannounced(ctx)
+	r.bg.Lock()
+	ended, err := r.unannounced(ctx)
 	if err != nil {
 		r.logErr(ctx, "host: the ended background commands were not read", err)
 	}
-	for _, j := range jobs {
+	for _, j := range ended {
 		r.announce(ctx, j)
 	}
+	r.bg.Unlock()
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM host_jobs WHERE state != 'running' AND (background = 0 OR announced = 1)
 		AND ended_ms < ?`, r.now().Add(-keepJobs).UnixMilli()); err != nil {
 		r.logErr(ctx, "host: old commands were not pruned", err)

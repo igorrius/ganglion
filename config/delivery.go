@@ -10,6 +10,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/host"
+	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/outbox"
@@ -196,6 +197,7 @@ func AgentHousekeepers() do.Provider[Housekeeping] {
 			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger),
 			do.MustInvoke[*host.Janitor](i),
 			do.MustInvoke[*host.Runner](i),
+			do.MustInvoke[*bgjobs.Registry](i),
 			node.Named("translator", do.MustInvoke[*language.Translator](i).Run),
 			cells.Reconciler{Service: do.MustInvoke[*cells.Service](i), Every: cells.ReconcileEvery, Log: logger, After: time.After},
 		}, nil

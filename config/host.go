@@ -9,8 +9,11 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/internal/redact"
+	bgjobs "github.com/igorrius/ganglion/jobs"
+	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/sandbox"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/samber/do/v2"
 )
@@ -75,9 +78,24 @@ func newRunner(i do.Injector, lim host.Limits, opts ...host.RunnerOption) (*host
 	opts = append([]host.RunnerOption{
 		host.WithRedact(secretRedact(b)),
 		host.WithRunnerLog(do.MustInvoke[*slog.Logger](i)),
+		host.WithJobs(do.MustInvoke[*bgjobs.Registry](i)),
 	}, opts...)
 	return host.NewRunner(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*sandbox.Sandbox](i),
 		do.MustInvoke[*sqlqueue.Queue](i).Put, lim, opts...)
+}
+
+// BackgroundJobs provides the registry of background jobs and their cards
+// (R-LIVE-9), in each person's language.
+func BackgroundJobs() do.Provider[*bgjobs.Registry] {
+	return func(i do.Injector) (*bgjobs.Registry, error) {
+		store, err := bgjobs.NewStore(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
+		if err != nil {
+			return nil, err
+		}
+		return bgjobs.New(bgjobs.Deps{Store: store, Outbox: do.MustInvoke[*sqlqueue.Queue](i),
+			Lang: do.MustInvoke[*language.Store](i).Resolve, Texts: do.MustInvoke[*texts.Catalog](i),
+			Log: do.MustInvoke[*slog.Logger](i)}), nil
+	}
 }
 
 // Switch provides the kill switch of host.exec, its cell defined at start.

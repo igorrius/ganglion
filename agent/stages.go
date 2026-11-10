@@ -182,6 +182,7 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 		t.state.Session, t.state.Started = t.event.ID, t.now
 	}
 	t.known = knownURLs(append(slices.Clone(t.state.Messages), user))
+	t.jobs = a.jobsNote(t)
 	turnCtx, cancel := context.WithTimeout(ctx, a.cfg.TurnTimeout)
 	defer cancel()
 	t.deadline, _ = turnCtx.Deadline()
@@ -331,7 +332,8 @@ func (a *Agent) annotate(ctx context.Context, t *turn, msgs []provider.Message) 
 // line break: "[now: 2026-11-03 09:00 Mon, Europe/Kyiv]" in the node's
 // location, then the taint notice while the session is tainted, then in a
 // scheduled task's run the line saying its answer is delivered by itself
-// (ruling R41) and the line listing its grant's commands exactly. A family
+// (ruling R41) and the line listing its grant's commands exactly, the
+// person's chosen language, and the conversation's background jobs. A family
 // member's turn gets no notice: it has no tools to misuse, and gets plain
 // conversation only (design section 4, rule 8); the <external> marks in
 // the history and the core rules still say the content is data.
@@ -349,6 +351,9 @@ func (a *Agent) turnLines(ctx context.Context, t *turn) string {
 	}
 	if l, ok, err := a.d.Languages.Chosen(ctx, t.msg.From); err == nil && ok {
 		lines += "\n" + fmt.Sprintf(chosenLine, texts.Native(l), string(l))
+	}
+	if t.jobs != "" {
+		lines += "\n" + t.jobs
 	}
 	return lines
 }

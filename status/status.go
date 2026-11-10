@@ -24,11 +24,12 @@ const (
 	SectionNode     Section = "node"
 	SectionModels   Section = "models"
 	SectionDelivery Section = "delivery"
+	SectionJobs     Section = "jobs" // background jobs (R-LIVE-9)
 	SectionProblems Section = "problems"
 )
 
 // Sections are the sections in the order they are shown.
-var Sections = []Section{SectionNode, SectionModels, SectionDelivery, SectionProblems}
+var Sections = []Section{SectionNode, SectionModels, SectionDelivery, SectionJobs, SectionProblems}
 
 // State is how a line stands. Off is switched off by configuration and
 // raises nothing.

@@ -775,19 +775,23 @@ The card's keys: the first message `job:<key>:card`, each edit `job:<key>:card:v
 `EditOf: "job:<key>:card"`. Texts (every language): `job.card_running` ("{icon} {title} · {kind} ·
 {elapsed}"), `job.card_count` ("crates built: {n}"), `job.card_queued`, `job.card_done` ("✅ {title} ·
 {kind} done in {elapsed}"), `job.card_failed`, `job.card_interrupted`, `status.jobs`.
+As built: `status.jobs` already named the scheduler's line, so the section is
+`status.section_jobs` ("Background jobs") with one line per job (`status.job_build`,
+`status.job_command`, `status.job_queued`); the kind's word is `job.kind_build` and
+`job.kind_command`.
 
 Host commands: when `Runner.Exec` detaches a command (after its 20 s wait) it `Start`s a job of kind
 `command`; its end `End`s it and puts `command.done` at once (the 30 s `pass` stays as the fallback
 for a lost wake-up).
 
-- [ ] **Step 1: Failing tests:** a started job sends one card; the ticker with a fake clock edits it
+- [x] **Step 1: Failing tests:** a started job sends one card; the ticker with a fake clock edits it
   every 10 s with the elapsed time and the count; `End` edits it to the final text and stops the
   edits; a restart (`Run` with a running row) ends it as interrupted with its card edited; `Running`
   lists only the conversation's running and queued jobs; a host command that detaches gets a card and
   its `command.done` is put at once; `/status` lists jobs; a turn's model input carries the jobs note
   and history does not.
-- [ ] **Step 2: Run, see them fail. Implement.**
-- [ ] **Step 3: `make lint test`; architecture docs; commit, push.**
+- [x] **Step 2: Run, see them fail. Implement.**
+- [x] **Step 3: `make lint test`; architecture docs; commit, push.**
 
 ```bash
 git commit -m "jobs: background jobs with a live card the node edits; host commands use it; the model and /status see what runs (R-LIVE-9)"

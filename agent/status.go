@@ -30,7 +30,8 @@ var statusMarks = map[status.State]string{status.OK: "✅", status.Warn: "⚠️
 // statusTitles are the sections' headings.
 var statusTitles = map[status.Section]texts.Key{
 	status.SectionNode: texts.StatusSectionNode, status.SectionModels: texts.StatusSectionModels,
-	status.SectionDelivery: texts.StatusSectionDelivery, status.SectionProblems: texts.StatusSectionProblems,
+	status.SectionDelivery: texts.StatusSectionDelivery, status.SectionJobs: texts.StatusSectionJobs,
+	status.SectionProblems: texts.StatusSectionProblems,
 }
 
 // showStatus shows an admin how the node is doing, with no model and no note in the history (R-OBS-11).

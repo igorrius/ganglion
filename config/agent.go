@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/diag"
 	"github.com/igorrius/ganglion/host"
+	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/plan"
@@ -107,6 +108,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		ModuleTrigger: do.MustInvoke[*modhost.Host](i).RunTrigger,
 		Switch:        do.MustInvoke[*host.Switch](i),
 		Commands:      do.MustInvoke[*host.Runner](i),
+		Background:    do.MustInvoke[*bgjobs.Registry](i),
 		Skills:        do.MustInvoke[Skilled](i).Set,
 		StatusSources: do.MustInvoke[[]status.Source](i),
 		Log:           do.MustInvoke[*slog.Logger](i),

@@ -152,8 +152,11 @@ type Deps struct {
 	Commands Commands
 	// StatusSources are the components /status asks (R-OBS-11); none when unset.
 	StatusSources []status.Source
-	Now           func() time.Time
-	Log           *slog.Logger
+	// Background lists a conversation's background jobs for the note every
+	// turn carries (R-LIVE-9, jobs.Registry); NoBackground when unset.
+	Background BackgroundJobs
+	Now        func() time.Time
+	Log        *slog.Logger
 }
 
 // Languages is what the agent needs of a person's language (language.Store).
@@ -279,6 +282,9 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Plans == nil {
 		d.Plans = NoPlans{}
+	}
+	if d.Background == nil {
+		d.Background = NoBackground{}
 	}
 	if d.Status == nil {
 		d.Status = NoStatus

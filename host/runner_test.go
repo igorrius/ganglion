@@ -8,11 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/hostcmd"
+	"github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 )
@@ -489,4 +492,82 @@ func TestASecretAcrossTheCutIsHiddenWhole(t *testing.T) {
 		t.Fatalf("answer = %+v, %v", a, err)
 	}
 	noPartOf(t, a.Job.Text)
+}
+
+// waitEvents waits until box holds n events without opening a pass, for at
+// most 10 s: the end of a background command is put at once (R-LIVE-9).
+func waitEvents(t *testing.T, box *inbox, n int) []event.Event {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for len(box.events()) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d events after 10 s with no pass, want %d", len(box.events()), n)
+		}
+		runtime.Gosched()
+	}
+	return box.events()
+}
+
+// A command that goes on in the background gets a card from the moment it
+// detaches, its end ends the card, and its command.done is put at once,
+// with no pass (R-LIVE-9, R-CMD-4).
+func TestADetachedCommandGetsACardAndItsEndIsPutAtOnce(t *testing.T) {
+	box, g, c := &inbox{}, newGate(), &cards{}
+	r, err := NewRunner(t.Context(), openDB(t), &shell{}, box.put, testLimits, WithRunnerClock(time.Now, g.after), WithJobs(c))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start(t, r)
+	argv := []string{"sleep", "0.3;", "echo", "late"}
+	opened := openWait(g)
+	a, err := r.Exec(t.Context(), req("t:card", argv...))
+	<-opened
+	if err != nil || a.Done {
+		t.Fatalf("answer = %+v, %v; want running in the background", a, err)
+	}
+	started, _ := c.seen()
+	if len(started) != 1 {
+		t.Fatalf("started %+v, want one card", started)
+	}
+	j := started[0]
+	if j.Key != "t:card" || j.Kind != jobs.KindCommand || j.Conv != "telegram:1" || j.Transport != "telegram" ||
+		j.Principal != "telegram:user:1" || j.Title != hostcmd.Show(argv) || j.State != jobs.StateRunning || j.Started.IsZero() {
+		t.Fatalf("job %+v", j)
+	}
+	evs := waitEvents(t, box, 1)
+	if evs[0].Kind != event.KindCommandDone || evs[0].IdemKey != "command:t:card:done" {
+		t.Fatalf("events = %+v", evs)
+	}
+	if _, ended := c.seen(); ended["t:card"] != jobs.StateDone {
+		t.Fatalf("ended %v, want t:card done", ended)
+	}
+	g.pass <- time.Now() // the pass finds it announced
+	g.pass <- time.Now()
+	if n := len(box.events()); n != 1 {
+		t.Fatalf("announced %d times", n)
+	}
+}
+
+// A command that fails in the background ends its card as failed; one
+// answered within its wait gets no card at all.
+func TestACardEndsAsFailedAndAQuickCommandHasNone(t *testing.T) {
+	box, g, c := &inbox{}, newGate(), &cards{}
+	r, err := NewRunner(t.Context(), openDB(t), &shell{}, box.put, testLimits, WithRunnerClock(time.Now, g.after), WithJobs(c))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start(t, r)
+	if a, err := r.Exec(t.Context(), req("t:quick", "true")); err != nil || !a.Done {
+		t.Fatalf("answer = %+v, %v", a, err)
+	}
+	opened := openWait(g)
+	if _, err := r.Exec(t.Context(), req("t:fail", "sleep", "0.2;", "exit", "3")); err != nil {
+		t.Fatal(err)
+	}
+	<-opened
+	waitEvents(t, box, 1)
+	started, ended := c.seen()
+	if len(started) != 1 || started[0].Key != "t:fail" || ended["t:fail"] != jobs.StateFailed || len(ended) != 1 {
+		t.Fatalf("started %+v, ended %v", started, ended)
+	}
 }

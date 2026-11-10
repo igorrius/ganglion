@@ -12,6 +12,7 @@ host/stats.go
 host/switch.go
 host/telemetry.go
 access/**
+agent/background.go
 agent/cells.go
 agent/commands.go
 agent/config.go
@@ -53,6 +54,7 @@ internal/size/**
 internal/text/**
 internal/transcript/**
 internal/urlnorm/**
+jobs/**
 logfile/**
 modstore/card.go
 modstore/journal.go
