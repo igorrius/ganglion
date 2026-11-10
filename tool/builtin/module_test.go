@@ -110,6 +110,18 @@ type reloads struct {
 	check      error // every Check's
 	rolledBack []string
 	rollback   func(ctx context.Context, module string) (modstore.Outcome, error)
+	card       modstore.Card // every Card's; an empty name is an unknown module
+}
+
+func (r *reloads) Card(_ context.Context, name string) (modstore.Card, error) {
+	if r.card.Name == "" || r.card.Name != name {
+		return modstore.Card{}, fmt.Errorf("%w %q", modstore.ErrUnknownModule, name)
+	}
+	return r.card, nil
+}
+
+func (*reloads) Hint(name string, kind modstore.Health) string {
+	return "hint for " + name + " " + string(kind)
 }
 
 func (r *reloads) Reload(_ context.Context, module string) error {

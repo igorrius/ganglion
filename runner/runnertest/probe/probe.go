@@ -85,17 +85,26 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 			sink = append(sink, make([]byte, 1<<20))
 		}
 		return map[string]int{"allocated_mib": o.MiB}, nil
-	case "fail":
+	case "fail": // with a name, it reports that cell first
+		if o.Name != "" {
+			_ = h.CellReport(o.Name, o.JSON)
+		}
 		return nil, pdk.WithKind(pdk.KindAuthFailed, errors.New(o.Value))
 	}
 	return nil, errors.New("unknown op " + o.Op)
 }
 
 // scripted is the operation a host configured for a trigger that brings no
-// payload (a cron run, a tool called with no arguments): the config key
-// "op_<trigger>", ":" written as "_" ("op_cron", "op_tool_status").
+// payload (a cron run, a tool called with no arguments): the state key
+// "op_<trigger>" when set, so a test changes it between runs, else the
+// config key of that name; ":" is written as "_" ("op_cron",
+// "op_tool_status").
 func scripted(h pdk.Host, trigger string) json.RawMessage {
-	v, _ := h.Config("op_" + strings.ReplaceAll(trigger, ":", "_"))
+	key := "op_" + strings.ReplaceAll(trigger, ":", "_")
+	if v, ok := h.StateGet(key); ok && v != "" {
+		return json.RawMessage(v)
+	}
+	v, _ := h.Config(key)
 	return json.RawMessage(v)
 }
 

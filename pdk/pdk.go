@@ -90,6 +90,11 @@ type Output struct {
 	Result json.RawMessage `json:"result,omitempty"` // module-specific JSON
 	Kind   string          `json:"kind,omitempty"`   // set when OK is false
 	Error  string          `json:"error,omitempty"`
+	// ModuleError is the module's own error text when the runner replaced
+	// its answer with a KindFormat verdict, whose Error is the node's
+	// words. It never crosses the wire: the node logs it, capped, and shows
+	// it to nobody else (R-RUN-14).
+	ModuleError string `json:"-"`
 }
 
 // kindError tags an error with an Output kind.

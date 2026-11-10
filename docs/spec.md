@@ -658,7 +658,11 @@ escalate:                    # when to call the model
     temporary target folder removed afterwards, the only folder the
     build may write, and kills whatever the build left running
     ([ADR-0064](adr/0064-builds-write-only-their-temp-folder.md));
-  - `module.build` and `module.install` are the agent's tools; the install
+  - `module.build` and `module.install` are the agent's tools, and
+    `module.status` shows the agent what the owner's `/modules <name>` card
+    shows (state, version, health with the node's hint, runs and the last
+    failure, the declared settings with the owner's values, a secret-like
+    or long one as `<set>`), never a text the module wrote; the install
     window lists the network, secrets, cells created and read, triggers and
     limits, and a version that widens its rights says so on its own line;
   - the install checks the name, the secrets (none of the node's own: the
@@ -686,13 +690,18 @@ escalate:                    # when to call the model
   (scheduler jobs of the kind "module", no model involved) and as an agent
   tool, one instance at a time; calls the optional `init` on load and
   `health` at install and on the module's card. Five failures within an
-  hour disable the module and raise `module.crashloop`. The kinds the
-  manifest's `escalate` lists, and `module.crashloop` always, reach the
+  hour disable the module and raise `module.crashloop`. A failure of a
+  run nobody watched (a cron run, `init` at load) whose kind the
+  manifest's `escalate` lists, and `module.crashloop` always, reaches the
   agent as a turn in the owner's private chat, once per kind per active
   version until a successful run clears it (a new version, a rollback or
   turning it on clear it too, and a restart does not repeat it); the model
-  sees the kind and the node's facts, never the module's text. Any reload
-  that starts the module, `/modules config` included, also clears its open
+  sees the kind, the node's facts and the node's hint for the kind, never
+  the module's text. A failed tool call the agent made in a turn is not
+  escalated: the turn has the node's words for it already (owner,
+  2026-11-10); it still counts for the crash loop and the journal, and a
+  successful run of either kind clears the episodes. Any reload that
+  starts the module, `/modules config` included, also clears its open
   episodes.
 
 - **R-RUN-13.** What a module returns to the model (its tool's output,
@@ -709,7 +718,14 @@ escalate:                    # when to call the model
   and `module.format` reaches the agent with the node's own description of
   the mismatch (field, expected and actual type, never the value), as
   context to revise the module (owner, 2026-11-09,
-  [ADR-0062](adr/0062-cells-owned-by-modules.md)).
+  [ADR-0062](adr/0062-cells-owned-by-modules.md)). Every failure the
+  model sees, a tool call's or an escalation's, carries a fixed hint per
+  kind from the node's texts: `auth_failed` (the service refused the
+  module's login: check its secrets and settings with `module.status`),
+  `stale` (the data source has not updated), `module.format` (a defect in
+  the module), `module.exception` (the node's log has the details), a
+  timeout and a trap (owner, 2026-11-10). The module's own error text goes
+  to the node's log on every failed run, whatever the verdict.
 
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation
@@ -1217,7 +1233,10 @@ which belongs with the flow engine (9.6).
   credentials and raises `auth_failed` (task 0.7).
 - **R-DEYE-3.** `deye-reader.status` reads fresh under the same 429 rule;
   when the cloud cannot answer it returns the cells' last values with
-  their age.
+  their age, and when the cells hold no reading it answers the read's own
+  failure, never an answer outside its declared output. Its `health`
+  checks without network that `inverter_sn` looks like a serial number
+  and that its secrets are set (owner's live check, 2026-11-10).
 - **R-LS-4.** Until the bot migrates, the module runs alongside `deye.py`
   and their readings are compared.
 

@@ -19,6 +19,10 @@ const (
 	triggerTool trigger = "tool"
 )
 
+// unattended reports whether nobody watches a run of t: a cron run's
+// failure is escalated, a tool call's is the calling turn's to tell.
+func (t trigger) unattended() bool { return t == triggerCron }
+
 // noArgs is the input schema of a module's tool: it takes no arguments.
 var noArgs = json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
 
@@ -79,22 +83,18 @@ func (h *Host) runTool(ctx context.Context, t moduleTool, c tool.Call) (tool.Res
 	if !o.failed() {
 		return tool.Result{Text: string(r.out.Result), External: runner.HasString(r.out.Result)}, nil
 	}
-	return tool.Result{}, errors.New(toolError(t.spec.Name, o, disabled))
+	return tool.Result{}, errors.New(toolError(t.spec.Name, r.l.short, o, disabled))
 }
 
 // toolError is the node's words for a failed tool call: a contract break
-// as the node describes it, any other failure by its kind; never the
-// module's text (R-RUN-14).
-func toolError(name string, o outcome, disabled bool) string {
-	var msg string
-	switch o.result {
-	case ResultFormat:
+// as the node describes it, any other failure by its kind, each with the
+// node's hint for it; never the module's text (R-RUN-14).
+func toolError(name, short string, o outcome, disabled bool) string {
+	msg := name + ": the module failed (" + string(o.kind) + ")"
+	if o.result == ResultFormat {
 		msg = o.format
-	case ResultTimeout:
-		msg = name + ": the module ran past its time limit (" + string(o.kind) + ")"
-	case ResultOK, ResultFailed, ResultException:
-		msg = name + ": the module failed (" + string(o.kind) + ")"
 	}
+	msg = withHint(msg, o, short)
 	if disabled {
 		msg += "; the module is now off: it failed 5 times within an hour"
 	}

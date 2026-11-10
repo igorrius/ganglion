@@ -236,10 +236,12 @@ sequenceDiagram
 
 ## A module's escalation (P1)
 
-A failure whose kind the manifest escalates, a contract break or a crash
-loop becomes one turn in the installing admin's private chat, at most one
-of a kind for a module until it recovers (design section 8.4, owner ruling of
-2026-11-10).
+A failure of a run nobody watched (a cron run, `init` at load) whose kind
+the manifest escalates, a contract break or a crash loop becomes one turn
+in the installing admin's private chat, at most one of a kind for a module
+until it recovers (design section 8.4, owner rulings of 2026-11-10). A tool
+call that fails inside a turn is not escalated: that turn has the node's
+words and hint for it already.
 
 ```mermaid
 sequenceDiagram
@@ -253,7 +255,7 @@ sequenceDiagram
     participant O as Owner
 
     H->>H: count the failure in the last hour
-    opt kind escalates and no episode of it is open (escalate list, module.format)
+    opt a cron run or init, kind escalates, no episode of it open (escalate list, module.format)
         H->>Q: Put(module event, key module:NAME:KIND:SHA:OPENED, once per episode)
     end
     opt fifth failure within an hour
@@ -263,7 +265,7 @@ sequenceDiagram
         H->>Q: Put(module event, kind module.crashloop)
     end
     Q->>A: turn in the admin's private chat
-    A->>A: note "[module] deye-reader: auth_failed (version 3, 14:30). (the node's detail)"
+    A->>A: note "[module] deye-reader: auth_failed (version 3, 14:30). (the node's detail and hint)"
     A->>LLM: chat purpose, with tools
     LLM-->>A: explanation and a proposal
     A->>O: reply

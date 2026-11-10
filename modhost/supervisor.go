@@ -80,7 +80,7 @@ func judge(out pdk.Output, err error, where string) outcome {
 		return outcome{result: ResultOK}
 	case out.Kind == pdk.KindFormat: // the runner's verdict: never the module's claim
 		f := where + ": " + text.Truncate(out.Error, maxFormat)
-		return outcome{result: ResultFormat, kind: KindFormat, detail: f, format: f}
+		return outcome{result: ResultFormat, kind: KindFormat, detail: f, format: f, logged: out.ModuleError}
 	}
 	k := moduleKind(out.Kind)
 	return outcome{result: ResultFailed, kind: k, detail: "the module reported a failure of kind " + string(k), logged: out.Error}
@@ -111,9 +111,12 @@ func moduleKind(k string) Kind {
 }
 
 // settle does what follows a run: it counts it, logs a failure with the
-// module's text, escalates it when its kind does, and disables the module on
-// its fifth failure within an hour. disabled reports the last; an error is
-// the node's failure to disable it.
+// module's own text (whatever the verdict, so the operator sees the cause),
+// escalates it when its kind does and nobody saw it fail, and disables the
+// module on its fifth failure within an hour. A tool call's failure is not
+// escalated: the agent has the node's words for it in the turn that made
+// the call, and a second turn would only repeat them (owner, 2026-11-10).
+// disabled reports the last; an error is the node's failure to disable it.
 func (h *Host) settle(ctx context.Context, l *loaded, trig trigger, o outcome) (disabled bool, err error) {
 	h.d.Store.Count(ctx, l.name, l.sha, o.callResult())
 	h.in.run(ctx, l, trig, o.result)
@@ -122,8 +125,10 @@ func (h *Host) settle(ctx context.Context, l *loaded, trig trigger, o outcome) (
 		return false, nil
 	}
 	h.d.Log.Warn("modhost: a module run failed", "module", l.name, "version", l.version, "trigger", string(trig),
-		"result", string(o.result), "kind", string(o.kind), "text", text.Truncate(o.logged, maxLogged))
-	h.escalate(ctx, l, o.kind, o.detail)
+		"result", string(o.result), "kind", string(o.kind), "detail", o.detail, "text", text.Truncate(o.logged, maxLogged))
+	if trig.unattended() {
+		h.escalate(ctx, l, o.kind, withHint(o.detail, o, l.short))
+	}
 	if h.failure(l.name) < crashFailures {
 		return false, nil
 	}

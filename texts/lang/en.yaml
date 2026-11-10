@@ -262,3 +262,12 @@ cells.history_head: "{id}: the last changes"
 cells.history_row: "{at}  {value}"
 cells.history_none: "{id} has no changes yet."
 cells.gone: "This cell no longer exists."
+
+# What the model reads about a module's failure, after the node's words for it (R-RUN-14).
+hint.module_auth_failed: "The service refused the module's login: its secrets or settings need checking; module.status with name {name} shows its settings and health."
+hint.module_stale: "The module's data source has not updated recently."
+hint.module_format: "The module answered outside its declared contract: a defect in the module."
+hint.module_exception: "The module failed; the node's log has the details, and module.status with name {name} shows its settings and health."
+hint.module_timeout: "It ran past its time limit."
+hint.module_trap: "It stopped with an error: a trap, or an answer the node cannot read."
+hint.module_not_running: "not checked: the module is not running"

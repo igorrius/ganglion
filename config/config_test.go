@@ -122,7 +122,7 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 		// on offer only where the node finds its examples folder, which a
 		// test's folder has not.
 		want = append(want, "memory.audit", "memory.forget", "memory.read", "memory.recall", "memory.write", "persona.propose",
-			"module.build", "module.install")
+			"module.build", "module.install", "module.status")
 	}
 	// host.exec is registered always and on offer only while the sandbox is
 	// ready (R-CMD-1, R-CMD-3).

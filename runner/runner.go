@@ -189,7 +189,7 @@ func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResu
 		out.Kind = pdk.KindException
 	}
 	if m.formatErr != "" {
-		out = pdk.Output{Kind: pdk.KindFormat, Error: m.formatErr}
+		out = pdk.Output{Kind: pdk.KindFormat, Error: m.formatErr, ModuleError: out.Error}
 	} else {
 		out = m.checkAnswer(in.Trigger, out)
 	}

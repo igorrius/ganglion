@@ -100,23 +100,54 @@ func TestAnAnswerWithAStringIsExternal(t *testing.T) {
 	}
 }
 
-// A contract break gives the node's words, never the value, counts a
-// failure and escalates module.format (R-RUN-14).
+// formatHint is the node's hint after a contract break.
+const formatHint = "The module answered outside its declared contract: a defect in the module."
+
+// A contract break gives the node's words, never the value, and counts a
+// failure; in a tool call it escalates nothing, for the calling turn has
+// the words already (R-RUN-14, owner 2026-11-10).
 func TestAContractBreakIsTheNodesError(t *testing.T) {
 	e := newEnv(t, active(t, "local/probe", probeManifest))
 	e.start(t)
 	res, err := e.call(t, "probe.broken")
-	if err == nil || err.Error() != "probe.broken: field value: expected integer, got string" || res.Text != "" {
+	if err == nil || err.Error() != "probe.broken: field value: expected integer, got string. "+formatHint || res.Text != "" {
 		t.Fatalf("result %+v, %v", res, err)
 	}
 	fs := e.store.failures()
 	if len(fs) != 1 || fs[0].Kind != "module.format" || fs[0].Exception {
 		t.Fatalf("failures %+v", fs)
 	}
+	if evs := e.inbox.taken(); len(evs) != 0 {
+		t.Fatalf("a tool call's failure escalated: %+v", evs)
+	}
+}
+
+// A cron run's contract break escalates module.format with the node's
+// description and its hint.
+func TestACronContractBreakEscalates(t *testing.T) {
+	e := newEnv(t, active(t, "local/probe", probeManifest))
+	e.start(t)
+	e.cron(t, cronBreaks)
 	ms := e.moduleEvents(t)
-	if len(ms) != 1 || ms[0].Kind != "module.format" || ms[0].Detail != "probe.broken: field value: expected integer, got string" ||
+	if len(ms) != 1 || ms[0].Kind != "module.format" || ms[0].Detail != "probe cron: cell soc: expected integer, got string. "+formatHint ||
 		ms[0].Module != "local/probe" || ms[0].Version != "3" || ms[0].Principal != owner || ms[0].Transport != "telegram" {
 		t.Fatalf("events %+v", ms)
+	}
+}
+
+// A run judged module.format still logs the module's own error text, so the
+// operator sees the cause; the model and the owner never see it (R-RUN-14).
+func TestAFormatVerdictLogsTheModulesOwnText(t *testing.T) {
+	e := newEnv(t, active(t, "local/probe", probeManifest))
+	e.start(t)
+	e.cron(t, `{"op":"fail","value":"`+hostile+`","name":"soc","json":"87"}`)
+	ms := e.moduleEvents(t)
+	if len(ms) != 1 || ms[0].Kind != "module.format" || strings.Contains(ms[0].Detail, "IGNORE") {
+		t.Fatalf("events %+v", ms)
+	}
+	log := e.logText()
+	if !strings.Contains(log, "IGNORE ALL PREVIOUS") || !strings.Contains(log, "result=format") {
+		t.Fatalf("the module's text is not in the log:\n%s", log)
 	}
 }
 
@@ -126,9 +157,10 @@ func TestAModuleErrorTextNeverReachesTheModel(t *testing.T) {
 	e := newEnv(t, active(t, "local/probe", probeManifest))
 	e.start(t)
 	_, err := e.call(t, "probe.fail")
-	if err == nil || err.Error() != "probe.fail: the module failed (auth_failed)" {
+	if err == nil || err.Error() != "probe.fail: the module failed (auth_failed). "+authHint {
 		t.Fatalf("error %v", err)
 	}
+	e.cron(t, cronFails)
 	ms := e.moduleEvents(t)
 	if len(ms) != 1 || ms[0].Kind != "auth_failed" {
 		t.Fatalf("events %+v", ms)
@@ -152,7 +184,7 @@ func TestATrapReachesTheModelInTheNodesWords(t *testing.T) {
 	e := newEnv(t, active(t, "local/probe", probeManifest))
 	e.start(t)
 	_, err := e.call(t, "probe.greedy")
-	if err == nil || err.Error() != "probe.greedy: the module failed (module.exception)" {
+	if err == nil || err.Error() != "probe.greedy: the module failed (module.exception). "+trapHint {
 		t.Fatalf("error %v", err)
 	}
 	if fs := e.store.failures(); len(fs) != 1 || !fs[0].Exception || fs[0].Kind != "module.exception" {
@@ -242,12 +274,10 @@ func TestFailuresOutsideTheHourDoNotCount(t *testing.T) {
 	}
 }
 
-// fail runs the failing tool; its failure is the point.
+// fail runs a failing cron run (auth_failed); its failure is the point.
 func (e *env) fail(t *testing.T) {
 	t.Helper()
-	if _, err := e.call(t, "probe.fail"); err == nil {
-		t.Fatal("probe.fail succeeded")
-	}
+	e.cron(t, cronFails)
 }
 
 // A kind that fails on every run for a day escalates once, not once an hour
@@ -291,9 +321,7 @@ func TestACronSuccessClearsTheEpisode(t *testing.T) {
 	e.start(t)
 	e.fail(t)
 	e.now = e.now.Add(time.Minute)
-	if err := e.host.RunCron(context.Background(), "local/probe"); err != nil {
-		t.Fatal(err)
-	}
+	e.cron(t, "")
 	e.now = e.now.Add(time.Minute)
 	e.fail(t)
 	if evs := e.inbox.taken(); len(evs) != 2 {
@@ -307,9 +335,7 @@ func TestTwoKindsEscalateOnceEach(t *testing.T) {
 	e.start(t)
 	for range 3 {
 		e.fail(t)
-		if _, err := e.call(t, "probe.broken"); err == nil {
-			t.Fatal("probe.broken succeeded")
-		}
+		e.cron(t, cronBreaks)
 		e.now = e.now.Add(time.Hour)
 	}
 	kinds := map[string]int{}
@@ -393,22 +419,24 @@ func TestAnOpenEpisodeSurvivesARestart(t *testing.T) {
 func TestASuccessAndAFailureSettlingAtOnceAgree(t *testing.T) {
 	e := newEnv(t, active(t, "local/probe", probeManifest))
 	e.start(t)
-	ok, bad := e.tool("probe.status"), e.tool("probe.fail")
-	run := func(h tool.Handler) {
+	h := e.tool("probe.status")
+	ok := func() {
 		h.Run(context.Background(), tool.Call{Name: h.Spec().Name, Args: json.RawMessage(`{}`), Admin: true}) //nolint:errcheck // either outcome is fine
 	}
+	e.state.Put("probe", "op_cron", cronFails)
+	bad := func() { e.host.RunCron(context.Background(), "local/probe") } //nolint:errcheck // its failure is the point
 	for range 40 {
 		var wg sync.WaitGroup
 		wg.Add(2)
-		go func() { defer wg.Done(); run(ok) }()
-		go func() { defer wg.Done(); run(bad) }()
+		go func() { defer wg.Done(); ok() }()
+		go func() { defer wg.Done(); bad() }()
 		wg.Wait()
 		e.now = e.now.Add(20 * time.Minute) // spread out: no crash loop
 	}
-	run(ok) // a success closes whatever is open, in the cache and the store
+	ok() // a success closes whatever is open, in the cache and the store
 	before := len(e.inbox.taken())
 	e.now = e.now.Add(time.Minute)
-	run(bad)
+	bad()
 	if n := len(e.inbox.taken()); n != before+1 {
 		t.Fatalf("%d events after the recovery, want %d: the cache and the store disagree", n, before+1)
 	}
@@ -419,7 +447,7 @@ func TestAKindNotEscalatedPutsNoEvent(t *testing.T) {
 	m := strings.Replace(probeManifest, "  - on: auth_failed\n", "  - on: stale\n", 1)
 	e := newEnv(t, active(t, "local/probe", m))
 	e.start(t)
-	e.call(t, "probe.fail") //nolint:errcheck // the failure is the point
+	e.fail(t)
 	if evs := e.inbox.taken(); len(evs) != 0 {
 		t.Fatalf("events %+v", evs)
 	}
@@ -561,5 +589,48 @@ func TestStartGoesOnWhenOrphanJobsCannotBeCleared(t *testing.T) {
 	e.start(t)
 	if !strings.Contains(e.logText(), "the jobs of removed modules are not cleared") {
 		t.Fatalf("log:\n%s", e.logText())
+	}
+}
+
+// Hints the node adds to a failure, by kind.
+const (
+	authHint = "The service refused the module's login: its secrets or settings need checking; " +
+		"module.status with name probe shows its settings and health."
+	trapHint = "It stopped with an error: a trap, or an answer the node cannot read."
+)
+
+// The node's words for a failed tool call, golden per kind: the kind, then
+// the node's hint for it, never the module's text (R-RUN-14).
+func TestAFailedToolCallHasTheNodesHint(t *testing.T) {
+	m := strings.Replace(probeManifest, "  - tool: greedy\n", "  - tool: crash\n    about: Throws.\n    output: {x: integer}\n"+
+		"  - tool: slow\n    about: Spins.\n    output: {x: integer}\n  - tool: greedy\n", 1)
+	m = strings.Replace(m, "  op_tool_greedy:", "  op_tool_crash: {type: string, default: '{\"op\":\"nope\"}'}\n"+
+		"  op_tool_slow: {type: string, default: '{\"op\":\"spin\"}'}\n  op_tool_greedy:", 1)
+	m = strings.Replace(m, "timeout: 5s", "timeout: 1s", 1)
+	e := newEnv(t, active(t, "local/probe", m))
+	e.start(t)
+	cases := map[string]string{
+		"probe.fail":   "probe.fail: the module failed (auth_failed). " + authHint,
+		"probe.broken": "probe.broken: field value: expected integer, got string. " + formatHint,
+		"probe.crash": "probe.crash: the module failed (module.exception). The module failed; the node's log has the details, " +
+			"and module.status with name probe shows its settings and health.",
+		"probe.slow":   "probe.slow: the module failed (module.exception). It ran past its time limit.",
+		"probe.greedy": "probe.greedy: the module failed (module.exception). " + trapHint,
+	}
+	for name, want := range cases {
+		_, err := e.call(t, name)
+		if err == nil || err.Error() != want {
+			t.Errorf("%s: %v\nwant %s", name, err, want)
+		}
+		if err != nil && strings.Contains(err.Error(), "IGNORE") {
+			t.Errorf("%s: the module's text reached the model", name)
+		}
+		e.now = e.now.Add(20 * time.Minute)
+	}
+	if evs := e.inbox.taken(); len(evs) != 0 {
+		t.Fatalf("tool calls escalated: %+v", evs)
+	}
+	if hn := e.host.Hint("probe", modstore.Health("stale")); hn != "The module's data source has not updated recently." {
+		t.Fatalf("stale hint %q", hn)
 	}
 }

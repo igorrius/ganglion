@@ -89,6 +89,7 @@ tool/args.go
 tool/tool.go
 tool/builtin/diag.go
 tool/builtin/message.go
+tool/builtin/module_status.go
 tool/builtin/persona.go
 tool/builtin/question.go
 tool/journal/**

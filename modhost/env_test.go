@@ -372,6 +372,7 @@ type env struct {
 	inbox  *inbox
 	conf   *conf
 	cells  *cells.Service
+	state  *runner.MemState // the modules' state, kept across a restart
 	now    time.Time
 	logs   *bytes.Buffer
 	logsMu sync.Mutex
@@ -388,7 +389,7 @@ func active(t *testing.T, name, manifest string) modstore.Active {
 func newEnv(t *testing.T, actives ...modstore.Active) *env {
 	t.Helper()
 	e := &env{store: &store{active: actives, by: map[string]string{}}, jobs: &jobs{live: map[string]schedule.Job{}},
-		inbox: &inbox{}, conf: &conf{}, now: t0, logs: &bytes.Buffer{}}
+		inbox: &inbox{}, conf: &conf{}, state: runner.NewMemState(), now: t0, logs: &bytes.Buffer{}}
 	for _, a := range actives {
 		e.store.by[a.SHA256] = owner
 	}
@@ -406,7 +407,7 @@ func (e *env) newHost() *modhost.Host {
 		Inbox:       e.inbox,
 		Secrets:     secretMap{"PROBE_TOKEN": "hunter2", "TELEGRAM_BOT_TOKEN": botToken},
 		NodeSecrets: []string{"TELEGRAM_BOT_TOKEN"},
-		State:       runner.NewMemState(),
+		State:       e.state,
 		Settings:    e.conf,
 		Admins: alert.Admins{
 			List: func(context.Context) ([]string, error) { return []string{"telegram:user:1", owner}, nil },
@@ -474,4 +475,19 @@ func (e *env) logText() string {
 	e.logsMu.Lock()
 	defer e.logsMu.Unlock()
 	return e.logs.String()
+}
+
+// Cron operations of the probe, set through its state (probe.scripted).
+const (
+	cronFails  = `{"op":"fail","value":"` + hostile + `"}`
+	cronBreaks = `{"op":"cell_report","name":"soc","json":"87"}`
+)
+
+// cron runs the probe's cron trigger as op, "" for its configured one.
+func (e *env) cron(t *testing.T, op string) {
+	t.Helper()
+	e.state.Put("probe", "op_cron", op)
+	if err := e.host.RunCron(context.Background(), "local/probe"); err != nil {
+		t.Fatal(err)
+	}
 }

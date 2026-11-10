@@ -12,8 +12,9 @@ and installs it after the owner approves its rights (`module.install`,
 | Trigger | What happens |
 |---|---|
 | cron, every 30 minutes | Reads the inverter and reports the cells; no model is involved. |
-| tool `status` (the agent sees `deye-reader.status`) | Reads fresh under the same rules; when the cloud cannot answer, it returns the cells' last values with `fresh: false` and their age. |
-| `init`, `health`, anything else | "unknown trigger": loading or checking the module makes no request. |
+| tool `status` (the agent sees `deye-reader.status`) | Reads fresh under the same rules; when the cloud cannot answer, it returns the cells' last values with `fresh: false` and their age. With no reading in the cells (never reported, so null) it answers the read's own failure (`auth_failed`, `stale` or `module.exception`), never an answer outside its declared output. |
+| `health` (at install and on the module's card) | Checks without network that `inverter_sn` is 8 to 16 digits and that the four `DEYE_*` secrets are set; otherwise `module.exception`. It cannot tell a wrong password or serial number from a right one: the first read does. |
+| `init`, anything else | "unknown trigger": loading the module makes no request. |
 
 The cells (the node names them `deye-reader.<cell>`,
 [ADR-0062](../../../docs/adr/0062-cells-owned-by-modules.md)):

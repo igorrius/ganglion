@@ -215,7 +215,7 @@ func (h *Host) init(ctx context.Context, l *loaded) stop {
 	o := initOutcome(err)
 	h.d.Store.Count(ctx, l.name, l.sha, o.callResult())
 	h.d.Log.Warn("modhost: the module's init failed", "module", l.name, "version", l.version, "kind", o.kind, "err", err)
-	h.escalate(ctx, l, o.kind, o.detail)
+	h.escalate(ctx, l, o.kind, withHint(o.detail, o, l.short))
 	return stop{reason: ReasonInit, kind: o.kind, since: h.d.Now()}
 }
 

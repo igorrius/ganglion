@@ -11,15 +11,21 @@
 //!   an episode answers `stale`, later ones OK until a fresh reading.
 //! - A refused login answers `auth_failed`; the same credentials are never
 //!   tried again (`cloud`).
-//! - Any other trigger, `init` and `health` among them, is unknown: loading
-//!   the module makes no request.
+//! - `health` checks what it can without network: `inverter_sn` looks like
+//!   a serial number and every `DEYE_*` secret is set; otherwise it fails
+//!   as `module.exception`, so the install and the module's card show it.
+//! - When a read fails and the cells hold no reading (never reported, so
+//!   null), the tool answers the read's own failure, never an answer that
+//!   breaks its declared output.
+//! - Any other trigger, `init` among them, is unknown: loading the module
+//!   makes no request.
 
 use crate::cloud::{self, Error, Sample};
 use crate::host::Host;
 use serde_json::{Value, json};
 
 /// The error text of a trigger the module does not handle; the node takes
-/// it as success for `init` and `health` (`pdk.ErrUnknownTrigger`).
+/// it as success for `init` (`pdk.ErrUnknownTrigger`).
 pub const UNKNOWN_TRIGGER: &str = "unknown trigger";
 
 /// Output kinds the module reports; the manifest escalates all three.
@@ -42,6 +48,7 @@ pub fn handle(h: &dyn Host, trigger: &str) -> Value {
     match trigger {
         "cron" => cron(h),
         "tool:status" => status(h),
+        "health" => health(h),
         _ => failure(KIND_EXCEPTION, UNKNOWN_TRIGGER),
     }
 }
@@ -90,6 +97,38 @@ fn status(h: &dyn Host) -> Value {
             "deye: DeyeCloud asked to wait and there is no reading yet",
         ),
     }
+}
+
+/// The secrets a read needs; the manifest grants exactly these.
+pub const SECRETS: [&str; 4] = [
+    "DEYE_APP_ID",
+    "DEYE_APP_SECRET",
+    "DEYE_EMAIL",
+    "DEYE_PASSWORD",
+];
+
+/// The length of a serial number the health check accepts; Deye's are ten
+/// digits.
+const SERIAL_LEN: std::ops::RangeInclusive<usize> = 8..=16;
+
+/// The health trigger: OK when the serial number looks like one and every
+/// secret is set. It makes no request, so it cannot tell a wrong password
+/// or serial from a right one; the first read does.
+fn health(h: &dyn Host) -> Value {
+    let sn = h.config("inverter_sn").unwrap_or_default();
+    if !SERIAL_LEN.contains(&sn.len()) || !sn.bytes().all(|b| b.is_ascii_digit()) {
+        return failure(
+            KIND_EXCEPTION,
+            "deye: config.inverter_sn does not look like a serial number (8 to 16 digits)",
+        );
+    }
+    if let Some(name) = SECRETS
+        .iter()
+        .find(|n| h.secret(n).filter(|v| !v.is_empty()).is_none())
+    {
+        return failure(KIND_EXCEPTION, &format!("deye: secret {name} is not set"));
+    }
+    ok(json!({}))
 }
 
 fn serial(h: &dyn Host) -> Result<String, Value> {
@@ -160,23 +199,27 @@ fn answer(s: &Sample, now: i64) -> Value {
 }
 
 /// The status answer from the cells, aged by the reading's own time; None
-/// when there was never a reading.
+/// when there was never a reading: a cell that is missing, null (defined
+/// but never reported) or not of its type is no reading.
 fn from_cells(h: &dyn Host, now: i64) -> Option<Value> {
-    let (sample, at_ms) = h.cell_get("sample")?;
+    let (sample, at_ms) = h.cell_get("sample").filter(|(v, _)| v.is_object())?;
     let ts = sample
         .get("ts")
         .and_then(Value::as_i64)
         .unwrap_or(at_ms / 1000);
     let soc = h
         .cell_get("soc")
-        .map(|(v, _)| v)
-        .or_else(|| sample.get("soc").cloned())?;
-    let grid = h.cell_get("grid").map(|(v, _)| v).or_else(|| {
-        sample
-            .get("grid_on")
-            .and_then(Value::as_i64)
-            .map(|g| Value::Bool(g == 1))
-    })?;
+        .and_then(|(v, _)| v.as_i64())
+        .or_else(|| sample.get("soc").and_then(Value::as_i64))?;
+    let grid = h
+        .cell_get("grid")
+        .and_then(|(v, _)| v.as_bool())
+        .or_else(|| {
+            sample
+                .get("grid_on")
+                .and_then(Value::as_i64)
+                .map(|g| g == 1)
+        })?;
     Some(json!({
         "soc": soc,
         "grid": grid,
@@ -458,7 +501,11 @@ mod tests {
                 None,
                 "auth_failed",
             ),
-            (r#"{"code":"1000000","accessToken":"tok-1"}"#, None, "module.exception"),
+            (
+                r#"{"code":"1000000","accessToken":"tok-1"}"#,
+                None,
+                "module.exception",
+            ),
             (
                 r#"{"code":"1000000","accessToken":"tok-1"}"#,
                 Some(latest(NOW - 21 * 60, "57", "230")),
@@ -470,7 +517,9 @@ mod tests {
             null_cells(&f);
             f.login.replace(login.into());
             f.latest.replace(
-                reading.unwrap_or(r#"{"code":"2101010","msg":"no such device","success":false}"#.into()),
+                reading.unwrap_or(
+                    r#"{"code":"2101010","msg":"no such device","success":false}"#.into(),
+                ),
             );
             let out = handle(&f, "tool:status");
             assert_eq!(
@@ -478,8 +527,14 @@ mod tests {
                 (Some(false), want),
                 "{out}"
             );
-            assert!(out.get("result").is_none(), "an answer with no reading: {out}");
-            assert!(out["error"].as_str().unwrap().starts_with("deye: "), "{out}");
+            assert!(
+                out.get("result").is_none(),
+                "an answer with no reading: {out}"
+            );
+            assert!(
+                out["error"].as_str().unwrap().starts_with("deye: "),
+                "{out}"
+            );
         }
     }
 
@@ -490,7 +545,9 @@ mod tests {
         f.cells
             .borrow_mut()
             .insert("grid".into(), (json!("yes"), NOW * 1000));
-        f.cells.borrow_mut().remove("sample");
+        f.cells
+            .borrow_mut()
+            .insert("sample".into(), (json!("garbage"), NOW * 1000));
         f.latest
             .replace(r#"{"code":"500","msg":"down","success":false}"#.into());
         let out = handle(&f, "tool:status");
@@ -513,7 +570,14 @@ mod tests {
         let out = handle(&f, "health");
         assert_eq!(out["ok"], true, "{out}");
 
-        for sn in ["", "<серийник>", "24000x0001", "1234567", "12345678901234567", " 2400000001"] {
+        for sn in [
+            "",
+            "<серийник>",
+            "24000x0001",
+            "1234567",
+            "12345678901234567",
+            " 2400000001",
+        ] {
             let mut f = fake();
             f.config.insert("inverter_sn", sn);
             let out = handle(&f, "health");
@@ -522,13 +586,21 @@ mod tests {
                 (Some(false), "module.exception"),
                 "{sn:?}: {out}"
             );
-            assert!(out["error"].as_str().unwrap().contains("inverter_sn"), "{out}");
+            assert!(
+                out["error"].as_str().unwrap().contains("inverter_sn"),
+                "{out}"
+            );
         }
         let mut f = fake();
         f.config.clear();
         assert_eq!(kind(&handle(&f, "health")), "module.exception");
 
-        for name in ["DEYE_APP_ID", "DEYE_APP_SECRET", "DEYE_EMAIL", "DEYE_PASSWORD"] {
+        for name in [
+            "DEYE_APP_ID",
+            "DEYE_APP_SECRET",
+            "DEYE_EMAIL",
+            "DEYE_PASSWORD",
+        ] {
             for value in [None, Some("")] {
                 let mut f = fake();
                 match value {

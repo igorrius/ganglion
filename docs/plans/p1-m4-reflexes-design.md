@@ -429,8 +429,11 @@ waits for the first module that needs it.
 
 Both optional (spec 7.5). `init` runs when the module loads; a failure
 keeps it stopped, with the reason in `/modules`. `health` runs at install
-(part of the checks before the press) and when the owner opens the
-module's card.
+(part of the checks before the press), when the owner opens the
+module's card and when the agent calls `module.status`. It checks what a
+module can check without network (the Deye reader: a serial number that
+looks like one, its secrets set), so a placeholder is caught at install
+and shown on the card.
 
 ### 8.3 Supervisor (call)
 
@@ -447,6 +450,15 @@ module's card.
 - The manifest's `escalate` list says which kinds call the model
   (`deye-reader`: `module.exception`, `auth_failed`); `module.crashloop`
   and `module.format` always do.
+- Only a run nobody watched escalates: a cron run, or `init` at load. A
+  tool call that fails inside a turn does not: the agent has the node's
+  words for it in that turn, and a second turn would repeat them (owner,
+  2026-11-10). It still counts toward the crash loop and the journal.
+- Every failure the model sees, in a tool's error or an escalation's
+  note, ends with the node's fixed hint for its kind (`hint.*` texts:
+  refused login → check the secrets and settings with `module.status`;
+  stale source; a defect in the module; the log has the details; time
+  limit; trap), so the model does not guess the cause.
 - The event arrives as a turn in the owner's private chat: "module
   deye-reader: auth_failed, version 3, 14:30". The agent explains and
   proposes.

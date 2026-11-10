@@ -110,6 +110,21 @@ func runCellTests(t *testing.T, fresh func() *env) {
 		}
 	})
 
+	t.Run("a module.format verdict keeps the module's own error text for the log", func(t *testing.T) {
+		e := fresh()
+		cellManifest(e)
+		out := call(t, e.instance(t), `{"op":"fail","value":"cloud read failed: 2101010","name":"soc","json":"87"}`)
+		if out.Kind != pdk.KindFormat || out.Error != "cell soc: expected integer, got string" {
+			t.Fatalf("output = %+v, want module.format with the node's words", out)
+		}
+		if out.ModuleError != "cloud read failed: 2101010" {
+			t.Fatalf("ModuleError = %q, want the module's own text", out.ModuleError)
+		}
+		if b, err := json.Marshal(out); err != nil || strings.Contains(string(b), "2101010") {
+			t.Fatalf("the module's text is on the wire: %s, %v", b, err)
+		}
+	})
+
 	t.Run("a refused cell_report does not leak into the next call", func(t *testing.T) {
 		e := fresh()
 		cellManifest(e)

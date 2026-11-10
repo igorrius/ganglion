@@ -26,6 +26,7 @@ const (
 	ModuleImportTool  = "module.import"
 	ModuleBuildTool   = "module.build"
 	ModuleInstallTool = "module.install"
+	ModuleStatusTool  = "module.status"
 )
 
 // modulesFolder is the workspace folder that holds the modules' sources.
@@ -52,11 +53,14 @@ type CellReader interface {
 
 // ModuleHost runs the owner's modules (modhost.Host): it checks a build in a
 // throwaway instance before it is installed, brings a module in line with
-// the store and the settings, and rolls one back.
+// the store and the settings, rolls one back, tells how one stands (its
+// /modules card) and gives the node's hint for a failure kind.
 type ModuleHost interface {
 	Check(ctx context.Context, b modstore.Build, config map[string]any) error
 	Reload(ctx context.Context, module string) error
 	Rollback(ctx context.Context, name string) (modstore.Outcome, error)
+	Card(ctx context.Context, name string) (modstore.Card, error)
+	Hint(name string, kind modstore.Health) string
 }
 
 // Workspace is the agent's workspace repository (gitrepo.Repo): where the
@@ -91,11 +95,12 @@ type Modules struct {
 	Examples string
 }
 
-// NewModuleTools returns module.import, module.build and module.install
-// over m: the agent copies an example into the workspace, builds it, and
-// the owner approves its rights with one press (R-RUN-9, ADR-0061).
+// NewModuleTools returns module.import, module.build, module.install and
+// module.status over m: the agent copies an example into the workspace,
+// builds it, the owner approves its rights with one press (R-RUN-9,
+// ADR-0061), and the agent reads how an installed module stands.
 func NewModuleTools(m Modules) []tool.Handler {
-	return []tool.Handler{&ModuleImport{m: m}, &ModuleBuild{m: m}, &ModuleInstall{m: m}}
+	return []tool.Handler{&ModuleImport{m: m}, &ModuleBuild{m: m}, &ModuleInstall{m: m}, &ModuleStatus{m: m}}
 }
 
 // moduleName checks the name of a module's source folder: the short name of

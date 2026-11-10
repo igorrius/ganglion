@@ -109,6 +109,11 @@ plan. M4a ([plan](p1-m4a-config.md)) is done: `settings`, `ganglion.yaml`, `/res
     opened_ms)` are kept in `modstore` (migration `004_escalations.sql`), so a restart in the
     middle of an episode escalates nothing; the inbox key makes the dedup of one episode.
     `module.crashloop` is unchanged (it disables the module, so it happens once anyway).
+    *Owner ruling, 2026-11-10 (live check, task 11b):* only runs nobody watched escalate — a
+    cron run and `init` at load. A failed tool call the agent made in a turn puts no event (the
+    turn already has the node's words; a second turn only repeated them); it still counts for
+    the crash loop and the journal, and its success still closes episodes. Each failure the
+    model sees carries the node's hint for its kind (`hint.*` texts).
 11. **The contract language** (manifest `output:` and cell `type:`): a type name `number`,
     `integer`, `boolean`, `string`, any of them with `?` for "may be null"; a list of strings is an
     enum; a mapping is an object whose listed fields are required (`?` makes one optional) and whose

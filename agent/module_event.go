@@ -21,8 +21,9 @@ const moduleNotePrefix = "[module] "
 // note names the module without it, as its cells and tools do.
 const localPrefix = "local/"
 
-// maxModuleDetail caps the node's description in the note.
-const maxModuleDetail = 300
+// maxModuleDetail caps the node's description in the note: a contract
+// break of up to 300 runes and the node's hint after it.
+const maxModuleDetail = 600
 
 // moduleKindRE is the shape of the node's kinds (auth_failed,
 // module.crashloop): a payload with anything else is not the node's.
