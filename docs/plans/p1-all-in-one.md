@@ -78,6 +78,7 @@ pinned by a test in the task that owns the code.
 | M3 more | After using the bot — **done** | A closed question folds, `/last`, fixed texts in the person's language, rich messages, replies that know what they answer, `/status` | |
 | M3d | Host commands and plans — **done** ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
 | M4 | Reflexes: config, modules built by the agent, Deye ([design](p1-m4-reflexes-design.md)) | One config file with models by purpose; the agent builds modules from source and installs them on the owner's press; modules own cells; the runner in the node with a supervisor; the Deye example deployed next to the current bot | about 1.5 weekends |
+| M4c | Reflex modules: `notify` for modules, the agent writing module source, `deye-alerts` (design next) | Routine reactions run without a model | one design, one plan |
 | ~~M5~~ | ~~Load-shedding flow~~ — left P1 ([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)) | Moved to the flow engine (spec 9.6) | — |
 | M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback | 0.25–0.5 weekend |
 | M7 | Migration | Memory import and consolidation, remaining skills and crons, backups, cutover, gate | 0.5–1 weekend |
@@ -101,7 +102,8 @@ flowchart LR
     M3M --> M3D["M3d Host commands and plans"]
     M3D --> M4["M4 Config, modules, Deye"]
     M1 --> M4
-    M4 --> M6["M6 Agent reconfigures"]
+    M4 --> M4C["M4c Reflex modules"]
+    M4C --> M6["M6 Agent reconfigures"]
     M6 --> M7["M7 Migration"]
 ```
 
@@ -283,18 +285,24 @@ the owner's system that the agent builds and installs, not a part of the
 agent; load shedding and the two-week clock left P1
 ([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)). The step-by-step plans
 are [p1-m4a-config.md](p1-m4a-config.md) (4.1, 4.2) and `p1-m4b-modules.md`
-(4.3–4.8, written when M4a is done).
+(4.3–4.8, done 2026-11-10 except the Railway deploy of 4.7).
+
+**M4c, next:** reflex modules. A `notify` capability for modules and the agent
+writing module source in the workspace; the first reflex is `deye-alerts`
+(thresholds 90…30 %, below 30 % every 5 %, full charge, a data failure once),
+so routine reactions run without a model (owner, 2026-11-10). It gets its own
+design and plan.
 
 | Task | Done when |
 |---|---|
 | 4.1 **Done** (2026-11-09, [plan](p1-m4a-config.md)). Config file: `ganglion.yaml` with its skeleton, `schemas/node.schema.json` with descriptions, secrets as `env:NAME`, `node.memory_limit` (R-RUN-6), the `modules:` section; strict parsing ([ADR-0059](../adr/0059-node-config-file.md), R-CFG-1–4, 7) | Config tests; a bad config fails at start naming the path; in a container limited to 256 MB with no setting, `GOMEMLIMIT` is about 205 MB |
 | 4.2 **Done** (2026-11-09, [plan](p1-m4a-config.md)). Every old setting and `models.yaml` into the file; models by purpose with order and effort (R-RTR-6, [ADR-0060](../adr/0060-models-by-purpose.md)); old variables fail the start with a hint (R-CFG-5); `/restart`; the lab, `make accept` and the live scripts on example files | A turn uses the `chat` list and the clean-context check the `check` list in the configured order; a stale `GANGLION_TZ` fails the start |
-| 4.3 Module cells: `cell.report` and `cell.get` granted by the manifest, ownership and prefixes, `cells.list`, condensed history in `cells.get`, `/cells` (R-RUN-11, [ADR-0062](../adr/0062-cells-owned-by-modules.md)); `pdk` and `pdk/guest` updated | Runner conformance suite extended and green; a module cannot write another's cell |
-| 4.4 Runner in the node: module jobs on the scheduler, module tools, `init` and `health`, the supervisor (five failures in an hour disable), escalation to the agent once per kind until the module recovers (owner ruling, 2026-11-10), `cells.Reconcile` and `ExpireDue` ticks, telemetry (R-RUN-12) | A failing probe module is disabled and the agent tells the owner once |
-| 4.5 The builder (`local`, in the command sandbox, temporary target folder), `module.build`, `module.install` with the rights window, the version journal, `/modules` commands (R-RUN-9, 10, [ADR-0061](../adr/0061-local-modules-built-from-source.md), [ADR-0063](../adr/0063-module-language.md)) | "Build and install" works from a workspace source; a ready `.wasm` is refused; no build folder remains; a widening is worded on its own line |
-| 4.6 The `deye-reader` example in Rust under `examples/modules/`: cells, 30-minute cron, 429 with `Retry-After`, stale data once, no second login (R-DEYE-1–3); the Go build moves to the runner's test data as the reference | Tests with the replay server from `tools/modbench`; the Rust and Go builds agree on a recorded response |
-| 4.7 Deploy: container image with the Rust toolchain and an unprivileged user, a Railway service next to the current bot, test bot token; compare with `deye.py` for a few days (R-LS-4); `ganglion mcp` over `railway ssh` (moved from M3c) | Samples match `deye.py`; idle RSS within budget; a build's peak memory measured |
-| 4.8 M4 acceptance, scripted and live on the test bot (design section 11) | All ten checks pass |
+| 4.3 **Done** (2026-11-10, [plan](p1-m4b-modules.md)). Module cells: `cell.report` and `cell.get` granted by the manifest, ownership and prefixes, `cells.list`, condensed history in `cells.get`, `/cells` (R-RUN-11, [ADR-0062](../adr/0062-cells-owned-by-modules.md)); `pdk` and `pdk/guest` updated | Runner conformance suite extended and green; a module cannot write another's cell |
+| 4.4 **Done** (2026-11-10, [plan](p1-m4b-modules.md)). Runner in the node: module jobs on the scheduler, module tools, `init` and `health`, the supervisor (five failures in an hour disable), escalation to the agent once per kind until the module recovers (owner ruling, 2026-11-10), `cells.Reconcile` and `ExpireDue` ticks, telemetry (R-RUN-12) | A failing probe module is disabled and the agent tells the owner once |
+| 4.5 **Done** (2026-11-10, [plan](p1-m4b-modules.md)). The builder (`local`, in the command sandbox, temporary target folder), `module.build`, `module.install` with the rights window, the version journal, `/modules` commands (R-RUN-9, 10, [ADR-0061](../adr/0061-local-modules-built-from-source.md), [ADR-0063](../adr/0063-module-language.md)) | "Build and install" works from a workspace source; a ready `.wasm` is refused; no build folder remains; a widening is worded on its own line |
+| 4.6 **Done** (2026-11-10, [plan](p1-m4b-modules.md)). The `deye-reader` example in Rust under `examples/modules/`: cells, 30-minute cron, 429 with `Retry-After`, stale data once, no second login (R-DEYE-1–3); the Go build moves to the runner's test data as the reference | Tests with the replay server from `tools/modbench`; the Rust and Go builds agree on a recorded response |
+| 4.7 **Image and runbook done** (2026-11-10, [runbook](../deploy-railway.md)); the deploy and its checks are open, board card G-121. Deploy: container image with the Rust toolchain and an unprivileged user, a Railway service next to the current bot, test bot token; compare with `deye.py` for a few days (R-LS-4); `ganglion mcp` over `railway ssh` (moved from M3c) | Samples match `deye.py`; idle RSS within budget; a build's peak memory measured |
+| 4.8 **Done** (2026-11-10, [plan](p1-m4b-modules.md)). M4 acceptance, scripted and live on the test bot (design section 11) | All ten checks pass |
 
 ### M6 · The agent reconfigures the system (ADR-0015)
 

@@ -910,7 +910,7 @@ git commit -m "deploy: a container image with the Rust toolchain, an unprivilege
 ### Task 11: M4 acceptance and closing (4.8; design section 11)
 
 **Files:**
-- Create: chatlab scenarios `internal/chatlab/scenarios/m4-*.yaml` (the scenario format of
+- Create: chatlab scenarios `tools/chatlab/scenarios/m4-*.yaml` (the scenario format of
   `schemas/chatlab-scenario.schema.json`)
 - Modify: `config/accept_test.go` if a check needs the real core
 - Modify: `docs/plans/p1-all-in-one.md`, `docs/README.md`, `docs/spec.md` (ADRs 0059–0063 to
@@ -931,7 +931,7 @@ The ten checks of the design (section 11) and how each is proved:
 | 9 | A wider version shows the widening on its own line; the journal lists both | tool test (golden) + live |
 | 10 | Turns use `chat`, the check uses `check`, in order | done in M4a |
 
-- [ ] **Steps:** write the scenarios; `make lab` for the new scenarios only (the owner decides a
+- [x] **Steps** (all done except the Railway deploy and its checks, G-121): write the scenarios; `make lab` for the new scenarios only (the owner decides a
   full run); `make memory` (idle and after 1,000 turns within the M4a numbers plus the modules'
   cost, a growth needs a reason); live on the test bot with the owner (locally if Rust is
   installed, else on the Railway service); accept ADRs 0059–0063; "Where we are" closes M4; the
@@ -940,3 +940,30 @@ The ten checks of the design (section 11) and how each is proved:
 ```bash
 git commit -m "docs: M4 closed — modules built by the agent, cells as registers, Deye on Railway"
 ```
+
+---
+
+## Closing (2026-11-10)
+
+- **Live check passed** on the test bot (locally, Rust stable with `wasm32-wasip1` on the owner's
+  machine). The agent imported, built in the confined sandbox and installed `local/deye-reader`
+  through the install window (the press installs exactly the shown build; no build folder is left).
+  A ready `.wasm` sent to the bot was not installed. Cron wrote the cells at :00 and :30 with no
+  model call. "How is the battery" used `deye-reader.status` (SOC 75–76 %). `/modules` showed the
+  card with health and journal, `/cells` the history, and `module.status` worked. A second version
+  installed (v1 became previous, v2 active), and the module came back by itself after a node
+  restart.
+- The first run exposed defects, fixed in step 11b (no contract-breaking answer without a reading,
+  health checks serial and secrets, only unattended runs escalate, the node's hint per failure
+  kind, `module.status`, module secrets hidden in the log) and step 10b (owner ruling: escalate a
+  kind once until the module recovers).
+- Chatlab scenarios for checks 3, 4, 6 and 8 (`tools/chatlab/scenarios/m4-*.yaml`) pass, scripted,
+  with no model tokens.
+- **Memory (`make memory`):** after 1,000 agent turns the agent with tools is about 3 MB above
+  M4a (48.6–49.1 against 45.6 MB; the binary grew 0.9 MB to 47.8 MB). Echo and the agent without
+  tools stay within 1 MB; idle readings swing 5–8 MB between runs. Likely cause: the larger binary
+  and the module host built even when no module is installed. The owner accepted it on 2026-11-10.
+- **Railway deploy is open:** the image and [deploy-railway.md](../deploy-railway.md) are ready; the
+  deploy and its checks (Landlock ABI 3 or newer on Railway's kernel, hard links on the volume)
+  stay open as board card G-121.
+- ADRs 0059–0063 are Accepted (2026-11-10).

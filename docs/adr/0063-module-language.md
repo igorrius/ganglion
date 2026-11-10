@@ -1,7 +1,7 @@
 # ADR-0063: Write modules in Rust by default, TinyGo when Go code already exists, standard Go only when neither fits
 
-- **Status:** Proposed
-- **Date:** 2026-11-09
+- **Status:** Accepted
+- **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-4, R-RUN-5, R-RUN-9), [9.4](../spec.md#94-skill-compilation-p3), [11](../spec.md#11-open-decisions) ("Language of model-written modules"); [M4 design](../plans/p1-m4-reflexes-design.md) section 6.5; [ADR-0011](0011-module-abi.md), [ADR-0056](0056-small-hosts-as-a-soft-target.md), [ADR-0061](0061-local-modules-built-from-source.md)
 

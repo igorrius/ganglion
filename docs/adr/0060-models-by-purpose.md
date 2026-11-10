@@ -1,7 +1,7 @@
 # ADR-0060: Choose models by purpose, each with an explicit order and an optional effort
 
-- **Status:** Proposed
-- **Date:** 2026-11-09
+- **Status:** Accepted
+- **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.3](../spec.md#73-model-router) (R-RTR-1, R-RTR-6), [7.4](../spec.md#74-providers-and-model-access), [11](../spec.md#11-open-decisions) ("Choosing models by purpose"), [14](../spec.md#14-not-now) ("Models by purpose"); [M4 design](../plans/p1-m4-reflexes-design.md) section 5; [ADR-0034](0034-clean-context-guard.md), [ADR-0047](0047-sonnet-answers-during-development.md), [ADR-0059](0059-node-config-file.md)
 

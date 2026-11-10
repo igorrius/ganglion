@@ -1406,7 +1406,8 @@ possible second backend: compiling flows into Home Assistant automations.
 Ready modules linked through cells: one module reports a cell, another
 reads it (R-RUN-11) and acts. A flow is edited visually, in the spirit of
 Node-RED, by a person or by the model, with the modules already written
-by the model (owner, 2026-11-09).
+by the model (owner, 2026-11-09). Its first step comes earlier, in M4c: reflex
+modules that notify without a model (see 10.2).
 
 #### First flow: load shedding (moved from P1)
 
@@ -1576,7 +1577,11 @@ knowing which message a reply answers (R-DLV-13, 14) and `/status`. M3d
 [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md)).
 M4 brings one config file, models by purpose, modules the agent builds
 from source, and cells owned by modules
-([M4 design](plans/p1-m4-reflexes-design.md)).
+([M4 design](plans/p1-m4-reflexes-design.md)); M4a and M4b closed
+2026-11-10, ADRs 0059–0063 Accepted. M4c, reflex modules, follows: a
+`notify` capability for modules and the agent writing module source in the
+workspace, first `deye-alerts`, so routine reactions run without a model
+(owner, 2026-11-10; design next).
 
 Acceptance:
 
@@ -1742,7 +1747,8 @@ Reviewed at each gate.
     weigh in its own brainstorm: one press for a plan's listed URLs (as R-CMD-7 does for
     commands), an approval for a host and path with the parameter values shown, or the model's
     verdict only in a clean session (R-POL-6).
-- Hooks and pipelines: an internal n8n (owner, 2026-11-03).
+- Hooks and pipelines: an internal n8n (owner, 2026-11-03). M4c takes the first
+  step: reflex modules with a `notify` capability; the rest stays here.
   - **Hooks** are module triggers on the node's own events, beside `cron`
     and `tool` (7.10's module ABI). Examples: before or after a tool call,
     after a turn, a file arrived.

@@ -64,11 +64,11 @@ considered, how they compare, the decision and its consequences. See
 | [0056](0056-small-hosts-as-a-soft-target.md) | Treat small hosts as a soft target held by GOMEMLIMIT, not as a 128 MB line | Accepted | 2026-11-08 |
 | [0057](0057-commands-may-list-split-folders.md) | Let commands list the folders the sandbox splits | Accepted | 2026-11-08 |
 | [0058](0058-load-shedding-leaves-p1.md) | Take load shedding out of P1 and pass the gate without the two-week clock | Accepted | 2026-11-09 |
-| [0059](0059-node-config-file.md) | Make `ganglion.yaml` the node's single source of configuration, with secrets as `env:NAME` (D-3) | Proposed | 2026-11-09 |
-| [0060](0060-models-by-purpose.md) | Choose models by purpose, each with an explicit order and an optional effort | Proposed | 2026-11-09 |
-| [0061](0061-local-modules-built-from-source.md) | Build `local/…` modules from source through a builder, install them on the owner's press, and journal every version (extends 0041) | Proposed | 2026-11-09 |
-| [0062](0062-cells-owned-by-modules.md) | Let modules own the cells they declare, and prefix cell and tool names with the module's name (extends 0014) | Proposed | 2026-11-09 |
-| [0063](0063-module-language.md) | Write modules in Rust by default, TinyGo when Go code already exists, standard Go only when neither fits | Proposed | 2026-11-09 |
+| [0059](0059-node-config-file.md) | Make `ganglion.yaml` the node's single source of configuration, with secrets as `env:NAME` (D-3) | Accepted | 2026-11-10 |
+| [0060](0060-models-by-purpose.md) | Choose models by purpose, each with an explicit order and an optional effort | Accepted | 2026-11-10 |
+| [0061](0061-local-modules-built-from-source.md) | Build `local/…` modules from source through a builder, install them on the owner's press, and journal every version (extends 0041) | Accepted | 2026-11-10 |
+| [0062](0062-cells-owned-by-modules.md) | Let modules own the cells they declare, and prefix cell and tool names with the module's name (extends 0014) | Accepted | 2026-11-10 |
+| [0063](0063-module-language.md) | Write modules in Rust by default, TinyGo when Go code already exists, standard Go only when neither fits | Accepted | 2026-11-10 |
 | [0064](0064-builds-write-only-their-temp-folder.md) | Let a module's build write only its own temporary folder, and kill what it leaves running (refines 0039) | Accepted | 2026-11-09 |
 
 Open questions that will become ADRs are listed in

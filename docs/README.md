@@ -6,28 +6,25 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** task 11 of the [M4b plan](plans/p1-m4b-modules.md), M4
-  acceptance: chatlab scenarios, the live check on the test bot with the
-  owner (locally — Rust stable with `wasm32-wasip1` is on the owner's
-  machine since 2026-11-09 — and on Railway with
-  [deploy-railway.md](deploy-railway.md)), then accepting ADRs 0059–0063
-  and merging `m4-reflexes`. Tasks 1–10 are done and reviewed
-  (2026-11-10): contracts, owned cells, the runner's cell host functions,
-  local installs and the journal, the Rust builder in a sandbox that
-  writes only its own folder ([ADR-0064](adr/0064-builds-write-only-their-temp-folder.md)),
-  `modhost` (the owner's modules on cron and as tools, with a supervisor
-  and escalations), `module.import`, `module.build` and `module.install`
-  with the install window (load and `health` checked before a version is
-  activated), `/modules`, `/cells`, `cells.list` and the condensed
-  history, the Deye example in Rust
-  ([examples/modules/deye-reader](../examples/modules/deye-reader/README.md))
-  checked against the Go reader (`internal/deyeref`), and the container
-  image. A module that keeps failing below the crash-loop threshold
-  escalates a kind once per version until a successful run (owner ruling of
-  2026-11-10). M4 was designed on 2026-11-09
-  ([design](plans/p1-m4-reflexes-design.md),
-  [phase plan](plans/p1-all-in-one.md)); M4a is done. Load shedding and
-  the two-week clock of the gate left P1
+- **Next:** M4c, reflex modules: a `notify` capability for modules and
+  the agent writing module source in the workspace, first reflex
+  `deye-alerts` (thresholds 90…30 %, below 30 % every 5 %, full charge, a
+  data failure once), so routine reactions run without a model (owner,
+  2026-11-10). Design next, no document yet. The Railway deploy (the image
+  and [deploy-railway.md](deploy-railway.md) are ready; Landlock ABI 3 or
+  newer and hard links on the volume still to check) stays open as board
+  card G-121.
+- **M4 closed (2026-11-10):** M4a (config, models by purpose) and M4b
+  ([plan](plans/p1-m4b-modules.md)) are done and merged; ADRs 0059–0064
+  are Accepted. The owner's live check on the test bot passed: the agent
+  imported, built and installed `local/deye-reader` through the install
+  window, cron wrote the cells without a model call, `/modules`, `/cells`
+  and `module.status` work, a second version installed, and the module
+  came back after a restart. Memory after 1,000 agent turns with tools is
+  about 3 MB above M4a (the owner accepted it). M4 was designed on
+  2026-11-09 ([design](plans/p1-m4-reflexes-design.md),
+  [phase plan](plans/p1-all-in-one.md)). Load shedding and the two-week
+  clock of the gate left P1
   ([ADR-0058](adr/0058-load-shedding-leaves-p1.md)).
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
