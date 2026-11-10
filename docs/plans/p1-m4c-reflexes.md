@@ -699,7 +699,7 @@ git commit -m "examples: the reflex template; skills: module-writing"
 - [x] **Automated part (checks 1-6):** the five scenarios and the probe manifests written and passing
   (`make lab`, scripted, no tokens; `make test-net` for check 5); `make memory`: agent with tools 48.7 MB
   after 1,000 turns (M4b closing 48.6-49.1), binary 48.1 MB (47.8 MB).
-- [ ] **Steps:** write the scenarios; `make lab` for them; `make test-net` for check 5; `make
+- [x] **Steps:** write the scenarios; `make lab` for them; `make test-net` for check 5; `make
   memory` (idle within M4b's numbers; a growth needs a reason); the live check with the owner
   (the owner's message is the design's section 8 text); fixes from the live check as tasks 9
   and 10 (the first live run, 2026-11-10, stopped at the build: design section 10);
@@ -866,3 +866,25 @@ type ModuleBuilt struct {
 ```bash
 git commit -m "modules: a build runs in the background with a card and resumes the agent; timeouts in the config"
 ```
+
+---
+
+## Closing (2026-11-10)
+
+- **Live check passed** on the test bot. The first run (19:22) stopped at the build: the 60 s
+  model-call limit cut it (design section 10), which led to tasks 9 and 10 (background jobs with a
+  live card, timeouts in `ganglion.yaml`) and [ADR-0069](../adr/0069-background-jobs-with-a-live-card.md),
+  [ADR-0070](../adr/0070-builds-in-a-row-instead-of-depth.md). The second run on `44c8441`: from the
+  owner's one message the agent read the skill and the cells, imported the template as
+  `battery-alerts`, wrote it from a clean session, built it in the background with no compile
+  error, and offered the window ("Reacts to: deye-reader.sample", up to 72 messages a day, no
+  network or secrets); the owner pressed at 22:52. At 23:00 `deye-reader`'s cron wrote its cells,
+  the trigger started `battery-alerts`, and "battery-alerts: Батарея полностью заряжена: 100%"
+  reached the owner about 0.1 s later; the log shows no model call on that path.
+- Found during the check and fixed: scheduled tasks may read modules (`module.status`,
+  `module.read`; owner).
+- Found and left for the board: the agent forgot the owner's correction about the sign of
+  `batt_w` (G-138, memory by topic; G-139, the meaning of cell fields for the model). Deferred
+  minors from the reviews: G-134–G-137.
+- Final whole-branch review passed with fixes (d718c7e); tasks 9 and 10 reviewed separately.
+- ADRs 0065–0070 are Accepted.

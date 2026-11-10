@@ -75,6 +75,7 @@ considered, how they compare, the decision and its consequences. See
 | [0067](0067-agent-writes-module-source.md) | Let the agent write a module's source in the workspace without a press, from a clean session only (moves a part of 0061 from P3) | Accepted | 2026-11-10 |
 | [0068](0068-vouch-for-module-source-per-file-and-vetted-crates.md) | Vouch for module source per file and only with the examples' crates (refines 0067) | Accepted | 2026-11-10 |
 | [0069](0069-background-jobs-with-a-live-card.md) | Run long node work as background jobs with a live card the node edits | Accepted | 2026-11-10 |
+| [0070](0070-builds-in-a-row-instead-of-depth.md) | Bound the agent's fix-and-rebuild loop by builds in a row, not by turn depth (refines 0069) | Accepted | 2026-11-10 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

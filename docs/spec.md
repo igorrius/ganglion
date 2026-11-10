@@ -776,7 +776,8 @@ escalate:                    # when to call the model
   time per node, and the build's answer comes back as a note when it ends,
   at the depth of the call that asked for it; the module cannot be built or
   written again until then, and a conversation may build one module at most
-  5 times in a row before a person writes there again (owner, 2026-11-10). They are clean only
+  5 times in a row before a person writes there again (owner, 2026-11-10,
+  [ADR-0070](adr/0070-builds-in-a-row-instead-of-depth.md)). They are clean only
   while the module's `Cargo.lock` lists, besides its own package, only
   crates.io crates that one of the node's examples locks with the same
   version and checksum; a missing or unreadable lock, or any other
@@ -1644,7 +1645,9 @@ from source, and cells owned by modules
 `notify` capability for modules and the agent writing module source in the
 workspace, first `deye-alerts`, so routine reactions run without a model
 (owner, 2026-11-10; [M4c design](plans/p1-m4c-reflexes-design.md),
-ADRs 0065–0067, R-RUN-15–17).
+ADRs 0065–0070, R-RUN-15–17, R-LIVE-9). M4c closed 2026-11-10: the agent
+wrote, built in the background and installed `battery-alerts`, and its alert
+reached the owner with no model call.
 
 Acceptance:
 

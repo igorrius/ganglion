@@ -78,7 +78,7 @@ pinned by a test in the task that owns the code.
 | M3 more | After using the bot — **done** | A closed question folds, `/last`, fixed texts in the person's language, rich messages, replies that know what they answer, `/status` | |
 | M3d | Host commands and plans — **done** ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
 | M4 | Reflexes: config, modules built by the agent, Deye ([design](p1-m4-reflexes-design.md)) | One config file with models by purpose; the agent builds modules from source and installs them on the owner's press; modules own cells; the runner in the node with a supervisor; the Deye example deployed next to the current bot | about 1.5 weekends |
-| M4c | Reflex modules: `notify` for modules, the agent writing module source, `deye-alerts` ([design](p1-m4c-reflexes-design.md)) | Routine reactions run without a model | one design, one plan |
+| M4c | Reflex modules: `notify` for modules, the agent writing module source, `deye-alerts` ([design](p1-m4c-reflexes-design.md)) — **done 2026-11-10** | Routine reactions run without a model | one design, one plan |
 | ~~M5~~ | ~~Load-shedding flow~~ — left P1 ([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)) | Moved to the flow engine (spec 9.6) | — |
 | M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback | 0.25–0.5 weekend |
 | M7 | Migration | Memory import and consolidation, remaining skills and crons, backups, cutover, gate | 0.5–1 weekend |
@@ -287,14 +287,15 @@ agent; load shedding and the two-week clock left P1
 are [p1-m4a-config.md](p1-m4a-config.md) (4.1, 4.2) and `p1-m4b-modules.md`
 (4.3–4.8, done 2026-11-10 except the Railway deploy of 4.7).
 
-**M4c, next:** reflex modules. A `notify` capability for modules and the agent
+**M4c, done (2026-11-10):** reflex modules. A `notify` capability for modules and the agent
 writing module source in the workspace; the first reflex is `deye-alerts`
 (thresholds 90…30 %, below 30 % every 5 %, full charge, a data failure once),
 so routine reactions run without a model (owner, 2026-11-10). Designed
 2026-11-10 ([design](p1-m4c-reflexes-design.md), ADRs 0065–0067 Accepted,
 R-RUN-15–17): cell triggers through the inbox, `notify` to the owner's private
 chat, `module.write` from a clean session, a reflex template and a
-module-writing skill. Step-by-step plan: [p1-m4c-reflexes.md](p1-m4c-reflexes.md).
+module-writing skill; builds and long commands as background jobs with a live card (ADR-0069, R-LIVE-9).
+Step-by-step plan: [p1-m4c-reflexes.md](p1-m4c-reflexes.md); the live check passed 2026-11-10.
 
 | Task | Done when |
 |---|---|
