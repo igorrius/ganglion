@@ -64,11 +64,12 @@ func render(sp texts.Speaker, j Job, now time.Time) string {
 func Note(js []Job, now time.Time) string {
 	var running, queued []string
 	for _, j := range js {
+		title := text.Truncate(j.Title, maxTitleRunes)
 		switch j.State {
 		case StateRunning:
-			running = append(running, string(j.Kind)+" "+j.Title+" "+Elapsed(now.Sub(j.Started)))
+			running = append(running, string(j.Kind)+" "+title+" "+Elapsed(now.Sub(j.Started)))
 		case StateQueued:
-			queued = append(queued, string(j.Kind)+" "+j.Title)
+			queued = append(queued, string(j.Kind)+" "+title)
 		case StateDone, StateFailed, StateInterrupted:
 		}
 	}
@@ -85,8 +86,11 @@ func Note(js []Job, now time.Time) string {
 	return "[jobs] " + strings.Join(parts, "; ")
 }
 
-// statusLines are the running jobs' lines of /status by kind.
-var statusLines = map[Kind]texts.Key{KindBuild: texts.StatusJobBuild, KindCommand: texts.StatusJobCommand}
+// statusLines are the lines of /status by state and kind.
+var statusLines = map[State]map[Kind]texts.Key{
+	StateRunning: {KindBuild: texts.StatusJobBuild, KindCommand: texts.StatusJobCommand},
+	StateQueued:  {KindBuild: texts.StatusJobBuildQueued, KindCommand: texts.StatusJobCommandQueued},
+}
 
 // Name implements status.Source and node.Component.
 func (*Registry) Name() string { return "jobs" }
@@ -96,10 +100,10 @@ func (*Registry) Name() string { return "jobs" }
 func (r *Registry) Status(_ context.Context, s status.Scope) ([]status.Check, error) {
 	var out []status.Check
 	for _, j := range r.All() {
-		c := status.Check{Section: status.SectionJobs, State: status.OK, Line: texts.StatusJobQueued,
+		c := status.Check{Section: status.SectionJobs, State: status.OK, Line: statusLines[j.State][j.Kind],
 			Vars: texts.Vars{"title": text.Truncate(j.Title, maxTitleRunes)}}
 		if j.State == StateRunning {
-			c.Line, c.Spans = statusLines[j.Kind], map[string]time.Duration{"elapsed": s.Now.Sub(j.Started)}
+			c.Spans = map[string]time.Duration{"elapsed": s.Now.Sub(j.Started)}
 		}
 		out = append(out, c)
 	}

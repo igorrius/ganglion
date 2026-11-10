@@ -31,8 +31,9 @@ func NewStore(ctx context.Context, db *sql.DB) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// card is a job with its card: the last edit's number and its text.
-type card struct {
+// row is a job as stored, with its card: the last edit's number and its
+// text, "" until its first message is in the outbox.
+type row struct {
 	job     Job
 	version int
 	shown   string
@@ -45,15 +46,15 @@ const cardColumns = `key, kind, conv, transport, principal, title, state, count,
 type rowScanner interface{ Scan(dest ...any) error }
 
 // scanCard reads one row of cardColumns.
-func scanCard(s rowScanner) (card, error) {
+func scanCard(s rowScanner) (row, error) {
 	var (
-		c              card
+		c              row
 		kind, state    string
 		started, ended int64
 	)
 	if err := s.Scan(&c.job.Key, &kind, &c.job.Conv, &c.job.Transport, &c.job.Principal, &c.job.Title, &state,
 		&c.job.Count, &started, &ended, &c.version, &c.shown); err != nil {
-		return card{}, err
+		return row{}, err
 	}
 	c.job.Kind, c.job.State, c.job.Started = Kind(kind), State(state), time.UnixMilli(started).UTC()
 	if ended != 0 {
@@ -76,7 +77,7 @@ func (s *Store) known(ctx context.Context, key string) (bool, error) {
 }
 
 // insert stores a new job with its first card.
-func (s *Store) insert(ctx context.Context, c card) error {
+func (s *Store) insert(ctx context.Context, c row) error {
 	j := c.job
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO background_jobs (key, kind, conv, transport, principal, title, state, count,
 		started_ms, version, shown) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (key) DO NOTHING`,
@@ -88,7 +89,7 @@ func (s *Store) insert(ctx context.Context, c card) error {
 }
 
 // save stores what changed of a job and its card.
-func (s *Store) save(ctx context.Context, c card) error {
+func (s *Store) save(ctx context.Context, c row) error {
 	j := c.job
 	if _, err := s.db.ExecContext(ctx, `UPDATE background_jobs SET state = ?, count = ?, started_ms = ?, ended_ms = ?, version = ?, shown = ?
 		WHERE key = ?`, string(j.State), j.Count, j.Started.UnixMilli(), unixMilli(j.Ended), c.version, c.shown, j.Key); err != nil {
@@ -98,14 +99,14 @@ func (s *Store) save(ctx context.Context, c card) error {
 }
 
 // open are the jobs whose rows say they run or wait.
-func (s *Store) open(ctx context.Context) ([]card, error) {
+func (s *Store) open(ctx context.Context) ([]row, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+cardColumns+` FROM background_jobs
 		WHERE state IN ('queued', 'running') ORDER BY started_ms, key`)
 	if err != nil {
 		return nil, fmt.Errorf("jobs: open: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var out []card
+	var out []row
 	for rows.Next() {
 		c, err := scanCard(rows)
 		if err != nil {

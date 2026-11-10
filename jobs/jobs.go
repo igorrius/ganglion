@@ -13,13 +13,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/texts"
+	"github.com/igorrius/ganglion/tool"
 )
 
 // Kind is what a job does.
@@ -104,6 +107,15 @@ type Registry struct {
 	live map[string]*card // the open jobs this process started, by key
 }
 
+// card is an open job and its card. Its row is guarded by Registry.mu, which
+// is never held across I/O; io orders the job's row writes and messages, so
+// its versions go up one at a time and no version is sent twice.
+type card struct {
+	io   sync.Mutex
+	row  row
+	gone bool // ended or dropped: no further change
+}
+
 // New returns a registry over d.
 func New(d Deps) *Registry {
 	if d.Lang == nil {
@@ -132,36 +144,60 @@ func cardKey(key string) string { return "job:" + key + ":card" }
 // editKey is the key of a card's n-th edit.
 func editKey(key string, n int) string { return cardKey(key) + ":v" + strconv.Itoa(n) }
 
-// Start registers j and sends its card at once. j's State is running (the
-// default) or queued, and Started defaults to now. A key seen before sends no
-// second card: a queued job started again as running begins to run, its card
-// edited at once and its time counted from now; any other repeat is a no-op,
-// so a job has one card for its key, across a restart too.
+// cardless reports whether conv is one no person reads, a scheduled task's:
+// its jobs are kept and listed, but get no card.
+func cardless(conv string) bool { return strings.HasPrefix(conv, tool.TaskConvPrefix) }
+
+// Start registers j, stores its row and then sends its card. j's State is
+// running (the default) or queued, and Started defaults to now. A key seen
+// before sends no second card: a queued job started again as running begins
+// to run, its card edited at once and its time counted from now; any other
+// repeat is a no-op, so a job has one card for its key, across a restart too.
+// A card the outbox refused is sent at the next tick; the job is kept.
 func (r *Registry) Start(ctx context.Context, j Job) error {
 	j, err := r.complete(j)
 	if err != nil {
 		return err
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if c, ok := r.live[j.Key]; ok {
+		r.mu.Unlock()
 		return r.promote(ctx, c, j)
 	}
-	known, err := r.d.Store.known(ctx, j.Key)
-	if err != nil || known {
-		return err
-	}
-	c := &card{job: j}
-	c.shown = render(r.speaker(ctx, j.Principal), j, r.d.Now())
-	if err := r.d.Outbox.Enqueue(ctx, event.Outgoing{IdemKey: cardKey(j.Key), Transport: j.Transport, Conv: j.Conv,
-		Text: c.shown, Silent: true}); err != nil {
-		return fmt.Errorf("jobs: card of %s: %w", j.Key, err)
-	}
-	if err := r.d.Store.insert(ctx, *c); err != nil {
-		return err
-	}
+	c := &card{row: row{job: j}}
+	c.io.Lock() // a second Start of the key waits for this one
 	r.live[j.Key] = c
-	return nil
+	r.mu.Unlock()
+	if err := r.register(ctx, c, row{job: j}); err != nil {
+		c.io.Unlock()
+		return err
+	}
+	c.io.Unlock()
+	return r.update(ctx, c, func(*row) {})
+}
+
+// register stores first, c's first row; a key that has a row already, or a
+// row that cannot be stored, drops c.
+func (r *Registry) register(ctx context.Context, c *card, first row) error {
+	known, err := r.d.Store.known(ctx, first.job.Key)
+	if err == nil && !known {
+		err = r.d.Store.insert(ctx, first)
+		if err == nil {
+			return nil
+		}
+	}
+	r.drop(c)
+	return err
+}
+
+// drop takes c off the live jobs for good.
+func (r *Registry) drop(c *card) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c.gone = true
+	if r.live[c.row.job.Key] == c {
+		delete(r.live, c.row.job.Key)
+	}
 }
 
 // complete checks j and fills its defaults.
@@ -181,13 +217,15 @@ func (r *Registry) complete(j Job) (Job, error) {
 
 // promote starts a queued job that is started again as running.
 func (r *Registry) promote(ctx context.Context, c *card, j Job) error {
-	if c.job.State != StateQueued || j.State != StateRunning {
+	if j.State != StateRunning {
 		return nil
 	}
 	now := r.d.Now()
-	next := *c
-	next.job.State, next.job.Started = StateRunning, now
-	return r.edit(ctx, c, next, now)
+	return r.update(ctx, c, func(n *row) {
+		if n.job.State == StateQueued {
+			n.job.State, n.job.Started = StateRunning, now
+		}
+	})
 }
 
 // Progress sets a job's count; its card shows it at the next tick. An
@@ -196,63 +234,114 @@ func (r *Registry) Progress(key string, count int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if c, ok := r.live[key]; ok {
-		c.job.Count = count
+		c.row.job.Count = count
 	}
 }
 
 // End ends a job as s (done, failed or interrupted) and edits its card to its
-// last text; no edit follows. A key that is not open here is a no-op.
+// last text; no edit follows. Once its row is stored as ended the job is no
+// longer open, even when the outbox refused the edit (the error says so). A
+// key that is not open here is a no-op.
 func (r *Registry) End(ctx context.Context, key string, s State) error {
 	if s.open() || s == "" {
 		return fmt.Errorf("%w: end %s as %q", ErrInvalid, key, s)
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	c, ok := r.live[key]
+	r.mu.Unlock()
 	if !ok {
 		return nil
 	}
 	now := r.d.Now()
-	next := *c
-	next.job.State, next.job.Ended = s, now
-	if err := r.edit(ctx, c, next, now); err != nil {
-		return err
-	}
-	delete(r.live, key)
-	r.tel.end(ctx, c.job.Kind, s)
-	return nil
+	return r.update(ctx, c, func(n *row) { n.job.State, n.job.Ended = s, now })
 }
 
-// edit makes next the state of c: its row first, then the card's edit when
-// its text changed, so a restart never edits a card back. c is left as it was
-// when the row could not be stored.
-func (r *Registry) edit(ctx context.Context, c *card, next card, now time.Time) error {
-	text := render(r.speaker(ctx, next.job.Principal), next.job, now)
-	changed := text != c.shown
-	if !changed && next.job == c.job {
-		r.tel.edit(ctx, editUnchanged)
-		return nil // nothing to store: a queued job between ticks
+// update applies change to c's row and stores it, and sends what the card
+// needs: its first message while none is in the outbox (before the row, which
+// already exists), else an edit when its text changed (after the row, so a
+// restart never edits a card back). A job that ends leaves the live jobs once
+// its row is stored. The error is a row that was not stored or a message the
+// outbox refused.
+func (r *Registry) update(ctx context.Context, c *card, change func(*row)) error {
+	c.io.Lock()
+	defer c.io.Unlock()
+	r.mu.Lock()
+	if c.gone {
+		r.mu.Unlock()
+		return nil
 	}
-	if changed {
-		next.version, next.shown = c.version+1, text
+	cur := c.row
+	r.mu.Unlock()
+	next := cur
+	change(&next)
+	text := render(r.speaker(ctx, next.job.Principal), next.job, r.d.Now())
+	msg, sendErr := r.plan(ctx, cur, &next, text)
+	if next == cur {
+		r.tel.edit(ctx, editUnchanged)
+		return sendErr
 	}
 	if err := r.d.Store.save(ctx, next); err != nil {
 		r.tel.edit(ctx, editFailed)
 		return err
 	}
-	*c = next
-	if !changed {
-		r.tel.edit(ctx, editUnchanged)
-		return nil
+	r.apply(ctx, c, cur, next)
+	if msg == nil {
+		return sendErr
 	}
-	j := next.job
-	if err := r.d.Outbox.Enqueue(ctx, event.Outgoing{IdemKey: editKey(j.Key, next.version), EditOf: cardKey(j.Key),
-		Transport: j.Transport, Conv: j.Conv, Text: text, Silent: true}); err != nil {
+	if err := r.d.Outbox.Enqueue(ctx, *msg); err != nil {
 		r.tel.edit(ctx, editFailed)
-		return fmt.Errorf("jobs: edit the card of %s: %w", j.Key, err)
+		return fmt.Errorf("jobs: edit the card of %s: %w", next.job.Key, err)
 	}
 	r.tel.edit(ctx, editSent)
 	return nil
+}
+
+// plan decides the card's message for next, whose text is text: the first
+// message is sent here, before the row is stored; an edit is returned, to be
+// sent after it. A task's job has no card.
+func (r *Registry) plan(ctx context.Context, cur row, next *row, text string) (*event.Outgoing, error) {
+	j := next.job
+	switch {
+	case cardless(j.Conv):
+		return nil, nil
+	case cur.shown == "":
+		err := r.d.Outbox.Enqueue(ctx, event.Outgoing{IdemKey: cardKey(j.Key), Transport: j.Transport, Conv: j.Conv,
+			Text: text, Silent: true})
+		if err != nil {
+			r.tel.edit(ctx, editFailed)
+			return nil, fmt.Errorf("jobs: card of %s: %w", j.Key, err)
+		}
+		r.tel.edit(ctx, editSent)
+		next.shown = text
+		return nil, nil
+	case text != cur.shown:
+		next.version, next.shown = cur.version+1, text
+		return &event.Outgoing{IdemKey: editKey(j.Key, next.version), EditOf: cardKey(j.Key), Transport: j.Transport,
+			Conv: j.Conv, Text: text, Silent: true}, nil
+	}
+	return nil, nil
+}
+
+// apply makes next c's row, keeping a count set since cur was read; a job
+// that ended leaves the live jobs.
+func (r *Registry) apply(ctx context.Context, c *card, cur, next row) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := c.row.job.Count
+	c.row = next
+	if count != cur.job.Count {
+		c.row.job.Count = count
+	}
+	if next.job.State.open() {
+		return
+	}
+	c.gone = true
+	if r.live[next.job.Key] == c {
+		delete(r.live, next.job.Key)
+	}
+	if cur.job.State.open() {
+		r.tel.end(ctx, next.job.Kind, next.job.State)
+	}
 }
 
 // Running is the open jobs of conv, running and queued, oldest first: for the
@@ -270,18 +359,15 @@ func (r *Registry) list(keep func(Job) bool) []Job {
 	defer r.mu.Unlock()
 	var out []Job
 	for _, c := range r.live {
-		if keep(c.job) {
-			out = append(out, c.job)
+		if keep(c.row.job) {
+			out = append(out, c.row.job)
 		}
 	}
 	slices.SortFunc(out, func(a, b Job) int {
 		if c := a.Started.Compare(b.Started); c != 0 {
 			return c
 		}
-		if a.Key < b.Key {
-			return -1
-		}
-		return 1
+		return strings.Compare(a.Key, b.Key)
 	})
 	return out
 }
@@ -322,33 +408,34 @@ func (r *Registry) interrupt(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	now := r.d.Now()
-	for _, c := range open {
-		if _, mine := r.live[c.job.Key]; mine {
+	for _, o := range open {
+		r.mu.Lock()
+		_, mine := r.live[o.job.Key]
+		r.mu.Unlock()
+		if mine {
 			continue
 		}
-		next := c
-		next.job.State, next.job.Ended = StateInterrupted, now
-		if err := r.edit(ctx, &c, next, now); err != nil {
-			r.logErr(ctx, "jobs: an interrupted job's card was not edited", err, "key", c.job.Key)
-			continue
+		c := &card{row: o}
+		if err := r.update(ctx, c, func(n *row) { n.job.State, n.job.Ended = StateInterrupted, now }); err != nil {
+			r.logErr(ctx, "jobs: an interrupted job's card was not edited", err, "key", o.job.Key)
 		}
-		r.tel.end(ctx, c.job.Kind, StateInterrupted)
 	}
 	r.prune(ctx, now)
 	return nil
 }
 
-// tick edits each running job's card whose text changed.
+// tick edits each open job's card whose text changed, and sends a first card
+// the outbox refused before. The live jobs are read under the lock; their
+// I/O runs outside it, so a turn reading Running never waits for it.
 func (r *Registry) tick(ctx context.Context) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	now := r.d.Now()
-	for _, c := range r.live {
-		if err := r.edit(ctx, c, *c, now); err != nil {
-			r.logErr(ctx, "jobs: a card was not edited", err, "key", c.job.Key)
+	cards := make(map[string]*card, len(r.live))
+	maps.Copy(cards, r.live)
+	r.mu.Unlock()
+	for key, c := range cards {
+		if err := r.update(ctx, c, func(*row) {}); err != nil {
+			r.logErr(ctx, "jobs: a card was not edited", err, "key", key)
 		}
 	}
 }

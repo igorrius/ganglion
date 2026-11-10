@@ -3,8 +3,10 @@ package jobs_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -18,17 +20,38 @@ import (
 
 var t0 = time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
 
-// outbox records the messages the registry stores.
+// outbox records the messages the registry stores. With err set it refuses
+// them; with hold set each Enqueue says so on entered and waits for hold.
 type outbox struct {
-	mu   sync.Mutex
-	msgs []event.Outgoing
+	mu      sync.Mutex
+	msgs    []event.Outgoing
+	err     error
+	hold    chan struct{}
+	entered chan struct{}
 }
 
 func (o *outbox) Enqueue(_ context.Context, msgs ...event.Outgoing) error {
 	o.mu.Lock()
+	hold, entered := o.hold, o.entered
+	o.mu.Unlock()
+	if hold != nil {
+		entered <- struct{}{}
+		<-hold
+	}
+	o.mu.Lock()
 	defer o.mu.Unlock()
+	if o.err != nil {
+		return o.err
+	}
 	o.msgs = append(o.msgs, msgs...)
 	return nil
+}
+
+// fail makes the outbox refuse messages, or take them again with nil.
+func (o *outbox) fail(err error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.err = err
 }
 
 func (o *outbox) got() []event.Outgoing {
@@ -363,7 +386,7 @@ func TestStatusListsTheOpenJobs(t *testing.T) {
 		line  texts.Key
 		title string
 		span  bool
-	}{{texts.StatusJobBuild, "battery-alerts", true}, {texts.StatusJobQueued, "solar", false}, {texts.StatusJobCommand, "du -sh /home", true}}
+	}{{texts.StatusJobBuild, "battery-alerts", true}, {texts.StatusJobBuildQueued, "solar", false}, {texts.StatusJobCommand, "du -sh /home", true}}
 	for i, c := range checks {
 		w := want[i]
 		if c.Section != status.SectionJobs || c.State != status.OK || c.Line != w.line || c.Vars["title"] != w.title {
@@ -403,5 +426,118 @@ func TestElapsed(t *testing.T) {
 		if got := jobs.Elapsed(d); got != want {
 			t.Errorf("Elapsed(%v) = %q, want %q", d, got, want)
 		}
+	}
+}
+
+// A scheduled task's conversation is no chat: its job is kept and listed,
+// but it gets no card and no edit (fix round 1).
+func TestATasksJobHasNoCard(t *testing.T) {
+	e := newEnv(t)
+	e.run(t)
+	if err := e.r.Start(t.Context(), command("c:1", "task:01TASK", "du -sh /home")); err != nil {
+		t.Fatal(err)
+	}
+	e.fire(t, 10*time.Second)
+	if got := e.r.Running("task:01TASK"); len(got) != 1 || got[0].Key != "c:1" {
+		t.Fatalf("Running = %+v", got)
+	}
+	if err := e.r.End(t.Context(), "c:1", jobs.StateDone); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.box.got(); len(got) != 0 {
+		t.Fatalf("a task's job sent %+v", got)
+	}
+	if len(e.r.All()) != 0 {
+		t.Fatalf("listed after its end: %+v", e.r.All())
+	}
+}
+
+// A row that cannot be stored sends no card: the row comes first.
+func TestARowThatIsNotStoredSendsNoCard(t *testing.T) {
+	e := newEnv(t)
+	if err := e.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.r.Start(t.Context(), command("c:1", "telegram:1", "ls")); err == nil {
+		t.Fatal("Start passed with no database")
+	}
+	if got := e.box.got(); len(got) != 0 || len(e.r.All()) != 0 {
+		t.Fatalf("messages %+v, jobs %+v", got, e.r.All())
+	}
+}
+
+// A card the outbox refused is sent at the next tick, as the first message.
+func TestARefusedCardIsSentAtTheNextTick(t *testing.T) {
+	e := newEnv(t)
+	e.run(t)
+	e.box.fail(errors.New("outbox: full"))
+	if err := e.r.Start(t.Context(), command("c:1", "telegram:1", "ls")); err == nil {
+		t.Fatal("Start hid the refused card")
+	}
+	if len(e.r.All()) != 1 {
+		t.Fatalf("the job was not kept: %+v", e.r.All())
+	}
+	e.box.fail(nil)
+	e.fire(t, 10*time.Second)
+	got := e.box.got()
+	if len(got) != 1 || got[0].IdemKey != "job:c:1:card" || got[0].EditOf != "" || got[0].Text != "⚙️ ls · command · 0:10" {
+		t.Fatalf("messages %+v", got)
+	}
+}
+
+// An end whose last edit the outbox refused still ends the job.
+func TestAnEndWithARefusedEditStillEndsTheJob(t *testing.T) {
+	e := newEnv(t)
+	if err := e.r.Start(t.Context(), command("c:1", "telegram:1", "ls")); err != nil {
+		t.Fatal(err)
+	}
+	e.box.fail(errors.New("outbox: full"))
+	if err := e.r.End(t.Context(), "c:1", jobs.StateDone); err == nil {
+		t.Fatal("End hid the refused edit")
+	}
+	if len(e.r.All()) != 0 || len(e.r.Running("telegram:1")) != 0 {
+		t.Fatalf("an ended job is listed: %+v", e.r.All())
+	}
+	e.r = e.registry() // a restart finds it ended: nothing to interrupt
+	e.run(t)
+	if got := e.box.got(); len(got) != 0 {
+		t.Fatalf("a restart edited an ended job's card: %+v", got)
+	}
+}
+
+// A tick's sending does not hold the list: a turn reads Running meanwhile.
+func TestATickSendsOutsideTheLock(t *testing.T) {
+	e := newEnv(t)
+	e.run(t)
+	if err := e.r.Start(t.Context(), command("c:1", "telegram:1", "ls")); err != nil {
+		t.Fatal(err)
+	}
+	hold, entered := make(chan struct{}), make(chan struct{})
+	e.box.mu.Lock()
+	e.box.hold, e.box.entered = hold, entered
+	e.box.mu.Unlock()
+	e.clock.add(10 * time.Second)
+	e.tick.fire <- e.clock.now()
+	<-entered // the tick waits inside Enqueue
+	if got := e.r.Running("telegram:1"); len(got) != 1 {
+		t.Fatalf("Running = %+v", got)
+	}
+	e.r.Progress("c:1", 3)
+	close(hold)
+	e.waitTick(t)
+	if got := textsOf(e.box.got()); !slices.Equal(got, []string{"⚙️ ls · command · 0:00", "⚙️ ls · command · 0:10"}) {
+		t.Fatalf("texts %q", got)
+	}
+	if got := e.r.Running("telegram:1"); got[0].Count != 3 {
+		t.Fatalf("the count set during the tick was lost: %+v", got)
+	}
+}
+
+func TestTheNoteCutsALongTitle(t *testing.T) {
+	c := command("c:1", "telegram:1", strings.Repeat("x", 300))
+	c.State, c.Started = jobs.StateRunning, t0
+	want := "[jobs] running: command " + strings.Repeat("x", 200) + "… 0:00"
+	if got := jobs.Note([]jobs.Job{c}, t0); got != want {
+		t.Errorf("note %q", got)
 	}
 }

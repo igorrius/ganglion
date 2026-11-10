@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -569,5 +570,62 @@ func TestACardEndsAsFailedAndAQuickCommandHasNone(t *testing.T) {
 	started, ended := c.seen()
 	if len(started) != 1 || started[0].Key != "t:fail" || ended["t:fail"] != jobs.StateFailed || len(ended) != 1 {
 		t.Fatalf("started %+v, ended %v", started, ended)
+	}
+}
+
+// outbox records what the background jobs' registry sends.
+type outbox struct {
+	mu   sync.Mutex
+	msgs []event.Outgoing
+}
+
+func (o *outbox) Enqueue(_ context.Context, msgs ...event.Outgoing) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.msgs = append(o.msgs, msgs...)
+	return nil
+}
+
+// A scheduled task's command that goes to the background is a job, listed
+// for the note and /status, but its conversation is no chat: no card and no
+// edit go out (fix round 1 of M4c task 9).
+func TestATasksBackgroundCommandHasAJobAndNoCard(t *testing.T) {
+	db, box, g, sent := openDB(t), &inbox{}, newGate(), &outbox{}
+	store, err := jobs.NewStore(t.Context(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := jobs.New(jobs.Deps{Store: store, Outbox: sent})
+	r, err := NewRunner(t.Context(), db, &shell{}, box.put, testLimits, WithRunnerClock(time.Now, g.after), WithJobs(reg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start(t, r)
+	release := filepath.Join(t.TempDir(), "go")
+	q := req("t:task", "while", "[", "!", "-e", release, "];", "do", "sleep", "0.01;", "done")
+	q.Conv = "task:01TASK"
+	opened := openWait(g)
+	if a, err := r.Exec(t.Context(), q); err != nil || a.Done {
+		t.Fatalf("answer = %+v, %v; want running in the background", a, err)
+	}
+	<-opened
+	if got := reg.Running("task:01TASK"); len(got) != 1 || got[0].Key != "t:task" || got[0].Kind != jobs.KindCommand {
+		t.Fatalf("Running = %+v", got)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM background_jobs WHERE key = 't:task'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("rows %d, %v", n, err)
+	}
+	if err := os.WriteFile(release, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitEvents(t, box, 1)
+	if len(reg.All()) != 0 {
+		t.Fatalf("listed after its end: %+v", reg.All())
+	}
+	sent.mu.Lock()
+	defer sent.mu.Unlock()
+	if len(sent.msgs) != 0 {
+		t.Fatalf("a task's command sent %+v", sent.msgs)
 	}
 }

@@ -777,7 +777,7 @@ The card's keys: the first message `job:<key>:card`, each edit `job:<key>:card:v
 {kind} done in {elapsed}"), `job.card_failed`, `job.card_interrupted`, `status.jobs`.
 As built: `status.jobs` already named the scheduler's line, so the section is
 `status.section_jobs` ("Background jobs") with one line per job (`status.job_build`,
-`status.job_command`, `status.job_queued`); the kind's word is `job.kind_build` and
+`status.job_command`, `status.job_build_queued`, `status.job_command_queued`); the kind's word is `job.kind_build` and
 `job.kind_command`.
 
 Host commands: when `Runner.Exec` detaches a command (after its 20 s wait) it `Start`s a job of kind
