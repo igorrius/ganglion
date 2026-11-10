@@ -701,10 +701,153 @@ git commit -m "examples: the reflex template; skills: module-writing"
   after 1,000 turns (M4b closing 48.6-49.1), binary 48.1 MB (47.8 MB).
 - [ ] **Steps:** write the scenarios; `make lab` for them; `make test-net` for check 5; `make
   memory` (idle within M4b's numbers; a growth needs a reason); the live check with the owner
-  (the owner's message is the design's section 8 text); fixes from the live check as task 8b;
+  (the owner's message is the design's section 8 text); fixes from the live check as tasks 9
+  and 10 (the first live run, 2026-11-10, stopped at the build: design section 10);
   "Where we are" closes M4c; the board's M4c cards done; merge `m4c-reflexes` into `master` with
   the owner's go.
 
 ```bash
 git commit -m "docs: M4c closed — reflex modules: cell triggers, notify, the agent writes deye-alerts"
+```
+
+---
+
+## Live-check findings (2026-11-10)
+
+The first live run stopped at `module.build`: on the `claude` CLI route one model call runs a
+turn's tool calls and is limited to 60 s, so the build was stopped after 10 s and the turn failed
+(design section 10, [ADR-0069](../adr/0069-background-jobs-with-a-live-card.md), R-LIVE-9). The
+owner chose background builds with a live card, one mechanism for every background job, and a chat
+that stays usable meanwhile. Tasks 9 and 10 do it; the live check (Task 8, check 7) follows them.
+
+Rulings for these tasks (call):
+
+14. **A job's card is edited every 10 s** while it runs, through the outbox with `EditOf`, like the
+    plan message; its texts are the node's, in the owner's language; it shows the title (a module
+    name, or the approved command's argv as the confirmation showed it) and counts, never output.
+15. **The jobs note is built at the start of each turn** from the registry and given to the model
+    as a node note that is not stored in history: `[jobs] running: build battery-alerts 0:45;
+    command du -sh /home 1:10`.
+16. **One build at a time per node**; the next waits in a FIFO queue with its card saying "queued".
+17. **Timeouts move to `ganglion.yaml`**: `agent.call_timeout` (default 3m), `agent.turn_timeout`
+    (default 5m); the node's handler gets the turn's plus 1 min, and the start fails when that is
+    not below the queue's lease (10 min).
+
+### Task 9: Background jobs — the registry, the card, the note, `/status`; host commands on it (R-LIVE-9, R-CMD-4)
+
+**Files:**
+- Create: `jobs/jobs.go`, `jobs/card.go`, `jobs/store.go` (+tests), `jobs/migrations/001_jobs.sql`
+- Modify: `host/runner.go`, `host/jobs.go` (announce through the registry, the card), `agent/stages.go`
+  or `agent/prompt.go` (the jobs note), `agent/status.go` (a "Background jobs" section),
+  `config/*.go` (wiring), `texts/texts.go`, `texts/lang/*`, `docs/architecture/03-components.md`,
+  `04-runtime.md`, `05-code-map.md`
+
+**Interfaces:**
+- Produces:
+
+```go
+// jobs
+type Kind string // "build" | "command"
+type State string // "queued" | "running" | "done" | "failed" | "interrupted"
+type Job struct {
+	Key       string // unique; the host job's key or "build:<module>:<id>"
+	Kind      Kind
+	Conv      string // the conversation it reports to
+	Transport string
+	Principal string
+	Title     string // a module name or an approved argv, as the owner saw it
+	Started   time.Time
+	Ended     time.Time
+	State     State
+	Count     int // progress: crates built for a build; 0 when none
+}
+// Registry keeps jobs in the node's database and drives their cards.
+func New(d Deps) *Registry
+func (r *Registry) Start(ctx context.Context, j Job) error            // card sent at once
+func (r *Registry) Progress(key string, count int)                      // card shows it at next tick
+func (r *Registry) End(ctx context.Context, key string, s State) error  // card's final edit
+func (r *Registry) Running(conv string) []Job                           // for the note and /status
+func (r *Registry) All() []Job                                          // /status
+func (r *Registry) Run(ctx context.Context) error // the 10 s ticker; at start, running rows → interrupted
+```
+
+The card's keys: the first message `job:<key>:card`, each edit `job:<key>:card:v<N>` with
+`EditOf: "job:<key>:card"`. Texts (every language): `job.card_running` ("{icon} {title} · {kind} ·
+{elapsed}"), `job.card_count` ("crates built: {n}"), `job.card_queued`, `job.card_done` ("✅ {title} ·
+{kind} done in {elapsed}"), `job.card_failed`, `job.card_interrupted`, `status.jobs`.
+
+Host commands: when `Runner.Exec` detaches a command (after its 20 s wait) it `Start`s a job of kind
+`command`; its end `End`s it and puts `command.done` at once (the 30 s `pass` stays as the fallback
+for a lost wake-up).
+
+- [ ] **Step 1: Failing tests:** a started job sends one card; the ticker with a fake clock edits it
+  every 10 s with the elapsed time and the count; `End` edits it to the final text and stops the
+  edits; a restart (`Run` with a running row) ends it as interrupted with its card edited; `Running`
+  lists only the conversation's running and queued jobs; a host command that detaches gets a card and
+  its `command.done` is put at once; `/status` lists jobs; a turn's model input carries the jobs note
+  and history does not.
+- [ ] **Step 2: Run, see them fail. Implement.**
+- [ ] **Step 3: `make lint test`; architecture docs; commit, push.**
+
+```bash
+git commit -m "jobs: background jobs with a live card the node edits; host commands use it; the model and /status see what runs (R-LIVE-9)"
+```
+
+---
+
+### Task 10: `module.build` in the background; timeouts in the config; the builder's message (R-RUN-9, R-RUN-17)
+
+**Files:**
+- Modify: `tool/builtin/module_build.go`, `tool/builtin/module_write.go`, `tool/builtin/module.go`,
+  `builder/builder.go`, `builder/local.go` (progress, the deadline message), `event/event.go`,
+  `event/message.go` (`module.built`), `agent/resume.go`, `agent/module_built.go` (+test),
+  `agent/config.go`, `core/loop.go`, `config/*.go`, `schemas/node.schema.json`, `settings/*`,
+  `skills/builtin/module-writing/SKILL.md`, `tools/chatlab/scenarios/m4c-write-build-template.yaml`
+
+**Interfaces:**
+- Produces:
+
+```go
+// builder: Source gains Progress func(crates int) — called as cargo prints "Compiling" lines.
+// event
+const KindModuleBuilt Kind = "module.built"
+type ModuleBuilt struct {
+	Key    string `json:"key"`    // the job's key
+	Module string `json:"module"`
+}
+```
+
+- `module.build` checks the name and that no build of the module runs or waits, registers a job
+  (kind `build`, title the module name, conversation and principal of the call), queues the build
+  and answers at once: `{"building": "<name>", "job": "<key>", "next": "the result comes back as a
+  note when the build ends; a card in the chat shows its progress"}` with `Job: key`. The build runs
+  with `context.WithoutCancel` and the builder's own 10 min limit, one at a time; it computes `own`
+  before and after as today, saves the build and the plan, and keeps the answer it would have given
+  (the same JSON and the same `External` rule) in the job's row; then `End` and a `module.built`
+  event at once.
+- The agent's `module.built` turn: like `commandDone` — a late one (the key is no longer in the
+  session's jobs, e.g. after `/new`) sends one fixed line; otherwise a note `[build finished]
+  <name>: <answer>` that taints only when the answer is outside content, then `converse` at depth
+  + 1, so the agent fixes and builds again or calls `module.install`.
+- `module.write` and `module.build` of a module whose build runs or waits are refused: "<name> is
+  being built; wait for its result".
+- `agent.call_timeout` (3m) and `agent.turn_timeout` (5m) in `ganglion.yaml` and its schema; the
+  core loop's turn timeout is the turn's plus 1 min; the start fails if that reaches the lease.
+- The builder says "the caller stopped it after <d>" when the caller's deadline ended it, and "it
+  ran past <limit>" only for its own limit.
+- The skill says the build runs in the background and the result comes back as a note.
+
+- [ ] **Step 1: Failing tests:** `module.build` answers at once with a job and a card; the build's
+  end puts `module.built` and ends the card; the note is clean for an own folder and tainted
+  otherwise; a second build of the module and a write to it are refused while it runs; two modules'
+  builds run one after the other; a restart during a build ends it as interrupted and the agent is
+  told; a late result after `/new` sends the fixed line; the config's timeouts reach the agent and
+  the loop, and a turn timeout at the lease fails the start; the builder's two messages; cargo's
+  "Compiling" lines reach `Progress`.
+- [ ] **Step 2: Run, see them fail. Implement.** Update the scenario `m4c-write-build-template` for a
+  build that answers at once and a `module.built` turn.
+- [ ] **Step 3: `make lint test`, `make test-net`; docs; commit, push.**
+
+```bash
+git commit -m "modules: a build runs in the background with a card and resumes the agent; timeouts in the config"
 ```

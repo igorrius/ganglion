@@ -323,3 +323,58 @@ Expected, with no model call per alert:
   7.5; 9.4 and 10.2; "Not now" gets targets beyond the private chat and a
   module asking a model.
 - The architecture views follow the code in the plan's tasks.
+
+## 10. Background jobs with a live card (live check, 2026-11-10)
+
+The first live run stopped at the build. The agent read the skill and the
+cells, imported the template as `battery-alerts`, wrote `manifest.yaml` and
+`src/logic.rs` from a clean session, and called `module.build`. With the
+`claude` CLI route one model call runs every tool call of the turn, and
+that call is limited to 60 s (the turn to 2 min, the node's handler to
+3 min). Writing the code took about 40 s, so the build was stopped after
+10 s, reported as "ran past 10m0s" (its own limit, which it never reached),
+and the turn failed. A build that fetches crates and links with LTO takes
+a minute or more; a turn is the wrong place for it.
+
+The owner also named the general pain (owner): agents give no sign of
+life. While something runs, the person cannot tell whether it is alive,
+what it is doing or when it will end.
+
+Decided (owner): builds run in the background, with a live card; the chat
+stays usable while they run; the card is one mechanism for every
+background job of the node, `host.exec` included.
+
+- **A background job** is work the node runs outside any turn: a build
+  (always), a host command that outlives its 20 s wait (as today). The
+  node keeps its row (kind, key, conversation, title, started, state,
+  progress) so a restart can finish it honestly.
+- **The card** is one message the node sends when the job starts and
+  edits in place on a timer, without a model: `🔨 battery-alerts · build ·
+  0:45 · crates built: 14`, every 10 s (call). The ticking time is the
+  sign of life; a frozen time means the node stopped. It ends as `✅ built
+  in 1:32`, `❌ build failed in 0:40`, or `⚠️ interrupted by a restart`.
+  Its words are the node's fixed texts; it shows no text from the build.
+- **The result comes back at once** as an event that starts a turn, not
+  after a 30 s poll. For a build the turn gets a note with the build's
+  answer, clean or outside content by the provenance rule (section 6),
+  and the agent goes on: it fixes and builds again, or offers the window.
+- **The model knows what runs.** Every turn of the conversation carries a
+  node note listing its running jobs (`[jobs] build battery-alerts 0:45`);
+  it is not stored in history. Asked "how is it going?", the agent answers
+  from it.
+- **`/status`** shows a "Background jobs" section with the same lines.
+- **The chat stays alive** (owner). New messages start ordinary turns.
+  Only work on the same module waits: `module.build` and `module.write`
+  of a module whose build is running or queued are refused in the node's
+  words ("battery-alerts is being built; wait for its result").
+- **One build at a time** per node (call): a build is heavy on a small
+  host; the next waits in a queue and its card says "queued".
+- **The model call and the turn get more time** (call): a call 3 min, a
+  turn 5 min, the node's handler 6 min (under the 10 min lease), set in
+  `ganglion.yaml`. Writing a module's code is a long answer, and the CLI
+  route runs a turn's tools inside one call.
+- **The builder's message** says what stopped it: its own limit, or the
+  caller's deadline.
+
+Records: [ADR-0069](../adr/0069-background-jobs-with-a-live-card.md); spec
+R-LIVE-9, R-CMD-4, R-RUN-9; plan tasks 9 and 10.

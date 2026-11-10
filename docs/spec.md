@@ -402,6 +402,15 @@ Live turns ([design](plans/p1-live-turns-design.md);
   closes the earlier ones nobody closed, and ⏭ means a line nobody reached or the model
   skipped. It displays and approves nothing: policies decide. M3d adds its one press
   (R-CMD-7).
+- **R-LIVE-9.** Work the node runs outside a turn is a background job: a module build
+  (always) and a host command past its wait (R-CMD-4). Each job has one card in the chat,
+  a message the node sends when the job starts and edits in place every 10 s without a
+  model (`🔨 battery-alerts · build · 0:45 · crates built: 14`), ending as done, failed or
+  interrupted by a restart; it carries only the node's words, the job's title and counts.
+  The job's end resumes the conversation at once. Every turn of the conversation carries
+  a node note listing its running jobs, not stored in history, and `/status` lists them
+  (R-OBS-11). The chat stays usable meanwhile; only work on the same module waits (M4c,
+  owner, 2026-11-10, [ADR-0069](adr/0069-background-jobs-with-a-live-card.md)).
 
 ### 7.3. Model router
 
@@ -762,7 +771,10 @@ escalate:                    # when to call the model
   `module.write` from a clean session); a build or a read of a folder that
   matches its record does not taint, and the build then keeps only rustc's
   diagnostics about the module's own files. Any other change to the folder
-  makes those answers outside content again (R-RUN-13). They are clean only
+  makes those answers outside content again (R-RUN-13). `module.build` runs
+  in the background (R-LIVE-9): it answers at once, one build runs at a
+  time per node, and the build's answer comes back as a note when it ends;
+  the module cannot be built or written again until then. They are clean only
   while the module's `Cargo.lock` lists, besides its own package, only
   crates.io crates that one of the node's examples locks with the same
   version and checksum; a missing or unreadable lock, or any other
@@ -1146,7 +1158,8 @@ decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
   its daemon over a Unix socket, so below Landlock ABI 9 Docker commands
   fail from the sandbox.
 - **R-CMD-4.** A command longer than a short wait continues in the
-  background; its completion resumes the conversation with the result.
+  background as a job with a live card (R-LIVE-9); its completion resumes
+  the conversation with the result at once.
   Commands have a hard time limit, their own process group and a cap on
   how many run at once.
 - **R-CMD-5.** `host.stats` reports, without a subprocess: memory (total,
