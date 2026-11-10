@@ -6,23 +6,28 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** execute the [M4b plan](plans/p1-m4b-modules.md) (written
-  2026-11-09; tasks 1–10 done: contracts, owned cells, the runner's cell
-  host functions, local installs and the journal, the Rust builder in a
-  confined sandbox, `modhost`, which runs the owner's modules in the
-  node on cron and as tools with a supervisor and escalations, the
-  agent's tools `module.import`, `module.build` and `module.install` with
-  the install window, `/modules`, `/cells`, `cells.list` and the condensed
-  history, and the Deye example in Rust
+- **Next:** task 11 of the [M4b plan](plans/p1-m4b-modules.md), M4
+  acceptance: chatlab scenarios, the live check on the test bot with the
+  owner (locally — Rust stable with `wasm32-wasip1` is on the owner's
+  machine since 2026-11-09 — and on Railway with
+  [deploy-railway.md](deploy-railway.md)), then accepting ADRs 0059–0063
+  and merging `m4-reflexes`. Tasks 1–10 are done and reviewed
+  (2026-11-10): contracts, owned cells, the runner's cell host functions,
+  local installs and the journal, the Rust builder in a sandbox that
+  writes only its own folder ([ADR-0064](adr/0064-builds-write-only-their-temp-folder.md)),
+  `modhost` (the owner's modules on cron and as tools, with a supervisor
+  and escalations), `module.import`, `module.build` and `module.install`
+  with the install window (load and `health` checked before a version is
+  activated), `/modules`, `/cells`, `cells.list` and the condensed
+  history, the Deye example in Rust
   ([examples/modules/deye-reader](../examples/modules/deye-reader/README.md))
-  checked against the Go reader, now `internal/deyeref`, and the container image with its Railway runbook, [deploy-railway.md](deploy-railway.md); next the owner's deploy):
-  modules the agent builds from source, cells
-  owned by modules, the Deye example, deploy on Railway. Rust with the
-  `wasm32-wasip1` target is needed on the machine that builds modules (the
-  owner's machine has none yet; CI gets it in task 1). M4 was designed on
-  2026-11-09 ([design](plans/p1-m4-reflexes-design.md),
-  [phase plan](plans/p1-all-in-one.md)); M4a is done. Load shedding and the
-  two-week clock of the gate left P1
+  checked against the Go reader (`internal/deyeref`), and the container
+  image. Open for the owner: how often a module that keeps failing below
+  the crash-loop threshold may escalate (ruling 10 says once per kind per
+  hour, without end). M4 was designed on 2026-11-09
+  ([design](plans/p1-m4-reflexes-design.md),
+  [phase plan](plans/p1-all-in-one.md)); M4a is done. Load shedding and
+  the two-week clock of the gate left P1
   ([ADR-0058](adr/0058-load-shedding-leaves-p1.md)).
 - **P0 results:**
   - 0.1 repository skeleton: `cmd/ganglion`, interface packages, CI.
