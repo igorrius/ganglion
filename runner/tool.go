@@ -57,7 +57,8 @@ func toolManifest(src []byte) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, fmt.Errorf("runner: tool module: %w", err)
 	}
-	if c := m.Capabilities; len(c.HTTPFetch) > 0 || len(c.SecretGet) > 0 || len(c.EventEmit) > 0 || c.State {
+	if c := m.Capabilities; len(c.HTTPFetch) > 0 || len(c.SecretGet) > 0 || len(c.EventEmit) > 0 || c.State ||
+		c.Notify != nil || len(m.Listens()) > 0 {
 		return Manifest{}, fmt.Errorf("%w (%s)", ErrCapabilities, m.Name)
 	}
 	return m, nil
