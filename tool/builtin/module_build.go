@@ -43,6 +43,8 @@ type rightsAnswer struct {
 	CellsCreated []string `json:"cells_created,omitempty"`
 	CellsTaken   []string `json:"cells_taken,omitempty"`
 	CellsRead    []string `json:"cells_read,omitempty"`
+	Reacts       []string `json:"reacts_to,omitempty"`
+	NotifyPerDay int      `json:"notify_per_day,omitempty"`
 	Crons        []string `json:"crons,omitempty"`
 	Tools        []string `json:"tools,omitempty"`
 	Memory       string   `json:"memory,omitempty"`
@@ -151,14 +153,14 @@ func answerPlan(b modstore.Build, p modstore.Plan) (tool.Result, error) {
 // rightsOf is r as answered; nil when r is empty.
 func rightsOf(r modstore.Rights) *rightsAnswer {
 	a := rightsAnswer{Hosts: r.Hosts, Secrets: r.Secrets, CellsCreated: r.CellsCreated, CellsTaken: r.CellsTaken,
-		CellsRead: r.CellsRead, Crons: r.Crons, Tools: r.Tools}
+		CellsRead: r.CellsRead, Reacts: r.Reacts, NotifyPerDay: r.NotifyPerDay, Crons: r.Crons, Tools: r.Tools}
 	if r.Memory > 0 {
 		a.Memory = memoryShown(r.Memory)
 	}
 	if r.Timeout > 0 {
 		a.Timeout = timeoutShown(r.Timeout)
 	}
-	if a.Memory == "" && a.Timeout == "" && len(slices.Concat(a.Hosts, a.Secrets, a.CellsCreated, a.CellsTaken, a.CellsRead, a.Crons, a.Tools)) == 0 {
+	if a.Memory == "" && a.Timeout == "" && a.NotifyPerDay == 0 && len(slices.Concat(a.Hosts, a.Secrets, a.CellsCreated, a.CellsTaken, a.CellsRead, a.Reacts, a.Crons, a.Tools)) == 0 {
 		return nil
 	}
 	return &a

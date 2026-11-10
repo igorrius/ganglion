@@ -39,6 +39,11 @@ type Card struct {
 	Journal []Entry // newest first, the retired ones too
 	Config  []ConfigLine
 	Health  Health // the running instance's health check; "" when it is not running
+
+	ReactsTo      []string // cells its triggers listen to (R-RUN-15)
+	Feeds         []string // running modules that listen to this module's cells, sorted
+	NotifiedToday int      // messages counted today, refused ones too; show min(n, NotifyPerDay)
+	NotifyPerDay  int      // the daily limit; 0 = it may not write to the owner
 }
 
 // Health is how a module's health check went (R-RUN-12): HealthOK, or the

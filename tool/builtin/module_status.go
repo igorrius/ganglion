@@ -70,6 +70,10 @@ type statusAnswer struct {
 	Runs        int            `json:"runs"`
 	Failures    int            `json:"failures"`
 	LastFailure *failureAnswer `json:"last_failure,omitempty"`
+	ReactsTo    []string       `json:"reacts_to,omitempty"`
+	Feeds       []string       `json:"feeds,omitempty"`
+	MessagesDay *int           `json:"messages_today,omitempty"`
+	MessagesMax int            `json:"messages_per_day,omitempty"`
 	Config      []configAnswer `json:"config"`
 	KeysHidden  int            `json:"config_keys_not_shown,omitempty"`
 }
@@ -80,6 +84,7 @@ func (*ModuleStatus) Spec() tool.Spec {
 		Description: "How an installed module of the owner stands, as its /modules card shows it: state (running; off, turned off by the owner; " +
 			"crashloop, turned off by the node after 5 failures in an hour; stopped, it should run and did not start), active version, " +
 			"health (its check now: ok, or the kind it failed with and the node's hint), runs, failures and the last failure's kind and time, " +
+			"the cells it reacts to, the running modules it feeds, and the messages it wrote to the owner today against its daily limit (never their text), " +
 			"and its settings: each declared key with its type, whether it is required and the value the owner set " +
 			"(a key left at its manifest default is set: false, has_default: true). " +
 			"Use it when a module fails, before guessing the cause.",
@@ -133,12 +138,30 @@ func (t *ModuleStatus) answer(c modstore.Card) statusAnswer {
 			out.LastFailure = &failureAnswer{Kind: e.LastFailureKind, At: e.LastFailure.Format(time.RFC3339)}
 		}
 	}
+	out.ReactsTo, out.Feeds = plainCells(c.ReactsTo), plainCells(c.Feeds)
+	if c.NotifyPerDay > 0 {
+		n := min(c.NotifiedToday, c.NotifyPerDay)
+		out.MessagesDay, out.MessagesMax = &n, c.NotifyPerDay
+	}
 	for _, l := range c.Config {
 		if !plainKey.MatchString(l.Key) {
 			out.KeysHidden++
 			continue
 		}
 		out.Config = append(out.Config, configLine(l))
+	}
+	return out
+}
+
+// plainCells are the plain names among ids: a cell id or a module name is
+// the manifest's text, so only one of letters, digits, dots and hyphens is
+// shown (R-RUN-13).
+func plainCells(ids []string) []string {
+	var out []string
+	for _, id := range ids {
+		if plainItem.MatchString(id) {
+			out = append(out, id)
+		}
 	}
 	return out
 }

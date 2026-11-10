@@ -112,8 +112,9 @@ func windowText(sp texts.Speaker, w window) string {
 		sp.Text(texts.AskModuleSecrets, texts.Vars{varItems: listed(r.Secrets)}),
 		sp.Text(texts.AskModuleCreates, texts.Vars{varItems: listed(r.CellsCreated)}),
 		sp.Text(texts.AskModuleTakes, texts.Vars{varItems: listed(r.CellsTaken)}),
-		sp.Text(texts.AskModuleReads, texts.Vars{varItems: listed(r.CellsRead)}),
-		sp.Text(texts.AskModuleRuns, texts.Vars{varItems: runs(sp, w.Module, r)}))
+		sp.Text(texts.AskModuleReads, texts.Vars{varItems: listed(r.CellsRead)}))
+	lines = append(lines, reflexLines(sp, r)...)
+	lines = append(lines, sp.Text(texts.AskModuleRuns, texts.Vars{varItems: runs(sp, w.Module, r)}))
 	for _, t := range r.Tools {
 		name := modstore.ShortName(w.Module) + "." + t
 		if about, ok := w.About[name]; ok {
@@ -122,6 +123,20 @@ func windowText(sp texts.Speaker, w window) string {
 	}
 	lines = append(lines, sp.Text(texts.AskModuleLimits, texts.Vars{"memory": memoryShown(r.Memory), "timeout": timeoutShown(r.Timeout)}))
 	return strings.Join(lines, "\n")
+}
+
+// reflexLines are the lines of what a module reacts to and how much it may
+// write to the owner; none for a module that does neither, so the window of
+// an ordinary module stays as it was.
+func reflexLines(sp texts.Speaker, r modstore.Rights) []string {
+	var lines []string
+	if len(r.Reacts) > 0 {
+		lines = append(lines, sp.Text(texts.AskModuleReacts, texts.Vars{varItems: listed(r.Reacts)}))
+	}
+	if r.NotifyPerDay > 0 {
+		lines = append(lines, sp.Text(texts.AskModuleNotify, texts.Vars{"n": strconv.Itoa(r.NotifyPerDay)}))
+	}
+	return lines
 }
 
 // wideningLine is "New: …" with each right the active version did not have;
@@ -138,6 +153,10 @@ func wideningLine(sp texts.Speaker, w window) string {
 	add(texts.AskModuleNewSecrets, n.Secrets)
 	add(texts.AskModuleNewCells, append(append([]string(nil), n.CellsCreated...), n.CellsTaken...))
 	add(texts.AskModuleNewReads, n.CellsRead)
+	add(texts.AskModuleNewReacts, n.Reacts)
+	if n.NotifyPerDay > 0 {
+		parts = append(parts, sp.Text(texts.AskModuleNewNotify, texts.Vars{"n": strconv.Itoa(n.NotifyPerDay)}))
+	}
 	if len(n.Crons)+len(n.Tools) > 0 {
 		parts = append(parts, sp.Text(texts.AskModuleNewRuns, texts.Vars{varItems: runs(sp, w.Module, modstore.Rights{Crons: n.Crons, Tools: n.Tools})}))
 	}

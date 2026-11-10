@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -654,6 +655,50 @@ func TestModuleInstallOfAWideningUpdateStartsWithWhatIsNew(t *testing.T) {
 	res, err := e.tool(builtin.ModuleInstallTool).Run(context.Background(), pressed(c2))
 	if err != nil || !strings.Contains(res.Text, "version 4 installed in place of 3") {
 		t.Fatalf("%+v, %v", res, err)
+	}
+}
+
+// reflexManifest is the reader with a cell trigger and a daily message limit.
+func reflexManifest(cells string, perDay int) string {
+	m := strings.Replace(deyeManifest, "triggers:\n", "triggers:\n  - cell: ["+cells+"]\n", 1)
+	m = strings.Replace(m, "cells:\n  report:", "cells:\n  read: ["+cells+"]\n  report:", 1)
+	return strings.Replace(m, "  state: true\n", "  state: true\n  notify: {per_day: "+strconv.Itoa(perDay)+"}\n", 1)
+}
+
+// R-RUN-15, R-RUN-16: the window of a reflex lists the cells it reacts to
+// and how much it may write to the owner, right after the cells it reads.
+func TestModuleInstallWindowShowsWhatAReflexReactsToAndWrites(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "deye-reader")
+	art := artifact(reflexManifest("boiler.temp", 5), 161<<10, 1)
+	e.build(t, art)
+	want := strings.Replace(goldenWindow(art.SHA256), "• Reads cells: —\n",
+		"• Reads cells: boiler.temp\n• Reacts to: boiler.temp\n• Writes to you: up to 5 messages a day\n", 1)
+	if q := question(t, e, installCall(art.SHA256)); q != want {
+		t.Fatalf("window:\n%s\nwant:\n%s", q, want)
+	}
+}
+
+// A version that reacts to one more cell or raises the limit says so under
+// "New:".
+func TestModuleInstallWideningNamesNewReactsAndANewLimit(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "deye-reader")
+	first := artifact(reflexManifest("boiler.temp", 5), 1024, 1)
+	e.build(t, first)
+	c := installCall(first.SHA256)
+	question(t, e, c)
+	if _, err := e.tool(builtin.ModuleInstallTool).Run(context.Background(), pressed(c)); err != nil {
+		t.Fatal(err)
+	}
+	wider := strings.Replace(reflexManifest("boiler.temp, boiler.mode", 9), "version: 3", "version: 4", 1)
+	second := artifact(wider, 1024, 2)
+	e.build(t, second)
+	c2 := installCall(second.SHA256)
+	c2.N = 3
+	q := question(t, e, c2)
+	if first, _, _ := strings.Cut(q, "\n"); first != "New: reads cells boiler.mode; reacts to boiler.mode; up to 9 messages a day" {
+		t.Fatalf("window:\n%s", q)
 	}
 }
 

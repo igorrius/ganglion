@@ -198,6 +198,27 @@ func TestModulesCardGolden(t *testing.T) {
 	}
 }
 
+// The card of a producer names the modules it feeds, the card of a listener
+// the cells it reacts to and the messages it wrote today against its limit;
+// a count over the limit shows the limit (R-RUN-15, R-RUN-16).
+func TestModulesCardShowsReactionsAndMessages(t *testing.T) {
+	e, l, _ := ownModulesEnv(t)
+	l.card.Feeds = []string{"boiler", "a_b"}
+	l.card.ReactsTo = []string{"grid.power", "x_y.z"}
+	l.card.NotifyPerDay, l.card.NotifiedToday = 5, 7
+	got := oneReply(t, e, "/modules deye-reader")
+	for _, want := range []string{"Reacts to: grid.power, x\\_y.z\n", "Feeds: boiler, a\\_b\n", "Messages today: 5 of 5\n"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("card\n%s\nwant %q", got, want)
+		}
+	}
+	l.card.Feeds, l.card.ReactsTo, l.card.NotifyPerDay = nil, nil, 0
+	got = oneReply(t, e, "/modules deye-reader")
+	if strings.Contains(got, "Reacts to") || strings.Contains(got, "Feeds") || strings.Contains(got, "Messages today") {
+		t.Fatalf("a plain module shows reactions:\n%s", got)
+	}
+}
+
 // The card tells a failed health check by its kind; a module that does not
 // run has no health line.
 func TestModulesCardHealth(t *testing.T) {

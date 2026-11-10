@@ -156,6 +156,12 @@ func (s *store) CountNotify(_ context.Context, module string, day time.Time) (in
 	return s.notified[k], s.limited[k], nil
 }
 
+func (s *store) NotifiedOn(_ context.Context, module string, day time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.notified[notifyDay(module, day)], nil
+}
+
 func (s *store) MarkLimited(_ context.Context, module string, day time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

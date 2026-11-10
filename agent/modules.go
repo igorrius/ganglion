@@ -254,6 +254,9 @@ func (a *Agent) moduleCard(ctx context.Context, t *turn, name string) (moduleRep
 	if line := a.healthLine(ctx, t, c.Health); line != "" {
 		b.WriteString("\n" + line)
 	}
+	for _, line := range a.reflexLines(ctx, t, c) {
+		b.WriteString("\n" + line)
+	}
 	rows := make([]string, len(c.Journal))
 	for i, e := range c.Journal {
 		rows[i] = a.journalRow(ctx, t, e)
@@ -265,6 +268,34 @@ func (a *Agent) moduleCard(ctx context.Context, t *turn, name string) (moduleRep
 		b.WriteString("\n" + a.say(ctx, t, texts.ModulesCardSettings, texts.Vars{"lines": a.settingRows(ctx, t, c.Config)}))
 	}
 	return moduleReply{text: b.String(), note: "the owner opened the card of " + c.Name}, nil
+}
+
+// reflexLines are the card's lines of what the module reacts to, which
+// modules it feeds and its messages today; none for a module with none of
+// them. A count over the limit shows the limit: the refused ones were not
+// sent.
+func (a *Agent) reflexLines(ctx context.Context, t *turn, c modstore.Card) []string {
+	var lines []string
+	if len(c.ReactsTo) > 0 {
+		lines = append(lines, a.say(ctx, t, texts.ModulesCardReacts, texts.Vars{"cells": escaped(c.ReactsTo)}))
+	}
+	if len(c.Feeds) > 0 {
+		lines = append(lines, a.say(ctx, t, texts.ModulesCardFeeds, texts.Vars{"modules": escaped(c.Feeds)}))
+	}
+	if c.NotifyPerDay > 0 {
+		lines = append(lines, a.say(ctx, t, texts.ModulesCardNotify,
+			texts.Vars{"n": strconv.Itoa(min(c.NotifiedToday, c.NotifyPerDay)), "limit": strconv.Itoa(c.NotifyPerDay)}))
+	}
+	return lines
+}
+
+// escaped is names escaped and joined by commas.
+func escaped(names []string) string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = texts.Escape(n)
+	}
+	return strings.Join(out, ", ")
 }
 
 // healthLine is the running module's health check on the card (ruling 3

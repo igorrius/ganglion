@@ -49,6 +49,8 @@ type Store interface {
 	// (modstore's notify).
 	CountNotify(ctx context.Context, module string, day time.Time) (n int, limited bool, err error)
 	MarkLimited(ctx context.Context, module string, day time.Time) error
+	// NotifiedOn is how many messages a module counted on day, for its card.
+	NotifiedOn(ctx context.Context, module string, day time.Time) (int, error)
 }
 
 // Jobs keeps the modules' cron jobs (schedule.Store).

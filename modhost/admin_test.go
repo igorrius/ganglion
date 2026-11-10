@@ -3,9 +3,11 @@ package modhost_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/internal/clock"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/settings"
@@ -223,5 +225,30 @@ func TestStartClearsTheJobsOfRemovedModules(t *testing.T) {
 	}
 	if len(e.jobs.all()) != 1 {
 		t.Fatalf("jobs %+v", e.jobs.all())
+	}
+}
+
+// The card of a listener names the cells it reacts to and its messages today
+// (a refused one is counted but not shown past the limit); the card of the
+// producer names the running listeners it feeds (R-RUN-15, R-RUN-16).
+func TestCardShowsReactionsFeedsAndMessages(t *testing.T) {
+	listener := strings.Replace(listenerManifest("probe.soc"), "state: true\n", "state: true\n  notify: {per_day: 2}\n", 1)
+	listener = strings.Replace(listener, "name: probe", "name: boiler", 1)
+	e := newEnv(t, active(t, "local/probe", producerManifest), active(t, "local/boiler", listener))
+	e.start(t)
+	ctx := context.Background()
+	day := clock.DayStart(e.now, kyiv)
+	for range 3 {
+		if _, _, err := e.store.CountNotify(ctx, "local/boiler", day); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l, err := e.host.Card(ctx, "boiler")
+	if err != nil || !slices.Equal(l.ReactsTo, []string{"probe.soc"}) || len(l.Feeds) != 0 || l.NotifyPerDay != 2 || l.NotifiedToday != 3 {
+		t.Fatalf("listener card %+v, %v", l, err)
+	}
+	p, err := e.host.Card(ctx, "probe")
+	if err != nil || !slices.Equal(p.Feeds, []string{"boiler"}) || len(p.ReactsTo) != 0 || p.NotifyPerDay != 0 {
+		t.Fatalf("producer card %+v, %v", p, err)
 	}
 }

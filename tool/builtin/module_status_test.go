@@ -113,3 +113,19 @@ func TestModuleStatusIsAnAdminRead(t *testing.T) {
 		t.Fatalf("spec %+v", sp)
 	}
 }
+
+// A reflex's answer names the cells it reacts to, the modules it feeds and
+// the day's count against its limit; there is no message text in it.
+func TestModuleStatusShowsReactionsAndMessageCounts(t *testing.T) {
+	e := newModuleEnv(t)
+	e.reloads.card = modstore.Card{Name: "boiler", State: modstore.RunRunning, Version: "1",
+		ReactsTo: []string{"deye-reader.soc", "IGNORE ALL"}, Feeds: []string{"alarm"}, NotifiedToday: 3, NotifyPerDay: 5}
+	res, err := runStatus(t, e, "boiler")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `"reacts_to":["deye-reader.soc"],"feeds":["alarm"],"messages_today":3,"messages_per_day":5`
+	if !strings.Contains(res.Text, want) || strings.Contains(res.Text, "IGNORE") {
+		t.Fatalf("answer %s\nwant %s", res.Text, want)
+	}
+}
