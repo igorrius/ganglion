@@ -22,9 +22,9 @@ Start here when coming back to the project.
   history, the Deye example in Rust
   ([examples/modules/deye-reader](../examples/modules/deye-reader/README.md))
   checked against the Go reader (`internal/deyeref`), and the container
-  image. Open for the owner: how often a module that keeps failing below
-  the crash-loop threshold may escalate (ruling 10 says once per kind per
-  hour, without end). M4 was designed on 2026-11-09
+  image. A module that keeps failing below the crash-loop threshold
+  escalates a kind once per version until a successful run (owner ruling of
+  2026-11-10). M4 was designed on 2026-11-09
   ([design](plans/p1-m4-reflexes-design.md),
   [phase plan](plans/p1-all-in-one.md)); M4a is done. Load shedding and
   the two-week clock of the gate left P1

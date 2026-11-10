@@ -452,8 +452,11 @@ module's card.
   proposes.
 - The model sees the kind and the node's own facts, never the module's
   text; the full text goes to the log, readable through `ganglion mcp`.
-- One event of one kind per module per hour, so a broken module cannot
-  burn tokens every 30 minutes.
+- One event of one kind per module until it recovers (owner ruling of
+  2026-11-10, replacing "per hour"): a module that keeps failing below the
+  crash-loop threshold does not burn tokens every 30 minutes. A successful
+  run, a new version, a rollback or turning the module on closes the
+  episode; the open episodes are stored, so a restart does not repeat one.
 
 ### 8.5 Cell ticks
 
@@ -472,7 +475,7 @@ over the bus. M4 adds:
 | What | Metric |
 |---|---|
 | Module runs | `ganglion.module.calls` gains the version and the trigger (cron or tool) |
-| Supervisor | disables by `crashloop`; events to the agent by kind, and how many the once-an-hour rule held back |
+| Supervisor | disables by `crashloop`; events to the agent by kind, and how many the once-per-episode rule held back |
 | Builds | count and result by language, duration, the build process's peak memory (it sizes the Railway container) |
 | Installs | installs, refusals by reason, rejected presses |
 | Cells | reports by owning module; the age of each cell's last value, which shows a module that stopped writing |

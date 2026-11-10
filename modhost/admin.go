@@ -277,6 +277,7 @@ func (h *Host) Remove(ctx context.Context, name string) error {
 	if err := h.d.Store.RemoveLocal(ctx, module); err != nil && !errors.Is(err, modstore.ErrUnknownModule) {
 		return err
 	}
+	h.clearEpisodes(ctx, module)
 	_, derr := h.d.Cells.Disown(ctx, module)
 	return errors.Join(h.d.Settings.RemoveModule(module), derr)
 }

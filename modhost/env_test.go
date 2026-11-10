@@ -126,8 +126,40 @@ type store struct {
 	counts     []countCall
 	rolledBack []string
 	removed    []string
-	gone       []string // removed through RemoveLocal; the journal still has them
-	failActive error    // ActiveLocal's, when set
+	gone       []string          // removed through RemoveLocal; the journal still has them
+	failActive error             // ActiveLocal's, when set
+	episodes   map[string]string // "module|kind" → sha of the open episode
+}
+
+func (s *store) OpenEpisode(_ context.Context, module, kind, sha string, _ time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.episodes == nil {
+		s.episodes = map[string]string{}
+	}
+	if s.episodes[module+"|"+kind] == sha {
+		return false, nil
+	}
+	s.episodes[module+"|"+kind] = sha
+	return true, nil
+}
+
+func (s *store) CloseEpisode(_ context.Context, module, kind string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.episodes, module+"|"+kind)
+	return nil
+}
+
+func (s *store) ClearEpisodes(_ context.Context, module string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k := range s.episodes {
+		if strings.HasPrefix(k, module+"|") {
+			delete(s.episodes, k)
+		}
+	}
+	return nil
 }
 
 func (s *store) ActiveLocal(context.Context) ([]modstore.Active, error) {
@@ -361,7 +393,13 @@ func newEnv(t *testing.T, actives ...modstore.Active) *env {
 		e.store.by[a.SHA256] = owner
 	}
 	e.cells = cells.NewService(cells.NewMemStore(), cells.WithClock(func() time.Time { return e.now }))
-	e.host = modhost.New(modhost.Deps{
+	e.host = e.newHost()
+	return e
+}
+
+// newHost is a host over the env's stores: a node that restarted.
+func (e *env) newHost() *modhost.Host {
+	return modhost.New(modhost.Deps{
 		Store:       e.store,
 		Cells:       e.cells,
 		Jobs:        e.jobs,
@@ -380,7 +418,6 @@ func newEnv(t *testing.T, actives ...modstore.Active) *env {
 		Now: func() time.Time { return e.now },
 		Log: slog.New(slog.NewTextHandler(syncWriter{e}, nil)),
 	})
-	return e
 }
 
 type syncWriter struct{ e *env }

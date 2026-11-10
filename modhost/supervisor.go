@@ -118,6 +118,7 @@ func (h *Host) settle(ctx context.Context, l *loaded, trig trigger, o outcome) (
 	h.d.Store.Count(ctx, l.name, l.sha, o.callResult())
 	h.in.run(ctx, l, trig, o.result)
 	if !o.failed() {
+		h.recovered(ctx, l.name)
 		return false, nil
 	}
 	h.d.Log.Warn("modhost: a module run failed", "module", l.name, "version", l.version, "trigger", string(trig),

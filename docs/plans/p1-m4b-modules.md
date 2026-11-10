@@ -101,8 +101,14 @@ plan. M4a ([plan](p1-m4a-config.md)) is done: `settings`, `ganglion.yaml`, `/res
    module's full name; it shows in `/tasks` as "module deye-reader every 30 min" and cannot be
    deleted there (only `/modules off|remove`).
 10. **Escalation is an inbox event** of the new kind `module`, `Conv` = the installing admin's
-    private chat, `IdemKey = module:<name>:<kind>:<hour>` — the outbox and inbox dedup make "once
-    per kind per module per hour".
+    private chat, `IdemKey = module:<name>:<kind>:<sha>:<opened ms>`. *Owner ruling, 2026-11-10
+    (replaces "once per kind per module per UTC hour"):* a module escalates a kind **once per
+    active version until a successful run clears it**; a successful run (cron or tool call) closes
+    every open kind of the module, and a new version, a rollback and `/modules on` (and any
+    reload that starts the module) close them too. The open episodes `(module, kind, sha,
+    opened_ms)` are kept in `modstore` (migration `004_escalations.sql`), so a restart in the
+    middle of an episode escalates nothing; the inbox key makes the dedup of one episode.
+    `module.crashloop` is unchanged (it disables the module, so it happens once anyway).
 11. **The contract language** (manifest `output:` and cell `type:`): a type name `number`,
     `integer`, `boolean`, `string`, any of them with `?` for "may be null"; a list of strings is an
     enum; a mapping is an object whose listed fields are required (`?` makes one optional) and whose
@@ -647,7 +653,7 @@ func (h *Host) Status(ctx context.Context, s status.Scope) ([]status.Check, erro
     `Store.Count`.
   - Escalation: the kinds in the manifest's `escalate` plus `module.crashloop` and
     `module.format`: `Inbox.Put(event.Event{Source: "module", Kind: event.KindModule, Conv:
-    <admin's private conv>, IdemKey: "module:<name>:<kind>:<hour>", Payload: event.Module{…}})`.
+    <admin's private conv>, IdemKey: "module:<name>:<kind>:<sha>:<opened ms>", Payload: event.Module{…}})`.
   - `agent/module_event.go`: the payload becomes a turn in that conversation with the history note
     `[module] deye-reader: auth_failed (version 3, 14:30). <Detail>` and the model answers the owner
     (purpose chat). The note is the node's text, not outside content.
@@ -664,7 +670,9 @@ func (h *Host) Status(ctx context.Context, s status.Scope) ([]status.Check, erro
   - a contract break gives the node's error text and counts a failure;
   - five failures inside an hour disable the module, write `off`, delete its job, and put one
     `module.crashloop` event; a sixth call does not run;
-  - two `auth_failed` in the same hour put one event (same IdemKey);
+  - a kind failing on every run for a day puts one event, a success closes the episode and the
+    next failure puts another, a new version, a rollback and `on` close it too, an open episode
+    survives a new `Host` over the same store (owner ruling, 2026-11-10);
   - the registry: a dynamic tool appears in `Specs` and `Lookup`, disappears after unload; a
     dynamic `cells.get` is skipped.
   - `agent`: a `KindModule` job calls `ModuleCron` and sends nothing; a `module` event becomes a

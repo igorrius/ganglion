@@ -688,8 +688,9 @@ escalate:                    # when to call the model
   `health` at install and on the module's card. Five failures within an
   hour disable the module and raise `module.crashloop`. The kinds the
   manifest's `escalate` lists, and `module.crashloop` always, reach the
-  agent as a turn in the owner's private chat, at most once per kind per
-  module per hour; the model sees the kind and the node's facts, never
+  agent as a turn in the owner's private chat, once per kind per active
+  version until a successful run clears it (a new version, a rollback or
+  turning it on clear it too, and a restart does not repeat it); the model sees the kind and the node's facts, never
   the module's text.
 
 - **R-RUN-13.** What a module returns to the model (its tool's output,

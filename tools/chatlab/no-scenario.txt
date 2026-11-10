@@ -68,6 +68,7 @@ internal/urlnorm/**
 logfile/**
 modhost/**
 modstore/card.go
+modstore/escalations.go
 modstore/journal.go
 modstore/local.go
 modstore/install.go

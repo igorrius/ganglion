@@ -238,7 +238,8 @@ sequenceDiagram
 
 A failure whose kind the manifest escalates, a contract break or a crash
 loop becomes one turn in the installing admin's private chat, at most one
-of a kind for a module in an hour (design section 8.4).
+of a kind for a module until it recovers (design section 8.4, owner ruling of
+2026-11-10).
 
 ```mermaid
 sequenceDiagram
@@ -252,8 +253,8 @@ sequenceDiagram
     participant O as Owner
 
     H->>H: count the failure in the last hour
-    opt kind escalates (escalate list, module.format)
-        H->>Q: Put(module event, key module:NAME:KIND:HOUR)
+    opt kind escalates and no episode of it is open (escalate list, module.format)
+        H->>Q: Put(module event, key module:NAME:KIND:SHA:OPENED, once per episode)
     end
     opt fifth failure within an hour
         H->>H: unload; its tools leave the registry

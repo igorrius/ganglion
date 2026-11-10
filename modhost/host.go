@@ -38,6 +38,12 @@ type Store interface {
 	Rollback(ctx context.Context, module string) (modstore.Outcome, error)
 	RemoveLocal(ctx context.Context, module string) error
 	RemovedLocal(ctx context.Context) ([]string, error)
+	// OpenEpisode opens the escalation episode of a kind for a build's sha;
+	// false when one is open for it already. CloseEpisode takes one back,
+	// ClearEpisodes closes all of a module's (modstore's escalations).
+	OpenEpisode(ctx context.Context, module, kind, sha string, at time.Time) (bool, error)
+	CloseEpisode(ctx context.Context, module, kind string) error
+	ClearEpisodes(ctx context.Context, module string) error
 }
 
 // Jobs keeps the modules' cron jobs (schedule.Store).
@@ -93,18 +99,19 @@ type Host struct {
 	running map[string]*loaded
 	tools   atomic.Pointer[[]tool.Handler] // the running modules' tools, for the registry
 
-	stateMu sync.Mutex // guards what follows
-	stopped map[string]stop
-	off     map[string]bool
-	fails   map[string][]time.Time
-	sent    map[string]string // escalation key → its hour
-	unread  time.Time         // when Start could not read the store or the settings; zero when it could
+	stateMu  sync.Mutex // guards what follows
+	stopped  map[string]stop
+	off      map[string]bool
+	fails    map[string][]time.Time
+	episodes map[string]map[Kind]string // module → kind → the sha of its open episode, a cache of the store's
+	clean    map[string]bool            // modules known to have no open episode
+	unread   time.Time                  // when Start could not read the store or the settings; zero when it could
 }
 
 // New returns a host with no module running; Start loads them.
 func New(d Deps) *Host {
 	h := &Host{d: d, in: newInstruments(), running: map[string]*loaded{}, stopped: map[string]stop{},
-		off: map[string]bool{}, fails: map[string][]time.Time{}, sent: map[string]string{}}
+		off: map[string]bool{}, fails: map[string][]time.Time{}, episodes: map[string]map[Kind]string{}, clean: map[string]bool{}}
 	h.tools.Store(&[]tool.Handler{})
 	return h
 }
@@ -140,7 +147,8 @@ func (h *Host) Start(ctx context.Context) {
 
 // Reload brings module in line with the store and the settings after an
 // install, a rollback, a config change, off or on, or a removal: a module
-// that is active and on is loaded again, from a fresh count of failures;
+// that is active and on is loaded again, from a fresh count of failures and
+// with its escalation episodes closed;
 // one that is not is stopped and its jobs deleted, its cells kept.
 // ErrNotStarted names why a module that should run does not.
 func (h *Host) Reload(ctx context.Context, module string) error {
@@ -154,7 +162,14 @@ func (h *Host) Reload(ctx context.Context, module string) error {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.apply(ctx, module, a, settingOf(mods, module))
+	s := settingOf(mods, module)
+	if err := h.apply(ctx, module, a, s); err != nil {
+		return err
+	}
+	if a != nil && !s.Off { // a version, a rollback or an "on" starts afresh (owner ruling of 2026-11-10)
+		h.clearEpisodes(ctx, module)
+	}
+	return nil
 }
 
 // read returns the active local modules and the settings' modules.

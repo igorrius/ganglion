@@ -24,7 +24,7 @@ func newInstruments() instruments {
 	in.disables, _ = m.Int64Counter("ganglion.modhost.disables",
 		metric.WithDescription("Modules the node turned off, by module and reason."))
 	in.escalations, _ = m.Int64Counter("ganglion.modhost.escalations",
-		metric.WithDescription("Escalations to the agent, by module, kind and outcome (put, held by the once-an-hour rule, failed)."))
+		metric.WithDescription("Escalations to the agent, by module, kind and outcome (put, held: an episode of the kind is open, failed)."))
 	return in
 }
 

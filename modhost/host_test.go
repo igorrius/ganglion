@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/modhost"
+	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/status"
@@ -239,22 +241,148 @@ func TestFailuresOutsideTheHourDoNotCount(t *testing.T) {
 	}
 }
 
-// Two auth_failed in the same hour put one event: the same IdemKey; the
-// next hour may put another (ruling 10 of the M4b plan).
-func TestOneEscalationOfAKindAnHour(t *testing.T) {
+// fail runs the failing tool; its failure is the point.
+func (e *env) fail(t *testing.T) {
+	t.Helper()
+	if _, err := e.call(t, "probe.fail"); err == nil {
+		t.Fatal("probe.fail succeeded")
+	}
+}
+
+// A kind that fails on every run for a day escalates once, not once an hour
+// (owner ruling of 2026-11-10); the key names the version and the episode.
+func TestAKindFailingAllDayEscalatesOnce(t *testing.T) {
+	a := active(t, "local/probe", probeManifest)
+	e := newEnv(t, a)
+	e.start(t)
+	for range 48 {
+		e.fail(t)
+		e.now = e.now.Add(30 * time.Minute)
+	}
+	evs := e.inbox.taken()
+	want := "module:local/probe:auth_failed:" + a.SHA256 + ":" + strconv.FormatInt(t0.UnixMilli(), 10)
+	if len(evs) != 1 || evs[0].IdemKey != want || evs[0].Conv != "telegram:42" {
+		t.Fatalf("events %+v, want one keyed %s", evs, want)
+	}
+}
+
+// A successful run closes the episode: the next failure escalates again.
+func TestASuccessClearsTheEpisode(t *testing.T) {
 	e := newEnv(t, active(t, "local/probe", probeManifest))
 	e.start(t)
-	e.call(t, "probe.fail") //nolint:errcheck // the failure is the point
-	e.now = e.now.Add(20 * time.Minute)
-	e.call(t, "probe.fail") //nolint:errcheck // the failure is the point
-	evs := e.inbox.taken()
-	if len(evs) != 1 || evs[0].IdemKey != "module:local/probe:auth_failed:2026-11-09T14" || evs[0].Conv != "telegram:42" {
-		t.Fatalf("events %+v", evs)
+	e.fail(t)
+	e.now = e.now.Add(time.Minute)
+	if _, err := e.call(t, "probe.status"); err != nil {
+		t.Fatal(err)
 	}
-	e.now = e.now.Add(time.Hour)
-	e.call(t, "probe.fail") //nolint:errcheck // the failure is the point
+	e.now = e.now.Add(time.Minute)
+	e.fail(t)
+	e.fail(t)
+	evs := e.inbox.taken()
+	if len(evs) != 2 || evs[0].IdemKey == evs[1].IdemKey {
+		t.Fatalf("events %+v, want two episodes", evs)
+	}
+}
+
+// A cron run that ends well closes the episode too.
+func TestACronSuccessClearsTheEpisode(t *testing.T) {
+	e := newEnv(t, active(t, "local/probe", probeManifest))
+	e.start(t)
+	e.fail(t)
+	e.now = e.now.Add(time.Minute)
+	if err := e.host.RunCron(context.Background(), "local/probe"); err != nil {
+		t.Fatal(err)
+	}
+	e.now = e.now.Add(time.Minute)
+	e.fail(t)
 	if evs := e.inbox.taken(); len(evs) != 2 {
-		t.Fatalf("next hour: %d events", len(evs))
+		t.Fatalf("%d events, want 2", len(evs))
+	}
+}
+
+// Two kinds escalate once each.
+func TestTwoKindsEscalateOnceEach(t *testing.T) {
+	e := newEnv(t, active(t, "local/probe", probeManifest))
+	e.start(t)
+	for range 3 {
+		e.fail(t)
+		if _, err := e.call(t, "probe.broken"); err == nil {
+			t.Fatal("probe.broken succeeded")
+		}
+		e.now = e.now.Add(time.Hour)
+	}
+	kinds := map[string]int{}
+	for _, m := range e.moduleEvents(t) {
+		kinds[m.Kind]++
+	}
+	if len(kinds) != 2 || kinds["auth_failed"] != 1 || kinds["module.format"] != 1 {
+		t.Fatalf("events by kind %v", kinds)
+	}
+}
+
+// A new version, a rollback and an "on" each give the module a fresh start:
+// the same kind escalates again.
+func TestAFreshStartClearsOpenKinds(t *testing.T) {
+	ctx := context.Background()
+	steps := map[string]func(*env) error{
+		"new version": func(e *env) error {
+			e.store.mu.Lock()
+			e.store.active = []modstore.Active{active(t, "local/probe", strings.Replace(probeManifest, "version: 3", "version: 4", 1))}
+			e.store.mu.Unlock()
+			return e.host.Reload(ctx, "local/probe")
+		},
+		"rollback": func(e *env) error { _, err := e.host.Rollback(ctx, "probe"); return err },
+		"on": func(e *env) error {
+			if err := e.host.SetOff(ctx, "probe", true); err != nil {
+				return err
+			}
+			return e.host.SetOff(ctx, "probe", false)
+		},
+	}
+	for name, step := range steps {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t, active(t, "local/probe", probeManifest))
+			e.start(t)
+			e.fail(t)
+			e.fail(t)
+			if n := len(e.inbox.taken()); n != 1 {
+				t.Fatalf("%d events before", n)
+			}
+			e.now = e.now.Add(time.Minute)
+			if err := step(e); err != nil {
+				t.Fatal(err)
+			}
+			e.fail(t)
+			e.fail(t)
+			if n := len(e.inbox.taken()); n != 2 {
+				t.Fatalf("%d events after %s, want 2", n, name)
+			}
+		})
+	}
+}
+
+// An open episode survives a restart: a new host over the same database
+// does not escalate the kind again; a success closes it there as well.
+func TestAnOpenEpisodeSurvivesARestart(t *testing.T) {
+	e := newEnv(t, active(t, "local/probe", probeManifest))
+	e.start(t)
+	e.fail(t)
+	e.host = e.newHost()
+	e.start(t)
+	e.now = e.now.Add(3 * time.Hour)
+	e.fail(t)
+	if n := len(e.inbox.taken()); n != 1 {
+		t.Fatalf("%d events after the restart, want 1", n)
+	}
+	e.host = e.newHost()
+	e.start(t)
+	if _, err := e.call(t, "probe.status"); err != nil {
+		t.Fatal(err)
+	}
+	e.now = e.now.Add(time.Minute)
+	e.fail(t)
+	if n := len(e.inbox.taken()); n != 2 {
+		t.Fatalf("%d events after the recovery, want 2", n)
 	}
 }
 
