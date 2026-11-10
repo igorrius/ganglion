@@ -10,7 +10,11 @@ Start here when coming back to the project.
   the agent writing module source in the workspace, first reflex
   `deye-alerts` (thresholds 90…30 %, below 30 % every 5 %, full charge, a
   data failure once), so routine reactions run without a model (owner,
-  2026-11-10). Design next, no document yet. The Railway deploy (the image
+  2026-11-10). Designed 2026-11-10
+  ([design](plans/p1-m4c-reflexes-design.md), ADRs 0065–0067 Proposed):
+  cell triggers through the inbox, `notify` to the owner's private chat,
+  the agent writing source with `module.write`; the plan is next. The
+  Railway deploy (the image
   and [deploy-railway.md](deploy-railway.md) are ready; Landlock ABI 3 or
   newer and hard links on the volume still to check) stays open as board
   card G-121.
