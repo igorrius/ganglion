@@ -1,3 +1,5 @@
+# Named producer on purpose: reflex-template listens to producer.value, so this module listening to
+# reflex-template.alert closes the loop that m4c-loop-refused expects the node to refuse.
 name: producer
 version: 1
 triggers:

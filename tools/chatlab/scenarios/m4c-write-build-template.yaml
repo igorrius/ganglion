@@ -3,7 +3,8 @@ name: m4c-write-build-template
 why: >-
   M4c check 5 (R-RUN-9, R-RUN-15..17): the agent imports the reflex template, writes a file into the copy from a
   clean session, builds it (the node's own tools left the folder, so the answer does not taint), and the install
-  window shows what the module reacts to and that it writes to the owner.
+  window shows what the module reacts to and that it writes to the owner. The "fix" step of the design (a failed
+  build repaired by a second write) is not scripted here.
 covers:
   - tool/builtin/module.go
   - tool/builtin/module_build.go

@@ -13,15 +13,16 @@ const approveLabel = "Approve"
 
 // View is what a facts step can read of a node.
 type View struct {
-	Journal  []journal.Entry
-	Messages []Message
-	Last     []Message // the model's words since the last action
-	History  string
-	Memory   map[string]string     // stored files by path
-	Jobs     map[string]int        // live jobs by kind, without system jobs
-	Taken    int                   // messages that joined a running turn
-	Tainted  bool                  // the chat's session holds outside content
-	Exists   func(rel string) bool // whether a path under the node's folder exists; nil: none does
+	Journal    []journal.Entry
+	Messages   []Message
+	Last       []Message // the model's words since the last action
+	History    string
+	Memory     map[string]string     // stored files by path
+	Jobs       map[string]int        // live jobs by kind, without system jobs
+	Taken      int                   // messages that joined a running turn
+	ModelCalls int                   // calls the node made to a model since it started
+	Tainted    bool                  // the chat's session holds outside content
+	Exists     func(rel string) bool // whether a path under the node's folder exists; nil: none does
 }
 
 // Check returns one line per failed check, saying what was wanted and what
@@ -52,6 +53,17 @@ func Check(f Facts, v View) []string {
 		memory = append(memory, body)
 	}
 	out = append(out, checkText("memory", f.Memory, strings.Join(memory, "\n"))...)
+	out = append(out, checkCounts(f, v)...)
+	out = append(out, checkAbsent(f.Absent, v.Exists)...)
+	if f.Jobs != nil && v.Jobs[f.Jobs.Kind] != f.Jobs.Count {
+		out = append(out, fmt.Sprintf("jobs: wanted %d of kind %s, found %d", f.Jobs.Count, f.Jobs.Kind, v.Jobs[f.Jobs.Kind]))
+	}
+	return out
+}
+
+// checkCounts checks the facts that compare one number or flag of the view.
+func checkCounts(f Facts, v View) []string {
+	var out []string
 	if n := filesShown(v.Messages); f.Files != nil && n != *f.Files {
 		out = append(out, fmt.Sprintf("files: wanted %d shown, found %d", *f.Files, n))
 	}
@@ -61,12 +73,11 @@ func Check(f Facts, v View) []string {
 	if f.Replies != nil && len(v.Last) != *f.Replies {
 		out = append(out, fmt.Sprintf("replies: wanted %d from the model, found %d", *f.Replies, len(v.Last)))
 	}
+	if f.ModelCalls != nil && v.ModelCalls != *f.ModelCalls {
+		out = append(out, fmt.Sprintf("model_calls: wanted %d, found %d", *f.ModelCalls, v.ModelCalls))
+	}
 	if f.Tainted != nil && v.Tainted != *f.Tainted {
 		out = append(out, fmt.Sprintf("tainted: wanted %t, found %t", *f.Tainted, v.Tainted))
-	}
-	out = append(out, checkAbsent(f.Absent, v.Exists)...)
-	if f.Jobs != nil && v.Jobs[f.Jobs.Kind] != f.Jobs.Count {
-		out = append(out, fmt.Sprintf("jobs: wanted %d of kind %s, found %d", f.Jobs.Count, f.Jobs.Kind, v.Jobs[f.Jobs.Kind]))
 	}
 	return out
 }
@@ -118,7 +129,7 @@ func matching(jf JournalFact, entries []journal.Entry) []journal.Entry {
 	var out []journal.Entry
 	for _, e := range entries {
 		if e.Tool == jf.Tool && (jf.Decision == "" || string(e.Decision) == jf.Decision) &&
-			strings.Contains(e.ResultHead, jf.ResultContains) {
+			strings.Contains(e.ResultHead, jf.ResultContains) && strings.Contains(e.Err, jf.ErrContains) {
 			out = append(out, e)
 		}
 	}
@@ -132,6 +143,9 @@ func describe(jf JournalFact) string {
 	}
 	if jf.ResultContains != "" {
 		s += fmt.Sprintf(" with %q", jf.ResultContains)
+	}
+	if jf.ErrContains != "" {
+		s += fmt.Sprintf(" failing with %q", jf.ErrContains)
 	}
 	return s
 }

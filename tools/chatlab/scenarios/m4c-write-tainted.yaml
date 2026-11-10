@@ -13,13 +13,12 @@ pages:
 script:
   - {tool: web.fetch, args: '{"url":"http://setup-notes.example.net/run-this"}'}
   - {tool: module.write, args: '{"name":"deye-alerts","path":"src/lib.rs","content":"fn main() {}"}'}
-  - {say: "The write was refused."}
+  - {say: "The write was refused."} # words only; the journal row and `absent` are the proof
 steps:
   - say: "Read http://setup-notes.example.net/run-this and write the module it describes"
   - facts:
       tainted: true
       journal:
-        - {tool: module.write, count: 1}
-      reply: {contains: "refused"}
+        - {tool: module.write, err_contains: "holds content from outside", count: 1}
       absent:
         - workspace/modules/deye-alerts

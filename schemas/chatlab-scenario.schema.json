@@ -140,6 +140,7 @@
         "tool": { "type": "string" },
         "decision": { "description": "allowed, confirm, approved, denied, expired…", "type": "string" },
         "result_contains": { "type": "string" },
+        "err_contains": { "description": "The call failed with an error holding this text.", "type": "string" },
         "count": { "description": "Exactly this many rows; at least one when unset.", "type": "integer", "minimum": 0 }
       }
     },
@@ -179,6 +180,7 @@
         "replies": { "description": "The model's messages since the last action.", "type": "integer", "minimum": 0 },
         "jobs": { "$ref": "#/$defs/jobFact" },
         "tainted": { "description": "The chat's session holds outside content.", "type": "boolean" },
+        "model_calls": { "description": "Calls the node has made to a model since it started.", "type": "integer", "minimum": 0 },
         "absent": { "description": "Paths under the node's folder (workspace/modules/x/target) that must not exist.", "type": "array", "items": { "type": "string" } }
       }
     }

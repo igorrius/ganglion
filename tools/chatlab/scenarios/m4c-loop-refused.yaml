@@ -29,5 +29,7 @@ steps:
   - facts:
       journal:
         - {tool: module.build, decision: allowed, result_contains: "reflex-template → producer → reflex-template", count: 1}
-        - {tool: module.install, count: 1}
-      reply: {contains: "refused"}
+        - {tool: module.install, err_contains: "would form a loop", count: 1}
+        - {tool: module.install, decision: approved, count: 0}
+      absent:
+        - modules/local/reflex-template

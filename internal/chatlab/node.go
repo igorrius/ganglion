@@ -74,6 +74,8 @@ type Node struct {
 	logs     string
 	pending  atomic.Int64 // how far the confirmations' clock is ahead, ns
 	sched    atomic.Int64 // how far the scheduler's clock is ahead, ns
+	tokens   *Counter     // counts the node's model calls
+	calls0   int          // the counter's calls when this node started
 }
 
 // Start runs a node for o. Stop ends it and removes its directory.
@@ -83,7 +85,10 @@ func Start(ctx context.Context, o NodeOptions) (n *Node, err error) {
 		return nil, fmt.Errorf("chatlab: %w", err)
 	}
 	closers := &program{}
-	n = &Node{dir: dir, ws: filepath.Join(dir, "workspace"), logs: filepath.Join(dir, "logs"), done: make(chan error, 1), closers: closers}
+	n = &Node{dir: dir, ws: filepath.Join(dir, "workspace"), logs: filepath.Join(dir, "logs"), done: make(chan error, 1), closers: closers, tokens: o.Tokens}
+	if o.Tokens != nil {
+		n.calls0 = o.Tokens.Calls()
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("chatlab: %v", r)
@@ -494,6 +499,14 @@ func (n *Node) Stop(ctx context.Context) error {
 	return n.stopErr
 }
 
+// modelCalls is how many calls the node has made to a model since it started.
+func (n *Node) modelCalls() int {
+	if n.tokens == nil {
+		return 0
+	}
+	return n.tokens.Calls() - n.calls0
+}
+
 // ReadView reads what a facts step checks; last is the model's words since
 // the last action.
 func ReadView(ctx context.Context, n *Node, last []Message) (View, error) {
@@ -501,7 +514,7 @@ func ReadView(ctx context.Context, n *Node, last []Message) (View, error) {
 	if err != nil {
 		return View{}, fmt.Errorf("chatlab: journal: %w", err)
 	}
-	v := View{Journal: entries, Messages: n.peer.Messages(), Last: last, Memory: map[string]string{}, Jobs: map[string]int{},
+	v := View{ModelCalls: n.modelCalls(), Journal: entries, Messages: n.peer.Messages(), Last: last, Memory: map[string]string{}, Jobs: map[string]int{},
 		Exists: func(rel string) bool {
 			_, err := os.Lstat(filepath.Join(n.dir, rel))
 			return err == nil
