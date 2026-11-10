@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/runner"
 )
@@ -38,8 +37,9 @@ func (h *Host) Check(ctx context.Context, b modstore.Build, cfg map[string]any) 
 	}
 	m.ConfigValues = configValues(m, cfg)
 	short := modstore.ShortName(b.Module)
-	log := h.moduleLog(m)
-	mod, err := runner.Load(ctx, b.Wasm, m, runner.Deps{Secrets: h.secret(b.Module), State: runner.NewMemState(),
+	g := h.newGiven(m)
+	log := h.moduleLog(g)
+	mod, err := runner.Load(ctx, b.Wasm, m, runner.Deps{Secrets: h.secret(b.Module, g), State: runner.NewMemState(),
 		Cells: checkCells{cellPort{cells: h.d.Cells, module: b.Module, prefix: short}}, Prefix: short, Logger: log})
 	if err != nil {
 		h.d.Log.Warn("modhost: a build does not load", "module", b.Module, "err", err)
@@ -48,7 +48,7 @@ func (h *Host) Check(ctx context.Context, b modstore.Build, cfg map[string]any) 
 	defer func() { _ = mod.Close(context.WithoutCancel(ctx)) }()
 	if err := mod.Health(ctx); err != nil {
 		k := lifecycleKind(err)
-		log.Warn("modhost: a build's health check failed", "module", b.Module, "kind", string(k), "err", text.Truncate(err.Error(), maxLogged))
+		log.Warn("modhost: a build's health check failed", "module", b.Module, "kind", string(k), "err", g.logged(err.Error()))
 		return fmt.Errorf("%w: its health check failed (%s)", ErrCheckFailed, k)
 	}
 	return nil
@@ -84,7 +84,7 @@ func (h *Host) health(ctx context.Context, module string) modstore.Health {
 	if err := l.mod.Health(ctx); err != nil {
 		k := lifecycleKind(err)
 		l.log.Warn("modhost: a module's health check failed", "module", module, "version", l.version, "kind", string(k),
-			"err", text.Truncate(err.Error(), maxLogged))
+			"err", l.given.logged(err.Error()))
 		return modstore.Health(k)
 	}
 	return modstore.HealthOK

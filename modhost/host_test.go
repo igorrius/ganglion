@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,6 +16,7 @@ import (
 	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/secrets"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/texts"
@@ -669,5 +672,40 @@ func TestAModulesGrantedSecretNeverReachesTheLog(t *testing.T) {
 	}
 	if strings.Count(log, "token [redacted]") < 4 {
 		t.Fatalf("the module's texts are not in the log, redacted:\n%s", log)
+	}
+}
+
+// A secret rotated through its _FILE while the module runs is read afresh
+// on the next call; the value the module was handed is hidden at once, so
+// an echo of either value never reaches the log (no secret value in a log).
+func TestARotatedSecretIsHiddenToo(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(file, []byte("first-secret-1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e := newEnv(t, active(t, "local/probe", probeManifest))
+	e.src = secrets.Env{Getenv: func(name string) string {
+		if name == "PROBE_TOKEN_FILE" {
+			return file
+		}
+		return ""
+	}, ReadFile: os.ReadFile}
+	e.host = e.newHost()
+	e.start(t)
+	leak := `{"op":"leak","name":"PROBE_TOKEN"}`
+	e.cron(t, leak)
+	if err := os.WriteFile(file, []byte("second-secret-2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.now = e.now.Add(time.Minute)
+	e.cron(t, leak)
+	log := e.logText()
+	for _, v := range []string{"first-secret-1", "second-secret-2"} {
+		if strings.Contains(log, v) {
+			t.Fatalf("%s reached the log:\n%s", v, log)
+		}
+	}
+	if n := strings.Count(log, "token [redacted]"); n < 4 {
+		t.Fatalf("%d redacted lines, want 4 (two logs, two failures):\n%s", n, log)
 	}
 }

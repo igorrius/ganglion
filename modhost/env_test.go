@@ -23,6 +23,7 @@ import (
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/secrets"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/tool"
 )
@@ -373,6 +374,7 @@ type env struct {
 	conf   *conf
 	cells  *cells.Service
 	state  *runner.MemState // the modules' state, kept across a restart
+	src    secrets.Source   // the node's secrets
 	now    time.Time
 	logs   *bytes.Buffer
 	logsMu sync.Mutex
@@ -389,7 +391,8 @@ func active(t *testing.T, name, manifest string) modstore.Active {
 func newEnv(t *testing.T, actives ...modstore.Active) *env {
 	t.Helper()
 	e := &env{store: &store{active: actives, by: map[string]string{}}, jobs: &jobs{live: map[string]schedule.Job{}},
-		inbox: &inbox{}, conf: &conf{}, state: runner.NewMemState(), now: t0, logs: &bytes.Buffer{}}
+		inbox: &inbox{}, conf: &conf{}, state: runner.NewMemState(),
+		src: secretMap{"PROBE_TOKEN": "hunter2", "TELEGRAM_BOT_TOKEN": botToken}, now: t0, logs: &bytes.Buffer{}}
 	for _, a := range actives {
 		e.store.by[a.SHA256] = owner
 	}
@@ -405,7 +408,7 @@ func (e *env) newHost() *modhost.Host {
 		Cells:       e.cells,
 		Jobs:        e.jobs,
 		Inbox:       e.inbox,
-		Secrets:     secretMap{"PROBE_TOKEN": "hunter2", "TELEGRAM_BOT_TOKEN": botToken},
+		Secrets:     e.src,
 		NodeSecrets: []string{"TELEGRAM_BOT_TOKEN"},
 		State:       e.state,
 		Settings:    e.conf,

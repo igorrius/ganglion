@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/cells"
-	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/schedule"
@@ -23,7 +22,8 @@ type loaded struct {
 	name, short, sha, version string
 	m                         runner.Manifest
 	mod                       *runner.Module
-	log                       *slog.Logger // for the module's texts: its granted secrets redacted (moduleLog)
+	given                     *given       // the secret values it was handed, hidden from its log lines
+	log                       *slog.Logger // for the module's texts, through given (moduleLog)
 	to                        recipient
 	escalate                  map[Kind]bool // the manifest's escalate kinds
 	tools                     []tool.Handler
@@ -88,11 +88,12 @@ func (h *Host) prepare(ctx context.Context, a modstore.Active, s settings.Module
 	}
 	m.ConfigValues = configValues(m, s.Config)
 	l := &loaded{name: a.Module, short: modstore.ShortName(a.Module), sha: a.SHA256, version: strconv.Itoa(m.Version), m: m, to: to,
-		escalate: escalations(m), log: h.moduleLog(m)}
+		escalate: escalations(m), given: h.newGiven(m)}
+	l.log = h.moduleLog(l.given)
 	if st, err := h.defineCells(ctx, l); err != nil || st.reason != "" {
 		return nil, st, err
 	}
-	if l.mod, err = runner.Load(ctx, a.Wasm, m, runner.Deps{Secrets: h.secret(a.Module), State: h.d.State,
+	if l.mod, err = runner.Load(ctx, a.Wasm, m, runner.Deps{Secrets: h.secret(a.Module, l.given), State: h.d.State,
 		Cells: cellPort{cells: h.d.Cells, module: l.name, prefix: l.short}, Prefix: l.short, Logger: l.log}); err != nil {
 		h.d.Log.Warn("modhost: the module does not load", "module", a.Module, "err", err)
 		return nil, stop{reason: ReasonLoad, since: now}, nil
@@ -166,11 +167,13 @@ func escalations(m runner.Manifest) map[Kind]bool {
 	return out
 }
 
-// secret is the runner's secret lookup for module: the node's source; a
-// secret that cannot be read is logged by name and is not set, and one of
-// the node's own is never set. The runner asks only for the names the
-// manifest grants.
-func (h *Host) secret(module string) func(string) (string, bool) {
+// secret is the runner's secret lookup for module: the node's source, read
+// on every call (a rotated NAME_FILE applies at once); a secret that cannot
+// be read is logged by name and is not set, and one of the node's own is
+// never set. Every value handed out goes to g first, so the module's logger
+// hides it before the module can echo it. The runner asks only for the
+// names the manifest grants.
+func (h *Host) secret(module string, g *given) func(string) (string, bool) {
 	return func(name string) (string, bool) {
 		if modstore.NodeSecret(h.d.NodeSecrets, name) {
 			h.d.Log.Warn("modhost: a module asked for one of the node's own secrets; it is not given", "module", module, "secret", name)
@@ -181,6 +184,7 @@ func (h *Host) secret(module string) func(string) (string, bool) {
 			h.d.Log.Warn("modhost: a module's secret cannot be read", "module", module, "secret", name, "err", err)
 			return "", false
 		}
+		g.add(name, v)
 		return v, v != ""
 	}
 }
@@ -218,7 +222,7 @@ func (h *Host) init(ctx context.Context, l *loaded) stop {
 	o := initOutcome(err)
 	h.d.Store.Count(ctx, l.name, l.sha, o.callResult())
 	l.log.Warn("modhost: the module's init failed", "module", l.name, "version", l.version, "kind", o.kind,
-		"err", text.Truncate(err.Error(), maxLogged))
+		"err", l.given.logged(err.Error()))
 	h.escalate(ctx, l, o.kind, withHint(o.detail, o, l.short))
 	return stop{reason: ReasonInit, kind: o.kind, since: h.d.Now()}
 }
