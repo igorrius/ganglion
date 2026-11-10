@@ -129,3 +129,18 @@ func TestModuleStatusShowsReactionsAndMessageCounts(t *testing.T) {
 		t.Fatalf("answer %s\nwant %s", res.Text, want)
 	}
 }
+
+// A cell id may hold "_" (runner's cell id pattern), and a module's short
+// name too: both are shown; text that is neither is not.
+func TestModuleStatusShowsCellIDsWithUnderscores(t *testing.T) {
+	e := newModuleEnv(t)
+	e.reloads.card = modstore.Card{Name: "boiler", State: modstore.RunRunning, Version: "1",
+		ReactsTo: []string{"deye_reader.soc_now", "_x.y", "a.b c", "Deye.soc"}, Feeds: []string{"alarm_2"}}
+	res, err := runStatus(t, e, "boiler")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `"reacts_to":["deye_reader.soc_now"],"feeds":["alarm_2"]`; !strings.Contains(res.Text, want) {
+		t.Fatalf("answer %s\nwant %s", res.Text, want)
+	}
+}

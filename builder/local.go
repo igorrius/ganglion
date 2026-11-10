@@ -419,27 +419,16 @@ func readOpened(f *os.File, limit int64) ([]byte, error) {
 	return b, nil
 }
 
-// CopySource copies the regular files of src into dst without a top-level
-// target folder: the copy a build makes, and the one module.import makes of
-// an example into the workspace. A symlink (src itself included), a device,
-// or more than limit bytes is refused; dst may exist.
+// CopySource copies the regular files of src into dst without the top-level
+// target and .git folders (walkSource, which SourceDigest walks too): the
+// copy a build makes, and the one module.import makes of an example into the
+// workspace. A symlink (src itself included), a device, or more than limit
+// bytes is refused; dst may exist.
 func CopySource(src, dst string, limit int64) error {
 	var total int64
-	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, p)
-		if err != nil {
-			return err
-		}
-		switch {
-		case rel == "target" && d.IsDir():
-			return filepath.SkipDir
-		case d.IsDir():
+	err := walkSource(src, func(rel string, d fs.DirEntry) error {
+		if d.IsDir() {
 			return os.MkdirAll(filepath.Join(dst, rel), 0o700)
-		case !d.Type().IsRegular():
-			return fmt.Errorf("builder: %s is not a regular file (symlinks and devices are refused)", rel)
 		}
 		info, err := d.Info()
 		if err != nil {
@@ -448,7 +437,7 @@ func CopySource(src, dst string, limit int64) error {
 		if total += info.Size(); total > limit {
 			return fmt.Errorf("builder: the source is over %d bytes, too big to build", limit)
 		}
-		return copyFile(p, filepath.Join(dst, rel))
+		return copyFile(filepath.Join(src, rel), filepath.Join(dst, rel))
 	})
 	if err != nil {
 		return fmt.Errorf("builder: copy source: %w", err)

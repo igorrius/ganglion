@@ -179,7 +179,8 @@ func newModuleEnv(t *testing.T) *moduleEnv {
 		settings: filepath.Join(dir, "ganglion.yaml"), examples: filepath.Join(dir, "examples", "modules")}
 	e.setConfig(t, "SN1")
 	e.m = builtin.Modules{Workspace: ws, Builder: e.b, Store: store, Secrets: deyeSecrets(), Settings: settings.ModulesFile{Path: e.settings},
-		Cells: e.cells, Host: e.reloads, Builds: filepath.Join(dir, "modules", "builds"), Examples: e.examples}
+		Cells: e.cells, Host: e.reloads, Builds: filepath.Join(dir, "modules", "builds"), Examples: e.examples,
+		Provenance: filepath.Join(dir, "modules", "provenance"), Now: func() time.Time { return time.Unix(1_800_000_000, 0) }}
 	return e
 }
 

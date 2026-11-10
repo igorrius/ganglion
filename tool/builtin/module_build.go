@@ -83,16 +83,17 @@ func (t *ModuleBuild) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 	if err := moduleName(ModuleBuildTool, a.Name); err != nil {
 		return tool.Result{}, err
 	}
-	dir, err := t.m.sourceDir(a.Name)
+	dir, err := t.m.sourceDir(ModuleBuildTool, a.Name)
 	if err != nil {
 		return tool.Result{}, err
 	}
+	own := t.m.ownSource(a.Name)
 	art, log, err := t.m.Builder.Build(ctx, builder.Source{Name: a.Name, Dir: dir})
 	if errors.Is(err, builder.ErrNoBuilder) {
 		return tool.Result{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
 	}
 	if err != nil {
-		return failed(err, log)
+		return failed(err, log, own)
 	}
 	if art.SHA256 != modstore.Digest(art.Wasm, art.Manifest) {
 		return tool.Result{}, fmt.Errorf("%s: the builder named the build wrongly", ModuleBuildTool)
@@ -106,16 +107,22 @@ func (t *ModuleBuild) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
 	}
-	return answerPlan(b, p)
+	return answerPlan(b, p, own)
 }
 
-// failed answers a build that failed, as outside content.
-func failed(err error, log builder.Log) (tool.Result, error) {
-	out, jerr := json.Marshal(failedAnswer{Error: "the build failed", Detail: redact.String(err.Error()), LogTail: redact.String(string(log))})
+// failed answers a build that failed. Of the node's own source (own) it
+// keeps only rustc's diagnostics about the module's own files and is not
+// outside content; otherwise the log's end is outside content (R-RUN-17).
+func failed(err error, log builder.Log, own bool) (tool.Result, error) {
+	tail := string(log)
+	if own {
+		tail = builder.OwnDiagnostics(log)
+	}
+	out, jerr := json.Marshal(failedAnswer{Error: "the build failed", Detail: redact.String(err.Error()), LogTail: redact.String(tail)})
 	if jerr != nil {
 		return tool.Result{}, jerr
 	}
-	return tool.Result{Text: string(out), External: true}, nil
+	return tool.Result{Text: string(out), External: !own}, nil
 }
 
 // commit is the workspace commit the source was built from, marked when the
@@ -131,10 +138,10 @@ func (t *ModuleBuild) commit(ctx context.Context, name string) string {
 	return head
 }
 
-// answerPlan is the plan as the model reads it. It is outside content: the
-// names of the rights are the manifest's words, as is the refusal's detail
-// (R-RUN-13).
-func answerPlan(b modstore.Build, p modstore.Plan) (tool.Result, error) {
+// answerPlan is the plan as the model reads it. It is outside content
+// unless the source is the node's own (own): the names of the rights are the
+// manifest's words, as is the refusal's detail (R-RUN-13, R-RUN-17).
+func answerPlan(b modstore.Build, p modstore.Plan, own bool) (tool.Result, error) {
 	ans := buildAnswer{Build: p.SHA256, Module: b.Module, Language: b.Language, Size: p.Size, Version: p.Version,
 		Refusal: p.Refusal, Detail: p.RefusalDetail}
 	if p.Refusal != "" {
@@ -147,7 +154,7 @@ func answerPlan(b modstore.Build, p modstore.Plan) (tool.Result, error) {
 	if err != nil {
 		return tool.Result{}, err
 	}
-	return tool.Result{Text: string(out), External: true}, nil
+	return tool.Result{Text: string(out), External: !own}, nil
 }
 
 // rightsOf is r as answered; nil when r is empty.

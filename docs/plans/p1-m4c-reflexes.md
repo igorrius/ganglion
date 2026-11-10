@@ -548,20 +548,20 @@ then `recordProvenance(name, "agent")`. Answer `{"written":"<path>","commit":"<s
 `own := t.m.ownSource(name)` before the build; `failed` uses `OwnDiagnostics(log)` and
 `External: false` when `own`, else today's answer; `answerPlan` sets `External: !own`.
 
-- [ ] **Step 1: Failing tests** (`builder`): the digest is stable across runs, changes with a
+- [x] **Step 1: Failing tests** (`builder`): the digest is stable across runs, changes with a
   byte, a name or a new file, ignores `target/` and `.git/`, errors on a symlink; `OwnDiagnostics`
   on recorded logs (a type error in `src/logic.rs` kept with its `-->` line; a
   `warning: serde@1.0.0: …` line dropped; an `error: could not compile` line dropped; a
   `Cargo.toml` parse error kept; nothing kept → the fixed sentence).
-- [ ] **Step 2: Failing tests** (`tool/builtin`): a write in a clean session writes, commits with
+- [x] **Step 2: Failing tests** (`tool/builtin`): a write in a clean session writes, commits with
   the exact message and records provenance; a tainted call is refused and writes nothing; `..`,
   `/abs`, `.cargo/config.toml`, `target/x`, a symlinked folder are refused; 256 KB + 1 is refused;
   the 201st file and the module over 16 MB are refused; a commit failure leaves the old file;
   `module.read` of a recorded folder is not external, after a file changed by hand it is; a build
   of a recorded folder answers with only own diagnostics and `External: false`, of a changed
   folder as today; `module.import` records `example:<from>`.
-- [ ] **Step 3: Run, see them fail. Implement.**
-- [ ] **Step 4: `make lint test`; code map rows (`builder`, module tools, the provenance folder);
+- [x] **Step 3: Run, see them fail. Implement.**
+- [x] **Step 4: `make lint test`; code map rows (`builder`, module tools, the provenance folder);
   commit, push.**
 
 ```bash

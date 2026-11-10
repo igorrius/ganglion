@@ -18,7 +18,7 @@ func TestHostExecCanBeGranted(t *testing.T) {
 
 // A module is imported, built and installed only with the owner at hand.
 func TestModuleToolsCannotBeGranted(t *testing.T) {
-	for _, name := range []string{ModuleImportTool, ModuleBuildTool, ModuleInstallTool} {
+	for _, name := range []string{ModuleImportTool, ModuleBuildTool, ModuleInstallTool, ModuleStatusTool, ModuleWriteTool, ModuleReadTool} {
 		if !ungrantable(name) {
 			t.Fatalf("a task can be granted %s", name)
 		}

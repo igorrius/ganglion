@@ -10,6 +10,7 @@ covers:
   - tool/builtin/module_import.go
   - tool/builtin/module_install.go
   - tool/builtin/module_window.go
+  - tool/builtin/provenance.go
   - config/builder.go
   - config/modhost.go
   - builder/**
