@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -79,7 +80,8 @@ func (*ModuleStatus) Spec() tool.Spec {
 		Description: "How an installed module of the owner stands, as its /modules card shows it: state (running; off, turned off by the owner; " +
 			"crashloop, turned off by the node after 5 failures in an hour; stopped, it should run and did not start), active version, " +
 			"health (its check now: ok, or the kind it failed with and the node's hint), runs, failures and the last failure's kind and time, " +
-			"and its settings: each declared key with its type, whether it is required and the value the owner set. " +
+			"and its settings: each declared key with its type, whether it is required and the value the owner set " +
+			"(a key left at its manifest default is set: false, has_default: true). " +
 			"Use it when a module fails, before guessing the cause.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"name":{"type":"string","description":"the module's name, as in its tools (deye-reader)"}},` +
@@ -143,10 +145,13 @@ func (t *ModuleStatus) answer(c modstore.Card) statusAnswer {
 
 // configLine is one config key as module.status shows it: a value that may
 // be a secret or is long stands as "<set>"; a default is noted, not shown,
-// for it is the manifest's text.
+// for it is the manifest's text. module.install writes the defaults into
+// the settings line, so a value equal to the default counts as not set by
+// the owner.
 func configLine(l modstore.ConfigLine) configAnswer {
 	a := configAnswer{Key: l.Key, Type: l.Type, Required: l.Required, Set: l.Set, HasDefault: l.Default != ""}
-	if !l.Set {
+	if !l.Set || isDefault(l) {
+		a.Set = false
 		return a
 	}
 	a.Value = l.Value
@@ -163,4 +168,27 @@ func activeEntry(c modstore.Card) (modstore.Entry, bool) {
 		return modstore.Entry{}, false
 	}
 	return c.Journal[i], true
+}
+
+// isDefault reports whether l's value is its key's default, compared as a
+// value of the key's type (install writes "30.0" as 30).
+func isDefault(l modstore.ConfigLine) bool {
+	if l.Default == "" {
+		return false
+	}
+	switch l.Type {
+	case "number":
+		v, verr := strconv.ParseFloat(l.Value, 64)
+		d, derr := strconv.ParseFloat(l.Default, 64)
+		if verr == nil && derr == nil {
+			return v == d
+		}
+	case "boolean":
+		v, verr := strconv.ParseBool(l.Value)
+		d, derr := strconv.ParseBool(l.Default)
+		if verr == nil && derr == nil {
+			return v == d
+		}
+	}
+	return l.Value == l.Default
 }

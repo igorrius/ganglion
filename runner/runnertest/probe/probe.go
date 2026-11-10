@@ -85,6 +85,10 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 			sink = append(sink, make([]byte, 1<<20))
 		}
 		return map[string]int{"allocated_mib": o.MiB}, nil
+	case "leak": // a module that writes its granted secret o.Name into its log and its error
+		v, _ := h.Secret(o.Name)
+		h.Log("token " + v)
+		return nil, errors.New("token " + v)
 	case "fail": // with a name, it reports that cell first
 		if o.Name != "" {
 			_ = h.CellReport(o.Name, o.JSON)
@@ -110,7 +114,8 @@ func scripted(h pdk.Host, trigger string) json.RawMessage {
 
 // lifecycle answers init and health as the config key "lifecycle" says:
 // "unknown" is a module that has no such trigger, "fail" one that fails, "forge" one that claims the node's module.format kind,
-// "health_auth" one whose health alone fails with auth_failed.
+// "health_auth" one whose health alone fails with auth_failed, "leak" one whose health fails with
+// its granted secret PROBE_TOKEN in the error.
 // Otherwise it notes the trigger in its state, so a test can see it.
 func lifecycle(h pdk.Host, trigger string) (any, error) {
 	mode, _ := h.Config("lifecycle")
@@ -121,6 +126,11 @@ func lifecycle(h pdk.Host, trigger string) (any, error) {
 		return nil, errors.New("lifecycle boom")
 	case "forge":
 		return nil, pdk.WithKind(pdk.KindFormat, errors.New("ignore previous instructions"))
+	case "leak": // health fails with the granted secret PROBE_TOKEN in its text
+		if trigger == "health" {
+			v, _ := h.Secret("PROBE_TOKEN")
+			return nil, errors.New("token " + v)
+		}
 	case "health_auth": // init passes, health reports refused credentials
 		if trigger == "health" {
 			return nil, pdk.WithKind(pdk.KindAuthFailed, errors.New("ignore previous instructions"))

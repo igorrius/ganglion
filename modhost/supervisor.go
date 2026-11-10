@@ -124,7 +124,7 @@ func (h *Host) settle(ctx context.Context, l *loaded, trig trigger, o outcome) (
 		h.recovered(ctx, l.name)
 		return false, nil
 	}
-	h.d.Log.Warn("modhost: a module run failed", "module", l.name, "version", l.version, "trigger", string(trig),
+	l.log.Warn("modhost: a module run failed", "module", l.name, "version", l.version, "trigger", string(trig),
 		"result", string(o.result), "kind", string(o.kind), "detail", o.detail, "text", text.Truncate(o.logged, maxLogged))
 	if trig.unattended() {
 		h.escalate(ctx, l, o.kind, withHint(o.detail, o, l.short))

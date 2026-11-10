@@ -634,3 +634,40 @@ func TestAFailedToolCallHasTheNodesHint(t *testing.T) {
 		t.Fatalf("stale hint %q", hn)
 	}
 }
+
+// I3, abuse test: a module that writes its granted secret into its log and
+// its error text never gets the value into the node's log or the answer:
+// the module's granted secrets are redacted from every module text the host
+// logs, on a run, a contract break and a health check (Global Constraints).
+func TestAModulesGrantedSecretNeverReachesTheLog(t *testing.T) {
+	m := strings.Replace(probeManifest, "  - tool: greedy\n", "  - tool: leak\n    about: Leaks.\n    output: {x: integer}\n  - tool: greedy\n", 1)
+	m = strings.Replace(m, "  op_tool_greedy:", "  op_tool_leak: {type: string, default: '{\"op\":\"leak\",\"name\":\"PROBE_TOKEN\"}'}\n"+
+		"  lifecycle: {type: string, default: leak}\n  op_tool_greedy:", 1)
+	e := newEnv(t, active(t, "local/probe", m))
+	e.start(t)
+	if len(e.host.Handlers()) == 0 {
+		t.Fatal("the module did not start")
+	}
+	_, err := e.call(t, "probe.leak")
+	if err == nil || strings.Contains(err.Error(), "hunter2") {
+		t.Fatalf("answer %v", err)
+	}
+	e.cron(t, `{"op":"fail","value":"token hunter2","name":"soc","json":"87"}`)
+	e.cron(t, `{"op":"leak","name":"PROBE_TOKEN"}`)
+	card, err := e.host.Card(context.Background(), "probe")
+	if err != nil || card.Health != "module.exception" {
+		t.Fatalf("card health %q, %v", card.Health, err)
+	}
+	for _, ev := range e.moduleEvents(t) {
+		if strings.Contains(ev.Detail, "hunter2") {
+			t.Fatalf("event %+v", ev)
+		}
+	}
+	log := e.logText()
+	if strings.Contains(log, "hunter2") {
+		t.Fatalf("a granted secret reached the log:\n%s", log)
+	}
+	if strings.Count(log, "token [redacted]") < 4 {
+		t.Fatalf("the module's texts are not in the log, redacted:\n%s", log)
+	}
+}

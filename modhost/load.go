@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"time"
 
 	"github.com/igorrius/ganglion/cells"
+	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/schedule"
@@ -21,6 +23,7 @@ type loaded struct {
 	name, short, sha, version string
 	m                         runner.Manifest
 	mod                       *runner.Module
+	log                       *slog.Logger // for the module's texts: its granted secrets redacted (moduleLog)
 	to                        recipient
 	escalate                  map[Kind]bool // the manifest's escalate kinds
 	tools                     []tool.Handler
@@ -85,12 +88,12 @@ func (h *Host) prepare(ctx context.Context, a modstore.Active, s settings.Module
 	}
 	m.ConfigValues = configValues(m, s.Config)
 	l := &loaded{name: a.Module, short: modstore.ShortName(a.Module), sha: a.SHA256, version: strconv.Itoa(m.Version), m: m, to: to,
-		escalate: escalations(m)}
+		escalate: escalations(m), log: h.moduleLog(m)}
 	if st, err := h.defineCells(ctx, l); err != nil || st.reason != "" {
 		return nil, st, err
 	}
 	if l.mod, err = runner.Load(ctx, a.Wasm, m, runner.Deps{Secrets: h.secret(a.Module), State: h.d.State,
-		Cells: cellPort{cells: h.d.Cells, module: l.name, prefix: l.short}, Prefix: l.short, Logger: h.d.Log}); err != nil {
+		Cells: cellPort{cells: h.d.Cells, module: l.name, prefix: l.short}, Prefix: l.short, Logger: l.log}); err != nil {
 		h.d.Log.Warn("modhost: the module does not load", "module", a.Module, "err", err)
 		return nil, stop{reason: ReasonLoad, since: now}, nil
 	}
@@ -214,7 +217,8 @@ func (h *Host) init(ctx context.Context, l *loaded) stop {
 	}
 	o := initOutcome(err)
 	h.d.Store.Count(ctx, l.name, l.sha, o.callResult())
-	h.d.Log.Warn("modhost: the module's init failed", "module", l.name, "version", l.version, "kind", o.kind, "err", err)
+	l.log.Warn("modhost: the module's init failed", "module", l.name, "version", l.version, "kind", o.kind,
+		"err", text.Truncate(err.Error(), maxLogged))
 	h.escalate(ctx, l, o.kind, withHint(o.detail, o, l.short))
 	return stop{reason: ReasonInit, kind: o.kind, since: h.d.Now()}
 }
