@@ -152,7 +152,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	b := config.Bootstrap{Examples: examplesFolder(), DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
 		Admin: fmt.Sprintf("telegram:user:%d", labChat), Build: rustenv.LocalFromEnv(os.Getenv), Secrets: labSecrets(), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
 		Agent: config.AgentSettings{Models: &models, Keys: keys, Workspace: n.ws, DailyBudgetUSD: 1, DailyTurns: 300,
-			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}}
+			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}, Timeouts: labTimeouts()}
 	rot, err := logfile.Open(logfile.DefaultConfig(n.logs), time.Now)
 	if err != nil {
 		return fmt.Errorf("chatlab: logs: %w", err)
@@ -434,11 +434,20 @@ func (n *Node) Advance(clock string, d time.Duration) error {
 }
 
 // busyQuery counts what the node has left to do: events in the inbox,
-// messages in the outbox, and background commands whose command.done event
-// the node has not put yet, which then resumes the conversation.
+// messages in the outbox, background commands whose command.done event the
+// node has not put yet, and background jobs still running or waiting (a
+// module build, whose module.built event then resumes the conversation).
 const busyQuery = `SELECT (SELECT count(*) FROM inbox WHERE status = 'pending') +
 	(SELECT count(*) FROM outbox WHERE status = 'pending') +
-	(SELECT count(*) FROM host_jobs WHERE background = 1 AND announced = 0)`
+	(SELECT count(*) FROM host_jobs WHERE background = 1 AND announced = 0) +
+	(SELECT count(*) FROM background_jobs WHERE state IN ('queued', 'running'))`
+
+// labTimeouts are the node's default timeouts, as the command line maps
+// them from the settings.
+func labTimeouts() config.Timeouts {
+	a := settings.Default().Agent
+	return config.Timeouts{Call: time.Duration(a.CallTimeout), Turn: time.Duration(a.TurnTimeout), Handler: a.HandlerTimeout()}
+}
 
 // Quiet waits until the node took the peer's last action and has nothing
 // left to do (busyQuery) on three looks in a row.

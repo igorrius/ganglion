@@ -9,6 +9,7 @@ covers:
   - tool/builtin/module_install.go
   - tool/builtin/module_import.go
   - tool/builtin/module_build.go
+  - tool/builtin/build_queue.go
   - config/builder.go
   - builder/**
   - internal/rustenv/**
@@ -21,6 +22,7 @@ script:
   - {tool: module.import, args: '{"from":"reflex-template","name":"reflex-template"}'}
   - {say: "The copy waits for your press."}
   - {tool: module.build, args: '{"name":"reflex-template","note":"loop check"}'}
+  - {say: "The build runs in the background."}
   - {tool: module.install, args: '{"build":"$BUILD","note":"loop check"}'}
   - {say: "The install was refused."}
 steps:
@@ -28,8 +30,9 @@ steps:
   - press: Approve
   - facts:
       journal:
-        - {tool: module.build, decision: allowed, result_contains: "reflex-template → producer → reflex-template", count: 1}
+        - {tool: module.build, decision: allowed, count: 1}
         - {tool: module.install, err_contains: "would form a loop", count: 1}
         - {tool: module.install, decision: approved, count: 0}
+      history: {contains: "reflex-template → producer → reflex-template"}
       absent:
         - modules/local/reflex-template

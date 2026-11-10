@@ -454,7 +454,7 @@ func (a *Agent) outcomeReply(ctx context.Context, t *turn, name string, run func
 
 // outcomeText says what an update or a rollback did.
 func (a *Agent) outcomeText(ctx context.Context, t *turn, o modstore.Outcome) string {
-	vars := texts.Vars{"module": texts.Escape(modstore.ShortName(o.Module)), "from": texts.Escape(o.From), "to": texts.Escape(o.To)}
+	vars := texts.Vars{varModule: texts.Escape(modstore.ShortName(o.Module)), "from": texts.Escape(o.From), "to": texts.Escape(o.To)}
 	switch o.Result {
 	case modstore.ResultInstalled:
 		return a.say(ctx, t, texts.ModulesUpdated, vars)

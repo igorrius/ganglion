@@ -36,6 +36,7 @@ flowchart TB
     modhost["Module host<br/>the owner's modules: cells, cron jobs,<br/>tools, contract, supervisor"]
     runner["Runner<br/>wazero, manifest grants,<br/>answers checked"]
     builderc["Module builder<br/>Rust from the workspace's source,<br/>confined in the sandbox"]
+    buildq["Build queue<br/>module builds in the background,<br/>one at a time, a record each"]
     cellsc[("Cells<br/>each owned by one module")]
     outbox[("Outbox")]
     sender["Outbox sender<br/>retries, 429 retry_after"]
@@ -71,12 +72,14 @@ flowchart TB
     hostrun -- "past its wait: Start; its end: End" --> bgjobs
     bgjobs -- "the card and its edits (EditOf)" --> outbox
     loop -- "the jobs note each turn; /status" --> bgjobs
-    builderc -. "a build as a job, planned (M4c task 10)" .-> bgjobs
+    buildq -- "the card: Start, Progress, End" --> bgjobs
+    buildq -- "module.built, at its end" --> inbox
     web --> html2md
     loop -- "module job: ModuleCron; module.trigger: ModuleTrigger, no turn" --> modhost
     tools -- "module tools, dynamic" --> modhost
     modhost --> runner
-    tools -- "module.build" --> builderc
+    tools -- "module.build: queued, answered at once" --> buildq
+    buildq -- "one build at a time" --> builderc
     builderc -- "writes only its temp folder" --> sandbox
     tools -- "module.install after the press: reload; module.status: the card" --> modhost
     modhost -- "own cells only" --> cellsc
@@ -108,7 +111,7 @@ flowchart TB
 | Clean-context check | Checks every memory write, and on schedule stored facts and the persona, with a model of the `check` purpose that sees only the text; fails closed into quarantine | R-POL-7 |
 | Scheduler | Crons in the node's zone with catch-up after downtime; reminders and agent tasks with grants, each task in its own conversation | R-SCH-1, R-SCH-2, R-POL-8 |
 | Host command runner | Runs `host.exec` commands in the sandbox once per call key; one still running after 20 s goes on as a background job with a card, and its end comes back at once as a `command.done` event that resumes its conversation (a task's under its grant) | R-CMD-1, R-CMD-4 |
-| Background jobs (`jobs`) | Work the node runs outside a turn (a host command past its wait; a module build from M4c task 10): a row each, one card in its conversation (none for a scheduled task's) sent at the start and edited through the outbox every 10 s with the node's words, the title and counts, ending as done, failed or interrupted by a restart; a note of the conversation's running jobs in every turn, not stored; a "Background jobs" section in `/status` | R-LIVE-9, R-CMD-4, R-OBS-11 |
+| Background jobs (`jobs`) | Work the node runs outside a turn (a host command past its wait; a module build): a row each, one card in its conversation (none for a scheduled task's) sent at the start and edited through the outbox every 10 s with the node's words, the title and counts, ending as done, failed or interrupted by a restart; a note of the conversation's running jobs in every turn, not stored; a "Background jobs" section in `/status` | R-LIVE-9, R-CMD-4, R-OBS-11 |
 | Class table | `hostcmd.Classify(argv)` gives a class and a fixed consequence line in three languages from code, never from the model; the policy, the tool, a plan and the agent's question all ask it, and what it cannot read moves a command up | R-CMD-2, R-CMD-6 |
 | Command sandbox | Starts each command as the node's own helper with Landlock, seccomp and a clean environment; off (and no `host.exec`) when a check fails. A module's build runs confined: it writes only its temporary folder, and the helper kills whatever it left running (ADR-0064) | R-CMD-3, R-RUN-9 |
 | Janitor and `host.stats` | Measure the node's places on disk without a subprocess and remove what is past its age; the kill switch `tools.host_exec` is a cell only an admin's `/commands` sets | R-CMD-5, R-CMD-8 |
@@ -116,7 +119,7 @@ flowchart TB
 | Web reader | `web.fetch` on public addresses only (checked on every connection, redirects included, a task kept to its granted hosts) within size and time limits; `web.search` through Brave or DuckDuckGo; remote text only as outside content | R-WEB-1…3 |
 | html2md module | Turns a page into Markdown in the WASM sandbox, granted nothing; replaced without a core release | R-WEB-1 |
 | Module host (`modhost`) | Runs the owner's local modules in the node: loads the active versions, defines the cells they own under their prefix, keeps a `module` cron job each (owned by the installing admin), offers their tools to the registry as they come and go, checks every answer against the manifest's contract, counts runs and failures, turns a module off after five failures within an hour, and puts one escalation of a kind per episode (until a successful run) of a run nobody watched (cron, `init`) as a turn in the admin's private chat; a failed tool call is the calling turn's to tell, in the node's words with a hint per kind; a run that wrote cells puts one `module.trigger` event per running listener into the inbox, and runs the listener when the agent hands the event back, with no model (chains stop past depth 4) | R-RUN-11…15 |
-| Module builder and the module tools | `module.import` copies an example the node ships into the workspace and commits it after a press; `module.write` writes one file of `modules/<name>` from a clean session and `module.read` reads it back, and the node keeps a per-file provenance record of what its own tools left (it decides whether a build answer taints); `module.build` builds `modules/<name>` from the workspace in the sandbox and keeps the build as a file with the rights its manifest asks for; `module.install` shows the owner those rights (the install window) and, after the press, installs exactly the build the window showed, re-planned at the press, then writes its settings line and reloads it in the module host | R-RUN-9, R-RUN-17 |
+| Module builder and the module tools | `module.import` copies an example the node ships into the workspace and commits it after a press; `module.write` writes one file of `modules/<name>` from a clean session and `module.read` reads it back, and the node keeps a per-file provenance record of what its own tools left (it decides whether a build answer taints); `module.build` queues a build of `modules/<name>` and answers at once; the build queue runs one build at a time in the sandbox in the background, with a card, keeps the build as a file with the rights its manifest asks for and puts `module.built`, which resumes the conversation with the answer (a module being built cannot be built or written meanwhile); `module.install` shows the owner those rights (the install window) and, after the press, installs exactly the build the window showed, re-planned at the press, then writes its settings line and reloads it in the module host | R-RUN-9, R-RUN-17, R-LIVE-9 |
 | turns | Trace and cost of every turn | R-AGT-5 |
 
 ## Edge runner

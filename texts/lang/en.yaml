@@ -34,6 +34,7 @@ reply.commands_on: Commands are on.
 reply.commands_off: Commands are off. /commands on turns them back on.
 reply.commands_usage: Write /commands on or /commands off.
 reply.command_late: The command {command} finished after this conversation moved on.
+reply.build_late: The build of {module} finished after this conversation moved on.
 reply.restarting: "Restarting. Back in a few seconds."
 
 button.details: "Details"

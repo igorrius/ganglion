@@ -49,6 +49,7 @@ type turn struct {
 	schedule   event.Schedule
 	module     event.Module       // the escalation of a KindModule event
 	notify     event.ModuleNotify // the message of a KindModuleNotify event
+	built      event.ModuleBuilt  // the build of a KindModuleBuilt event
 	// transport and replyConv are where the answer goes: the event's
 	// source and conversation, or for a scheduled job its owner's
 	// transport and the job's reply target.

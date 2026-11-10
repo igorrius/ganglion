@@ -150,10 +150,12 @@ func cardless(conv string) bool { return strings.HasPrefix(conv, tool.TaskConvPr
 
 // Start registers j, stores its row and then sends its card. j's State is
 // running (the default) or queued, and Started defaults to now. A key seen
-// before sends no second card: a queued job started again as running begins
-// to run, its card edited at once and its time counted from now; any other
-// repeat is a no-op, so a job has one card for its key, across a restart too.
-// A card the outbox refused is sent at the next tick; the job is kept.
+// before sends no second card, so a job has one card for its key, across a
+// restart too. A repeat as running of a job open here runs an update: a
+// queued job begins to run, its time counted from now, and the card is
+// edited at once when its text changed. A repeat as queued, or of a key that
+// has a row but is not open here, does nothing. A card the outbox refused is
+// sent at the next tick; the job is kept.
 func (r *Registry) Start(ctx context.Context, j Job) error {
 	j, err := r.complete(j)
 	if err != nil {

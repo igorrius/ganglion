@@ -150,6 +150,9 @@ type Deps struct {
 	// Commands are host commands' outcomes (host.Runner), read when one
 	// that went on in the background ends (R-CMD-4); NoCommands when unset.
 	Commands Commands
+	// Builds are module builds' outcomes (builtin.BuildQueue), read when
+	// one ends (R-RUN-9, ADR-0069); NoBuilds when unset.
+	Builds Builds
 	// StatusSources are the components /status asks (R-OBS-11); none when unset.
 	StatusSources []status.Source
 	// Background lists a conversation's background jobs for the note every
@@ -277,15 +280,7 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Switch == nil {
 		d.Switch = NoSwitch{}
 	}
-	if d.Commands == nil {
-		d.Commands = NoCommands{}
-	}
-	if d.Plans == nil {
-		d.Plans = NoPlans{}
-	}
-	if d.Background == nil {
-		d.Background = NoBackground{}
-	}
+	d = withBackground(d)
 	if d.Status == nil {
 		d.Status = NoStatus
 	}
@@ -309,10 +304,28 @@ func New(cfg Config, d Deps) *Agent {
 	return a
 }
 
+// withBackground fills the readers of the work that runs outside a turn
+// with their no-ops: host commands, module builds, plans, the jobs note.
+func withBackground(d Deps) Deps {
+	if d.Commands == nil {
+		d.Commands = NoCommands{}
+	}
+	if d.Builds == nil {
+		d.Builds = NoBuilds{}
+	}
+	if d.Plans == nil {
+		d.Plans = NoPlans{}
+	}
+	if d.Background == nil {
+		d.Background = NoBackground{}
+	}
+	return d
+}
+
 // Handle implements core.Handler: it runs the turn's stages and returns
 // the replies and the new state. It answers text messages, button
 // presses, the expiry of pending calls, scheduled jobs and the end of host
-// commands that went on in the background; a module trigger runs its
+// commands and module builds that went on in the background; a module trigger runs its
 // module with no turn at all; other events are left alone.
 func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
 	if e.Kind == event.KindModuleTrigger {
@@ -355,6 +368,9 @@ var payloads = map[event.Kind]func(t *turn) bool{
 	},
 	event.KindCommandDone: func(t *turn) bool {
 		return json.Unmarshal(t.event.Payload, &t.command) == nil && t.command.Key != ""
+	},
+	event.KindModuleBuilt: func(t *turn) bool {
+		return json.Unmarshal(t.event.Payload, &t.built) == nil && t.built.Key != ""
 	},
 	event.KindModule: func(t *turn) bool {
 		m := &t.module

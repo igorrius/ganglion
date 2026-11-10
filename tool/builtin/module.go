@@ -102,6 +102,8 @@ type Modules struct {
 	Provenance string
 	// Now is the clock the records are stamped with.
 	Now func() time.Time
+	// Queue runs the builds in the background, one at a time (ADR-0069).
+	Queue *BuildQueue
 
 	// locks serialises the writes to each module's folder; NewModuleTools
 	// makes it, one for all the tools it returns.

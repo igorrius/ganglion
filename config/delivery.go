@@ -16,6 +16,7 @@ import (
 	"github.com/igorrius/ganglion/outbox"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/transport"
@@ -149,6 +150,7 @@ func Loop() do.Provider[*core.Loop] {
 		q := do.MustInvoke[*sqlqueue.Queue](i)
 		return core.NewLoop(q, q.InboxReady(), do.MustInvoke[core.Handler](i), do.MustInvoke[*slog.Logger](i),
 			core.WithTurnHook(do.MustInvoke[core.TurnHook](i)),
+			core.WithTurnTimeout(do.MustInvoke[Bootstrap](i).Timeouts.Handler),
 			core.WithMaxAttempts(core.DefaultMaxAttempts, do.MustInvoke[core.GiveUp](i))), nil
 	}
 }
@@ -198,6 +200,7 @@ func AgentHousekeepers() do.Provider[Housekeeping] {
 			do.MustInvoke[*host.Janitor](i),
 			do.MustInvoke[*host.Runner](i),
 			do.MustInvoke[*bgjobs.Registry](i),
+			do.MustInvoke[*builtin.BuildQueue](i),
 			node.Named("translator", do.MustInvoke[*language.Translator](i).Run),
 			cells.Reconciler{Service: do.MustInvoke[*cells.Service](i), Every: cells.ReconcileEvery, Log: logger, After: time.After},
 		}, nil

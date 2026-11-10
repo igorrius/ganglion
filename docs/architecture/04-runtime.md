@@ -188,6 +188,75 @@ sequenceDiagram
     end
 ```
 
+## A module build (P1)
+
+A module build takes a minute or more, longer than a model call may wait,
+so `module.build` never builds inside its turn (R-RUN-9, ADR-0069). The
+call checks the module, refuses one whose build runs or waits ("<name> is
+being built; wait for its result", and `module.write` refuses the same),
+stores a record of the build under `<data>/modules/build-jobs`, starts its
+card and answers at once with the job's key, which the session keeps. The
+build queue, a node component, runs one build at a time in the order they
+were asked for; a build that waits has a card that says so, and the card
+starts counting when it runs. The build runs under the queue's context
+within the builder's own 10 min limit, and cargo's "Compiling" lines move
+the card's count. Its end stores the answer `module.build` gave before
+builds ran in the background (the same JSON; outside content unless the
+folder was the node's own before and after the build, ADR-0068), ends the
+card and puts `module.built` into the conversation's inbox at once. That
+event resumes the conversation as `command.done` does, one level deeper:
+the note `[build finished] <module>: <answer>` taints only when the answer
+is outside content, and the agent fixes the source and builds again, or
+calls `module.install` with the digest. A session that moved on gets one
+fixed line. A restart ends a build it finds open as interrupted, in the
+node's words, and puts `module.built` so the agent is told; the job
+registry edits its card once.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Q as Inbox / outbox
+    participant A as Agent
+    participant M as Model
+    participant T as module.build
+    participant B as Build queue
+    participant R as Builder
+    participant J as Jobs
+
+    Q->>A: lease (a message, or a note that resumed the conversation)
+    A->>M: call
+    M-->>A: module.build battery-alerts
+    A->>T: call (key turn_id + n)
+    T->>B: submit: refused while battery-alerts builds or waits
+    B->>B: record build:battery-alerts:<hash> "queued"
+    B->>J: Start(build, running or queued)
+    J->>Q: Enqueue(card)
+    T-->>A: {"building", "job", "next"}, Job = key
+    A->>M: call with the answer
+    M-->>A: "it builds; I'll tell you"
+    A->>Q: Complete(answer, Commands += key)
+    B->>J: Start(running): the card counts from now
+    B->>R: Build(source, Progress)
+    loop every 10 s while it runs
+        R-->>J: Progress(crates built)
+        J->>Q: Enqueue(edit: "🔨 battery-alerts · build · 0:45 · crates built: 14")
+    end
+    R-->>B: wasm + manifest, or the log
+    B->>B: save the build, plan it, record the answer and whether it is outside content
+    B->>J: End(done or failed)
+    J->>Q: Enqueue(last edit: "✅ … built in 1:32")
+    B->>Q: Put(module.built, idemKey <key>:built), at once
+    Q->>A: lease
+    A->>B: Outcome(key): conversation, principal, depth, answer
+    alt the session lists the key
+        A->>M: "[build finished] battery-alerts: {…}", with tools
+        M-->>A: module.install <digest>, or a fix and module.build again
+        A->>Q: Complete(Commands -= key)
+    else the session moved on
+        A->>Q: Complete("The build of battery-alerts finished after this conversation moved on.")
+    end
+```
+
 ## A module run on cron (P1)
 
 The Deye reader as a reflex: no model in the normal path (R-RUN-12). The

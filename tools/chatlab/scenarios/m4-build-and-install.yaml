@@ -11,6 +11,8 @@ covers:
   - tool/builtin/module_install.go
   - tool/builtin/module_window.go
   - tool/builtin/provenance.go
+  - tool/builtin/build_queue.go
+  - agent/module_built.go
   - config/builder.go
   - config/modhost.go
   - builder/**
@@ -27,6 +29,7 @@ script:
   - {tool: module.import, args: '{"from":"deye-reader","name":"deye-reader"}'}
   - {say: "The copy waits for your press."}
   - {tool: module.build, args: '{"name":"deye-reader","note":"first build"}'}
+  - {say: "The build runs in the background."}
   - {tool: module.install, args: '{"build":"$BUILD","note":"first install"}'}
   - {say: "The install waits for your press."}
   - {say: "deye-reader is installed and running."}
@@ -43,8 +46,9 @@ steps:
       question: {contains: "eu1-developer.deyecloud.com"}
       journal:
         - {tool: module.import, decision: approved, count: 1}
-        - {tool: module.build, decision: allowed, result_contains: '"language":"rust"', count: 1}
+        - {tool: module.build, decision: allowed, count: 1}
         - {tool: module.install, decision: approved, count: 0}
+      history: {contains: '"language":"rust"'}
   - press: Approve
   - facts:
       questions: 0

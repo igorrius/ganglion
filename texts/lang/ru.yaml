@@ -33,6 +33,7 @@ reply.commands_on: Команды включены.
 reply.commands_off: Команды выключены. /commands on включает их снова.
 reply.commands_usage: Напишите /commands on или /commands off.
 reply.command_late: Команда {command} завершилась, когда разговор уже ушёл дальше.
+reply.build_late: Сборка {module} завершилась, когда разговор уже ушёл дальше.
 reply.restarting: "Перезапускаюсь. Вернусь через несколько секунд."
 
 button.details: "Подробнее"

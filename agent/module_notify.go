@@ -71,7 +71,7 @@ func (a *Agent) moduleNotify(ctx context.Context, t *turn, p event.ModuleNotify)
 // cannot format, or the node's line in the owner's language.
 func (a *Agent) notifyText(ctx context.Context, t *turn, p event.ModuleNotify) string {
 	name := texts.Escape(moduleName(p.Module))
-	vars := texts.Vars{"module": name, "n": strconv.Itoa(p.PerDay)}
+	vars := texts.Vars{varModule: name, "n": strconv.Itoa(p.PerDay)}
 	switch p.Node {
 	case event.NotifyLimitLine:
 		return a.say(ctx, t, texts.ModuleNotifyLimit, vars)

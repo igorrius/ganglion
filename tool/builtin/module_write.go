@@ -77,6 +77,9 @@ func (t *ModuleWrite) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 		return tool.Result{}, err
 	}
 	defer t.m.locks.lock(a.Name)()
+	if t.m.Queue.Building(a.Name) {
+		return tool.Result{}, fmt.Errorf("%s: %w", ModuleWriteTool, errBeingBuilt(a.Name))
+	}
 	commit, fresh, err := t.m.writeSource(ctx, a)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("%s: %w", ModuleWriteTool, err)

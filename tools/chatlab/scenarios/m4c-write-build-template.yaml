@@ -1,10 +1,12 @@
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
 name: m4c-write-build-template
 why: >-
-  M4c check 5 (R-RUN-9, R-RUN-15..17): the agent imports the reflex template, writes a file into the copy from a
-  clean session, builds it (the node's own tools left the folder, so the answer does not taint), and the install
-  window shows what the module reacts to and that it writes to the owner. The "fix" step of the design (a failed
-  build repaired by a second write) is not scripted here.
+  M4c check 5 (R-RUN-9, R-RUN-15..17, ADR-0069): the agent imports the reflex template, writes a file into the
+  copy from a clean session and builds it. The build runs in the background: module.build answers at once, the
+  turn ends, and the build's end comes back as a module.built turn whose note (the node's own tools left the
+  folder, so it does not taint) leads to the install window, which shows what the module reacts to and that it
+  writes to the owner. The "fix" step of the design (a failed build repaired by a second write) is not scripted
+  here.
 covers:
   - tool/builtin/module.go
   - tool/builtin/module_build.go
@@ -13,6 +15,8 @@ covers:
   - tool/builtin/module_window.go
   - tool/builtin/module_write.go
   - tool/builtin/provenance.go
+  - tool/builtin/build_queue.go
+  - agent/module_built.go
   - config/builder.go
   - config/modhost.go
   - builder/**
@@ -31,6 +35,7 @@ script:
   - {say: "The copy waits for your press."}
   - {tool: module.write, args: '{"name":"reflex-template","path":"NOTES.md","content":"The owner wants a line when the value falls below 30.\n"}'}
   - {tool: module.build, args: '{"name":"reflex-template","note":"first build"}'}
+  - {say: "The build runs in the background; its card shows how it goes."}
   - {tool: module.install, args: '{"build":"$BUILD","note":"first install"}'}
   - {say: "The install waits for your press."}
   - {say: "reflex-template is installed."}
@@ -45,8 +50,9 @@ steps:
       question: {contains: "Reacts to"}
       journal:
         - {tool: module.write, decision: allowed, count: 1}
-        - {tool: module.build, decision: allowed, count: 1}
+        - {tool: module.build, decision: allowed, result_contains: '"building":"reflex-template"', count: 1}
         - {tool: module.install, decision: approved, count: 0}
+      history: {contains: "[build finished] reflex-template: {\"build\""}
       tainted: false
   - facts:
       question: {contains: "Writes to you"}

@@ -334,7 +334,9 @@ func (r *Runner) background(ctx context.Context, key string) (j Job, moved bool,
 		Title: hostcmd.Show(j.Argv), Started: j.Started, State: jobs.StateRunning}
 	if err := r.jobs.Start(ctx, card); err != nil {
 		// The card is a sign of life, not the command: its end still comes.
-		r.logErr(ctx, "host: a background command's card was not started", err, "key", key)
+		// The job's row may be stored with its card refused, which the
+		// registry then sends at its next tick.
+		r.logErr(ctx, "host: a background command's card failed to start or waits for the next tick", err, "key", key)
 	}
 	return j, true, nil
 }

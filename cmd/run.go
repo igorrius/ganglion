@@ -139,7 +139,9 @@ func fromFile(f settings.File, db string, limit memlimit.Limit, src secrets.Sour
 		ReactionAfter: time.Duration(f.Telegram.Reactions.After), ReactionDwell: time.Duration(f.Telegram.Reactions.Dwell),
 		SandboxDeny: f.Sandbox.Deny, SandboxHideNames: f.Sandbox.HideNames,
 		ModulesDir:  filepath.Join(filepath.Dir(db), "modules"),
-		MemoryLimit: limit, Settings: f}
+		MemoryLimit: limit, Settings: f,
+		Timeouts: config.Timeouts{Call: time.Duration(f.Agent.CallTimeout), Turn: time.Duration(f.Agent.TurnTimeout),
+			Handler: f.Agent.HandlerTimeout()}}
 	// Absolute: the CLI runs inside it, and the sandbox, the janitor and
 	// host.stats must all name the same folder.
 	var err error

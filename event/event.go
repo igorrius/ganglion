@@ -39,6 +39,10 @@ const (
 	// KindModuleNotify is a module's text for its owner (R-RUN-16,
 	// ADR-0066).
 	KindModuleNotify Kind = "module.notify"
+	// KindModuleBuilt is the end of a module build that ran in the
+	// background (R-RUN-9, ADR-0069); its payload is a ModuleBuilt. It
+	// resumes the conversation whose call asked for the build.
+	KindModuleBuilt Kind = "module.built"
 )
 
 // SourceModule is the Source of the events the node puts for the owner's

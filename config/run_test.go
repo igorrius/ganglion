@@ -30,7 +30,7 @@ const testToken = "7001:test-secret"
 
 func testConfig(t *testing.T) Bootstrap {
 	t.Helper()
-	return Bootstrap{DB: filepath.Join(t.TempDir(), "node.db"), BotAPIURL: "http://127.0.0.1:1"}
+	return Bootstrap{DB: filepath.Join(t.TempDir(), "node.db"), BotAPIURL: "http://127.0.0.1:1", Timeouts: testTimeouts()}
 }
 
 type running struct {

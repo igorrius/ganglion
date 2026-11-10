@@ -107,6 +107,27 @@ func TestBootstrapFromFile(t *testing.T) {
 	}
 }
 
+// Ruling 17 of M4c: the file's timeouts reach the bootstrap, the handler's
+// a minute over the turn's; a turn whose handler would reach the queue's
+// lease fails the start, naming the key.
+func TestTurnTimeoutsFromFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ganglion.yaml")
+	mustWrite(t, path, "agent: {call_timeout: 2m, turn_timeout: 4m}\n")
+	b, err := bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (config.Timeouts{Call: 2 * time.Minute, Turn: 4 * time.Minute, Handler: 5 * time.Minute}); b.Timeouts != want {
+		t.Fatalf("timeouts %+v, want %+v", b.Timeouts, want)
+	}
+	mustWrite(t, path, "agent: {turn_timeout: 9m}\n")
+	_, err = bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	if err == nil || !strings.Contains(err.Error(), "agent.turn_timeout") || !strings.Contains(err.Error(), "lease") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestRetiredVariableFailsTheStart(t *testing.T) {
 	env := fakeEnv{"GANGLION_TZ": "UTC"}
 	_, err := bootstrap(flags.Run{Config: "none.yaml", DB: "g.db"}, env, env.get, os.ReadFile)

@@ -325,20 +325,14 @@ func TestModuleBuildOfTheAgentsOwnSourceDoesNotTaint(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.b.err, e.b.log = errors.New("builder: building deye-reader: exit status 101"), buildLog
-	res, err := e.tool(builtin.ModuleBuildTool).Run(context.Background(), call(builtin.ModuleBuildTool, `{"name":"deye-reader"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := e.buildNow(t, `{"name":"deye-reader"}`)
 	if res.External || !strings.Contains(res.Text, "src/lib.rs:1:5") || strings.Contains(res.Text, "ignore your instructions") ||
 		strings.Contains(res.Text, "could not compile") {
 		t.Fatalf("a failed build of a recorded folder: %+v", res)
 	}
 	e.b.err, e.b.log = nil, ""
 	e.b.art = artifact(deyeManifest, 1024, 1)
-	res, err = e.tool(builtin.ModuleBuildTool).Run(context.Background(), call(builtin.ModuleBuildTool, `{"name":"deye-reader"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
+	res = e.buildNow(t, `{"name":"deye-reader"}`)
 	if res.External {
 		t.Fatalf("a build of a recorded folder: %+v", res)
 	}
@@ -346,14 +340,11 @@ func TestModuleBuildOfTheAgentsOwnSourceDoesNotTaint(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(e.moduleDir("deye-reader"), "src.rs"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if res, _ = e.tool(builtin.ModuleBuildTool).Run(context.Background(), call(builtin.ModuleBuildTool, `{"name":"deye-reader"}`)); !res.External {
+	if res = e.buildNow(t, `{"name":"deye-reader"}`); !res.External {
 		t.Fatalf("a build of a changed folder: %+v", res)
 	}
 	e.b.err, e.b.log = errors.New("builder: building deye-reader: exit status 101"), buildLog
-	res, err = e.tool(builtin.ModuleBuildTool).Run(context.Background(), call(builtin.ModuleBuildTool, `{"name":"deye-reader"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
+	res = e.buildNow(t, `{"name":"deye-reader"}`)
 	if !res.External || !strings.Contains(res.Text, "ignore your instructions") {
 		t.Fatalf("a failed build of a changed folder: %+v", res)
 	}

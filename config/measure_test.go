@@ -171,7 +171,7 @@ func TestMeasureNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := Bootstrap{DB: c.DB, BotToken: crashTokenForMeasure, BotAPIURL: c.BotAPIURL, Admin: "telegram:user:42",
+	b := Bootstrap{DB: c.DB, BotToken: crashTokenForMeasure, BotAPIURL: c.BotAPIURL, Admin: "telegram:user:42", Timeouts: testTimeouts(),
 		Agent: AgentSettings{Models: f.Models, Keys: map[string]string{"fake": measureKey}, Workspace: c.Workspace,
 			DailyBudgetUSD: 1, TZ: time.UTC, SearchOff: true}}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)

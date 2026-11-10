@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/agent"
+	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/settings"
 )
 
@@ -13,6 +14,19 @@ func TestDefaultsMatchTheAgent(t *testing.T) {
 	a, d := agent.DefaultConfig(), settings.Default().Agent
 	if int(d.Limits.DailyTurns) != a.DailyTurns || int(d.Limits.DailyTokens) != a.DailyTokens || time.Duration(d.SessionIdle) != a.SessionIdle {
 		t.Fatalf("settings defaults %+v differ from agent.DefaultConfig %+v", d, a)
+	}
+	if time.Duration(d.CallTimeout) != a.CallTimeout || time.Duration(d.TurnTimeout) != a.TurnTimeout {
+		t.Fatalf("settings timeouts %v, %v differ from agent.DefaultConfig %v, %v", d.CallTimeout, d.TurnTimeout, a.CallTimeout, a.TurnTimeout)
+	}
+}
+
+// The lease the settings check the handler against is the queue's.
+func TestTheLeaseIsTheLoops(t *testing.T) {
+	if settings.QueueLease != core.DefaultLease {
+		t.Fatalf("settings.QueueLease %v, core.DefaultLease %v", settings.QueueLease, core.DefaultLease)
+	}
+	if settings.Default().Agent.HandlerTimeout() != core.DefaultTurnTimeout {
+		t.Fatalf("the loop's default turn timeout %v is not the default handler's", core.DefaultTurnTimeout)
 	}
 }
 

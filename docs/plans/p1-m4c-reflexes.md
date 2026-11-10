@@ -841,16 +841,23 @@ type ModuleBuilt struct {
   ran past <limit>" only for its own limit.
 - The skill says the build runs in the background and the result comes back as a note.
 
-- [ ] **Step 1: Failing tests:** `module.build` answers at once with a job and a card; the build's
+- As built (task 10): the build runs under the build queue's own context (a node component,
+  conventions section 6) rather than `context.WithoutCancel` of the call: a stopping node stops
+  the build, and the next start tells it as interrupted. The answer is kept in a record file per
+  build, `<data>/modules/build-jobs/`, beside the builds and the provenance records, not in the
+  job's row: `jobs` stays generic, and the queue's restart path (interrupted, not yet told) reads
+  only its own records. `module.built` carries the module's short name.
+
+- [x] **Step 1: Failing tests:** `module.build` answers at once with a job and a card; the build's
   end puts `module.built` and ends the card; the note is clean for an own folder and tainted
   otherwise; a second build of the module and a write to it are refused while it runs; two modules'
   builds run one after the other; a restart during a build ends it as interrupted and the agent is
   told; a late result after `/new` sends the fixed line; the config's timeouts reach the agent and
   the loop, and a turn timeout at the lease fails the start; the builder's two messages; cargo's
   "Compiling" lines reach `Progress`.
-- [ ] **Step 2: Run, see them fail. Implement.** Update the scenario `m4c-write-build-template` for a
+- [x] **Step 2: Run, see them fail. Implement.** Update the scenario `m4c-write-build-template` for a
   build that answers at once and a `module.built` turn.
-- [ ] **Step 3: `make lint test`, `make test-net`; docs; commit, push.**
+- [x] **Step 3: `make lint test`, `make test-net`; docs; commit, push.**
 
 ```bash
 git commit -m "modules: a build runs in the background with a card and resumes the agent; timeouts in the config"

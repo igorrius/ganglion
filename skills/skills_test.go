@@ -149,6 +149,8 @@ func TestModuleWritingSkill(t *testing.T) {
 		"A module does its one task fully and hands the system contract data.",
 		"the\nmodel works after the module on clean, prepared data, or not at all.",
 		"module.import", "reflex-template", "module.read", "module.write", "module.build", "module.install",
+		// The build runs in the background and its end comes back as a note (ADR-0069).
+		"The build runs in the background", "a card in the\n   chat shows", "[build finished] <name>",
 	} {
 		if !strings.Contains(sk.Body, want) {
 			t.Errorf("the body lacks %q", want)

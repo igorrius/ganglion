@@ -233,7 +233,7 @@ func startAcceptNode(t *testing.T, r acceptRoute, out string) *acceptNode {
 	fake := telegramtest.NewServer(t, acceptToken)
 	h := &acceptNode{t: t, route: r.name, fake: fake, ws: ws, loc: loc}
 	b := Bootstrap{DB: filepath.Join(dir, "node.db"), BotToken: acceptToken, BotAPIURL: fake.URL(),
-		Admin: fmt.Sprintf("telegram:user:%d", ownerChat), MetricsAddr: "off", LogDir: filepath.Join(dir, "logs"),
+		Admin: fmt.Sprintf("telegram:user:%d", ownerChat), MetricsAddr: "off", LogDir: filepath.Join(dir, "logs"), Timeouts: testTimeouts(),
 		Agent: AgentSettings{Models: &r.models, Keys: r.keys, Workspace: ws, DailyBudgetUSD: 1, DailyTurns: 300,
 			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}}
 

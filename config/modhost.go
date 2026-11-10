@@ -102,6 +102,7 @@ func ModuleTools() do.Provider[Moduling] {
 			Examples:    examplesDir(b),
 			Provenance:  provenanceDir(b),
 			Now:         time.Now,
+			Queue:       do.MustInvoke[*builtin.BuildQueue](i),
 		})}, nil
 	}
 }
@@ -114,6 +115,10 @@ func buildsDir(b Bootstrap) string { return filepath.Join(b.ModulesDir, "builds"
 // tools left it: provenance/ in the modules folder, beside the builds and
 // out of the command sandbox's reach (ruling 7 of M4c).
 func provenanceDir(b Bootstrap) string { return filepath.Join(b.ModulesDir, "provenance") }
+
+// buildJobsDir is where the build queue keeps a record of each build and
+// its answer: build-jobs/ in the modules folder, beside the builds.
+func buildJobsDir(b Bootstrap) string { return filepath.Join(b.ModulesDir, "build-jobs") }
 
 // imageExamples is where the container image keeps the example modules.
 const imageExamples = "/app/examples/modules"

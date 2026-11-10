@@ -89,11 +89,29 @@ type Agent struct {
 	// SessionIdle is the silence after which a conversation starts afresh;
 	// off is 0.
 	SessionIdle Duration `yaml:"session_idle"`
+	// CallTimeout bounds one model call. On the claude CLI route one call
+	// runs every tool call of its turn (ruling 17 of M4c).
+	CallTimeout Duration `yaml:"call_timeout"`
+	// TurnTimeout bounds a whole turn; the node's handler gets HandlerSlack
+	// more, which must stay below QueueLease.
+	TurnTimeout Duration `yaml:"turn_timeout"`
 	// Limits caps what one day of conversation may use.
 	Limits Limits `yaml:"limits"`
 	// Search is the web search the agent may use.
 	Search Search `yaml:"search"`
 }
+
+// HandlerSlack is how much longer than a turn the node's handler may run: it
+// stores the turn's outcome after the turn's own deadline (ruling 17 of M4c).
+const HandlerSlack = time.Minute
+
+// QueueLease is how long a turn holds its event before the queue offers it
+// again (core.DefaultLease): the handler must end before it.
+const QueueLease = 10 * time.Minute
+
+// HandlerTimeout is the node handler's limit for a turn: the turn's plus
+// HandlerSlack.
+func (a Agent) HandlerTimeout() time.Duration { return time.Duration(a.TurnTimeout) + HandlerSlack }
 
 // Limits is the daily caps; 0 or off means no cap. The scalar off turns all
 // of them off.
@@ -149,6 +167,8 @@ func Default() File {
 		Agent: Agent{
 			Workspace:   "workspace",
 			SessionIdle: Duration(6 * time.Hour),
+			CallTimeout: Duration(3 * time.Minute),
+			TurnTimeout: Duration(5 * time.Minute),
 			Limits:      Limits{DailyBudgetUSD: 1.0, DailyTurns: 300, DailyTokens: 1_000_000},
 			Search:      Search{Mode: auto, BraveKey: "env:BRAVE_API_KEY"},
 		},

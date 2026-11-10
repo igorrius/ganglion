@@ -75,13 +75,15 @@ type Local struct {
 	// (safeParents); the package's tests that build in a t.TempDir under
 	// the shared /tmp replace it.
 	parents func(root string) error
+	// now is the clock that times a build the caller stopped.
+	now func() time.Time
 }
 
 var _ Builder = (*Local)(nil)
 
 // NewLocal makes a builder that starts its commands through start.
 func NewLocal(start Starter, cfg LocalConfig) *Local {
-	return &Local{start: start, cfg: cfg, parents: safeParents}
+	return &Local{start: start, cfg: cfg, parents: safeParents, now: time.Now}
 }
 
 // Can runs cargo and rustc once and reports Rust when both answer and the
@@ -97,12 +99,12 @@ func (l *Local) Can(ctx context.Context) (Abilities, error) {
 	}
 	defer func() { _ = os.RemoveAll(temp) }()
 	env := l.env(temp)
-	version, _, err := l.run(ctx, []string{l.cfg.Cargo, "--version"}, temp, temp, env)
+	version, _, err := l.run(ctx, []string{l.cfg.Cargo, "--version"}, temp, temp, env, io.Discard)
 	if err != nil {
 		return nil, fmt.Errorf("builder: cargo --version: %w", err)
 	}
 	rustc := filepath.Join(filepath.Dir(l.cfg.Cargo), "rustc")
-	root, _, err := l.run(ctx, []string{rustc, "--print", "sysroot"}, temp, temp, env)
+	root, _, err := l.run(ctx, []string{rustc, "--print", "sysroot"}, temp, temp, env, io.Discard)
 	if err != nil {
 		return nil, fmt.Errorf("builder: rustc --print sysroot: %w", err)
 	}
@@ -144,7 +146,7 @@ func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 		return Artifact{}, "", fmt.Errorf("builder: %s has no %s: %w", src.Name, manifestFile, err)
 	}
 	argv := []string{l.cfg.Cargo, "build", "--release", "--locked", "--target", rustTarget}
-	_, log, err := l.run(ctx, argv, work, temp, l.env(temp))
+	_, log, err := l.run(ctx, argv, work, temp, l.env(temp), &crateCounter{progress: src.Progress})
 	if err != nil {
 		return Artifact{}, log, fmt.Errorf("builder: building %s: %w", src.Name, err)
 	}
@@ -298,12 +300,16 @@ func (l *Local) env(temp string) []string {
 }
 
 // run runs argv in dir in the sandbox, writing only beneath temp, in a
-// process group of its own, under the build's time limit. It returns stdout
-// and the tail of stdout and stderr together; a non-zero exit is an error.
-func (l *Local) run(ctx context.Context, argv []string, dir, temp string, env []string) ([]byte, Log, error) {
+// process group of its own, under the build's time limit; stderr is also
+// written to watch. It returns stdout and the tail of stdout and stderr
+// together; a non-zero exit is an error. A build stopped by its own limit
+// says "ran past" the limit; one stopped by the caller's deadline says the
+// caller stopped it and after how long (design section 10 of M4c).
+func (l *Local) run(ctx context.Context, argv []string, dir, temp string, env []string, watch io.Writer) ([]byte, Log, error) {
 	if err := checkAncestors(temp); err != nil {
 		return nil, "", err
 	}
+	caller, started := ctx, l.now()
 	ctx, cancel := context.WithTimeout(ctx, l.cfg.Timeout)
 	defer cancel()
 	cmd, err := l.start.Confined(ctx, []string{temp}, argv, dir, env...)
@@ -316,7 +322,7 @@ func (l *Local) run(ctx context.Context, argv []string, dir, temp string, env []
 		return nil, "", err
 	}
 	tail, out := &tailWriter{max: logKeep}, &bytes.Buffer{}
-	cmd.Stdout, cmd.Stderr = io.MultiWriter(out, tail), tail
+	cmd.Stdout, cmd.Stderr = io.MultiWriter(out, tail), io.MultiWriter(tail, watch)
 	cmd.WaitDelay = waitDelay
 	procgroup.Own(cmd)
 	// The sandbox's helper kills what the build left, setsid or not, when it
@@ -330,6 +336,8 @@ func (l *Local) run(ctx context.Context, argv []string, dir, temp string, env []
 	procgroup.Kill(cmd)
 	log := Log(tail.String())
 	switch {
+	case errors.Is(caller.Err(), context.DeadlineExceeded):
+		return out.Bytes(), log, fmt.Errorf("the caller stopped it after %s", l.now().Sub(started).Round(time.Second))
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		return out.Bytes(), log, fmt.Errorf("it ran past %s and was stopped", l.cfg.Timeout)
 	case ctx.Err() != nil:
@@ -489,4 +497,44 @@ func (t *tailWriter) String() string {
 		b = b[1:]
 	}
 	return strings.ToValidUTF8(string(b), "?")
+}
+
+// compilingPrefix starts the line cargo prints as it compiles a crate,
+// after its leading spaces.
+const compilingPrefix = "Compiling "
+
+// maxWatchedLine is how much of a line crateCounter keeps to look at its
+// start: the rest of a long line is not needed.
+const maxWatchedLine = 64
+
+// crateCounter counts cargo's "Compiling" lines in the build's stderr and
+// tells progress the count after each. It sees the build's text only to
+// count it; nothing of it goes further.
+type crateCounter struct {
+	progress ProgressFunc
+	line     []byte
+	n        int
+}
+
+// Write implements io.Writer; it never fails.
+func (c *crateCounter) Write(p []byte) (int, error) {
+	for _, b := range p {
+		if b == '\n' {
+			c.endLine()
+			continue
+		}
+		if len(c.line) < maxWatchedLine {
+			c.line = append(c.line, b)
+		}
+	}
+	return len(p), nil
+}
+
+// endLine counts the line just ended when it is a "Compiling" line.
+func (c *crateCounter) endLine() {
+	if strings.HasPrefix(strings.TrimLeft(string(c.line), " "), compilingPrefix) {
+		c.n++
+		c.progress.report(c.n)
+	}
+	c.line = c.line[:0]
 }

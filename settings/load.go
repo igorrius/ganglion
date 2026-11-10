@@ -230,8 +230,10 @@ func validAdmin(v string) bool { return v == "" || principalRE.MatchString(v) }
 
 // The paths of keys that more than one check names.
 const (
-	keyTZ     = "node.tz"
-	keyAPIURL = "telegram.api_url"
+	keyTZ          = "node.tz"
+	keyAPIURL      = "telegram.api_url"
+	keyCallTimeout = "agent.call_timeout"
+	keyTurnTimeout = "agent.turn_timeout"
 )
 
 // check is the validation that is not about the type of a value.
@@ -250,6 +252,11 @@ func (f File) check() error {
 		{"telegram.reply", "must be auto, always or off", slices.Contains([]string{auto, "always", off}, f.Telegram.Reply)},
 		{"agent.search.mode", "must be auto or off", slices.Contains([]string{auto, off}, f.Agent.Search.Mode)},
 		{"agent.workspace", "must not be empty", f.Agent.Workspace != ""},
+		{keyCallTimeout, "must be above 0", f.Agent.CallTimeout > 0},
+		{keyTurnTimeout, "must be above 0", f.Agent.TurnTimeout > 0},
+		{keyCallTimeout, "must not be longer than " + keyTurnTimeout, f.Agent.CallTimeout <= f.Agent.TurnTimeout},
+		{keyTurnTimeout, "plus " + HandlerSlack.String() + " for the node's handler must stay below the queue's lease of " +
+			QueueLease.String(), f.Agent.HandlerTimeout() < QueueLease},
 	} {
 		if !c.ok {
 			return pathError(c.path, c.reason)

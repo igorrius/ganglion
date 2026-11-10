@@ -98,6 +98,17 @@ func BackgroundJobs() do.Provider[*bgjobs.Registry] {
 	}
 }
 
+// Builds provides the queue that runs module builds in the background, one
+// at a time, with a card each and a module.built event at the end (R-RUN-9,
+// ADR-0069).
+func Builds() do.Provider[*builtin.BuildQueue] {
+	return func(i do.Injector) (*builtin.BuildQueue, error) {
+		b := do.MustInvoke[Bootstrap](i)
+		return builtin.NewBuildQueue(builtin.BuildQueueDeps{Dir: buildJobsDir(b), Jobs: do.MustInvoke[*bgjobs.Registry](i),
+			Put: do.MustInvoke[*sqlqueue.Queue](i).Put, Now: time.Now, Log: do.MustInvoke[*slog.Logger](i)}), nil
+	}
+}
+
 // Switch provides the kill switch of host.exec, its cell defined at start.
 func Switch() do.Provider[*host.Switch] {
 	return func(i do.Injector) (*host.Switch, error) {

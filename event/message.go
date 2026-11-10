@@ -155,6 +155,14 @@ type ModuleNotify struct {
 	Transport string     `json:"transport"` // where it goes
 }
 
+// ModuleBuilt is the payload of an event of kind "module.built": the job
+// key of a build that ended, whose answer the build queue stored, and the
+// module's short name.
+type ModuleBuilt struct {
+	Key    string `json:"key"`    // the job's key
+	Module string `json:"module"` // the module's short name
+}
+
 // CommandDone is the payload of an event of kind "command.done": the call
 // key of the command, whose outcome the runner stored.
 type CommandDone struct {
