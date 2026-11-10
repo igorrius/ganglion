@@ -732,7 +732,7 @@ escalate:                    # when to call the model
   (`triggers: - cell: [deye-reader.soc, …]`), with no model (M4c,
   [ADR-0065](adr/0065-cell-triggers-through-the-inbox.md)). Every cell a
   trigger names is in `cells.read`; a module never listens to its own
-  cells, and the install refuses a loop between modules. When a run that
+  cells, and the install and a rollback refuse a loop between modules. When a run that
   wrote cells ends, the host puts one `module.trigger` event per listening
   module into the inbox, keyed by listener, producer and run, so it
   survives a restart and is never doubled; the node routes it to the
@@ -758,7 +758,7 @@ escalate:                    # when to call the model
   with `module.read` (M4c,
   [ADR-0067](adr/0067-agent-writes-module-source.md)). `module.write` is
   refused in a tainted session (R-POL-6). The node records each module
-  folder's digest as its own tools left it (`module.import` of an example,
+  file's digest as its own tools left it (`module.import` of an example,
   `module.write` from a clean session); a build or a read of a folder that
   matches its record does not taint, and the build then keeps only rustc's
   diagnostics about the module's own files. Any other change to the folder
@@ -766,7 +766,8 @@ escalate:                    # when to call the model
   while the module's `Cargo.lock` lists, besides its own package, only
   crates.io crates that one of the node's examples locks with the same
   version and checksum; a missing or unreadable lock, or any other
-  dependency, keeps them outside content.
+  dependency, keeps them outside content
+  ([ADR-0068](adr/0068-vouch-for-module-source-per-file-and-vetted-crates.md)).
 
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation

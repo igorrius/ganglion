@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/texts"
@@ -78,5 +79,12 @@ func (a *Agent) notifyText(ctx context.Context, t *turn, p event.ModuleNotify) s
 		return a.say(ctx, t, texts.ModuleChainStopped, vars)
 	case event.NotifyText:
 	}
-	return name + ": " + texts.Escape(p.Text)
+	return name + ": " + texts.Escape(oneLine(p.Text))
 }
+
+// lineBreaks folds every kind of line break into one space.
+var lineBreaks = strings.NewReplacer("\r", " ", "\n", " ", "\u0085", " ", "\u2028", " ", "\u2029", " ", "\v", " ", "\f", " ")
+
+// oneLine is s as a single line, so a module's text cannot start a line that
+// looks like another module's.
+func oneLine(s string) string { return lineBreaks.Replace(s) }

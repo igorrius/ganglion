@@ -595,3 +595,22 @@ func TestAModuleReplacingItselfDoesNotLoop(t *testing.T) {
 		t.Fatalf("refused: %s", p.Refusal)
 	}
 }
+
+// A rollback runs the loop check too: v1 of a listened to b.y, v2 does not,
+// b was installed listening to a.x; going back to v1 would close the loop.
+func TestRollbackRefusesATriggerLoop(t *testing.T) {
+	s := newEnv(t).open(t)
+	ctx := context.Background()
+	install(t, s, build("local/a", variant("a1"), loopManifest("a", "b.y")))
+	v2 := "name: a\nversion: 2\n"
+	install(t, s, build("local/a", variant("a2"), v2))
+	install(t, s, build("local/b", variant("b"), loopManifest("b", "a.x")))
+
+	o, err := s.Rollback(ctx, "local/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Result != modstore.ResultRefused || o.Reason != "the triggers would form a loop: a → b → a" {
+		t.Fatalf("rollback %+v", o)
+	}
+}

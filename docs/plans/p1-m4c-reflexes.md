@@ -82,7 +82,7 @@ session, builds it, fixes its own compile errors and ends at the install window.
 4. **`module.trigger` events use the conversation `module:<listener>`**, so the queue serialises a
    listener's events, and they are handled in `Agent.Handle` before `begin`.
 5. **The loop check reads the active versions of every local module, off ones included**, from
-   `modstore`, at plan and at install.
+   `modstore`, at plan, at install and at rollback.
 6. **The "chain deeper than 4" line is once per active build, in memory**: a restart may repeat it
    once. The escalation episodes are not used, since a successful run clears them.
 7. **Provenance lives in `<data>/modules/provenance/<name>.json`** (`{"digest","origin","at"}`),
@@ -103,7 +103,8 @@ session, builds it, fixes its own compile errors and ends at the install window.
     workspace"; nothing seeds the workspace's skills, and a built-in ships with the binary and
     cannot be shadowed by a workspace skill of the same name.
 11. **Messages are counted per module per day in `modstore`** before the event is put; a crash
-    between the two can count one message that was never sent.
+    between the two can count one message that was never sent, and a replayed run (after a crash
+    or a retried turn) counts its messages again, though none is sent twice.
 12. **One `cell` trigger per manifest**, listing full cell ids.
 13. **`notify` codes:** `0` sent, `-1` not granted, `-2` over today's limit, `-3` not in this run.
 

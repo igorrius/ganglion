@@ -22,8 +22,8 @@ const (
 
 // Caps on what the provenance checks read.
 const (
-	maxProvenance = 64 << 10 // a record: 200 files' digests fit
-	maxLock       = 1 << 20  // a Cargo.lock
+	maxProvenance = 256 << 10 // a record: 200 paths of 512 bytes with their escaping, and digests
+	maxLock       = 1 << 20   // a Cargo.lock
 )
 
 // Files of a Rust module the dependency check reads.

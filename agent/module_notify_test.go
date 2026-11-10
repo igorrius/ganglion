@@ -185,3 +185,18 @@ func TestModuleTextCarriesNoMachineNotice(t *testing.T) {
 		t.Fatalf("node line %+v", out)
 	}
 }
+
+// A module cannot start a line of its own: every kind of line break in its
+// text folds into one space, so it cannot imitate another module's line.
+func TestModuleNotifyFoldsLineBreaks(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	p := deyeAlert()
+	p.Text = "one\r\nother-module: two\nthree four five\rsix"
+	out := e.turn(t, notifyEvent(p))
+	if len(out) != 1 {
+		t.Fatalf("out %+v", out)
+	}
+	if want := "deye-alerts: one  other-module: two three four five six"; out[0].Text != want {
+		t.Fatalf("text %q, want %q", out[0].Text, want)
+	}
+}

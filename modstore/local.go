@@ -506,11 +506,24 @@ func (s *Store) rollbackLocal(ctx context.Context, module string) (Outcome, erro
 			Reason: "no previous version is kept"}, nil
 	}
 	prev := prevs[0]
-	if _, _, err := s.readLocal(prev); err != nil {
+	_, manifest, err := s.readLocal(prev)
+	if err != nil {
 		s.log.Warn("modstore: rollback refused", "module", module, "version", prev.Version, "err", err)
 		s.count(ctx, module, ResultRefused)
 		return Outcome{Module: module, From: cur.Version, To: prev.Version, Result: ResultRefused,
 			Reason: "the previous version's files are missing or do not match their sums"}, nil
+	}
+	// The other modules changed since the previous version ran: its triggers
+	// may close a loop now (R-RUN-15).
+	if m, perr := runner.ParseManifest(manifest); perr == nil {
+		why, loop, err := s.checkLoop(ctx, module, m)
+		if err != nil {
+			return Outcome{}, err
+		}
+		if why != "" {
+			s.count(ctx, module, ResultRefused)
+			return Outcome{Module: module, From: cur.Version, To: prev.Version, Result: ResultRefused, Reason: why + ": " + loop}, nil
+		}
 	}
 	var retired []string
 	err = sqlitedb.Immediate(ctx, s.db, func(c *sql.Conn) error {

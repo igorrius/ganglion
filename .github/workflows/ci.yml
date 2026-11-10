@@ -108,7 +108,7 @@ jobs:
 
   # The reflex template (R-RUN-15..17): the agent copies it to make reflex
   # modules. Its rules run here on a fake host; the node's builder builds it
-  # in the test job (modhost, GANGLION_NET_TESTS).
+  # in the test job (make test-net runs TestTheReflexTemplate in modhost).
   reflex-template:
     runs-on: ubuntu-latest
     steps:

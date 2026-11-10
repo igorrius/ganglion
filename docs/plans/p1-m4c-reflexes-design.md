@@ -229,7 +229,9 @@ the session and stop the loop. The fix (owner approved the principle):
   the module's own package, only crates.io crates (name, version and
   checksum) that an example's `Cargo.lock` lists too, since a dependency's
   build script or macro can write any text into the build's output (owner,
-  2026-11-10).
+  2026-11-10). How the record and this rule were built is
+  [ADR-0068](../adr/0068-vouch-for-module-source-per-file-and-vetted-crates.md):
+  a digest per file, not per folder.
 
 ### What the agent sees
 

@@ -41,7 +41,7 @@ One listened cell, `producer.value`:
 `react` is pure: it takes the input, the readings, the settings, the state and
 the time, and returns the messages. The new state is stored only when every
 message went out: when the owner's daily limit refuses one, the previous state
-stays and the same rule fires again on a later run. The text of a message is made from a template and
+stays and the same rule fires again on a later run; the earlier messages of that run may then be sent again. The text of a message is made from a template and
 numbers in code, never from text that came from outside. `init` and `health`
 answer `{"ok":true}` and send nothing.
 

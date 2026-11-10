@@ -73,6 +73,7 @@ considered, how they compare, the decision and its consequences. See
 | [0065](0065-cell-triggers-through-the-inbox.md) | Start a module when cells it listens to change, with the event carried by the node's inbox | Accepted | 2026-11-10 |
 | [0066](0066-notify-capability.md) | Let a module write to the owner's private chat through a `notify` capability with a daily limit | Accepted | 2026-11-10 |
 | [0067](0067-agent-writes-module-source.md) | Let the agent write a module's source in the workspace without a press, from a clean session only (moves a part of 0061 from P3) | Accepted | 2026-11-10 |
+| [0068](0068-vouch-for-module-source-per-file-and-vetted-crates.md) | Vouch for module source per file and only with the examples' crates (refines 0067) | Accepted | 2026-11-10 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

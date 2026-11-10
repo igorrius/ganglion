@@ -922,3 +922,41 @@ func TestModuleInstallWindowKeepsMarkdownFromNames(t *testing.T) {
 		t.Fatalf("Markdown marks outside a code span:\n%s", outside)
 	}
 }
+
+// The press is refused when only the reaction list, or only the daily limit,
+// differs from the window the owner was shown.
+func TestModuleInstallRefusesAPressWhenOnlyReactsOrTheLimitChanged(t *testing.T) {
+	for _, c := range []struct{ name, from, to string }{
+		{"reacts", `"Reacts":["boiler.temp"]`, `"Reacts":["boiler.tmp"]`},
+		{"limit", `"NotifyPerDay":5`, `"NotifyPerDay":6`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newModuleEnv(t)
+			e.source(t, "deye-reader")
+			art := artifact(reflexManifest("boiler.temp", 5), 1024, 1)
+			e.build(t, art)
+			call := installCall(art.SHA256)
+			question(t, e, call)
+			files, _ := filepath.Glob(filepath.Join(e.m.Builds, art.SHA256+".window-*.json"))
+			if len(files) != 1 {
+				t.Fatalf("window records %v", files)
+			}
+			b, err := os.ReadFile(files[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(b), c.from) {
+				t.Fatalf("record lacks %s: %s", c.from, b)
+			}
+			if err := os.WriteFile(files[0], []byte(strings.Replace(string(b), c.from, c.to, 1)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := e.tool(builtin.ModuleInstallTool).Run(context.Background(), pressed(call)); err == nil || !strings.Contains(err.Error(), "changed since the owner saw") {
+				t.Fatalf("the press went through: %v", err)
+			}
+			if vs, _ := e.store.List(context.Background()); len(vs) != 0 {
+				t.Fatalf("versions %+v", vs)
+			}
+		})
+	}
+}
