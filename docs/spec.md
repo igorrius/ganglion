@@ -690,8 +690,10 @@ escalate:                    # when to call the model
   manifest's `escalate` lists, and `module.crashloop` always, reach the
   agent as a turn in the owner's private chat, once per kind per active
   version until a successful run clears it (a new version, a rollback or
-  turning it on clear it too, and a restart does not repeat it); the model sees the kind and the node's facts, never
-  the module's text.
+  turning it on clear it too, and a restart does not repeat it); the model
+  sees the kind and the node's facts, never the module's text. Any reload
+  that starts the module, `/modules config` included, also clears its open
+  episodes.
 
 - **R-RUN-13.** What a module returns to the model (its tool's output,
   its cells' values) is outside content only where it is a string: numbers,

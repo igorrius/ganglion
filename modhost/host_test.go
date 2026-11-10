@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -383,6 +384,33 @@ func TestAnOpenEpisodeSurvivesARestart(t *testing.T) {
 	e.fail(t)
 	if n := len(e.inbox.taken()); n != 2 {
 		t.Fatalf("%d events after the recovery, want 2", n)
+	}
+}
+
+// A success and a failure settling at once never leave the cache and the
+// store disagreeing: afterwards one success always clears the episode, so
+// the next failure escalates again.
+func TestASuccessAndAFailureSettlingAtOnceAgree(t *testing.T) {
+	e := newEnv(t, active(t, "local/probe", probeManifest))
+	e.start(t)
+	ok, bad := e.tool("probe.status"), e.tool("probe.fail")
+	run := func(h tool.Handler) {
+		h.Run(context.Background(), tool.Call{Name: h.Spec().Name, Args: json.RawMessage(`{}`), Admin: true}) //nolint:errcheck // either outcome is fine
+	}
+	for range 40 {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); run(ok) }()
+		go func() { defer wg.Done(); run(bad) }()
+		wg.Wait()
+		e.now = e.now.Add(20 * time.Minute) // spread out: no crash loop
+	}
+	run(ok) // a success closes whatever is open, in the cache and the store
+	before := len(e.inbox.taken())
+	e.now = e.now.Add(time.Minute)
+	run(bad)
+	if n := len(e.inbox.taken()); n != before+1 {
+		t.Fatalf("%d events after the recovery, want %d: the cache and the store disagree", n, before+1)
 	}
 }
 

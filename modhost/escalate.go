@@ -39,7 +39,9 @@ func (h *Host) escalate(ctx context.Context, l *loaded, kind Kind, detail string
 	if !l.escalates(kind) {
 		return
 	}
-	if h.episodeOpen(l.name, kind, l.sha) {
+	h.episodeMu.Lock()
+	defer h.episodeMu.Unlock()
+	if h.episodes[l.name][kind] == l.sha {
 		h.in.escalated(ctx, l.name, kind, escalationHeld)
 		return
 	}
@@ -76,39 +78,35 @@ func (h *Host) escalate(ctx context.Context, l *loaded, kind Kind, detail string
 // next failure of any kind escalates again. A module known to have none
 // costs nothing.
 func (h *Host) recovered(ctx context.Context, module string) {
-	h.stateMu.Lock()
-	clean := h.clean[module]
-	h.stateMu.Unlock()
-	if !clean {
-		h.clearEpisodes(ctx, module)
+	h.episodeMu.Lock()
+	defer h.episodeMu.Unlock()
+	if !h.clean[module] {
+		h.clearLocked(ctx, module)
 	}
 }
 
 // clearEpisodes closes every open episode of module: it recovered, or a new
 // version, a rollback or an "on" gave it a fresh start.
 func (h *Host) clearEpisodes(ctx context.Context, module string) {
+	h.episodeMu.Lock()
+	defer h.episodeMu.Unlock()
+	h.clearLocked(ctx, module)
+}
+
+// clearLocked is clearEpisodes with episodeMu held: the store and the cache
+// change together, so a concurrent failure never sees one without the other.
+func (h *Host) clearLocked(ctx context.Context, module string) {
 	if err := h.d.Store.ClearEpisodes(ctx, module); err != nil {
 		h.d.Log.Error("modhost: escalation episodes cannot be closed", "module", module, "err", err)
 		return
 	}
-	h.stateMu.Lock()
-	defer h.stateMu.Unlock()
 	delete(h.episodes, module)
 	h.clean[module] = true
 }
 
-// episodeOpen reports whether the host knows an episode of kind open for
-// module's version sha.
-func (h *Host) episodeOpen(module string, kind Kind, sha string) bool {
-	h.stateMu.Lock()
-	defer h.stateMu.Unlock()
-	return h.episodes[module][kind] == sha
-}
-
 // noteEpisode remembers an open episode, so the store is not asked again.
+// It holds episodeMu.
 func (h *Host) noteEpisode(module string, kind Kind, sha string) {
-	h.stateMu.Lock()
-	defer h.stateMu.Unlock()
 	if h.episodes[module] == nil {
 		h.episodes[module] = map[Kind]string{}
 	}
@@ -117,11 +115,9 @@ func (h *Host) noteEpisode(module string, kind Kind, sha string) {
 }
 
 // forgetEpisode takes back an episode whose event was not put, so the next
-// failure tries again.
+// failure tries again. It holds episodeMu.
 func (h *Host) forgetEpisode(ctx context.Context, module string, kind Kind) {
-	h.stateMu.Lock()
 	delete(h.episodes[module], kind)
-	h.stateMu.Unlock()
 	if err := h.d.Store.CloseEpisode(ctx, module, string(kind)); err != nil {
 		h.d.Log.Error("modhost: an escalation episode cannot be taken back", "module", module, "kind", string(kind), "err", err)
 	}

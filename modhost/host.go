@@ -99,13 +99,15 @@ type Host struct {
 	running map[string]*loaded
 	tools   atomic.Pointer[[]tool.Handler] // the running modules' tools, for the registry
 
-	stateMu  sync.Mutex // guards what follows
-	stopped  map[string]stop
-	off      map[string]bool
-	fails    map[string][]time.Time
-	episodes map[string]map[Kind]string // module → kind → the sha of its open episode, a cache of the store's
-	clean    map[string]bool            // modules known to have no open episode
-	unread   time.Time                  // when Start could not read the store or the settings; zero when it could
+	stateMu sync.Mutex // guards what follows
+	stopped map[string]stop
+	off     map[string]bool
+	fails   map[string][]time.Time
+	unread  time.Time // when Start could not read the store or the settings; zero when it could
+
+	episodeMu sync.Mutex                 // held across the store's calls on episodes, so the cache and the store change together
+	episodes  map[string]map[Kind]string // module → kind → the sha of its open episode, a cache of the store's
+	clean     map[string]bool            // modules known to have no open episode
 }
 
 // New returns a host with no module running; Start loads them.
