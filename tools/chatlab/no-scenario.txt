@@ -17,8 +17,6 @@ agent/commands.go
 agent/config.go
 agent/limits.go
 agent/model.go
-agent/module_notify.go
-agent/module_trigger.go
 agent/modules.go
 agent/persona.go
 agent/restart.go
@@ -56,7 +54,6 @@ internal/text/**
 internal/transcript/**
 internal/urlnorm/**
 logfile/**
-modstore/chains.go
 modstore/card.go
 modstore/journal.go
 modstore/notify.go
@@ -96,7 +93,6 @@ tool/builtin/diag.go
 tool/builtin/message.go
 tool/builtin/module_read.go
 tool/builtin/module_status.go
-tool/builtin/module_write.go
 tool/builtin/persona.go
 tool/builtin/question.go
 tool/journal/**

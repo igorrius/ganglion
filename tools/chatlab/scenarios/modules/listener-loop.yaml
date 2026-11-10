@@ -1,0 +1,10 @@
+name: producer
+version: 1
+triggers:
+  - cell: [reflex-template.alert]
+capabilities:
+  notify: {per_day: 5}
+cells:
+  read: [reflex-template.alert]
+config:
+  op_cell: {type: string, default: '{"op":"notify","value":"never"}'}

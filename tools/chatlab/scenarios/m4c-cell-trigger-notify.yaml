@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m4c-cell-trigger-notify
+why: >-
+  M4c check 1 (R-RUN-15, R-RUN-16): a producer's cron run that writes a cell starts its listener, and the
+  listener's notify reaches the owner with the node's note in history; no model turn is spent on any of it.
+covers:
+  - modhost/**
+  - config/modhost.go
+  - agent/module_event.go
+  - agent/module_notify.go
+  - agent/module_trigger.go
+  - schedule/**
+repeat: 1
+model: scripted
+modules:
+  - {name: producer, manifest: modules/producer.yaml}
+  - {name: listener, manifest: modules/listener.yaml}
+script:
+  - {say: "No model turn should happen."}
+steps:
+  - advance: {scheduler: 31m}
+  - facts:
+      replies: 1
+      reply: {contains: "the reading changed"}
+      history: {contains: "[module] listener notified you at"}

@@ -695,6 +695,9 @@ git commit -m "examples: the reflex template; skills: module-writing"
 | 6 | An event survives a restart; a repeated run sends nothing twice | `modhost` and `agent` tests of tasks 3 and 4 |
 | 7 | Live: the owner's one message → the agent writes `deye-alerts`, the window, the press, alerts at :00/:30 with no model turn; cards show the chain | the owner, on the test bot |
 
+- [x] **Automated part (checks 1-6):** the five scenarios and the probe manifests written and passing
+  (`make lab`, scripted, no tokens; `make test-net` for check 5); `make memory`: agent with tools 48.7 MB
+  after 1,000 turns (M4b closing 48.6-49.1), binary 48.1 MB (47.8 MB).
 - [ ] **Steps:** write the scenarios; `make lab` for them; `make test-net` for check 5; `make
   memory` (idle within M4b's numbers; a growth needs a reason); the live check with the owner
   (the owner's message is the design's section 8 text); fixes from the live check as task 8b;

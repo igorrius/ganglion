@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m4c-write-build-template
+why: >-
+  M4c check 5 (R-RUN-9, R-RUN-15..17): the agent imports the reflex template, writes a file into the copy from a
+  clean session, builds it (the node's own tools left the folder, so the answer does not taint), and the install
+  window shows what the module reacts to and that it writes to the owner.
+covers:
+  - tool/builtin/module.go
+  - tool/builtin/module_build.go
+  - tool/builtin/module_import.go
+  - tool/builtin/module_install.go
+  - tool/builtin/module_window.go
+  - tool/builtin/module_write.go
+  - tool/builtin/provenance.go
+  - config/builder.go
+  - config/modhost.go
+  - builder/**
+  - internal/rustenv/**
+  - modstore/install.go
+  - modstore/local.go
+  - modstore/chains.go
+  - modhost/**
+  - examples/modules/reflex-template/**
+repeat: 1
+model: scripted
+modules:
+  - {name: producer, manifest: modules/producer.yaml}
+script:
+  - {tool: module.import, args: '{"from":"reflex-template","name":"reflex-template"}'}
+  - {say: "The copy waits for your press."}
+  - {tool: module.write, args: '{"name":"reflex-template","path":"NOTES.md","content":"The owner wants a line when the value falls below 30.\n"}'}
+  - {tool: module.build, args: '{"name":"reflex-template","note":"first build"}'}
+  - {tool: module.install, args: '{"build":"$BUILD","note":"first install"}'}
+  - {say: "The install waits for your press."}
+  - {say: "reflex-template is installed."}
+steps:
+  - say: "Make me a reflex from the template"
+  - facts:
+      questions: 1
+      question: {contains: "reflex-template"}
+  - press: Approve
+  - facts:
+      questions: 1
+      question: {contains: "Reacts to"}
+      journal:
+        - {tool: module.write, decision: allowed, count: 1}
+        - {tool: module.build, decision: allowed, count: 1}
+        - {tool: module.install, decision: approved, count: 0}
+      tainted: false
+  - facts:
+      question: {contains: "Writes to you"}
+  - press: Approve
+  - facts:
+      questions: 0
+      journal:
+        - {tool: module.install, decision: approved, count: 1}
+      absent:
+        - workspace/modules/reflex-template/target
