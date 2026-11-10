@@ -13,7 +13,7 @@ type NotifyCode int32
 const (
 	NotifySent    NotifyCode = 0  // the text was handed on to the owner
 	NotifyDenied  NotifyCode = -1 // the manifest grants no notify
-	NotifyLimit   NotifyCode = -2 // today's limit is used up
+	NotifyLimit   NotifyCode = -2 // over today's limit, or the node could not take the message now; nothing was sent
 	NotifyNotHere NotifyCode = -3 // init and health runs send nothing
 )
 

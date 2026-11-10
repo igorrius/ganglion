@@ -247,7 +247,10 @@ writes the node's note into the history and the message into the outbox,
 which the queue stores together. The model never sees the text (R-RUN-13);
 the message carries a tainted origin, so a reply that quotes it brings it
 in as outside content. `init` and `health` carry no run: notify there
-answers "not here" and sends nothing.
+answers "not here" and sends nothing. When the node cannot count or put the
+message (its store or inbox fails), notify answers "limit" too: nothing was
+sent. The note does not move the session's last activity, so a module
+writing all day never keeps a session (or its taint) alive.
 
 ```mermaid
 sequenceDiagram

@@ -138,8 +138,13 @@ func (a *Agent) speaker(ctx context.Context, t *turn) texts.Speaker {
 
 // tellMachineTexts adds to the turn's last plain message, once per person per language, that the
 // fixed texts were translated by a machine (R-LANG-6). It goes with a message rather than as its own,
-// and only a message to read uses it up. A failure leaves the person untold this turn.
+// and only a message to read uses it up. A module's text is the module's words, not the node's
+// fixed texts: it never carries the notice (a node line about a module does). A failure leaves the
+// person untold this turn.
 func (a *Agent) tellMachineTexts(ctx context.Context, t *turn) {
+	if t.event.Kind == event.KindModuleNotify && t.notify.Node == event.NotifyText {
+		return
+	}
 	l := a.language(ctx, t)
 	if t.msg.From == "" || a.d.Texts.Source(l, texts.ButtonApprove) != texts.SourceMachine {
 		return

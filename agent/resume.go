@@ -182,6 +182,18 @@ func (t *turn) note(text string) {
 	t.state.Last = t.now
 }
 
+// noteQuiet adds a note as note does but leaves Last as it was, unless the
+// note opens the session: a module's note is no exchange with the person,
+// so it must not keep the session, and its taint, alive past SessionIdle
+// (R-RUN-16).
+func (t *turn) noteQuiet(text string) {
+	last, opens := t.state.Last, t.state.Session == ""
+	t.note(text)
+	if !opens {
+		t.state.Last = last
+	}
+}
+
 // confirmed acknowledges the press, runs an approved call or declines a
 // denied one, stores the outcome, folds the question and resumes the
 // conversation with it. An approved plan's question is not folded: its run

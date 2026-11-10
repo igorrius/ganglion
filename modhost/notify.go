@@ -108,7 +108,7 @@ func (h *Host) limitLine(ctx context.Context, l *loaded, now, day time.Time) {
 		h.d.Log.Error("modhost: the line of a module's daily limit was not put", "module", l.name, "err", err)
 		return
 	}
-	if err := h.d.Store.MarkLimited(ctx, l.name, day); err != nil {
+	if err := h.d.Store.MarkLimited(context.WithoutCancel(ctx), l.name, day); err != nil {
 		h.d.Log.Warn("modhost: a module's daily limit is not marked; its key keeps the line to one", "module", l.name, "err", err)
 	}
 }

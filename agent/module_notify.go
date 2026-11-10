@@ -30,7 +30,7 @@ func (a *Agent) moduleNotifyEvent(ctx context.Context, t *turn) error {
 		a.log.Warn("agent: a module message for a principal who is not an admin; dropped", "module", p.Module, "principal", p.Principal)
 		return nil
 	}
-	if p.Node == event.NotifyText { // the note joins the session as it is now
+	if p.Node == event.NotifyText { // an idle session rolls over first, as for a reminder's note
 		if _, err := a.idle(ctx, t); err != nil {
 			return err
 		}
@@ -51,11 +51,12 @@ func knownNode(n event.NotifyNode) bool {
 
 // moduleNotify writes the node note into history and returns the message. The module's text
 // goes only into the outgoing message, escaped and prefixed; the model never sees it (R-RUN-13).
-// A node line writes no note. The message carries a tainted origin (ruling 2 of M4c): a reply
+// A node line writes no note. The note does not move the session's Last (noteQuiet), so a
+// module writing all day never keeps a session alive. The message carries a tainted origin (ruling 2 of M4c): a reply
 // quoting it brings the module's text in as outside content; stamp keeps that origin.
 func (a *Agent) moduleNotify(ctx context.Context, t *turn, p event.ModuleNotify) {
 	if p.Node == event.NotifyText {
-		t.note(fmt.Sprintf("%s%s notified you at %s", moduleNotePrefix, moduleName(p.Module), moduleClock(p.At, a.cfg.Location)))
+		t.noteQuiet(fmt.Sprintf("%s%s notified you at %s", moduleNotePrefix, moduleName(p.Module), moduleClock(p.At, a.cfg.Location)))
 	}
 	t.out = append(t.out, event.Outgoing{
 		IdemKey: t.event.IdemKey + ":out", Transport: p.Transport, Conv: t.event.Conv,

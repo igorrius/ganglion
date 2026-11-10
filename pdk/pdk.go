@@ -37,9 +37,10 @@ type Host interface {
 	// the cell last changed.
 	CellGet(id string) (value json.RawMessage, at time.Time, ok bool)
 	// Notify sends text to the module's owner. It fails with ErrNotifyDenied
-	// when the manifest grants no notify, ErrNotifyLimit when today's limit
-	// is used up and ErrNotifyNotHere in a run that sends nothing (init,
-	// health). The host cuts the text at 1000 characters.
+	// when the manifest grants no notify, ErrNotifyLimit when the message is
+	// over today's limit or the node could not take it now (nothing was
+	// sent either way), and ErrNotifyNotHere in a run that sends nothing
+	// (init, health). The host cuts the text at 1000 characters.
 	Notify(text string) error
 	// Now returns the current time.
 	Now() time.Time
@@ -49,7 +50,9 @@ type Host interface {
 
 // Errors of Host.Notify.
 var (
-	ErrNotifyDenied  = errors.New("notify is not granted")
+	ErrNotifyDenied = errors.New("notify is not granted")
+	// ErrNotifyLimit is over today's limit, or the node could not take the
+	// message now; nothing was sent.
 	ErrNotifyLimit   = errors.New("today's notify limit is used up")
 	ErrNotifyNotHere = errors.New("notify does nothing in this run")
 )

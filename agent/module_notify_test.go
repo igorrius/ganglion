@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/turns"
 )
 
@@ -132,5 +134,54 @@ func TestGiveUpOnANodeEventApologisesToNobody(t *testing.T) {
 		if len(out) != 1 || !strings.HasPrefix(out[0].IdemKey, "alert:give-up:"+ev.ID) {
 			t.Errorf("%s: give-up %+v", name, out)
 		}
+	}
+}
+
+// A module's note does not keep the session alive: a session whose last
+// exchange with the person is older than SessionIdle rolls over on a note,
+// with its taint, and a note in an open session leaves Last where it was.
+func TestModuleNotesDoNotKeepASessionAlive(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	old := State{V: StateVersion, Session: "s1", Started: t0, Last: t0, Tainted: true,
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}, {Role: provider.RoleAssistant, Content: "hello"}}}
+	e.states.m["telegram:42"], _ = json.Marshal(old)
+	for i := 1; i <= 12; i++ { // a note every 30 minutes up to 6 hours after the last exchange
+		e.now = t0.Add(time.Duration(i) * 30 * time.Minute)
+		e.turn(t, notifyEvent(deyeAlert()))
+		st := e.state(t)
+		if st.Session != "s1" || !st.Last.Equal(t0) || !st.Tainted || len(st.Messages) != 2+i {
+			t.Fatalf("note %d: session %q, last %v, tainted %v, %d messages", i, st.Session, st.Last, st.Tainted, len(st.Messages))
+		}
+	}
+	e.now = t0.Add(6*time.Hour + 30*time.Minute)
+	ev := notifyEvent(deyeAlert())
+	e.turn(t, ev)
+	st := e.state(t)
+	if st.Session != ev.ID || st.Tainted || !st.Last.Equal(e.now) || len(st.Messages) != 1 ||
+		!strings.HasPrefix(st.Messages[0].Content, "[module] deye-alerts notified you at") {
+		t.Fatalf("the idle session did not roll over: %+v", st)
+	}
+	e.now = e.now.Add(30 * time.Minute)
+	e.turn(t, notifyEvent(deyeAlert()))
+	if st2 := e.state(t); !st2.Last.Equal(st.Last) || len(st2.Messages) != 2 {
+		t.Fatalf("a note moved Last: %v, want %v", st2.Last, st.Last)
+	}
+}
+
+// R-LANG-6: the machine-translation notice never joins a module's text,
+// which is the module's words, and is not used up by it; a node line, the
+// node's fixed text, carries it.
+func TestModuleTextCarriesNoMachineNotice(t *testing.T) {
+	e := machineEnv(t, map[texts.Key]string{texts.ButtonApprove: "Zatwierdź", texts.NoticeMachine: noticePL})
+	p := deyeAlert()
+	p.Principal = "pl"
+	out := e.turn(t, notifyEvent(p))
+	if len(out) != 1 || strings.Contains(out[0].Text, noticePL) {
+		t.Fatalf("module text %+v", out)
+	}
+	p.Text, p.Node = "", event.NotifyLimitLine
+	out = e.turn(t, notifyEvent(p))
+	if len(out) != 1 || !strings.HasSuffix(out[0].Text, "\n\n"+noticePL) {
+		t.Fatalf("node line %+v", out)
 	}
 }
