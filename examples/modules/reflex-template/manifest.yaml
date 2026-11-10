@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../../schemas/module-manifest.schema.json
+name: reflex-template
+version: 1
+abi: 1
+triggers:
+  - cell: [producer.value]
+  - cron: "15 * * * *"        # the staleness check
+capabilities:
+  state: true
+  notify: {per_day: 24}
+cells:
+  read: [producer.value]
+config:
+  threshold:   {type: number, default: "30"}
+  stale_after: {type: number, default: "60"}
+limits:
+  memory: 16MiB
+  timeout: 5s
+escalate:
+  - on: module.exception
