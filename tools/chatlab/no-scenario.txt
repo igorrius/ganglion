@@ -54,6 +54,7 @@ internal/text/**
 internal/transcript/**
 internal/urlnorm/**
 logfile/**
+modstore/chains.go
 modstore/card.go
 modstore/journal.go
 modstore/store.go

@@ -3,6 +3,7 @@ package modstore_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -520,5 +521,77 @@ func TestRemovedLocalListsModulesWithNothingInService(t *testing.T) {
 	}
 	if got, err := s.RemovedLocal(ctx); err != nil || len(got) != 1 || got[0] != "local/x" {
 		t.Fatalf("removed %v, %v", got, err)
+	}
+}
+
+const reactManifest = `name: %s
+version: 1
+abi: 1
+triggers:
+  - cell: [%s]
+capabilities:
+  notify: {per_day: %d}
+cells:
+  read: [%s]
+`
+
+func react(name, listens string, perDay int) string {
+	return fmt.Sprintf(reactManifest, name, listens, perDay, listens)
+}
+
+func TestPlanShowsReactsAndNotify(t *testing.T) {
+	s := newEnv(t).open(t)
+	p := plan(t, s, build("local/b", variant("a"), react("b", "a.x", 5)), noOwners)
+	if p.Refusal != "" || !slices.Equal(p.Rights.Reacts, []string{"a.x"}) || p.Rights.NotifyPerDay != 5 {
+		t.Fatalf("plan %+v", p)
+	}
+}
+
+func TestWideningListsNewReactsAndAHigherLimit(t *testing.T) {
+	s := newEnv(t).open(t)
+	install(t, s, build("local/b", variant("a"), react("b", "a.x", 5)))
+
+	more := strings.Replace(react("b", "a.x, a.y", 10), "version: 1", "version: 2", 1)
+	p := plan(t, s, build("local/b", variant("b"), more), noOwners)
+	if !slices.Equal(p.Widening.Reacts, []string{"a.y"}) || p.Widening.NotifyPerDay != 10 {
+		t.Fatalf("widening %+v", p.Widening)
+	}
+
+	install(t, s, build("local/b", variant("b"), more))
+	less := strings.Replace(react("b", "a.x", 2), "version: 1", "version: 3", 1)
+	p = plan(t, s, build("local/b", variant("c"), less), noOwners)
+	if len(p.Widening.Reacts) != 0 || p.Widening.NotifyPerDay != 0 {
+		t.Fatalf("lower rights are not a widening: %+v", p.Widening)
+	}
+}
+
+func loopManifest(name, listens string) string {
+	return "name: " + name + "\nversion: 1\ntriggers:\n  - cell: [" + listens + "]\ncells:\n  read: [" + listens + "]\n"
+}
+
+func TestPlanAndInstallRefuseATriggerLoop(t *testing.T) {
+	s := newEnv(t).open(t)
+	install(t, s, build("local/b", variant("a"), loopManifest("b", "a.x")))
+
+	a := build("local/a", variant("b"), loopManifest("a", "b.y"))
+	p := plan(t, s, a, noOwners)
+	if p.Refusal != "the triggers would form a loop" || p.RefusalDetail != "a → b → a" {
+		t.Fatalf("plan refusal %q detail %q", p.Refusal, p.RefusalDetail)
+	}
+	o, err := s.InstallLocal(context.Background(), a, modstore.Digest(a.Wasm, a.Manifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Result != modstore.ResultRefused || o.Reason != "the triggers would form a loop" {
+		t.Fatalf("install %+v", o)
+	}
+}
+
+func TestAModuleReplacingItselfDoesNotLoop(t *testing.T) {
+	s := newEnv(t).open(t)
+	install(t, s, build("local/b", variant("a"), loopManifest("b", "a.x")))
+	next := strings.Replace(loopManifest("b", "a.x"), "version: 1", "version: 2", 1)
+	if p := plan(t, s, build("local/b", variant("b"), next), noOwners); p.Refusal != "" {
+		t.Fatalf("refused: %s", p.Refusal)
 	}
 }

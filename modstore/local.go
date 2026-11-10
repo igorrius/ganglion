@@ -65,8 +65,10 @@ type Build struct {
 // Rights is what the install window shows: everything the module may do.
 type Rights struct {
 	Hosts, Secrets, CellsCreated, CellsTaken, CellsRead, Crons, Tools []string
+	Reacts                                                            []string // cells its triggers listen to
 	Memory                                                            uint64
 	Timeout                                                           time.Duration
+	NotifyPerDay                                                      int // messages to the owner a day; 0 = not granted
 }
 
 // Plan is a build checked but not installed.
@@ -178,8 +180,12 @@ func (s *Store) PlanLocal(ctx context.Context, b Build, secrets Secrets, config 
 		return p, nil
 	}
 	p.Version = m.Version
+	var err error
 	if p.Refusal, p.RefusalDetail = missing(m, secrets, config); p.Refusal != "" {
 		return p, nil
+	}
+	if p.Refusal, p.RefusalDetail, err = s.checkLoop(ctx, b.Module, m); err != nil || p.Refusal != "" {
+		return p, err
 	}
 	rights, why, err := cellRights(ctx, b.Module, m, owners)
 	if err != nil || why != "" {
@@ -268,7 +274,10 @@ func cellIDs(module string, m runner.Manifest) []string {
 func baseRights(m runner.Manifest) Rights {
 	r := Rights{
 		Hosts: sorted(m.Capabilities.HTTPFetch), Secrets: sorted(m.Capabilities.SecretGet),
-		CellsRead: sorted(m.Cells.Read), Memory: m.Limits.Memory, Timeout: m.Limits.Timeout,
+		CellsRead: sorted(m.Cells.Read), Reacts: m.Listens(), Memory: m.Limits.Memory, Timeout: m.Limits.Timeout,
+	}
+	if n := m.Capabilities.Notify; n != nil {
+		r.NotifyPerDay = n.PerDay
 	}
 	for _, t := range m.Triggers {
 		if t.Cron != "" {
@@ -322,11 +331,13 @@ func widening(next Rights, old activeRightsSet) Rights {
 		Hosts: minus(next.Hosts, old.Hosts), Secrets: minus(next.Secrets, old.Secrets),
 		CellsCreated: minus(next.CellsCreated, old.cells), CellsTaken: minus(next.CellsTaken, old.cells),
 		CellsRead: minus(next.CellsRead, old.CellsRead), Crons: minus(next.Crons, old.Crons), Tools: minus(next.Tools, old.Tools),
+		Reacts: minus(next.Reacts, old.Reacts),
 		Memory: wider(next.Memory, old.Memory), Timeout: wider(next.Timeout, old.Timeout),
+		NotifyPerDay: wider(next.NotifyPerDay, old.NotifyPerDay),
 	}
 }
 
-func wider[T uint64 | time.Duration](next, old T) T {
+func wider[T uint64 | time.Duration | int](next, old T) T {
 	if next > old {
 		return next
 	}
@@ -374,6 +385,9 @@ func (s *Store) InstallLocal(ctx context.Context, b Build, sha string) (Outcome,
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if why, _, err := s.checkLoop(ctx, b.Module, m); err != nil || why != "" {
+		return Outcome{Module: b.Module, Result: ResultRefused, Reason: why}, err
+	}
 	from := ""
 	if cur, err := s.versions(ctx, b.Module, StateActive); err != nil {
 		return Outcome{}, fmt.Errorf("modstore: %w", err)

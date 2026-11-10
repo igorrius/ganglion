@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,12 +37,24 @@ type Manifest struct {
 	Escalate     []Escalation         `yaml:"escalate"`
 }
 
-// Trigger starts a module: a cron schedule or a tool call by the model.
+// Trigger starts a module: a cron schedule, a tool call by the model or a
+// change of a cell it listens to.
 type Trigger struct {
-	Cron   string `yaml:"cron,omitempty"`
-	Tool   string `yaml:"tool,omitempty"`
-	About  string `yaml:"about,omitempty"`  // the tool's description for the agent
-	Output *Shape `yaml:"output,omitempty"` // required for a tool of a local module
+	Cron   string   `yaml:"cron,omitempty"`
+	Tool   string   `yaml:"tool,omitempty"`
+	Cell   []string `yaml:"cell,omitempty"`   // full cell ids it listens to (R-RUN-15)
+	About  string   `yaml:"about,omitempty"`  // the tool's description for the agent
+	Output *Shape   `yaml:"output,omitempty"` // required for a tool of a local module
+}
+
+// Listens is the union of the manifest's cell triggers, sorted ("" none).
+func (m Manifest) Listens() []string {
+	var ids []string
+	for _, t := range m.Triggers {
+		ids = append(ids, t.Cell...)
+	}
+	slices.Sort(ids)
+	return slices.Compact(ids)
 }
 
 // MaxAbout caps a tool's description, which the manifest writes.
@@ -80,7 +93,16 @@ type Capabilities struct {
 	SecretGet []string `yaml:"secret.get"` // allowed secret names
 	EventEmit []string `yaml:"event.emit"` // allowed event kinds
 	State     bool     `yaml:"state"`
+	Notify    *Notify  `yaml:"notify,omitempty"` // may message the owner, at most PerDay a day
 }
+
+// Notify grants a module a daily budget of messages to the owner (R-RUN-16).
+type Notify struct {
+	PerDay int `yaml:"per_day"` // 1..MaxNotifyPerDay
+}
+
+// MaxNotifyPerDay caps what a manifest may ask for.
+const MaxNotifyPerDay = 100
 
 // Limits bound one call of a module.
 type Limits struct {
@@ -167,6 +189,9 @@ func (m Manifest) checkV2() error {
 			return fmt.Errorf("cells.read %q: not a full cell id like module.cell", id)
 		}
 	}
+	if n := m.Capabilities.Notify; n != nil && (n.PerDay < 1 || n.PerDay > MaxNotifyPerDay) {
+		return fmt.Errorf("notify.per_day must be 1..%d", MaxNotifyPerDay)
+	}
 	for name, k := range m.Config {
 		switch k.Type {
 		case "string", "number", "boolean":
@@ -181,10 +206,19 @@ func (m Manifest) checkV2() error {
 // install window would show one tool's about and the node run another's
 // handler) or a cron line given twice (the module would run twice a tick).
 func (m Manifest) checkTriggers() error {
-	tools, crons := map[string]bool{}, map[string]bool{}
+	tools, crons, cells := map[string]bool{}, map[string]bool{}, false
 	for i, t := range m.Triggers {
-		if (t.Cron == "") == (t.Tool == "") {
-			return fmt.Errorf("trigger %d must set exactly one of cron, tool", i)
+		if t.kinds() != 1 {
+			return fmt.Errorf("trigger %d must set exactly one of cron, tool, cell", i)
+		}
+		if len(t.Cell) > 0 {
+			if cells {
+				return fmt.Errorf("trigger %d: a module has one cell trigger; list every cell in it", i)
+			}
+			cells = true
+			if err := m.checkListens(i, t.Cell); err != nil {
+				return err
+			}
 		}
 		if t.Tool != "" && !toolNamePattern.MatchString(t.Tool) {
 			return fmt.Errorf("tool %q: a name is lower-case letters, digits and _", t.Tool)
@@ -197,6 +231,34 @@ func (m Manifest) checkTriggers() error {
 			return fmt.Errorf("trigger %d repeats the cron line of another", i)
 		}
 		tools[t.Tool], crons[cron] = true, true
+	}
+	return nil
+}
+
+// kinds counts how many of cron, tool and cell the trigger sets.
+func (t Trigger) kinds() int {
+	n := 0
+	for _, set := range []bool{t.Cron != "", t.Tool != "", len(t.Cell) > 0} {
+		if set {
+			n++
+		}
+	}
+	return n
+}
+
+// checkListens refuses a listened cell that the module may not read or that
+// it owns itself: a module reacting to its own cell would run itself.
+func (m Manifest) checkListens(i int, ids []string) error {
+	short := m.Name[strings.LastIndex(m.Name, "/")+1:] // local/x names cells x.…
+	for _, id := range ids {
+		switch {
+		case !cellIDPattern.MatchString(id):
+			return fmt.Errorf("trigger %d: cell %q is not a full cell id like module.cell", i, id)
+		case !slices.Contains(m.Cells.Read, id):
+			return fmt.Errorf("trigger %d: cell %q is not in cells.read", i, id)
+		case strings.HasPrefix(id, short+"."):
+			return fmt.Errorf("trigger %d: a module cannot listen to its own cell %q", i, id)
+		}
 	}
 	return nil
 }
