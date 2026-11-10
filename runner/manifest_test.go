@@ -116,6 +116,8 @@ func TestParseManifestRejectsV2(t *testing.T) {
 		"read id":     {"cells:\n  read: [soc]\n", "soc"},
 		"config type": {"config:\n  day: {type: date}\n", "day"},
 		"tool name":   {"triggers:\n  - tool: Status\n", "Status"},
+		"tool twice":  {"triggers:\n  - tool: status\n    about: one\n  - tool: status\n    about: other\n", "status is declared twice"},
+		"cron twice":  {"triggers:\n  - cron: \"*/30 * * * *\"\n  - cron: \"*/30  *  * * *\"\n", "repeats the cron line"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -95,6 +95,12 @@ func (s *Shape) fromObject(n *yaml.Node) error {
 	obj := Shape{Type: typeObject, Fields: map[string]Shape{}, Optional: map[string]bool{}}
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		name, optional := strings.CutSuffix(n.Content[i].Value, "?")
+		// A field name reaches the model as a key of an answer and in the
+		// node's words about a contract break, so it is plain or refused;
+		// the refusal names the line, not the name (R-RUN-14).
+		if !fieldNamePattern.MatchString(name) {
+			return fmt.Errorf("line %d: a field name is lower-case letters, digits and _, at most 32", n.Content[i].Line)
+		}
 		if _, dup := obj.Fields[name]; dup {
 			return fmt.Errorf("line %d: field %q is declared twice", n.Content[i].Line, name)
 		}

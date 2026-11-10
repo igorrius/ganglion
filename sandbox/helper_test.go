@@ -453,3 +453,37 @@ func TestHideNamesKeepsASplitFolderUnlisted(t *testing.T) {
 		t.Errorf("cat top/open/file with hidden names: exit %d, %q", code, out)
 	}
 }
+
+// TestTheImagesDataFolderKeepsTheSettingsAndTheLock: in the container image
+// the node runs in /data, beside its database and ganglion.yaml, so the
+// folder is split rather than denied. A command can neither rewrite the
+// settings (the admins and the providers' commands at the next restart),
+// replace them by rename, nor open the database's lock.
+func TestTheImagesDataFolderKeepsTheSettingsAndTheLock(t *testing.T) {
+	data, _ := secretDir(t)
+	settings, lock := filepath.Join(data, "ganglion.yaml"), filepath.Join(data, "ganglion.db.lock")
+	for _, f := range []string{settings, lock} {
+		if err := os.WriteFile(f, []byte("admin: owner\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	node := NodeFiles{DB: filepath.Join(data, "ganglion.db"), Settings: settings, Workspace: filepath.Join(data, "workspace")}
+	s := ready(t, Policy{Deny: func() []string { return DenyList("", data, node, nil, nil) }})
+	for _, script := range []string{
+		"echo 'admin: mallory' >> ganglion.yaml",
+		"echo 'admin: mallory' > /tmp/x.yaml; mv /tmp/x.yaml ganglion.yaml",
+		"rm -f ganglion.yaml",
+		"cat ganglion.yaml",
+		"echo x >> ganglion.db.lock",
+		"rm -f ganglion.db.lock",
+	} {
+		if out, code := output(t, s, data, "sh", "-c", script); code == 0 || strings.Contains(out, "owner") {
+			t.Errorf("%s: exit %d, %q", script, code, out)
+		}
+	}
+	for _, f := range []string{settings, lock} {
+		if b, err := os.ReadFile(f); err != nil || string(b) != "admin: owner\n" {
+			t.Fatalf("%s changed: %q, %v", f, b, err)
+		}
+	}
+}

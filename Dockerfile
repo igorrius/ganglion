@@ -45,6 +45,10 @@ ENV RUSTUP_AUTO_INSTALL=0 \
 # The image starts as root only for docker-entrypoint.sh, which hands /data to
 # ganglion and drops to uid 10001 before the node starts. Running the image
 # with --user 10001 skips the hand-over and needs a volume that user owns.
+# The node runs in /data so the workspace (agent.workspace, "workspace" by
+# default, relative to this folder) is on the volume. The sandbox then denies
+# the database, its journal files and lock, and ganglion.yaml one by one
+# rather than the whole folder (sandbox.DenyList).
 WORKDIR /data
 VOLUME /data
 ENTRYPOINT ["docker-entrypoint.sh", "ganglion", "run", "--db", "/data/ganglion.db"]

@@ -148,13 +148,8 @@ var (
 
 // checkV2 validates triggers, cells and config keys.
 func (m Manifest) checkV2() error {
-	for i, t := range m.Triggers {
-		if (t.Cron == "") == (t.Tool == "") {
-			return fmt.Errorf("trigger %d must set exactly one of cron, tool", i)
-		}
-		if t.Tool != "" && !toolNamePattern.MatchString(t.Tool) {
-			return fmt.Errorf("tool %q: a name is lower-case letters, digits and _", t.Tool)
-		}
+	if err := m.checkTriggers(); err != nil {
+		return err
 	}
 	for name, c := range m.Cells.Report {
 		if !cellNamePattern.MatchString(name) {
@@ -178,6 +173,30 @@ func (m Manifest) checkV2() error {
 		default:
 			return fmt.Errorf("config %q: type must be string, number or boolean", name)
 		}
+	}
+	return nil
+}
+
+// checkTriggers validates each trigger and refuses a tool named twice (the
+// install window would show one tool's about and the node run another's
+// handler) or a cron line given twice (the module would run twice a tick).
+func (m Manifest) checkTriggers() error {
+	tools, crons := map[string]bool{}, map[string]bool{}
+	for i, t := range m.Triggers {
+		if (t.Cron == "") == (t.Tool == "") {
+			return fmt.Errorf("trigger %d must set exactly one of cron, tool", i)
+		}
+		if t.Tool != "" && !toolNamePattern.MatchString(t.Tool) {
+			return fmt.Errorf("tool %q: a name is lower-case letters, digits and _", t.Tool)
+		}
+		if t.Tool != "" && tools[t.Tool] {
+			return fmt.Errorf("tool %s is declared twice", t.Tool)
+		}
+		cron := strings.Join(strings.Fields(t.Cron), " ")
+		if cron != "" && crons[cron] {
+			return fmt.Errorf("trigger %d repeats the cron line of another", i)
+		}
+		tools[t.Tool], crons[cron] = true, true
 	}
 	return nil
 }

@@ -79,7 +79,17 @@ The image installs no model provider. Add one at deploy time, with the owner:
 The file is `/data/ganglion.yaml`, beside the database (R-CFG-1). It must be a
 file inside the volume directory, not a single-file bind mount: settings are
 written by rename (and the install window by hard link), and both need a
-directory. Create it over `railway ssh` or ship a first copy in the volume:
+directory. Create it over `railway ssh` as the node's user, so the node can
+rewrite it (a file root creates is root's):
+
+```sh
+setpriv --reuid=10001 --regid=10001 --clear-groups sh -c 'cat > /data/ganglion.yaml'   # paste, then Ctrl-D
+```
+
+or ship a first copy in the volume (the entrypoint hands every file in
+`/data` to uid 10001 only when `/data` itself is not that user's, so `chown
+10001:10001 /data/ganglion.yaml` after copying it in as root). The first
+copy:
 
 ```yaml
 node:
@@ -103,15 +113,19 @@ check before relying on it:
 2. The node's log line `sandbox: ready` (or `sandbox: commands are off` with
    the reason), and the admin's `/status`, which shows the sandbox verdict.
 
-Checked locally (2026-11-09, host kernel 6.18, Docker's default seccomp
-profile, uid 10001): the node logs `sandbox: ready denied=60 hide_names=false`,
-and `go test ./builder -run 'Rust|Real'` and `go test ./sandbox -run Confined`
-pass in a container as that user with this image's Rust, so the default seccomp
-profile does not block Landlock or the build helper. What Railway's runtime
-allows cannot be known without deploying, so it is a deploy-time check: in the
-node's log after the first start, the line must read `sandbox: ready ...`; if it
-reads `sandbox: commands are off`, its `reason` names what is missing (kernel,
-root, or dumpable) and nothing can be built.
+Checked locally (2026-11-09; the start and the layout test again on 2026-11-10;
+host kernel 6.18, Docker's default seccomp profile, uid 10001): the node logs
+`sandbox: ready denied=62 hide_names=false` (the node runs in `/data`, so the
+sandbox denies `ganglion.yaml`, the database, its journal files and its lock
+there one by one), and `go test ./builder -run 'Rust|Real'`, `go test ./sandbox
+-run Confined` and the sandbox's test of this layout
+(`TestTheImagesDataFolderKeepsTheSettingsAndTheLock`) pass in a container as
+that user with this image's Rust, so the default seccomp profile does not block
+Landlock or the build helper. What Railway's runtime allows cannot be known
+without deploying, so it is a deploy-time check: in the node's log after the
+first start, the line must read `sandbox: ready ...`; if it reads `sandbox:
+commands are off`, its `reason` names what is missing (kernel, root, or
+dumpable) and nothing can be built.
 
 If the sandbox is off, the node still runs the echo bot, the built-in modules
 and installed modules; it only builds nothing.
@@ -120,15 +134,20 @@ and installed modules; it only builds nothing.
 
 Over `railway ssh`:
 
+Every command that touches `/data` runs as the node's user: one run as root
+would leave root's files there (the database's `-wal` and `-shm`, a log),
+which the node cannot open after its next start.
+
 ```sh
 setpriv --reuid=10001 --regid=10001 --clear-groups cargo --version   # as the ganglion user
 ls -ld /data /home/ganglion          # both writable by the user
 uname -r
-ganglion mcp --db /data/ganglion.db  # read-only diagnostics over stdio
+setpriv --reuid=10001 --regid=10001 --clear-groups ganglion mcp --db /data/ganglion.db  # read-only diagnostics over stdio
 ```
 
 `ganglion mcp` is how you read logs, turns and settings: point a local MCP
-client at `railway ssh -- ganglion mcp --db /data/ganglion.db` (see
+client at `railway ssh -- setpriv --reuid=10001 --regid=10001 --clear-groups
+ganglion mcp --db /data/ganglion.db` (see
 [diagnostics](README.md#diagnosing-the-node-from-outside)).
 
 Then, in the bot: `module.import` the Deye example from
