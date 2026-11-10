@@ -45,8 +45,7 @@ limits:
 
 // The reflex template, built once by the node's own builder, listens to a
 // producer's cell: a value below its threshold makes one module.notify
-// event, the same value again none, and a trigger run on init or health
-// sends nothing. The build fetches crates from crates.io, so it runs only
+// event and the same value again none. The build fetches crates from crates.io, so it runs only
 // with GANGLION_NET_TESTS=1 (make test-net, docs/conventions.md section 9).
 func TestTheReflexTemplateNotifiesOnALowValue(t *testing.T) {
 	if os.Getenv("GANGLION_NET_TESTS") == "" {

@@ -35,11 +35,13 @@ you.
 
 1. `module.import` the example `reflex-template` under the new name.
 2. `module.read` its `manifest.yaml` and `src/logic.rs` (and the README).
-3. `module.write` `manifest.yaml` and `src/logic.rs` only. Nothing else is writable in practice:
-   `src/lib.rs`, `src/host.rs` and `Cargo.lock` stay as the template has them. Write a Rust
-   test in `logic.rs` for every rule, and make `react` do the rules without host calls.
+3. `module.write` `manifest.yaml` and `src/logic.rs` only: the rules, the settings, the state and
+   their tests. `src/lib.rs`, `src/host.rs` and `Cargo.lock` stay as the template has them. Write
+   a Rust test in `logic.rs` for every rule, and keep `react` free of host calls.
 4. `module.build`. Read the diagnostics: they name your files and lines. Fix and build again.
-5. When the build is clean and the tests pass, `module.install`. The owner sees what the module
+   The node's build does not run the module's tests; the owner and CI do. Read your tests back
+   with `module.read` and keep the logic simple enough to check by reading.
+5. When the build is clean, `module.install`. The owner sees what the module
    reacts to, the rights it asks for and how many messages a day, and presses the button. Do not
    describe it as installed before then.
 

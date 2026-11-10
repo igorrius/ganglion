@@ -3,6 +3,8 @@ name: reflex-template
 version: 1
 abi: 1
 triggers:
+  # A cell trigger lists full ids, <module>.<cell>, and each must also be in cells.read.
+  # A module never listens to its own cells.
   - cell: [producer.value]
   - cron: "15 * * * *"        # the staleness check
 capabilities:

@@ -602,12 +602,15 @@ pub trait Host {
 pub struct Input { pub trigger: String, pub cells: Vec<String> }
 pub struct Reading { pub id: String, pub value: serde_json::Value, pub at_ms: i64 }
 /// react decides what to say about the readings; it keeps what it must remember in state.
-pub fn react(input: &Input, readings: &[Reading], state: &mut State, now_ms: i64) -> Vec<String>
+/// Settings (the config, parsed in logic.rs with defaults) are a separate argument.
+pub fn react(input: &Input, readings: &[Reading], settings: &Settings, state: &mut State, now_ms: i64) -> Vec<String>
 ```
 
 `lib.rs` reads the input, gets every listened cell, loads `State` (serde JSON under the key
-`state`), calls `react`, stores the state, sends each message with `notify`, and returns
-`{"ok":true}`; a `Limit` stops the remaining messages for this run. The template's own rule is a
+`state`), calls `react`, sends each message with `notify`, stores the state only when every
+message went out (owner's ruling, 2026-11-10: a refused message keeps the previous state, so the
+same rule fires again later; messages after a refusal are not attempted), and returns
+`{"ok":true}`. `lib.rs` names no rule or setting. The template's own rule is a
 neutral example: one listened cell `producer.value`, a message when it crosses a configured
 `threshold` downwards, once until it rises again, and "no data for <n> min" once from the hourly
 cron when the cell is older than `stale_after` minutes (default 60). Its tests cover each rule on

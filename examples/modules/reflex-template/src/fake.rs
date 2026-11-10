@@ -16,6 +16,8 @@ pub struct Fake {
     pub sent: RefCell<Vec<String>>,
     /// What `notify` answers; `Ok` sends.
     pub verdict: Cell<Result<(), Notify>>,
+    /// How many times `notify` was called.
+    pub attempts: Cell<usize>,
     pub now: Cell<i64>,
 }
 
@@ -26,21 +28,8 @@ pub fn fake() -> Fake {
         cells: RefCell::new(HashMap::new()),
         sent: RefCell::new(vec![]),
         verdict: Cell::new(Ok(())),
+        attempts: Cell::new(0),
         now: Cell::new(NOW),
-    }
-}
-
-impl Fake {
-    /// Sets the producer's cell, changed `age_min` minutes ago.
-    pub fn produce(&self, value: serde_json::Value, age_min: i64) {
-        let at = (self.now.get() - age_min * 60) * 1000;
-        self.cells
-            .borrow_mut()
-            .insert("producer.value".into(), (value, at));
-    }
-
-    pub fn set_config(&self, key: &str, value: &str) {
-        self.config.borrow_mut().insert(key.into(), value.into());
     }
 }
 
@@ -58,6 +47,7 @@ impl Host for Fake {
         self.cells.borrow().get(id).cloned()
     }
     fn notify(&self, text: &str) -> Result<(), Notify> {
+        self.attempts.set(self.attempts.get() + 1);
         let verdict = self.verdict.get();
         if verdict.is_ok() {
             self.sent.borrow_mut().push(text.into());

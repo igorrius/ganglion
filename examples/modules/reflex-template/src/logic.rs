@@ -40,53 +40,79 @@ pub struct Reading {
     pub at_ms: i64,
 }
 
-/// What the module remembers between runs (JSON under the key `state`) and
-/// the settings of this run (`lib.rs` fills them from the config).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// What the module remembers between runs (JSON under the key `state`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct State {
     /// The value is below the threshold and the owner was told.
     pub below: bool,
     /// The cell is stale and the owner was told.
     pub stale: bool,
-    #[serde(skip)]
+}
+
+/// The module's settings: the manifest's `config`, parsed here with their
+/// defaults.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Settings {
     pub threshold: f64,
     /// Minutes.
-    #[serde(skip)]
     pub stale_after: i64,
 }
 
-impl Default for State {
+impl Default for Settings {
     fn default() -> Self {
-        State {
-            below: false,
-            stale: false,
+        Settings {
             threshold: THRESHOLD_DEFAULT,
             stale_after: STALE_AFTER_DEFAULT,
         }
     }
 }
 
+impl Settings {
+    /// Reads the settings with `get`; one that is missing or not valid (a
+    /// threshold that is not a finite number, a `stale_after` that is not a
+    /// whole number of minutes, 0 or more) keeps its default.
+    pub fn from_config(get: &dyn Fn(&str) -> Option<String>) -> Settings {
+        let d = Settings::default();
+        Settings {
+            threshold: get("threshold")
+                .and_then(|s| s.trim().parse::<f64>().ok())
+                .filter(|v| v.is_finite())
+                .unwrap_or(d.threshold),
+            stale_after: get("stale_after")
+                .and_then(|s| s.trim().parse::<i64>().ok())
+                .filter(|v| *v >= 0)
+                .unwrap_or(d.stale_after),
+        }
+    }
+}
+
 /// Decides what to say about the readings; keeps what it must remember in
 /// `state`.
-pub fn react(input: &Input, readings: &[Reading], state: &mut State, now_ms: i64) -> Vec<String> {
+pub fn react(
+    input: &Input,
+    readings: &[Reading],
+    settings: &Settings,
+    state: &mut State,
+    now_ms: i64,
+) -> Vec<String> {
     let Some(r) = readings.iter().find(|r| r.id == LISTENED[0]) else {
         return Vec::new();
     };
     match input.trigger.as_str() {
-        "cell" if input.cells.contains(&r.id) => on_cell(r, state),
-        "cron" => on_cron(r, state, now_ms),
+        "cell" if input.cells.contains(&r.id) => on_cell(r, settings, state),
+        "cron" => on_cron(r, settings, state, now_ms),
         _ => Vec::new(),
     }
 }
 
 /// A new value: the cell is alive again; a crossing downwards is said once.
-fn on_cell(r: &Reading, state: &mut State) -> Vec<String> {
+fn on_cell(r: &Reading, settings: &Settings, state: &mut State) -> Vec<String> {
     let Some(v) = r.value.as_f64() else {
         return Vec::new();
     };
     state.stale = false;
-    if v >= state.threshold {
+    if v >= settings.threshold {
         state.below = false;
         return Vec::new();
     }
@@ -96,15 +122,15 @@ fn on_cell(r: &Reading, state: &mut State) -> Vec<String> {
     state.below = true;
     vec![format!(
         "{} fell below {}: it is {}",
-        r.id, state.threshold, v
+        r.id, settings.threshold, v
     )]
 }
 
 /// The hourly check: a cell silent for more than `stale_after` minutes is
 /// said once.
-fn on_cron(r: &Reading, state: &mut State, now_ms: i64) -> Vec<String> {
+fn on_cron(r: &Reading, settings: &Settings, state: &mut State, now_ms: i64) -> Vec<String> {
     let age_min = (now_ms - r.at_ms) / 60_000;
-    if age_min <= state.stale_after {
+    if age_min <= settings.stale_after {
         state.stale = false;
         return Vec::new();
     }
@@ -146,7 +172,13 @@ mod tests {
     }
 
     fn on_cell(value: Value, state: &mut State) -> Vec<String> {
-        react(&cell_input(), &reading(value, 0), state, NOW_MS)
+        react(
+            &cell_input(),
+            &reading(value, 0),
+            &Settings::default(),
+            state,
+            NOW_MS,
+        )
     }
 
     #[test]
@@ -179,12 +211,19 @@ mod tests {
 
     #[test]
     fn the_threshold_is_the_configured_one() {
-        let mut s = State {
+        let settings = Settings {
             threshold: 50.0,
-            ..State::default()
+            ..Settings::default()
         };
+        let mut s = State::default();
         assert_eq!(
-            on_cell(json!(40), &mut s),
+            react(
+                &cell_input(),
+                &reading(json!(40), 0),
+                &settings,
+                &mut s,
+                NOW_MS
+            ),
             vec!["producer.value fell below 50: it is 40".to_string()]
         );
     }
@@ -201,7 +240,7 @@ mod tests {
     #[test]
     fn a_cell_trigger_without_the_cell_says_nothing() {
         let mut s = State::default();
-        assert!(react(&cell_input(), &[], &mut s, NOW_MS).is_empty());
+        assert!(react(&cell_input(), &[], &Settings::default(), &mut s, NOW_MS).is_empty());
     }
 
     #[test]
@@ -209,10 +248,19 @@ mod tests {
         let mut s = State::default();
         let r = reading(json!(50), 61);
         assert_eq!(
-            react(&cron_input(), &r, &mut s, NOW_MS),
+            react(&cron_input(), &r, &Settings::default(), &mut s, NOW_MS),
             vec!["no data for 61 min".to_string()]
         );
-        assert!(react(&cron_input(), &r, &mut s, NOW_MS + 60 * MIN).is_empty());
+        assert!(
+            react(
+                &cron_input(),
+                &r,
+                &Settings::default(),
+                &mut s,
+                NOW_MS + 60 * MIN
+            )
+            .is_empty()
+        );
         assert!(s.stale);
     }
 
@@ -220,32 +268,62 @@ mod tests {
     fn a_cell_exactly_at_the_limit_is_not_stale() {
         let mut s = State::default();
         let r = reading(json!(50), 60);
-        assert!(react(&cron_input(), &r, &mut s, NOW_MS).is_empty());
+        assert!(react(&cron_input(), &r, &Settings::default(), &mut s, NOW_MS).is_empty());
     }
 
     #[test]
     fn staleness_is_said_again_after_the_cell_changed() {
         let mut s = State::default();
         assert_eq!(
-            react(&cron_input(), &reading(json!(50), 90), &mut s, NOW_MS).len(),
+            react(
+                &cron_input(),
+                &reading(json!(50), 90),
+                &Settings::default(),
+                &mut s,
+                NOW_MS
+            )
+            .len(),
             1
         );
-        assert!(react(&cron_input(), &reading(json!(50), 5), &mut s, NOW_MS).is_empty());
+        assert!(
+            react(
+                &cron_input(),
+                &reading(json!(50), 5),
+                &Settings::default(),
+                &mut s,
+                NOW_MS
+            )
+            .is_empty()
+        );
         assert!(!s.stale);
         assert_eq!(
-            react(&cron_input(), &reading(json!(50), 70), &mut s, NOW_MS).len(),
+            react(
+                &cron_input(),
+                &reading(json!(50), 70),
+                &Settings::default(),
+                &mut s,
+                NOW_MS
+            )
+            .len(),
             1
         );
     }
 
     #[test]
     fn stale_after_is_the_configured_one() {
-        let mut s = State {
+        let settings = Settings {
             stale_after: 10,
-            ..State::default()
+            ..Settings::default()
         };
+        let mut s = State::default();
         assert_eq!(
-            react(&cron_input(), &reading(json!(50), 11), &mut s, NOW_MS),
+            react(
+                &cron_input(),
+                &reading(json!(50), 11),
+                &settings,
+                &mut s,
+                NOW_MS
+            ),
             vec!["no data for 11 min".to_string()]
         );
     }
@@ -253,13 +331,22 @@ mod tests {
     #[test]
     fn the_cron_without_the_cell_says_nothing() {
         let mut s = State::default();
-        assert!(react(&cron_input(), &[], &mut s, NOW_MS).is_empty());
+        assert!(react(&cron_input(), &[], &Settings::default(), &mut s, NOW_MS).is_empty());
     }
 
     #[test]
     fn the_cron_does_not_judge_the_threshold() {
         let mut s = State::default();
-        assert!(react(&cron_input(), &reading(json!(1), 0), &mut s, NOW_MS).is_empty());
+        assert!(
+            react(
+                &cron_input(),
+                &reading(json!(1), 0),
+                &Settings::default(),
+                &mut s,
+                NOW_MS
+            )
+            .is_empty()
+        );
         assert!(!s.below);
     }
 
@@ -274,23 +361,50 @@ mod tests {
     }
 
     #[test]
-    fn the_state_keeps_the_episodes_and_not_the_settings() {
+    fn the_state_round_trips_through_json() {
         let s = State {
             below: true,
             stale: true,
-            threshold: 5.0,
-            stale_after: 3,
         };
         let back: State = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
-        assert_eq!(
-            back,
-            State {
-                below: true,
-                stale: true,
-                ..State::default()
-            }
-        );
+        assert_eq!(back, s);
         let empty: State = serde_json::from_str("{}").unwrap();
         assert_eq!(empty, State::default());
+    }
+
+    fn config(pairs: &[(&str, &str)]) -> Settings {
+        Settings::from_config(&|k| {
+            pairs
+                .iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| v.to_string())
+        })
+    }
+
+    #[test]
+    fn settings_come_from_the_config_with_defaults() {
+        assert_eq!(config(&[]), Settings::default());
+        assert_eq!(
+            config(&[("threshold", " 12.5 "), ("stale_after", "10")]),
+            Settings {
+                threshold: 12.5,
+                stale_after: 10
+            }
+        );
+    }
+
+    #[test]
+    fn a_setting_that_is_not_valid_keeps_its_default() {
+        for bad in ["low", "NaN", "inf", "-inf", ""] {
+            assert_eq!(config(&[("threshold", bad)]), Settings::default(), "{bad}");
+        }
+        for bad in ["-1", "1.5", "NaN", "soon", ""] {
+            assert_eq!(
+                config(&[("stale_after", bad)]),
+                Settings::default(),
+                "{bad}"
+            );
+        }
+        assert_eq!(config(&[("stale_after", "0")]).stale_after, 0);
     }
 }
