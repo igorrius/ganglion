@@ -88,6 +88,7 @@ func (m *Memory) Apply(ctx context.Context, ops []Op, src Source) (Applied, erro
 	if err != nil {
 		return Applied{}, err
 	}
+	src.Key = oneLine(src.Key)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	topics, err := m.Topics()
@@ -405,7 +406,7 @@ func (a *applying) message() string {
 	}
 	msg := fmt.Sprintf("memory: %s\n\nTurn: %s\nTainted: %t\n", strings.Join(what, "; "), a.src.Turn, a.src.Tainted)
 	if a.src.Key != "" {
-		msg += changeKeyLine + oneLine(a.src.Key) + "\n"
+		msg += changeKeyLine + a.src.Key + "\n"
 	}
 	return msg
 }
@@ -492,10 +493,10 @@ func (m *Memory) topic(slug string) (Topic, error) {
 	return decodeTopic(slug, data)
 }
 
-// NoticeChange returns the alerts about c: one to every admin when it was
+// Notice returns the alerts about c: one to every admin when it was
 // held back, none otherwise. The key holds the topic and a short hash of
 // the text, so the same held-back text (a rerun) alerts once.
-func (m *Memory) NoticeChange(ctx context.Context, c Change) ([]event.Outgoing, error) {
+func (m *Memory) Notice(ctx context.Context, c Change) ([]event.Outgoing, error) {
 	if !c.Held {
 		return nil, nil
 	}

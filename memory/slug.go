@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -70,36 +69,6 @@ func cut(slug string, n int) string {
 		slug = slug[:n]
 	}
 	return strings.TrimRight(slug, "-")
-}
-
-// allocate returns the slug for title among the entries: the title's
-// own slug, or with "-2", "-3"… when that one holds a fact with another
-// title. same are the entries (stored or quarantined) that already hold
-// this title.
-func allocate(title string, all []Entry) (slug string, same []Entry) {
-	base := Slug(title)
-	for n := 1; ; n++ {
-		slug = base
-		if n > 1 {
-			suffix := "-" + strconv.Itoa(n)
-			slug = cut(base, MaxSlugLen-len(suffix)) + suffix
-		}
-		taken := false
-		same = same[:0]
-		for _, e := range all {
-			if e.Slug != slug {
-				continue
-			}
-			if strings.EqualFold(e.Title, title) {
-				same = append(same, e)
-			} else {
-				taken = true
-			}
-		}
-		if !taken || len(same) > 0 {
-			return slug, same
-		}
-	}
 }
 
 // shortHash is 8 hex digits of the SHA-256 of s.

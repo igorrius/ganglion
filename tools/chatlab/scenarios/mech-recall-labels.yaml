@@ -14,7 +14,7 @@ pages:
 script:
   - {tool: web.fetch, args: '{"url":"http://solar-notes.example.net/tips"}'}
   - {say: Keep the battery above 20%.}
-  - {tool: memory.write, args: '{"title":"Boiler","body":"My boiler holds 80 litres."}'}
+  - {tool: memory.write, args: '{"topic":"Boiler","summary":"The water boiler","fact":"My boiler holds 80 litres."}'}
   - {say: It waits for your answer.}
   - {say: It expired.}
   - {tool: memory.recall, args: '{"query":"boiler"}'}

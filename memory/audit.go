@@ -39,23 +39,24 @@ func (r Report) String() string {
 	return b.String()
 }
 
-// Audit runs the clean-context check over every stored fact and every
-// persona file and reports what it flags (R-POL-7, the scheduled check).
-// It changes nothing: the owner decides. An error is the context's or
-// an unreadable directory.
+// Audit runs the clean-context check over every topic, read as one text
+// (ruling 8 of the M5 plan), and every persona file, and reports what it
+// flags (R-POL-7, the scheduled check). Facts counts the facts read. It
+// changes nothing: the owner decides. An error is the context's or an
+// unreadable directory.
 func (m *Memory) Audit(ctx context.Context) (Report, error) {
-	es, err := m.list(CheckOK)
+	ts, err := m.Topics()
 	if err != nil {
 		return Report{}, err
 	}
 	var r Report
-	for _, e := range es {
-		v, err := m.guard.CheckFact(ctx, e.Title+"\n\n"+e.Body)
+	for _, t := range ts {
+		v, err := m.guard.CheckFact(ctx, topicText(t))
 		if err != nil {
-			return Report{}, fmt.Errorf("memory: audit %s: %w", e.Slug, err)
+			return Report{}, fmt.Errorf("memory: audit %s: %w", t.Slug, err)
 		}
-		r.Facts++
-		r.flag(pathOf(e.Slug, CheckOK), v)
+		r.Facts += len(t.Facts)
+		r.flag(pathOf(t.Slug, CheckOK), v)
 	}
 	if err := m.auditPersona(ctx, &r); err != nil {
 		return Report{}, err
@@ -94,4 +95,18 @@ func (m *Memory) auditPersona(ctx context.Context, r *Report) error {
 		r.flag(rel, v)
 	}
 	return nil
+}
+
+// topicText is a topic as the audit reads it: the title, the summary, then
+// one fact per line.
+func topicText(t Topic) string {
+	var b strings.Builder
+	b.WriteString(t.Title + "\n")
+	if t.Summary != "" {
+		b.WriteString(t.Summary + "\n")
+	}
+	for _, f := range t.Facts {
+		b.WriteString("\n" + f.Text)
+	}
+	return b.String()
 }

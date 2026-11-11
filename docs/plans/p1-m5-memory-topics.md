@@ -175,7 +175,7 @@ func decodeTopic(slug string, data []byte) (Topic, error)
 func checkFactText(s string) (string, error)
 ```
 
-- [ ] **Step 1: Failing tests** (table tests, `package memory`):
+- [x] **Step 1: Failing tests** (table tests, `package memory`):
   - round trip: a topic with a dated fact, a tainted fact and a hand-written fact encodes and
     decodes to itself; the encoded file ends with one newline;
   - `decodeTopic`: a line `- [f2] text <!-- 2026-11-11 turn=01M tainted -->` gives id `f2`, the
@@ -187,10 +187,10 @@ func checkFactText(s string) (string, error)
   - `checkFactText`: empty, 300 and 301 runes (multi-byte), `<!--`, `-->`, line breaks folded to
     spaces; errors wrap `ErrInvalid`;
   - `Changed`: the newest date; zero with only hand-written facts.
-- [ ] **Step 2: Run, see them fail:** `go test ./memory -run 'Topic|FactText'`.
-- [ ] **Step 3: Implement.** Reuse `fence`, `oneLine`, `errFrontmatter`; dates are `2006-01-02`
+- [x] **Step 2: Run, see them fail:** `go test ./memory -run 'Topic|FactText'`.
+- [x] **Step 3: Implement.** Reuse `fence`, `oneLine`, `errFrontmatter`; dates are `2006-01-02`
   in UTC.
-- [ ] **Step 4: `make lint test`; commit, push.**
+- [x] **Step 4: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "memory: the topic file — facts as lines with ids and their source (R-MEM-6)"
@@ -308,7 +308,7 @@ More topics, read with memory.read:
 - Car — the family car and its service (car)
 ```
 
-- [ ] **Step 1: Failing tests** (`package memory_test`, on `newEnv` and `okGuard`):
+- [x] **Step 1: Failing tests** (`package memory_test`, on `newEnv` and `okGuard`):
   - `Apply` add to a new topic: the file, one commit whose message names the turn and the taint,
     `Change` with slug, id `f1`; a second add gets `f2`; an add by title (any case) finds the
     same topic; a new topic with no summary is `ErrInvalid`;
@@ -333,17 +333,23 @@ More topics, read with memory.read:
     second `Migrate` commits nothing; `memory/quarantine/` is untouched;
   - `gitrepo`: `RevertAll` of two commits is one commit; a conflict leaves no revert in
     progress; `Reverted` true and false.
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement.** `Apply` holds `m.mu` for the whole call and the guard runs inside
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement.** `Apply` holds `m.mu` for the whole call and the guard runs inside
   it, as `Write` does. Counters in `memory/telemetry.go`: `ganglion.memory.changes` by `kind`
   (add, replace, remove, drop) and `result` (stored, held), and `ganglion.memory.undos` by
   `result` (ok, conflict).
-- [ ] **Step 4: `make lint test`; code map rows for `memory` and `gitrepo`; commit, push.**
+- [x] **Step 4: `make lint test`; code map rows for `memory` and `gitrepo`; commit, push.**
 
 ```bash
 git commit -m "memory, gitrepo: operations on topics in one commit, the known-facts block within a budget, undo, the move from one fact per file (R-MEM-6, 7, 9)"
 ```
 
+
+As built: `Source` gained `Key`, the change's key (a tool call's key, a review's event id),
+written as a `Change-Key:` line so a rerun finds the commit it made; `gitrepo.Last` finds it, and
+`Reverted` is `Last("Undo-Of: …")`. A remove or drop whose target is gone counts as done when
+that commit exists. `Apply` flattens the key to one line. The alert for a held-back text was
+`NoticeChange` here and became `Notice` in Task 4.
 ---
 
 ### Task 3: `router`, `settings`, `config` — the `memory` purpose and section (R-RTR-6, R-CFG-8)
@@ -390,16 +396,16 @@ type MemorySettings struct {
 `RouterPurposes`: after the existing fallbacks, `memory` uses `check`'s list when absent.
 `check`: `memory.review.quiet` must be above 0 while the review is enabled.
 
-- [ ] **Step 1: Failing tests:** `memory` absent routes to `check`'s list, and to `chat`'s when
+- [x] **Step 1: Failing tests:** `memory` absent routes to `check`'s list, and to `chat`'s when
   `check` is absent too; an explicit `memory` list is used; an unknown key under `memory:` fails
   naming the path; `quiet: off` with `enabled: true` fails; the schema tests
   (`TestSchemaMatchesTheLoader` with `"/$defs/memory"` and `"/$defs/review"`,
   `TestSchemaDefaultsMatchTheLoader`, `TestExamplesLoad`); a skill with `model.purpose: memory`
   is refused.
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement**; the example file gains the section with a comment line over each
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement**; the example file gains the section with a comment line over each
   key and the fallback comment names `memory`.
-- [ ] **Step 4: `make lint test`; commit, push.**
+- [x] **Step 4: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "router, settings, config: the memory purpose (check's list when absent) and the memory section — prompt_budget, review.enabled, review.quiet (R-RTR-6, R-CFG-8)"
@@ -451,7 +457,7 @@ what they like, with no instruction to an AI?"; two ok examples are added: "Nega
 the Deye inverter means the battery is charging", "The boiler's sensor reports tenths of a
 degree". Nothing is removed from the not-ok list.
 
-- [ ] **Step 1: Failing tests:**
+- [x] **Step 1: Failing tests:**
   - specs: names, classes, policies and `AdminOnly` unchanged; schemas as in the table;
   - write then read: a new topic with a summary; a second write by slug; `replaces` swaps the
     text and keeps the id; a new topic without a summary is an error that says to give one; the
@@ -467,17 +473,22 @@ degree". Nothing is removed from the not-ok list.
     family member's holds none; `TestCleanWriteRunsWithoutAsking` and the tainted ones pass on
     the new arguments;
   - `config`: a workspace with old files starts as topics (one move commit).
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement.** `config.Remember` calls `m.Migrate` under the `Startup` context
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement.** `config.Remember` calls `m.Migrate` under the `Startup` context
   before the audit job, and sets `Facts: func() string { return m.Block(budget) }`. Remove the
   old API and fix every caller the compiler names.
-- [ ] **Step 4: `make lint test`; code map rows for `memory`, `guard`, `tool/builtin`; commit,
+- [x] **Step 4: `make lint test`; code map rows for `memory`, `guard`, `tool/builtin`; commit,
   push.**
 
 ```bash
 git commit -m "tool/builtin, guard, config: memory tools take a topic; every topic whole in the prompt; how the owner's devices work is a fact (R-MEM-6, 7; R-POL-7)"
 ```
 
+
+As built: `memory.write` refuses a fact over 300 characters before any question is asked; a
+new text key `ask.forget_topic` asks before a whole topic goes. The agent's facts come from
+`AgentSettings.Memory.PromptBudget` (`config.DefaultMemory()` for a bootstrap made in code).
+The three scripted lab scenarios that call `memory.write` take the new arguments.
 ---
 
 ### Task 5: `tool/builtin`, `agent`, `texts` — the directive, the note with Undo, `/memory` (R-MEM-8, 9)

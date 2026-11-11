@@ -53,8 +53,8 @@ func Memory() do.Provider[*memory.Memory] {
 }
 
 // Remembering is the memory as the agent and its tools take it: its
-// tools, its index and its nightly audit, or none of them when memory is
-// off.
+// tools, its known-facts block and its nightly audit, or none of them when
+// memory is off.
 type Remembering struct {
 	Tools []tool.Handler
 	Facts agent.FactsFunc
@@ -62,8 +62,9 @@ type Remembering struct {
 }
 
 // Remember provides the memory's tools, the persona tool of the first-run
-// introduction, the memory's index and the code of its scheduled audit,
-// and makes sure the audit's system job exists. A host without git runs without memory: the
+// introduction, the known-facts block within memory.prompt_budget and the
+// code of its scheduled audit, moves facts of the one-fact shape into
+// topics (ADR-0071), and makes sure the audit's system job exists. A host without git runs without memory: the
 // tools are not registered, the prompt has no facts, and a warning says
 // why (ADR-0033). Any other failure stops the start.
 func Remember() do.Provider[Remembering] {
@@ -76,10 +77,14 @@ func Remember() do.Provider[Remembering] {
 		if err != nil {
 			return Remembering{}, err
 		}
+		if err := m.Migrate(do.MustInvoke[Startup](i)); err != nil {
+			return Remembering{}, err
+		}
 		err = builtin.EnsureAudit(do.MustInvoke[Startup](i), do.MustInvoke[*schedule.Store](i), do.MustInvoke[alert.Admins](i),
 			time.Now(), do.MustInvoke[*slog.Logger](i))
 		tools := append(builtin.MemoryTools(m, telegram.PrivateConv), builtin.NewPersonaPropose(m, builtin.WithPersonaLogger(do.MustInvoke[*slog.Logger](i))))
 		jobs := map[string]agent.SystemJob{builtin.AuditJobID: builtin.NewAuditJob(m).Run}
-		return Remembering{Tools: tools, Facts: m.Index, Jobs: jobs}, err
+		budget := do.MustInvoke[Bootstrap](i).Agent.Memory.PromptBudget
+		return Remembering{Tools: tools, Facts: func() string { return m.Block(budget) }, Jobs: jobs}, err
 	}
 }

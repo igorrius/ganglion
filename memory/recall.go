@@ -47,16 +47,17 @@ const (
 // Hit is one result of a recall.
 type Hit struct {
 	Kind    HitKind
-	Slug    string // the fact's slug; "" for a session
+	Slug    string // the fact's topic; "" for a session
+	Fact    string // the fact's id; "" for a session
 	Source  string // "memory/<slug>" or "session <conv> <session>"
-	Title   string // the fact's title; "" for a session
+	Title   string // the topic's title; "" for a session
 	Text    string
 	When    time.Time
 	Tainted bool // from a tainted session or a fact written in one: outside content
 }
 
-// Recall finds q, case insensitive, in the stored facts (title and
-// body) and in the archived sessions of the conversations convs (the
+// Recall finds q, case insensitive, in the stored facts (a topic's title
+// and a fact's text) and in the archived sessions of the conversations convs (the
 // caller's own: another person's chat is not searched), newest first, at
 // most limit hits.
 func (m *Memory) Recall(ctx context.Context, q string, convs []string, limit int) ([]Hit, error) {
@@ -64,15 +65,18 @@ func (m *Memory) Recall(ctx context.Context, q string, convs []string, limit int
 	if q == "" || limit <= 0 {
 		return nil, fmt.Errorf("%w: recall needs a query and a limit", ErrInvalid)
 	}
-	es, err := m.list(CheckOK)
+	ts, err := m.Topics()
 	if err != nil {
 		return nil, err
 	}
 	needle := strings.ToLower(q)
 	var hits []Hit
-	for _, e := range es {
-		if strings.Contains(strings.ToLower(e.Title+"\n"+e.Body), needle) {
-			hits = append(hits, Hit{Kind: HitFact, Slug: e.Slug, Source: dirFacts + "/" + e.Slug, Title: e.Title, Text: e.Body, When: e.Created, Tainted: e.Tainted})
+	for _, t := range ts {
+		for _, f := range t.Facts {
+			if strings.Contains(strings.ToLower(t.Title+"\n"+f.Text), needle) {
+				hits = append(hits, Hit{Kind: HitFact, Slug: t.Slug, Fact: f.ID, Source: dirFacts + "/" + t.Slug, Title: t.Title,
+					Text: f.Text, When: f.Date, Tainted: f.Tainted})
+			}
 		}
 	}
 	eps, err := m.episodes.Search(ctx, q, convs, limit)
