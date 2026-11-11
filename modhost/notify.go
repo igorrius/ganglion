@@ -117,7 +117,7 @@ func (h *Host) limitLine(ctx context.Context, l *loaded, now, day time.Time) {
 // does not end with ctx: the message was counted and the run goes on, so a
 // shutdown does not lose it.
 func (h *Host) putNotify(ctx context.Context, l *loaded, key string, p event.ModuleNotify, now time.Time) error {
-	p.Module, p.At, p.Principal, p.Transport = l.name, now.UnixMilli(), l.to.principal, l.to.transport
+	p.Module, p.Version, p.At, p.Principal, p.Transport = l.name, l.version, now.UnixMilli(), l.to.principal, l.to.transport
 	payload, err := json.Marshal(p)
 	if err != nil {
 		return err

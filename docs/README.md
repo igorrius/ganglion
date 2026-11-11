@@ -21,6 +21,12 @@ Start here when coming back to the project.
   the text, so the session stays clean and `module.write` works; a message
   this node has no record of is said to be so. Moving a node's workspace
   and modules to another host is still by hand (M7).
+- **A module's name went under its message (2026-11-11,
+  [ADR-0074](adr/0074-a-modules-name-goes-under-its-message.md),
+  R-RUN-16):** the owner did not want `battery-alerts: ` before the text.
+  The node now signs a module's message in a rich message's footer, or as
+  an italic last line where there is none; a trial of both went to the
+  owner's chat.
 - **M5 closed (2026-11-11):** memory by topic
   ([design](plans/p1-m5-memory-topics-design.md),
   [plan](plans/p1-m5-memory-topics.md), ADRs

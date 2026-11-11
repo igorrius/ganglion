@@ -20,6 +20,9 @@ const (
 var richBlocks = map[string]bool{
 	"paragraph": true, "heading": true, "pre": true, "list": true, "blockquote": true,
 	"expandable_blockquote": true, "divider": true, "table": true,
+	// footer is the node's signature under a module's message (ADR-0074);
+	// nothing in a message's text makes one.
+	"footer": true,
 }
 
 // sendRichMessage takes a rich message described by blocks. Text in markdown or
@@ -66,7 +69,7 @@ func (s *Server) sendRichMessage(w http.ResponseWriter, params map[string]json.R
 		writeErr(w, http.StatusBadRequest, "Bad Request: rich message is too long", 0)
 		return
 	}
-	out := Outgoing{ChatID: p.ChatID, ThreadID: p.MessageThreadID, Text: text, Silent: p.DisableNotification, Rich: true}
+	out := Outgoing{ChatID: p.ChatID, ThreadID: p.MessageThreadID, Text: text, Silent: p.DisableNotification, Rich: true, Footer: r.footer}
 	if p.ReplyParameters != nil {
 		out.ReplyTo = p.ReplyParameters.MessageID
 	}
@@ -88,6 +91,7 @@ func (s *Server) richRefusal(chat, thread int64) string {
 type richReader struct {
 	chars, count int
 	err          string
+	footer       string // the text of the last footer block
 }
 
 func (r *richReader) blocks(blocks []any, depth int) string {
@@ -120,6 +124,9 @@ func (r *richReader) block(m map[string]any, depth int) string {
 		return r.list(m, depth)
 	case "table":
 		return r.table(m)
+	case "footer":
+		r.footer = r.text(m["text"])
+		return r.footer
 	default:
 		return r.text(m["text"])
 	}

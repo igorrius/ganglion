@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
+	"unicode/utf16"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -37,18 +39,19 @@ func (r richCounter) add(ctx context.Context, o richOutcome) {
 }
 
 // richShape reports whether msg may go as a rich message at all: the setting is on,
-// nothing later needs it to be ordinary (R-DLV-11), and it is not a module's message,
-// which is plain text without previews (R-RUN-16).
+// nothing later needs it to be ordinary (R-DLV-11), and it is not a message without
+// previews (R-RUN-16), unless it is signed: a module's message is rich for its
+// footer, and its text is escaped, so it holds no link to preview.
 func (t *Transport) richShape(msg event.Outgoing) bool {
 	return t.rich && msg.Edit == "" && msg.EditOf == "" && msg.Ack == "" && msg.Attach == nil &&
-		len(msg.Buttons) == 0 && msg.Folded == "" && !msg.Superseded && !msg.NoPreview
+		len(msg.Buttons) == 0 && msg.Folded == "" && !msg.Superseded && (!msg.NoPreview || msg.Signature != "")
 }
 
 // sendsRich reports whether Send sends this part as a rich message: it has the
-// structure, or it is too long for an ordinary message, which only the rich
-// branch of Parts produces.
+// structure, it is signed (the signature is a footer, ADR-0074), or it is too
+// long for an ordinary message, which only the rich branch of Parts produces.
 func (t *Transport) sendsRich(msg event.Outgoing) bool {
-	return t.richShape(msg) && (structured(msg.Text) || renderedUnits(msg.Text) > maxTextUnits)
+	return t.richShape(msg) && (msg.Signature != "" || structured(msg.Text) || renderedUnits(msg.Text) > maxTextUnits)
 }
 
 // sendRich sends msg as a rich message, and the ordinary way when Telegram refuses
@@ -60,7 +63,7 @@ func (t *Transport) sendRich(ctx context.Context, chat, thread int64, msg event.
 	m, err := t.c.sendRichMessage(ctx, richParams{
 		ChatID:              chat,
 		MessageThreadID:     thread,
-		RichMessage:         renderRich(msg.Text),
+		RichMessage:         signed(msg),
 		DisableNotification: msg.Silent,
 		ReplyParameters:     t.replyTo(chat, msg.ReplyTo),
 	})
@@ -82,6 +85,10 @@ func (t *Transport) sendRich(ctx context.Context, chat, thread int64, msg event.
 // repeat a chunk but cannot lose one.
 func (t *Transport) sendChunks(ctx context.Context, chat, thread int64, msg event.Outgoing) (string, error) {
 	pieces := ordinaryPieces(msg.Text)
+	if msg.Signature != "" {
+		last := &pieces[len(pieces)-1]
+		last.text, last.ents = withSignature(last.text, last.ents, msg.Signature)
+	}
 	ref := ""
 	for i, p := range pieces {
 		part := msg
@@ -98,6 +105,16 @@ func (t *Transport) sendChunks(ctx context.Context, chat, thread int64, msg even
 		ref = r
 	}
 	return ref, nil
+}
+
+// withSignature puts the signature on its own last line in italics, for a
+// message that cannot have a footer. Nothing in it is parsed, and it sits
+// after text, so it changes no entity of the text.
+func withSignature(text string, ents []entity, signature string) (string, []entity) {
+	head := text + "\n\n"
+	at := len(utf16.Encode([]rune(head)))
+	out := append(slices.Clone(ents), entity{Type: "italic", Offset: at, Length: len(utf16.Encode([]rune(signature)))})
+	return head + signature, out
 }
 
 // piece is one ordinary message, rendered.

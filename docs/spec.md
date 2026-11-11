@@ -760,9 +760,13 @@ escalate:                    # when to call the model
   chain both ways ("Reacts to", "Feeds").
 - **R-RUN-16.** A module granted `notify: {per_day: N}` writes plain text
   to the private chat of the admin who installed it, through the outbox
-  (M4c, [ADR-0066](adr/0066-notify-capability.md)). The node prefixes the
-  module's name, escapes Markdown, adds no buttons or previews and cuts the
-  text at 1000 characters. `N` is at most 100 a day in the node's time
+  (M4c, [ADR-0066](adr/0066-notify-capability.md)). The node signs the
+  message with the module's name and running version under the text, apart from it (a rich
+  message's footer under a divider; the last line in italics where there
+  is none,
+  [ADR-0074](adr/0074-a-modules-name-goes-under-its-message.md)), escapes
+  Markdown, adds no buttons or previews and cuts the text at 1000
+  characters. `N` is at most 100 a day in the node's time
   zone; over it nothing is sent, the module gets the code "limit" and the
   owner one node line that day. A repeated run sends nothing twice. The
   model gets a node note without the text (`[module] deye-alerts notified

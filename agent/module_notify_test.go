@@ -26,7 +26,7 @@ func notifyEvent(p event.ModuleNotify) event.Event {
 const alertText = "battery *30* %, see [this](https://evil.example/x)"
 
 func deyeAlert() event.ModuleNotify {
-	return event.ModuleNotify{Module: "local/deye-alerts", Text: alertText, PerDay: 24,
+	return event.ModuleNotify{Module: "local/deye-alerts", Version: "2", Text: alertText, PerDay: 24,
 		At: t0.Add(4*time.Hour + 30*time.Minute).UnixMilli(), Principal: owner, Transport: "telegram"}
 }
 
@@ -41,12 +41,12 @@ func TestModuleNotifySendsTheTextAndNotesWithoutIt(t *testing.T) {
 			e.states.m["telegram:42"], _ = json.Marshal(State{V: StateVersion, Session: "s1", Started: t0, Last: t0, Tainted: tainted})
 			ev := notifyEvent(deyeAlert())
 			out := e.turn(t, ev)
-			want := `deye-alerts: battery \*30\* %, see \[this\](https://evil.example/x)`
+			want := `battery \*30\* %, see \[this\](https://evil.example/x)`
 			if len(out) != 1 {
 				t.Fatalf("out %+v", out)
 			}
 			o := out[0]
-			if o.IdemKey != ev.IdemKey+":out" || o.Transport != "telegram" || o.Conv != "telegram:42" || o.Text != want || !o.NoPreview ||
+			if o.IdemKey != ev.IdemKey+":out" || o.Transport != "telegram" || o.Conv != "telegram:42" || o.Text != want || o.Signature != "deye-alerts v2" || !o.NoPreview ||
 				len(o.Buttons) != 0 || o.Origin == nil || *o.Origin != (event.Origin{Kind: event.OriginModule, Module: "local/deye-alerts", Tainted: true}) {
 				t.Fatalf("message %+v, origin %+v", o, o.Origin)
 			}
@@ -196,7 +196,25 @@ func TestModuleNotifyFoldsLineBreaks(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("out %+v", out)
 	}
-	if want := "deye-alerts: one  other-module: two three four five six"; out[0].Text != want {
-		t.Fatalf("text %q, want %q", out[0].Text, want)
+	if want := "one  other-module: two three four five six"; out[0].Text != want || out[0].Signature != "deye-alerts v2" {
+		t.Fatalf("text %q signed %q, want %q signed deye-alerts v2", out[0].Text, out[0].Signature, want)
+	}
+}
+
+// ADR-0074: the signature carries the running version when it is a number,
+// and only the name when the event has none (an older node's) or one that
+// is not a number.
+func TestNotifySignatureKeepsOnlyANumberedVersion(t *testing.T) {
+	for version, want := range map[string]string{"": "deye-alerts", "7": "deye-alerts v7", "0": "deye-alerts", "07": "deye-alerts", "2\nadmin": "deye-alerts", "-1": "deye-alerts"} {
+		p := deyeAlert()
+		p.Version = version
+		if got := notifySignature(p); got != want {
+			t.Errorf("version %q: signature %q, want %q", version, got, want)
+		}
+	}
+	line := deyeAlert()
+	line.Node, line.Text = event.NotifyLimitLine, ""
+	if got := notifySignature(line); got != "" {
+		t.Errorf("a node line is signed %q", got)
 	}
 }
