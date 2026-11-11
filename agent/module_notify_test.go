@@ -47,7 +47,7 @@ func TestModuleNotifySendsTheTextAndNotesWithoutIt(t *testing.T) {
 			}
 			o := out[0]
 			if o.IdemKey != ev.IdemKey+":out" || o.Transport != "telegram" || o.Conv != "telegram:42" || o.Text != want || !o.NoPreview ||
-				len(o.Buttons) != 0 || o.Origin == nil || o.Origin.Kind != event.OriginSystem || !o.Origin.Tainted {
+				len(o.Buttons) != 0 || o.Origin == nil || *o.Origin != (event.Origin{Kind: event.OriginModule, Module: "local/deye-alerts", Tainted: true}) {
 				t.Fatalf("message %+v, origin %+v", o, o.Origin)
 			}
 			if n := len(e.smart.requests()) + len(e.cheap.requests()); n != 0 {

@@ -13,6 +13,14 @@ Start here when coming back to the project.
   ([deploy-railway.md](deploy-railway.md)). Still to do there: build and
   install `deye-reader`, measure a build's peak memory, compare with
   `deye.py` for a few days. M5's review left board card G-140.
+- **A reply to a module's message names the module (2026-11-11,
+  [ADR-0073](adr/0073-a-modules-message-names-its-module.md), R-DLV-15,
+  board card G-141):** found in the first chat on Railway, where the owner
+  replied to an alert the local node had sent. A module's message now
+  records its module; a reply to it gives the agent the name and none of
+  the text, so the session stays clean and `module.write` works; a message
+  this node has no record of is said to be so. Moving a node's workspace
+  and modules to another host is still by hand (M7).
 - **M5 closed (2026-11-11):** memory by topic
   ([design](plans/p1-m5-memory-topics-design.md),
   [plan](plans/p1-m5-memory-topics.md), ADRs

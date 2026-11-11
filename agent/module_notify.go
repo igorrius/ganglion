@@ -53,8 +53,8 @@ func knownNode(n event.NotifyNode) bool {
 // moduleNotify writes the node note into history and returns the message. The module's text
 // goes only into the outgoing message, escaped and prefixed; the model never sees it (R-RUN-13).
 // A node line writes no note. The note does not move the session's Last (noteQuiet), so a
-// module writing all day never keeps a session alive. The message carries a tainted origin (ruling 2 of M4c): a reply
-// quoting it brings the module's text in as outside content; stamp keeps that origin.
+// module writing all day never keeps a session alive. The message carries a tainted origin that names the module
+// (ruling 2 of M4c, R-DLV-15): a reply to it is told the module and never its text; stamp keeps that origin.
 func (a *Agent) moduleNotify(ctx context.Context, t *turn, p event.ModuleNotify) {
 	if p.Node == event.NotifyText {
 		t.noteQuiet(fmt.Sprintf("%s%s notified you at %s", moduleNotePrefix, moduleName(p.Module), moduleClock(p.At, a.cfg.Location)))
@@ -63,7 +63,7 @@ func (a *Agent) moduleNotify(ctx context.Context, t *turn, p event.ModuleNotify)
 		IdemKey: t.event.IdemKey + ":out", Transport: p.Transport, Conv: t.event.Conv,
 		Text:      a.notifyText(ctx, t, p),
 		NoPreview: true,
-		Origin:    &event.Origin{Kind: event.OriginSystem, Tainted: true},
+		Origin:    &event.Origin{Kind: event.OriginModule, Module: p.Module, Tainted: true},
 	})
 }
 

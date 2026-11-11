@@ -11,15 +11,19 @@ const (
 	OriginTask     OriginKind = "task"     // a scheduled task's run
 	OriginReminder OriginKind = "reminder" // a reminder, sent as it was set
 	OriginSystem   OriginKind = "system"   // a system job, such as the memory audit
+	OriginModule   OriginKind = "module"   // a module's own text, sent with no model (R-RUN-16)
 )
 
 // Origin is where a message the node sends came from: the session that made it and
 // whether outside content had entered that session when it was stored (R-DLV-14,
-// ADR-0055). A message stored with none counts as tainted.
+// ADR-0055). A message stored with none counts as tainted. A module's message
+// names the module that wrote it, so a reply can say which one without
+// showing its text (R-DLV-15, ADR-0073).
 type Origin struct {
 	Kind    OriginKind `json:"kind"`
 	Session string     `json:"session,omitempty"`
 	Tainted bool       `json:"tainted,omitempty"`
+	Module  string     `json:"module,omitempty"` // full name, for OriginModule only
 }
 
 type originKey struct{}

@@ -326,6 +326,13 @@ Guarantee: **at-least-once + idempotency.**
   from the channel's copy. A failed lookup never fails or delays the turn: the channel's copy is then
   outside content. Messages stored outside a turn (alerts, notifiers, the give-up reply) record none
   and count as tainted.
+- **R-DLV-15.** A module's message (R-RUN-16) records the module that wrote it. A reply to it tells the
+  agent the module's name and the time as the node's own words, with none of the message's text, the
+  channel's copy or a selected quote, so it does not taint the session and the agent can read and
+  rewrite the module (R-RUN-17). A name that could not be a module's makes the message one of an unknown
+  source. A message the channel says the bot wrote and this node has no record of is said to be so
+  (another node of the bot may have sent it, or it is over 90 days old); its text stays outside content
+  ([ADR-0073](adr/0073-a-modules-message-names-its-module.md)).
 
 ### 7.2. Conversations, history and the agent loop
 
@@ -759,7 +766,8 @@ escalate:                    # when to call the model
   zone; over it nothing is sent, the module gets the code "limit" and the
   owner one node line that day. A repeated run sends nothing twice. The
   model gets a node note without the text (`[module] deye-alerts notified
-  you at 14:30`), which does not taint. The window says "Writes to you: up
+  you at 14:30`), which does not taint; a reply to the message names the
+  module the same way (R-DLV-15). The window says "Writes to you: up
   to N messages a day". Other targets wait in "Not now".
 - **R-RUN-17.** The agent writes a module's source with `module.write`
   (one file in `workspace/modules/<name>/`, relative path without `..`,

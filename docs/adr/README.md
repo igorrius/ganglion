@@ -78,6 +78,7 @@ considered, how they compare, the decision and its consequences. See
 | [0070](0070-builds-in-a-row-instead-of-depth.md) | Bound the agent's fix-and-rebuild loop by builds in a row, not by turn depth (refines 0069) | Accepted | 2026-11-10 |
 | [0071](0071-memory-topics-whole-in-the-prompt.md) | Keep facts in topic files and show every topic whole in the prompt, within a budget (replaces the file layout of 0033) | Accepted | 2026-11-11 |
 | [0072](0072-who-writes-memory.md) | The agent writes memory in the turn, and a review after quiet time catches what it missed | Accepted | 2026-11-11 |
+| [0073](0073-a-modules-message-names-its-module.md) | A module's message records its module, and a reply to it names the module without its text | Accepted | 2026-11-11 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).
