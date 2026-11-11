@@ -892,6 +892,14 @@ list (6), and a very fast Skip then Remember stores the facts.
 
 - [ ] **Step 1:** `make lint test`, `make test-net`, `make lab-faults`, `make crash-agent`,
   `make memory`; write the numbers beside M4c's in "Where we are".
+  So far (2026-11-11, on `1fddfa6` and the harness fix): `make lint test` green (one timing test,
+  `TestAddsStepSendsWithoutWaitingForTheTurn`, failed once under the load of a parallel
+  `make memory` and passed 5 of 5 alone); `make memory`: agent with tools 49.5 MB after 1,000
+  turns (M4c 48.7), idle 44.0 MB, binary 48.6 MB (48.1), the hostile page peak 107 MB, 50
+  `/metrics` 116.5 MB: within the measure's noise; `make crash-agent`: 200 kills, 246 messages in
+  124 groups (122 joined a turn), 128 answers, 0 duplicates, one commit per fact, after the
+  harness learned the topic arguments and the note; the two new faults turn their scenarios red
+  (run by hand; the whole `make lab-faults` also runs a live judge).
 - [ ] **Step 2:** The owner decides on `make lab-all` (the prompt changed) or
   `make lab-skip-full`.
 - [ ] **Step 3:** The live check with the owner (row 10), and the same correction with the

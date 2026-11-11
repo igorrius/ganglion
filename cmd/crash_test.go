@@ -227,7 +227,7 @@ func crashModel(t *testing.T) *providertest.Server {
 			return providertest.Answer{Text: "answer " + marker}
 		}
 		return providertest.Answer{Tool: "memory.write",
-			Args: fmt.Sprintf(`{"title":"fact %s","body":"The owner's number is %s."}`, marker, marker)}
+			Args: fmt.Sprintf(`{"topic":"fact %s","summary":"A number","fact":"The owner's number is %s."}`, marker, marker)}
 	})
 	return model
 }
@@ -289,7 +289,8 @@ func (n *crashAgentNode) answers() (markers, other []string) {
 	for _, s := range n.fake.Sent() {
 		if m, ok := strings.CutPrefix(s.Text, "answer "); ok {
 			markers = append(markers, m)
-		} else {
+		} else if !strings.HasPrefix(s.Text, "Memory updated") {
+			// A stored fact's note with Undo (R-MEM-9) is expected too.
 			other = append(other, s.Text)
 		}
 	}
@@ -299,7 +300,8 @@ func (n *crashAgentNode) answers() (markers, other []string) {
 // TestCrashHarnessAgent kills the agent with SIGKILL at random moments while
 // messages arrive (3.8, R-DLV-3 to R-DLV-6). In the end every message has its
 // answer, in order, at most one duplicate per kill; every fact was stored by
-// exactly one commit; the journal holds one call per message, so a rerun kept
+// exactly one commit, its note sent beside the answer; the journal holds one
+// call per message, so a rerun kept
 // the call's key; and every /metrics sent its photo. Some messages arrive
 // during a turn and join it: such a message counts as answered when the turn
 // that took it answered, and its fact is stored at most once, since a rerun may
@@ -519,7 +521,7 @@ func (n *crashAgentNode) checkFacts(t *testing.T, groups [][]string) {
 	}
 	commits := map[string]int{}
 	for line := range strings.SplitSeq(string(out), "\n") {
-		if strings.HasPrefix(line, "memory: remember ") {
+		if strings.HasPrefix(line, "memory: add ") {
 			commits[crashMarker.FindString(line)]++
 		}
 	}
