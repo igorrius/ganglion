@@ -916,9 +916,29 @@ list (6), and a very fast Skip then Remember stores the facts.
   the undone fact again, since the Undo note is a node note it leaves out. Fixed: a memory
   button (Undo, Remember, Skip) settles the conversation so far for the review
   (`pending.QuickEdit.Reviewed`), with a test that fails without it.
-- [ ] **Step 4:** Close: "Where we are", the phase plan's ticks, the ADRs' status, the board
+- [x] **Step 4:** Close: "Where we are", the phase plan's ticks, the ADRs' status, the board
   (G-138 done; a card for each finding), a `## Closing` section here; merge on the owner's go.
 
 ```bash
 git commit -m "docs: M5 closed — memory by topic: corrections stored in the turn, a review after quiet time, a note with Undo; ADR-0071, ADR-0072 accepted"
 ```
+
+---
+
+## Closing (2026-11-11)
+
+- **Live check passed** on the test bot (`d906e88`): the old fact moved into a topic at start;
+  the owner's correction about `batt_w` was stored in its turn under "deye-inverter" with the
+  note; `/memory` showed it; Undo reverted it in one commit and folded the note.
+- **Found in the live check and fixed** (`04ffdd2`): the review armed by that turn would read the
+  same correction and store the undone fact again. A memory button now settles the conversation
+  so far for the review.
+- **Real models:** `memory-correction` 10 of 10 (442,247 tokens); the agent wrote the correction
+  itself in every run, before its answer; the review then found nothing more. The runs with the
+  review off were not made (owner). The full lab run was skipped (owner).
+- **Measured:** agent with tools 49.5 MB after 1,000 turns (M4c 48.7), binary 48.6 MB (48.1);
+  `make crash-agent` 200 kills, 0 duplicates, one commit per fact; `make test-net` green; the two
+  new seeded faults red.
+- **Reviews:** an independent review of the whole branch found seven defects, all fixed (section
+  "Review fixes"); two minor items on board card G-140.
+- ADR-0071 and ADR-0072 are Accepted; ADR-0033's file layout is superseded by ADR-0071.

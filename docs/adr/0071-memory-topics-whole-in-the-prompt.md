@@ -1,6 +1,6 @@
 # ADR-0071: Keep facts in topic files and show every topic whole in the prompt, within a budget
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-11
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.7](../spec.md#77-memory) (R-MEM-6, R-MEM-7), [7.14](../spec.md#714-node-configuration) (R-CFG-8); [M5 design](../plans/p1-m5-memory-topics-design.md) sections 3 and 4; replaces the file layout of [ADR-0033](0033-memory-in-the-workspace-git-with-the-git-binary.md)

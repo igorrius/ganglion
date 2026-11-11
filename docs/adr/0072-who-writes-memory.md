@@ -1,6 +1,6 @@
 # ADR-0072: The agent writes memory in the turn, and a review after quiet time catches what it missed
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-11
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.7](../spec.md#77-memory) (R-MEM-8, R-MEM-9, R-MEM-2), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-6, R-POL-7), [7.3](../spec.md#73-model-router) (R-RTR-6); [M5 design](../plans/p1-m5-memory-topics-design.md) sections 5 and 6; with [ADR-0071](0071-memory-topics-whole-in-the-prompt.md)
