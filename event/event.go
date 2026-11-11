@@ -113,9 +113,14 @@ type Outgoing struct {
 	Folded string `json:",omitempty"`
 	// Origin is where the message came from (R-DLV-14); nil until it is stored.
 	Origin *Origin `json:",omitempty"`
-	// NoPreview shows no link preview and sends the message as an ordinary
-	// one, never a rich one: a module's message (R-RUN-16).
+	// NoPreview shows no link preview: a module's message (R-RUN-16). It is
+	// sent as an ordinary message, unless it has a Signature.
 	NoPreview bool `json:",omitempty"`
+	// Signature is the node's line naming who wrote Text when the node did
+	// not: a module's short name (R-RUN-16, ADR-0074). It is never part of
+	// Text. The transport shows it under the text, apart from it and small
+	// if it can, and always shows it.
+	Signature string `json:",omitempty"`
 }
 
 // Stage is where the work on a person's message stands (R-LIVE-7). The agent

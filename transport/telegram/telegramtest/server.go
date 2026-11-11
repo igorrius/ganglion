@@ -52,6 +52,7 @@ type Outgoing struct {
 	ReplyTo  int64  // reply_parameters.message_id; 0 when not a reply
 	Keyboard string // reply_markup.inline_keyboard as sent, JSON; "" when none or empty
 	Rich     bool   // sent by sendRichMessage; Text is its plain text
+	Footer   string // the text of a rich message's footer block; "" for none
 	// NoPreview is link_preview_options.is_disabled: the message shows no
 	// link preview.
 	NoPreview bool

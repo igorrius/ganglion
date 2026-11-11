@@ -143,14 +143,24 @@ func (a *Agent) observeCall(ctx context.Context, span trace.Span, c router.Candi
 	span.End()
 }
 
+// answeredBy is the attempt that answered the turn: the first that did not
+// fail. A compaction or a check after the answer adds its own attempts to the
+// same route, on other models, so the last one is not it.
+func answeredBy(route []turns.Attempt) (turns.Attempt, bool) {
+	for _, at := range route {
+		if at.Error == "" {
+			return at, true
+		}
+	}
+	return turns.Attempt{}, false
+}
+
 // logTurn writes one info line per turn: what an operator watches in the
 // console. Never message text.
 func (a *Agent) logTurn(ctx context.Context, r *turns.Turn, additions int) {
 	model := ""
-	for _, at := range r.Route {
-		if at.Error == "" {
-			model = at.Provider + "/" + at.Model
-		}
+	if at, ok := answeredBy(r.Route); ok {
+		model = at.Provider + "/" + at.Model
 	}
 	dur := r.Finished.Sub(r.Started)
 	outcome := attribute.String("outcome", string(r.Outcome))

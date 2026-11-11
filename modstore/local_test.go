@@ -614,3 +614,37 @@ func TestRollbackRefusesATriggerLoop(t *testing.T) {
 		t.Fatalf("rollback %+v", o)
 	}
 }
+
+// A rewrite must come under a new number: a second build with the version
+// the node already had is refused, in the plan and at the install, with the
+// number to set; the same build again and a higher number pass. Seen live on
+// 2026-11-11, where a translated module was installed as a second "v1".
+func TestANewBuildNeedsAVersionAboveTheOnesTheNodeHad(t *testing.T) {
+	s := newEnv(t).open(t)
+	ctx := context.Background()
+	v1 := build("local/x", variant("a"), withKey(localManifest))
+	if o := install(t, s, v1); o.Result != modstore.ResultInstalled {
+		t.Fatalf("the first build: %+v", o)
+	}
+	same := build("local/x", variant("b"), withKey(localManifest))
+	want := "the manifest's version is 1, and this node has already had version 1 of the module: set version: 2 in manifest.yaml and build again"
+	if p := plan(t, s, same, noOwners); p.Refusal != want {
+		t.Fatalf("the plan of a second version 1: %q", p.Refusal)
+	}
+	o, err := s.InstallLocal(ctx, same, modstore.Digest(same.Wasm, same.Manifest))
+	if err != nil || o.Result != modstore.ResultRefused || o.Reason != want {
+		t.Fatalf("the install of a second version 1: %+v, %v", o, err)
+	}
+	if p := plan(t, s, v1, noOwners); p.Refusal != "" {
+		t.Fatalf("the plan of the build already installed: %q", p.Refusal)
+	}
+	v2 := build("local/x", variant("b"), strings.Replace(withKey(localManifest), "version: 1", "version: 2", 1))
+	if o := install(t, s, v2); o.Result != modstore.ResultInstalled || o.To != "2" {
+		t.Fatalf("version 2: %+v", o)
+	}
+	// After version 2, a third build under 1 or 2 is refused with 3.
+	old := build("local/x", variant("c"), withKey(localManifest))
+	if p := plan(t, s, old, noOwners); !strings.Contains(p.Refusal, "set version: 3 in manifest.yaml") {
+		t.Fatalf("the plan of a third build under 1: %q", p.Refusal)
+	}
+}

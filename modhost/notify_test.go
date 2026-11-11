@@ -91,7 +91,7 @@ func TestACronRunNotifiesOnceForItsSlot(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("events %+v", got)
 	}
-	want := event.ModuleNotify{Module: "local/n", Text: "battery *30* %", PerDay: 24, At: t0.UnixMilli(), Principal: owner, Transport: "telegram"}
+	want := event.ModuleNotify{Module: "local/n", Version: "1", Text: "battery *30* %", PerDay: 24, At: t0.UnixMilli(), Principal: owner, Transport: "telegram"}
 	if got[0].ev.IdemKey != "notify:local/n:cron:module:local/n:0:1:1" || got[0].p != want {
 		t.Fatalf("event %+v, payload %+v", got[0].ev, got[0].p)
 	}
@@ -121,7 +121,7 @@ func TestOverTheDailyLimitTheOwnerGetsOneLine(t *testing.T) {
 		t.Fatalf("%d events, want 24 and the limit line", len(got))
 	}
 	line := got[24]
-	want := event.ModuleNotify{Module: "local/n", Node: event.NotifyLimitLine, PerDay: 24, At: t0.UnixMilli(), Principal: owner, Transport: "telegram"}
+	want := event.ModuleNotify{Module: "local/n", Version: "1", Node: event.NotifyLimitLine, PerDay: 24, At: t0.UnixMilli(), Principal: owner, Transport: "telegram"}
 	if line.ev.IdemKey != "notify:local/n:limit:2026-11-09" || line.p != want {
 		t.Fatalf("limit line %+v, payload %+v", line.ev, line.p)
 	}
@@ -174,7 +174,7 @@ func TestAStoppedChainTellsTheOwnerOnce(t *testing.T) {
 		}
 	}
 	got := e.notifies(t)
-	want := event.ModuleNotify{Module: "local/l", Node: event.NotifyChainLine, At: t0.UnixMilli(), Principal: owner, Transport: "telegram"}
+	want := event.ModuleNotify{Module: "local/l", Version: "1", Node: event.NotifyChainLine, At: t0.UnixMilli(), Principal: owner, Transport: "telegram"}
 	if len(got) != 1 || got[0].ev.IdemKey != "notify:local/l:chain:"+l.SHA256 || got[0].p != want {
 		t.Fatalf("events %+v", got)
 	}

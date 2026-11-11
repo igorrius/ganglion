@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"github.com/igorrius/ganglion/event"
 	"net/url"
 	"strings"
 	"unicode/utf8"
@@ -36,6 +37,9 @@ const (
 	richExpandable richKind = "expandable_blockquote"
 	richDivider    richKind = "divider"
 	richTable      richKind = "table"
+	// richFooter is the node's signature under a message it did not write
+	// (ADR-0074). renderRich never makes one: only signed does.
+	richFooter richKind = "footer"
 
 	richBold   richKind = "bold"
 	richItalic richKind = "italic"
@@ -82,6 +86,18 @@ type richSpan struct {
 	Type richKind `json:"type"`
 	Text any      `json:"text"`
 	URL  string   `json:"url,omitempty"`
+}
+
+// signed is the rich message of msg: its text's blocks, then, when it has a
+// signature, a divider and the signature in italics in a footer (the owner's
+// choice of the trials, 2026-11-11).
+func signed(msg event.Outgoing) richMessage {
+	m := renderRich(msg.Text)
+	if msg.Signature != "" {
+		m.Blocks = append(m.Blocks, richBlock{Type: richDivider},
+			richBlock{Type: richFooter, Text: richSpan{Type: richItalic, Text: msg.Signature}})
+	}
+	return m
 }
 
 // orderedLabel is the label type of an item of an ordered list: decimal.

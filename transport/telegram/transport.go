@@ -399,6 +399,9 @@ func (t *Transport) Send(ctx context.Context, msg event.Outgoing) (string, error
 		return msg.Edit, sendError(t.editButtons(ctx, chat, msg.Edit, msg.Buttons))
 	}
 	text, ents := visible(msg.Text)
+	if msg.Signature != "" {
+		text, ents = withSignature(text, ents, msg.Signature)
+	}
 	if msg.Superseded {
 		ents = collapsed(text, ents)
 	}

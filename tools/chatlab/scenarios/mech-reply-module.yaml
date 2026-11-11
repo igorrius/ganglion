@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-reply-module
+why: >-
+  R-DLV-15, ADR-0073. A reply to a module's message tells the agent which module wrote it, from the node's
+  record, with none of the module's text, and leaves the session clean, so the agent can read and rewrite
+  the module.
+covers:
+  - agent/reply.go
+  - agent/module_notify.go
+  - event/origin.go
+  - queue/sqlqueue/**
+  - modhost/**
+model: scripted
+modules:
+  - {name: producer, manifest: modules/producer.yaml}
+  - {name: listener, manifest: modules/listener.yaml}
+script:
+  - {say: I will read the listener module and change its message.}
+steps:
+  - advance: {scheduler: 31m}
+  - facts:
+      replies: 1
+      reply: {contains: "the reading changed"}
+      model_calls: 0
+  - reply: {to: "the reading changed", say: "Add the unit to this message."}
+  - facts:
+      tainted: false
+      history: {contains: "in reply to the message the module listener sent at", not_contains: "the reading changed"}

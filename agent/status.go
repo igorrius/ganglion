@@ -74,9 +74,8 @@ func (a *Agent) sessionLine(ctx context.Context, t *turn) status.Check {
 	return c
 }
 
-// lastAnsweredBy is the model that answered conv's last turn: its first successful attempt, since a
-// compaction after the answer adds its own attempts to the same route. "" for none or when it cannot
-// be read.
+// lastAnsweredBy is the model that answered conv's last turn (answeredBy). "" for none or when it
+// cannot be read.
 func (a *Agent) lastAnsweredBy(ctx context.Context, conv string) string {
 	last, err := a.d.Turns.Last(ctx, conv)
 	if err != nil {
@@ -85,12 +84,8 @@ func (a *Agent) lastAnsweredBy(ctx context.Context, conv string) string {
 		}
 		return ""
 	}
-	for _, at := range last.Route {
-		if at.Error == "" {
-			return at.Model
-		}
-	}
-	return ""
+	at, _ := answeredBy(last.Route)
+	return at.Model
 }
 
 // dayLine is the asking admin's day against the daily limits, and what the node spent today.

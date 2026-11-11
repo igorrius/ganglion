@@ -326,6 +326,13 @@ Guarantee: **at-least-once + idempotency.**
   from the channel's copy. A failed lookup never fails or delays the turn: the channel's copy is then
   outside content. Messages stored outside a turn (alerts, notifiers, the give-up reply) record none
   and count as tainted.
+- **R-DLV-15.** A module's message (R-RUN-16) records the module that wrote it. A reply to it tells the
+  agent the module's name and the time as the node's own words, with none of the message's text, the
+  channel's copy or a selected quote, so it does not taint the session and the agent can read and
+  rewrite the module (R-RUN-17). A name that could not be a module's makes the message one of an unknown
+  source. A message the channel says the bot wrote and this node has no record of is said to be so
+  (another node of the bot may have sent it, or it is over 90 days old); its text stays outside content
+  ([ADR-0073](adr/0073-a-modules-message-names-its-module.md)).
 
 ### 7.2. Conversations, history and the agent loop
 
@@ -673,9 +680,16 @@ escalate:                    # when to call the model
     `module.status` shows the agent what the owner's `/modules <name>` card
     shows (state, version, health with the node's hint, runs and the last
     failure, the declared settings with the owner's values, a secret-like
-    or long one as `<set>`), never a text the module wrote; the install
+    or long one as `<set>`), never a text the module wrote; its answer is
+    outside content only when it shows a setting's value as text, not for a
+    number, a boolean or a hidden value
+    ([ADR-0075](adr/0075-reading-a-modules-state-keeps-the-session-clean.md)); the install
     window lists the network, secrets, cells created and read, triggers and
     limits, and a version that widens its rights says so on its own line;
+  - a build that is not already in the module's journal must carry a
+    manifest `version` above every version the node has had of the module;
+    otherwise the plan and the install refuse it and name the number to
+    set, so two builds never share a number (owner, 2026-11-11);
   - the install checks the name, the secrets (none of the node's own: the
     bot token, the providers' and the search keys), the required config,
     cell ownership, and, in a throwaway instance before anything changes,
@@ -753,21 +767,31 @@ escalate:                    # when to call the model
   chain both ways ("Reacts to", "Feeds").
 - **R-RUN-16.** A module granted `notify: {per_day: N}` writes plain text
   to the private chat of the admin who installed it, through the outbox
-  (M4c, [ADR-0066](adr/0066-notify-capability.md)). The node prefixes the
-  module's name, escapes Markdown, adds no buttons or previews and cuts the
-  text at 1000 characters. `N` is at most 100 a day in the node's time
+  (M4c, [ADR-0066](adr/0066-notify-capability.md)). The node signs the
+  message with the module's name and running version under the text, apart from it (a rich
+  message's footer under a divider; the last line in italics where there
+  is none,
+  [ADR-0074](adr/0074-a-modules-name-goes-under-its-message.md)), escapes
+  Markdown, adds no buttons or previews and cuts the text at 1000
+  characters. `N` is at most 100 a day in the node's time
   zone; over it nothing is sent, the module gets the code "limit" and the
   owner one node line that day. A repeated run sends nothing twice. The
   model gets a node note without the text (`[module] deye-alerts notified
-  you at 14:30`), which does not taint. The window says "Writes to you: up
+  you at 14:30`), which does not taint; a reply to the message names the
+  module the same way (R-DLV-15). The window says "Writes to you: up
   to N messages a day". Other targets wait in "Not now".
 - **R-RUN-17.** The agent writes a module's source with `module.write`
   (one file in `workspace/modules/<name>/`, relative path without `..`,
   hidden segments, `target/` or symlinks, at most 256 KB a file, 16 MB and
   200 files a module, a workspace commit per write, no press) and reads it
   with `module.read` (M4c,
-  [ADR-0067](adr/0067-agent-writes-module-source.md)). `module.write` is
-  refused in a tainted session (R-POL-6). The node records each module
+  [ADR-0067](adr/0067-agent-writes-module-source.md)). In a tainted
+  session `module.write` asks the owner first, with the file and how many
+  of its lines are new or changed, and a file written on that press is not
+  the node's own: the folder answers as outside content until a clean
+  session writes the file again; a tainted call that was not pressed is
+  refused ([ADR-0075](adr/0075-reading-a-modules-state-keeps-the-session-clean.md),
+  R-POL-6). The node records each module
   file's digest as its own tools left it (`module.import` of an example,
   `module.write` from a clean session); a build or a read of a folder that
   matches its record does not taint, and the build then keeps only rustc's

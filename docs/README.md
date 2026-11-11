@@ -13,6 +13,33 @@ Start here when coming back to the project.
   ([deploy-railway.md](deploy-railway.md)). Still to do there: build and
   install `deye-reader`, measure a build's peak memory, compare with
   `deye.py` for a few days. M5's review left board card G-140.
+- **A reply to a module's message names the module (2026-11-11,
+  [ADR-0073](adr/0073-a-modules-message-names-its-module.md), R-DLV-15,
+  board card G-141):** found in the first chat on Railway, where the owner
+  replied to an alert the local node had sent. A module's message now
+  records its module; a reply to it gives the agent the name and none of
+  the text, so the session stays clean and `module.write` works; a message
+  this node has no record of is said to be so. Moving a node's workspace
+  and modules to another host is still by hand (M7).
+- **A look at a module no longer closes its rewrite (2026-11-11,
+  [ADR-0075](adr/0075-reading-a-modules-state-keeps-the-session-clean.md),
+  board card G-147):** the live check of the reply found that one
+  `module.status` had tainted the session three hours before, so
+  `module.write` refused. `module.status` is now outside content only when
+  it shows a setting as text, and `module.write` in a tainted session asks
+  the owner, the file then counting as outside content until a clean
+  session writes it again. The turn's log line now names the model that
+  answered (it named a compaction's model and read as a fallback). A
+  rewritten module had been installed as a second `v1`: a new build now
+  needs a manifest `version` above the ones the node has had (R-RUN-9,
+  board card G-148). The owner's live check on Railway passed for the
+  reply, the signature and the rewrite; a `v2` has not been seen yet.
+- **A module's name went under its message (2026-11-11,
+  [ADR-0074](adr/0074-a-modules-name-goes-under-its-message.md),
+  R-RUN-16):** the owner did not want `battery-alerts: ` before the text.
+  The node now signs a module's message in a rich message's footer, or as
+  an italic last line where there is none; a trial of both went to the
+  owner's chat.
 - **M5 closed (2026-11-11):** memory by topic
   ([design](plans/p1-m5-memory-topics-design.md),
   [plan](plans/p1-m5-memory-topics.md), ADRs

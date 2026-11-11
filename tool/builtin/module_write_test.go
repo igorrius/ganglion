@@ -114,15 +114,17 @@ func sameFiles(rec map[string]any, want map[string]string) bool {
 	return true
 }
 
-// A tainted session writes nothing: outside text must not dictate code the
-// window shows only the rights of (R-RUN-17, ADR-0067).
-func TestModuleWriteRefusesATaintedSession(t *testing.T) {
+// A tainted call the owner did not press for writes nothing: outside text
+// must not dictate code the window shows only the rights of (R-RUN-17,
+// ADR-0067). The policy asks first (ADR-0075); this is the call that reached
+// Run without a press, such as a task's under its grant.
+func TestModuleWriteRefusesATaintedCallWithoutAPress(t *testing.T) {
 	e := newModuleEnv(t)
 	before := e.head(t)
 	c := writeCall(t, "blink", "src/lib.rs", "pub fn f() {}\n")
 	c.Tainted = true
 	_, err := e.tool(builtin.ModuleWriteTool).Run(context.Background(), c)
-	want := "this conversation holds content from outside, so it cannot write a module's source; start a new conversation and ask again"
+	want := "this conversation holds content from outside, so writing a module's source needs the owner's press"
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %v", err)
 	}
@@ -131,6 +133,63 @@ func TestModuleWriteRefusesATaintedSession(t *testing.T) {
 	}
 	if _, ok := e.record(t, "blink"); ok || e.head(t) != before {
 		t.Fatal("a tainted call recorded or committed")
+	}
+}
+
+// ADR-0075: on the owner's press a tainted session writes the file, but not
+// as the node's own: the folder then reads as outside content, until a clean
+// session writes the file again.
+func TestAPressedWriteInATaintedSessionIsNotTheNodesOwn(t *testing.T) {
+	e := newModuleEnv(t)
+	e.vettedModule(t, "blink", "blink")
+	if res := e.read(t, "blink", "src/lib.rs"); res.External {
+		t.Fatal("a folder the node wrote reads as outside content")
+	}
+	c := writeCall(t, "blink", "src/lib.rs", "two\n")
+	c.Tainted, c.Approved = true, true
+	if _, err := e.tool(builtin.ModuleWriteTool).Run(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
+	res := e.read(t, "blink", "src/lib.rs")
+	if res.Text != "two\n" || !res.External {
+		t.Fatalf("after a pressed tainted write: text %q, outside %v", res.Text, res.External)
+	}
+	if _, err := e.write(t, "blink", "src/lib.rs", "three\n"); err != nil {
+		t.Fatal(err)
+	}
+	if res := e.read(t, "blink", "src/lib.rs"); res.External {
+		t.Fatal("a clean rewrite did not make the folder the node's own again")
+	}
+}
+
+// The question of a write names the file and counts what changes, without
+// the code.
+func TestModuleWriteQuestionCountsTheChange(t *testing.T) {
+	e := newModuleEnv(t)
+	if _, err := e.write(t, "blink", "src/lib.rs", "a\nb\nc\n"); err != nil {
+		t.Fatal(err)
+	}
+	q, ok := e.tool(builtin.ModuleWriteTool).(tool.Questioner)
+	if !ok {
+		t.Fatal("module.write words no question")
+	}
+	c := writeCall(t, "blink", "src/lib.rs", "a\nB\nc\nd\n")
+	c.Tainted = true
+	got, err := q.Question(context.Background(), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"src/lib.rs", "blink", "4 lines, 2 of them new or changed", "content from outside"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("question %q lacks %q", got, want)
+		}
+	}
+	if strings.Contains(got, "B\n") {
+		t.Fatalf("the question shows the code: %q", got)
+	}
+	fresh := writeCall(t, "newmod", "src/lib.rs", "x\ny\n")
+	if got, err := q.Question(context.Background(), fresh); err != nil || !strings.Contains(got, "2 lines, 2 of them new or changed") {
+		t.Fatalf("a new file's question %q, err %v", got, err)
 	}
 }
 
@@ -487,4 +546,18 @@ func TestModuleWriteLeavesNoTemporaryFile(t *testing.T) {
 	if err != nil || len(files) != 1 || files[0].Path != "src/lib.rs" {
 		t.Fatalf("files %+v, %v", files, err)
 	}
+}
+
+// read runs module.read on one file of a module.
+func (e *moduleEnv) read(t *testing.T, name, path string) tool.Result {
+	t.Helper()
+	args, err := json.Marshal(map[string]string{"name": name, "path": path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.tool(builtin.ModuleReadTool).Run(context.Background(), call(builtin.ModuleReadTool, string(args)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
 }

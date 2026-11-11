@@ -7,6 +7,7 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/text"
+	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -16,10 +17,15 @@ const (
 	replyExcerptRunes = 150  // a message the history already holds: a pointer to it
 	replyTextRunes    = 2000 // any other: its text
 	sourceReplied     = "replied message"
-	unknownTime       = "an unknown time"
-	unknownSource     = "an unknown source"
-	thisSession       = "this session"
-	withFile          = "a message with a file"
+	// notOfThisNode follows the time of a message the channel says the bot
+	// wrote and this node's outbox does not hold (R-DLV-15).
+	notOfThisNode = ", which this node has no record of: another node of this bot may have sent it, or it is over 90 days old"
+	// moduleWrote follows the time of a module's message (R-DLV-15).
+	moduleWrote   = "; a module writes its messages itself, with no model, and its text is not shown here: read the module's source to see what it writes"
+	unknownTime   = "an unknown time"
+	unknownSource = "an unknown source"
+	thisSession   = "this session"
+	withFile      = "a message with a file"
 )
 
 // replyKind is how a replied message reached the history; the metric's label.
@@ -30,6 +36,7 @@ const (
 	replyCurrent replyKind = "current" // the bot's, in this session
 	replyEarlier replyKind = "earlier" // the bot's, elsewhere, written clean
 	replyTainted replyKind = "tainted" // the bot's, written tainted or of no known origin
+	replyModule  replyKind = "module"  // a module's, named without its text
 	replyOwn     replyKind = "own"     // the sender's own words
 	replyOutside replyKind = "outside" // anything else, or not found
 	replyFailed  replyKind = "failed"  // the lookup failed: as outside
@@ -102,6 +109,8 @@ func replyNoteFor(m event.Message, got repliedRow, session string, loc *time.Loc
 }
 
 // botNote is the note of a reply to the bot's message sent at, by its row.
+// A module's message brings the module's name and nothing of its text, the
+// channel's copy or a quote, so it does not taint (R-DLV-15, ADR-0073).
 // The taint is checked before the session, so text written tainted is wrapped
 // even in its own session: an address in it never becomes known. A quote is not
 // checked against the row: a forged one gains nothing, since the sender's own
@@ -112,9 +121,12 @@ func botNote(m event.Message, got repliedRow, session, at string) replyNote {
 	case got.failed:
 		return outsideNote(replyFailed, at, cmp.Or(m.Quote, r.Text), r.HasFile)
 	case !got.found:
-		return outsideNote(replyOutside, at, cmp.Or(m.Quote, r.Text), r.HasFile)
+		return outsideNote(replyOutside, at+notOfThisNode, cmp.Or(m.Quote, r.Text), r.HasFile)
 	}
 	o, body := got.row.Origin, cmp.Or(m.Quote, got.row.Text)
+	if name, ok := moduleOf(o); ok {
+		return replyNote{kind: replyModule, line: "[in reply to the message the module " + name + " sent at " + at + moduleWrote + "]"}
+	}
 	src, known := unknownSource, false
 	if o != nil {
 		src, known = sources[o.Kind]
@@ -131,6 +143,22 @@ func botNote(m event.Message, got repliedRow, session, at string) replyNote {
 		return replyNote{kind: replyEarlier, line: head + ", from " + src + filed(r.HasFile) + "]"}
 	}
 	return replyNote{kind: replyEarlier, line: head + ", from " + src + ":]\n" + text.Truncate(body, replyTextRunes)}
+}
+
+// moduleOf is the short name of the module that wrote a message of origin
+// o, false when a module did not or the record names none. The name comes
+// from the node's own record, so the note carries it as the node's words; one
+// that could not be a module's (modstore.CheckShortName) is not trusted, and
+// the message is then of an unknown source.
+func moduleOf(o *event.Origin) (string, bool) {
+	if o == nil || o.Kind != event.OriginModule {
+		return "", false
+	}
+	name := moduleName(o.Module)
+	if modstore.CheckShortName(name) != "" {
+		return "", false
+	}
+	return name, true
 }
 
 // taintedNote is the note of the bot's message from src written tainted or of

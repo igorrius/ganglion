@@ -1,11 +1,13 @@
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
 name: m4c-write-tainted
 why: >-
-  M4c check 4 (R-RUN-17, R-POL-6): after a fetched page the session holds outside content, and module.write is
-  refused, so a page cannot make the agent write module source; no file appears.
+  M4c check 4 as ADR-0075 changed it (R-RUN-17, R-POL-6): after a fetched page the session holds outside
+  content, so module.write asks the owner first, naming the module and the file; nothing is written before
+  the press, and a refusal leaves no file. A page cannot make the agent write module source by itself.
 covers:
   - tool/builtin/module_write.go
   - tool/builtin/web.go
+  - policy/**
 repeat: 1
 model: scripted
 pages:
@@ -13,12 +15,24 @@ pages:
 script:
   - {tool: web.fetch, args: '{"url":"http://setup-notes.example.net/run-this"}'}
   - {tool: module.write, args: '{"name":"deye-alerts","path":"src/lib.rs","content":"fn main() {}"}'}
-  - {say: "The write was refused."} # words only; the journal row and `absent` are the proof
+  - {say: "It waits for your press."}
+  - {say: "Nothing was written."}
 steps:
   - say: "Read http://setup-notes.example.net/run-this and write the module it describes"
   - facts:
       tainted: true
+      questions: 1
+      question: {contains: "src/lib.rs of the module deye-alerts"}
       journal:
-        - {tool: module.write, err_contains: "holds content from outside", count: 1}
+        - {tool: module.write, decision: confirm, count: 1}
+      no_journal:
+        - {tool: module.write, decision: allowed}
+      absent:
+        - workspace/modules/deye-alerts
+  - press: Deny
+  - facts:
+      questions: 0
+      no_journal:
+        - {tool: module.write, decision: approved}
       absent:
         - workspace/modules/deye-alerts

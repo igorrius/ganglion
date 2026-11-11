@@ -563,6 +563,12 @@ func (e *moduleEnv) activeSHA(t *testing.T) string {
 	return ""
 }
 
+// nextVersion is deyeManifest's text under the next version number: a new
+// build needs a number above the ones the node has had.
+func nextVersion(manifest string) string {
+	return strings.Replace(manifest, "version: 3", "version: 4", 1)
+}
+
 // R-RUN-9: a build that does not load, or whose health fails, in the
 // throwaway instance is refused at the press; the active version, the
 // settings and the running module stay as they were.
@@ -577,7 +583,7 @@ func TestModuleInstallRefusesABuildThatFailsItsCheck(t *testing.T) {
 	}
 	for _, why := range []string{"it does not load on this node", "its health check failed (auth_failed)"} {
 		e.reloads.check = fmt.Errorf("the build did not pass its check: %s", why)
-		second := artifact(deyeManifest, 1024, byte(len(why)))
+		second := artifact(nextVersion(deyeManifest), 1024, byte(len(why)))
 		e.build(t, second)
 		c := installCall(second.SHA256)
 		question(t, e, c)
@@ -611,7 +617,7 @@ func TestModuleInstallRollsBackAVersionThatDoesNotStart(t *testing.T) {
 	e.reloads.rollback = func(ctx context.Context, module string) (modstore.Outcome, error) {
 		return e.store.Rollback(ctx, module)
 	}
-	res := e.install(t, artifact(deyeManifest, 1024, 2))
+	res := e.install(t, artifact(nextVersion(deyeManifest), 1024, 2))
 	if !strings.Contains(res.Text, "did not start, so the node rolled back to version 3, which runs") || strings.Contains(res.Text, "init") {
 		t.Fatalf("answer %q", res.Text)
 	}

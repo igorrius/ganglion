@@ -103,7 +103,7 @@ func (t *turn) origin() event.Origin {
 		o.Kind, o.Tainted = event.OriginReminder, false
 	case event.OriginSystem:
 		o.Kind, o.Tainted = event.OriginSystem, true
-	case event.OriginTurn:
+	case event.OriginTurn, event.OriginModule: // a module's message sets its own origin
 	}
 	return o
 }

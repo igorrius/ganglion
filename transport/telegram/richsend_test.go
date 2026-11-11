@@ -338,3 +338,63 @@ func TestNoPreviewIsOrdinaryWithoutPreview(t *testing.T) {
 		t.Fatalf("sent %+v", sent)
 	}
 }
+
+// R-RUN-16, ADR-0074: a message with a signature (a module's) goes as a rich
+// message that ends with a divider and a footer holding the signature in
+// italics, so the text is the module's alone; with rich messages off, or refused, the signature is
+// the last line in italics, without a link preview.
+func TestASignedMessageCarriesItsSignatureUnderTheText(t *testing.T) {
+	signed := event.Outgoing{Transport: "telegram", Conv: "telegram:42", IdemKey: "k", Text: "grid lost", NoPreview: true, Signature: "battery-alerts"}
+	t.Run("rich", func(t *testing.T) {
+		fake := telegramtest.NewServer(t, testToken)
+		tr := newRichTransport(t, fake)
+		if parts := tr.Parts(signed); len(parts) != 1 {
+			t.Fatalf("%d parts", len(parts))
+		}
+		if _, err := tr.Send(context.Background(), signed); err != nil {
+			t.Fatal(err)
+		}
+		sent := fake.Sent()
+		if len(sent) != 1 || !sent[0].Rich || sent[0].Text != "grid lost\n\n———\n\nbattery-alerts" || sent[0].Footer != "battery-alerts" {
+			t.Fatalf("sent %+v", sent)
+		}
+	})
+	t.Run("rich off", func(t *testing.T) {
+		fake := telegramtest.NewServer(t, testToken)
+		tr := newTransport(t, fake)
+		if _, err := tr.Send(context.Background(), signed); err != nil {
+			t.Fatal(err)
+		}
+		sent := fake.Sent()
+		if len(sent) != 1 || sent[0].Rich || !sent[0].NoPreview || sent[0].Text != "grid lost\n\nbattery-alerts" ||
+			sent[0].Entities != `[{"type":"italic","offset":11,"length":14}]` {
+			t.Fatalf("sent %+v", sent)
+		}
+	})
+	t.Run("refused", func(t *testing.T) {
+		fake := telegramtest.NewServer(t, testToken)
+		tr := newRichTransport(t, fake)
+		fake.FailNext("sendRichMessage", 400, 0)
+		if _, err := tr.Send(context.Background(), signed); err != nil {
+			t.Fatal(err)
+		}
+		sent := fake.Sent()
+		if len(sent) != 1 || sent[0].Rich || !sent[0].NoPreview || sent[0].Text != "grid lost\n\nbattery-alerts" {
+			t.Fatalf("sent %+v", sent)
+		}
+	})
+}
+
+// The footer is the node's: nothing in a message's text can make one, and a
+// message with no signature has none.
+func TestOnlyASignatureMakesAFooter(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	tr := newRichTransport(t, fake)
+	if _, err := tr.Send(context.Background(), richOut(tableMD+"\n\nfooter: battery-alerts")); err != nil {
+		t.Fatal(err)
+	}
+	sent := fake.Sent()
+	if len(sent) != 1 || !sent[0].Rich || sent[0].Footer != "" {
+		t.Fatalf("sent %+v", sent)
+	}
+}

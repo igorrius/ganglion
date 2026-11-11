@@ -378,7 +378,7 @@ sequenceDiagram
     end
     Q->>A: kind module.notify, through begin, no model
     A->>A: note "[module] deye-alerts notified you at 14:30" (a node line adds none)
-    A->>O: "deye-alerts: <text escaped>", no preview, tainted system origin
+    A->>O: "<text escaped>" signed deye-alerts, no preview, tainted module origin
     Note over A,O: the state with the note and the message are stored in one transaction
 ```
 
