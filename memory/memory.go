@@ -114,13 +114,14 @@ type Memory struct {
 	alerts   alert.Admins
 	episodes Episodes
 	log      *slog.Logger
+	in       instruments
 	mu       sync.Mutex
 }
 
 // New returns the memory in repo, checked by g.
 func New(repo *gitrepo.Repo, g Guard, now func() time.Time, opts ...Option) *Memory {
 	m := &Memory{
-		repo: repo, guard: g, now: now, episodes: NoEpisodes{}, log: slog.New(slog.DiscardHandler),
+		repo: repo, guard: g, now: now, episodes: NoEpisodes{}, log: slog.New(slog.DiscardHandler), in: newInstruments(),
 		alerts: alert.Admins{List: func(context.Context) ([]string, error) { return nil, nil }},
 	}
 	for _, o := range opts {
