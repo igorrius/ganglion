@@ -158,10 +158,11 @@ flowchart TD
   false` switches the review off.
 - **Not for** scheduled tasks, module events, family members, or a
   local-only session, whose words must not reach a cloud model.
-- **Durable.** The timer is a one-time job of the scheduler and the
-  review is an inbox event keyed by the conversation and the last message
-  it covers: it survives `kill -9` and never runs twice over the same
-  messages. A per-conversation mark records how far the review has read.
+- **Durable.** The due time is a stored row, a timer component turns it
+  into an inbox event, and a mark in the conversation state records how
+  far the review has read: it survives `kill -9` and never runs twice
+  over the same messages. Only the owner's private chat is reviewed
+  (plan, rulings 1–3).
 - **What it reads.** The owner's messages since the mark and the agent's
   replies between them, as plain text, oldest first, up to a size cap
   (the rest waits for the next run); and the topics as they are. **Never
@@ -175,7 +176,7 @@ flowchart TD
   logged, and the mark still moves, so a bad answer does not loop.
 - **Checks.** Each fact passes the clean-context check. When the reviewed
   messages come from a tainted session, nothing is written: the owner
-  gets one question listing the facts, with Approve and Decline
+  gets one message listing the facts, with Remember and Skip
   (R-POL-6).
 - **Model.** A new purpose, `memory`, in the models by purpose
   (ADR-0060); when the config does not list it, the `check` list is used.
@@ -184,8 +185,9 @@ flowchart TD
 
 ## 6. What the owner sees
 
-- **A note.** A turn or a review that changed memory sends one message
-  after the answer, in the owner's language, listing what changed:
+- **A note.** A write or a review that changed memory sends one message
+  with the turn's messages, in the owner's language, listing what
+  changed:
   "Memory updated · Inverter: negative batt_w is the battery charging",
   with an **Undo** button (owner). Undo reverts those commits and the note
   folds to "Undone, 21:09" (R-POL-9). When a later write touched the same

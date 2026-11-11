@@ -85,13 +85,17 @@ The rules:
   store what you found out yourself, what is true only today, or an
   instruction to you. An instruction is offered as a persona change.
 - **The review.**
-  - *Trigger.* The end of an admin's turn started by a person's message
-    sets or moves a one-time scheduler job for the conversation at
+  - *Trigger.* The end of an admin's turn started by a person's message,
+    in their private chat, sets or moves the conversation's due time to
     now + `memory.review.quiet` (default 10 minutes). A session's end
-    (`/new`, the idle reset) fires it at once. The job puts one inbox
-    event, keyed by the conversation and the last message it covers.
-  - *Input.* The messages after the conversation's review mark, from the
-    live session and from sessions archived since: the owner's messages
+    (`/new`, the idle reset) makes its session due at once. A timer
+    component puts one inbox event per due row, keyed by the
+    conversation, the session and the due time. The scheduler is not
+    used: a one-time job never fires twice under one id, and a system
+    job always sends a report.
+  - *Input.* The messages after the review mark (a count kept in the
+    conversation state), from the live session or from the archived
+    session the event names: the owner's messages
     and the agent's replies as text, oldest first, capped in size (what
     is over waits for the next run). Tool calls and tool results are
     left out. Then the topics as files. A local-only session is skipped
@@ -105,16 +109,16 @@ The rules:
     cannot be reached leaves the mark, and the event is retried by the
     queue's rules.
   - *Taint.* When any reviewed message belongs to a tainted session,
-    nothing is written: the owner gets one question that lists the facts
-    whole, with Approve and Decline (R-POL-6).
+    nothing is written: the owner gets one message that lists the facts
+    whole, with Remember and Skip (R-POL-6).
   - `memory.review.enabled: false` switches it off; `/status` says so.
 - **Every fact** from either path passes the clean-context check before
   its commit ([ADR-0034](0034-clean-context-guard.md)). Its question
   gains one clause: a statement of how the owner's home and devices
   work, as the owner describes it, is a fact.
-- **The note.** After a turn or a review that changed memory, one
-  message lists the changes with an Undo button bound to those commits.
-  Undo runs `git revert` on them, newest first; if one does not apply,
+- **The note.** After a `memory.write` or a review that changed memory,
+  one message lists the changes with an Undo button bound to those
+  commits. Undo reverts them in one commit; if one does not apply,
   nothing is reverted and the press says so. The agent gets a node note
   of what was stored or held back.
 - Scheduled tasks and family members get neither path, as before.
@@ -138,9 +142,9 @@ The rules:
     whole life (R-POL-6), so the same rule applies. Replies are context;
     the prompt tells the review to take facts from the owner's messages,
     and the check still reads the result.
-  - *Another person in a group states "facts".* Only an admin's own
-    messages are given as the owner's; other speakers' messages are left
-    out of the input.
+  - *Another person in a group states "facts".* Only the owner's private
+    chat is reviewed: history keeps a speaker as a display name, which
+    another person can imitate.
   - *The review's own answer is steered into many writes.* At most five
     operations a run, the limits of ADR-0071 on each, and one note with
     Undo for all of them.
@@ -154,8 +158,10 @@ The rules:
 - A turn with nothing to remember costs what it did.
 - A missed fact is stored within the quiet time, or at the session's
   end.
-- A new purpose in the models config, a per-conversation review mark in
-  the database, a scheduler job kind, a new inbox event.
+- A new purpose in the models config, a review mark in the conversation
+  state, a table of due times with its timer component, a new inbox
+  event.
+- In a group chat only the agent's own writes store facts.
 - The review may store noise; the note shows each write and Undo removes
   it. What the owner undoes is the signal to tighten its prompt.
 - The 10 chatlab runs of the card's scenario measure how often the agent

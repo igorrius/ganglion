@@ -970,19 +970,21 @@ undone with `git revert`.
     at once when its session ends. It reads the owner's messages and the
     agent's replies as text, never a tool's result, and the topics; it
     returns at most five operations, which code applies. It is durable
-    (a scheduler job and an inbox event, once per span of messages), is
-    skipped for scheduled tasks, module events, family members and
-    local-only sessions, and is switched off with
+    (a stored due time and an inbox event, once per span of messages),
+    reads only the owner's private chat, is skipped for scheduled tasks,
+    module events, family members and local-only sessions, and is
+    switched off with
     `memory.review.enabled: false`.
   - Every fact from either path passes the clean-context check
     (R-POL-7). Messages of a tainted session are not written by the
-    review: the owner gets one question listing the facts (R-POL-6).
+    review: the owner gets one message listing the facts, with Remember
+    and Skip (R-POL-6).
   - What the agent found out itself, from a tool or a page, is not
     stored here; it waits for consolidation (R-MEM-1).
-- **R-MEM-9.** The owner sees every change. A turn or a review that
-  changed memory sends one note after the answer, in the owner's
-  language, listing what changed, with an Undo button that reverts those
-  commits; the note then folds (R-POL-9). An undo that cannot apply
+- **R-MEM-9.** The owner sees every change. A write by the agent
+  or a review that changed memory sends one note with the turn's
+  messages, in the owner's language, listing what changed, with an Undo
+  button that reverts those commits; the note then folds (R-POL-9). An undo that cannot apply
   says so and changes nothing. `/memory` (admin, private chat, no model,
   no note in the history) lists the topics; `/memory <topic>` shows one.
 
