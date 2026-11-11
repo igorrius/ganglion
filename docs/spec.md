@@ -1800,6 +1800,20 @@ Ideas that come up along the way and are outside the current phase go here.
 Reviewed at each gate.
 
 - Classifier and learning in the router (P2 / P3).
+- Tiny trained models inside modules (owner, 2026-11-11): the agent trains
+  a model of tens to a few thousand parameters (a decision tree, a
+  logistic regression, a small neural net) for one narrow task and ships
+  it as a module whose inference is plain arithmetic in WASM, returning a
+  number or a flag as 9.4 asks. Plain if-else stays the default; a model
+  is for a rule nobody can write down but the data shows (time to an
+  empty battery, an odd consumption pattern, the router classifier
+  above). Open, each needing an ADR: where training runs (a skill
+  script, online in the module with weights in its cells, a worker marked
+  like `builder`), the format of the weights, and how the owner vouches
+  for weights nobody can read, trained on outside data
+  ([ADR-0067](adr/0067-agent-writes-module-source.md),
+  [ADR-0068](adr/0068-vouch-for-module-source-per-file-and-vetted-crates.md)
+  vouch for source only).
 - Memory (M5 design, 2026-11-11): a model call after every turn to pick
   out facts (rejected for its cost, ADR-0072); storing what the agent
   found out itself before consolidation looks at it; finding a folded
