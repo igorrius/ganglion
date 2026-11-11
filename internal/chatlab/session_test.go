@@ -76,7 +76,7 @@ func TestSessionAdvanceClosesAQuestion(t *testing.T) {
 }
 
 func TestShowLogsAndJournal(t *testing.T) {
-	dir, _ := startSession(t, []ScriptStep{{Tool: "memory.write", Args: `{"title":"Boiler","body":"80 litres."}`}, {Say: "Stored."}}, time.Minute)
+	dir, _ := startSession(t, []ScriptStep{{Tool: "memory.write", Args: `{"topic":"Boiler","summary":"The water boiler","fact":"80 litres."}`}, {Say: "Stored."}}, time.Minute)
 	call(t, dir, Request{Op: OpSay, Text: "Remember my boiler"})
 	for what, want := range map[string]string{"journal": "memory.write", "turns": "scripted", "history": "Remember my boiler", "memory": "80 litres", "logs": "outbox: sent"} {
 		out := call(t, dir, Request{Op: OpShow, What: what})

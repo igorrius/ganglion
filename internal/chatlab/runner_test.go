@@ -81,7 +81,7 @@ func TestReachInconclusive(t *testing.T) {
 }
 
 func TestReachWithNudgePasses(t *testing.T) {
-	s := scripted("x", []ScriptStep{{Say: "Sure."}, {Tool: "memory.write", Args: `{"title":"Boiler","body":"80 litres."}`}, {Say: "Stored."}},
+	s := scripted("x", []ScriptStep{{Say: "Sure."}, {Tool: "memory.write", Args: `{"topic":"Boiler","summary":"The water boiler","fact":"80 litres."}`}, {Say: "Stored."}},
 		Step{Say: "My boiler holds 80 litres"},
 		Step{Reach: &Reach{Journal: JournalFact{Tool: "memory.write"}, Nudge: "Please remember that."}},
 		Step{Facts: &Facts{Memory: &Text{Contains: "80 litres"}}})
@@ -213,7 +213,7 @@ func TestAFactFailedUnderAnotherModelIsInconclusive(t *testing.T) {
 // was in the right one.
 func TestJudgeReadsTheReplyBeforeANudge(t *testing.T) {
 	m := &recordingModel{answer: `{"ok":true,"reason":""}`}
-	s := scripted("x", []ScriptStep{{Say: "First reply."}, {Tool: "memory.write", Args: `{"title":"Boiler","body":"80 litres."}`}, {Say: "Second reply."}},
+	s := scripted("x", []ScriptStep{{Say: "First reply."}, {Tool: "memory.write", Args: `{"topic":"Boiler","summary":"The water boiler","fact":"80 litres."}`}, {Say: "Second reply."}},
 		Step{Say: "My boiler holds 80 litres"},
 		Step{Reach: &Reach{Journal: JournalFact{Tool: "memory.write"}, Nudge: "Please remember that."}},
 		Step{Judge: "claim"})
