@@ -890,7 +890,7 @@ list (6), and a very fast Skip then Remember stores the facts.
 | 9 | Memory against M4c (ADR-0056) | `make memory`: binary, idle RSS, RSS after 1,000 turns |
 | 10 | The owner corrects the agent, sees the note, presses Undo once, reads `/memory` | the owner, on the test bot |
 
-- [ ] **Step 1:** `make lint test`, `make test-net`, `make lab-faults`, `make crash-agent`,
+- [x] **Step 1:** `make lint test`, `make test-net`, `make lab-faults`, `make crash-agent`,
   `make memory`; write the numbers beside M4c's in "Where we are".
   So far (2026-11-11, on `1fddfa6` and the harness fix): `make lint test` green (one timing test,
   `TestAddsStepSendsWithoutWaitingForTheTurn`, failed once under the load of a parallel
@@ -899,9 +899,15 @@ list (6), and a very fast Skip then Remember stores the facts.
   `/metrics` 116.5 MB: within the measure's noise; `make crash-agent`: 200 kills, 246 messages in
   124 groups (122 joined a turn), 128 answers, 0 duplicates, one commit per fact, after the
   harness learned the topic arguments and the note; the two new faults turn their scenarios red
-  (run by hand; the whole `make lab-faults` also runs a live judge).
-- [ ] **Step 2:** The owner decides on `make lab-all` (the prompt changed) or
-  `make lab-skip-full`.
+  (run by hand; the whole `make lab-faults` also runs a live judge); `make test-net` green.
+- [x] **Step 2:** The owner decides on `make lab-all` (the prompt changed) or
+  `make lab-skip-full`. The owner (2026-11-11): only `memory-correction`, no full run
+  (`make lab-skip-full` recorded). `memory-correction` on the real models (Sonnet answers, Haiku
+  reviews): **10 of 10 passed**, 442,247 tokens. In all 10 the agent stored the correction in its
+  own turn, before its answer, under a new topic "Deye inverter"; the review of the ended session
+  ran each time on Haiku and stored nothing more (one note per run). After `/new` the agent
+  answered "charging" every time. The runs with the review off were not made: the agent wrote by
+  itself in every run (owner).
 - [ ] **Step 3:** The live check with the owner (row 10), and the same correction with the
   agent told nothing about memory.
 - [ ] **Step 4:** Close: "Where we are", the phase plan's ticks, the ADRs' status, the board
