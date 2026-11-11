@@ -24,6 +24,9 @@ func (m *Memory) Undo(ctx context.Context, commits []string) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.commitHandEdits(ctx, ""); err != nil {
+		return err
+	}
 	var left []string
 	for _, c := range commits {
 		done, err := m.repo.Reverted(ctx, c)
@@ -42,7 +45,11 @@ func (m *Memory) Undo(ctx context.Context, commits []string) error {
 	for _, c := range left {
 		msg.WriteString(gitrepo.UndoOf + c + "\n")
 	}
-	_, err := m.repo.RevertAll(ctx, left, msg.String())
+	next, err := m.nextIDs()
+	if err != nil {
+		return err
+	}
+	_, err = m.repo.RevertAllFixed(ctx, left, msg.String(), func() ([]string, error) { return m.keepNextIDs(next) })
 	m.observeUndo(ctx, err)
 	if err != nil {
 		return fmt.Errorf("memory: undo: %w", err)
@@ -140,4 +147,43 @@ func oldShape(data []byte) bool {
 		return false
 	}
 	return slices.ContainsFunc(oldShapeKeys, func(k string) bool { _, ok := keys[k]; return ok })
+}
+
+// nextIDs is every topic's id counter.
+func (m *Memory) nextIDs() (map[string]int, error) {
+	ts, err := m.Topics()
+	if err != nil {
+		return nil, err
+	}
+	next := make(map[string]int, len(ts))
+	for _, t := range ts {
+		next[t.Slug] = t.Next
+	}
+	return next, nil
+}
+
+// keepNextIDs sets each topic's id counter back to at least what it was
+// before a revert, so an undone fact's id is never given again; it returns
+// the files it rewrote.
+func (m *Memory) keepNextIDs(before map[string]int) ([]string, error) {
+	ts, err := m.Topics()
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, t := range ts {
+		if t.Next >= before[t.Slug] {
+			continue
+		}
+		t.Next = before[t.Slug]
+		data, err := encodeTopic(t)
+		if err != nil {
+			return nil, err
+		}
+		if err := m.writeFile(pathOf(t.Slug, CheckOK), data); err != nil {
+			return nil, err
+		}
+		paths = append(paths, pathOf(t.Slug, CheckOK))
+	}
+	return paths, nil
 }

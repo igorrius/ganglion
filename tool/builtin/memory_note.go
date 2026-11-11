@@ -49,10 +49,12 @@ const (
 	noteSkipped      = "the owner pressed Skip: the memory review's facts were not stored"
 )
 
-// MemoryStore is what the notes' buttons change (memory.Memory).
+// MemoryStore is what the notes' buttons change and the question reads
+// (memory.Memory).
 type MemoryStore interface {
 	Apply(ctx context.Context, ops []memory.Op, src memory.Source) (memory.Applied, error)
 	Undo(ctx context.Context, commits []string) error
+	Topic(slug string) (memory.Topic, error)
 }
 
 // ButtonStore keeps quick-action buttons (pending.Store).
@@ -186,16 +188,7 @@ type proposalArgs struct {
 func (n MemoryNotes) Proposal(ctx context.Context, sp texts.Speaker, key, transport, conv, principal string, ops []memory.Op) (event.Outgoing, error) {
 	lines := make([]string, len(ops))
 	for i, op := range ops {
-		v := texts.Vars{varTopic: texts.Escape(op.Topic), varFact: texts.Escape(op.Text)}
-		switch op.Kind {
-		case memory.OpRemove:
-			v[varFact] = op.Fact
-			lines[i] = "- " + sp.Text(texts.MemoryLineForget, v)
-		case memory.OpReplace:
-			lines[i] = "- " + sp.Text(texts.MemoryLineReplaced, v)
-		case memory.OpAdd, memory.OpDrop:
-			lines[i] = "- " + sp.Text(texts.MemoryLineAdded, v)
-		}
+		lines[i] = "- " + n.proposed(sp, op)
 	}
 	text := sp.Text(texts.MemoryProposal, texts.Vars{"facts": strings.Join(lines, "\n")})
 	args, err := json.Marshal(proposalArgs{Ops: ops, Note: text})
@@ -274,4 +267,35 @@ func whatOf(changes []memory.Change) string {
 		}
 	}
 	return strings.Join(what, ", ")
+}
+
+// proposed is one fact of the question, everything a model wrote escaped:
+// a new topic with its summary, a correction with the text it replaces,
+// a forget with the text it removes.
+func (n MemoryNotes) proposed(sp texts.Speaker, op memory.Op) string {
+	topic := op.Topic
+	if op.Summary != "" {
+		topic += " — " + op.Summary
+	}
+	v := texts.Vars{varTopic: texts.Escape(topic), varFact: texts.Escape(op.Text)}
+	was := ""
+	if t, err := n.mem.Topic(op.Topic); err == nil {
+		for _, f := range t.Facts {
+			if f.ID == op.Fact {
+				was = f.Text
+			}
+		}
+	}
+	switch op.Kind {
+	case memory.OpRemove:
+		v[varFact] = texts.Escape(op.Fact + " " + was)
+		return sp.Text(texts.MemoryLineForget, v)
+	case memory.OpReplace:
+		if was != "" {
+			v[varFact] = texts.Escape(op.Text + " (was: " + was + ")")
+		}
+		return sp.Text(texts.MemoryLineReplaced, v)
+	case memory.OpAdd, memory.OpDrop:
+	}
+	return sp.Text(texts.MemoryLineAdded, v)
 }

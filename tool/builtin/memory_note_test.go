@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/memory"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/pending"
 )
@@ -113,5 +115,28 @@ func TestForgetSendsANote(t *testing.T) {
 	var a struct{ Commits []string }
 	if err := json.Unmarshal(buttons.got[1].Args, &a); err != nil || len(a.Commits) != 1 {
 		t.Fatalf("args %s", buttons.got[1].Args)
+	}
+}
+
+// The review's question shows a new topic's summary and the text a
+// correction replaces, with every field a model wrote escaped.
+func TestProposalShowsWhatRememberDoes(t *testing.T) {
+	tools, m, buttons := memoryToolsWith(t)
+	run(t, tools["memory.write"], call("memory.write", `{"topic":"Car","summary":"The car","fact":"The car is blue."}`))
+	notes := builtin.NewMemoryNotes(m, buttons, func() time.Time { return noteNow }, time.UTC)
+	o, err := notes.Proposal(context.Background(), texts.Speaker{}, "k", "telegram", "telegram:42", "telegram:user:42", []memory.Op{
+		{Kind: memory.OpReplace, Topic: "car", Fact: "f1", Text: "The car is *red*."},
+		{Kind: memory.OpAdd, Topic: "Boiler", Summary: "The water_boiler", Text: "It holds 80 litres."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"car, corrected: The car is \\*red\\*. (was: The car is blue.)", "Boiler — The water\\_boiler: It holds 80 litres."} {
+		if !strings.Contains(o.Text, want) {
+			t.Fatalf("%q is not in\n%s", want, o.Text)
+		}
+	}
+	if len(o.Buttons) != 2 {
+		t.Fatalf("buttons %+v", o.Buttons)
 	}
 }

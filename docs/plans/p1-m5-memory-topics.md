@@ -843,6 +843,32 @@ ended session runs before the question. The fault `memory-review-tool-text` lets
 into the review and makes a tainted session write without asking.
 ---
 
+## Review fixes (2026-11-11)
+
+An independent review of the whole branch (tasks 1–7) found these, fixed with tests:
+
+1. A topic file that does not parse kept its slug free, so a new topic of that name wrote over it:
+   `allocate` now counts a file on disk as taken.
+2. The owner's uncommitted edit to a topic went into the next change's commit, and Undo took it
+   out; Undo with such an edit failed outright. `Apply` and `Undo` first commit the owner's edits
+   apart (`memory: hand edits`, `gitrepo.Changed`; a file that holds a fact of the change's own
+   turn is a crash's leftover and stays with the change); `RevertAll` unstages what was left
+   staged and maps a revert git refused to `ErrConflict`.
+3. An archived session's review did not record its mark, so `/resume` read it again:
+   `SessionStore.MarkReviewed` stores it, and a review of a session the owner resumed reads the
+   live state.
+4. A hand-written line never got an id: it gets one at the next write to its topic.
+5. Undo turned a topic's id counter back, so an id could be given twice: the counter is kept in
+   the undo commit (`RevertAllFixed`).
+7. The review's answer is checked like any change (`ParseOps` runs `checkOps`: fact ids, lengths,
+   markers); the question shows a new topic's summary and the text a correction or a forget
+   replaces, every field escaped; a folded topic with a fact from outside content is marked.
+8. A topic file with CRLF line ends or a byte-order mark reads as one with plain line ends.
+9. A topic named by another spelling of its slug is the same topic; a fact cannot start with an id.
+
+Left for the board, card G-140: a review rerun after a crash may store a fact its note does not
+list (6), and a very fast Skip then Remember stores the facts.
+
 ### Task 8: Acceptance and closing
 
 **Files:**

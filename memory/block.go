@@ -112,11 +112,16 @@ func section(t Topic) string {
 	return b.String()
 }
 
-// foldedLine is a folded topic: "- title — summary (slug)".
+// foldedLine is a folded topic: "- title — summary (slug)", marked when
+// any of its facts came from a session with outside content.
 func foldedLine(t Topic) string {
 	s := "- " + oneLine(t.Title)
 	if sum := oneLine(t.Summary); sum != "" {
 		s += " — " + sum
 	}
-	return s + " (" + t.Slug + ")\n"
+	s += " (" + t.Slug + ")"
+	if slices.ContainsFunc(t.Facts, func(f Fact) bool { return f.Tainted }) {
+		s += " " + TaintedMark
+	}
+	return s + "\n"
 }

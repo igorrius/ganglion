@@ -206,16 +206,15 @@ func TestSlugs(t *testing.T) {
 	}
 }
 
-// A topic's title in any case is the same topic; another title with the
-// same slug gets a suffix.
-func TestSameTitleSameTopicOtherTitleGetsASuffix(t *testing.T) {
+// A topic named by its title in any case, or by another spelling of its
+// slug, is the same topic (review fix 9).
+func TestTitleOrSlugFindsTheSameTopic(t *testing.T) {
 	e := newEnv(t, okGuard())
 	same := e.fact(t, "Car", "The owner drives a blue car.")
 	upd := e.fact(t, "car", "It is serviced in May.")
-	other := e.fact(t, "Car!", "A different topic with the same slug.")
-	third := e.fact(t, "car?", "And another.")
-	if same.Slug != "car" || upd.Slug != "car" || upd.Fact != "f2" || other.Slug != "car-2" || third.Slug != "car-3" {
-		t.Fatalf("slugs %+v %+v %+v %+v", same, upd, other, third)
+	other := e.fact(t, "Car!", "It has winter tyres.")
+	if same.Slug != "car" || upd.Slug != "car" || upd.Fact != "f2" || other.Slug != "car" || other.Fact != "f3" {
+		t.Fatalf("slugs %+v %+v %+v", same, upd, other)
 	}
 }
 

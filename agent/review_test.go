@@ -270,6 +270,17 @@ func TestReviewOfAnArchivedSession(t *testing.T) {
 	if _, err := r.mem.Topic("boiler"); err != nil {
 		t.Fatal(err)
 	}
+	// Review fix 3: the archive keeps the mark, so a resumed session is
+	// not read again, and a review of it now reads the live state.
+	r.turn(t, message(owner, "Igor", "/resume 1"))
+	if st := r.state(t); st.Session != session || st.Reviewed != len(st.Messages) {
+		t.Fatalf("resumed %+v", st)
+	}
+	calls := len(r.reviewCalls())
+	r.turn(t, reviewEvent(session))
+	if len(r.reviewCalls()) != calls {
+		t.Fatal("the resumed session was read again")
+	}
 }
 
 func TestReviewInput(t *testing.T) {

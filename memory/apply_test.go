@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -371,5 +372,119 @@ func TestMigrateOldFacts(t *testing.T) {
 	again := commits(t, e)
 	if err := e.m.Migrate(context.Background()); err != nil || commits(t, e) != again {
 		t.Fatalf("a second move committed: %v", err)
+	}
+}
+
+// Review fix 1: a topic file that does not parse is never written over: a
+// new topic with its slug gets another slug.
+func TestApplyKeepsAnUnreadableTopic(t *testing.T) {
+	e := newEnv(t, okGuard())
+	bad := "---\ntitle: Car: Tesla\n---\n- The car is grey.\n"
+	if err := os.MkdirAll(filepath.Join(e.repo.Dir(), "memory"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.repo.Dir(), "memory/car.md"), []byte(bad), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := e.apply(t, src, add("Car", "The family car", "The car is blue."))
+	if got.Changes[0].Slug == "car" {
+		t.Fatal("the unreadable car.md was taken")
+	}
+	if b, _ := os.ReadFile(filepath.Join(e.repo.Dir(), "memory/car.md")); string(b) != bad {
+		t.Fatalf("car.md changed: %q", b)
+	}
+}
+
+// Review fix 2: the owner's uncommitted edit to a topic goes in a commit of
+// its own, so the change's commit, and its Undo, hold only the change.
+func TestApplyCommitsHandEditsApart(t *testing.T) {
+	e := newEnv(t, okGuard())
+	e.apply(t, memory.Source{Turn: "01T0", Key: "k0"}, add("Car", "The family car", "The car is blue."))
+	full := filepath.Join(e.repo.Dir(), "memory/car.md")
+	data, _ := os.ReadFile(full)
+	if err := os.WriteFile(full, append(data, []byte("- It is serviced in May.\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := e.apply(t, src, add("car", "", "It has winter tyres."))
+	// The hand edit is its own commit, just before the change's; the change
+	// only gives its line an id.
+	if subj := git(t, e.repo.Dir(), "log", "-1", "--format=%s", got.Commit+"~1"); subj != "memory: hand edits" {
+		t.Fatalf("the commit before the change is %q", subj)
+	}
+	if diff := git(t, e.repo.Dir(), "show", got.Commit+"~1", "--format="); !strings.Contains(diff, "+- It is serviced in May.") {
+		t.Fatalf("the hand edit's commit:\n%s", diff)
+	}
+	if err := e.m.Undo(context.Background(), []string{got.Commit}); err != nil {
+		t.Fatal(err)
+	}
+	tp, _ := e.m.Topic("car")
+	if !slices.ContainsFunc(tp.Facts, func(f memory.Fact) bool { return strings.Contains(f.Text, "serviced in May") }) ||
+		slices.ContainsFunc(tp.Facts, func(f memory.Fact) bool { return strings.Contains(f.Text, "winter tyres") }) {
+		t.Fatalf("after undo %+v", tp.Facts)
+	}
+}
+
+// Review fix 2B: an owner's uncommitted edit when Undo is pressed is kept,
+// and the undo still applies or says it conflicts, never a broken revert.
+func TestUndoWithAnUncommittedEdit(t *testing.T) {
+	e := newEnv(t, okGuard())
+	got := e.apply(t, src, add("Car", "The family car", "The car is blue."))
+	full := filepath.Join(e.repo.Dir(), "memory/car.md")
+	data, _ := os.ReadFile(full)
+	if err := os.WriteFile(full, append(data, []byte("- It is serviced in May.\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := e.m.Undo(context.Background(), []string{got.Commit})
+	if err != nil && !errors.Is(err, gitrepo.ErrConflict) {
+		t.Fatalf("undo: %v", err)
+	}
+	if exists(e.repo.Dir(), ".git/REVERT_HEAD") {
+		t.Fatal("a revert is left in progress")
+	}
+	if b, _ := os.ReadFile(full); err != nil && !strings.Contains(string(b), "serviced in May") {
+		t.Fatalf("the hand edit is lost: %q", b)
+	}
+}
+
+// Review fix 4: a line with no id gets one at the next write to its topic.
+func TestApplyGivesHandLinesIDs(t *testing.T) {
+	e := newEnv(t, okGuard())
+	if err := os.MkdirAll(filepath.Join(e.repo.Dir(), "memory"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.repo.Dir(), "memory/car.md"), []byte("---\ntitle: Car\n---\n- The car is blue.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.apply(t, src, add("car", "", "It has winter tyres."))
+	tp, _ := e.m.Topic("car")
+	if len(tp.Facts) != 2 || tp.Facts[0].ID == "" || tp.Facts[0].ID == tp.Facts[1].ID {
+		t.Fatalf("facts %+v", tp.Facts)
+	}
+}
+
+// Review fix 5: Undo keeps the id counter, so an id is never given twice.
+func TestUndoKeepsTheIDCounter(t *testing.T) {
+	e := newEnv(t, okGuard())
+	e.apply(t, memory.Source{Turn: "01T0", Key: "k0"}, add("Car", "The family car", "The car is blue."))
+	second := e.apply(t, memory.Source{Turn: "01T1", Key: "k1"}, add("car", "", "It has winter tyres."))
+	if err := e.m.Undo(context.Background(), []string{second.Commit}); err != nil {
+		t.Fatal(err)
+	}
+	third := e.apply(t, memory.Source{Turn: "01T2", Key: "k2"}, add("car", "", "It is serviced in May."))
+	if third.Changes[0].Fact == "f2" {
+		t.Fatal("f2 was given again after the undo")
+	}
+}
+
+// Review fix 9: a topic named by another spelling of its slug is the same
+// topic; a fact cannot start with an id of its own.
+func TestApplyFindsATopicBySlugAndRefusesALeadingID(t *testing.T) {
+	e := newEnv(t, okGuard())
+	e.apply(t, memory.Source{Turn: "01T0", Key: "k0"}, add("Inverter", "The Deye inverter", "Negative batt_w is charging."))
+	if got := e.apply(t, src, add("Inverter!", "", "It is 8 kW.")); got.Changes[0].Slug != "inverter" {
+		t.Fatalf("slug %s", got.Changes[0].Slug)
+	}
+	if _, err := e.m.Apply(context.Background(), []memory.Op{add("inverter", "", "[f1] fake")}, memory.Source{Turn: "t", Key: "x"}); !errors.Is(err, memory.ErrInvalid) {
+		t.Fatalf("a leading id: %v", err)
 	}
 }

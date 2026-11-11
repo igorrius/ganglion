@@ -91,6 +91,9 @@ func (m *Memory) Apply(ctx context.Context, ops []Op, src Source) (Applied, erro
 	src.Key = oneLine(src.Key)
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.commitHandEdits(ctx, src.Turn); err != nil {
+		return Applied{}, err
+	}
 	topics, err := m.Topics()
 	if err != nil {
 		return Applied{}, err
@@ -190,12 +193,17 @@ func (a *applying) apply(ctx context.Context, op Op) error {
 	return nil
 }
 
-// find is the index of the topic named by slug or title; -1 when none.
+// find is the index of the topic named by its slug, its title in any case,
+// or another spelling of its slug ("Inverter!"); -1 when none.
 func (a *applying) find(name string) int {
 	if i := slices.IndexFunc(a.topics, func(t Topic) bool { return t.Slug == name }); i >= 0 {
 		return i
 	}
-	return slices.IndexFunc(a.topics, func(t Topic) bool { return strings.EqualFold(t.Title, name) })
+	if i := slices.IndexFunc(a.topics, func(t Topic) bool { return strings.EqualFold(t.Title, name) }); i >= 0 {
+		return i
+	}
+	slug := Slug(name)
+	return slices.IndexFunc(a.topics, func(t Topic) bool { return t.Slug == slug })
 }
 
 // open adds a new, empty topic titled by op.Topic; it is written only when
@@ -211,7 +219,9 @@ func (a *applying) open(op Op) (int, error) {
 	return len(a.topics) - 1, nil
 }
 
-// allocate returns a free slug for title: its own, or with "-2", "-3"….
+// allocate returns a free slug for title: its own, or with "-2", "-3"…. A
+// slug whose file exists but does not parse is not free: the owner's file
+// is never written over.
 func (a *applying) allocate(title string) string {
 	base := Slug(title)
 	for n := 1; ; n++ {
@@ -220,7 +230,7 @@ func (a *applying) allocate(title string) string {
 			suffix := "-" + strconv.Itoa(n)
 			slug = cut(base, MaxSlugLen-len(suffix)) + suffix
 		}
-		if !slices.ContainsFunc(a.topics, func(t Topic) bool { return t.Slug == slug }) {
+		if !slices.ContainsFunc(a.topics, func(t Topic) bool { return t.Slug == slug }) && len(a.m.present([]string{pathOf(slug, CheckOK)})) == 0 {
 			return slug
 		}
 	}
@@ -363,7 +373,7 @@ func (a *applying) store(ctx context.Context) (string, error) {
 		if !a.changed[t.Slug] {
 			continue
 		}
-		data, err := encodeTopic(t)
+		data, err := encodeTopic(withIDs(t))
 		if err != nil {
 			return "", err
 		}
@@ -506,4 +516,46 @@ func (m *Memory) Notice(ctx context.Context, c Change) ([]event.Outgoing, error)
 		return nil, fmt.Errorf("memory: quarantine alert: %w", err)
 	}
 	return out, nil
+}
+
+// commitHandEdits commits the owner's uncommitted changes to topic files in
+// a commit of their own, so a change's commit, and its Undo, hold only that
+// change (R-MEM-9). A file that already holds a fact of turn is this
+// change's own, left by a crash between its write and its commit: the
+// change commits it.
+func (m *Memory) commitHandEdits(ctx context.Context, turn string) error {
+	changed, err := m.repo.Changed(ctx, dirFacts)
+	if err != nil {
+		return fmt.Errorf("memory: %w", err)
+	}
+	var paths []string
+	for _, rel := range changed {
+		slug, ok := strings.CutSuffix(strings.TrimPrefix(rel, dirFacts+"/"), ".md")
+		if !ok || strings.Contains(slug, "/") {
+			continue // quarantine and anything else is not a topic
+		}
+		if t, err := m.topic(slug); err == nil && turn != "" && slices.ContainsFunc(t.Facts, func(f Fact) bool { return f.Turn == turn }) {
+			continue
+		}
+		paths = append(paths, rel)
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	if _, err := m.repo.Commit(ctx, paths, "memory: hand edits\n"); err != nil {
+		return fmt.Errorf("memory: commit hand edits: %w", err)
+	}
+	return nil
+}
+
+// withIDs is t with an id for every line the owner wrote by hand: it gets
+// one at the next write to its topic, so it can be corrected or forgotten.
+func withIDs(t Topic) Topic {
+	t.Facts = slices.Clone(t.Facts)
+	for i := range t.Facts {
+		if t.Facts[i].ID == "" {
+			t.Facts[i].ID, t.Next = "f"+strconv.Itoa(t.Next), t.Next+1
+		}
+	}
+	return t
 }

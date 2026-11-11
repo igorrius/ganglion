@@ -103,6 +103,8 @@ func factLine(f Fact) string {
 // M5 plan): nothing the owner typed is lost. Next is at least one above
 // the highest id.
 func decodeTopic(slug string, data []byte) (Topic, error) {
+	// A file saved on Windows or with a byte-order mark reads the same.
+	data = bytes.ReplaceAll(bytes.TrimPrefix(data, []byte("\ufeff")), []byte("\r\n"), []byte("\n"))
 	t := Topic{Slug: slug, Title: slug}
 	body := data
 	if rest, ok := bytes.CutPrefix(data, []byte(fence)); ok {
@@ -177,8 +179,9 @@ func highestID(fs []Fact) int {
 }
 
 // checkFactText returns s on one line, refusing an empty text, one over
-// MaxFactRunes, and one holding a comment marker, which would end or fake
-// the fact's source comment.
+// MaxFactRunes, one holding a comment marker, which would end or fake the
+// fact's source comment, and one that starts with an id, which would read
+// as another fact's.
 func checkFactText(s string) (string, error) {
 	s = oneLine(s)
 	switch {
@@ -188,6 +191,8 @@ func checkFactText(s string) (string, error) {
 		return "", fmt.Errorf("%w: a fact is longer than %d characters", ErrInvalid, MaxFactRunes)
 	case strings.Contains(s, "<!--") || strings.Contains(s, "-->"):
 		return "", fmt.Errorf("%w: a fact cannot hold <!-- or -->", ErrInvalid)
+	case idPrefix.MatchString(s + " "):
+		return "", fmt.Errorf("%w: a fact cannot start with an id such as [f3]", ErrInvalid)
 	}
 	return s, nil
 }

@@ -40,6 +40,8 @@ func TestParseOps(t *testing.T) {
 		`{"ops":[{"kind":"add","topic":"car","text":"x","why":"because"}]}`,
 		`{"ops":[], "note":"x"}`,
 		`{"ops":{}}`,
+		`{"ops":[{"kind":"remove","topic":"car","fact":"f1](http://evil.example)"}]}`,
+		`{"ops":[{"kind":"add","topic":"car","text":"x <!-- 2026-01-01 -->"}]}`,
 		`{}`,
 		six,
 	} {

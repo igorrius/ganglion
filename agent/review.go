@@ -123,14 +123,14 @@ func (a *Agent) memoryReview(ctx context.Context, t *turn) error {
 		return err
 	}
 	if st.LocalOnly {
-		a.markReviewed(t, live)
+		a.markReviewed(ctx, t, st, live)
 		a.observeReview(ctx, t.event.Conv, reviewSkipped)
 		return nil
 	}
 	in := reviewInput(st.Messages, st.Reviewed, reviewInputRunes)
 	a.observeReviewUnread(ctx, in.skipped)
 	if in.owner == 0 {
-		a.markReviewed(t, live)
+		a.markReviewed(ctx, t, st, live)
 		a.observeReview(ctx, t.event.Conv, reviewNothing)
 		return nil
 	}
@@ -141,14 +141,15 @@ func (a *Agent) memoryReview(ctx context.Context, t *turn) error {
 	if err := a.storeReview(ctx, t, *st, ops, live); err != nil {
 		return err
 	}
-	a.markReviewed(t, live)
+	a.markReviewed(ctx, t, st, live)
 	return nil
 }
 
 // reviewedState is the session the event names: the live one, or an
 // archived one read from the archive; nil when that is gone.
 func (a *Agent) reviewedState(ctx context.Context, t *turn) (*State, bool, error) {
-	if t.review.Session == "" {
+	if t.review.Session == "" || t.review.Session == t.state.Session {
+		// The live session, also an ended one the owner resumed since.
 		return &t.state, true, nil
 	}
 	st, err := a.d.Archive.Get(ctx, t.event.Conv, t.review.Session)
@@ -160,11 +161,17 @@ func (a *Agent) reviewedState(ctx context.Context, t *turn) (*State, bool, error
 	return &st, false, nil
 }
 
-// markReviewed marks the live session read up to its end; an archived
-// session was reviewed once, when it ended.
-func (a *Agent) markReviewed(t *turn, live bool) {
+// markReviewed marks the session read up to its end: the live one in the
+// state the turn saves, an archived one in the archive, so it is not read
+// again when the owner resumes it. A failure there is logged: the review
+// is done.
+func (a *Agent) markReviewed(ctx context.Context, t *turn, st *State, live bool) {
 	if live {
 		t.state.Reviewed = len(t.state.Messages)
+		return
+	}
+	if err := a.d.Archive.MarkReviewed(ctx, t.event.Conv, t.review.Session, len(st.Messages)); err != nil {
+		a.log.Warn("agent: memory review mark not stored", "conv", t.event.Conv, "session", t.review.Session, "err", err)
 	}
 }
 
@@ -194,7 +201,7 @@ func (a *Agent) askReview(ctx context.Context, t *turn, st State, conversation s
 	if err != nil {
 		a.log.Warn("agent: the memory review's answer is unreadable", "conv", t.event.Conv)
 		a.observeReview(ctx, t.event.Conv, reviewUnreadable)
-		a.markReviewed(t, t.review.Session == "")
+		a.markReviewed(ctx, t, &st, t.review.Session == "" || t.review.Session == t.state.Session)
 		return nil, false
 	}
 	if len(ops) == 0 {

@@ -188,6 +188,27 @@ func (r *Repo) staged(ctx context.Context, paths []string) (bool, error) {
 	return strings.TrimSpace(out) != "", nil
 }
 
+// Changed lists the paths under rel that differ from the last commit:
+// changed, added, removed or not tracked yet.
+func (r *Repo) Changed(ctx context.Context, rel string) ([]string, error) {
+	if err := checkPath(rel); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out, err := r.run(ctx, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames", "--", rel)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for entry := range strings.SplitSeq(out, "\x00") {
+		if len(entry) > 3 {
+			paths = append(paths, entry[3:])
+		}
+	}
+	return paths, nil
+}
+
 // Head is the id of the current commit; an error in a repository with no
 // commit yet.
 func (r *Repo) Head(ctx context.Context) (string, error) {
@@ -225,6 +246,13 @@ func (r *Repo) Revert(ctx context.Context, commit string) (string, error) {
 // stay out of it. If any commit does not apply, the revert is aborted,
 // nothing changes and the error is ErrConflict.
 func (r *Repo) RevertAll(ctx context.Context, commits []string, msg string) (string, error) {
+	return r.RevertAllFixed(ctx, commits, msg, func() ([]string, error) { return nil, nil })
+}
+
+// RevertAllFixed is RevertAll with fix run after the revert is applied and
+// before it is committed: the paths fix returns, changed again on disk,
+// join the same commit (memory keeps its id counters this way).
+func (r *Repo) RevertAllFixed(ctx context.Context, commits []string, msg string, fix func() ([]string, error)) (string, error) {
 	if len(commits) == 0 {
 		return "", errors.New("gitrepo: revert: no commits")
 	}
@@ -237,16 +265,39 @@ func (r *Repo) RevertAll(ctx context.Context, commits []string, msg string) (str
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// Only the revert goes in the commit: anything left staged (a crash
+	// between a commit's add and its commit) is unstaged, not lost.
+	if _, err := r.run(ctx, "reset", "--quiet"); err != nil {
+		return "", err
+	}
 	if _, err := r.run(ctx, args...); err != nil {
-		if _, aerr := r.run(ctx, "revert", "--abort"); aerr != nil {
-			return "", fmt.Errorf("gitrepo: revert: %w; the abort failed too: %w", err, aerr)
+		return "", r.abortRevert(ctx, err)
+	}
+	paths, err := fix()
+	if err != nil {
+		return "", errors.Join(err, r.abortRevert(ctx, err))
+	}
+	if len(paths) > 0 {
+		if _, err := r.run(ctx, append([]string{"add", "--"}, paths...)...); err != nil {
+			return "", err
 		}
-		return "", fmt.Errorf("%w: %w", ErrConflict, err)
 	}
 	if _, err := r.run(ctx, "commit", "--quiet", "--no-verify", "--message", msg); err != nil {
 		return "", err
 	}
 	return r.head(ctx)
+}
+
+// abortRevert takes back a revert that did not apply and returns
+// ErrConflict. A revert git refused before it started (a local change in
+// its way) leaves nothing to abort.
+func (r *Repo) abortRevert(ctx context.Context, cause error) error {
+	if _, err := r.run(ctx, "revert", "--abort"); err != nil {
+		if _, serr := os.Stat(filepath.Join(r.dir, ".git", "REVERT_HEAD")); serr == nil {
+			return fmt.Errorf("gitrepo: revert: %w; the abort failed too: %w", cause, err)
+		}
+	}
+	return fmt.Errorf("%w: %w", ErrConflict, cause)
 }
 
 // Last returns the newest commit whose message holds line as a whole

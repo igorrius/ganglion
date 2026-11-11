@@ -149,3 +149,12 @@ func sameTopic(a, b Topic) bool {
 func sameFact(a, b Fact) bool {
 	return a.ID == b.ID && a.Text == b.Text && a.Date.Equal(b.Date) && a.Turn == b.Turn && a.Tainted == b.Tainted
 }
+
+// Review fix 8: a file saved with CRLF line ends, or with a BOM, reads as
+// one with plain line ends.
+func TestDecodeTopicCRLF(t *testing.T) {
+	tp, err := decodeTopic("car", []byte("\ufeff---\r\ntitle: Car\r\nnext: 3\r\n---\r\n\r\n- [f2] The car is blue.\r\n"))
+	if err != nil || tp.Title != "Car" || tp.Next != 3 || len(tp.Facts) != 1 || tp.Facts[0].Text != "The car is blue." {
+		t.Fatalf("%+v %v", tp, err)
+	}
+}

@@ -61,5 +61,9 @@ func ParseOps(answer string) ([]Op, error) {
 		}
 		ops = append(ops, Op(r))
 	}
+	// The same checks as any change: a fact id, a text's length and markers.
+	if _, err := checkOps(ops); err != nil {
+		return nil, err
+	}
 	return ops, nil
 }
