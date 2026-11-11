@@ -6,9 +6,14 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** memory by topic (board card G-138): facts and the owner's
-  corrections kept during the conversation in topic files, found when the
-  live check showed the agent forgetting a correction; a brainstorm first.
+- **Next:** M5, memory by topic (board card G-138), designed on
+  2026-11-11 ([design](plans/p1-m5-memory-topics-design.md), ADRs
+  [0071](adr/0071-memory-topics-whole-in-the-prompt.md) and
+  [0072](adr/0072-who-writes-memory.md), Proposed): facts in topic
+  files, every topic whole in the prompt within a budget; the agent
+  stores the owner's corrections in the turn and a review after quiet
+  time catches what it missed, with no model call per message; a note
+  with Undo and `/memory`. The plan comes next; no code yet.
   The Railway deploy (the image
   and [deploy-railway.md](deploy-railway.md) are ready; Landlock ABI 3 or
   newer and hard links on the volume still to check) stays open as board

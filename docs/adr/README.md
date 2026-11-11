@@ -76,6 +76,8 @@ considered, how they compare, the decision and its consequences. See
 | [0068](0068-vouch-for-module-source-per-file-and-vetted-crates.md) | Vouch for module source per file and only with the examples' crates (refines 0067) | Accepted | 2026-11-10 |
 | [0069](0069-background-jobs-with-a-live-card.md) | Run long node work as background jobs with a live card the node edits | Accepted | 2026-11-10 |
 | [0070](0070-builds-in-a-row-instead-of-depth.md) | Bound the agent's fix-and-rebuild loop by builds in a row, not by turn depth (refines 0069) | Accepted | 2026-11-10 |
+| [0071](0071-memory-topics-whole-in-the-prompt.md) | Keep facts in topic files and show every topic whole in the prompt, within a budget (replaces the file layout of 0033) | Proposed | 2026-11-11 |
+| [0072](0072-who-writes-memory.md) | The agent writes memory in the turn, and a review after quiet time catches what it missed | Proposed | 2026-11-11 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).
