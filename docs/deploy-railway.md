@@ -32,21 +32,32 @@ Three details matter to the builder:
   `setpriv --reuid=10001 --regid=10001 --clear-groups <command>` to act as the
   node's user.
 
-The image installs no model provider. Add one at deploy time, with the owner:
+The image carries the claude CLI as one root-owned binary,
+`/usr/local/bin/claude` (`--build-arg CLAUDE_CLI=off` leaves it out). Choose
+the provider at deploy time, with the owner:
 
+- **The claude CLI:** set `CLAUDE_CODE_OAUTH_TOKEN` on the service (from
+  `claude setup-token`) and list the `claude-cli` provider in `models:`. No
+  login inside the container is needed: the CLI reads the token from the
+  environment, which the provider passes to it, and keeps its own files in
+  `/home/ganglion/.claude`, outside the volume. Commands the agent runs do not
+  get the token (a clean environment), but a module could be granted it by its
+  manifest until board card G-132 is closed: read the install window.
 - **OpenRouter:** set `OPENROUTER_API_KEY` and name `key: env:OPENROUTER_API_KEY`
   in the `models:` section of `ganglion.yaml`.
-- **The claude CLI:** it needs a login inside the container, which the image
-  does not do. Install the CLI in a derived image and log in once over
-  `railway ssh`; the login lives under the user's home, which is not on the
-  volume, so it is lost at the next deploy. Prefer OpenRouter on Railway.
 
 ## The service
 
 1. Create a second service in the same project as the current bot, from this
-   repository and branch (Railway builds the `Dockerfile` by itself). Do not
-   point it at the current bot's token: use the test bot's.
-2. **Volume:** add a volume to the service, mount path `/data`.
+   repository and branch (Railway builds the `Dockerfile` by itself), or with
+   the CLI: `railway add -s ganglion`, then `railway up -s ganglion` from the
+   repository. Always name the service: `railway link` selects the current
+   bot's service by itself. Do not point it at the current bot's token: use
+   the test bot's.
+2. **Volume:** add a volume to the service, mount path `/data`
+   (`railway volume --service <service id> add -m /data`; with a service's
+   name CLI 5.71 panics). The `Dockerfile` has no `VOLUME` line, because
+   Railway refuses a Dockerfile that has one.
 3. **The volume and the user.** Railway mounts volumes owned by root, and its
    documentation suggests `RAILWAY_RUN_UID=0` for images that default to a
    non-root user. Do not set it: the node's command sandbox and the builder
@@ -65,14 +76,27 @@ The image installs no model provider. Add one at deploy time, with the owner:
    | `OPENROUTER_API_KEY` | a provider key, if the agent runs through OpenRouter |
 
    Secrets are written in `ganglion.yaml` as `env:NAME` and never in the file.
+   A variable can refer to the current bot's (`${{openclaw.DEYE_APP_ID}}`),
+   but not to a sealed one: a sealed variable resolves to an empty value, so
+   set those by value.
 5. **Memory:** give the service 1 GB while builds run (cargo and rustc peak
    there). The node's own limit is set in the file, `node.memory_limit:
    100MiB`: the node logs `node: memory limit` with `source=config` at start.
-   Builds are separate processes outside that soft limit.
+   Builds are separate processes outside that soft limit. Measured on
+   Railway (2026-11-11, `deye-reader`): the container peaked at 1.74 GB
+   during the build, file cache included, and 0.92 GB stayed afterwards, of
+   which 874 MB was the kernel's cache of the Rust toolchain's files and
+   36 MB anonymous memory. Railway counts that cache as used memory and the
+   container cannot ask its cgroup to reclaim it (`/sys/fs/cgroup` is
+   read-only), so the builder advises the kernel to drop the toolchain's
+   cached pages when a build ends.
 6. **Restart policy:** "on failure". The node exits with code 75 for
    `/restart`, and the platform starts it again.
 7. **Region and size:** the same region as the current bot; nothing here needs
    more than the plan's CPU.
+
+`railway ssh` and `railway volume files` need an SSH key registered in the
+Railway account (`railway ssh keys add`); the CLI's login is not enough.
 
 ## `ganglion.yaml` in the volume
 
@@ -127,6 +151,14 @@ first start, the line must read `sandbox: ready ...`; if it reads `sandbox:
 commands are off`, its `reason` names what is missing (kernel, root, or
 dumpable) and nothing can be built.
 
+Checked on Railway (2026-11-11, project `openclaw`, service `ganglion`):
+kernel `6.18.15+deb13-cloud-amd64`; the volume is ext4, handed to `ganglion` by
+the entrypoint, and hard links work on it; the node runs as uid 10001 and logs
+`sandbox: ready denied=62 hide_names=false`, `node: memory limit
+bytes=104857600 source=config` (the container's own limit is 8 GB); idle RSS
+47 MB with the agent on; `claude -p` answers as that user with the token.
+Still open: a module build there and its peak memory, and the comparison below.
+
 If the sandbox is off, the node still runs the echo bot, the built-in modules
 and installed modules; it only builds nothing.
 
@@ -172,6 +204,7 @@ When a few days agree, the owner decides to migrate the bot (spec R-LS-4).
 
 ## Not covered here
 
-The Railway deploy itself is the owner's step (task 11 of the plan); this page
-and the image are the preparation. A custom domain and a webhook are not
+While the test bot's token runs on Railway, a local `make live-agent` on the
+same bot gets `409 Conflict` and one of the two stops polling: stop the
+service (or use another bot) for local live checks. A custom domain and a webhook are not
 needed: the bot polls Telegram.

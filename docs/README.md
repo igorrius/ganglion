@@ -6,10 +6,13 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** M6, the agent reconfigures the system, or the Railway deploy
-  (board card G-121: the image and [deploy-railway.md](deploy-railway.md)
-  are ready; Landlock ABI 3 or newer and hard links on the volume still to
-  check). M5's review left board card G-140.
+- **Next:** M6, the agent reconfigures the system. The Railway deploy
+  (board card G-121) is up since 2026-11-11: service `ganglion` beside the
+  current bot, on the test bot, the agent through the claude CLI, the
+  sandbox ready on kernel 6.18, hard links work on the volume
+  ([deploy-railway.md](deploy-railway.md)). Still to do there: build and
+  install `deye-reader`, measure a build's peak memory, compare with
+  `deye.py` for a few days. M5's review left board card G-140.
 - **M5 closed (2026-11-11):** memory by topic
   ([design](plans/p1-m5-memory-topics-design.md),
   [plan](plans/p1-m5-memory-topics.md), ADRs
@@ -685,7 +688,8 @@ Suggested path after a long break: this page → the
 
 The image is built from the [`Dockerfile`](../Dockerfile): the node, Rust with
 `wasm32-wasip1` in `/opt/rust`, an unprivileged user `ganglion` (uid 10001)
-and a volume at `/data` that holds `ganglion.yaml` and the database. The
+the claude CLI, and a volume at `/data` that holds `ganglion.yaml` and the
+database. The
 owner sets up the service, the volume, the variables (`TELEGRAM_BOT_TOKEN` of
 the test bot, `DEYE_*`, a provider key) and the restart policy by the
 [runbook](deploy-railway.md). Module builds need Linux 6.2 or later (Landlock
