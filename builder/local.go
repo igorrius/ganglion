@@ -122,7 +122,7 @@ func firstLine(s string) string {
 
 // Build copies the source to a temporary folder, builds it there in the
 // sandbox and reads the wasm and the manifest. The folder is removed before
-// Build returns. Only Rust is built; a source in another language is
+// Build returns, and the kernel is told to drop the toolchain's cached pages. Only Rust is built; a source in another language is
 // ErrNoBuilder.
 func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 	lang, err := detect(src.Dir)
@@ -137,6 +137,7 @@ func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 		return Artifact{}, "", err
 	}
 	defer func() { _ = os.RemoveAll(temp) }()
+	defer dropFileCache(l.toolchainDir())
 	work := filepath.Join(temp, "src")
 	if err := CopySource(src.Dir, work, l.cfg.MaxCopy); err != nil {
 		return Artifact{}, "", err
@@ -155,6 +156,12 @@ func (l *Local) Build(ctx context.Context, src Source) (Artifact, Log, error) {
 		return Artifact{}, log, fmt.Errorf("builder: %s: %w", src.Name, err)
 	}
 	return Artifact{Wasm: wasm, Manifest: manifest, Language: Rust, SHA256: digest(wasm, manifest)}, log, nil
+}
+
+// toolchainDir is the folder of the toolchain every build is pinned to, the
+// compiler and its libraries: what a build leaves in the kernel's file cache.
+func (l *Local) toolchainDir() string {
+	return filepath.Join(l.cfg.Rustup, "toolchains", l.cfg.Toolchain)
 }
 
 // digest is modstore.Digest. The builder does not import modstore (it would
