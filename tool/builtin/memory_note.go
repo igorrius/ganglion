@@ -163,11 +163,13 @@ func (n MemoryNotes) undoByButton(ctx context.Context, p pending.QuickPress) (pe
 	err := n.mem.Undo(ctx, a.Commits)
 	switch {
 	case errors.Is(err, gitrepo.ErrConflict):
-		return pending.QuickEdit{Text: a.Note + "\n\n" + p.Speak.Text(texts.MemoryUndoConflict, nil), Note: noteUndoConflict}, nil
+		return pending.QuickEdit{Text: a.Note + "\n\n" + p.Speak.Text(texts.MemoryUndoConflict, nil), Note: noteUndoConflict, Reviewed: true}, nil
 	case err != nil:
 		return pending.QuickEdit{}, err
 	}
-	return pending.QuickEdit{Text: n.stamped(p.Speak, texts.LineUndone), Folded: a.Note, Note: fmt.Sprintf(noteUndone, strings.Join(a.What, ", "))}, nil
+	// The owner rejected what memory took: the review must not take it again.
+	return pending.QuickEdit{Text: n.stamped(p.Speak, texts.LineUndone), Folded: a.Note, Note: fmt.Sprintf(noteUndone, strings.Join(a.What, ", ")),
+		Reviewed: true}, nil
 }
 
 // stamped is a closing line with the time of the press: "Undone, 21:09".
@@ -243,6 +245,7 @@ func (n MemoryNotes) remember(ctx context.Context, p pending.QuickPress) (pendin
 	if ok {
 		e = pending.QuickEdit{Text: o.Text, Buttons: o.Buttons, Note: fmt.Sprintf(noteRemembered, whatOf(changes))}
 	}
+	e.Reviewed = true
 	if held > 0 {
 		e.Text += "\n\n" + p.Speak.Text(texts.MemoryHeld, texts.Vars{"count": strconv.Itoa(held)})
 	}
@@ -255,7 +258,7 @@ func (n MemoryNotes) skip(_ context.Context, p pending.QuickPress) (pending.Quic
 	if err := json.Unmarshal(p.Button.Args, &a); err != nil {
 		return pending.QuickEdit{}, fmt.Errorf("memory: button %s: arguments: %w", p.Button.ID, err)
 	}
-	return pending.QuickEdit{Text: n.stamped(p.Speak, texts.LineSkipped), Folded: a.Note, Note: noteSkipped}, nil
+	return pending.QuickEdit{Text: n.stamped(p.Speak, texts.LineSkipped), Folded: a.Note, Note: noteSkipped, Reviewed: true}, nil
 }
 
 // whatOf names the stored changes: "inverter f1, car f2".

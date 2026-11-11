@@ -173,6 +173,9 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 	if e.Note != "" {
 		t.note(buttonPrefix + transcript.Cap(e.Note))
 	}
+	if e.Reviewed {
+		t.state.Reviewed = len(t.state.Messages)
+	}
 	return nil
 }
 

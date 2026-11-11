@@ -330,3 +330,29 @@ func TestCompactionLowersTheReviewMark(t *testing.T) {
 		t.Fatalf("mark %d, want %d (folded %d)", after.Reviewed, want, folded)
 	}
 }
+
+// The live check (2026-11-11): after the owner pressed Undo, the review read
+// the same correction and would store it again. A memory button settles the
+// conversation so far: the review then has nothing to read.
+func TestUndoSettlesTheConversationForTheReview(t *testing.T) {
+	r := newReviewEnv(t)
+	r.cheap.push(say(`{"ok":true,"reason":"a fact"}`))
+	r.smart.push(callWith("memory.write", `{"topic":"Car","summary":"The family car","fact":"The car is blue."}`), say("Noted."))
+	out := r.turn(t, message(owner, "Igor", "Remember my car is blue."))
+	note, ok := findOut(out, func(o event.Outgoing) bool { return strings.HasSuffix(o.IdemKey, ":memory") })
+	if !ok {
+		t.Fatalf("no note in %+v", out)
+	}
+	r.turn(t, press(owner, note.Buttons[0].ID, "88"))
+	if st := r.state(t); st.Reviewed != len(st.Messages) {
+		t.Fatalf("mark %d of %d", st.Reviewed, len(st.Messages))
+	}
+	r.cheap.push(say(`{"ops":[{"kind":"add","topic":"Car","summary":"The family car","text":"The car is blue."}]}`))
+	r.turn(t, reviewEvent(""))
+	if n := len(r.reviewCalls()); n != 0 {
+		t.Fatalf("%d review calls after Undo", n)
+	}
+	if b := r.mem.Block(24000); b != "" {
+		t.Fatalf("stored again: %q", b)
+	}
+}

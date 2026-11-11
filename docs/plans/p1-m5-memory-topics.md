@@ -908,8 +908,14 @@ list (6), and a very fast Skip then Remember stores the facts.
   ran each time on Haiku and stored nothing more (one note per run). After `/new` the agent
   answered "charging" every time. The runs with the review off were not made: the agent wrote by
   itself in every run (owner).
-- [ ] **Step 3:** The live check with the owner (row 10), and the same correction with the
-  agent told nothing about memory.
+- [x] **Step 3:** The live check with the owner (row 10), and the same correction with the
+  agent told nothing about memory. The owner on the test bot (2026-11-11, `d906e88`): the old fact
+  moved into a topic at start (one commit); the correction about `batt_w` was stored in its turn
+  under "deye-inverter" with the note; `/memory` showed it; Undo reverted it in one commit and
+  folded the note. Found: the review armed by that turn would read the same correction and store
+  the undone fact again, since the Undo note is a node note it leaves out. Fixed: a memory
+  button (Undo, Remember, Skip) settles the conversation so far for the review
+  (`pending.QuickEdit.Reviewed`), with a test that fails without it.
 - [ ] **Step 4:** Close: "Where we are", the phase plan's ticks, the ADRs' status, the board
   (G-138 done; a card for each finding), a `## Closing` section here; merge on the owner's go.
 
