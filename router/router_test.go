@@ -12,7 +12,7 @@ import (
 func TestVocabularyValues(t *testing.T) {
 	for got, want := range map[string]string{
 		string(router.PurposeChat): "chat", string(router.PurposeCheck): "check", string(router.PurposeCompact): "compact",
-		string(router.PurposeTranslate): "translate", string(router.PurposeCode): "code",
+		string(router.PurposeTranslate): "translate", string(router.PurposeMemory): "memory", string(router.PurposeCode): "code",
 		string(router.EffortLow): "low", string(router.EffortMedium): "medium", string(router.EffortHigh): "high",
 		string(router.EffortXHigh): "xhigh", string(router.EffortMax): "max",
 	} {
@@ -20,7 +20,7 @@ func TestVocabularyValues(t *testing.T) {
 			t.Errorf("%q, want %q", got, want)
 		}
 	}
-	if len(router.Purposes) != 5 || router.Purposes[0] != router.PurposeChat {
+	if len(router.Purposes) != 6 || router.Purposes[0] != router.PurposeChat {
 		t.Fatalf("Purposes = %v", router.Purposes)
 	}
 }

@@ -111,4 +111,18 @@ type AgentSettings struct {
 	TZ             *time.Location    // node.tz, default Europe/Kyiv
 	BraveKey       string            // the variable agent.search.brave_key names, or its _FILE; empty → the key-free search (ADR-0035)
 	SearchOff      bool              // agent.search.mode off: no web.search tool
+	Memory         MemorySettings    // the memory: section (M5)
+}
+
+// MemorySettings is the memory: section (R-CFG-8).
+type MemorySettings struct {
+	PromptBudget int           // memory.prompt_budget, default 24000 characters; 0 folds every topic (R-MEM-7)
+	Review       bool          // memory.review.enabled, default on (R-MEM-8)
+	Quiet        time.Duration // memory.review.quiet, default 10m
+}
+
+// DefaultMemory is the memory: section's defaults, for a bootstrap made in
+// code (the lab, tests).
+func DefaultMemory() MemorySettings {
+	return MemorySettings{PromptBudget: 24000, Review: true, Quiet: 10 * time.Minute}
 }

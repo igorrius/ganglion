@@ -39,6 +39,8 @@ func TestSchemaMatchesTheLoader(t *testing.T) {
 		"/$defs/model":     settings.ModelDef{},
 		"/$defs/choice":    settings.Choice{},
 		"/$defs/module":    settings.Module{},
+		"/$defs/memory":    settings.Memory{},
+		"/$defs/review":    settings.Review{},
 	} {
 		o, err := schemas.At(schema, pointer)
 		if err != nil {

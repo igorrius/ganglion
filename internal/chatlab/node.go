@@ -152,7 +152,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	b := config.Bootstrap{Examples: examplesFolder(), DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
 		Admin: fmt.Sprintf("telegram:user:%d", labChat), Build: rustenv.LocalFromEnv(os.Getenv), Secrets: labSecrets(), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
 		Agent: config.AgentSettings{Models: &models, Keys: keys, Workspace: n.ws, DailyBudgetUSD: 1, DailyTurns: 300,
-			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}, Timeouts: labTimeouts()}
+			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc, Memory: config.DefaultMemory()}, Timeouts: labTimeouts()}
 	rot, err := logfile.Open(logfile.DefaultConfig(n.logs), time.Now)
 	if err != nil {
 		return fmt.Errorf("chatlab: logs: %w", err)
@@ -338,6 +338,7 @@ func scriptedModel(owner *program, script []ScriptStep, write func(Writing)) (se
 			router.PurposeCheck:     {{Model: guard}},
 			router.PurposeCompact:   {{Model: guard}},
 			router.PurposeTranslate: {{Model: guard}},
+			router.PurposeMemory:    {{Model: guard}},
 		},
 	}
 	return models, map[string]string{provider: key}, fake

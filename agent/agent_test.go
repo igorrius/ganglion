@@ -179,7 +179,7 @@ func testPurposes(extra ...string) map[router.Purpose][]router.Choice {
 		chat, house = append(chat, router.Choice{Model: id}), append(house, router.Choice{Model: id})
 	}
 	return map[router.Purpose][]router.Choice{router.PurposeChat: chat, router.PurposeCheck: house,
-		router.PurposeCompact: house, router.PurposeTranslate: house}
+		router.PurposeCompact: house, router.PurposeTranslate: house, router.PurposeMemory: house}
 }
 
 // routeLog is a router that records the tasks it is asked to route.

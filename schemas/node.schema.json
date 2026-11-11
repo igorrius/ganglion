@@ -17,9 +17,38 @@
       "description": "The modules the node runs and their configuration. Missing means none; module.install writes this list (M4b).",
       "type": "array",
       "items": { "$ref": "#/$defs/module" }
-    }
+    },
+    "memory": { "description": "The agent's long-term memory by topic (M5, R-MEM-6–9).", "$ref": "#/$defs/memory" }
   },
   "$defs": {
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prompt_budget": {
+          "description": "The size in characters of the known-facts block of an admin's system prompt. Every topic is shown whole while they fit; over it, the topics changed longest ago fold to one line and are read with memory.read. off (0) folds every topic.",
+          "$ref": "#/$defs/count",
+          "default": 24000
+        },
+        "review": { "description": "The pass that reads a quiet conversation once for facts the turn did not store (R-MEM-8).", "$ref": "#/$defs/review" }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Run the review. Off, only the agent's own writes in a turn store facts.",
+          "type": "boolean",
+          "default": true
+        },
+        "quiet": {
+          "description": "How long the owner's private chat is silent before it is reviewed; the end of a session reviews it at once. Must be above 0 while enabled.",
+          "$ref": "#/$defs/duration",
+          "default": "10m"
+        }
+      }
+    },
     "secretRef": {
       "description": "A secret by reference: env:NAME reads the variable NAME, or the file named by NAME_FILE. A literal secret is refused.",
       "type": "string",
@@ -300,7 +329,7 @@
       }
     },
     "purposes": {
-      "description": "Each purpose lists its models in the order they are tried. A missing check, compact or translate uses chat's list; a missing code means no code model.",
+      "description": "Each purpose lists its models in the order they are tried. A missing check, compact or translate uses chat's list; a missing memory uses check's; a missing code means no code model.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -308,6 +337,7 @@
         "check": { "description": "The memory check after a turn. Missing uses chat's list.", "type": "array", "items": { "$ref": "#/$defs/choice" } },
         "compact": { "description": "Compaction of a long conversation. Missing uses chat's list.", "type": "array", "items": { "$ref": "#/$defs/choice" } },
         "translate": { "description": "Translation of the node's own messages. Missing uses chat's list.", "type": "array", "items": { "$ref": "#/$defs/choice" } },
+        "memory": { "description": "The memory review of a quiet conversation (R-MEM-8). Missing uses check's list.", "type": "array", "items": { "$ref": "#/$defs/choice" } },
         "code": { "description": "Writing module code. Missing means none: the node does not write code.", "type": "array", "items": { "$ref": "#/$defs/choice" } }
       }
     },

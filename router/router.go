@@ -20,11 +20,12 @@ const (
 	PurposeCheck     Purpose = "check"     // a short yes/no decision: the clean-context check
 	PurposeCompact   Purpose = "compact"   // folding old history into a summary
 	PurposeTranslate Purpose = "translate" // fixed texts into a language with no file (R-LANG-5)
+	PurposeMemory    Purpose = "memory"    // the memory review: missed facts in a quiet conversation (R-MEM-8)
 	PurposeCode      Purpose = "code"      // writing modules and skills (P3)
 )
 
 // Purposes lists every purpose, in the order the file shows them.
-var Purposes = []Purpose{PurposeChat, PurposeCheck, PurposeCompact, PurposeTranslate, PurposeCode}
+var Purposes = []Purpose{PurposeChat, PurposeCheck, PurposeCompact, PurposeTranslate, PurposeMemory, PurposeCode}
 
 // Effort is a model's reasoning effort; "" leaves the provider's default.
 type Effort string
