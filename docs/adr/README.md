@@ -80,6 +80,7 @@ considered, how they compare, the decision and its consequences. See
 | [0072](0072-who-writes-memory.md) | The agent writes memory in the turn, and a review after quiet time catches what it missed | Accepted | 2026-11-11 |
 | [0073](0073-a-modules-message-names-its-module.md) | A module's message records its module, and a reply to it names the module without its text | Accepted | 2026-11-11 |
 | [0074](0074-a-modules-name-goes-under-its-message.md) | A module's name goes under its message as the node's signature, not before its text | Accepted | 2026-11-11 |
+| [0075](0075-reading-a-modules-state-keeps-the-session-clean.md) | Reading a module's state keeps the session clean, and a write in a tainted session asks instead of refusing | Accepted | 2026-11-11 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

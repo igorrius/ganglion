@@ -680,7 +680,10 @@ escalate:                    # when to call the model
     `module.status` shows the agent what the owner's `/modules <name>` card
     shows (state, version, health with the node's hint, runs and the last
     failure, the declared settings with the owner's values, a secret-like
-    or long one as `<set>`), never a text the module wrote; the install
+    or long one as `<set>`), never a text the module wrote; its answer is
+    outside content only when it shows a setting's value as text, not for a
+    number, a boolean or a hidden value
+    ([ADR-0075](adr/0075-reading-a-modules-state-keeps-the-session-clean.md)); the install
     window lists the network, secrets, cells created and read, triggers and
     limits, and a version that widens its rights says so on its own line;
   - the install checks the name, the secrets (none of the node's own: the
@@ -778,8 +781,13 @@ escalate:                    # when to call the model
   hidden segments, `target/` or symlinks, at most 256 KB a file, 16 MB and
   200 files a module, a workspace commit per write, no press) and reads it
   with `module.read` (M4c,
-  [ADR-0067](adr/0067-agent-writes-module-source.md)). `module.write` is
-  refused in a tainted session (R-POL-6). The node records each module
+  [ADR-0067](adr/0067-agent-writes-module-source.md)). In a tainted
+  session `module.write` asks the owner first, with the file and how many
+  of its lines are new or changed, and a file written on that press is not
+  the node's own: the folder answers as outside content until a clean
+  session writes the file again; a tainted call that was not pressed is
+  refused ([ADR-0075](adr/0075-reading-a-modules-state-keeps-the-session-clean.md),
+  R-POL-6). The node records each module
   file's digest as its own tools left it (`module.import` of an example,
   `module.write` from a clean session); a build or a read of a folder that
   matches its record does not taint, and the build then keeps only rustc's

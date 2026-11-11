@@ -199,11 +199,11 @@ func withDefaults(cfg map[string]any, m runner.Manifest) map[string]any {
 // line reads as the owner would write it.
 func typedDefault(k runner.ConfigKey) any {
 	switch k.Type {
-	case "number":
+	case typeNumber:
 		if n, err := strconv.ParseFloat(k.Default, 64); err == nil {
 			return n
 		}
-	case "boolean":
+	case typeBoolean:
 		if v, err := strconv.ParseBool(k.Default); err == nil {
 			return v
 		}

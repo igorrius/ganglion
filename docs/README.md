@@ -21,6 +21,15 @@ Start here when coming back to the project.
   the text, so the session stays clean and `module.write` works; a message
   this node has no record of is said to be so. Moving a node's workspace
   and modules to another host is still by hand (M7).
+- **A look at a module no longer closes its rewrite (2026-11-11,
+  [ADR-0075](adr/0075-reading-a-modules-state-keeps-the-session-clean.md),
+  board card G-147):** the live check of the reply found that one
+  `module.status` had tainted the session three hours before, so
+  `module.write` refused. `module.status` is now outside content only when
+  it shows a setting as text, and `module.write` in a tainted session asks
+  the owner, the file then counting as outside content until a clean
+  session writes it again. The turn's log line now names the model that
+  answered (it named a compaction's model and read as a fallback).
 - **A module's name went under its message (2026-11-11,
   [ADR-0074](adr/0074-a-modules-name-goes-under-its-message.md),
   R-RUN-16):** the owner did not want `battery-alerts: ` before the text.

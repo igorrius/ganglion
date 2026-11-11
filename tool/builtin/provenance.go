@@ -74,6 +74,20 @@ func (m Modules) recordFile(name, path string, content []byte, fresh bool) error
 	return m.saveProvenance(name, rec)
 }
 
+// forgetFile takes path out of the record of module name: a file written in
+// a session that holds outside content is not the node's own, so ownSource is
+// false until a clean session writes it again. A new folder (fresh) starts
+// with an empty record, so nothing else in it is blessed either.
+func (m Modules) forgetFile(name, path string, fresh bool) error {
+	rec, err := m.readProvenance(name)
+	if err != nil || fresh || rec.Files == nil {
+		rec.Files = map[string]string{}
+	}
+	delete(rec.Files, path)
+	rec.Origin, rec.At = originAgent, m.Now().UTC()
+	return m.saveProvenance(name, rec)
+}
+
 // saveProvenance writes the record of module name atomically.
 func (m Modules) saveProvenance(name string, rec sourceProvenance) error {
 	if m.Provenance == "" {

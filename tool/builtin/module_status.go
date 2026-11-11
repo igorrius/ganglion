@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -24,6 +25,12 @@ const (
 	maxShownValue = 200
 	// hiddenValue stands for a value module.status does not show.
 	hiddenValue = "<set>"
+)
+
+// The types of a config key that are not free text (modstore.ConfigLine).
+const (
+	typeNumber  = "number"
+	typeBoolean = "boolean"
 )
 
 // plainKey is a config key module.status names: the manifest's key names
@@ -94,8 +101,11 @@ func (*ModuleStatus) Spec() tool.Spec {
 		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true}
 }
 
-// Run implements tool.Handler. The answer is outside content: the settings'
-// values come from a file the agent did not write.
+// Run implements tool.Handler. The answer is outside content only when it
+// shows a setting's value as text (ownText): everything else in it is the
+// node's own words, counts and checked names, which cannot carry an
+// instruction, so reading a module's state leaves the session able to
+// rewrite the module (R-RUN-14, ADR-0075).
 func (t *ModuleStatus) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	var a statusArgs
 	if err := strictJSON(c.Args, &a); err != nil {
@@ -115,10 +125,35 @@ func (t *ModuleStatus) Run(ctx context.Context, c tool.Call) (tool.Result, error
 	var b strings.Builder
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false) // "<set>" reads as itself
-	if err := enc.Encode(t.answer(card)); err != nil {
+	answer := t.answer(card)
+	if err := enc.Encode(answer); err != nil {
 		return tool.Result{}, err
 	}
-	return tool.Result{Text: strings.TrimSuffix(b.String(), "\n"), External: true}, nil
+	return tool.Result{Text: strings.TrimSuffix(b.String(), "\n"), External: showsText(answer)}, nil
+}
+
+// showsText reports whether a's settings show a value as free text: one that
+// is neither hidden nor a number or a boolean of its declared type. Such a
+// value comes from the settings file, which the agent did not write.
+func showsText(a statusAnswer) bool {
+	for _, c := range a.Config {
+		if c.Value != "" && c.Value != hiddenValue && !typedValue(c.Type, c.Value) {
+			return true
+		}
+	}
+	return false
+}
+
+// typedValue reports whether v is a number or a boolean as typ declares it.
+func typedValue(typ, v string) bool {
+	switch typ {
+	case typeNumber:
+		f, err := strconv.ParseFloat(v, 64)
+		return err == nil && !math.IsNaN(f) && !math.IsInf(f, 0)
+	case typeBoolean:
+		return v == "true" || v == "false"
+	}
+	return false
 }
 
 // answer is the card in module.status's words.
@@ -208,13 +243,13 @@ func isDefault(l modstore.ConfigLine) bool {
 		return false
 	}
 	switch l.Type {
-	case "number":
+	case typeNumber:
 		v, verr := strconv.ParseFloat(l.Value, 64)
 		d, derr := strconv.ParseFloat(l.Default, 64)
 		if verr == nil && derr == nil {
 			return v == d
 		}
-	case "boolean":
+	case typeBoolean:
 		v, verr := strconv.ParseBool(l.Value)
 		d, derr := strconv.ParseBool(l.Default)
 		if verr == nil && derr == nil {

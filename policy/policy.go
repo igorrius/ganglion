@@ -34,6 +34,7 @@ const (
 	toolMessageSend  = "message.send"
 	toolLanguageSet  = "language.set"
 	toolMemoryWrite  = "memory.write"
+	toolModuleWrite  = "module.write"
 	toolMemoryForget = "memory.forget"
 	toolHostExec     = "host.exec"
 	toolPlanShow     = "plan.show"
@@ -314,7 +315,8 @@ func (p *Policy) outOfGrantText(job string, c tool.Call) string {
 //  7. memory.write and memory.forget: confirm in a tainted session, auto
 //     otherwise (the memory guard still checks the entry), though they
 //     are side effects; language.set likewise, since it changes only the
-//     caller's own language (R-LANG-3);
+//     caller's own language (R-LANG-3); module.write confirms in a tainted
+//     session and follows its own policy otherwise (R-RUN-17);
 //  8. a host command by its class: read is auto, even in a tainted
 //     session; one the conversation's approved plan lists is planned; any
 //     other confirms (R-CMD-2, R-CMD-7);
@@ -345,7 +347,7 @@ type rule func(cfg Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decis
 
 // rules are the rules of Decide, in order.
 var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleCommandForbidden, ruleGrant,
-	ruleMemoryWrite, ruleLanguageSet, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
+	ruleMemoryWrite, ruleModuleWrite, ruleLanguageSet, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -610,6 +612,16 @@ func ruleMemoryWrite(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.D
 		return confirm()
 	}
 	return tool.PolicyAuto, journal.DecisionAllowed, true
+}
+
+// ruleModuleWrite asks before a module's source is written in a session that
+// holds outside content, where a page may have dictated the code; in a clean
+// session the tool's own policy decides (R-RUN-17, ADR-0075).
+func ruleModuleWrite(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if s.Name == toolModuleWrite && c.Tainted {
+		return confirm()
+	}
+	return "", "", false
 }
 
 // ruleLanguageSet applies a person's own choice of language at once, and asks in a session that holds
