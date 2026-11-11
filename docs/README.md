@@ -29,7 +29,11 @@ Start here when coming back to the project.
   it shows a setting as text, and `module.write` in a tainted session asks
   the owner, the file then counting as outside content until a clean
   session writes it again. The turn's log line now names the model that
-  answered (it named a compaction's model and read as a fallback).
+  answered (it named a compaction's model and read as a fallback). A
+  rewritten module had been installed as a second `v1`: a new build now
+  needs a manifest `version` above the ones the node has had (R-RUN-9,
+  board card G-148). The owner's live check on Railway passed for the
+  reply, the signature and the rewrite; a `v2` has not been seen yet.
 - **A module's name went under its message (2026-11-11,
   [ADR-0074](adr/0074-a-modules-name-goes-under-its-message.md),
   R-RUN-16):** the owner did not want `battery-alerts: ` before the text.
