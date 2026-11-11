@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/agent"
+	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/samber/do/v2"
@@ -115,5 +117,39 @@ func TestMemoryStartMovesOldFactsIntoTopics(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(ws, "memory", "test-before-rollout.md"))
 	if strings.Contains(string(data), "checked:") || !strings.Contains(string(data), "<!-- 2026-11-09 turn=01M70RZ -->") {
 		t.Fatalf("file %s", data)
+	}
+}
+
+// The review's timer runs among the core's components while the review is
+// on; with memory.review.enabled false there is no timer and /status says
+// so (R-MEM-8).
+func TestMemoryReviewTimerFollowsTheSetting(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("the git binary is not installed; this test needs memory on (ADR-0033)")
+	}
+	for _, on := range []bool{true, false} {
+		b := agentConfig(t)
+		b.Agent.Memory = DefaultMemory()
+		b.Agent.Memory.Review = on
+		i := New(context.Background(), b, slog.New(slog.DiscardHandler))
+		t.Cleanup(func() { _ = i.Shutdown() })
+		comps, err := do.Invoke[[]node.Component](i)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, c := range comps {
+			found = found || c.Name() == "memory-review"
+		}
+		if found != on {
+			t.Fatalf("review %t: timer among the components %t", on, found)
+		}
+		offLine := false
+		for _, s := range do.MustInvoke[[]status.Source](i) {
+			offLine = offLine || s.Name() == "memory-review"
+		}
+		if offLine == on {
+			t.Fatalf("review %t: the off line in /status %t", on, offLine)
+		}
 	}
 }

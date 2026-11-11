@@ -37,6 +37,9 @@ type instruments struct {
 	runsEnded    metric.Int64Counter
 	inboxErrors  metric.Int64Counter
 	replies      metric.Int64Counter
+	reviews      metric.Int64Counter
+	reviewOps    metric.Int64Counter
+	reviewUnread metric.Int64Counter
 }
 
 func newInstruments() instruments {
@@ -64,7 +67,55 @@ func newInstruments() instruments {
 	in.runsEnded, _ = m.Int64Counter("ganglion.additions.runs_ended", metric.WithDescription("CLI runs ended at a tool boundary for an addition."))
 	in.replies, _ = m.Int64Counter("ganglion.replies",
 		metric.WithDescription("Messages that answer another, by kind: current, earlier, tainted, own, outside, failed."))
+	in.reviews, _ = m.Int64Counter("ganglion.memory.reviews",
+		metric.WithDescription("Memory reviews of a quiet conversation, by result: nothing, stored, asked, unreadable, no_model, skipped."))
+	in.reviewOps, _ = m.Int64Counter("ganglion.memory.review.ops",
+		metric.WithDescription("Operations a memory review answered, by result: applied, held, dropped."))
+	in.reviewUnread, _ = m.Int64Counter("ganglion.memory.review.unread_skipped",
+		metric.WithDescription("Messages no memory review read: past its input's cap, or folded by compaction first."))
 	return in
+}
+
+// reviewResult is how a memory review ended: a metric label.
+type reviewResult string
+
+// Review results.
+const (
+	reviewNothing    reviewResult = "nothing"
+	reviewStored     reviewResult = "stored"
+	reviewAsked      reviewResult = "asked"
+	reviewUnreadable reviewResult = "unreadable"
+	reviewNoModel    reviewResult = "no_model"
+	reviewSkipped    reviewResult = "skipped"
+)
+
+// reviewOpResult is what became of one operation a review answered.
+type reviewOpResult string
+
+// Review operation results.
+const (
+	reviewOpApplied reviewOpResult = "applied"
+	reviewOpHeld    reviewOpResult = "held"
+	reviewOpDropped reviewOpResult = "dropped"
+)
+
+// observeReview counts a memory review by how it ended, and logs it with
+// the conversation.
+func (a *Agent) observeReview(ctx context.Context, conv string, r reviewResult) {
+	a.in.reviews.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(r))))
+	a.log.InfoContext(ctx, "agent: memory review", "conv", conv, "result", string(r))
+}
+
+// observeReviewOp counts one operation a review answered.
+func (a *Agent) observeReviewOp(ctx context.Context, r reviewOpResult) {
+	a.in.reviewOps.Add(ctx, 1, metric.WithAttributes(attribute.String("result", string(r))))
+}
+
+// observeReviewUnread counts messages no review will read.
+func (a *Agent) observeReviewUnread(ctx context.Context, n int) {
+	if n > 0 {
+		a.in.reviewUnread.Add(ctx, int64(n))
+	}
 }
 
 // observeCall records a model call's metrics and ends its span. Nothing

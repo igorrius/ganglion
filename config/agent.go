@@ -73,6 +73,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 	cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
 	cfg.CallTimeout, cfg.TurnTimeout = b.Timeouts.Call, b.Timeouts.Turn
 	cfg.Home = commandHome()
+	cfg.Review, cfg.ReviewQuiet = reviewOn(i), b.Agent.Memory.Quiet
 	return cfg, agent.Deps{
 		States:    do.MustInvoke[*sqlqueue.Queue](i),
 		Languages: do.MustInvoke[*language.Store](i),
@@ -102,6 +103,8 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Facts:         do.MustInvoke[Remembering](i).Facts,
 		Memory:        do.MustInvoke[Remembering](i).View,
 		Private:       telegram.PrivateConv,
+		Reviews:       reviews(i),
+		Review:        do.MustInvoke[Remembering](i).Review,
 		SystemJobs:    do.MustInvoke[Remembering](i).Jobs,
 		Restart:       do.MustInvoke[agent.RestartFunc](i),
 		Modules:       do.MustInvoke[agent.Modules](i),
@@ -350,4 +353,13 @@ func quickActions(i do.Injector) map[string]pending.QuickAction {
 	out := do.MustInvoke[builtin.Scheduling](i).QuickActions()
 	maps.Copy(out, do.MustInvoke[Remembering](i).QuickActions)
 	return out
+}
+
+// reviews arms the memory review: the due table while the review runs,
+// nothing otherwise.
+func reviews(i do.Injector) agent.Reviews {
+	if !reviewOn(i) {
+		return agent.NoReviews{}
+	}
+	return do.MustInvoke[*agent.ReviewDue](i)
 }

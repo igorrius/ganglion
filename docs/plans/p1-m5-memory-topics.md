@@ -726,7 +726,7 @@ How the pieces run:
   a gauge `ganglion.memory.block.chars`. `/status` shows "Memory review: switched off" (state
   `Off`) when it is off. `/last` names a review turn.
 
-- [ ] **Step 1: Failing tests:**
+- [x] **Step 1: Failing tests:**
   - `ParseOps`: an empty list; three kinds; a code fence; prose, a second object, six ops, an
     unknown kind, an unknown field, `drop`: errors;
   - the input builder (table test): a tool result's text never appears; a page's text inside
@@ -755,16 +755,33 @@ How the pieces run:
   - `/status` with the review off; `/last` after a review turn;
   - `config`: the container builds with the timer among the core's components; with the review
     off there is no timer and `Reviews` is `NoReviews`.
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement.** Every function stays under the linter's limits: the handler is a
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement.** Every function stays under the linter's limits: the handler is a
   short pipeline of the nine steps above, each its own function.
-- [ ] **Step 4: `make lint test`; code map rows for `agent`, `memory`, `event`, `turns`; the
+- [x] **Step 4: `make lint test`; code map rows for `agent`, `memory`, `event`, `turns`; the
   review on `03-components.md` and its sequence on `04-runtime.md`; commit, push.**
 
 ```bash
 git commit -m "agent, memory: a review reads a quiet conversation's owner lines once and stores what the turn missed; a tainted session asks first (R-MEM-8)"
 ```
 
+
+As built:
+- The input is the newest unread lines that fit 12,000 runes, not the oldest with a re-arm for the
+  rest: an archived session's mark is never written back, so a re-arm would read the same part
+  again. Older unread lines are counted in `ganglion.memory.review.unread_skipped`, as compaction's
+  are.
+- The review reads the known-facts block (`Deps.Facts`) as its topics, so a folded topic shows only
+  its summary; `Review` has no `Topics`. `Deps.Review` is the memory and its notes joined in
+  `config` (`memoryReview`); without git it is `NoReview`.
+- A review turn records outcome `review`; `/last` names it "memory review".
+- `ReviewOff` is the `/status` line; the timer is one of the agent's housekeepers, only while the
+  review runs.
+- Remember with nothing new stored folds the question under "Approved"; a held-back fact is counted
+  on the note it becomes.
+- A resumed archived session keeps the mark it was archived with: a review of it when it ended does
+  not move that mark, and the prompt's stored topics keep the review from adding a fact twice.
+- `agent/review.go` and `agent/review_due.go` are on the no-scenario list until Task 7 claims them.
 ---
 
 ### Task 7: `internal/chatlab` — the scripted reviewer, scenarios, seeded faults

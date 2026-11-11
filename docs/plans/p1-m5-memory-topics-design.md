@@ -164,8 +164,9 @@ flowchart TD
   over the same messages. Only the owner's private chat is reviewed
   (plan, rulings 1–3).
 - **What it reads.** The owner's messages since the mark and the agent's
-  replies between them, as plain text, oldest first, up to a size cap
-  (the rest waits for the next run); and the topics as they are. **Never
+  replies between them, as plain text, oldest first: the newest that fit
+  a size cap (older unread ones are skipped and counted); and the topics
+  as they are. **Never
   a tool's result**, so text from a page has no path into memory through
   it. The agent's replies are context for what a correction corrects; a
   fact must come from the owner's words (owner).

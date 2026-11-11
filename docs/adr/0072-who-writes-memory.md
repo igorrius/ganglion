@@ -96,9 +96,10 @@ The rules:
   - *Input.* The messages after the review mark (a count kept in the
     conversation state), from the live session or from the archived
     session the event names: the owner's messages
-    and the agent's replies as text, oldest first, capped in size (what
-    is over waits for the next run). Tool calls and tool results are
-    left out. Then the topics as files. A local-only session is skipped
+    and the agent's replies as text, oldest first: the newest that fit
+    12,000 runes (older unread ones are skipped and counted: an archived
+    session keeps no mark to come back to). Tool calls and tool results
+    are left out. Then the known-facts block. A local-only session is skipped
     and the mark moves past it.
   - *Call.* Purpose `memory` (the `check` list when absent), one fixed
     system prompt, the messages wrapped as data, no tools.

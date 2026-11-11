@@ -77,6 +77,8 @@ func (a *Agent) compact(ctx context.Context, st State, rec *turns.Turn) State {
 		// section 4, rule 4).
 		st.Summary = tool.WrapExternal(summarySource, st.Summary)
 	}
+	a.observeReviewUnread(ctx, max(0, split-st.Reviewed))
+	st.Reviewed = max(0, st.Reviewed-split)
 	st.Messages = append([]provider.Message(nil), st.Messages[split:]...)
 	return st
 }

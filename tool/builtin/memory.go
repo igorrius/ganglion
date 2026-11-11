@@ -240,7 +240,7 @@ func (f *MemoryForget) Question(_ context.Context, c tool.Call) (string, error) 
 		if terr == nil {
 			n = len(t.Facts)
 		}
-		return c.Speak.Text(texts.AskForgetTopic, texts.Vars{"topic": a.Topic, "count": strconv.Itoa(n)}), nil
+		return c.Speak.Text(texts.AskForgetTopic, texts.Vars{varTopic: a.Topic, "count": strconv.Itoa(n)}), nil
 	}
 	if terr == nil {
 		for _, fact := range t.Facts {

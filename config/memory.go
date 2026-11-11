@@ -11,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/guard"
 	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/provider"
+	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
@@ -60,8 +61,41 @@ type Remembering struct {
 	Tools        []tool.Handler
 	Facts        agent.FactsFunc
 	Jobs         map[string]agent.SystemJob
-	QuickActions map[string]pending.QuickAction // the memory notes' Undo (R-MEM-9)
+	QuickActions map[string]pending.QuickAction // the memory notes' Undo, Remember and Skip (R-MEM-9)
 	View         agent.MemoryView               // what /memory reads
+	Review       agent.Review                   // what the memory review stores through (R-MEM-8)
+	On           bool                           // memory is on: git was found
+}
+
+// memoryReview is the memory and its notes as the review takes them.
+type memoryReview struct {
+	*memory.Memory
+	builtin.MemoryNotes
+}
+
+// reviewOn reports whether the memory review runs: memory is on and
+// memory.review.enabled (R-MEM-8).
+func reviewOn(i do.Injector) bool {
+	return do.MustInvoke[Remembering](i).On && do.MustInvoke[Bootstrap](i).Agent.Memory.Review
+}
+
+// ReviewDue provides when each conversation's memory review is due.
+func ReviewDue() do.Provider[*agent.ReviewDue] {
+	return func(i do.Injector) (*agent.ReviewDue, error) {
+		return agent.NewReviewDue(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
+	}
+}
+
+// reviewEvery is how often the review timer looks for due reviews.
+const reviewEvery = 30 * time.Second
+
+// ReviewTimer provides the component that puts the due memory reviews in
+// the inbox.
+func ReviewTimer() do.Provider[*agent.ReviewTimer] {
+	return func(i do.Injector) (*agent.ReviewTimer, error) {
+		return agent.NewReviewTimer(do.MustInvoke[*agent.ReviewDue](i), do.MustInvoke[*sqlqueue.Queue](i).Put, time.Now, reviewEvery,
+			do.MustInvoke[*slog.Logger](i)), nil
+	}
 }
 
 // Remember provides the memory's tools, the persona tool of the first-run
@@ -76,7 +110,7 @@ func Remember() do.Provider[Remembering] {
 		if errors.Is(err, gitrepo.ErrNoGit) {
 			do.MustInvoke[*slog.Logger](i).Warn("config: memory is off", "err", err)
 			return Remembering{Facts: agent.NoFacts, Jobs: map[string]agent.SystemJob{}, QuickActions: map[string]pending.QuickAction{},
-				View: agent.NoMemory{}}, nil
+				View: agent.NoMemory{}, Review: agent.NoReview{}}, nil
 		}
 		if err != nil {
 			return Remembering{}, err
@@ -92,6 +126,6 @@ func Remember() do.Provider[Remembering] {
 		jobs := map[string]agent.SystemJob{builtin.AuditJobID: builtin.NewAuditJob(m).Run}
 		budget := b.Agent.Memory.PromptBudget
 		return Remembering{Tools: tools, Facts: func() string { return m.Block(budget) }, Jobs: jobs, QuickActions: notes.QuickActions(),
-			View: m}, err
+			View: m, Review: memoryReview{m, notes}, On: true}, err
 	}
 }

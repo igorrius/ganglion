@@ -95,3 +95,17 @@ func TestStateRoundTripsCommands(t *testing.T) {
 		t.Fatalf("round trip %s -> %+v, %v", raw, back, err)
 	}
 }
+
+func TestStateRoundTripsReviewed(t *testing.T) {
+	raw, err := json.Marshal(State{Reviewed: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := DecodeState(raw)
+	if err != nil || st.Reviewed != 7 {
+		t.Fatalf("%+v %v", st, err)
+	}
+	if old, err := DecodeState(json.RawMessage(`{"v":2,"summary":"","messages":[]}`)); err != nil || old.Reviewed != 0 {
+		t.Fatalf("a state without the mark: %+v %v", old, err)
+	}
+}

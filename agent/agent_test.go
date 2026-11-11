@@ -317,6 +317,7 @@ func overDefaults(cfg Config) Config {
 		d.Location = cfg.Location
 	}
 	d.Home = cfg.Home
+	d.Review, d.ReviewQuiet = cfg.Review, cfg.ReviewQuiet
 	return d
 }
 

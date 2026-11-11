@@ -16,6 +16,8 @@ agent/background.go
 agent/cells.go
 agent/commands.go
 agent/memory_cmd.go
+agent/review.go
+agent/review_due.go
 agent/config.go
 agent/limits.go
 agent/model.go

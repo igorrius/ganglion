@@ -18,6 +18,10 @@ type Config struct {
 	// dir: an approved plan's command matches a call with "" read as home
 	// (tool.Command.SameAs), and a task run's commands are shown with it.
 	Home string
+	// Review runs the memory review of a quiet private chat (R-MEM-8);
+	// ReviewQuiet is how long the chat is silent first.
+	Review      bool
+	ReviewQuiet time.Duration
 }
 
 // DefaultConfig returns the agent's defaults.

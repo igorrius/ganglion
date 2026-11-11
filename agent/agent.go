@@ -163,8 +163,13 @@ type Deps struct {
 	// Background lists a conversation's background jobs for the note every
 	// turn carries (R-LIVE-9, jobs.Registry); NoBackground when unset.
 	Background BackgroundJobs
-	Now        func() time.Time
-	Log        *slog.Logger
+	// Reviews arms the memory review (R-MEM-8); NoReviews when unset.
+	Reviews Reviews
+	// Review stores what a review found and tells the owner; NoReview
+	// when unset.
+	Review Review
+	Now    func() time.Time
+	Log    *slog.Logger
 }
 
 // Languages is what the agent needs of a person's language (language.Store).
@@ -266,12 +271,7 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Facts == nil {
 		d.Facts = NoFacts
 	}
-	if d.Memory == nil {
-		d.Memory = NoMemory{}
-	}
-	if d.Private == nil {
-		d.Private = func(string) (string, string, bool) { return "", "", false }
-	}
+	d = withMemory(d)
 	if d.Languages == nil {
 		d.Languages = NoLanguages{}
 	}
@@ -394,6 +394,13 @@ var payloads = map[event.Kind]func(t *turn) bool{
 	event.KindCommandDone: func(t *turn) bool {
 		return json.Unmarshal(t.event.Payload, &t.command) == nil && t.command.Key != ""
 	},
+	event.KindMemoryReview: func(t *turn) bool {
+		if json.Unmarshal(t.event.Payload, &t.review) != nil || t.review.Principal == "" {
+			return false
+		}
+		t.msg = event.Message{From: t.review.Principal}
+		return true
+	},
 	event.KindModuleBuilt: func(t *turn) bool {
 		return json.Unmarshal(t.event.Payload, &t.built) == nil && t.built.Key != ""
 	},
@@ -458,10 +465,29 @@ func (a *Agent) finish(ctx context.Context, t *turn) ([]event.Outgoing, queue.St
 		a.log.Warn("agent: plan not finished", "conv", t.event.Conv, "err", err)
 	}
 	a.tellMachineTexts(rctx, t)
+	a.armAfterTurn(rctx, t)
 	data, err := json.Marshal(t.state)
 	if err != nil {
 		return nil, queue.StateUpdate{}, err
 	}
 	stamp(t.out, t.origin())
 	return t.out, queue.StateUpdate{Conv: t.event.Conv, Data: data, Taken: t.taken}, nil
+}
+
+// withMemory fills the memory's collaborators that are not set: no
+// topics, no private chat, no review (R-MEM-8, R-MEM-9).
+func withMemory(d Deps) Deps {
+	if d.Memory == nil {
+		d.Memory = NoMemory{}
+	}
+	if d.Private == nil {
+		d.Private = func(string) (string, string, bool) { return "", "", false }
+	}
+	if d.Reviews == nil {
+		d.Reviews = NoReviews{}
+	}
+	if d.Review == nil {
+		d.Review = NoReview{}
+	}
+	return d
 }

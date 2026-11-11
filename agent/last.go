@@ -36,6 +36,7 @@ var outcomeWords = map[turns.Outcome]string{
 	turns.OutcomeNoModel:    "no model",
 	turns.OutcomeCommand:    "command",
 	turns.OutcomeError:      "error",
+	turns.OutcomeReview:     "memory review",
 }
 
 // lastTurn shows an admin what the conversation's last turn did, with no model
