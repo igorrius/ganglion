@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-memory-review
+why: >-
+  ADR-0072: when the turn does not store the owner's correction, the review after the
+  quiet time does, once, with a note for the owner and one for the model.
+covers:
+  - agent/review.go
+  - agent/review_due.go
+  - agent/compact.go
+  - agent/state.go
+  - memory/**
+model: scripted
+script:
+  - {say: "Right, it is charging."}
+review:
+  - '{"ops":[{"kind":"add","topic":"Inverter","summary":"The Deye inverter","text":"Negative batt_w on the Deye is the battery charging."}]}'
+steps:
+  - say: "No, negative batt_w is charging, not discharging."
+  - facts:
+      memory: {not_contains: "batt_w"}
+  - advance: {scheduler: 11m}
+  - facts:
+      memory: {contains: "Negative batt_w on the Deye is the battery charging."}
+      history: {contains: "[memory] the memory review stored: inverter f1"}
+  - press: Undo
+  - advance: {scheduler: 11m}
+  - facts:
+      memory: {not_contains: "batt_w"}

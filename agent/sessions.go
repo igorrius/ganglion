@@ -30,6 +30,9 @@ type SessionStore interface {
 	// Search finds archived sessions of convs by text, for recall
 	// (memory.Episodes).
 	Search(ctx context.Context, q string, convs []string, limit int) ([]memory.Episode, error)
+	// MarkReviewed records that the memory review read the first n messages
+	// of an archived session (R-MEM-8), so a resumed session is not read again.
+	MarkReviewed(ctx context.Context, conv, session string, n int) error
 }
 
 // NoArchive is a SessionStore that keeps nothing: ended sessions are
@@ -46,6 +49,9 @@ func (NoArchive) List(context.Context, string, int, string) ([]SessionInfo, erro
 func (NoArchive) Search(context.Context, string, []string, int) ([]memory.Episode, error) {
 	return nil, nil
 }
+
+// MarkReviewed implements SessionStore.
+func (NoArchive) MarkReviewed(context.Context, string, string, int) error { return nil }
 
 // Get implements SessionStore.
 func (NoArchive) Get(_ context.Context, _, session string) (State, error) {
@@ -138,4 +144,14 @@ func (a *Archive) Get(ctx context.Context, conv, session string) (State, error) 
 		return State{}, fmt.Errorf("agent: get session %s: %w", session, err)
 	}
 	return DecodeState(json.RawMessage(data))
+}
+
+// MarkReviewed implements SessionStore: the stored state's mark, and only
+// that, changes.
+func (a *Archive) MarkReviewed(ctx context.Context, conv, session string, n int) error {
+	if _, err := a.db.ExecContext(ctx, `UPDATE sessions SET data = json_set(data, '$.reviewed', ?) WHERE conv = ? AND session = ?`,
+		n, conv, session); err != nil {
+		return fmt.Errorf("agent: mark session %s reviewed: %w", session, err)
+	}
+	return nil
 }

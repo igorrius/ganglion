@@ -189,12 +189,13 @@ func Housekeepers() do.Provider[Housekeeping] {
 
 // AgentHousekeepers provides the daily prune of the tool-call journal, the
 // expiry of unanswered confirmations, the janitor, the translator, the
-// runner of host commands, which lives where the agent does, and the
-// reconcile of the cells at start and every five minutes.
+// runner of host commands, which lives where the agent does, the
+// reconcile of the cells at start and every five minutes, and the memory
+// review's timer while the review runs.
 func AgentHousekeepers() do.Provider[Housekeeping] {
 	return func(i do.Injector) (Housekeeping, error) {
 		logger := do.MustInvoke[*slog.Logger](i)
-		return Housekeeping{
+		hk := Housekeeping{
 			journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: logger},
 			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger),
 			do.MustInvoke[*host.Janitor](i),
@@ -203,7 +204,11 @@ func AgentHousekeepers() do.Provider[Housekeeping] {
 			do.MustInvoke[*builtin.BuildQueue](i),
 			node.Named("translator", do.MustInvoke[*language.Translator](i).Run),
 			cells.Reconciler{Service: do.MustInvoke[*cells.Service](i), Every: cells.ReconcileEvery, Log: logger, After: time.After},
-		}, nil
+		}
+		if reviewOn(i) {
+			hk = append(hk, do.MustInvoke[*agent.ReviewTimer](i))
+		}
+		return hk, nil
 	}
 }
 

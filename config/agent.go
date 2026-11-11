@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"time"
 
@@ -72,6 +73,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 	cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
 	cfg.CallTimeout, cfg.TurnTimeout = b.Timeouts.Call, b.Timeouts.Turn
 	cfg.Home = commandHome()
+	cfg.Review, cfg.ReviewQuiet = reviewOn(i), b.Agent.Memory.Quiet
 	return cfg, agent.Deps{
 		States:    do.MustInvoke[*sqlqueue.Queue](i),
 		Languages: do.MustInvoke[*language.Store](i),
@@ -90,7 +92,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Status:        do.MustInvoke[agent.StatusFunc](i),
 		Plans:         do.MustInvoke[*plan.Store](i),
 		Sent:          do.MustInvoke[*sqlqueue.Queue](i),
-		QuickActions:  do.MustInvoke[builtin.Scheduling](i).QuickActions(),
+		QuickActions:  quickActions(i),
 		Jobs:          do.MustInvoke[*schedule.Store](i),
 		IsAdmin:       do.MustInvoke[agent.AdminFunc](i),
 		Names:         do.MustInvoke[*access.List](i).Name,
@@ -99,6 +101,10 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Alerts:        do.MustInvoke[alert.Admins](i),
 		Persona:       agent.PersonaDir(b.Agent.Workspace),
 		Facts:         do.MustInvoke[Remembering](i).Facts,
+		Memory:        do.MustInvoke[Remembering](i).View,
+		Private:       telegram.PrivateConv,
+		Reviews:       reviews(i),
+		Review:        do.MustInvoke[Remembering](i).Review,
 		SystemJobs:    do.MustInvoke[Remembering](i).Jobs,
 		Restart:       do.MustInvoke[agent.RestartFunc](i),
 		Modules:       do.MustInvoke[agent.Modules](i),
@@ -339,4 +345,21 @@ func Providers() do.Provider[map[string]provider.Provider] {
 		}
 		return out, nil
 	}
+}
+
+// quickActions are every tool's quick-action buttons by action name: the
+// scheduler's and the memory notes'.
+func quickActions(i do.Injector) map[string]pending.QuickAction {
+	out := do.MustInvoke[builtin.Scheduling](i).QuickActions()
+	maps.Copy(out, do.MustInvoke[Remembering](i).QuickActions)
+	return out
+}
+
+// reviews arms the memory review: the due table while the review runs,
+// nothing otherwise.
+func reviews(i do.Injector) agent.Reviews {
+	if !reviewOn(i) {
+		return agent.NoReviews{}
+	}
+	return do.MustInvoke[*agent.ReviewDue](i)
 }

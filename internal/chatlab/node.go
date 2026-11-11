@@ -104,7 +104,7 @@ func Start(ctx context.Context, o NodeOptions) (n *Node, err error) {
 	}
 	models, keys := o.Models, o.Keys
 	if o.Scenario.Model == ModelScripted {
-		models, keys, n.scripted = scriptedModel(closers, o.Scenario.Script, n.write)
+		models, keys, n.scripted = scriptedModel(closers, o.Scenario.Script, o.Scenario.Review, n.write)
 	}
 	return n, n.run(ctx, o, models, keys)
 }
@@ -152,7 +152,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	b := config.Bootstrap{Examples: examplesFolder(), DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
 		Admin: fmt.Sprintf("telegram:user:%d", labChat), Build: rustenv.LocalFromEnv(os.Getenv), Secrets: labSecrets(), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
 		Agent: config.AgentSettings{Models: &models, Keys: keys, Workspace: n.ws, DailyBudgetUSD: 1, DailyTurns: 300,
-			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc}, Timeouts: labTimeouts()}
+			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc, Memory: config.DefaultMemory()}, Timeouts: labTimeouts()}
 	rot, err := logfile.Open(logfile.DefaultConfig(n.logs), time.Now)
 	if err != nil {
 		return fmt.Errorf("chatlab: logs: %w", err)
@@ -298,19 +298,30 @@ func copyDir(src, dst string) error {
 
 // scriptedModel starts a fake model that plays script, one step per request,
 // and then says "ok". The memory check goes to a model of its own, so it
-// never takes a step.
-func scriptedModel(owner *program, script []ScriptStep, write func(Writing)) (settings.Models, map[string]string, *providertest.Server) {
+// never takes a step, and so does the memory review, which plays review
+// and then answers that there is nothing to store.
+func scriptedModel(owner *program, script []ScriptStep, review []string, write func(Writing)) (settings.Models, map[string]string, *providertest.Server) {
 	const (
 		key      = "scripted"
 		provider = "script"
-		guard    = "guard" // the model of the memory check and the housekeeping
+		guard    = "guard"    // the model of the memory check and the housekeeping
+		reviewer = "reviewer" // the model of the memory review
 	)
 	fake := providertest.NewServer(owner, key)
 	var mu sync.Mutex
-	next := 0
+	next, reviewed := 0, 0
 	fake.Respond(func(r providertest.Request) providertest.Answer {
 		if r.Model == guard {
 			return providertest.Answer{Text: `{"ok":true,"reason":""}`}
+		}
+		if r.Model == reviewer {
+			mu.Lock()
+			defer mu.Unlock()
+			if reviewed >= len(review) {
+				return providertest.Answer{Text: `{"ops":[]}`}
+			}
+			reviewed++
+			return providertest.Answer{Text: review[reviewed-1]}
 		}
 		mu.Lock()
 		if next >= len(script) {
@@ -330,6 +341,7 @@ func scriptedModel(owner *program, script []ScriptStep, write func(Writing)) (se
 		Models: []settings.ModelDef{
 			{ID: ModelScripted, Provider: provider, Name: ModelScripted, Tools: true, Context: 200_000},
 			{ID: guard, Provider: provider, Name: guard, Context: 200_000},
+			{ID: reviewer, Provider: provider, Name: reviewer, Context: 200_000},
 		},
 		Purposes: map[router.Purpose][]settings.Choice{
 			// The housekeeping purposes go to guard too, so they never take
@@ -338,6 +350,7 @@ func scriptedModel(owner *program, script []ScriptStep, write func(Writing)) (se
 			router.PurposeCheck:     {{Model: guard}},
 			router.PurposeCompact:   {{Model: guard}},
 			router.PurposeTranslate: {{Model: guard}},
+			router.PurposeMemory:    {{Model: reviewer}},
 		},
 	}
 	return models, map[string]string{provider: key}, fake

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/igorrius/ganglion/agent"
 	"time"
 
 	"github.com/igorrius/ganglion/host"
@@ -35,6 +36,9 @@ func StatusSources() do.Provider[[]status.Source] {
 			do.MustInvoke[*sandbox.Sandbox](i),
 			do.MustInvoke[*host.Switch](i),
 			do.MustInvoke[*bgjobs.Registry](i),
+		}
+		if do.MustInvoke[Remembering](i).On && !b.Agent.Memory.Review {
+			sources = append(sources, agent.ReviewOff{})
 		}
 		return append(sources, do.MustInvoke[Watched](i)...), nil
 	}

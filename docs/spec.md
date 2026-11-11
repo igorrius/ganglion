@@ -474,10 +474,11 @@ model:
   `chat` (turns and scheduled agent tasks), `check` (short yes/no
   decisions such as the clean-context check), `compact` (history
   compaction), `translate` (fixed texts into a language with no file,
-  R-LANG-5), `code` (writing modules and skills, used from P3). The
+  R-LANG-5), `memory` (the memory review, R-MEM-8, M5), `code` (writing
+  modules and skills, used from P3). The
   purposes are a fixed list in code; an unknown one fails the start.
-  `check`, `compact` and `translate` use `chat`'s list when absent; `code`
-  has no default. The
+  `check`, `compact` and `translate` use `chat`'s list when absent;
+  `memory` uses `check`'s; `code` has no default. The
   order is the preference; the next entry is taken on an exhausted limit,
   429 or a timeout. `effort` is passed to providers that take one; a
   provider that cannot take an effort set in the config fails the start.
@@ -853,7 +854,8 @@ human); module install — tests + reviewer + admin.
   uses a cheap model with no history, no tools and no tainted context (the
   "dual LLM" pattern; a first, narrow form of the reviewer model above).
   - **On write:** every memory entry is checked before it is committed: a
-    fact about the owner, or a hidden instruction? Imperative entries
+    fact about the owner, their home and devices (how they work, as the
+    owner describes it, included; M5), or a hidden instruction? Imperative entries
     ("always do…", "ignore…") are rejected. Suspicious ones go to
     quarantine, and the owner gets a notice.
   - **On schedule:** a system job audits memory, persona and skills for
@@ -912,7 +914,7 @@ undone with `git revert`.
 |---|---|---|---|
 | Working | The current conversation | History in the core's SQLite | Recent turns + summary |
 | Episodic | What happened and when | `turns` + device events | On demand via `memory.search` |
-| Semantic | Facts about people, home, preferences | `memory/*.md` + embeddings | Index in the system prompt + semantic search |
+| Semantic | Facts about people, home, devices, preferences | Topic files `memory/*.md` (R-MEM-6); embeddings in P2 | Every topic whole in the system prompt within a budget (R-MEM-7); semantic search in P2 |
 | Procedural | How to do specific things | Skills: instruction + script + model requirements | Description in context, body on demand |
 
 - **R-MEM-1.** Nightly consolidation is a regular cron with its own prompt:
@@ -921,7 +923,9 @@ undone with `git revert`.
   procedure, commit and re-index embeddings. Archived sessions it has
   read may then be dropped after a retention (section 11, M7).
 - **R-MEM-2.** A dislike or a correction in chat flags the turn;
-  consolidation handles flagged turns first.
+  consolidation handles flagged turns first. Since M5 a correction is
+  stored during the conversation (R-MEM-8); the flag for consolidation
+  stays in M7.
 - **R-MEM-3.** Memory is Markdown files in the node's workspace, in git.
   ganglion's formats are its own. Moving in from another assistant goes
   through an importer that writes these files (spec 14).
@@ -939,6 +943,50 @@ undone with `git revert`.
     confirmation (R-POL-6), every write passes the clean-context check
     (R-POL-7), and every change is a git commit.
   - "What do you remember about me?" lists it.
+- **R-MEM-6.** Facts are kept by **topic** (M5, owner, 2026-11-11,
+  [ADR-0071](adr/0071-memory-topics-whole-in-the-prompt.md),
+  [design](plans/p1-m5-memory-topics-design.md)). A topic is one file,
+  `memory/<slug>.md`: a title and a one-line summary in the frontmatter,
+  then a list of short facts. Each fact has an id that is stable inside
+  its topic and records its date, its turn and whether its session was
+  tainted. A correction replaces the fact it corrects. Limits are checked
+  on write: a fact 300 runes, 50 facts in a topic. Files in the older
+  shape, one fact per file, are moved into topics at start, in one
+  commit.
+- **R-MEM-7.** An admin's system prompt holds every topic whole, in the
+  "known facts" data block, within `memory.prompt_budget` (characters;
+  default 24,000). Over the budget topics fold, the one changed longest
+  ago first, to a line with the title and the summary, and are read with
+  `memory.read`. The same files give the same text.
+- **R-MEM-8.** Memory is written during the conversation, from the
+  owner's words only ([ADR-0072](adr/0072-who-writes-memory.md)).
+  - **In the turn:** the core rules tell the agent to write a correction
+    or a lasting fact the owner states with `memory.write`, under the
+    fitting topic, in the same turn. A turn with nothing to remember
+    makes no extra model call.
+  - **The review:** a conversation with an admin's messages not reviewed
+    yet is read once by a cheap model (purpose `memory`, R-RTR-6) after
+    it has been quiet for `memory.review.quiet` (default 10 minutes), or
+    at once when its session ends. It reads the owner's messages and the
+    agent's replies as text, never a tool's result, and the topics; it
+    returns at most five operations, which code applies. It is durable
+    (a stored due time and an inbox event, once per span of messages),
+    reads only the owner's private chat, is skipped for scheduled tasks,
+    module events, family members and local-only sessions, and is
+    switched off with
+    `memory.review.enabled: false`.
+  - Every fact from either path passes the clean-context check
+    (R-POL-7). Messages of a tainted session are not written by the
+    review: the owner gets one message listing the facts, with Remember
+    and Skip (R-POL-6).
+  - What the agent found out itself, from a tool or a page, is not
+    stored here; it waits for consolidation (R-MEM-1).
+- **R-MEM-9.** The owner sees every change. A write by the agent
+  or a review that changed memory sends one note with the turn's
+  messages, in the owner's language, listing what changed, with an Undo
+  button that reverts those commits; the note then folds (R-POL-9). An undo that cannot apply
+  says so and changes nothing. `/memory` (admin, private chat, no model,
+  no note in the history) lists the topics; `/memory <topic>` shows one.
 
 ### 7.8. Security and operations (MVP)
 
@@ -1269,6 +1317,9 @@ phase plan).
 - **R-CFG-7.** `node.memory_limit` sets `GOMEMLIMIT` (R-RUN-6). A
   `GOMEMLIMIT` the operator set, the Go runtime's own setting, wins over
   it.
+- **R-CFG-8.** The `memory` section (M5): `prompt_budget`, the size in
+  characters of the known-facts block (R-MEM-7), and `review` with
+  `enabled` and `quiet` (R-MEM-8).
 
 ## 8. First reflex: Deye (P1)
 
@@ -1725,6 +1776,10 @@ Ideas that come up along the way and are outside the current phase go here.
 Reviewed at each gate.
 
 - Classifier and learning in the router (P2 / P3).
+- Memory (M5 design, 2026-11-11): a model call after every turn to pick
+  out facts (rejected for its cost, ADR-0072); storing what the agent
+  found out itself before consolidation looks at it; finding a folded
+  topic by keywords or embeddings (R-MEM-4).
 - A global kill switch for every tool.
 - Docker from commands below Landlock ABI 9.
 - Channels other than Telegram and MQTT; HTTP API; web UI.

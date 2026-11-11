@@ -256,3 +256,126 @@ func TestHeadIsTheLastCommit(t *testing.T) {
 		t.Fatalf("head %q, %v; want %q", head, err, id)
 	}
 }
+
+func TestRevertAllIsOneCommit(t *testing.T) {
+	r := open(t)
+	ctx := context.Background()
+	write(t, r, "memory/a.md", "one\n")
+	first, err := r.Commit(ctx, []string{"memory/a.md"}, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, r, "memory/b.md", "two\n")
+	second, err := r.Commit(ctx, []string{"memory/b.md"}, "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := gitOut(t, r.Dir(), "rev-list", "--count", "HEAD")
+	undo, err := r.RevertAll(ctx, []string{first, second}, "undo both\n\nUndo-Of: "+first+"\nUndo-Of: "+second+"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after := gitOut(t, r.Dir(), "rev-list", "--count", "HEAD"); after != strconv.Itoa(mustAtoi(t, before)+1) {
+		t.Fatalf("commits %s → %s, want one more", before, after)
+	}
+	if head := gitOut(t, r.Dir(), "rev-parse", "HEAD"); head != undo {
+		t.Fatalf("head %s, undo %s", head, undo)
+	}
+	for _, p := range []string{"memory/a.md", "memory/b.md"} {
+		if _, err := os.Stat(filepath.Join(r.Dir(), p)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s still there: %v", p, err)
+		}
+	}
+	for _, c := range []string{first, second} {
+		if ok, err := r.Reverted(ctx, c); err != nil || !ok {
+			t.Fatalf("Reverted(%s) = %v %v", c, ok, err)
+		}
+	}
+}
+
+func TestRevertAllConflictChangesNothing(t *testing.T) {
+	r := open(t)
+	ctx := context.Background()
+	write(t, r, "memory/a.md", "one\n")
+	if _, err := r.Commit(ctx, []string{"memory/a.md"}, "a"); err != nil {
+		t.Fatal(err)
+	}
+	write(t, r, "memory/a.md", "two\n")
+	changed, err := r.Commit(ctx, []string{"memory/a.md"}, "a two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, r, "memory/a.md", "three\n")
+	later, err := r.Commit(ctx, []string{"memory/a.md"}, "a three")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = r.RevertAll(ctx, []string{changed}, "undo\n\nUndo-Of: "+changed+"\n")
+	if !errors.Is(err, gitrepo.ErrConflict) {
+		t.Fatalf("want ErrConflict, got %v", err)
+	}
+	if head := gitOut(t, r.Dir(), "rev-parse", "HEAD"); head != later {
+		t.Fatalf("head moved to %s", head)
+	}
+	if st := gitOut(t, r.Dir(), "status", "--porcelain"); st != "" {
+		t.Fatalf("the work tree is not clean:\n%s", st)
+	}
+	if _, err := os.Stat(filepath.Join(r.Dir(), ".git", "REVERT_HEAD")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a revert is still in progress: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(r.Dir(), "memory/a.md")); string(b) != "three\n" {
+		t.Fatalf("the later write is lost: %q", b)
+	}
+	if ok, err := r.Reverted(ctx, changed); err != nil || ok {
+		t.Fatalf("Reverted = %v %v", ok, err)
+	}
+}
+
+func TestRevertAllLeavesOtherChangesAlone(t *testing.T) {
+	r := open(t)
+	ctx := context.Background()
+	write(t, r, "memory/a.md", "one\n")
+	c, err := r.Commit(ctx, []string{"memory/a.md"}, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, r, "modules/x/src.rs", "draft\n")
+	if _, err := r.RevertAll(ctx, []string{c}, "undo\n\nUndo-Of: "+c+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	if st := gitOut(t, r.Dir(), "status", "--porcelain", "--untracked-files=all"); st != "?? modules/x/src.rs" {
+		t.Fatalf("status %q", st)
+	}
+}
+
+func TestLastFindsAWholeLine(t *testing.T) {
+	r := open(t)
+	ctx := context.Background()
+	write(t, r, "memory/a.md", "one\n")
+	c, err := r.Commit(ctx, []string{"memory/a.md"}, "a\n\nChange-Key: k:1-2\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{"Change-Key: k:1-2"} {
+		if got, err := r.Last(ctx, line); err != nil || got != c {
+			t.Fatalf("Last(%q) = %q %v, want %s", line, got, err, c)
+		}
+	}
+	for _, line := range []string{"Change-Key: k:1", "Change-Key: k.1-2", "Key: k:1-2"} {
+		if got, err := r.Last(ctx, line); err != nil || got != "" {
+			t.Fatalf("Last(%q) = %q %v, want none", line, got, err)
+		}
+	}
+	if _, err := r.RevertAll(ctx, []string{"--all"}, "x"); err == nil {
+		t.Fatal("an option as a commit")
+	}
+}
+
+func mustAtoi(t *testing.T, s string) int {
+	t.Helper()
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}

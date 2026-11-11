@@ -66,6 +66,7 @@ const (
 	OutcomeNoModel    Outcome = "no_model"
 	OutcomeCommand    Outcome = "command"
 	OutcomeError      Outcome = "error"
+	OutcomeReview     Outcome = "review" // the memory review of a quiet conversation (R-MEM-8)
 )
 
 // Turn is one row of the trace.

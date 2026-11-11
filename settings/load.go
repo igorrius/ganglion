@@ -255,6 +255,7 @@ func (f File) check() error {
 		{keyCallTimeout, "must be above 0", f.Agent.CallTimeout > 0},
 		{keyTurnTimeout, "must be above 0", f.Agent.TurnTimeout > 0},
 		{keyCallTimeout, "must not be longer than " + keyTurnTimeout, f.Agent.CallTimeout <= f.Agent.TurnTimeout},
+		{"memory.review.quiet", "must be above 0 while the review is enabled", !f.Memory.Review.Enabled || f.Memory.Review.Quiet > 0},
 		{keyTurnTimeout, "plus " + HandlerSlack.String() + " for the node's handler must stay below the queue's lease of " +
 			QueueLease.String(), f.Agent.HandlerTimeout() < QueueLease},
 	} {

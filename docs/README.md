@@ -6,13 +6,30 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Next:** memory by topic (board card G-138): facts and the owner's
-  corrections kept during the conversation in topic files, found when the
-  live check showed the agent forgetting a correction; a brainstorm first.
-  The Railway deploy (the image
-  and [deploy-railway.md](deploy-railway.md) are ready; Landlock ABI 3 or
-  newer and hard links on the volume still to check) stays open as board
-  card G-121.
+- **Next:** M6, the agent reconfigures the system, or the Railway deploy
+  (board card G-121: the image and [deploy-railway.md](deploy-railway.md)
+  are ready; Landlock ABI 3 or newer and hard links on the volume still to
+  check). M5's review left board card G-140.
+- **M5 closed (2026-11-11):** memory by topic
+  ([design](plans/p1-m5-memory-topics-design.md),
+  [plan](plans/p1-m5-memory-topics.md), ADRs
+  [0071](adr/0071-memory-topics-whole-in-the-prompt.md) and
+  [0072](adr/0072-who-writes-memory.md) Accepted; board card G-138). Facts
+  live in topic files, one line per fact with an id and its source; every
+  topic is whole in an admin's prompt within `memory.prompt_budget`, the
+  oldest folding first. The agent stores the owner's correction in the
+  same turn; a review after 10 quiet minutes, or at a session's end, reads
+  the owner's words once (never a tool's result) and stores what the turn
+  missed, asking with Remember and Skip in a session that read a page.
+  Every write sends "Memory updated" with Undo; `/memory` lists the topics.
+  `memory-correction` on the real models: 10 of 10, the agent wrote the
+  correction itself in every run and answered "charging" after `/new`
+  (442,247 tokens; the full lab run skipped, owner). The owner's live
+  check passed and found that the review could store an undone fact
+  again (live, Haiku chose not to): a memory button now settles the
+  conversation for it. Measured:
+  agent with tools 49.5 MB after 1,000 turns (M4c 48.7), binary 48.6 MB
+  (48.1); `make crash-agent` 200 kills, 0 duplicates, one commit per fact.
 - **M4c closed (2026-11-10):** reflex modules
   ([design](plans/p1-m4c-reflexes-design.md),
   [plan](plans/p1-m4c-reflexes.md), ADRs 0065–0070 Accepted). A module runs

@@ -83,6 +83,7 @@ const (
 	AskRemember          Key = "ask.remember"
 	AskForgetFact        Key = "ask.forget_fact"
 	AskForgetSlug        Key = "ask.forget_slug"
+	AskForgetTopic       Key = "ask.forget_topic"
 	AskPersona           Key = "ask.persona"
 	AskSkillScript       Key = "ask.skill_script"
 	AskHostExec          Key = "ask.host_exec"
@@ -323,6 +324,29 @@ const (
 	HintModuleTimeout    Key = "hint.module_timeout"
 	HintModuleTrap       Key = "hint.module_trap"
 	HintModuleNotRunning Key = "hint.module_not_running"
+
+	MemoryUpdated         Key = "memory.updated"
+	MemoryLineAdded       Key = "memory.line_added"
+	MemoryLineReplaced    Key = "memory.line_replaced"
+	MemoryLineRemoved     Key = "memory.line_removed"
+	MemoryLineDropped     Key = "memory.line_dropped"
+	MemoryUndoConflict    Key = "memory.undo_conflict"
+	MemoryEmpty           Key = "memory.empty"
+	MemoryTopicsHead      Key = "memory.topics_head"
+	MemoryTopicRow        Key = "memory.topic_row"
+	MemoryNoTopic         Key = "memory.no_topic"
+	MemoryPrivateOnly     Key = "memory.private_only"
+	MemoryFromOutside     Key = "memory.from_outside"
+	MemoryByHand          Key = "memory.by_hand"
+	ButtonUndo            Key = "button.undo"
+	LineUndone            Key = "line.undone"
+	MemoryProposal        Key = "memory.proposal"
+	MemoryLineForget      Key = "memory.line_forget"
+	MemoryHeld            Key = "memory.held"
+	ButtonRemember        Key = "button.remember"
+	ButtonSkip            Key = "button.skip"
+	LineSkipped           Key = "line.skipped"
+	StatusMemoryReviewOff Key = "status.memory_review_off"
 )
 
 var allKeys = []Key{
@@ -331,11 +355,12 @@ var allKeys = []Key{
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, ReplyBuildLate, ReplyRestarting, StatusCommandsOff,
-	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskPersona, AskSkillScript, AskHostExec, AskPlan, AskModuleImport, AskModuleInstall, AskModuleNetwork, AskModuleSecrets, AskModuleCreates, AskModuleTakes, AskModuleReads, AskModuleReacts, AskModuleNotify, AskModuleRuns, AskModuleTool, AskModuleAbout, AskModuleLimits, AskModuleNew, AskModuleNewNetwork, AskModuleNewSecrets, AskModuleNewCells, AskModuleNewReads, AskModuleNewReacts, AskModuleNewNotify, AskModuleNewRuns, AskModuleNewMemory, AskModuleNewTimeout, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
+	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskForgetFact, AskForgetSlug, AskForgetTopic, AskPersona, AskSkillScript, AskHostExec, AskPlan, AskModuleImport, AskModuleInstall, AskModuleNetwork, AskModuleSecrets, AskModuleCreates, AskModuleTakes, AskModuleReads, AskModuleReacts, AskModuleNotify, AskModuleRuns, AskModuleTool, AskModuleAbout, AskModuleLimits, AskModuleNew, AskModuleNewNetwork, AskModuleNewSecrets, AskModuleNewCells, AskModuleNewReads, AskModuleNewReacts, AskModuleNewNotify, AskModuleNewRuns, AskModuleNewMemory, AskModuleNewTimeout, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, StatusModuleFallback, StatusReasonModuleFailed, StatusModulesLocal, StatusModuleOff, StatusReasonModuleCrashloop, StatusModuleStopped, StatusModulesUnread, StatusReasonModuleInit, StatusReasonModuleCells, StatusReasonModuleLoad, StatusReasonModuleNoAdmin, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusSectionJobs, StatusJobBuild, StatusJobCommand, StatusJobBuildQueued, StatusJobCommandQueued, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled, StatusUnitDay, StatusUnitHour, StatusUnitMin, StatusUnitSec, StatusSandboxReady, StatusSandboxOff, StatusReasonSandboxNotLinux, StatusReasonSandboxRoot, StatusReasonSandboxLandlock, StatusReasonSandboxDumpable, StatusReasonSandboxSelfTest,
 	ButtonHistory, ModulesUsage, ModulesNone, ModulesHeader, ModulesPrevious, ModulesFailed, ModulesLocalRow, ModulesStateRunning, ModulesStateOff, ModulesStateCrashloop, ModulesStateStopped, ModulesUnknown, ModulesUpdated, ModulesUpToDate, ModulesRolledBack, ModulesNothingToRollBack, ModulesStays, ModulesCardRunning, ModulesCardStopped, ModulesCardVersions, ModulesCardHealthOK, ModulesCardHealthFailed, ModulesJournalRow, ModulesMarkActive, ModulesMarkPrevious, ModulesMarkFailed, ModulesMarkRetired, ModulesCardSettings, ModulesCardReacts, ModulesCardFeeds, ModulesCardNotify, ModulesSettingRow, ModulesSettingUnset, ModulesSettingDefault, ModulesSettingRequired, ModulesConfigDone, ModulesConfigUndeclared, ModulesConfigKeys, ModulesConfigNoKeys, ModulesConfigWrongType, ModulesOffDone, ModulesOnDone, ModulesNotStarted, ModulesRemoved, ModuleNotifyLimit, ModuleChainStopped, CellsNone, CellsRow, CellsNoValue, CellsMore, CellsAgeNow, CellsAgeMin, CellsAgeHour, CellsAgeDay, CellsHistoryHead, CellsHistoryRow, CellsHistoryNone, CellsGone,
 	JobCardRunning, JobCardCount, JobCardQueued, JobCardDone, JobCardFailed, JobCardInterrupted, JobKindBuild, JobKindCommand,
 	HintModuleAuthFailed, HintModuleStale, HintModuleFormat, HintModuleException, HintModuleTimeout, HintModuleTrap, HintModuleNotRunning,
+	MemoryUpdated, MemoryLineAdded, MemoryLineReplaced, MemoryLineRemoved, MemoryLineDropped, MemoryUndoConflict, MemoryEmpty, MemoryTopicsHead, MemoryTopicRow, MemoryNoTopic, MemoryPrivateOnly, MemoryFromOutside, MemoryByHand, ButtonUndo, LineUndone, MemoryProposal, MemoryLineForget, MemoryHeld, ButtonRemember, ButtonSkip, LineSkipped, StatusMemoryReviewOff,
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
 }
 
@@ -378,7 +403,7 @@ func limit(k Key) int {
 // missing any of these is refused whole (R-LANG-5).
 func IsApproval(k Key) bool {
 	switch k {
-	case ButtonApprove, ButtonDeny, ButtonDelete, ButtonRunNow, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands,
+	case ButtonApprove, ButtonDeny, ButtonDelete, ButtonRunNow, MemoryProposal, ButtonRemember, ButtonSkip, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands,
 		SchedOnce, SchedEvery, SchedEveryNext, SchedThisChat, SchedNone:
 		return true
 	default:

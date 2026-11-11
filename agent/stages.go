@@ -24,7 +24,7 @@ func (a *Agent) idle(ctx context.Context, t *turn) (bool, error) {
 	if t.grant != nil || a.cfg.SessionIdle <= 0 || len(st.Messages) == 0 || st.Last.IsZero() || t.now.Sub(st.Last) <= a.cfg.SessionIdle {
 		return false, nil
 	}
-	if err := a.archive(ctx, t.event.Conv, st, "idle"); err != nil {
+	if err := a.archive(ctx, t, st, "idle"); err != nil {
 		return false, err
 	}
 	a.log.Info("agent: new session after silence", "conv", t.event.Conv, "silent_for", t.now.Sub(st.Last).Round(time.Minute))

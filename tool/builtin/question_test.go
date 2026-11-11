@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/tool"
@@ -92,33 +93,40 @@ func TestMessageSendNameIsOneLine(t *testing.T) {
 	}
 }
 
-// Ruling R34: a fact's question shows its title and its whole body; one
-// the question would show redacted is refused.
+// Ruling R34: a fact's question shows its topic and its whole text; one
+// the question would show redacted is refused, and one longer than a fact
+// may be is refused before anyone is asked.
 func TestMemoryWriteQuestionShowsTheWholeFact(t *testing.T) {
 	tools := memoryTools(t)
-	body := strings.Repeat("The boiler is serviced in May. ", 66)[:1999]
-	args, _ := json.Marshal(map[string]string{"title": "Boiler", "body": body})
+	body := strings.Repeat("The boiler is serviced in May. ", 10)[:memory.MaxFactRunes]
+	args, _ := json.Marshal(map[string]string{"topic": "boiler", "fact": body})
 	c := call("memory.write", string(args))
 	c.Tainted = true
 	q, err := confirmed(t, c, tools["memory.write"])
-	if err != nil || !strings.Contains(q, "Boiler: "+strings.TrimSpace(body)) {
+	if err != nil || !strings.Contains(q, "boiler: "+strings.TrimSpace(body)) {
 		t.Fatalf("question %q, %v", q, err)
 	}
-	c = call("memory.write", `{"title":"Wifi","body":"The wifi password: hunter2"}`)
+	args, _ = json.Marshal(map[string]string{"topic": "boiler", "fact": body + "!"})
+	c = call("memory.write", string(args))
+	c.Tainted = true
+	if _, err := confirmed(t, c, tools["memory.write"]); err == nil || !strings.Contains(err.Error(), "300") {
+		t.Fatalf("an over-long fact was asked: %v", err)
+	}
+	c = call("memory.write", `{"topic":"Wifi","fact":"The wifi password: hunter2"}`)
 	c.Tainted = true
 	if _, err := confirmed(t, c, tools["memory.write"]); !errors.Is(err, builtin.ErrSecretShown) {
 		t.Fatalf("a secret-looking fact: %v", err)
 	}
 }
 
-// Ruling R34: forgetting shows the fact's slug and what it holds.
+// Ruling R34: forgetting shows the fact's topic and id and what it holds.
 func TestMemoryForgetQuestionNamesTheFact(t *testing.T) {
 	tools := memoryTools(t)
-	run(t, tools["memory.write"], call("memory.write", `{"title":"Quiet hours","body":"No messages 23:00-07:00."}`))
-	c := call("memory.forget", `{"slug":"quiet-hours"}`)
+	run(t, tools["memory.write"], call("memory.write", `{"topic":"Quiet hours","summary":"No messages","fact":"No messages 23:00-07:00."}`))
+	c := call("memory.forget", `{"topic":"quiet-hours","fact":"f1"}`)
 	c.Tainted = true
 	q, err := confirmed(t, c, tools["memory.forget"])
-	if err != nil || q != "Forget this fact (quiet-hours)?\n\nQuiet hours: No messages 23:00-07:00." {
+	if err != nil || q != "Forget this fact (quiet-hours f1)?\n\nQuiet hours: No messages 23:00-07:00." {
 		t.Fatalf("question %q, %v", q, err)
 	}
 }

@@ -79,7 +79,7 @@ pinned by a test in the task that owns the code.
 | M3d | Host commands and plans — **done** ([design](p1-m3d-host-commands-design.md)) | `host.exec` under a class table and a sandbox, `host.stats`, plan messages that approve their commands, commands in task grants | about 1 weekend |
 | M4 | Reflexes: config, modules built by the agent, Deye ([design](p1-m4-reflexes-design.md)) | One config file with models by purpose; the agent builds modules from source and installs them on the owner's press; modules own cells; the runner in the node with a supervisor; the Deye example deployed next to the current bot | about 1.5 weekends |
 | M4c | Reflex modules: `notify` for modules, the agent writing module source, `deye-alerts` ([design](p1-m4c-reflexes-design.md)) — **done 2026-11-10** | Routine reactions run without a model | one design, one plan |
-| ~~M5~~ | ~~Load-shedding flow~~ — left P1 ([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)) | Moved to the flow engine (spec 9.6) | — |
+| M5 | **Memory by topic** ([design](p1-m5-memory-topics-design.md), [plan](p1-m5-memory-topics.md)) — **done 2026-11-11**; the number was load shedding's, which left P1 ([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)) | Facts in topic files, whole in the prompt; the agent stores the owner's corrections in the turn, a review after quiet time catches the rest; a note with Undo, `/memory` | one design, one plan |
 | M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback | 0.25–0.5 weekend |
 | M7 | Migration | Memory import and consolidation, remaining skills and crons, backups, cutover, gate | 0.5–1 weekend |
 
@@ -103,7 +103,8 @@ flowchart LR
     M3D --> M4["M4 Config, modules, Deye"]
     M1 --> M4
     M4 --> M4C["M4c Reflex modules"]
-    M4C --> M6["M6 Agent reconfigures"]
+    M4C --> M5["M5 Memory by topic"]
+    M5 --> M6["M6 Agent reconfigures"]
     M6 --> M7["M7 Migration"]
 ```
 
@@ -307,6 +308,21 @@ Step-by-step plan: [p1-m4c-reflexes.md](p1-m4c-reflexes.md); the live check pass
 | 4.6 **Done** (2026-11-10, [plan](p1-m4b-modules.md)). The `deye-reader` example in Rust under `examples/modules/`: cells, 30-minute cron, 429 with `Retry-After`, stale data once, no second login (R-DEYE-1–3); the Go build moves to the runner's test data as the reference | Tests with the replay server from `tools/modbench`; the Rust and Go builds agree on a recorded response |
 | 4.7 **Image and runbook done** (2026-11-10, [runbook](../deploy-railway.md)); the deploy and its checks are open, board card G-121. Deploy: container image with the Rust toolchain and an unprivileged user, a Railway service next to the current bot, test bot token; compare with `deye.py` for a few days (R-LS-4); `ganglion mcp` over `railway ssh` (moved from M3c) | Samples match `deye.py`; idle RSS within budget; a build's peak memory measured |
 | 4.8 **Done** (2026-11-10, [plan](p1-m4b-modules.md)). M4 acceptance, scripted and live on the test bot (design section 11) | All ten checks pass |
+
+### M5 · Memory by topic ([design](p1-m5-memory-topics-design.md), spec 7.7)
+
+Added on 2026-11-11 after the M4c live check (board card G-138): the
+agent forgot the owner's correction. Tasks are in the plan
+(`p1-m5-memory-topics.md`).
+
+| Task | Done when |
+|---|---|
+| 5.1 **Done** (2026-11-11, [plan](p1-m5-memory-topics.md)). Topic files: the format, ids, limits, the move from one fact per file (R-MEM-6, [ADR-0071](../adr/0071-memory-topics-whole-in-the-prompt.md)) | The old test workspace opens as topics in one commit; the format round-trips |
+| 5.2 **Done** (2026-11-11, [plan](p1-m5-memory-topics.md)). The known-facts block: every topic whole within `memory.prompt_budget`, folding (R-MEM-7, R-CFG-8) | The same files give the same block; over the budget the oldest topic folds |
+| 5.3 **Done** (2026-11-11, [plan](p1-m5-memory-topics.md)). Tools by topic: `memory.write`, `memory.read`, `memory.forget`, recall and the audit; the check's question widened (R-POL-7) | A correction replaces its fact; "negative batt_w on the Deye is charging" passes the check |
+| 5.4 **Done** (2026-11-11, [plan](p1-m5-memory-topics.md)). The directive, the note with Undo and `/memory` (R-MEM-8, R-MEM-9) | A correction in chat is stored in that turn; Undo reverts it and the note folds |
+| 5.5 **Done** (2026-11-11, [plan](p1-m5-memory-topics.md)). The review after quiet time: the `memory` purpose, the timer and the mark, the owner's words only, the question in a tainted session (R-MEM-8, [ADR-0072](../adr/0072-who-writes-memory.md)) | A fact the turn missed is stored after the quiet time and at `/new`; a planted fact in a page's text is not |
+| 5.6 **Done** (2026-11-11, [plan](p1-m5-memory-topics.md)). Acceptance: chatlab on the scripted and the real model, the seeded fault, `make crash-agent`, `make memory`, the live check | After `/new` the agent answers the `batt_w` question correctly with no hint; 10 runs counted |
 
 ### M6 · The agent reconfigures the system (ADR-0015)
 

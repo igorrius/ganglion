@@ -43,6 +43,11 @@ const (
 	// background (R-RUN-9, ADR-0069); its payload is a ModuleBuilt. It
 	// resumes the conversation whose call asked for the build.
 	KindModuleBuilt Kind = "module.built"
+	// KindMemoryReview asks for the memory review of a conversation that
+	// went quiet or whose session ended (R-MEM-8, ADR-0072); its payload is
+	// a MemoryReview. It reads the owner's words once and stores what the
+	// turns missed.
+	KindMemoryReview Kind = "memory.review"
 )
 
 // SourceModule is the Source of the events the node puts for the owner's

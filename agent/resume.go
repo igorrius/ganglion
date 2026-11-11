@@ -56,6 +56,8 @@ func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 		return true, a.commandDone(ctx, t)
 	case event.KindModuleBuilt:
 		return true, a.moduleBuilt(ctx, t)
+	case event.KindMemoryReview:
+		return true, a.memoryReview(ctx, t)
 	case event.KindModule:
 		return true, a.moduleEvent(ctx, t)
 	case event.KindModuleNotify:
@@ -170,6 +172,9 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 	t.editWith(e)
 	if e.Note != "" {
 		t.note(buttonPrefix + transcript.Cap(e.Note))
+	}
+	if e.Reviewed {
+		t.state.Reviewed = len(t.state.Messages)
 	}
 	return nil
 }

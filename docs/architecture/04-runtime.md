@@ -453,6 +453,54 @@ sequenceDiagram
     A->>O: reply
 ```
 
+## The memory review (P1)
+
+The agent stores a correction in the turn it hears it (`memory.write`);
+the review is the net for what that turn missed (R-MEM-8,
+[ADR-0072](../adr/0072-who-writes-memory.md)). It runs once per quiet
+period of the owner's private chat, or at once when a session ends, and
+never for a turn with nothing new from the owner.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Agent
+    participant D as review_due
+    participant T as Review timer
+    participant Q as Inbox
+    participant M as Model (memory purpose)
+    participant Mem as Memory
+    participant G as Clean-context check
+    participant O as Owner
+
+    A->>D: Arm(conv, now + 10 min) after each turn
+    Note over A,D: a later turn moves the time
+    T->>D: due rows (every 30 s)
+    T->>Q: Put(memory.review, key conv:session:due)
+    T->>D: remove the row unless it moved
+    Q-->>A: memory.review
+    A->>A: the owner's lines and replies after State.Reviewed,<br/>no tool results, no notes, no external text
+    alt no owner line
+        A->>A: mark read, no model call
+    else
+        A->>M: ReviewPrompt + topics + lines, as data
+        M-->>A: {"ops":[…]}
+        alt the session held outside content
+            A->>O: the facts with Remember and Skip
+        else
+            A->>Mem: Apply each op (its own key)
+            Mem->>G: CheckFact
+            G-->>Mem: ok, or held back to quarantine
+            A->>O: Memory updated, with Undo
+        end
+        A->>A: mark read
+    end
+```
+
+A rerun of the event finds each op's commit by its key, so nothing is
+stored twice and the note keeps its key. When no model answers, the
+review is armed again a quiet period later and the mark stays.
+
 ## Load-shedding flow (planned, after P1)
 
 Moved out of P1 by [ADR-0058](../adr/0058-load-shedding-leaves-p1.md); kept

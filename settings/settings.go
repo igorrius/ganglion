@@ -28,6 +28,8 @@ type File struct {
 	Models *Models `yaml:"models"`
 	// Modules lists the modules the node runs and their configuration (M4b).
 	Modules []Module `yaml:"modules"`
+	// Memory is the agent's long-term memory (M5, R-CFG-8).
+	Memory Memory `yaml:"memory"`
 }
 
 // Node is the process-wide settings.
@@ -140,6 +142,24 @@ type Sandbox struct {
 	HideNames bool `yaml:"hide_names"`
 }
 
+// Memory is the agent's long-term memory (R-CFG-8).
+type Memory struct {
+	// PromptBudget is the size in characters of the known-facts block of
+	// the system prompt; over it, topics fold (R-MEM-7).
+	PromptBudget Count `yaml:"prompt_budget"`
+	// Review is the pass that reads a quiet conversation for facts the turn
+	// missed (R-MEM-8).
+	Review Review `yaml:"review"`
+}
+
+// Review is the memory review's settings.
+type Review struct {
+	// Enabled runs the review.
+	Enabled bool `yaml:"enabled"`
+	// Quiet is how long a conversation is silent before it is reviewed.
+	Quiet Duration `yaml:"quiet"`
+}
+
 // Module is one module the node runs (M4b).
 type Module struct {
 	// Name is the module's name.
@@ -172,6 +192,7 @@ func Default() File {
 			Limits:      Limits{DailyBudgetUSD: 1.0, DailyTurns: 300, DailyTokens: 1_000_000},
 			Search:      Search{Mode: auto, BraveKey: "env:BRAVE_API_KEY"},
 		},
+		Memory: Memory{PromptBudget: 24000, Review: Review{Enabled: true, Quiet: Duration(10 * time.Minute)}},
 	}
 }
 

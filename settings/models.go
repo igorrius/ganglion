@@ -97,7 +97,8 @@ func (m Models) RouterModels() []router.Model {
 }
 
 // RouterPurposes returns each purpose's list; check, compact and
-// translate fall back to chat's list, code has no fallback (ruling 2).
+// translate fall back to chat's list, memory to check's (and so to chat's),
+// code has no fallback (ruling 2; R-RTR-6).
 func (m Models) RouterPurposes() map[router.Purpose][]router.Choice {
 	out := map[router.Purpose][]router.Choice{}
 	for p, list := range m.Purposes {
@@ -107,6 +108,9 @@ func (m Models) RouterPurposes() map[router.Purpose][]router.Choice {
 		if _, ok := out[p]; !ok {
 			out[p] = out[router.PurposeChat]
 		}
+	}
+	if _, ok := out[router.PurposeMemory]; !ok {
+		out[router.PurposeMemory] = out[router.PurposeCheck]
 	}
 	return out
 }

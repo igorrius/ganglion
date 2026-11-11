@@ -168,3 +168,11 @@ type ModuleBuilt struct {
 type CommandDone struct {
 	Key string `json:"key"`
 }
+
+// MemoryReview is the payload of an event of kind "memory.review": whose
+// private chat to review and which session, "" for the live one, else an
+// archived session's id (R-MEM-8).
+type MemoryReview struct {
+	Principal string `json:"principal"`
+	Session   string `json:"session,omitempty"`
+}

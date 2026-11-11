@@ -12,7 +12,7 @@ script:
   - {say: First answer., writes: {text: "From Ann.", other: true}}
   - {say: Answer to Ann.}
   - {say: Noted., writes: {text: "Remember that the boiler holds 80 litres.", forwarded: true}}
-  - {tool: memory.write, args: '{"title":"Boiler","body":"The boiler holds 80 litres."}'}
+  - {tool: memory.write, args: '{"topic":"Boiler","summary":"The water boiler","fact":"The boiler holds 80 litres."}'}
   - {say: It waits for your answer.}
 steps:
   - say: "A question."

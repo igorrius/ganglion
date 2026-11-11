@@ -72,6 +72,10 @@ func (a *Agent) commandTable() []commandEntry {
 			transport.LangDefault:   "Modules: /modules, then /modules <name>, config, off, on, remove or rollback",
 			transport.LangRussian:   "Модули: /modules, затем /modules <имя>, config, off, on, remove или rollback",
 			transport.LangUkrainian: "Модулі: /modules, потім /modules <назва>, config, off, on, remove або rollback"}},
+		{"/memory", a.showMemory, map[transport.Lang]string{
+			transport.LangDefault:   "What I remember: /memory, or /memory <topic>",
+			transport.LangRussian:   "Что я помню: /memory или /memory <тема>",
+			transport.LangUkrainian: "Що я пам'ятаю: /memory або /memory <тема>"}},
 		{"/cells", a.listCells, map[transport.Lang]string{
 			transport.LangDefault: "Cells: sensors and switches with their values", transport.LangRussian: "Ячейки: датчики и выключатели со значениями",
 			transport.LangUkrainian: "Комірки: датчики та вимикачі зі значеннями"}},
@@ -143,7 +147,7 @@ func (a *Agent) commandIn(m event.Message) (run command, arg string, ok bool) {
 // newSession archives the session; the next real message opens a new one
 // and sets its id and start.
 func (a *Agent) newSession(ctx context.Context, t *turn, _ string) error {
-	if err := a.archive(ctx, t.event.Conv, t.state, "new"); err != nil {
+	if err := a.archive(ctx, t, t.state, "new"); err != nil {
 		return err
 	}
 	t.state = State{V: StateVersion}
@@ -164,7 +168,7 @@ func (a *Agent) listSessions(ctx context.Context, t *turn, _ string) error {
 	lines := make([]string, len(list))
 	for i, s := range list {
 		lines[i] = a.say(ctx, t, texts.ReplySessionRow, texts.Vars{"n": strconv.Itoa(i + 1), "span": a.formatSpan(s),
-			"turns": strconv.Itoa(s.Turns), "title": s.Title})
+			"turns": strconv.Itoa(s.Turns), varTitle: s.Title})
 	}
 	t.reply(strings.Join(lines, "\n"))
 	return nil
@@ -190,7 +194,7 @@ func (a *Agent) resumeSession(ctx context.Context, t *turn, arg string) error {
 		return err
 	}
 	if t.state.Session != chosen.Session {
-		if err := a.archive(ctx, t.event.Conv, t.state, "resume"); err != nil {
+		if err := a.archive(ctx, t, t.state, "resume"); err != nil {
 			return err
 		}
 	}
@@ -204,17 +208,18 @@ func (a *Agent) resumeSession(ctx context.Context, t *turn, arg string) error {
 	}
 	chosen.Last = t.now
 	t.state = chosen
-	t.reply(a.say(ctx, t, texts.ReplyResumed, texts.Vars{"title": list[n-1].Title}))
+	t.reply(a.say(ctx, t, texts.ReplyResumed, texts.Vars{varTitle: list[n-1].Title}))
 	return nil
 }
 
-func (a *Agent) archive(ctx context.Context, conv string, st State, by string) error {
+func (a *Agent) archive(ctx context.Context, t *turn, st State, by string) error {
 	if len(st.Messages) == 0 {
 		return nil
 	}
-	if err := a.d.Archive.Put(ctx, conv, st, by); err != nil {
+	if err := a.d.Archive.Put(ctx, t.event.Conv, st, by); err != nil {
 		return err
 	}
+	a.armArchived(ctx, t, st)
 	a.observeEnded(ctx, by)
 	return nil
 }

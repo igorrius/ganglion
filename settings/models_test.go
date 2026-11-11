@@ -186,3 +186,27 @@ func TestDuplicatePurposeFails(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestMemoryPurposeFallsBackToCheckThenChat(t *testing.T) {
+	f, err := settings.Parse([]byte(models))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Models.RouterPurposes()[router.PurposeMemory]; len(got) != 2 || got[0] != (router.Choice{Model: "haiku", Effort: router.EffortLow}) {
+		t.Fatalf("memory falls back to check: %+v", got)
+	}
+	noCheck := strings.Replace(models, "    check: [{model: haiku, effort: low}, {model: sonnet, effort: low}]\n", "", 1)
+	if f, err = settings.Parse([]byte(noCheck)); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Models.RouterPurposes()[router.PurposeMemory]; len(got) != 2 || got[0].Model != "sonnet" {
+		t.Fatalf("memory falls back to chat when check is absent: %+v", got)
+	}
+	own := models + "    memory: [{model: flash}]\n"
+	if f, err = settings.Parse([]byte(own)); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Models.RouterPurposes()[router.PurposeMemory]; len(got) != 1 || got[0].Model != "flash" {
+		t.Fatalf("memory's own list: %+v", got)
+	}
+}

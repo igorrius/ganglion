@@ -42,6 +42,7 @@
     "mech-skill-read": "fc37d2338a1d2bac2e4eb44d42deee46116156a1976d4de83484114e31530458",
     "mech-status": "4c71e2b413c671806202f33f5e56905c943c26d151e6f9b6c0a92c403358ad30",
     "mech-waiting-call": "967bdbce024aa8a3d414cfee29ee7a6a99b982cefe8a368263cd0dc5b282302d",
+    "memory-correction": "9e10e7a410ea82a065717e390c98e1dbe7e0ff8b69f9656986bf26bf91ae0457",
     "plan-shown": "f0f6d531ec8de52327a5e9c0be59da3bcda1f46afd157f91b89f283d58f839b6",
     "question-no-plan": "20c9cd0ed46876dd78b223613c6a2472c4f0ace2cbdb42c46396a38f3f9815bd",
     "r38-identical-call-asks-once": "f14c0a291f8ac81095016092a432f1c2dbd84a82d5b55449560db00d0a49ede0",
@@ -53,21 +54,19 @@
     "task-selection": "823f615cba7b6b587419b7d76c3bbe727fcb7089ea6e9d4fca69d5df197c143a"
   },
   "shared": {
-    "agent/compact.go": "28fc309f9030755e3e52ed69475d032574f42232cb90d6f77d74817b1755fbb4",
-    "agent/prompt.go": "26fe2b783b8b349a1a4c3d81d663f2c719320f0f989b9ef3c69561e25bcc8217",
-    "agent/stages.go": "a4b8c623e0adb1c3530e62920477f1b6bc547489699a6fb822fd64ffb67683e3",
-    "examples/ganglion.lab.yaml": "75ebc6dab3ed07a1d0b4aae4761cb23c1f97642b310d4ae60c742f595d61b84d",
-    "examples/workspace/persona/10-identity.md": "d58fb38efe59a7664e3c7ce40f99c7468cc951aef56a9d832ea1775a71a4168d",
+    "agent/compact.go": "41f48d0c6a6f4f9e65d49e88c7f13999a103db8bf8003402b06df14580b8d7a6",
+    "agent/prompt.go": "b8ef523b193058f3f257e4d247f7a987fbe941254e9e7f32bb78abd7709bc69e",
+    "agent/stages.go": "a4c7c3ef4ec3abfe7b50dd0dec1e89ec897d1687002c5676dd6bcd2ffec21c8b",
+    "examples/ganglion.lab.yaml": "c5dc8badeb922d907dce8eb8ec66a448bb9166feab1d36cf64d7a0e1f6e72603",
+    "examples/workspace/persona/10-identity.md": "573075f5fd2004364cf3eac109a69bd86db2be5fba0688a3b0e55ed2d807adb4",
     "mcp/lines.go": "1285d34c113d364ae7c2d7735d1ca828a0b607cb280d5227adafb88b33f014c8",
     "mcp/relay.go": "52992986ebb95b6f3275cff3408ffe6340334ef1d8fff8b8856bde2513c5384c",
     "mcp/server.go": "38bbcdce92876d5a1ff6ea073f7f353a00a01d70e2c684657067c6967780c55a",
     "provider/claudecli/bridge.go": "7527d2c5b1b447448a8ca925f533cc43a0b5c0be4d481ff9bc10dc5c37cff632",
-    "provider/claudecli/claudecli.go": "b8176be6436ed5cc11b09bd3eabfed319729c824d4efb827701770aaa1e00f03",
-    "provider/claudecli/proc_other.go": "ac390a48e6332635da7fdf4762dba4f66af55b967f7a3c97d869873ff6d7c38a",
-    "provider/claudecli/proc_unix.go": "c71b8c703486def7a33431c851eeabcd6b6d188e51ade2614d4aae05ac1aa22c",
+    "provider/claudecli/claudecli.go": "30fd267aa5950bfd3c83da0295f6c2227a8a7cfdc61af2c50829ad5cf7bfee97",
     "provider/errors.go": "535af3583ccc210ff100948a313ff443d309d707807e665056d18767acfdfb09",
-    "provider/openai/client.go": "ad1b795b5cdc2855beb9f383b179d1d57227bafbf9cc78b2fc3381b6c507469f",
-    "provider/provider.go": "956fbe6e05998a86c21677e2babdc47bf68658d1dc4de43efde4efc6fe3101d5",
+    "provider/openai/client.go": "29fca6001bb43286ad8899543dcfd15032f8ca46204444beee035ed7b90d993a",
+    "provider/provider.go": "adbf146e87d2088106d62739accbd63cd1275d99384098d87e91b0a2309bdc04",
     "provider/providertest/server.go": "5095ad7458ab50522ad7b091a6f2e8a1f94d35ba068337cc9c285ad57dd5c346"
   }
 }

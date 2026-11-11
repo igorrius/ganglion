@@ -91,7 +91,7 @@ models:
   # Each purpose lists its models in the order they are tried; effort is low,
   # medium or high (an openai provider) and also xhigh or max (claude-cli).
   # check, compact and translate use chat's list when they have none of
-  # their own; code has no fallback.
+  # their own; memory (the memory review) uses check's; code has no fallback.
   purposes:
     chat:    [{model: sonnet, effort: medium}, {model: haiku}]
     check:   [{model: haiku, effort: low}, {model: sonnet, effort: low}]
@@ -101,3 +101,14 @@ models:
 # The modules the node runs and their configuration. module.install writes this
 # list (M4b); leave it empty until then.
 modules: []
+
+# The agent's long-term memory, kept by topic in the workspace (M5).
+memory:
+  # The size in characters of the known-facts block of the system prompt;
+  # over it, the topics changed longest ago fold to one line.
+  prompt_budget: 24000
+  review:
+    # Read the owner's quiet private chat once for facts the turn missed.
+    enabled: true
+    # How long the chat is silent before it is reviewed.
+    quiet: 10m

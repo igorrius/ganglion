@@ -35,8 +35,11 @@ type Scenario struct {
 	Skills  []string     `yaml:"skills"`  // directories copied to workspace/skills
 	Model   string       `yaml:"model"`   // "" or ModelScripted
 	Script  []ScriptStep `yaml:"script"`
-	Pages   []Page       `yaml:"pages"`
-	Modules []Module     `yaml:"modules"`
+	// Review is the scripted memory review's answers, in order: JSON the
+	// review parses (R-MEM-8). After them it answers {"ops":[]}.
+	Review  []string `yaml:"review"`
+	Pages   []Page   `yaml:"pages"`
+	Modules []Module `yaml:"modules"`
 	// Config is the settings the owner wrote for modules, by short name, in the
 	// node's ganglion.yaml before it starts.
 	Config map[string]map[string]any `yaml:"config"`
@@ -231,8 +234,8 @@ func (s Scenario) check(base string) error {
 func (s Scenario) checkModel() error {
 	switch s.Model {
 	case "":
-		if len(s.Script) > 0 {
-			return errors.New("script needs model: scripted")
+		if len(s.Script) > 0 || len(s.Review) > 0 {
+			return errors.New("script and review need model: scripted")
 		}
 	case ModelScripted:
 		if len(s.Script) == 0 {

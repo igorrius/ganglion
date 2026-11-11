@@ -1,0 +1,22 @@
+diff --git a/agent/review.go b/agent/review.go
+index 8203f4a..7b58116 100644
+--- a/agent/review.go
++++ b/agent/review.go
+@@ -214,7 +214,7 @@ func (a *Agent) storeReview(ctx context.Context, t *turn, st State, ops []memory
+ 	}
+ 	sp := a.speaker(ctx, t)
+ 	key := t.event.IdemKey + ":memory"
+-	if st.Tainted {
++	if false && st.Tainted { // seeded fault: a tainted session writes without asking
+ 		o, err := a.d.Review.Proposal(ctx, sp, key, t.transport, t.event.Conv, t.msg.From, ops)
+ 		if err != nil {
+ 			return fmt.Errorf("agent: memory review question: %w", err)
+@@ -321,6 +321,8 @@ func reviewLine(m provider.Message) (line string, owner, ok bool) {
+ 		return "", false, false
+ 	case m.Role == provider.RoleAssistant:
+ 		return "[assistant] " + text, false, true
++	case m.Role == provider.RoleTool:
++		return "[tool] " + m.Content, false, true // seeded fault: a tool's result reaches the review
+ 	case m.Role != provider.RoleUser:
+ 		return "", false, false
+ 	}

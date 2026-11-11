@@ -89,7 +89,7 @@ func TestScriptedNodeAnswers(t *testing.T) {
 
 func TestScriptedGuardIsSeparate(t *testing.T) {
 	n := startScripted(t, Scenario{Name: "x", Script: []ScriptStep{
-		{Tool: "memory.write", Args: `{"title":"Boiler","body":"The boiler holds 80 litres."}`},
+		{Tool: "memory.write", Args: `{"topic":"Boiler","summary":"The water boiler","fact":"The boiler holds 80 litres."}`},
 		{Say: "Stored."},
 	}})
 	sayQuiet(t, n, "Remember that my boiler holds 80 litres")
@@ -330,7 +330,7 @@ func TestRunNowQuestionClosesItself(t *testing.T) {
 
 func TestReadView(t *testing.T) {
 	n := startScripted(t, Scenario{Name: "x", Script: []ScriptStep{
-		{Tool: "memory.write", Args: `{"title":"Boiler","body":"The boiler holds 80 litres."}`},
+		{Tool: "memory.write", Args: `{"topic":"Boiler","summary":"The water boiler","fact":"The boiler holds 80 litres."}`},
 		{Say: "Stored it."},
 		{Tool: "schedule.create", Args: reminderArgs(t, time.Now().Add(time.Hour))},
 		{Say: "I asked."},

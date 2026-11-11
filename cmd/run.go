@@ -168,7 +168,8 @@ func agentSettings(f settings.File, src secrets.Source) (config.AgentSettings, e
 	l := f.Agent.Limits
 	a := config.AgentSettings{Workspace: f.Agent.Workspace, DailyBudgetUSD: float64(l.DailyBudgetUSD), DailyTurns: int(l.DailyTurns),
 		DailyTokens: int(l.DailyTokens), SessionIdle: time.Duration(f.Agent.SessionIdle), TZ: tz, SearchOff: f.Agent.Search.Mode == "off",
-		Models: f.Models}
+		Models: f.Models, Memory: config.MemorySettings{PromptBudget: int(f.Memory.PromptBudget), Review: f.Memory.Review.Enabled,
+			Quiet: time.Duration(f.Memory.Review.Quiet)}}
 	if a.BraveKey, err = f.Agent.Search.BraveKey.Resolve(src); err != nil {
 		return config.AgentSettings{}, err
 	}

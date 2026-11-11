@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/igorrius/ganglion/settings"
 )
@@ -120,6 +121,36 @@ func TestDuplicateKeysFail(t *testing.T) {
 		"telegram:\n  rich: true\n  rich: false\n":  `ganglion.yaml: telegram: key "rich" twice`,
 	} {
 		if _, err := settings.Parse([]byte(src)); err == nil || err.Error() != want {
+			t.Errorf("%q: err = %v; want %q", src, err, want)
+		}
+	}
+}
+
+func TestMemorySection(t *testing.T) {
+	f, err := settings.Parse([]byte("memory:\n  prompt_budget: 12000\n  review: {enabled: false, quiet: 30m}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Memory.PromptBudget != 12000 || f.Memory.Review.Enabled || time.Duration(f.Memory.Review.Quiet) != 30*time.Minute {
+		t.Fatalf("memory %+v", f.Memory)
+	}
+	d := settings.Default().Memory
+	if d.PromptBudget != 24000 || !d.Review.Enabled || time.Duration(d.Review.Quiet) != 10*time.Minute {
+		t.Fatalf("defaults %+v", d)
+	}
+	for src, want := range map[string]string{
+		"memory:\n  budget: 1\n":                            `memory: unknown key "budget"`,
+		"memory:\n  review: {quiet: off}\n":                 "memory.review.quiet: must be above 0 while the review is enabled",
+		"memory:\n  review: {enabled: false, quiet: off}\n": "",
+	} {
+		_, err := settings.Parse([]byte(src))
+		if want == "" {
+			if err != nil {
+				t.Errorf("%q: %v", src, err)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: err = %v; want %q", src, err, want)
 		}
 	}

@@ -23,7 +23,8 @@ flowchart TB
     web["Web reader<br/>public addresses only, limits,<br/>fixed errors; search backends"]
     html2md["html2md module<br/>WASM, no capabilities:<br/>HTML to Markdown"]
     policies["Policies<br/>risk classes, confirmations, audit"]
-    memory["Memory<br/>memory/*.md in git,<br/>quarantine, recall, audit"]
+    memory["Memory<br/>topics memory/*.md in git,<br/>quarantine, recall, audit, undo"]
+    review["Memory review<br/>a quiet private chat,<br/>the owner's words only"]
     guard["Clean-context check<br/>the check purpose's models,<br/>no history, no tools"]
     sched["Scheduler<br/>crons, catch-up;<br/>reminders, tasks with grants"]
     hostrun["Host command runner<br/>host.exec in the sandbox, once per key;<br/>past 20 s in the background"]
@@ -56,6 +57,9 @@ flowchart TB
     tools <--> memory
     loop --> memory
     memory --> guard
+    loop --> review
+    review --> memory
+    review --> router
     guard --> router
     tools --> sched
     tools --> web
@@ -107,7 +111,8 @@ flowchart TB
 | Providers | Talk to model backends, translate MCP tools | R-PRV-1…4 |
 | Policies | Decide autonomous / confirm / forbid; audit | R-POL-1…5 |
 | Tool registry | Tools available to the model, local and on edges | — |
-| Memory | Facts in git with where they came from; the index in an admin's system prompt; recall over facts and archived sessions; nightly consolidation (M7) later | R-MEM-1…5 |
+| Memory | Facts by topic in git with where they came from; every topic whole in an admin's system prompt within a budget; a note with Undo for every write; recall over facts and archived sessions; nightly consolidation (M7) later | R-MEM-1…7, 9 |
+| Memory review | Reads a quiet private chat, or an ended session, once: the owner's lines and the replies, never a tool's result; stores what the turns missed through the clean-context check, or asks in a session with outside content | R-MEM-8 |
 | Clean-context check | Checks every memory write, and on schedule stored facts and the persona, with a model of the `check` purpose that sees only the text; fails closed into quarantine | R-POL-7 |
 | Scheduler | Crons in the node's zone with catch-up after downtime; reminders and agent tasks with grants, each task in its own conversation | R-SCH-1, R-SCH-2, R-POL-8 |
 | Host command runner | Runs `host.exec` commands in the sandbox once per call key; one still running after 20 s goes on as a background job with a card, and its end comes back at once as a `command.done` event that resumes its conversation (a task's under its grant) | R-CMD-1, R-CMD-4 |

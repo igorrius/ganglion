@@ -40,6 +40,9 @@ type State struct {
 	// Commands are the keys of the session's background jobs whose end is
 	// still to be told: host commands (R-CMD-4) and module builds (R-RUN-9).
 	Commands []string
+	// Reviewed is how many leading Messages the memory review has read
+	// (R-MEM-8); compaction lowers it by what it folds.
+	Reviewed int
 }
 
 type wireState struct {
@@ -53,6 +56,7 @@ type wireState struct {
 	Local    bool               `json:"local_only,omitempty"`
 	Pending  []string           `json:"pending,omitempty"`
 	Commands []string           `json:"commands,omitempty"`
+	Reviewed int                `json:"reviewed,omitempty"`
 }
 
 // privacy is the routing privacy the session's history demands.
@@ -84,7 +88,7 @@ func (s State) MarshalJSON() ([]byte, error) {
 		msgs = []provider.Message{}
 	}
 	return json.Marshal(wireState{V: StateVersion, Session: s.Session, Started: ms(s.Started), Last: ms(s.Last), Summary: s.Summary, Messages: msgs, Tainted: s.Tainted, Local: s.LocalOnly, Pending: s.Pending,
-		Commands: s.Commands})
+		Commands: s.Commands, Reviewed: s.Reviewed})
 }
 
 // DecodeState reads a stored state; nil is an empty state.
@@ -99,7 +103,7 @@ func DecodeState(raw json.RawMessage) (State, error) {
 	if w.V < firstStateVersion || w.V > StateVersion {
 		return State{}, fmt.Errorf("agent: state version %d, this build reads %d to %d", w.V, firstStateVersion, StateVersion)
 	}
-	return State{V: StateVersion, Tainted: w.Tainted, LocalOnly: w.Local, Pending: w.Pending, Commands: w.Commands, Session: w.Session, Started: fromMS(w.Started), Last: fromMS(w.Last), Summary: w.Summary, Messages: w.Messages}, nil
+	return State{V: StateVersion, Tainted: w.Tainted, LocalOnly: w.Local, Pending: w.Pending, Commands: w.Commands, Session: w.Session, Started: fromMS(w.Started), Last: fromMS(w.Last), Summary: w.Summary, Messages: w.Messages, Reviewed: w.Reviewed}, nil
 }
 
 // tokens estimates the size of the state as runes/4.

@@ -157,6 +157,10 @@ type QuickEdit struct {
 	Key string
 	// Folded is a closed question's text, kept under Text (event.Outgoing.Folded).
 	Folded string
+	// Reviewed says the press settled what the conversation said so far for
+	// the memory review: the owner undid, kept or skipped what memory took
+	// from it, so the review does not read it again (R-MEM-8).
+	Reviewed bool
 }
 
 // QuickAction runs a quick-action button, such as Delete on a list entry,
