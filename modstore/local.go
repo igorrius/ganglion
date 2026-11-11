@@ -150,6 +150,41 @@ func checkBuild(b Build) (runner.Manifest, string, string) {
 	return m, "", ""
 }
 
+// checkVersion is the refusal of a build of module whose manifest's version
+// is not above every version the node has had of it: two builds under one
+// number cannot be told apart in the journal, a rollback or the signature
+// of a message (seen live on 2026-11-11: a rewrite installed as a second
+// "v1"). A build the journal already holds, by its digest, is not a new
+// version and passes: installing it again changes nothing.
+func (s *Store) checkVersion(ctx context.Context, module, sha string, version int) (string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT sha256, version FROM module_versions WHERE module = ?`, module)
+	if err != nil {
+		return "", fmt.Errorf("modstore: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	highest := 0
+	for rows.Next() {
+		var had, v string
+		if err := rows.Scan(&had, &v); err != nil {
+			return "", fmt.Errorf("modstore: %w", err)
+		}
+		if had == sha {
+			return "", rows.Err()
+		}
+		if n, err := strconv.Atoi(v); err == nil {
+			highest = max(highest, n)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("modstore: %w", err)
+	}
+	if highest > 0 && version <= highest {
+		return fmt.Sprintf("the manifest's version is %d, and this node has already had version %d of the module: "+
+			"set version: %d in manifest.yaml and build again", version, highest, highest+1), nil
+	}
+	return "", nil
+}
+
 // SecretSet reports whether the node has a value for the secret name.
 type SecretSet func(name string) bool
 
@@ -185,6 +220,9 @@ func (s *Store) PlanLocal(ctx context.Context, b Build, secrets Secrets, config 
 		return p, nil
 	}
 	if p.Refusal, p.RefusalDetail, err = s.checkLoop(ctx, b.Module, m); err != nil || p.Refusal != "" {
+		return p, err
+	}
+	if p.Refusal, err = s.checkVersion(ctx, b.Module, p.SHA256, m.Version); err != nil || p.Refusal != "" {
 		return p, err
 	}
 	rights, why, err := cellRights(ctx, b.Module, m, owners)
@@ -386,6 +424,9 @@ func (s *Store) InstallLocal(ctx context.Context, b Build, sha string) (Outcome,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if why, _, err := s.checkLoop(ctx, b.Module, m); err != nil || why != "" {
+		return Outcome{Module: b.Module, Result: ResultRefused, Reason: why}, err
+	}
+	if why, err := s.checkVersion(ctx, b.Module, sha, m.Version); err != nil || why != "" {
 		return Outcome{Module: b.Module, Result: ResultRefused, Reason: why}, err
 	}
 	from := ""

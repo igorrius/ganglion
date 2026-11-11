@@ -42,7 +42,10 @@ you.
 3. `module.write` `manifest.yaml` and `src/logic.rs` only: the rules, the settings, the state and
    their tests. `src/lib.rs`, `src/host.rs` and `Cargo.lock` stay as the template has them. Write
    a Rust test in `logic.rs` for every rule, and keep `react` free of host calls.
-4. `module.build`. The build runs in the background: the call answers at once, a card in the
+4. When you change a module that is already installed, raise `version` in `manifest.yaml` by one
+   before you build: the node refuses to install a build under a number it has already had, and
+   the owner tells versions apart by that number.
+5. `module.build`. The build runs in the background: the call answers at once, a card in the
    chat shows the owner its progress, and the result comes back later as a note
    (`[build finished] <name>: …`) that starts your next step. End your turn after the call and
    tell the owner the build runs; do not call `module.build` or `module.write` on the module
@@ -52,7 +55,7 @@ you.
    tell the owner what fails and ask how to go on.
    The node's build does not run the module's tests; the owner and CI do. Read your tests back
    with `module.read` and keep the logic simple enough to check by reading.
-5. When the note shows a clean build, `module.install` with its digest. The owner sees what the module
+6. When the note shows a clean build, `module.install` with its digest. The owner sees what the module
    reacts to, the rights it asks for and how many messages a day, and presses the button. Do not
    describe it as installed before then.
 

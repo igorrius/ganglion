@@ -686,6 +686,10 @@ escalate:                    # when to call the model
     ([ADR-0075](adr/0075-reading-a-modules-state-keeps-the-session-clean.md)); the install
     window lists the network, secrets, cells created and read, triggers and
     limits, and a version that widens its rights says so on its own line;
+  - a build that is not already in the module's journal must carry a
+    manifest `version` above every version the node has had of the module;
+    otherwise the plan and the install refuse it and name the number to
+    set, so two builds never share a number (owner, 2026-11-11);
   - the install checks the name, the secrets (none of the node's own: the
     bot token, the providers' and the search keys), the required config,
     cell ownership, and, in a throwaway instance before anything changes,
