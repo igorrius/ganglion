@@ -25,8 +25,9 @@ Start here when coming back to the project.
   `memory-correction` on the real models: 10 of 10, the agent wrote the
   correction itself in every run and answered "charging" after `/new`
   (442,247 tokens; the full lab run skipped, owner). The owner's live
-  check passed and found that the review would store an undone fact
-  again: a memory button now settles the conversation for it. Measured:
+  check passed and found that the review could store an undone fact
+  again (live, Haiku chose not to): a memory button now settles the
+  conversation for it. Measured:
   agent with tools 49.5 MB after 1,000 turns (M4c 48.7), binary 48.6 MB
   (48.1); `make crash-agent` 200 kills, 0 duplicates, one commit per fact.
 - **M4c closed (2026-11-10):** reflex modules

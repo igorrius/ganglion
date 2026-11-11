@@ -912,8 +912,9 @@ list (6), and a very fast Skip then Remember stores the facts.
   agent told nothing about memory. The owner on the test bot (2026-11-11, `d906e88`): the old fact
   moved into a topic at start (one commit); the correction about `batt_w` was stored in its turn
   under "deye-inverter" with the note; `/memory` showed it; Undo reverted it in one commit and
-  folded the note. Found: the review armed by that turn would read the same correction and store
-  the undone fact again, since the Undo note is a node note it leaves out. Fixed: a memory
+  folded the note. Found: the review armed by that turn read the same correction again (Haiku
+  stored nothing, but could have stored the undone fact), since the Undo note is a node note it
+  leaves out. Fixed: a memory
   button (Undo, Remember, Skip) settles the conversation so far for the review
   (`pending.QuickEdit.Reviewed`), with a test that fails without it.
 - [x] **Step 4:** Close: "Where we are", the phase plan's ticks, the ADRs' status, the board
@@ -930,9 +931,10 @@ git commit -m "docs: M5 closed — memory by topic: corrections stored in the tu
 - **Live check passed** on the test bot (`d906e88`): the old fact moved into a topic at start;
   the owner's correction about `batt_w` was stored in its turn under "deye-inverter" with the
   note; `/memory` showed it; Undo reverted it in one commit and folded the note.
-- **Found in the live check and fixed** (`04ffdd2`): the review armed by that turn would read the
-  same correction and store the undone fact again. A memory button now settles the conversation
-  so far for the review.
+- **Found in the live check and fixed** (`04ffdd2`): the review armed by that turn read the same
+  correction again at 13:32; Haiku stored nothing this time, but nothing kept it from storing the
+  undone fact again. A memory button now settles the conversation so far for the review, which
+  also saves that call.
 - **Real models:** `memory-correction` 10 of 10 (442,247 tokens); the agent wrote the correction
   itself in every run, before its answer; the review then found nothing more. The runs with the
   review off were not made (owner). The full lab run was skipped (owner).
