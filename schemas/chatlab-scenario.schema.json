@@ -15,6 +15,7 @@
     "skills": { "description": "Directories under the scenario's, copied to workspace/skills.", "type": "array", "items": { "type": "string" } },
     "model": { "description": "scripted runs a fake model that plays script; for a mechanic a real model cannot be made to repeat.", "enum": ["scripted"] },
     "script": { "description": "The scripted model's answers, in order.", "type": "array", "items": { "$ref": "#/$defs/scriptStep" } },
+    "review": { "description": "The scripted memory review's answers, in order, each a JSON object such as {\"ops\":[]}; after them it answers {\"ops\":[]}. Needs model: scripted.", "type": "array", "items": { "type": "string" } },
     "pages": { "description": "Web pages the node reaches.", "type": "array", "items": { "$ref": "#/$defs/page" } },
     "modules": { "description": "Modules the node has installed from the start: the lab's probe module under the manifest's name, rights and defaults (its config keys op_cron and op_tool_<tool> pick what a run does).", "type": "array", "items": { "$ref": "#/$defs/module" } },
     "config": { "description": "The settings the owner wrote for modules before the node starts, by short name: a mapping of config keys to values.", "type": "object", "additionalProperties": { "type": "object" } },

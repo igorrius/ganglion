@@ -820,12 +820,12 @@ Faults (each a patch that keeps applying to HEAD):
 | `memory-review-off` — `finish` never arms the review | `mech-memory-review` |
 | `memory-review-tool-text` — the input builder keeps `tool` messages and `<external>` spans, and the tainted branch writes | `mech-memory-review-tainted` |
 
-- [ ] **Step 1: Failing tests:** the scenario loader takes `review:` and the schema test
+- [x] **Step 1: Failing tests:** the scenario loader takes `review:` and the schema test
   matches; a scripted scenario with `review:` reaches the handler through the lab clock; the
   five scenario files load; `TestEveryProductionFileIsClaimed` passes with the new files in
   `covers`.
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement**; write the scenarios and the patches.
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement**; write the scenarios and the patches.
 - [ ] **Step 4: `make lint test` (runs every scripted scenario); `make lab-faults`;
   `make lab LAB=memory-correction` (real model, 10 runs: record how many wrote in the turn,
   with the review on, then with `memory.review.enabled: false` in the scenario's `config`);
@@ -835,6 +835,12 @@ Faults (each a patch that keeps applying to HEAD):
 git commit -m "chatlab: memory scenarios — a correction stored in the turn, undo, the review after quiet time, a tainted session that asks; two seeded faults"
 ```
 
+
+As built: the lab's "reply" fact leaves out messages with buttons, so the scenarios prove the note
+by pressing its Undo (a press fails the step when the button is missing) and read the history and
+memory. `memory-correction` advances the scheduler a minute after `/new`, so the review of the
+ended session runs before the question. The fault `memory-review-tool-text` lets a tool's result
+into the review and makes a tainted session write without asking.
 ---
 
 ### Task 8: Acceptance and closing

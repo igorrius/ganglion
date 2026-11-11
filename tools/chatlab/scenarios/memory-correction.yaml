@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: memory-correction
+why: >-
+  G-138, the M5 acceptance: the agent read a negative batt_w as discharge although the
+  owner had corrected it. The correction must be stored, by the turn or by the review
+  when the session ends, and a new session must answer right with no hint.
+covers:
+  - agent/prompt.go
+  - agent/review.go
+  - tool/builtin/memory.go
+  - memory/**
+repeat: 10
+steps:
+  - say: "Negative batt_w on my Deye inverter means the battery is charging, not discharging. Keep that in mind."
+  - say: /new
+  - advance: {scheduler: 1m}
+  - facts:
+      memory: {contains: "batt_w"}
+  - say: "batt_w is -900 W right now. What is the battery doing?"
+  - judge: "The reply says the battery is charging (taking in power), not discharging."

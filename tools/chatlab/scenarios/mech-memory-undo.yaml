@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-memory-undo
+why: >-
+  R-MEM-9: every memory write comes with a note whose Undo takes it out again, and the
+  model is told what the owner undid.
+covers:
+  - tool/builtin/memory.go
+  - tool/builtin/memory_note.go
+  - gitrepo/**
+  - memory/**
+model: scripted
+script:
+  - {tool: memory.write, args: '{"topic":"Car","summary":"The family car","fact":"The car is blue."}'}
+  - {say: "Noted."}
+steps:
+  - say: "Remember that my car is blue."
+  - facts:
+      memory: {contains: "The car is blue."}
+  - press: Undo
+  - facts:
+      memory: {not_contains: "The car is blue."}
+      message_replaced: "Undone"
+      history: {contains: "[button] the owner pressed Undo on the memory note; reverted: car f1"}

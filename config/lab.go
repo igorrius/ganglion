@@ -5,6 +5,7 @@ package config
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -61,7 +62,7 @@ type LabNode struct {
 	DB         *sql.DB
 	Journal    *journal.Journal
 	Components []node.Component
-	Tick       func(context.Context) error // one tick of the scheduler
+	Tick       func(context.Context) error // one tick of the scheduler and of the memory review's timer
 	// Allow lists a family member by principal and name, so a scenario can have
 	// another person in the owner's chat.
 	Allow    func(ctx context.Context, principal, name string) error
@@ -81,8 +82,13 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 		return nil, err
 	}
 	scheduler := do.MustInvoke[*schedule.Scheduler](i)
+	tick := scheduler.Tick
+	if reviewOn(i) {
+		reviews := do.MustInvoke[*agent.ReviewTimer](i)
+		tick = func(ctx context.Context) error { return errors.Join(scheduler.Tick(ctx), reviews.Tick(ctx)) }
+	}
 	return &LabNode{DB: do.MustInvoke[Database](i).DB, Journal: do.MustInvoke[*journal.Journal](i), Components: components,
-		Tick: scheduler.Tick,
+		Tick: tick,
 		Allow: func(ctx context.Context, principal, name string) error {
 			return do.MustInvoke[*access.List](i).Allow(ctx, principal, access.RoleFamily, name)
 		},
@@ -185,6 +191,12 @@ func applyLab(i do.Injector, o LabOptions) {
 		cfg, deps := agentParts(i)
 		deps.Now = o.SchedNow
 		return agent.New(cfg, deps), nil
+	})
+	// The memory review's timer goes by the same clock and ticks only with
+	// the scheduler; the lab's housekeepers leave it out.
+	do.Override(i, func(i do.Injector) (*agent.ReviewTimer, error) {
+		return agent.NewReviewTimer(do.MustInvoke[*agent.ReviewDue](i), do.MustInvoke[*sqlqueue.Queue](i).Put, o.SchedNow, time.Hour,
+			do.MustInvoke[*slog.Logger](i)), nil
 	})
 	do.Override(i, func(i do.Injector) (*schedule.Scheduler, error) {
 		never := func(time.Duration) <-chan time.Time { return nil }

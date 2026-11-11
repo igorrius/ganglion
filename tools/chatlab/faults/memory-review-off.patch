@@ -1,0 +1,12 @@
+diff --git a/agent/review.go b/agent/review.go
+index 8203f4a..f649217 100644
+--- a/agent/review.go
++++ b/agent/review.go
+@@ -69,6 +69,7 @@ func (NoReview) Proposal(context.Context, texts.Speaker, string, string, string,
+ // admin's turn that answered a person's message (R-MEM-8). A task's run, a
+ // module's event, a command and a turn that failed arm nothing.
+ func (a *Agent) armAfterTurn(ctx context.Context, t *turn) {
++	return // seeded fault: a turn never arms the memory review
+ 	if t.event.Kind != event.KindMessage || t.made != "" || t.grant != nil || !t.admin || t.record.Outcome != turns.OutcomeOK {
+ 		return
+ 	}

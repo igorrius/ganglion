@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-memory-correction
+why: >-
+  G-138: the owner corrected the agent and the correction never reached memory. The
+  correction must be stored in its turn, under a topic, with no question in a clean
+  session, and be in front of the model in a new session; /memory shows it.
+covers:
+  - agent/memory_cmd.go
+  - agent/prompt.go
+  - tool/builtin/memory.go
+  - tool/builtin/memory_note.go
+  - memory/**
+model: scripted
+script:
+  - {tool: memory.write, args: '{"topic":"Inverter","summary":"The Deye inverter and its battery","fact":"Negative batt_w on the Deye is the battery charging."}'}
+  - {say: "Got it: negative means charging."}
+  - {say: "It is charging."}
+steps:
+  - say: "No, negative batt_w is charging, not discharging."
+  - facts:
+      journal:
+        - {tool: memory.write, decision: allowed, result_contains: "stored in inverter as f1"}
+      questions: 0
+      memory: {contains: "- [f1] Negative batt_w on the Deye is the battery charging."}
+  - say: /new
+  - say: /memory inverter
+  - facts:
+      reply: {contains: "[f1] Negative batt_w on the Deye is the battery charging."}
