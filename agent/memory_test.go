@@ -22,6 +22,7 @@ import (
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
+	"github.com/igorrius/ganglion/tool/pending"
 )
 
 const knownFacts = memory.IndexHeader + "\n## Car (car)\n- [f1] The owner drives a blue car.\n"
@@ -94,8 +95,10 @@ func newMemoryEnvOf(t *testing.T, extra func(*memory.Memory) []tool.Handler) *me
 		Private: func(p string) (string, string, bool) {
 			return "telegram", "telegram:" + strings.TrimPrefix(p, "telegram:user:"), true
 		}}))
-	e = newConfirmEnv(t, append(builtin.MemoryTools(me.mem, privateOf), extra(me.mem)...)...)
+	notes := builtin.NewMemoryNotes(me.mem, lateButtons{func() *pending.Store { return e.pending }}, func() time.Time { return e.now }, time.UTC)
+	e = newConfirmEnv(t, append(builtin.MemoryTools(me.mem, privateOf, notes), extra(me.mem)...)...)
 	e.deps.Facts = func() string { return me.mem.Block(24000) }
+	e.deps.QuickActions = notes.QuickActions()
 	e.deps.Persona = PersonaDir(repo.Dir())
 	e.a = New(overDefaults(Config{}), e.deps)
 	me.confirmEnv = e
@@ -106,6 +109,13 @@ func newMemoryEnvOf(t *testing.T, extra func(*memory.Memory) []tool.Handler) *me
 func privateOf(p string) (string, string, bool) {
 	id, ok := strings.CutPrefix(p, "telegram:user:")
 	return "telegram", "telegram:" + id, ok
+}
+
+// lateButtons reads the env's pending store when first asked.
+type lateButtons struct{ get func() *pending.Store }
+
+func (l lateButtons) AddButtons(ctx context.Context, bs ...pending.Button) error {
+	return l.get().AddButtons(ctx, bs...)
 }
 
 // lateGuard builds the guard when it is first asked.
@@ -155,8 +165,12 @@ func TestCleanWriteRunsWithoutAsking(t *testing.T) {
 	m.cheap.push(say(`{"ok":true,"reason":"a fact about the owner"}`))
 	m.smart.push(callWith("memory.write", writeCar), say("Noted."))
 	out := m.turn(t, message(owner, "Igor", "remember my car is blue"))
-	if _, asked := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 }); asked {
+	if _, asked := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 && !strings.HasSuffix(o.IdemKey, ":memory") }); asked {
 		t.Fatalf("a clean write asked: %+v", out)
+	}
+	note, ok := findOut(out, func(o event.Outgoing) bool { return strings.HasSuffix(o.IdemKey, ":memory") })
+	if !ok || note.Text != "Memory updated\n- Car: The owner drives a blue car." || len(note.Buttons) != 1 {
+		t.Fatalf("no note with Undo in %+v", out)
 	}
 	if !m.exists("memory/car.md") || len(m.guardCalls()) != 1 {
 		t.Fatal("not stored after the check")
@@ -371,5 +385,37 @@ func TestSystemJobNeedsAnAdminAndItsCode(t *testing.T) {
 	}
 	if len(e.smart.requests())+len(e.cheap.requests()) != 0 {
 		t.Fatal("a model ran")
+	}
+}
+
+// The owner's correction, stored by the turn's memory.write, comes back
+// as a note with Undo, and the next turn's prompt holds the fact itself;
+// Undo through the button takes it out again and leaves a [button] note
+// (R-MEM-8, R-MEM-9).
+func TestCorrectionIsStoredInItsTurnAndUndone(t *testing.T) {
+	m := newMemoryEnv(t)
+	m.cheap.push(say(`{"ok":true,"reason":"a fact about a device"}`))
+	correction := `{"topic":"Inverter","summary":"The Deye inverter and its battery","fact":"Negative batt_w on the Deye is the battery charging."}`
+	m.smart.push(callWith("memory.write", correction), say("Got it: negative means charging."))
+	out := m.turn(t, message(owner, "Igor", "No, negative batt_w is charging, not discharging."))
+	note, ok := findOut(out, func(o event.Outgoing) bool { return strings.HasSuffix(o.IdemKey, ":memory") })
+	if !ok || len(note.Buttons) != 1 {
+		t.Fatalf("no note in %+v", out)
+	}
+	m.smart.push(say("It is charging."))
+	m.turn(t, message(owner, "Igor", "batt_w is -900 W, what is the battery doing?"))
+	reqs := m.smart.requests()
+	if sys := systemOf(reqs[len(reqs)-1]); !strings.Contains(sys, "## Inverter (inverter)\n- [f1] Negative batt_w on the Deye is the battery charging.\n") {
+		t.Fatalf("the next prompt lacks the fact:\n%s", sys)
+	}
+	out = m.turn(t, press(owner, note.Buttons[0].ID, "55"))
+	if _, err := m.mem.Topic("inverter"); err == nil {
+		t.Fatal("Undo left the fact")
+	}
+	if edit, ok := findOut(out, func(o event.Outgoing) bool { return o.Edit == "55" && strings.HasPrefix(o.Text, "Undone, ") }); !ok || edit.Folded != note.Text {
+		t.Fatalf("no folded note in %+v", out)
+	}
+	if h := m.state(t).Messages; !strings.Contains(h[len(h)-1].Content, "[button] the owner pressed Undo on the memory note; reverted: inverter f1") {
+		t.Fatalf("history %q", h[len(h)-1].Content)
 	}
 }

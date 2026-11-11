@@ -45,9 +45,21 @@ type Facts interface {
 // recall and the audit. They are registered together or not at all.
 // private finds the caller's private conversation, whose archived
 // sessions recall searches besides the calling conversation's
-// (telegram.PrivateConv).
-func MemoryTools(f Facts, private alert.PrivateConvFunc) []tool.Handler {
-	return []tool.Handler{&MemoryWrite{f}, &MemoryForget{f}, &MemoryRead{f}, &MemoryRecall{facts: f, private: private}, &MemoryAudit{f}}
+// (telegram.PrivateConv); notes tell the owner what a write or a forget
+// changed, with Undo (R-MEM-9).
+func MemoryTools(f Facts, private alert.PrivateConvFunc, notes MemoryNotes) []tool.Handler {
+	return []tool.Handler{&MemoryWrite{facts: f, notes: notes}, &MemoryForget{facts: f, notes: notes}, &MemoryRead{f},
+		&MemoryRecall{facts: f, private: private}, &MemoryAudit{f}}
+}
+
+// noteOf is the "memory updated" note of a call's change, keyed by the
+// call, or none when nothing was stored.
+func noteOf(ctx context.Context, n MemoryNotes, c tool.Call, a memory.Applied) ([]event.Outgoing, error) {
+	o, ok, err := n.Note(ctx, c.Speak, c.Key()+":memory", c.Transport, c.Conv, c.Principal, a.Changes, []string{a.Commit})
+	if err != nil || !ok {
+		return nil, err
+	}
+	return []event.Outgoing{o}, nil
 }
 
 // sourceOf is where a call's change comes from: its turn, its key (so a
@@ -57,7 +69,10 @@ func sourceOf(c tool.Call) memory.Source {
 }
 
 // MemoryWrite is the memory.write tool.
-type MemoryWrite struct{ facts Facts }
+type MemoryWrite struct {
+	facts Facts
+	notes MemoryNotes
+}
 
 type writeArgs struct {
 	Topic    string `json:"topic"`
@@ -121,7 +136,7 @@ func (w *MemoryWrite) Question(_ context.Context, c tool.Call) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return whole(toolMemoryWrite, c.Speak.Text(texts.AskRemember, texts.Vars{"fact": a.Topic + ": " + a.Fact}))
+	return whole(toolMemoryWrite, c.Speak.Text(texts.AskRemember, texts.Vars{varFact: a.Topic + ": " + a.Fact}))
 }
 
 // Run stores the fact with where it came from: the turn and the session's
@@ -142,7 +157,11 @@ func (w *MemoryWrite) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 		if ch.Kind == memory.OpReplace {
 			verb = "replaced in "
 		}
-		return tool.Result{Text: verb + ch.Slug + " as " + ch.Fact}, nil
+		out, err := noteOf(ctx, w.notes, c, applied)
+		if err != nil {
+			return tool.Result{}, fmt.Errorf("memory.write: stored in %s, but the note failed: %w", ch.Slug, err)
+		}
+		return tool.Result{Text: verb + ch.Slug + " as " + ch.Fact + "; the owner got a note with Undo", Out: out}, nil
 	}
 	out, err := w.facts.Notice(ctx, ch)
 	if err != nil {
@@ -181,7 +200,10 @@ func topicOf(name string, c tool.Call, optional bool) (topicArgs, error) {
 }
 
 // MemoryForget is the memory.forget tool.
-type MemoryForget struct{ facts Facts }
+type MemoryForget struct {
+	facts Facts
+	notes MemoryNotes
+}
 
 // Spec describes memory.forget: a side effect with the same policy as a
 // write.
@@ -223,7 +245,7 @@ func (f *MemoryForget) Question(_ context.Context, c tool.Call) (string, error) 
 	if terr == nil {
 		for _, fact := range t.Facts {
 			if fact.ID == a.Fact {
-				return c.Speak.Text(texts.AskForgetFact, texts.Vars{"slug": a.Topic + " " + a.Fact, "fact": t.Title + ": " + fact.Text}), nil
+				return c.Speak.Text(texts.AskForgetFact, texts.Vars{"slug": a.Topic + " " + a.Fact, varFact: t.Title + ": " + fact.Text}), nil
 			}
 		}
 	}
@@ -240,10 +262,15 @@ func (f *MemoryForget) Run(ctx context.Context, c tool.Call) (tool.Result, error
 	if a.Fact != "" {
 		op, what = memory.Op{Kind: memory.OpRemove, Topic: a.Topic, Fact: a.Fact}, a.Fact+" of "+a.Topic
 	}
-	if _, err := f.facts.Apply(ctx, []memory.Op{op}, sourceOf(c)); err != nil {
+	applied, err := f.facts.Apply(ctx, []memory.Op{op}, sourceOf(c))
+	if err != nil {
 		return tool.Result{}, fmt.Errorf("memory.forget: %w", err)
 	}
-	return tool.Result{Text: "forgotten " + what + "; the owner can bring it back from the workspace history"}, nil
+	out, err := noteOf(ctx, f.notes, c, applied)
+	if err != nil {
+		return tool.Result{}, fmt.Errorf("memory.forget: forgotten, but the note failed: %w", err)
+	}
+	return tool.Result{Text: "forgotten " + what + "; the owner got a note with Undo", Out: out}, nil
 }
 
 // MemoryRead is the memory.read tool.

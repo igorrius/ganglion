@@ -17,6 +17,7 @@ import (
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
+	"github.com/igorrius/ganglion/tool/pending"
 )
 
 // wordGuard holds back any text with "always" in it.
@@ -35,7 +36,24 @@ func (g wordGuard) CheckPersona(ctx context.Context, p string) (guard.Verdict, e
 
 var oneAdmin = alert.Admins{List: func(context.Context) ([]string, error) { return []string{"telegram:user:42"}, nil }, Private: private}
 
+// noteButtons records the buttons the memory notes store.
+type noteButtons struct{ got []pending.Button }
+
+func (b *noteButtons) AddButtons(_ context.Context, bs ...pending.Button) error {
+	b.got = append(b.got, bs...)
+	return nil
+}
+
+var noteNow = time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+
 func memoryTools(t *testing.T, opts ...memory.Option) map[string]tool.Handler {
+	t.Helper()
+	tools, _, _ := memoryToolsWith(t, opts...)
+	return tools
+}
+
+// memoryToolsWith is memoryTools with the memory and the notes' buttons.
+func memoryToolsWith(t *testing.T, opts ...memory.Option) (map[string]tool.Handler, *memory.Memory, *noteButtons) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("the git binary is not installed; memory lives in a git repository (ADR-0033)")
@@ -44,13 +62,15 @@ func memoryTools(t *testing.T, opts ...memory.Option) map[string]tool.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := memory.New(repo, wordGuard{}, func() time.Time { return time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC) },
+	m := memory.New(repo, wordGuard{}, func() time.Time { return noteNow },
 		append([]memory.Option{memory.WithAlerts(oneAdmin)}, opts...)...)
+	buttons := &noteButtons{}
+	notes := builtin.NewMemoryNotes(m, buttons, func() time.Time { return noteNow }, time.UTC)
 	out := map[string]tool.Handler{}
-	for _, h := range builtin.MemoryTools(m, private) {
+	for _, h := range builtin.MemoryTools(m, private, notes) {
 		out[h.Spec().Name] = h
 	}
-	return out
+	return out, m, buttons
 }
 
 func run(t *testing.T, h tool.Handler, c tool.Call) tool.Result {
@@ -76,17 +96,17 @@ func TestMemoryToolsSpecs(t *testing.T) {
 func TestMemoryWriteReadForget(t *testing.T) {
 	tools := memoryTools(t)
 	c := call("memory.write", `{"topic":"Quiet hours","summary":"When the owner wants no messages","fact":"The owner does not want messages 23:00-07:00."}`)
-	if res := run(t, tools["memory.write"], c); res.Text != "stored in quiet-hours as f1" || len(res.Out) != 0 {
+	if res := run(t, tools["memory.write"], c); !strings.HasPrefix(res.Text, "stored in quiet-hours as f1;") || len(res.Out) != 1 {
 		t.Fatalf("write %+v", res)
 	}
 	c = call("memory.write", `{"topic":"quiet-hours","fact":"On Sundays until 09:00."}`)
 	c.N = 2
-	if res := run(t, tools["memory.write"], c); res.Text != "stored in quiet-hours as f2" {
+	if res := run(t, tools["memory.write"], c); !strings.HasPrefix(res.Text, "stored in quiet-hours as f2;") {
 		t.Fatalf("second write %+v", res)
 	}
 	c = call("memory.write", `{"topic":"quiet-hours","fact":"The owner does not want messages 22:00-07:00.","replaces":"f1"}`)
 	c.N = 3
-	if res := run(t, tools["memory.write"], c); res.Text != "replaced in quiet-hours as f1" {
+	if res := run(t, tools["memory.write"], c); !strings.HasPrefix(res.Text, "replaced in quiet-hours as f1;") {
 		t.Fatalf("replace %+v", res)
 	}
 	res := run(t, tools["memory.read"], call("memory.read", `{"topic":"quiet-hours"}`))

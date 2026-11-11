@@ -110,9 +110,14 @@ type Deps struct {
 	Archive SessionStore
 	Alerts  alert.Admins // who hears about a reached daily limit
 	Persona PersonaFunc
-	// Facts is the memory's index, shown to admins only (design section
-	// 4, rule 8); NoFacts when unset.
+	// Facts is the memory's known-facts block, shown to admins only
+	// (design section 4, rule 8; R-MEM-7); NoFacts when unset.
 	Facts FactsFunc
+	// Memory is what /memory reads (R-MEM-9); NoMemory when unset.
+	Memory MemoryView
+	// Private finds a person's private chat, where /memory answers
+	// (telegram.PrivateConv); none when unset.
+	Private alert.PrivateConvFunc
 	// Restart ends the node so its supervisor starts it again, for
 	// /restart (R-CFG-6); a no-op when unset.
 	Restart RestartFunc
@@ -260,6 +265,12 @@ func New(cfg Config, d Deps) *Agent {
 	}
 	if d.Facts == nil {
 		d.Facts = NoFacts
+	}
+	if d.Memory == nil {
+		d.Memory = NoMemory{}
+	}
+	if d.Private == nil {
+		d.Private = func(string) (string, string, bool) { return "", "", false }
 	}
 	if d.Languages == nil {
 		d.Languages = NoLanguages{}

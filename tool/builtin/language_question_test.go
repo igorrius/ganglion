@@ -133,7 +133,7 @@ func TestAuditToolResultStaysEnglish(t *testing.T) {
 	c := call("memory.audit", `{}`)
 	c.Speak = texts.Speaker{Lang: "uk"}
 	var audit tool.Handler
-	for _, h := range builtin.MemoryTools(fakeAudit{rep: memory.Report{Facts: 3}}, nil) {
+	for _, h := range builtin.MemoryTools(fakeAudit{rep: memory.Report{Facts: 3}}, nil, builtin.MemoryNotes{}) {
 		if h.Spec().Name == "memory.audit" {
 			audit = h
 		}

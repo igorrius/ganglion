@@ -15,6 +15,7 @@ import (
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
+	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/transport/telegram"
 	"github.com/samber/do/v2"
 )
@@ -56,9 +57,11 @@ func Memory() do.Provider[*memory.Memory] {
 // tools, its known-facts block and its nightly audit, or none of them when
 // memory is off.
 type Remembering struct {
-	Tools []tool.Handler
-	Facts agent.FactsFunc
-	Jobs  map[string]agent.SystemJob
+	Tools        []tool.Handler
+	Facts        agent.FactsFunc
+	Jobs         map[string]agent.SystemJob
+	QuickActions map[string]pending.QuickAction // the memory notes' Undo (R-MEM-9)
+	View         agent.MemoryView               // what /memory reads
 }
 
 // Remember provides the memory's tools, the persona tool of the first-run
@@ -72,7 +75,8 @@ func Remember() do.Provider[Remembering] {
 		m, err := do.Invoke[*memory.Memory](i)
 		if errors.Is(err, gitrepo.ErrNoGit) {
 			do.MustInvoke[*slog.Logger](i).Warn("config: memory is off", "err", err)
-			return Remembering{Facts: agent.NoFacts, Jobs: map[string]agent.SystemJob{}}, nil
+			return Remembering{Facts: agent.NoFacts, Jobs: map[string]agent.SystemJob{}, QuickActions: map[string]pending.QuickAction{},
+				View: agent.NoMemory{}}, nil
 		}
 		if err != nil {
 			return Remembering{}, err
@@ -82,9 +86,12 @@ func Remember() do.Provider[Remembering] {
 		}
 		err = builtin.EnsureAudit(do.MustInvoke[Startup](i), do.MustInvoke[*schedule.Store](i), do.MustInvoke[alert.Admins](i),
 			time.Now(), do.MustInvoke[*slog.Logger](i))
-		tools := append(builtin.MemoryTools(m, telegram.PrivateConv), builtin.NewPersonaPropose(m, builtin.WithPersonaLogger(do.MustInvoke[*slog.Logger](i))))
+		b := do.MustInvoke[Bootstrap](i)
+		notes := builtin.NewMemoryNotes(m, do.MustInvoke[*pending.Store](i), time.Now, b.Agent.TZ)
+		tools := append(builtin.MemoryTools(m, telegram.PrivateConv, notes), builtin.NewPersonaPropose(m, builtin.WithPersonaLogger(do.MustInvoke[*slog.Logger](i))))
 		jobs := map[string]agent.SystemJob{builtin.AuditJobID: builtin.NewAuditJob(m).Run}
-		budget := do.MustInvoke[Bootstrap](i).Agent.Memory.PromptBudget
-		return Remembering{Tools: tools, Facts: func() string { return m.Block(budget) }, Jobs: jobs}, err
+		budget := b.Agent.Memory.PromptBudget
+		return Remembering{Tools: tools, Facts: func() string { return m.Block(budget) }, Jobs: jobs, QuickActions: notes.QuickActions(),
+			View: m}, err
 	}
 }

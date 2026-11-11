@@ -324,6 +324,22 @@ const (
 	HintModuleTimeout    Key = "hint.module_timeout"
 	HintModuleTrap       Key = "hint.module_trap"
 	HintModuleNotRunning Key = "hint.module_not_running"
+
+	MemoryUpdated      Key = "memory.updated"
+	MemoryLineAdded    Key = "memory.line_added"
+	MemoryLineReplaced Key = "memory.line_replaced"
+	MemoryLineRemoved  Key = "memory.line_removed"
+	MemoryLineDropped  Key = "memory.line_dropped"
+	MemoryUndoConflict Key = "memory.undo_conflict"
+	MemoryEmpty        Key = "memory.empty"
+	MemoryTopicsHead   Key = "memory.topics_head"
+	MemoryTopicRow     Key = "memory.topic_row"
+	MemoryNoTopic      Key = "memory.no_topic"
+	MemoryPrivateOnly  Key = "memory.private_only"
+	MemoryFromOutside  Key = "memory.from_outside"
+	MemoryByHand       Key = "memory.by_hand"
+	ButtonUndo         Key = "button.undo"
+	LineUndone         Key = "line.undone"
 )
 
 var allKeys = []Key{
@@ -337,6 +353,7 @@ var allKeys = []Key{
 	ButtonHistory, ModulesUsage, ModulesNone, ModulesHeader, ModulesPrevious, ModulesFailed, ModulesLocalRow, ModulesStateRunning, ModulesStateOff, ModulesStateCrashloop, ModulesStateStopped, ModulesUnknown, ModulesUpdated, ModulesUpToDate, ModulesRolledBack, ModulesNothingToRollBack, ModulesStays, ModulesCardRunning, ModulesCardStopped, ModulesCardVersions, ModulesCardHealthOK, ModulesCardHealthFailed, ModulesJournalRow, ModulesMarkActive, ModulesMarkPrevious, ModulesMarkFailed, ModulesMarkRetired, ModulesCardSettings, ModulesCardReacts, ModulesCardFeeds, ModulesCardNotify, ModulesSettingRow, ModulesSettingUnset, ModulesSettingDefault, ModulesSettingRequired, ModulesConfigDone, ModulesConfigUndeclared, ModulesConfigKeys, ModulesConfigNoKeys, ModulesConfigWrongType, ModulesOffDone, ModulesOnDone, ModulesNotStarted, ModulesRemoved, ModuleNotifyLimit, ModuleChainStopped, CellsNone, CellsRow, CellsNoValue, CellsMore, CellsAgeNow, CellsAgeMin, CellsAgeHour, CellsAgeDay, CellsHistoryHead, CellsHistoryRow, CellsHistoryNone, CellsGone,
 	JobCardRunning, JobCardCount, JobCardQueued, JobCardDone, JobCardFailed, JobCardInterrupted, JobKindBuild, JobKindCommand,
 	HintModuleAuthFailed, HintModuleStale, HintModuleFormat, HintModuleException, HintModuleTimeout, HintModuleTrap, HintModuleNotRunning,
+	MemoryUpdated, MemoryLineAdded, MemoryLineReplaced, MemoryLineRemoved, MemoryLineDropped, MemoryUndoConflict, MemoryEmpty, MemoryTopicsHead, MemoryTopicRow, MemoryNoTopic, MemoryPrivateOnly, MemoryFromOutside, MemoryByHand, ButtonUndo, LineUndone,
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
 }
 

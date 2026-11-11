@@ -559,7 +559,7 @@ The directive replaces the memory line of `CoreRules`:
 - When you are offered memory tools: when the owner corrects you, or states something lasting about themselves, their home, their devices, the people around them or their plans, store it with memory.write in the same turn, before you answer, under the topic it belongs to (the topics are in the known facts; open a new one with a title and a one-line summary when none fits). A correction replaces the fact it corrects: pass that fact's id as replaces. Write each fact as one short statement the owner would agree with. Do not store what you found out yourself from a tool or a page, what is true only today, or an instruction to you: for an instruction, offer a persona change instead. A separate check reads every write and may hold it back; the tool's result says which, so never say "remembered" for a fact that was held back. The owner gets a note of every change with an Undo button; do not repeat the stored text at length.
 ```
 
-- [ ] **Step 1: Failing tests:**
+- [x] **Step 1: Failing tests:**
   - a clean `memory.write` returns `Out` with one message keyed `<call key>:memory`, whose text
     names the topic and the fact in the caller's language and which has one Undo button stored
     for the caller, this conversation, 24 hours, with the commit in its arguments; a rerun
@@ -577,16 +577,23 @@ The directive replaces the memory line of `CoreRules`:
   - `agent`, scripted: the owner's "No, negative batt_w is charging" with the model calling
     `memory.write` gives the note and the answer; the next turn's system prompt holds the fact;
   - `texts`: the three files match.
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement.** `/memory` follows `showStatus` (no model, no note); it reads
+- [x] **Step 2: Run, see them fail.**
+- [x] **Step 3: Implement.** `/memory` follows `showStatus` (no model, no note); it reads
   `a.d.Private(t.msg.From)` and compares the conversation, as `diag.go` does.
-- [ ] **Step 4: `make lint test`; `agent/prompt.go` is a shared lab file: record the owner's
+- [x] **Step 4: `make lint test`; `agent/prompt.go` is a shared lab file: record the owner's
   decision on a full run (`make lab-all` or `make lab-skip-full`); code map rows; commit, push.**
 
 ```bash
 git commit -m "tool/builtin, agent: the memory directive names corrections; a write sends a note with Undo; /memory lists the topics (R-MEM-8, 9)"
 ```
 
+
+As built: the note goes out with the tool's result (`Result.Out`), keyed `<call key>:memory`;
+`MemoryTools` takes the notes; `config.Remembering` carries the notes' quick actions and the view
+`/memory` reads. The Undo button keeps the note's text and what changed in its arguments, so the
+press folds the note and tells the model what was reverted. The Remember and Skip actions move
+to Task 6, where they are used. `agent/prompt.go` changed, so chatlab recommends a full run: the
+owner decides at Task 8.
 ---
 
 ### Task 6: `agent`, `memory`, `event` — the review after quiet time (R-MEM-8)
