@@ -15,6 +15,7 @@ access/**
 agent/background.go
 agent/cells.go
 agent/commands.go
+agent/memory_cmd.go
 agent/config.go
 agent/limits.go
 agent/model.go
@@ -124,3 +125,4 @@ sandbox/sandbox.go
 sandbox/harden.go
 sandbox/*_linux.go
 sandbox/*_other.go
+tool/builtin/memory_note.go
