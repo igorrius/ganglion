@@ -115,7 +115,12 @@ func (e *env) oldFact(t *testing.T, slug, title, body, turn string, tainted bool
 
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+	// The identity is given here and the machine's git settings are switched
+	// off, as gitrepo does: a commit by hand must not depend on who runs the
+	// test, and a CI runner has no user.name at all.
+	cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=test", "-c", "user.email=test@localhost"}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
