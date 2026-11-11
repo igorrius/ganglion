@@ -10,9 +10,11 @@ Start here when coming back to the project.
   (board card G-121) is up since 2026-11-11: service `ganglion` beside the
   current bot, on the test bot, the agent through the claude CLI, the
   sandbox ready on kernel 6.18, hard links work on the volume
-  ([deploy-railway.md](deploy-railway.md)). Still to do there: build and
-  install `deye-reader`, measure a build's peak memory, compare with
-  `deye.py` for a few days. M5's review left board card G-140.
+  ([deploy-railway.md](deploy-railway.md)). Task 4.7 closed the same day:
+  `deye-reader` and a `battery-alerts` the agent wrote from scratch run
+  there, a build's peak memory is measured, and the owner found the two
+  bots' battery messages identical and closed the comparison with
+  `deye.py` after one day (owner). M5's review left board card G-140.
 - **A reply to a module's message names the module (2026-11-11,
   [ADR-0073](adr/0073-a-modules-message-names-its-module.md), R-DLV-15,
   board card G-141):** found in the first chat on Railway, where the owner

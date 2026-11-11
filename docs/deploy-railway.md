@@ -202,6 +202,10 @@ by day:
 
 When a few days agree, the owner decides to migrate the bot (spec R-LS-4).
 
+On 2026-11-11 the owner compared the messages of the two bots, the current
+one and this node's `battery-alerts` over `deye-reader`, found them identical
+and closed the comparison after one day. The by-day export above was not run.
+
 ## Not covered here
 
 While the test bot's token runs on Railway, a local `make live-agent` on the
