@@ -1761,6 +1761,7 @@ fallback until the gate is passed.
 | How long ended sessions (episodes) are kept | Forever, searched by `memory.recall` (today: the newest 500 per chat) · a retention: sessions older than N days are dropped after consolidation has read them | A retention after consolidation (owner, 2026-11-03): nothing is dropped that consolidation has not read, so a fact the owner never confirmed is still turned into one or kept; what was said by chance fades | M7 task 7.2, with the nightly consolidation; N is chosen there |
 | Telemetry of edge nodes | Each edge to an OpenTelemetry collector over OTLP · Prometheus scrapes each edge · snapshots over the NATS bus, collected by the core | Decided by the owner (2026-11-03): over the bus, collected by the core, without JetStream for metrics (R-OBS-9). A collector needs one more link and one more service for every edge; the bus is already there. An outside collector can later be fed by the core | ADR at the start of P2, with the protocol |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
+| Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | An encrypted store, with the page served by the node and the ciphertext returned through Telegram first; the command on the host as the path without a browser (owner's brainstorm, 2026-11-12, [design note](plans/secrets-intake-design.md)). The phase is open: M6 or P2 | A spike on Telegram's `sendData`, then an ADR |
 
 Each question becomes an ADR (status Proposed) when work on it starts and is
 accepted when decided; see [docs/adr](adr/README.md). Already decided: one
@@ -1837,7 +1838,12 @@ Reviewed at each gate.
   pairing code, and the first person to send it to the bot becomes the
   admin (the same idea as node enrolment with a one-time token, 9.3).
 - An encrypted secret store on the node's key, behind the secret source of
-  D-3; secrets set and rotated without a restart.
+  D-3; secrets set and rotated without a restart. The owner hands a value
+  over from the chat through a page that encrypts it in the browser, so it
+  passes neither the agent nor the chat's history; a build never gets a
+  secret; a device gets its Wi-Fi credentials when it is provisioned, not
+  in its firmware (owner's brainstorm, 2026-11-12,
+  [design note](plans/secrets-intake-design.md); section 11).
 - Telegram, beyond formatting, typing and replies (ADR-0025). Each item
   is to be checked against the Bot API docs of the day:
   - a reaction in groups, useful when someone addresses the agent directly;
