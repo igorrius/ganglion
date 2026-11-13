@@ -72,6 +72,7 @@ type SettingsPort interface {
 	SetOff(name string, off bool, why string) error
 	SetModule(m settings.Module) error
 	RemoveModule(name string) error
+	SetNotifyTo(module string, names []string) error
 }
 
 // DestinationFunc resolves a destination's name to its transport and

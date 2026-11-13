@@ -40,12 +40,28 @@ type Convs struct {
 	States  States
 	Listed  ListedFunc
 	Private alert.PrivateConvFunc // principal -> private conversation (telegram.PrivateConv)
-	Names   NameFunc              // who a principal is, for the owner's question
+	// Dests resolves a named destination (groups.Destinations.Resolve);
+	// unset knows none.
+	Dests DestinationFunc
+	Names NameFunc // who a principal is, for the owner's question
+}
+
+// DestinationFunc resolves a destination's name to its transport and
+// conversation; ok is false when there is none by that name.
+type DestinationFunc func(name string) (transport, conv string, ok bool, err error)
+
+// destination resolves target as a destination's name.
+func (v Convs) destination(target string) (transport, conv string, ok bool, err error) {
+	if v.Dests == nil {
+		return "", "", false, nil
+	}
+	return v.Dests(target)
 }
 
 // resolve returns where a message to target goes. target is a
-// conversation key or a principal such as "telegram:user:7"; a known
-// conversation is reached on the transport of the call.
+// conversation key, a principal such as "telegram:user:7", or the name of
+// a destination the admin defined (R-CFG-12); a known conversation is
+// reached on the transport of the call.
 // A scheduled task's own conversation ("task:<id>") is no chat: a message
 // to it goes to the task's reply target.
 func (v Convs) resolve(ctx context.Context, c tool.Call, target string) (transport, conv string, err error) {
@@ -57,6 +73,11 @@ func (v Convs) resolve(ctx context.Context, c tool.Call, target string) (transpo
 			return c.Transport, c.Grant.ReplyTo, nil
 		}
 		return c.Transport, c.Conv, nil
+	}
+	if tr, cv, ok, err := v.destination(target); err != nil {
+		return "", "", fmt.Errorf("builtin: destinations: %w", err)
+	} else if ok {
+		return tr, cv, nil
 	}
 	if tr, cv, ok := v.Private(target); ok {
 		listed, err := v.Listed(ctx, target)
@@ -92,11 +113,11 @@ func NewMessageSend(convs Convs) *MessageSend { return &MessageSend{convs: convs
 func (*MessageSend) Spec() tool.Spec {
 	return tool.Spec{
 		Name: "message.send",
-		Description: "Send a message to a conversation the assistant knows or to a person on the access list. " +
-			"conv is a conversation key or a person's id such as telegram:user:123456. " +
+		Description: "Send a message to a named destination, a conversation the assistant knows or a person on the access list. " +
+			"conv is a destination's name from destination.list (such as family-k7), a conversation key, or a person's id such as telegram:user:123456. " +
 			"The owner confirms the message before it goes out.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
-			`"conv":{"type":"string","description":"conversation key, or the person's id such as telegram:user:123456"},` +
+			`"conv":{"type":"string","description":"a destination's name, a conversation key, or the person's id such as telegram:user:123456"},` +
 			`"text":{"type":"string","description":"the message text"}},` +
 			`"required":["conv","text"],"additionalProperties":false}`),
 		Class:     tool.ClassSideEffect,
@@ -157,6 +178,9 @@ func (m *MessageSend) Question(ctx context.Context, c tool.Call) (string, error)
 func (m *MessageSend) recipient(ctx context.Context, c tool.Call, target, conv string) (string, error) {
 	if target == c.Conv && conv == c.Conv {
 		return "this chat", nil
+	}
+	if _, _, ok, err := m.convs.destination(target); err == nil && ok {
+		return "the destination " + oneLine(target) + " (" + oneLine(conv) + ")", nil
 	}
 	if _, _, ok := m.convs.Private(target); !ok {
 		return "the conversation " + oneLine(conv), nil

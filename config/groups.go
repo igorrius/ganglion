@@ -7,8 +7,10 @@ import (
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/groups"
+	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/settings"
+	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/transport/telegram"
 	"github.com/samber/do/v2"
 )
@@ -53,5 +55,31 @@ func GroupTopics() do.Provider[groups.Topics] {
 	return func(i do.Injector) (groups.Topics, error) {
 		connected := groups.Connected{List: do.MustInvoke[settings.TelegramFile](i).Groups, Key: telegram.GroupKey}
 		return groups.NewTopics(do.MustInvoke[*groups.Store](i), connected.Has, do.MustInvoke[*slog.Logger](i)), nil
+	}
+}
+
+// Destinations provides the named destinations of the node's file.
+func Destinations() do.Provider[groups.Destinations] {
+	return func(i do.Injector) (groups.Destinations, error) {
+		file := settings.DestinationsFile{Path: settingsFile(do.MustInvoke[Bootstrap](i))}
+		return groups.Destinations{List: file.Destinations}, nil
+	}
+}
+
+// Routing provides the admin's tools for where messages go: destinations,
+// a module's notify_to and disconnecting a group.
+func Routing() do.Provider[builtin.Routing] {
+	return func(i do.Injector) (builtin.Routing, error) {
+		path := settingsFile(do.MustInvoke[Bootstrap](i))
+		return builtin.Routing{
+			Dests:   settings.DestinationsFile{Path: path},
+			Groups:  do.MustInvoke[settings.TelegramFile](i),
+			Topics:  do.MustInvoke[*groups.Store](i),
+			Modules: settings.ModulesFile{Path: path}.Modules,
+			Router:  do.MustInvoke[*modhost.Host](i),
+			Parse:   telegram.ParseConv,
+			Key:     telegram.GroupKey,
+			Private: telegram.PrivateConv,
+		}, nil
 	}
 }

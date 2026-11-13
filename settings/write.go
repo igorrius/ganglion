@@ -141,6 +141,11 @@ func (f ModulesFile) SetOff(name string, off bool, why string) error {
 	})
 }
 
+// SetNotifyTo is DestinationsFile.SetNotifyTo on this file.
+func (f ModulesFile) SetNotifyTo(module string, names []string) error {
+	return DestinationsFile(f).SetNotifyTo(module, names)
+}
+
 // RemoveModule is RemoveModule on this file.
 func (f ModulesFile) RemoveModule(name string) error { return RemoveModule(f.Path, name) }
 

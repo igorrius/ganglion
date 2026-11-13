@@ -393,6 +393,18 @@ func (c *conf) SetModule(m settings.Module) error {
 	return nil
 }
 
+func (c *conf) SetNotifyTo(module string, names []string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i := slices.IndexFunc(c.mods, func(m settings.Module) bool { return m.Name == module })
+	if i < 0 {
+		c.mods = append(c.mods, settings.Module{Name: module})
+		i = len(c.mods) - 1
+	}
+	c.mods[i].NotifyTo = slices.Clone(names)
+	return nil
+}
+
 func (c *conf) RemoveModule(name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

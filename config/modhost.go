@@ -41,7 +41,7 @@ func ModuleHost() do.Provider[*modhost.Host] {
 			NodeSecrets:  nodeSecrets(b),
 			State:        runner.NewSQLState(do.MustInvoke[Database](i).DB, runner.WithStateLogger(logger)),
 			Settings:     settings.ModulesFile{Path: settingsFile(b)},
-			Destinations: groups.Destinations{List: settings.DestinationsFile{Path: settingsFile(b)}.Destinations}.Resolve,
+			Destinations: do.MustInvoke[groups.Destinations](i).Resolve,
 			Admins:       do.MustInvoke[alert.Admins](i),
 			Now:          time.Now,
 			Location:     b.Agent.TZ,

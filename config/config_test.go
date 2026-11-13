@@ -116,7 +116,8 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"cells.get", "cells.list", "cells.set", "host.exec", "host.stats", "message.send", "plan.show", "plan.step", "schedule.create", "schedule.delete",
-		"schedule.list", "schedule.run_now", "web.fetch", "web.search", "logs.search", "journal.search", "turns.failed", "skill.read", "language.set"}
+		"schedule.list", "schedule.run_now", "web.fetch", "web.search", "logs.search", "journal.search", "turns.failed", "skill.read", "language.set",
+		"destination.list", "destination.set", "destination.remove", "module.notify_to", "group.disconnect"}
 	if _, err := exec.LookPath("git"); err == nil {
 		// The module tools need the workspace's git too; module.import is
 		// on offer only where the node finds its examples folder, which a

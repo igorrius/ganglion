@@ -79,6 +79,14 @@ const (
 	AskLanguageNoFile    Key = "ask.language_no_file"
 	AskRunTool           Key = "ask.run_tool"
 	AskSendMessage       Key = "ask.send_message"
+	AskDestinationSet    Key = "ask.destination_set"    // vars: name, place
+	AskDestinationRemove Key = "ask.destination_remove" // vars: name
+	AskModuleNotifyTo    Key = "ask.module_notify_to"   // vars: module, places
+	AskGroupDisconnect   Key = "ask.group_disconnect"   // vars: title
+	PlacePrivate         Key = "ask.place_private"      // what a destination points at, inside a question
+	PlaceGroup           Key = "ask.place_group"        // vars: title
+	PlaceTopic           Key = "ask.place_topic"        // vars: topic, title
+	PlaceTopicNumber     Key = "ask.place_topic_number" // vars: n, title
 	AskCreateReminder    Key = "ask.create_reminder"
 	AskCreateTask        Key = "ask.create_task"
 	AskDeleteReminder    Key = "ask.delete_reminder"
@@ -362,6 +370,7 @@ var allKeys = []Key{
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, ReplyBuildLate, ReplyRestarting, StatusCommandsOff,
+	AskDestinationSet, AskDestinationRemove, AskModuleNotifyTo, AskGroupDisconnect, PlacePrivate, PlaceGroup, PlaceTopic, PlaceTopicNumber,
 	ButtonAllow, ButtonRefuse, GroupRequestCard, GroupNotConnected, GroupAllowed, GroupRefused,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskModuleWrite, AskForgetFact, AskForgetSlug, AskForgetTopic, AskPersona, AskSkillScript, AskHostExec, AskPlan, AskModuleImport, AskModuleInstall, AskModuleNetwork, AskModuleSecrets, AskModuleCreates, AskModuleTakes, AskModuleReads, AskModuleReacts, AskModuleNotify, AskModuleRuns, AskModuleTool, AskModuleAbout, AskModuleLimits, AskModuleNew, AskModuleNewNetwork, AskModuleNewSecrets, AskModuleNewCells, AskModuleNewReads, AskModuleNewReacts, AskModuleNewNotify, AskModuleNewRuns, AskModuleNewMemory, AskModuleNewTimeout, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, StatusModuleFallback, StatusReasonModuleFailed, StatusModulesLocal, StatusModuleOff, StatusReasonModuleCrashloop, StatusModuleStopped, StatusModulesUnread, StatusReasonModuleInit, StatusReasonModuleCells, StatusReasonModuleLoad, StatusReasonModuleNoAdmin, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusSectionJobs, StatusJobBuild, StatusJobCommand, StatusJobBuildQueued, StatusJobCommandQueued, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled, StatusUnitDay, StatusUnitHour, StatusUnitMin, StatusUnitSec, StatusSandboxReady, StatusSandboxOff, StatusReasonSandboxNotLinux, StatusReasonSandboxRoot, StatusReasonSandboxLandlock, StatusReasonSandboxDumpable, StatusReasonSandboxSelfTest,
