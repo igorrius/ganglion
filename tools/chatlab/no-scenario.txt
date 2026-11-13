@@ -24,6 +24,7 @@ agent/restart.go
 agent/state.go
 agent/telemetry.go
 alert/**
+groups/**
 cmd/mcp.go
 cmd/relay.go
 cmd/root.go
