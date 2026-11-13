@@ -292,6 +292,7 @@ Guarantee: **at-least-once + idempotency.**
   by NATS JetStream (deduplication via `Nats-Msg-Id`).
 - **R-DLV-8.** Two processes must not poll with the same Telegram token at
   once: zero overlap on deploy, or switch to a webhook.
+  In webhook mode nobody polls (R-DLV-18).
 - **R-DLV-9.** A reply may carry attachments (a picture, a document) in a
   channel-neutral form; they go through the outbox with the same delivery
   guarantee as text. The Telegram transport sends them with `sendPhoto`
@@ -347,6 +348,24 @@ Guarantee: **at-least-once + idempotency.**
   next message, with no restart. Refuse is remembered and the group is not asked about again. A
   request nobody answers lasts 7 days; at most 10 wait at once, and further ones are dropped and
   counted ([ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md)).
+- **R-DLV-18.** Telegram updates arrive by long polling or by a webhook, as `telegram.updates` says
+  (R-CFG-11; owner, 2026-11-13,
+  [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)). In webhook mode the node registers
+  the webhook itself at every start (`setWebhook`, one connection, pending updates kept) on its public
+  listener. A request is accepted only with Telegram's secret header, compared in constant time; the
+  secret is derived from the bot token and is in no file, address or log. An update takes the path a
+  polled one takes, with the same `idemKey` (R-DLV-1), and `200` is sent only after it is in the inbox
+  (R-DLV-2); a failed write is `500`, so Telegram sends it again. Updates that waited while the node
+  was away are taken by polling before the webhook is registered, since Telegram's next retry can be
+  two minutes off ([research](research/2026-11-13-telegram-webhook-on-railway.md)). Back in polling mode the node removes
+  only a webhook it recorded setting itself; another process's webhook stays and is the 409 alert of
+  R-DLV-8. When another process takes the bot from a node in webhook mode, the node alerts the admins
+  and does not set its webhook again.
+- **R-DLV-19.** A webhook that does not work must not cut the owner off from the chat. Before it
+  registers, the node checks that its public address reaches this process; when it does not, it polls
+  for this run and tells the admins why. While it runs, repeated delivery errors that Telegram reports
+  with updates waiting make it remove the webhook, poll for the rest of the run and tell the admins.
+  The node changes mode by itself in no other case.
 
 ### 7.2. Conversations, history and the agent loop
 
@@ -1399,6 +1418,16 @@ phase plan).
   node starts with the store locked (stored secrets read as unset, setting
   one is refused, `/status` says why) until the admin's `/secrets reset`
   drops them.
+- **R-CFG-11.** The `http` section is the node's public listener: `addr`
+  (`off` by default) and `public_url`, the HTTPS address the outside
+  reaches it at. It serves plain HTTP behind a proxy that ends TLS,
+  carries the Telegram webhook and a health route, answers `404` to
+  anything else, and is never the metrics listener. `telegram.updates` is
+  `polling` (the default) or `webhook` (R-DLV-18); `webhook` without a
+  listener and a `public_url` fails the start. A change to any of the
+  three opens or moves a public entry to the node: the agent proposes it
+  on a card of its own, never from a tainted session
+  ([ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)).
 - **R-CFG-12.** `destinations:` in the node's file names conversations a
   message may be sent to: a private chat on the access list, a connected
   group (R-DLV-17) or one topic of a forum. The node remembers the titles
@@ -1831,6 +1860,7 @@ fallback until the gate is passed.
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
 | Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | The encrypted store and the command on the host are decided and in M6 ([ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), R-CFG-9, R-CFG-10). Still open: the page served by the node with the ciphertext returned through Telegram first (owner's brainstorm, 2026-11-12, [design note](plans/secrets-intake-design.md)); its phase follows the spike | A spike on Telegram's `sendData`, then an ADR |
 | Logging the claude CLI provider in | A variable set by hand from `claude setup-token` · a `/login` command of the core that drives the bundled CLI and takes the one-time code from the chat · the same command with the node doing the OAuth exchange itself | The `/login` command driving the CLI; the token goes to the encrypted store and never to the chat (owner's request, 2026-11-13, [design note](plans/model-login-from-chat-design.md)). The phase is open; the store itself is in M6 | A spike on driving `setup-token` without a terminal, then an ADR |
+| How Telegram updates reach the node | Long polling only · a webhook only · both, chosen in `ganglion.yaml` · both, chosen by the node | Decided (owner, 2026-11-13, [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)): both, chosen in the file, polling by default (R-DLV-18, R-DLV-19, R-CFG-11; [design note](plans/telegram-webhook-design.md)) | — |
 
 Each question becomes an ADR (status Proposed) when work on it starts and is
 accepted when decided; see [docs/adr](adr/README.md). Already decided: one
@@ -1900,6 +1930,10 @@ Reviewed at each gate.
   in the transport (P3, [ADR-0017](adr/0017-extension-points.md)).
 - Telegram Mini Apps (web pages inside the chat): an HTTP server and
   `initData` validation in the core; a web UI, excluded from 0.x (ADR-0017).
+  The public listener itself left this list in a narrow form, for the
+  Telegram webhook only (R-CFG-11,
+  [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)); pages
+  and `initData` stay here.
 - Packaging and install paths for other users: a Docker image, a Railway
   template, a Helm chart, a systemd unit for a Pi, `ganglion init` (closer
   to the public release in P3).
