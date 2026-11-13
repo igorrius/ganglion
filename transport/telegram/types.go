@@ -6,11 +6,24 @@ package telegram
 
 import "encoding/json"
 
-// update is a Bot API Update; messages and button presses are requested.
+// update is a Bot API Update; messages, button presses and the bot's own
+// membership of a chat are requested.
 type update struct {
 	UpdateID      int64          `json:"update_id"`
 	Message       *message       `json:"message,omitempty"`
 	CallbackQuery *callbackQuery `json:"callback_query,omitempty"`
+	MyChatMember  *chatMember    `json:"my_chat_member,omitempty"`
+}
+
+// chatMember is a Bot API ChatMemberUpdated about the bot itself, reduced
+// to what says the bot was added to a chat.
+type chatMember struct {
+	Chat          chat `json:"chat"`
+	From          user `json:"from"`
+	NewChatMember struct {
+		Status string `json:"status"`
+		User   user   `json:"user"`
+	} `json:"new_chat_member"`
 }
 
 // callbackQuery is a press of an inline button. Message is the message

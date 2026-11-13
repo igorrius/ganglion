@@ -185,3 +185,24 @@ type MemoryReview struct {
 	Principal string `json:"principal"`
 	Session   string `json:"session,omitempty"`
 }
+
+// GroupSeen is a group chat that reached the node: someone addressed the
+// bot in it or added the bot to it (R-DLV-17). It is the payload of an
+// event of kind "group.joined" and what the access filter reports about a
+// group that is not connected. Title and Name are outside text.
+type GroupSeen struct {
+	Group string `json:"group"`           // the group's key, as Message.Group
+	Conv  string `json:"conv"`            // where it happened: a topic's conversation, or the group's
+	Title string `json:"title,omitempty"` // the group's title
+	From  string `json:"from"`            // principal who addressed or added the bot
+	Name  string `json:"name,omitempty"`  // their display name
+}
+
+// GroupRequest is the payload of an event of kind "group.request": the
+// node asks the admin Principal, in their private chat, whether the group
+// may talk to the bot.
+type GroupRequest struct {
+	GroupSeen
+	Principal string `json:"principal"` // the admin asked
+	Transport string `json:"transport"` // of the admin's private chat and of the group
+}

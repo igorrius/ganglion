@@ -48,11 +48,23 @@ const (
 	// a MemoryReview. It reads the owner's words once and stores what the
 	// turns missed.
 	KindMemoryReview Kind = "memory.review"
+	// KindGroupJoined says the node's bot was added to a group chat; its
+	// payload is a GroupSeen. The access filter takes it and never passes
+	// it on: a group that is not connected becomes a request (R-DLV-17).
+	KindGroupJoined Kind = "group.joined"
+	// KindGroupRequest asks an admin, in their private chat, whether a
+	// group that is not connected may talk to the bot; its payload is a
+	// GroupRequest and its source is SourceGroups (R-DLV-17).
+	KindGroupRequest Kind = "group.request"
 )
 
 // SourceModule is the Source of the events the node puts for the owner's
 // modules: only those make a module turn.
 const SourceModule = "module"
+
+// SourceGroups is the Source of the node's own events about group chats:
+// only those make a request to an admin.
+const SourceGroups = "groups"
 
 // Event is the single input from any transport: a chat message, a sensor
 // reading, a cron tick or a module exception.

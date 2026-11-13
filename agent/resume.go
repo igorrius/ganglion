@@ -64,6 +64,7 @@ func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 		return true, a.moduleNotifyEvent(ctx, t)
 	case event.KindMessage, event.KindSchedule:
 	case event.KindModuleTrigger: // never here: Handle runs a trigger before begin
+	case event.KindGroupJoined, event.KindGroupRequest: // never here: the access filter takes the first, begin knows no payload of the second
 	}
 	return false, nil
 }

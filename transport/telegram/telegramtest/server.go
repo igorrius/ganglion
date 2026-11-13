@@ -334,6 +334,25 @@ func (s *Server) AddCallback(c Callback) int64 {
 	return s.nextUpdate
 }
 
+// AddChatMember queues a change of the bot's own membership of the group
+// chatID, made by byUserID, and returns its update_id. status is the
+// bot's new status: "member", "administrator", "left" or "kicked".
+func (s *Server) AddChatMember(chatID int64, title string, byUserID int64, status string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nextUpdate++
+	s.updates = append(s.updates, map[string]any{"update_id": s.nextUpdate, "my_chat_member": map[string]any{
+		"chat":            chatOf(chatID, "supergroup", title, false),
+		"from":            sender(byUserID, false, "User", ""),
+		"date":            time.Now().Unix(),
+		"old_chat_member": map[string]any{"status": "left", "user": sender(s.botID, true, "Test", "")},
+		"new_chat_member": map[string]any{"status": status, "user": sender(s.botID, true, "Test", "")},
+	}})
+	close(s.notify)
+	s.notify = make(chan struct{})
+	return s.nextUpdate
+}
+
 // Answered returns the ids of the callback queries answered, in order.
 func (s *Server) Answered() []string {
 	s.mu.Lock()

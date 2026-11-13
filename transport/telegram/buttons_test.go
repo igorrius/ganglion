@@ -43,7 +43,7 @@ func TestCallbackBecomesDecisionEvent(t *testing.T) {
 	if got := fake.Answered(); len(got) != 0 {
 		t.Fatalf("the transport answered %v", got)
 	}
-	if got := fake.AllowedUpdates(); !reflect.DeepEqual(got, []string{"message", "callback_query"}) {
+	if got := fake.AllowedUpdates(); !reflect.DeepEqual(got, []string{"message", "callback_query", "my_chat_member"}) {
 		t.Fatalf("allowed_updates %v", got)
 	}
 }

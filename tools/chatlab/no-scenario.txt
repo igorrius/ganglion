@@ -106,6 +106,7 @@ transport/telegram/commands.go
 transport/telegram/conv.go
 transport/telegram/files.go
 transport/telegram/groupcount.go
+transport/telegram/joined.go
 transport/telegram/markdown.go
 transport/telegram/reactions.go
 transport/telegram/rich.go

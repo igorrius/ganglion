@@ -270,10 +270,14 @@ func (t *Transport) onError(ctx context.Context, err error, b *backoff.Backoff) 
 }
 
 // toEvent turns an update into an event: a text message (or caption)
-// from a person, or a press of one of our buttons.
+// from a person, a press of one of our buttons, or the bot being added to
+// a group.
 func (t *Transport) toEvent(me user, u update) (event.Event, bool) {
 	if u.CallbackQuery != nil {
 		return t.decisionEvent(me.ID, u)
+	}
+	if u.MyChatMember != nil {
+		return t.joinedEvent(me, u)
 	}
 	return t.messageEvent(me, u)
 }
