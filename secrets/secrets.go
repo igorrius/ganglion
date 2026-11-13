@@ -1,8 +1,9 @@
 // Package secrets is where a node reads its secrets: the bot token and
-// the providers' API keys. P1 reads the environment and *_FILE files
-// (Docker and Kubernetes secrets); an encrypted store comes later behind
-// the same interface (decision D-3). Secrets never come from flags: argv
-// shows in ps.
+// the providers' API keys, and where a module's secrets come from. This
+// package holds the interface, the environment source (a variable or its
+// *_FILE file, as Docker and Kubernetes hand secrets over) and the scopes
+// of stored secrets; the encrypted store itself is secrets/vault
+// (ADR-0077). Secrets never come from flags: argv shows in ps.
 package secrets
 
 import (
@@ -56,3 +57,60 @@ type None struct{}
 
 // Secret implements Source.
 func (None) Secret(string) (string, error) { return "", nil }
+
+// Scope is who a stored secret belongs to (ADR-0077).
+type Scope string
+
+// ScopeNode holds the node's own secrets, named by store:NAME in the file.
+const ScopeNode Scope = "node"
+
+// modulePrefix starts the scope of a module.
+const modulePrefix = "module:"
+
+// ModuleScope is the scope of the module with this full name
+// ("local/deye-reader" → "module:local/deye-reader").
+func ModuleScope(module string) Scope { return Scope(modulePrefix + module) }
+
+// maxName is the longest name of a stored secret.
+const maxName = 128
+
+// ValidName reports whether name can name a stored secret:
+// ^[A-Za-z_][A-Za-z0-9_.-]{0,127}$.
+func ValidName(name string) bool {
+	if name == "" || len(name) > maxName {
+		return false
+	}
+	for i := range len(name) {
+		if !nameByte(name[i], i == 0) {
+			return false
+		}
+	}
+	return true
+}
+
+// nameByte reports whether c may stand in a name; the first byte is a
+// letter or an underscore.
+func nameByte(c byte, first bool) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c == '_':
+		return true
+	case first:
+		return false
+	}
+	return c >= '0' && c <= '9' || c == '.' || c == '-'
+}
+
+// First reads each source in order and returns the first value that is
+// not empty. An error of a source ends the search and is returned.
+type First []Source
+
+// Secret implements Source.
+func (f First) Secret(name string) (string, error) {
+	for _, src := range f {
+		v, err := src.Secret(name)
+		if err != nil || v != "" {
+			return v, err
+		}
+	}
+	return "", nil
+}

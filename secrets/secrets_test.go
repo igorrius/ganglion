@@ -63,3 +63,69 @@ func TestSecretErrorsNameTheVariableNeverTheContent(t *testing.T) {
 		}
 	}
 }
+
+func TestModuleScopeNamesTheModule(t *testing.T) {
+	if got := secrets.ModuleScope("local/x"); got != "module:local/x" {
+		t.Fatalf("ModuleScope = %q", got)
+	}
+	if secrets.ScopeNode != "node" {
+		t.Fatalf("ScopeNode = %q", secrets.ScopeNode)
+	}
+}
+
+func TestValidName(t *testing.T) {
+	for name, want := range map[string]bool{
+		"DEYE_APP_ID":            true,
+		"wifi-home":              true,
+		"a.b":                    true,
+		"_x":                     true,
+		strings.Repeat("a", 128): true,
+		"":                       false,
+		"1A":                     false,
+		"a b":                    false,
+		"a/b":                    false,
+		"a:b":                    false,
+		"a\n":                    false,
+		strings.Repeat("a", 129): false,
+	} {
+		if got := secrets.ValidName(name); got != want {
+			t.Errorf("ValidName(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+// fixed is a Source of one answer.
+type fixed struct {
+	value string
+	err   error
+}
+
+func (f fixed) Secret(string) (string, error) { return f.value, f.err }
+
+// unasked fails the test when it is read.
+type unasked struct{ t *testing.T }
+
+func (u unasked) Secret(name string) (string, error) {
+	u.t.Errorf("a later source was asked for %s", name)
+	return "", nil
+}
+
+func TestFirstReadsSourcesInOrder(t *testing.T) {
+	broken := errors.New("broken")
+	for name, tc := range map[string]struct {
+		sources secrets.First
+		want    string
+		err     error
+	}{
+		"the second answers when the first is empty": {secrets.First{fixed{}, fixed{value: "b"}}, "b", nil},
+		"the first wins":           {secrets.First{fixed{value: "a"}, unasked{t}}, "a", nil},
+		"an error ends the search": {secrets.First{fixed{err: broken}, unasked{t}}, "", broken},
+		"no sources":               {secrets.First{}, "", nil},
+		"nobody has it":            {secrets.First{fixed{}, fixed{}}, "", nil},
+	} {
+		got, err := tc.sources.Secret("TOKEN")
+		if got != tc.want || !errors.Is(err, tc.err) {
+			t.Errorf("%s: Secret = %q, %v", name, got, err)
+		}
+	}
+}
