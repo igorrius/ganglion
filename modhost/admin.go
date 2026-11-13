@@ -307,7 +307,8 @@ func (h *Host) Rollback(ctx context.Context, name string) (modstore.Outcome, err
 }
 
 // Remove takes a module out of service: it stops and its jobs go first, then
-// its versions retire, its settings line goes and its cells lose their owner.
+// its versions retire, its settings line goes, its cells lose their owner
+// and its stored secrets are dropped (ADR-0077).
 // The cells and their history stay (ADR-0062), and so does the journal. It
 // can be repeated: a remove that failed partway is finished by the next one,
 // for the journal still knows the module.
@@ -336,7 +337,7 @@ func (h *Host) Remove(ctx context.Context, name string) error {
 	}
 	h.clearEpisodes(ctx, module)
 	_, derr := h.d.Cells.Disown(ctx, module)
-	return errors.Join(h.d.Settings.RemoveModule(module), derr)
+	return errors.Join(h.d.Settings.RemoveModule(module), derr, h.d.Forget(ctx, module))
 }
 
 // clearOrphans deletes the jobs of local modules that have no active

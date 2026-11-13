@@ -42,8 +42,8 @@ func TestDenyListKeepsADatabaseBesideOtherWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := DenyList("", dir, NodeFiles{DB: filepath.Join(dir, "ganglion.db")}, nil, nil)
-	for _, want := range []string{"ganglion.db", "ganglion.db-wal", "ganglion.db-shm", "ganglion.db-journal", "ganglion.db.lock"} {
+	got := DenyList("", dir, NodeFiles{DB: filepath.Join(dir, "ganglion.db"), MasterKey: filepath.Join(dir, "master.key")}, nil, nil)
+	for _, want := range []string{"ganglion.db", "ganglion.db-wal", "ganglion.db-shm", "ganglion.db-journal", "ganglion.db.lock", "master.key"} {
 		if !slices.Contains(got, filepath.Join(dir, want)) {
 			t.Errorf("%s is not denied; got %v", want, got)
 		}

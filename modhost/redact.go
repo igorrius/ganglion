@@ -30,14 +30,16 @@ type given struct {
 	hide   func(string) string
 }
 
-// newGiven is the set of m's granted secrets as the node holds them now.
-func (h *Host) newGiven(m runner.Manifest) *given {
+// newGiven is the set of the granted secrets of module, whose manifest is
+// m, as the node holds them now.
+func (h *Host) newGiven(module string, m runner.Manifest) *given {
+	src := h.d.Secrets(module)
 	g := &given{byName: map[string][]string{}, hide: func(s string) string { return s }}
 	for _, name := range m.Capabilities.SecretGet {
 		if modstore.NodeSecret(h.d.NodeSecrets, name) {
 			continue // never given to a module, and hidden by the node's own redactor
 		}
-		if v, err := h.d.Secrets.Secret(name); err == nil {
+		if v, err := src.Secret(name); err == nil {
 			g.add(name, v)
 		}
 	}

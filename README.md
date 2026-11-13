@@ -32,10 +32,14 @@ Requires Go 1.27 and, for linting, golangci-lint v2 built with Go 1.27.
 make check                      # lint, test, build
 ./bin/ganglion version          # version, commit, toolchain
 
-# Run: settings live in ganglion.yaml beside the database; secrets stay in the environment.
+# Run: settings live in ganglion.yaml beside the database; secrets stay in the environment
+# or in the node's encrypted store.
 cp ganglion.example.yaml ganglion.yaml   # set telegram.admin and the models you use
 export TELEGRAM_BOT_TOKEN=...                      # and the provider keys the file names
 ./bin/ganglion run --roles core,edge,worker
+
+# A module's secret: stored encrypted, read at the module's next run, no restart.
+printf %s "$VALUE" | ./bin/ganglion secret set --module <name> NAME
 
 make example-deye modrun        # build the Deye example module (Rust) and the module runner
 ./bin/modrun -wasm bin/deye-reader.rust.wasm \

@@ -82,13 +82,33 @@ type DestinationFunc func(name string) (transport, conv string, ok bool, err err
 // NoDestinations knows no destination.
 func NoDestinations(string) (string, string, bool, error) { return "", "", false, nil }
 
+// SecretsFor is the secret source of one module, by its full name: the
+// module's own scope of the secret store, then the environment (ADR-0077).
+type SecretsFor func(module string) secrets.Source
+
+// OneSource is a SecretsFor that gives every module the same source: a
+// node without a secret store.
+func OneSource(src secrets.Source) SecretsFor {
+	return func(string) secrets.Source { return src }
+}
+
+// ForgetSecrets drops what the node stores for a removed module, by its
+// full name.
+type ForgetSecrets func(ctx context.Context, module string) error
+
+// NothingToForget is the ForgetSecrets of a node without a secret store.
+func NothingToForget(context.Context, string) error { return nil }
+
 // Deps are the host's collaborators; all are required.
 type Deps struct {
-	Store   Store
-	Cells   *cells.Service
-	Jobs    Jobs
-	Inbox   Inbox
-	Secrets secrets.Source
+	Store Store
+	Cells *cells.Service
+	Jobs  Jobs
+	Inbox Inbox
+	// Secrets gives each module its own secret source; Forget drops a
+	// removed module's stored secrets.
+	Secrets SecretsFor
+	Forget  ForgetSecrets
 	// NodeSecrets are the names of the node's own secrets (the bot token,
 	// the providers' and the search keys): no module reads one, even one
 	// installed before the install refused them.

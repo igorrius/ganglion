@@ -76,6 +76,7 @@ the provider at deploy time, with the owner:
    | `OPENROUTER_API_KEY` | a provider key, if the agent runs through OpenRouter |
 
    Secrets are written in `ganglion.yaml` as `env:NAME` and never in the file.
+   A module's secrets need no variable: see [Module secrets](#module-secrets).
    A variable can refer to the current bot's (`${{openclaw.DEYE_APP_ID}}`),
    but not to a sealed one: a sealed variable resolves to an empty value, so
    set those by value.
@@ -125,6 +126,43 @@ telegram:
 
 Add `models:` when the provider is chosen. [`ganglion.example.yaml`](../ganglion.example.yaml)
 lists every key.
+
+## Module secrets
+
+A module's secret is stored by the node, encrypted, in its database
+([ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md)); a new
+secret is no new variable and no redeploy. Set one over `railway ssh`, as
+the node's user, with the value on standard input:
+
+```sh
+setpriv --reuid=10001 --regid=10001 --clear-groups \
+  sh -c 'printf %s "$DEYE_APP_ID" | ganglion secret set --db /data/ganglion.db --module deye-reader DEYE_APP_ID'
+```
+
+- The module reads the value at its next run; nothing restarts. `/secrets`
+  in the admin's private chat lists the names (never a value), and
+  `ganglion secret list` does the same on the host.
+- **Moving a secret from a variable:** the command above reads the variable
+  the service still has. When `/secrets` shows the name and the module's
+  next run is healthy, delete the variable in Railway. A module reads its
+  own stored secret first and the environment second, so both may exist
+  during the move.
+- **The key** is `/data/master.key`, made by the node at its first start
+  (mode `0600`). It lies on the volume with the database: a backup or a
+  copy of the volume must hold both, and the database without the key
+  yields no secret. To keep the key off the volume, set
+  `GANGLION_MASTER_KEY` (base64 of 32 bytes: `openssl rand -base64 32`) as
+  a sealed variable before the first secret is stored.
+- **A key that does not fit** (a restored database with another key, a
+  changed variable) does not stop the node: the store is locked, every
+  stored secret reads as not set, `/status` says so. Give the node the old
+  key back, or send `/secrets reset` to drop the stored secrets and set
+  them again.
+- Run the command as uid 10001: a `master.key` that root creates is not
+  readable by the node.
+- One of the node's own secrets can be stored the same way, without
+  `--module`, and named in the file as `store:NAME` instead of `env:NAME`.
+  The node reads those at its start, so changing one needs `/restart`.
 
 ## Telegram by webhook
 

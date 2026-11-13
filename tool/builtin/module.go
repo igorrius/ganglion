@@ -83,7 +83,7 @@ type Modules struct {
 	Workspace Workspace
 	Builder   builder.Builder
 	Store     ModuleStore
-	Secrets   secrets.Source
+	Secrets   ModuleSecrets
 	// NodeSecrets are the names of the node's own secrets (the bot token,
 	// the providers' and the search keys): no module is granted one.
 	NodeSecrets []string
@@ -326,7 +326,7 @@ func (m Modules) plan(ctx context.Context, b modstore.Build) (modstore.Plan, err
 	if err != nil {
 		return modstore.Plan{}, err
 	}
-	return m.Store.PlanLocal(ctx, b, modstore.Secrets{Set: m.secretSet, Node: m.NodeSecrets}, line.Config, m.owner)
+	return m.Store.PlanLocal(ctx, b, modstore.Secrets{Set: m.secretSet(b.Module), Node: m.NodeSecrets}, line.Config, m.owner)
 }
 
 // line is the settings line of module; one with only the name when there is
@@ -344,11 +344,20 @@ func (m Modules) line(module string) (settings.Module, error) {
 	return settings.Module{Name: module}, nil
 }
 
-// secretSet reports whether the node has a value for the secret name; the
-// value itself goes nowhere.
-func (m Modules) secretSet(name string) bool {
-	v, err := m.Secrets.Secret(name)
-	return err == nil && v != ""
+// ModuleSecrets is the secret source of one module, by its full name.
+// tool/builtin does not import modhost, so it declares its own type;
+// config gives both the same function.
+type ModuleSecrets func(module string) secrets.Source
+
+// secretSet reports whether the node has a value for a secret of module,
+// in the module's own scope of the store or in the environment; the value
+// itself goes nowhere.
+func (m Modules) secretSet(module string) func(name string) bool {
+	src := m.Secrets(module)
+	return func(name string) bool {
+		v, err := src.Secret(name)
+		return err == nil && v != ""
+	}
 }
 
 // owner is modstore.CellOwners over the node's cells.

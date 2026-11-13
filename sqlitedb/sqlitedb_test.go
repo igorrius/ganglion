@@ -172,3 +172,39 @@ func TestReadOnlyPathIsEscaped(t *testing.T) {
 		t.Fatal("a write succeeded through an odd path")
 	}
 }
+
+// Two processes on one database (the node and a command beside it) that
+// migrate a component at once: each migration is applied once. The file
+// exists already, as it does once a node has started on it.
+func TestMigrateFromTwoConnectionsAtOnce(t *testing.T) {
+	ctx := context.Background()
+	fs := fstest.MapFS{
+		"001_a.sql": {Data: []byte("CREATE TABLE a (x INTEGER);")},
+		"002_b.sql": {Data: []byte("CREATE TABLE b (x INTEGER);")},
+	}
+	for range 10 {
+		path := filepath.Join(t.TempDir(), "node.db")
+		first, err := Open(ctx, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = first.Close()
+		errs := make(chan error, 4)
+		for range cap(errs) {
+			go func() {
+				db, err := Open(ctx, path)
+				if err != nil {
+					errs <- err
+					return
+				}
+				defer func() { _ = db.Close() }()
+				errs <- Migrate(ctx, db, "x", fs)
+			}()
+		}
+		for range cap(errs) {
+			if err := <-errs; err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}

@@ -81,6 +81,11 @@ type Bootstrap struct {
 	// Secrets is where the node reads secrets that are not in the file, such
 	// as those a module's manifest names (R-RUN-1); nil reads none.
 	Secrets secrets.Source
+	// MasterKey is where the secret store's key file is: master.key beside
+	// the database for a node the command line starts; "" makes a key in
+	// memory (a test node). The operator's GANGLION_MASTER_KEY, read
+	// through Secrets, comes first (ADR-0077).
+	MasterKey string
 	// Metrics draws the node's own metrics for metrics.show and /metrics
 	// (ADR-0045); the command line sets it from telemetry, nil leaves the
 	// tool out.

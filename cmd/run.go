@@ -19,7 +19,9 @@ import (
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/secrets"
+	"github.com/igorrius/ganglion/secrets/vault"
 	"github.com/igorrius/ganglion/settings"
+	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/telemetry"
 	"github.com/urfave/cli/v3"
 )
@@ -30,14 +32,15 @@ func runCommand(out io.Writer, start startFunc) *cli.Command {
 		Name:  "run",
 		Usage: "run a node with the given roles until a signal",
 		Description: "Settings come from ganglion.yaml (--config; default: beside the database). Secrets never are in it:\n" +
-			"the file names each one as env:NAME, and the node reads NAME or the file named by NAME_FILE.",
+			"the file names each one as env:NAME, and the node reads NAME or the file named by NAME_FILE,\n" +
+			"or as store:NAME, one of the node's own secrets in its secret store (ganglion secret set NAME).",
 		Flags: v.Flags(),
 		Action: func(ctx context.Context, _ *cli.Command) error {
 			roles, err := node.ParseRoles(v.Roles)
 			if err != nil {
 				return err
 			}
-			b, err := bootstrap(v, secrets.OSEnv(), os.Getenv, os.ReadFile)
+			b, err := bootstrap(ctx, v, secrets.OSEnv(), os.Getenv, os.ReadFile)
 			if err != nil {
 				return err
 			}
@@ -94,7 +97,7 @@ func newLogger(out io.Writer, level slog.Level, b config.Bootstrap) (*slog.Logge
 // bootstrap reads the config file and the secrets it references into
 // config.Bootstrap. A retired variable fails first: a stale deploy must
 // not run on defaults (R-CFG-5).
-func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read func(string) ([]byte, error)) (config.Bootstrap, error) {
+func bootstrap(ctx context.Context, v flags.Run, src secrets.Source, getenv func(string) string, read func(string) ([]byte, error)) (config.Bootstrap, error) {
 	if err := settings.Retired(getenv); err != nil {
 		return config.Bootstrap{}, err
 	}
@@ -103,13 +106,57 @@ func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read
 		return config.Bootstrap{}, err
 	}
 	limit := memlimit.Decide(getenv("GOMEMLIMIT"), uint64(f.Node.MemoryLimit), read)
-	b, err := fromFile(f, v.DB, limit, src)
+	store, done, err := storeSource(ctx, f, v.DB, src)
+	if err != nil {
+		return config.Bootstrap{}, err
+	}
+	defer done()
+	b, err := fromFile(f, v.DB, limit, settings.Sources{Env: src, Store: store})
 	if err != nil {
 		return config.Bootstrap{}, err
 	}
 	b.Build = rustenv.LocalFromEnv(getenv)
-	b.SettingsPath, b.Secrets = settingsPath(v.Config, v.DB), src
+	b.SettingsPath, b.Secrets, b.MasterKey = settingsPath(v.Config, v.DB), src, masterKey(v.DB)
 	return b, nil
+}
+
+// memoryDB is the database path of a node that keeps nothing on disk.
+const memoryDB = ":memory:"
+
+// masterKey is where the secret store's key file is for the database at
+// db: beside it, or nowhere for a database in memory.
+func masterKey(db string) string {
+	if db == memoryDB {
+		return ""
+	}
+	return vault.KeyPath(db)
+}
+
+// storeSource is where the file's store: references are read: the node
+// scope of the secret store in the database at db (ADR-0077). The node's
+// components need these values before the container exists, so the
+// database is opened here for a moment; a file without a store: reference
+// opens nothing. The caller calls done when it has read them. A store
+// whose key does not fit reads every reference as not set; the node says
+// so at start and in /status.
+func storeSource(ctx context.Context, f settings.File, db string, src secrets.Source) (store secrets.Source, done func(), err error) {
+	if len(f.StoreNames()) == 0 || db == memoryDB {
+		return secrets.None{}, func() {}, nil
+	}
+	key, _, err := vault.LoadKey(src, masterKey(db))
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, err := sqlitedb.Open(ctx, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	v, err := vault.Open(ctx, conn, key, time.Now)
+	if err != nil {
+		_ = conn.Close()
+		return nil, nil, err
+	}
+	return v.Source(secrets.ScopeNode), func() { _ = conn.Close() }, nil
 }
 
 // loadSettings reads the file the operator named, which must exist, or
@@ -133,7 +180,7 @@ func settingsPath(named, db string) string {
 // fromFile maps the file to the node's bootstrap settings for the
 // database at db, with the decided memory limit, reading the secrets
 // through src.
-func fromFile(f settings.File, db string, limit memlimit.Limit, src secrets.Source) (config.Bootstrap, error) {
+func fromFile(f settings.File, db string, limit memlimit.Limit, src settings.Sources) (config.Bootstrap, error) {
 	b := config.Bootstrap{DB: db, Languages: f.Agent.Languages, BotAPIURL: f.Telegram.APIURL, Admin: f.Telegram.Admin,
 		HTTPAddr: f.HTTP.Addr, PublicURL: f.HTTP.PublicURL, TelegramWebhook: f.Telegram.Updates == settings.UpdatesWebhook,
 		MetricsAddr: f.Metrics.Addr, TelegramReply: f.Telegram.Reply, TelegramRich: f.Telegram.Rich,
@@ -161,7 +208,7 @@ func fromFile(f settings.File, db string, limit memlimit.Limit, src secrets.Sour
 
 // agentSettings maps the file's agent and models sections, reading the
 // search key and the providers' keys through src.
-func agentSettings(f settings.File, src secrets.Source) (config.AgentSettings, error) {
+func agentSettings(f settings.File, src settings.Sources) (config.AgentSettings, error) {
 	tz, err := time.LoadLocation(f.Node.TZ) // checked by settings
 	if err != nil {
 		return config.AgentSettings{}, fmt.Errorf("%s: node.tz: %w", settings.FileName, err)
@@ -188,7 +235,7 @@ func announce(logger *slog.Logger, b config.Bootstrap) {
 		logger.Warn("node: no models section in " + settings.FileName + "; the agent is off and the bot echoes")
 	}
 	if b.BotToken == "" {
-		logger.Warn("node: no " + b.Settings.Telegram.Token.Name() + "; the Telegram transport is off")
+		logger.Warn("node: no " + string(b.Settings.Telegram.Token) + "; the Telegram transport is off")
 	}
 	if b.Settings.HTTP.On() {
 		logger.Info("node: public listener on", "addr", b.HTTPAddr, "telegram_webhook", b.TelegramWebhook)

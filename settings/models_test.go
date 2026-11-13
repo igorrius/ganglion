@@ -108,10 +108,10 @@ func TestKeysNameTheUnsetVariable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.Models.Keys(fakeSource{}); err == nil || !strings.Contains(err.Error(), "OR_KEY") || !strings.Contains(err.Error(), "or") {
+	if _, err := f.Models.Keys(settings.Sources{Env: fakeSource{}, Store: fakeSource{}}); err == nil || !strings.Contains(err.Error(), "OR_KEY") || !strings.Contains(err.Error(), "or") {
 		t.Fatalf("err = %v", err)
 	}
-	keys, err := f.Models.Keys(fakeSource{"OR_KEY": "sk-1"})
+	keys, err := f.Models.Keys(settings.Sources{Env: fakeSource{"OR_KEY": "sk-1"}, Store: fakeSource{}})
 	if err != nil || keys["or"] != "sk-1" || len(keys) != 1 {
 		t.Fatalf("keys = %v, %v", keys, err)
 	}

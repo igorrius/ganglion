@@ -89,7 +89,7 @@ func (h *Host) prepare(ctx context.Context, a modstore.Active, s settings.Module
 	}
 	m.ConfigValues = configValues(m, s.Config)
 	l := &loaded{name: a.Module, short: modstore.ShortName(a.Module), sha: a.SHA256, version: strconv.Itoa(m.Version), m: m, to: to,
-		escalate: escalations(m), given: h.newGiven(m), notifyTo: slices.Clone(s.NotifyTo)}
+		escalate: escalations(m), given: h.newGiven(a.Module, m), notifyTo: slices.Clone(s.NotifyTo)}
 	l.log = h.moduleLog(l.given)
 	if st, err := h.defineCells(ctx, l); err != nil || st.reason != "" {
 		return nil, st, err
@@ -168,19 +168,21 @@ func escalations(m runner.Manifest) map[Kind]bool {
 	return out
 }
 
-// secret is the runner's secret lookup for module: the node's source, read
-// on every call (a rotated NAME_FILE applies at once); a secret that cannot
+// secret is the runner's secret lookup for module: the module's own source
+// (its scope of the secret store, then the environment; ADR-0077), read on
+// every call (a value set while the module runs applies at once); a secret that cannot
 // be read is logged by name and is not set, and one of the node's own is
 // never set. Every value handed out goes to g first, so the module's logger
 // hides it before the module can echo it. The runner asks only for the
 // names the manifest grants.
 func (h *Host) secret(module string, g *given) func(string) (string, bool) {
+	src := h.d.Secrets(module)
 	return func(name string) (string, bool) {
 		if modstore.NodeSecret(h.d.NodeSecrets, name) {
 			h.d.Log.Warn("modhost: a module asked for one of the node's own secrets; it is not given", "module", module, "secret", name)
 			return "", false
 		}
-		v, err := h.d.Secrets.Secret(name)
+		v, err := src.Secret(name)
 		if err != nil {
 			h.d.Log.Warn("modhost: a module's secret cannot be read", "module", module, "secret", name, "err", err)
 			return "", false

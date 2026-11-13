@@ -43,7 +43,7 @@ var settingVars = []string{"GANGLION_CONFIG", "GANGLION_DB", "GANGLION_ADMIN", "
 	"GANGLION_DAILY_TOKENS", "GANGLION_SESSION_IDLE", "GANGLION_TZ", "GANGLION_LOG_LEVEL", "GANGLION_SEARCH",
 	"GANGLION_SANDBOX_DENY", "GANGLION_SANDBOX_HIDE_NAMES",
 	"TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN_FILE", "OPENROUTER_API_KEY", "OPENROUTER_API_KEY_FILE",
-	"BRAVE_API_KEY", "BRAVE_API_KEY_FILE"}
+	"BRAVE_API_KEY", "BRAVE_API_KEY_FILE", "GANGLION_MASTER_KEY", "GANGLION_MASTER_KEY_FILE"}
 
 // clearEnv unsets settingVars, so the developer's own .env does not leak in.
 func clearEnv(t *testing.T) {
@@ -328,7 +328,7 @@ func TestRunAnnouncesWhatIsOff(t *testing.T) {
 	clearEnv(t)
 	_, _, out, err := captured(t, append([]string{"run"}, nodeFiles(t, quiet+"telegram: {token: env:MY_BOT}\n")...)...)
 	if err != nil || !strings.Contains(out, "no models section in ganglion.yaml; the agent is off") ||
-		!strings.Contains(out, "no MY_BOT; the Telegram transport is off") {
+		!strings.Contains(out, "no env:MY_BOT; the Telegram transport is off") {
 		t.Fatalf("%v:\n%s", err, out)
 	}
 }

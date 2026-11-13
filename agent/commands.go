@@ -76,6 +76,10 @@ func (a *Agent) commandTable() []commandEntry {
 			transport.LangDefault:   "What I remember: /memory, or /memory <topic>",
 			transport.LangRussian:   "Что я помню: /memory или /memory <тема>",
 			transport.LangUkrainian: "Що я пам'ятаю: /memory або /memory <тема>"}},
+		{"/secrets", a.secretsCmd, map[transport.Lang]string{
+			transport.LangDefault:   "Stored secrets: /secrets, /secrets rm <module|node> NAME",
+			transport.LangRussian:   "Сохранённые секреты: /secrets, /secrets rm <модуль|node> ИМЯ",
+			transport.LangUkrainian: "Збережені секрети: /secrets, /secrets rm <модуль|node> НАЗВА"}},
 		{"/cells", a.listCells, map[transport.Lang]string{
 			transport.LangDefault: "Cells: sensors and switches with their values", transport.LangRussian: "Ячейки: датчики и выключатели со значениями",
 			transport.LangUkrainian: "Комірки: датчики та вимикачі зі значеннями"}},

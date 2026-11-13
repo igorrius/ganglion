@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/igorrius/ganglion/secrets"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -196,7 +197,7 @@ func newModuleEnv(t *testing.T) *moduleEnv {
 		settings: filepath.Join(dir, "ganglion.yaml"), examples: filepath.Join(dir, "examples", "modules"),
 		jobs: newFakeBuildJobs(), puts: &puts{}}
 	e.setConfig(t, "SN1")
-	e.m = builtin.Modules{Workspace: ws, Builder: e.b, Store: store, Secrets: deyeSecrets(), Settings: settings.ModulesFile{Path: e.settings},
+	e.m = builtin.Modules{Workspace: ws, Builder: e.b, Store: store, Secrets: func(string) secrets.Source { return deyeSecrets() }, Settings: settings.ModulesFile{Path: e.settings},
 		Cells: e.cells, Host: e.reloads, Builds: filepath.Join(dir, "modules", "builds"), Examples: e.examples,
 		Provenance: filepath.Join(dir, "modules", "provenance"), Now: func() time.Time { return time.Unix(1_800_000_000, 0) },
 		Queue: newQueue(filepath.Join(dir, "modules", "build-jobs"), e.jobs, e.puts)}
@@ -532,6 +533,33 @@ func TestModuleInstallRefusesTheNodesOwnSecret(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 	noSecret(t, err.Error())
+}
+
+// ADR-0077: the install check counts a secret as set when the module's own
+// source has it, and as not set when only another module's has.
+func TestModuleInstallChecksTheModulesOwnSecrets(t *testing.T) {
+	for owner, wantErr := range map[string]bool{"local/deye-reader": false, "local/other": true} {
+		e := newModuleEnv(t)
+		e.m.Secrets = func(module string) secrets.Source {
+			if module == owner {
+				return deyeSecrets()
+			}
+			return secrets.None{}
+		}
+		e.source(t, "deye-reader")
+		art := artifact(deyeManifest, 1024, 1)
+		e.build(t, art)
+		_, err := e.tool(builtin.ModuleInstallTool).(tool.Questioner).Question(context.Background(), installCall(art.SHA256))
+		if (err != nil) != wantErr {
+			t.Fatalf("secrets of %s: err %v", owner, err)
+		}
+		if err != nil {
+			if !strings.Contains(err.Error(), "DEYE_APP_ID") {
+				t.Fatalf("the refusal does not name the secret: %v", err)
+			}
+			noSecret(t, err.Error())
+		}
+	}
 }
 
 // install builds art and installs it with a press; it fails the test when

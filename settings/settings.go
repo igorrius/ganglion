@@ -1,5 +1,5 @@
 // Package settings is the node's config file, ganglion.yaml (spec 7.14,
-// ADR-0059): everything an operator chooses, with secrets only as env:NAME
+// ADR-0059): everything an operator chooses, with secrets only as env:NAME or store:NAME
 // references. Load and Parse are strict: an unknown key or a bad value
 // fails with the path in the file.
 package settings
@@ -85,7 +85,7 @@ const (
 
 // Telegram is the Telegram transport's settings.
 type Telegram struct {
-	// Token is the bot token, as env:NAME.
+	// Token is the bot token, as env:NAME or store:NAME.
 	Token SecretRef `yaml:"token"`
 	// APIURL is the Bot API's base address.
 	APIURL string `yaml:"api_url"`
@@ -188,7 +188,7 @@ type Limits struct {
 type Search struct {
 	// Mode is auto (use a search key when there is one) or off.
 	Mode string `yaml:"mode"`
-	// BraveKey is the Brave Search API key, as env:NAME.
+	// BraveKey is the Brave Search API key, as env:NAME or store:NAME.
 	BraveKey SecretRef `yaml:"brave_key"`
 }
 
@@ -309,18 +309,26 @@ func (f File) LogDir(db string) (string, bool) {
 	return f.Log.Dir, true
 }
 
-// SecretNames are the variables every secret reference of the file names:
+// SecretNames are the variables every env: reference of the file names:
 // the bot token, the search key and the providers' keys. A skill script
-// never gets them (R-RTR-5, ADR-0042).
-func (f File) SecretNames() []string {
+// never gets them (R-RTR-5, ADR-0042). A store: reference is not a
+// variable and is not listed.
+func (f File) SecretNames() []string { return f.refNames(SchemeEnv) }
+
+// StoreNames are the names every store: reference of the file names.
+func (f File) StoreNames() []string { return f.refNames(SchemeStore) }
+
+// refNames are the names of the file's references of one scheme.
+func (f File) refNames(scheme Scheme) []string {
+	refs := []SecretRef{f.Telegram.Token, f.Agent.Search.BraveKey}
+	if f.Models != nil {
+		refs = append(refs, f.Models.keyRefs()...)
+	}
 	var out []string
-	for _, r := range []SecretRef{f.Telegram.Token, f.Agent.Search.BraveKey} {
-		if r != "" {
+	for _, r := range refs {
+		if r.Scheme() == scheme {
 			out = append(out, r.Name())
 		}
-	}
-	if f.Models != nil {
-		out = append(out, f.Models.KeyNames()...)
 	}
 	return out
 }

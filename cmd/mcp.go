@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/igorrius/ganglion/mcp"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/secrets"
+	"github.com/igorrius/ganglion/secrets/vault"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/urfave/cli/v3"
@@ -54,11 +56,29 @@ func mcpCommand(in io.Reader, out io.Writer) *cli.Command {
 				f.Log.Dir = logDir
 			}
 			dir, _ := f.LogDir(db)
-			d := diag.New(ro, dir, runSettings(f, loadErr, secrets.OSEnv(), os.Getenv), time.Now)
+			d := diag.New(ro, dir, runSettings(f, loadErr, settings.Sources{Env: secrets.OSEnv(), Store: storedRows{ctx: ctx, db: ro}}, os.Getenv), time.Now)
 			srv := mcp.NewServer(diag.ClientSource, buildinfo.Read().Short(), d.Tools(), d.ExecForClient, mcp.WithInstructions(diag.ClientInstructions))
 			return srv.Serve(ctx, stdio{in, out})
 		},
 	}
+}
+
+// storedRows answers whether one of the node's own secrets is stored,
+// reading the read-only database without the store's key: this command
+// never reads a value (ADR-0077). It answers a fixed word for a row that
+// exists, which secretSetting shows as "set".
+type storedRows struct {
+	ctx context.Context //nolint:containedctx // the command's context, for a source that takes none
+	db  *sql.DB
+}
+
+// Secret implements secrets.Source.
+func (s storedRows) Secret(name string) (string, error) {
+	has, err := vault.Has(s.ctx, s.db, secrets.ScopeNode, name)
+	if err != nil || !has {
+		return "", err
+	}
+	return "stored", nil
 }
 
 // stdio joins the command's stdin and stdout into the server's stream.
@@ -72,7 +92,7 @@ type stdio struct {
 // variable and whether it is set, the models by id and the purposes in
 // order. A file that did not load, or a retired variable that would stop
 // the start, is an error row first.
-func runSettings(f settings.File, loadErr error, src secrets.Source, getenv func(string) string) diag.Settings {
+func runSettings(f settings.File, loadErr error, src settings.Sources, getenv func(string) string) diag.Settings {
 	var out diag.Settings
 	for _, err := range []error{loadErr, settings.Retired(getenv)} {
 		if err != nil {
@@ -93,7 +113,7 @@ func runSettings(f settings.File, loadErr error, src secrets.Source, getenv func
 
 // sectionSettings lists every leaf of the struct v, by its path in the
 // file. A nil pointer is left out.
-func sectionSettings(path string, v reflect.Value, src secrets.Source) diag.Settings {
+func sectionSettings(path string, v reflect.Value, src settings.Sources) diag.Settings {
 	var out diag.Settings
 	t := v.Type()
 	for i := range t.NumField() {
@@ -111,7 +131,7 @@ func sectionSettings(path string, v reflect.Value, src secrets.Source) diag.Sett
 }
 
 // leafSetting is one value; a secret is its variable and whether it is set.
-func leafSetting(path string, v reflect.Value, src secrets.Source) diag.Setting {
+func leafSetting(path string, v reflect.Value, src settings.Sources) diag.Setting {
 	switch x := v.Interface().(type) {
 	case settings.SecretRef:
 		return secretSetting(path, x, src)
@@ -123,9 +143,9 @@ func leafSetting(path string, v reflect.Value, src secrets.Source) diag.Setting 
 	return diag.Setting{Name: path, Value: fmt.Sprint(v.Interface())}
 }
 
-// secretSetting is "env:NAME (set)" or "(unset)"; the value never leaves
+// secretSetting is the reference with "(set)" or "(unset)"; the value never leaves
 // this function.
-func secretSetting(path string, r settings.SecretRef, src secrets.Source) diag.Setting {
+func secretSetting(path string, r settings.SecretRef, src settings.Sources) diag.Setting {
 	if r == "" {
 		return diag.Setting{Name: path, Value: "none"}
 	}
@@ -134,13 +154,17 @@ func secretSetting(path string, r settings.SecretRef, src secrets.Source) diag.S
 	if err != nil {
 		state = "error: " + err.Error()
 	}
-	return diag.Setting{Name: path, Env: r.Name(), Value: fmt.Sprintf("%s (%s)", r, state)}
+	out := diag.Setting{Name: path, Value: fmt.Sprintf("%s (%s)", r, state)}
+	if r.Scheme() == settings.SchemeEnv {
+		out.Env = r.Name() // the variable; a stored secret is not one
+	}
+	return out
 }
 
 // modelSettings list the providers with their keys as set or unset, the
 // models as "id provider/name", and each purpose as "chat: sonnet
 // (medium), haiku".
-func modelSettings(m settings.Models, src secrets.Source) diag.Settings {
+func modelSettings(m settings.Models, src settings.Sources) diag.Settings {
 	var out diag.Settings
 	for i, p := range m.Providers {
 		at := fmt.Sprintf("models.providers[%d]", i)

@@ -3,7 +3,8 @@
 # ganglion.yaml (or ganglion.local.yaml, which git ignores) and change what you
 # need. Every key is optional; the values below are the defaults unless a
 # comment says otherwise. A secret is never written here: it is env:NAME, the
-# variable (or NAME_FILE) that holds it, usually set in .env.
+# variable (or NAME_FILE) that holds it, usually set in .env, or store:NAME,
+# one of the node's own secrets in its secret store (ganglion secret set NAME).
 
 node:
   # The soft memory limit of the node (GOMEMLIMIT). Without it the node takes

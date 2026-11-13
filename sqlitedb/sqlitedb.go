@@ -75,7 +75,8 @@ var migrationName = regexp.MustCompile(`^(\d{3,})_[a-z0-9_]+\.sql$`)
 // Migrate applies the migrations in fsys (top-level files named
 // NNN_name.sql) that component has not applied yet, in numeric order, each
 // in its own transaction. Applied versions are recorded in
-// schema_migrations.
+// schema_migrations. Two processes may migrate one component at once:
+// each migration is applied by one of them.
 func Migrate(ctx context.Context, db *sql.DB, component string, fsys fs.FS) error {
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		component  TEXT    NOT NULL,
@@ -128,20 +129,25 @@ func Migrate(ctx context.Context, db *sql.DB, component string, fsys fs.FS) erro
 	return nil
 }
 
+// apply runs one migration and records it, under the write lock taken
+// first: a second process that migrates the same component at the same
+// time (ganglion secret beside a starting node, ADR-0077) waits, then
+// finds the version recorded and applies nothing.
 func apply(ctx context.Context, db *sql.DB, component string, version int, body string) error {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
+	return Immediate(ctx, db, func(c *sql.Conn) error {
+		var applied bool
+		if err := c.QueryRowContext(ctx,
+			`SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE component = ? AND version = ?)`,
+			component, version).Scan(&applied); err != nil || applied {
+			return err
+		}
+		if _, err := c.ExecContext(ctx, body); err != nil {
+			return err
+		}
+		_, err := c.ExecContext(ctx,
+			`INSERT INTO schema_migrations (component, version) VALUES (?, ?)`, component, version)
 		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, body); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO schema_migrations (component, version) VALUES (?, ?)`, component, version); err != nil {
-		return err
-	}
-	return tx.Commit()
+	})
 }
 
 // Immediate runs fn in a BEGIN IMMEDIATE transaction on one connection, so
