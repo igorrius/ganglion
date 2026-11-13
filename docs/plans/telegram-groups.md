@@ -2147,7 +2147,7 @@ Expected: PASS. Fix the tests left marked in Task 7 by connecting their group in
 Run: `make lint && go test ./...`
 Expected: PASS. Then the targets the repository uses for the model-free acceptance of the agent (`grep -n "^[a-z-]*:" Makefile | head -40` lists them); run the chatlab target.
 
-- [ ] **Step 9: The live check, in the owner's family forum.** Deploy to Railway as the project's deploy note says. With the owner:
+- [x] **Step 9: The live check, in the owner's family forum.** Deploy to Railway as the project's deploy note says. With the owner:
   1. A family member mentions the bot in a topic of the forum. The topic gets the "no permission yet" line once; the owner's private chat gets the card with the forum's title and id.
   2. A second mention sends nothing.
   3. The owner presses Allow. The card changes to "connected".
@@ -2195,8 +2195,37 @@ the steps above:
   and addresses the bot in it: it used to rely on an allowed person being
   answered in any group.
 
-Open: the live check (task 9, step 9), and with it the owner's word on
-ADR-0076, which is still Proposed.
+The live check is recorded below. Open: the owner's word on ADR-0076,
+which is still Proposed.
+
+## Live check (2026-11-13)
+
+Merged as [PR 19](https://github.com/igorrius/ganglion/pull/19) and
+deployed to Railway on the production bot. The owner ran the check in the
+family's forum; the node's log, its metrics and its file on the volume
+agree with what the owner saw.
+
+| Step | Result | Evidence |
+|---|---|---|
+| A mention in a topic of a group that is not connected | The topic got the notice, the owner's private chat the card | Log, 12:46:16 UTC: `groups: a group that is not connected … outcome=asked`, `access: event dropped reason=group`, two `outbox: sent` (the private chat, the topic); the owner confirmed the card |
+| No model for the request | Held | The request's turn: `outcome=command steps=0 model=""` |
+| Allow | The card was edited, the line written | Log, 12:46:34: a turn of `outcome=command` and two messages to the private chat; `/data/ganglion.yaml` holds `telegram.groups` with the forum's chat, its title and `role: family` |
+| A mention after Allow, with no restart | Answered in the same topic | Log, 12:46:59 and 12:49:57: turns in the topic's conversation, `outcome=ok`, each followed by `outbox: sent` to that topic |
+| No tools in a group | Held | Both turns: `tools=0` |
+| A message that does not address the bot | No answer, no turn | `ganglion_telegram_group_messages_total{outcome="unaddressed"} 2` and no turn for them; `outcome="addressed"` is 3, the first of which was the request |
+| One request per group | Held | `ganglion_groups_requests_total{outcome="asked"} 1` |
+
+Not checked live yet: a reply to the bot's message as the only way of
+addressing it, a second topic keeping its own conversation, and the group
+staying connected over a restart (the line is in the file on the volume,
+which the node reads at every message). The topic check the
+[M2 plan](p1-m2-delivery-telegram.md) could not run is covered by the rows
+above: a topic's message reached its own conversation and the answer
+returned to that topic.
+
+The deploy's first build failed on Railway's side (its build daemon could
+not reach buildkit); the second passed. The log's `version=dev commit=""`
+is how an image built by `railway up` reports itself.
 
 ## What this plan does not do
 
