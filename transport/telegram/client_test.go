@@ -162,7 +162,7 @@ func TestClientAgainstFake(t *testing.T) {
 	if _, err := c.sendMessage(ctx, sendParams{ChatID: -100, MessageThreadID: 45, Text: "hi", DisableNotification: true}); err != nil {
 		t.Fatal(err)
 	}
-	if sent := fake.Sent(); len(sent) != 1 || sent[0] != (telegramtest.Outgoing{ChatID: -100, ThreadID: 45, Text: "hi", Silent: true}) {
+	if sent := fake.Sent(); len(sent) != 1 || sent[0] != (telegramtest.Outgoing{MessageID: sent[0].MessageID, ChatID: -100, ThreadID: 45, Text: "hi", Silent: true}) {
 		t.Fatalf("fake got %+v", sent)
 	}
 

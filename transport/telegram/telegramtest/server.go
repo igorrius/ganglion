@@ -45,15 +45,16 @@ type Incoming struct {
 
 // Outgoing is a message the bot sent.
 type Outgoing struct {
-	ChatID   int64
-	ThreadID int64
-	Text     string
-	Silent   bool
-	Entities string // the entities as sent, JSON; "" when none
-	ReplyTo  int64  // reply_parameters.message_id; 0 when not a reply
-	Keyboard string // reply_markup.inline_keyboard as sent, JSON; "" when none or empty
-	Rich     bool   // sent by sendRichMessage; Text is its plain text
-	Footer   string // the text of a rich message's footer block; "" for none
+	MessageID int64 // the id Telegram gave it, for a Callback or ReplyTo
+	ChatID    int64
+	ThreadID  int64
+	Text      string
+	Silent    bool
+	Entities  string // the entities as sent, JSON; "" when none
+	ReplyTo   int64  // reply_parameters.message_id; 0 when not a reply
+	Keyboard  string // reply_markup.inline_keyboard as sent, JSON; "" when none or empty
+	Rich      bool   // sent by sendRichMessage; Text is its plain text
+	Footer    string // the text of a rich message's footer block; "" for none
 	// NoPreview is link_preview_options.is_disabled: the message shows no
 	// link preview.
 	NoPreview bool
@@ -784,8 +785,9 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 
 // keep records a sent message and answers with it. The caller holds s.mu.
 func (s *Server) keep(w http.ResponseWriter, out Outgoing) {
-	s.sent = append(s.sent, out)
 	s.nextMsg++
+	out.MessageID = s.nextMsg
+	s.sent = append(s.sent, out)
 	if s.messages[out.ChatID] == nil {
 		s.messages[out.ChatID] = map[int64]shown{}
 	}

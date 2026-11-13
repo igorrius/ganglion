@@ -334,15 +334,15 @@ the family's forum. [Design](telegram-groups-design.md);
 
 | Task | Done when |
 |---|---|
-| G.1 The decision: spec (R-DLV-16, R-DLV-17, R-POL-10) and ADR-0076 | The spec and the ADR say what is built |
-| G.2 `telegram.groups` in the node's file, with a writer that keeps the rest of the file | A line is set, replaced and removed; a bad line is refused at load |
-| G.3 The addressing rule as a pure function | A mention, a reply to the bot and `/cmd@bot` address it; a typed name, a bare command and a topic's root do not |
-| G.4 The transport drops a group message that does not address the bot | It never becomes an event; its update is confirmed |
-| G.5 "The bot was added to a group" as an event | `my_chat_member` is polled and read |
-| G.6 The `groups` package: connected groups and requests | A group that is not connected asks an admin once; a refusal and the cap of 10 hold |
-| G.7 The access filter knows groups | A stranger in a connected group passes; anyone in another group is dropped |
-| G.8 The agent: the card with Allow and Refuse; the admin role only in a private chat | The card and the notice go out with no model; Allow writes the line |
-| G.9 Wiring, the example file, the chatlab scenario, the live check in the family's forum | The scenario passes; the live check is recorded in the plan |
+| G.1 **Done** (2026-11-13). The decision: spec (R-DLV-16, R-DLV-17, R-POL-10) and ADR-0076 | The spec and the ADR say what is built |
+| G.2 **Done** (2026-11-13). `telegram.groups` in the node's file, with a writer that keeps the rest of the file | A line is set, replaced and removed; a bad line is refused at load |
+| G.3 **Done** (2026-11-13). The addressing rule as a pure function | A mention, a reply to the bot and `/cmd@bot` address it; a typed name, a bare command and a topic's root do not |
+| G.4 **Done** (2026-11-13). The transport drops a group message that does not address the bot | It never becomes an event; its update is confirmed |
+| G.5 **Done** (2026-11-13). "The bot was added to a group" as an event | `my_chat_member` is polled and read |
+| G.6 **Done** (2026-11-13). The `groups` package: connected groups and requests | A group that is not connected asks an admin once; a refusal and the cap of 10 hold |
+| G.7 **Done** (2026-11-13). The access filter knows groups | A stranger in a connected group passes; anyone in another group is dropped |
+| G.8 **Done** (2026-11-13). The agent: the card with Allow and Refuse; the admin role only in a private chat | The card and the notice go out with no model; Allow writes the line |
+| G.9 Wiring, the example file, the end-to-end scenario (`cmd.TestConnectAGroupThroughTheCard`): **done** (2026-11-13). The live check in the family's forum: open | The scenario passes; the live check is recorded in the plan |
 | G.10 Named destinations and `NotifyTo` for modules; managing groups and destinations in words | A second plan and its ADR |
 
 ### M6 · The agent reconfigures the system (ADR-0015)

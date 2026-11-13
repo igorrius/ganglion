@@ -12,7 +12,11 @@ Start here when coming back to the project.
   addressed ([design](plans/telegram-groups-design.md),
   [plan](plans/telegram-groups.md),
   [ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md),
-  Proposed).
+  Proposed). Built on 2026-11-13 and passing end to end against the fake
+  Bot API: a group is connected from the card in the admin's private
+  chat, answered only when addressed, and nobody has the admin role in
+  it. Open: the live check in the family's forum, and the second plan
+  (named destinations and `NotifyTo` for modules).
 - **Next:** M6, the agent reconfigures the system. The Railway deploy
   (board card G-121) is up since 2026-11-11: service `ganglion` beside the
   current bot, on the test bot, the agent through the claude CLI, the

@@ -54,24 +54,24 @@
 **Interfaces:**
 - Produces: requirement ids that later tasks cite in doc comments. `R-DLV-15` is the last delivery requirement today; check with `grep -n "R-DLV-1[5-9]" docs/spec.md` and take the next free numbers. This plan calls them **R-DLV-16** (the addressing rule), **R-DLV-17** (connecting a group) and **R-POL-10** (no admin role in a group; take the next free `R-POL` number and use it wherever this plan says R-POL-10).
 
-- [ ] **Step 1: Write ADR-0076.** Status Proposed until the owner accepts it. Context: design sections 1 and 3. Options compared, at least these three:
+- [x] **Step 1: Write ADR-0076.** Status Proposed until the owner accepts it. Context: design sections 1 and 3. Options compared, at least these three:
   - A. A group is listed in the node's file and gives its members a role; the transport drops what does not address the bot; the admin connects a group by a press on a card in the private chat (chosen).
   - B. Every person is listed one by one and a group needs both the group and the person listed. Rejected: nothing adds a person today, so the family chat would answer the owner only.
   - C. Trust Telegram's privacy mode for addressing and keep the per-person list. Rejected: a bot made a group's admin receives every message, and the owner's ruling of 2026-11-06 says "whatever Telegram's privacy mode says".
   Consequences: an allowed person is no longer answered in a group that is not connected; the admin has no admin tools in any group; every member of a connected group can spend the node's model budget, bounded by the existing daily limits; `family` has no tools today, so a group is conversation only until roles become configurable.
 
-- [ ] **Step 2: Add the ADR's row** to `docs/adr/README.md`.
+- [x] **Step 2: Add the ADR's row** to `docs/adr/README.md`.
 
-- [ ] **Step 3: Change the spec.**
+- [x] **Step 3: Change the spec.**
   - Add R-DLV-16: in a group the bot is addressed by a mention of its username, a reply to its own message, or a command that carries its name; anything else is dropped before the inbox, whatever the privacy mode.
   - Add R-DLV-17: a group not listed under `telegram.groups` is not answered; the first time the bot is addressed in it or added to it, the node says so once in the group and sends the admin a card with the group's title and id and the buttons Allow and Refuse; Allow lists the group with the role `family`; Refuse is remembered; at most 10 requests wait at once.
   - Add R-POL-10: the admin role holds only in the admin's private chat; in a group everyone acts with the group's role.
   - In the 7.8 security table add the row for `telegram.groups`.
   - In section 14 "Not now": remove "where a bot answers" (the 2026-11-06 ruling, now R-DLV-16) and "limiting Telegram … groups"; keep "per-group behaviour and limits", per-topic settings, reactions in groups and the classifier; add "roles a group's line may name beyond `family`, with their own tools and filters (owner, 2026-11-13); the `role` field of a group's line is where they plug in"; keep "`notify` targets beyond the owner's private chat" with a pointer to the second plan.
 
-- [ ] **Step 4: Add the milestone.** In `docs/plans/p1-all-in-one.md` add a row to the milestone table and a task table "Telegram groups" before M6, with this plan's tasks 2–9 as rows and a link to this file. In `docs/README.md` "Where we are", name it as the work in progress and note that the production token moved to ganglion on 2026-11-13, ahead of task 7.5.
+- [x] **Step 4: Add the milestone.** In `docs/plans/p1-all-in-one.md` add a row to the milestone table and a task table "Telegram groups" before M6, with this plan's tasks 2–9 as rows and a link to this file. In `docs/README.md` "Where we are", name it as the work in progress and note that the production token moved to ganglion on 2026-11-13, ahead of task 7.5.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git add docs/adr/0076-telegram-groups-and-the-addressing-rule.md docs/adr/README.md docs/spec.md docs/plans/p1-all-in-one.md docs/README.md docs/plans/telegram-groups-design.md docs/plans/telegram-groups.md
@@ -107,7 +107,7 @@ func (f TelegramFile) SetGroup(g Group) error
 func (f TelegramFile) RemoveGroup(chat int64) error
 ```
 
-- [ ] **Step 1: Write the failing tests** in `settings/write_telegram_test.go`.
+- [x] **Step 1: Write the failing tests** in `settings/write_telegram_test.go`.
 
 ```go
 package settings
@@ -189,12 +189,12 @@ func TestSetGroupRefusesABadLine(t *testing.T) {
 
 In `settings/load_test.go` add a table test, in the style of its neighbours, that loading refuses: `chat: 42`, `role: admin`, a missing `role`, and two lines with the same `chat`.
 
-- [ ] **Step 2: Run them and see them fail.**
+- [x] **Step 2: Run them and see them fail.**
 
 Run: `go test ./settings/ -run 'Group' -v`
 Expected: FAIL to compile, `undefined: TelegramFile`.
 
-- [ ] **Step 3: Add the type and the check.** In `settings/settings.go`, in `Telegram`, after `Reactions`:
+- [x] **Step 3: Add the type and the check.** In `settings/settings.go`, in `Telegram`, after `Reactions`:
 
 ```go
 	// Groups are the group chats whose members may talk to the bot
@@ -250,7 +250,7 @@ func checkGroups(gs []Group) error {
 }
 ```
 
-- [ ] **Step 4: Free the editor from `modules:`.** In `settings/write.go` split `edit` so that the part that reads, encodes and replaces the file takes the document:
+- [x] **Step 4: Free the editor from `modules:`.** In `settings/write.go` split `edit` so that the part that reads, encodes and replaces the file takes the document:
 
 ```go
 // editDoc reads the file, hands the document to change and writes the
@@ -297,7 +297,7 @@ func edit(path string, change func(seq *yaml.Node) error) error {
 
 Leave `modulesNode` as it is.
 
-- [ ] **Step 5: Write `settings/write_telegram.go`.**
+- [x] **Step 5: Write `settings/write_telegram.go`.**
 
 ```go
 package settings
@@ -437,12 +437,12 @@ func setScalar(item *yaml.Node, key, value, tag string) {
 
 `field` and `plain` already exist in `settings/write.go`. If `field` returns its second value in another meaning than "index", keep the calls and ignore it as above.
 
-- [ ] **Step 6: Run the tests.**
+- [x] **Step 6: Run the tests.**
 
 Run: `go test ./settings/ -v`
 Expected: PASS, the old module-writing tests included.
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add settings/
@@ -475,7 +475,7 @@ func isGroup(c chat) bool
 func addressed(m *message, botID int64, username string) bool
 ```
 
-- [ ] **Step 1: Write the failing test** `transport/telegram/addressed_test.go`.
+- [x] **Step 1: Write the failing test** `transport/telegram/addressed_test.go`.
 
 ```go
 package telegram
@@ -537,12 +537,12 @@ func TestIsGroup(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run it and see it fail.**
+- [x] **Step 2: Run it and see it fail.**
 
 Run: `go test ./transport/telegram/ -run 'Addressed|IsGroup|TopicRootByTheBot' -v`
 Expected: FAIL to compile, `undefined: inEntity`.
 
-- [ ] **Step 3: Add the fields.** In `types.go`, in `message` after `Caption`:
+- [x] **Step 3: Add the fields.** In `types.go`, in `message` after `Caption`:
 
 ```go
 	// Entities and CaptionEntities mark the parts of Text and Caption; of
@@ -571,7 +571,7 @@ type inEntity struct {
 }
 ```
 
-- [ ] **Step 4: Write `addressed.go`.**
+- [x] **Step 4: Write `addressed.go`.**
 
 ```go
 package telegram
@@ -639,12 +639,12 @@ func part(units []uint16, e inEntity) string {
 
 `seen()` in `transport.go` compares the chat type to the literals `"group"` and `"supergroup"`: replace that condition with `isGroup(m.Chat)`.
 
-- [ ] **Step 5: Run the tests.**
+- [x] **Step 5: Run the tests.**
 
 Run: `go test ./transport/telegram/ -v`
 Expected: PASS.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add transport/telegram/
@@ -680,7 +680,7 @@ const BotUsername = "test_bot"
 func Mention(text string) map[string]any // the "entities" of text for Incoming.Extra: every "@test_bot" in it
 ```
 
-- [ ] **Step 1: Extend the fake server.** In `telegramtest/server.go`:
+- [x] **Step 1: Extend the fake server.** In `telegramtest/server.go`:
   - export `const BotUsername = "test_bot"` and return it as `"username"` from the `getMe` handler (find the handler with `grep -n '"getMe"' transport/telegram/telegramtest/server.go`);
   - add `Title string` to `Incoming` and put `"title": m.Title` into the `"chat"` map of `AddMessage` when the chat is a group and the title is not empty;
   - add the helper:
@@ -706,7 +706,7 @@ func Mention(text string) map[string]any {
 
   Add a test for `Mention` in `server_test.go`: `Mention("😀 @test_bot hi")` gives one entity with offset 3 and length 9.
 
-- [ ] **Step 2: Write the failing transport tests.** Open `transport_test.go` at `TestTopicMessageGetsTopicConv` (line 161) and use the same way of starting the transport and collecting events. Add:
+- [x] **Step 2: Write the failing transport tests.** Open `transport_test.go` at `TestTopicMessageGetsTopicConv` (line 161) and use the same way of starting the transport and collecting events. Add:
 
 ```go
 // A group message that does not address the bot never becomes an event,
@@ -736,12 +736,12 @@ func TestTypedNameWithoutEntityIsDropped(t *testing.T)
 
 Write each as a full test body with the file's existing helpers; the assertions are the ones listed. In `buttons_test.go` add: a press on a button under a message in chat `-1001` gives an `event.Decision` with `Group == "telegram:-1001"`, and one in a private chat gives `Group == ""`.
 
-- [ ] **Step 3: Run them and see them fail.**
+- [x] **Step 3: Run them and see them fail.**
 
 Run: `go test ./transport/telegram/... -run 'Group|TypedName|ReplyToTheBot|Mention' -v`
 Expected: FAIL (`Group` is not a field; the unaddressed message arrives).
 
-- [ ] **Step 4: Add the event fields.** In `event/message.go`, in `Message` after `Reply`:
+- [x] **Step 4: Add the event fields.** In `event/message.go`, in `Message` after `Reply`:
 
 ```go
 	// Group is the channel's key of the group chat the message came from,
@@ -759,7 +759,7 @@ and in `Decision` after `Lang`:
 	Group string `json:"group,omitempty"`
 ```
 
-- [ ] **Step 5: Add the key and the counter.** In `conv.go`:
+- [x] **Step 5: Add the key and the counter.** In `conv.go`:
 
 ```go
 // GroupKey is the key of a group chat as a whole: its conversation with
@@ -805,7 +805,7 @@ func (g groupCounter) add(ctx context.Context, o groupOutcome) {
 
 Add the field `groupMsgs groupCounter` to `Transport` and set it in `New` where `files` is set.
 
-- [ ] **Step 6: Pass the bot's identity and apply the rule.** In `transport.go`:
+- [x] **Step 6: Pass the bot's identity and apply the rule.** In `transport.go`:
   - `Run` passes `me` instead of `me.ID`: `t.hand(ctx, sink, me, ups, offset, sinkRetry)`;
   - `hand`, `toEvent`, `messageEvent` and `decisionEvent` take `me user` instead of `botID int64`; inside them use `me.ID` where `botID` was used;
   - in `messageEvent`, right after the "no text and no file" check and before `t.files.add`:
@@ -831,14 +831,14 @@ Add the field `groupMsgs groupCounter` to `Transport` and set it in `New` where 
   If `messageEvent` passes 60 lines, move the building of `msg` into `func (t *Transport) incoming(me user, m *message, text string, fs []event.File) event.Message`.
   - in `buttons.go`, `decisionEvent`: build the `event.Decision` into a variable, set `d.Group = GroupKey(m.Chat.ID)` when `isGroup(m.Chat)`, then marshal it.
 
-- [ ] **Step 7: Run everything.**
+- [x] **Step 7: Run everything.**
 
 Run: `go test ./transport/... ./event/... ./agent/... ./internal/chatlab/... ./cmd/...`
 Expected: the new tests PASS. Tests that send a plain message into a negative chat id now see no event: fix each by adding `Extra: telegramtest.Mention(text)` with `@test_bot` in the text when the test is about a group conversation, or by moving it to a private chat when the group was incidental. Do not weaken the rule to make a test pass.
 
-- [ ] **Step 8: Add the metric's readback test** beside the existing telemetry tests of the package (`grep -ln "ganglion.files.received" transport/telegram/*_test.go` shows the pattern): after one addressed and one unaddressed group message, the Prometheus text has `ganglion_telegram_group_messages_total{outcome="addressed"} 1` and `{outcome="unaddressed"} 1`.
+- [x] **Step 8: Add the metric's readback test** beside the existing telemetry tests of the package (`grep -ln "ganglion.files.received" transport/telegram/*_test.go` shows the pattern): after one addressed and one unaddressed group message, the Prometheus text has `ganglion_telegram_group_messages_total{outcome="addressed"} 1` and `{outcome="unaddressed"} 1`.
 
-- [ ] **Step 9: Commit.**
+- [x] **Step 9: Commit.**
 
 ```bash
 git add event/ transport/
@@ -881,7 +881,7 @@ func (s *Server) AddChatMember(chatID int64, title string, byUserID int64, statu
 func (s *Server) AllowedUpdates() []string // exists; now also holds "my_chat_member"
 ```
 
-- [ ] **Step 1: Write the failing tests** in `joined_test.go`, with the helpers of `transport_test.go`:
+- [x] **Step 1: Write the failing tests** in `joined_test.go`, with the helpers of `transport_test.go`:
 
 ```go
 // The bot added to a group becomes a group.joined event in the group's
@@ -900,12 +900,12 @@ func TestPollingAsksForMyChatMember(t *testing.T)
 // after one poll, srv.AllowedUpdates() contains "message", "callback_query" and "my_chat_member".
 ```
 
-- [ ] **Step 2: Run them and see them fail.**
+- [x] **Step 2: Run them and see them fail.**
 
 Run: `go test ./transport/telegram/ -run 'BotAdded|OtherMember|MyChatMember' -v`
 Expected: FAIL to compile, `undefined: AddChatMember`.
 
-- [ ] **Step 3: Add the kinds and payloads.** In `event/event.go`, after `KindMemoryReview`:
+- [x] **Step 3: Add the kinds and payloads.** In `event/event.go`, after `KindMemoryReview`:
 
 ```go
 	// KindGroupJoined says the node's bot was added to a group chat; its
@@ -920,7 +920,7 @@ Expected: FAIL to compile, `undefined: AddChatMember`.
 
 Add `SourceGroups = "groups"` beside `SourceModule`, with the comment "the source of the node's own events about group chats". Add the two payload types from the Interfaces block to `event/message.go`, with doc comments that say Title and Name are outside text. Update `event/kind_test.go` so its list of kinds holds the two new ones.
 
-- [ ] **Step 4: Read the update.** In `types.go`:
+- [x] **Step 4: Read the update.** In `types.go`:
 
 ```go
 // chatMember is a Bot API ChatMemberUpdated about the bot itself, reduced
@@ -937,7 +937,7 @@ type chatMember struct {
 
 Add `MyChatMember *chatMember `json:"my_chat_member,omitempty"`` to `update`, and change its comment to "messages, button presses and the bot's own membership are requested". In `client.go`, `getUpdates`, the allowed updates become `[]string{"message", "callback_query", "my_chat_member"}`.
 
-- [ ] **Step 5: Write `joined.go`.**
+- [x] **Step 5: Write `joined.go`.**
 
 ```go
 package telegram
@@ -985,14 +985,14 @@ In `toEvent`, before the message case:
 	}
 ```
 
-- [ ] **Step 6: Extend the fake server.** `AddChatMember` queues `{"update_id": n, "my_chat_member": {"chat": {"id", "type": "supergroup", "title"}, "from": sender(byUserID, false, "User", ""), "date": now, "new_chat_member": {"status": status, "user": sender(s.botID, true, "Test", "")}}}` the way `AddMessage` queues an update, and returns the update id.
+- [x] **Step 6: Extend the fake server.** `AddChatMember` queues `{"update_id": n, "my_chat_member": {"chat": {"id", "type": "supergroup", "title"}, "from": sender(byUserID, false, "User", ""), "date": now, "new_chat_member": {"status": status, "user": sender(s.botID, true, "Test", "")}}}` the way `AddMessage` queues an update, and returns the update id.
 
-- [ ] **Step 7: Run the tests.**
+- [x] **Step 7: Run the tests.**
 
 Run: `go test ./transport/... ./event/...`
 Expected: PASS.
 
-- [ ] **Step 8: Commit.**
+- [x] **Step 8: Commit.**
 
 ```bash
 git add event/ transport/
@@ -1043,7 +1043,7 @@ func NewRequests(s *Store, admins alert.Admins, put PutFunc, now func() time.Tim
 func (r Requests) Seen(ctx context.Context, g event.GroupSeen) error
 ```
 
-- [ ] **Step 1: Write the migration** `groups/migrations/001_group_requests.sql`:
+- [x] **Step 1: Write the migration** `groups/migrations/001_group_requests.sql`:
 
 ```sql
 -- A group chat that is not connected and has addressed the bot (R-DLV-17).
@@ -1055,7 +1055,7 @@ CREATE TABLE group_requests (
 );
 ```
 
-- [ ] **Step 2: Write the failing tests.** `groups/groups_test.go` (real SQLite, opened the way `access/access_test.go` opens it):
+- [x] **Step 2: Write the failing tests.** `groups/groups_test.go` (real SQLite, opened the way `access/access_test.go` opens it):
 
 ```go
 package groups_test
@@ -1102,12 +1102,12 @@ func TestSeenReturnsAPutError(t *testing.T)
 
 Write each as a full test; the assertions are the ones listed. Add the metric readback: after one asked, one known and one capped call, `ganglion_groups_requests_total` has the three outcomes.
 
-- [ ] **Step 3: Run them and see them fail.**
+- [x] **Step 3: Run them and see them fail.**
 
 Run: `go test ./groups/ -v`
 Expected: FAIL to compile (the package does not exist).
 
-- [ ] **Step 4: Write `groups/groups.go`.**
+- [x] **Step 4: Write `groups/groups.go`.**
 
 ```go
 // Package groups is what the node knows about group chats: which are
@@ -1161,7 +1161,7 @@ func (c Connected) Has(_ context.Context, group string) (bool, error) {
 }
 ```
 
-- [ ] **Step 5: Write `groups/store.go`.**
+- [x] **Step 5: Write `groups/store.go`.**
 
 ```go
 package groups
@@ -1261,7 +1261,7 @@ func (s *Store) Pending(ctx context.Context) (int, error) {
 }
 ```
 
-- [ ] **Step 6: Write `groups/telemetry.go` and `groups/requests.go`.**
+- [x] **Step 6: Write `groups/telemetry.go` and `groups/requests.go`.**
 
 ```go
 package groups
@@ -1392,7 +1392,7 @@ func (r Requests) address(ctx context.Context, g event.GroupSeen) (event.GroupRe
 
 The IdemKey holds the day: a group whose request expired or was forgotten can ask again on another day, and a put that is repeated the same day is stored once.
 
-- [ ] **Step 7: Run the tests, update the code map, commit.**
+- [x] **Step 7: Run the tests, update the code map, commit.**
 
 Run: `go test ./groups/ -v`
 Expected: PASS.
@@ -1431,7 +1431,7 @@ func NoGroups() Groups // no group is connected and nobody is told
 func (l *List) Filter(next transport.Sink, g Groups, logger *slog.Logger) transport.Sink
 ```
 
-- [ ] **Step 1: Write the failing tests** in `access/access_test.go`. Add a helper that builds a message event with a group, then:
+- [x] **Step 1: Write the failing tests** in `access/access_test.go`. Add a helper that builds a message event with a group, then:
 
 ```go
 func groupMsg(from, group, conv string) event.Event // KindMessage, payload event.Message{Text: "hi", From: from, Name: "Ann", Group: group, GroupTitle: "Family"}, Conv: conv
@@ -1473,12 +1473,12 @@ func TestFilterPrivateChatUnchanged(t *testing.T)
 
 Update the existing calls of `Filter` in the tests to pass `access.NoGroups()`.
 
-- [ ] **Step 2: Run them and see them fail.**
+- [x] **Step 2: Run them and see them fail.**
 
 Run: `go test ./access/ -v`
 Expected: FAIL to compile (`Filter` takes two arguments).
 
-- [ ] **Step 3: Rewrite the filter.** Replace `Filter` with:
+- [x] **Step 3: Rewrite the filter.** Replace `Filter` with:
 
 ```go
 // GroupsFunc reports whether a group chat is connected.
@@ -1604,14 +1604,14 @@ func (f filter) drop(ctx context.Context, e event.Event, reason, principal strin
 
 `joined` is logged at warn like the others; if that is too loud for a connected group's re-join, log `reasonJoined` at info inside `drop` with a `switch` on the reason. Existing tests that match the old log messages or the `text_len` attribute are updated to the new line.
 
-- [ ] **Step 4: Keep `config` compiling.** In `config/delivery.go` pass `access.NoGroups()` as the second argument for now; Task 9 replaces it.
+- [x] **Step 4: Keep `config` compiling.** In `config/delivery.go` pass `access.NoGroups()` as the second argument for now; Task 9 replaces it.
 
-- [ ] **Step 5: Run the tests.**
+- [x] **Step 5: Run the tests.**
 
 Run: `go test ./access/ ./config/ ./internal/chatlab/...`
 Expected: PASS. A chatlab or agent test in which a listed person talks in a group now sees a drop: with `NoGroups` no group is connected. Mark such tests to be fixed in Task 9 by connecting the group in the lab's file (`config/lab.go`), not by loosening the filter; if one cannot wait, connect the group there now.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add access/ config/
@@ -1661,7 +1661,7 @@ type Actions struct {
 func (a Actions) QuickActions() map[string]pending.QuickAction
 ```
 
-- [ ] **Step 1: Write the failing test for the role.** Beside the existing tests of the admin check:
+- [x] **Step 1: Write the failing test for the role.** Beside the existing tests of the admin check:
 
 ```go
 // The admin role holds only in the admin's private chat (R-POL-10): in
@@ -1674,12 +1674,12 @@ func TestAdminRoleDoesNotFollowIntoAGroup(t *testing.T)
 
 Use the agent test kit the neighbouring tests use to read what tools a turn offered.
 
-- [ ] **Step 2: Run it and see it fail.**
+- [x] **Step 2: Run it and see it fail.**
 
 Run: `go test ./agent/ -run AdminRoleDoesNotFollow -v`
 Expected: FAIL: the group turn is offered the admin tools.
 
-- [ ] **Step 3: Change `setAdmin`.**
+- [x] **Step 3: Change `setAdmin`.**
 
 ```go
 // setAdmin looks up whether the turn's principal may use tools. The admin
@@ -1704,7 +1704,7 @@ func (a *Agent) inPrivate(t *turn) bool {
 
 Run `go test ./agent/... ./internal/chatlab/... ./cmd/...`. A test in which an admin uses a tool from a conversation that is not their private chat now fails: check that conversation. If it is a group, the test moves to the private chat. If it is a scheduled task or a background job reporting to a conversation the admin made it in, its event's conversation is that private chat and the test already passes. Any other failure means a turn kind whose conversation is not the principal's private chat: stop and report it instead of changing `inPrivate`.
 
-- [ ] **Step 4: Add the texts.** In `texts/texts.go` add the six keys of the Interfaces block beside their neighbours (the two buttons beside `ButtonDelete`), add them to `allKeys`, and add `ButtonAllow, ButtonRefuse` to the label case of the function that lists button labels (line 407). In the language files:
+- [x] **Step 4: Add the texts.** In `texts/texts.go` add the six keys of the Interfaces block beside their neighbours (the two buttons beside `ButtonDelete`), add them to `allKeys`, and add `ButtonAllow, ButtonRefuse` to the label case of the function that lists button labels (line 407). In the language files:
 
 `en.yaml`
 ```yaml
@@ -1747,7 +1747,7 @@ button.refuse: Відмовити
 
 Match the placeholder syntax and the YAML style of the neighbouring entries in each file (check one entry with variables before pasting). Run `go test ./texts/`: its tests check that every key exists in every language and fits its length limit; add the keys to whatever list a failing test names.
 
-- [ ] **Step 5: Write the failing tests for the actions** in `groups/actions_test.go`:
+- [x] **Step 5: Write the failing tests for the actions** in `groups/actions_test.go`:
 
 ```go
 func press(t *testing.T, action string, a groups.ButtonArgs, principal string) pending.QuickPress
@@ -1781,7 +1781,7 @@ func TestAllowTwice(t *testing.T)
 // two calls → the same edit, no error.
 ```
 
-- [ ] **Step 6: Write `groups/actions.go`.**
+- [x] **Step 6: Write `groups/actions.go`.**
 
 ```go
 package groups
@@ -1901,7 +1901,7 @@ func (a Actions) pressed(ctx context.Context, p pending.QuickPress) (ButtonArgs,
 
 `text.Truncate` (`internal/text`) is the one truncation by runes (conventions, section 8). The Note never holds the title: a note goes into the model's history, and a title is outside text.
 
-- [ ] **Step 7: Write the failing agent test** `agent/group_request_test.go`, with the kit the module-notify tests use (`grep -ln "KindModuleNotify" agent/*_test.go`):
+- [x] **Step 7: Write the failing agent test** `agent/group_request_test.go`, with the kit the module-notify tests use (`grep -ln "KindModuleNotify" agent/*_test.go`):
 
 ```go
 // A group's request becomes a card with two buttons in the admin's
@@ -1925,7 +1925,7 @@ func TestGroupRequestFromAnotherSourceIsDropped(t *testing.T)
 // the same event with Principal a family member → no outgoing, no buttons.
 ```
 
-- [ ] **Step 8: Write `agent/group_request.go` and hook it in.** In `agent/turn.go` add to `turn`: `groupReq event.GroupRequest // the request of a KindGroupRequest event`. In `agent/agent.go`, in `payloads`:
+- [x] **Step 8: Write `agent/group_request.go` and hook it in.** In `agent/turn.go` add to `turn`: `groupReq event.GroupRequest // the request of a KindGroupRequest event`. In `agent/agent.go`, in `payloads`:
 
 ```go
 	event.KindGroupRequest: func(t *turn) bool {
@@ -2016,12 +2016,12 @@ Notes for this step:
 - A turn that runs again stores two more buttons and its outgoing messages are dropped by their IdemKey, so the extra buttons are never shown; they expire.
 - If the dependency rules forbid `agent → groups`, move `ActionAllow`, `ActionRefuse` and `ButtonArgs` to `event` (as `event.GroupActionAllow`, …) and use them from both; add the edge to the code map otherwise.
 
-- [ ] **Step 9: Run the tests.**
+- [x] **Step 9: Run the tests.**
 
 Run: `go test ./agent/... ./groups/... ./texts/...`
 Expected: PASS.
 
-- [ ] **Step 10: Commit.**
+- [x] **Step 10: Commit.**
 
 ```bash
 git add agent/ groups/ texts/ docs/architecture/05-code-map.md
@@ -2041,7 +2041,7 @@ git commit -m "agent: a group's request is a card for the admin, and the admin r
 - Consumes: everything above.
 - Produces: providers `GroupStore() do.Provider[*groups.Store]`, `GroupsFile() do.Provider[settings.TelegramFile]`, `AccessGroups() do.Provider[access.Groups]`, `GroupActions() do.Provider[groups.Actions]`.
 
-- [ ] **Step 1: Write the failing end-to-end scenario** in `internal/chatlab/`, in the style of an existing scenario that uses buttons (`grep -ln "AddCallback" internal/chatlab/*_test.go`):
+- [x] **Step 1: Write the failing end-to-end scenario** in `internal/chatlab/`, in the style of an existing scenario that uses buttons (`grep -ln "AddCallback" internal/chatlab/*_test.go`):
 
 ```go
 // A group is connected through the card and then answers its members
@@ -2058,12 +2058,12 @@ func TestConnectAGroupThroughTheCard(t *testing.T)
 // 6. The admin writes "@test_bot run status" in the group → the turn is offered no admin-only tool.
 ```
 
-- [ ] **Step 2: Run it and see it fail.**
+- [x] **Step 2: Run it and see it fail.**
 
 Run: `go test ./internal/chatlab/ -run ConnectAGroupThroughTheCard -v`
 Expected: FAIL at step 1: the filter runs with `NoGroups`, so nothing is sent.
 
-- [ ] **Step 3: Write `config/groups.go`.** Providers only, in the shape of `config/modhost.go` (find how it builds `settings.ModulesFile` from the bootstrap's config path and do the same for `settings.TelegramFile`):
+- [x] **Step 3: Write `config/groups.go`.** Providers only, in the shape of `config/modhost.go` (find how it builds `settings.ModulesFile` from the bootstrap's config path and do the same for `settings.TelegramFile`):
 
 ```go
 package config
@@ -2116,18 +2116,18 @@ func GroupChat(group string) (chat int64, ok bool) {
 
 If the queue's `Put` has another signature than `groups.PutFunc`, adapt it in the provider the way `TelegramReceivers` adapts it for the sink. If the clock is injected elsewhere in `config` (a `Clock` provider), use that instead of `time.Now`.
 
-- [ ] **Step 4: Connect the providers.**
+- [x] **Step 4: Connect the providers.**
   - `config/config.go`: add `do.Lazy(GroupStore()), do.Lazy(GroupsFile()), do.Lazy(AccessGroups()), do.Lazy(GroupActions())` to the list that holds `Admins()`; a role that has no Telegram gets them through the same `choose` its neighbours use if the container test asks for it.
   - `config/delivery.go`, `TelegramReceivers`: `do.MustInvoke[*access.List](i).Filter(do.MustInvoke[*telegram.Reactor](i).Noting(q.Put), do.MustInvoke[access.Groups](i), logger)`.
   - `config/agent.go`, `quickActions`: `maps.Copy(out, do.MustInvoke[groups.Actions](i).QuickActions())`.
   - `config/lab.go`: the lab node writes its file to a temporary directory; make sure `GroupsFile` points at it, so step 3 of the scenario can read the line back.
 
-- [ ] **Step 5: Run the scenario and the container test.**
+- [x] **Step 5: Run the scenario and the container test.**
 
 Run: `go test ./config/ ./internal/chatlab/ -v -run 'ConnectAGroup|Container|Roles'`
 Expected: PASS. Fix the tests left marked in Task 7 by connecting their group in the lab's file.
 
-- [ ] **Step 6: Update the example file.** In `ganglion.example.yaml`, in the `telegram:` section, correct the comment on `reply` to "When an answer quotes the message it answers: auto (in groups, or when newer messages came), always, off", and add:
+- [x] **Step 6: Update the example file.** In `ganglion.example.yaml`, in the `telegram:` section, correct the comment on `reply` to "When an answer quotes the message it answers: auto (in groups, or when newer messages came), always, off", and add:
 
 ```yaml
   # Group chats whose members may talk to the bot. In a group it answers
@@ -2140,9 +2140,9 @@ Expected: PASS. Fix the tests left marked in Task 7 by connecting their group in
   #     role: family
 ```
 
-- [ ] **Step 7: Update the architecture views.** In `docs/architecture/05-code-map.md` describe `groups` and the new edges (`config --> groups`, `agent --> groups` or the `event` variant chosen in Task 8). On the delivery level page add to the incoming flow, as a Mermaid `sequenceDiagram` or in the existing `flowchart`: transport → "addressed?" → access filter → "connected?" → inbox, with the branch to `groups.Requests` → inbox → agent → card. Nothing in it is planned, so nothing is dashed.
+- [x] **Step 7: Update the architecture views.** In `docs/architecture/05-code-map.md` describe `groups` and the new edges (`config --> groups`, `agent --> groups` or the `event` variant chosen in Task 8). On the delivery level page add to the incoming flow, as a Mermaid `sequenceDiagram` or in the existing `flowchart`: transport → "addressed?" → access filter → "connected?" → inbox, with the branch to `groups.Requests` → inbox → agent → card. Nothing in it is planned, so nothing is dashed.
 
-- [ ] **Step 8: Run everything.**
+- [x] **Step 8: Run everything.**
 
 Run: `make lint && go test ./...`
 Expected: PASS. Then the targets the repository uses for the model-free acceptance of the agent (`grep -n "^[a-z-]*:" Makefile | head -40` lists them); run the chatlab target.
@@ -2166,6 +2166,37 @@ git commit -m "config: groups are wired: the card connects a group and the filte
 ```
 
 ---
+
+## As built (2026-11-13)
+
+Tasks 1–8 are done, and task 9 up to the live check. What differs from
+the steps above:
+
+- **The admin role (task 8).** The plan compared the turn's conversation
+  with the principal's private chat. The code asks whether a group's
+  message or press started the turn (`event.Message.Group`), which the
+  transport sets: `t.admin = admin && t.msg.Group == ""`. It needs no
+  private-chat lookup and holds for every transport that names its groups.
+  A press carries its group too (`event.Decision.Group`).
+- **Wiring (task 9) came with task 7:** the filter reads the node's file
+  from the commit that added the group rule, so no commit runs with
+  `access.NoGroups()`.
+- **The end-to-end scenario is `cmd.TestConnectAGroupThroughTheCard`,**
+  not a chatlab scenario: it runs the node's binary against the fake Bot
+  API and a fake model, presses the card's button and reads
+  `ganglion.yaml` back. Chatlab's scenarios are YAML conversations with a
+  model and have no step for a second person in a group or for the node's
+  file; the new files are listed in `tools/chatlab/no-scenario.txt`.
+- **The fake Bot API** gained `Outgoing.MessageID`, `Incoming.Title`,
+  `Mention`, `Server.AddressBot` and `AddChatMember`.
+- **`telegram.groups` is in `schemas/node.schema.json`** as well, which the
+  plan did not name.
+- **The crash harness** (`cmd/crash_test.go`) lists its group in its file
+  and addresses the bot in it: it used to rely on an allowed person being
+  answered in any group.
+
+Open: the live check (task 9, step 9), and with it the owner's word on
+ADR-0076, which is still Proposed.
 
 ## What this plan does not do
 

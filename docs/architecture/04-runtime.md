@@ -81,6 +81,45 @@ The press is acknowledged before its action runs (ruling R40); a press
 that becomes no event, or that the access list drops, the transport
 answers itself.
 
+A group chat reaches the agent only when the admin connected it and only
+with a message that addresses the bot (R-DLV-16, R-DLV-17,
+[ADR-0076](../adr/0076-telegram-groups-and-the-addressing-rule.md)). The
+first message from a group that is not connected becomes a card in the
+admin's private chat; Allow writes the group's line to the node's file,
+which the filter reads on every message, so the group works with no
+restart.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant G as Group chat
+    participant T as Telegram transport
+    participant F as Access filter
+    participant R as groups
+    participant Q as Inbox / outbox
+    participant A as Agent
+    participant O as Admin's private chat
+    G->>T: a message with no mention
+    Note over T: dropped: not stored, not logged with its text
+    G->>T: "@bot hello" in a topic
+    T->>F: message event, with its group
+    F->>R: is the group connected? no
+    R->>Q: group.request, once per group
+    F-->>T: dropped
+    Q->>A: lease
+    A->>O: card: title, id, Allow, Refuse
+    A->>G: "no permission yet", once
+    O->>A: press Allow
+    A->>R: write the line to telegram.groups
+    A->>O: the card says connected
+    G->>T: "@bot hello" again
+    T->>F: message event
+    F->>R: is the group connected? yes
+    F->>Q: Put
+    Q->>A: lease, with no admin role
+    A->>G: the answer, in the topic
+```
+
 ```mermaid
 sequenceDiagram
     autonumber

@@ -264,7 +264,11 @@ func TestSendSilentToTopic(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := telegramtest.Outgoing{ChatID: -100, ThreadID: 45, Text: "hi", Silent: true}
-	if sent := fake.Sent(); len(sent) != 1 || sent[0] != want {
+	sent := fake.Sent()
+	if len(sent) == 1 {
+		want.MessageID = sent[0].MessageID
+	}
+	if len(sent) != 1 || sent[0] != want {
 		t.Fatalf("sent %+v, want %+v", sent, want)
 	}
 }
