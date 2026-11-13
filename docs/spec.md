@@ -1020,7 +1020,7 @@ undone with `git revert`.
 | Threat | Measure | Phase |
 |---|---|---|
 | Prompt injection | Confirmation of side effects; external text is data; tainted sessions, the clean-context check and grants (R-POL-6–8); the `web.fetch` URL rule (R-WEB-2); [ADR-0031](adr/0031-agent-security-baseline.md) | P1 |
-| Secret leakage | The model never sees secrets; modules get them via `secret.get` / env per manifest; secrets are redacted before the journal and logs, and the Bot API token is never logged | P1 |
+| Secret leakage | The model never sees secrets; modules get them via `secret.get` per manifest, from the encrypted store or the environment (R-CFG-9); secrets are redacted before the journal and logs, and the Bot API token is never logged | P1 |
 | A stranger messages the bot | `allowed` table with roles: the admin installs modules, others only ask; in M3b a `family` member gets conversation with no tools and no memory, and the family bot migration (M7) decides family access | P1 |
 | Diagnostics expose the node | `ganglion mcp` opens no port: it runs over stdio and relies on the platform's authentication; read access to the data directory is read access to all history | P1 |
 | A host command reads secrets or gains root | Commands run in a sandbox: no privilege gain, a clean environment, the node's environment, memory and secret files unreadable; root and anything that starts a process outside the sandbox are forbidden; the tool is off where the sandbox cannot be set up (R-CMD-1–3, [ADR-0039](adr/0039-command-sandbox.md)) | P1 (M3d) |
@@ -1322,9 +1322,10 @@ phase plan).
   at the default path means defaults; a path given with `--config` or
   `GANGLION_CONFIG` must exist.
 - **R-CFG-2.** A field that takes a secret holds `env:NAME`; the node reads
-  `NAME` or the file named by `NAME_FILE`. A literal value in such a field
-  fails the start. Module secrets are named by the manifest and never
-  appear in the file.
+  `NAME` or the file named by `NAME_FILE`. From M6 it may hold
+  `store:NAME` instead, read from the node's scope of the secret store
+  (R-CFG-9). A literal value in such a field fails the start. Module
+  secrets are named by the manifest and never appear in the file.
 - **R-CFG-3.** Parsing is strict: an unknown key fails the start, and an
   error names the path and the reason. `off` turns a thing off; a missing
   key means the default.
@@ -1347,6 +1348,30 @@ phase plan).
 - **R-CFG-8.** The `memory` section (M5): `prompt_budget`, the size in
   characters of the known-facts block (R-MEM-7), and `review` with
   `enabled` and `quiet` (R-MEM-8).
+- **R-CFG-9.** The secret store (M6, owner, 2026-11-13,
+  [ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md)): secrets
+  are encrypted rows in the node's database, so nobody creates a variable
+  for each one.
+  - A secret belongs to a scope: `module:<name>` or `node`. A module's
+    `secret.get` reads its own scope, then the environment variable of
+    that name; it never reads another module's scope or the node's.
+    Removing a module removes its scope.
+  - `ganglion secret set [--module <name>] NAME` takes the value on
+    standard input, `secret rm` and `secret list` complete it, and a
+    running node sees the change at the next read, with no restart.
+  - Nothing shows a value again. `/secrets` (admin, private chat, no
+    model) lists names, dates and the modules that name each, and removes
+    one. A value the store hands out is redacted from the journal and the
+    logs like one read at the start.
+  - How the owner hands a value over from the chat is a separate decision
+    (section 11).
+- **R-CFG-10.** The store's master key is `GANGLION_MASTER_KEY` or
+  `GANGLION_MASTER_KEY_FILE` when set; otherwise the file `master.key` in
+  the data directory, which the node creates at its first start. A key
+  that does not fit the stored secrets is never replaced silently: the
+  node starts with the store locked (stored secrets read as unset, setting
+  one is refused, `/status` says why) until the admin's `/secrets reset`
+  drops them.
 
 ## 8. First reflex: Deye (P1)
 
@@ -1764,8 +1789,8 @@ fallback until the gate is passed.
 | How long ended sessions (episodes) are kept | Forever, searched by `memory.recall` (today: the newest 500 per chat) · a retention: sessions older than N days are dropped after consolidation has read them | A retention after consolidation (owner, 2026-11-03): nothing is dropped that consolidation has not read, so a fact the owner never confirmed is still turned into one or kept; what was said by chance fades | M7 task 7.2, with the nightly consolidation; N is chosen there |
 | Telemetry of edge nodes | Each edge to an OpenTelemetry collector over OTLP · Prometheus scrapes each edge · snapshots over the NATS bus, collected by the core | Decided by the owner (2026-11-03): over the bus, collected by the core, without JetStream for metrics (R-OBS-9). A collector needs one more link and one more service for every edge; the bus is already there. An outside collector can later be fed by the core | ADR at the start of P2, with the protocol |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
-| Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | An encrypted store, with the page served by the node and the ciphertext returned through Telegram first; the command on the host as the path without a browser (owner's brainstorm, 2026-11-12, [design note](plans/secrets-intake-design.md)). The phase is open: M6 or P2 | A spike on Telegram's `sendData`, then an ADR |
-| Logging the claude CLI provider in | A variable set by hand from `claude setup-token` · a `/login` command of the core that drives the bundled CLI and takes the one-time code from the chat · the same command with the node doing the OAuth exchange itself | The `/login` command driving the CLI; the token goes to the encrypted store and never to the chat (owner's request, 2026-11-13, [design note](plans/model-login-from-chat-design.md)). The phase is open, with the store | A spike on driving `setup-token` without a terminal, then an ADR |
+| Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | The encrypted store and the command on the host are decided and in M6 ([ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), R-CFG-9, R-CFG-10). Still open: the page served by the node with the ciphertext returned through Telegram first (owner's brainstorm, 2026-11-12, [design note](plans/secrets-intake-design.md)); its phase follows the spike | A spike on Telegram's `sendData`, then an ADR |
+| Logging the claude CLI provider in | A variable set by hand from `claude setup-token` · a `/login` command of the core that drives the bundled CLI and takes the one-time code from the chat · the same command with the node doing the OAuth exchange itself | The `/login` command driving the CLI; the token goes to the encrypted store and never to the chat (owner's request, 2026-11-13, [design note](plans/model-login-from-chat-design.md)). The phase is open; the store itself is in M6 | A spike on driving `setup-token` without a terminal, then an ADR |
 | How Telegram updates reach the node | Long polling only · a webhook only · both, chosen in `ganglion.yaml` · both, chosen by the node | Both, chosen in the file, polling by default; the webhook on the node's public listener, verified by Telegram's secret header, registered by the node, with a fallback to polling when the address does not reach it (owner's request, 2026-11-13, [design note](plans/telegram-webhook-design.md), [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md), Proposed). The phase is open | The owner accepts the ADR; a spike on Railway with the test bot before the code |
 
 Each question becomes an ADR (status Proposed) when work on it starts and is
@@ -1846,12 +1871,12 @@ Reviewed at each gate.
 - First-run onboarding without hand-written ids: the node prints a one-time
   pairing code, and the first person to send it to the bot becomes the
   admin (the same idea as node enrolment with a one-time token, 9.3).
-- An encrypted secret store on the node's key, behind the secret source of
-  D-3; secrets set and rotated without a restart. The owner hands a value
-  over from the chat through a page that encrypts it in the browser, so it
-  passes neither the agent nor the chat's history; a build never gets a
-  secret; a device gets its Wi-Fi credentials when it is provisioned, not
-  in its firmware (owner's brainstorm, 2026-11-12,
+- Handing a secret to the node from the chat (the store itself is in M6,
+  [ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md)): a
+  page that encrypts the value in the browser, so it passes neither the
+  agent nor the chat's history; a build never gets a secret; a device gets
+  its Wi-Fi credentials when it is provisioned, not in its firmware
+  (owner's brainstorm, 2026-11-12,
   [design note](plans/secrets-intake-design.md); section 11).
 - Logging the model provider in from the chat: the owner sends `/login`,
   the node answers it without a model, sends the sign-in link and takes the
