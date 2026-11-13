@@ -343,7 +343,7 @@ the family's forum. [Design](telegram-groups-design.md);
 | G.7 **Done** (2026-11-13). The access filter knows groups | A stranger in a connected group passes; anyone in another group is dropped |
 | G.8 **Done** (2026-11-13). The agent: the card with Allow and Refuse; the admin role only in a private chat | The card and the notice go out with no model; Allow writes the line |
 | G.9 Wiring, the example file, the end-to-end scenario (`cmd.TestConnectAGroupThroughTheCard`): **done** (2026-11-13). The live check in the family's forum: **done** (2026-11-13, [recorded](telegram-groups.md#live-check-2026-11-13)) | The scenario passes; the live check is recorded in the plan |
-| G.10 Named destinations: a module's line routes its messages (`notify_to`), topic titles, the admin's tools, `message.send` by name ([plan](telegram-destinations.md), [ADR-0079](../adr/0079-a-modules-messages-go-where-the-nodes-file-says.md), card G-153) | "Send the battery alerts to K7 and to me" holds after one press, with no rebuild |
+| G.10 **Done** (2026-11-13), the live check open. Named destinations: a module's line routes its messages (`notify_to`), topic titles, the admin's tools, `message.send` by name ([plan](telegram-destinations.md), [ADR-0079](../adr/0079-a-modules-messages-go-where-the-nodes-file-says.md), card G-153) | "Send the battery alerts to K7 and to me" holds after one press, with no rebuild |
 
 ### M6 · The agent reconfigures the system (ADR-0015)
 

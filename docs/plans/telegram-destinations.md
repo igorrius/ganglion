@@ -63,9 +63,9 @@ func (f DestinationsFile) SetNotifyTo(module string, names []string) error // ni
 var ErrDestinationUsed, ErrNoDestination error
 ```
 
-- [ ] Tests first: a destination is set, replaced and removed with the file's comments kept; a bad name, the name `owner`, an empty or malformed conv, a duplicate name are refused by the writer and at load with the path of the key; a module's `notify_to` naming an unknown destination, a duplicate or more than 8 is refused at load; removing a destination a module uses returns `ErrDestinationUsed` and names nothing in the file; `SetNotifyTo` writes a flow list, keeps the module's `config`, and with no names removes the key.
-- [ ] Implement, with the schema (`/$defs/destination`, `module.notify_to`) and the schema test's table.
-- [ ] `go test ./settings/ ./schemas/`, lint, commit: `settings: destinations and a module's notify_to in the node's file`.
+- [x] Tests first: a destination is set, replaced and removed with the file's comments kept; a bad name, the name `owner`, an empty or malformed conv, a duplicate name are refused by the writer and at load with the path of the key; a module's `notify_to` naming an unknown destination, a duplicate or more than 8 is refused at load; removing a destination a module uses returns `ErrDestinationUsed` and names nothing in the file; `SetNotifyTo` writes a flow list, keeps the module's `config`, and with no names removes the key.
+- [x] Implement, with the schema (`/$defs/destination`, `module.notify_to`) and the schema test's table.
+- [x] `go test ./settings/ ./schemas/`, lint, commit: `settings: destinations and a module's notify_to in the node's file`.
 
 ### Task 2: Topic titles
 
@@ -89,9 +89,9 @@ func (s *Store) Topics(ctx context.Context, group string) ([]Topic, error)
 func (s *Store) Topic(ctx context.Context, group string, thread int64) (Topic, bool, error)
 ```
 
-- [ ] Tests first. Transport: a topic's message whose root carries `forum_topic_created.name`, the service message that creates a topic, and `forum_topic_edited` each call the hook once with the title; the same title again does not call it; a message that does not address the bot still teaches the title; a private chat and a group that is no forum call nothing. Groups: a title is stored only for a connected group, cut at 128 runes, replaced by a newer one; a group holds at most 200 topics (abuse: a member cannot fill the table).
-- [ ] Implement: `forum_topic_created` and `forum_topic_edited` decoded to `{name}`; `seen` calls the hook, after a per-topic in-memory check that the title changed.
-- [ ] Tests, lint, code map, commit: `telegram, groups: the node remembers the titles of a connected group's topics`.
+- [x] Tests first. Transport: a topic's message whose root carries `forum_topic_created.name`, the service message that creates a topic, and `forum_topic_edited` each call the hook once with the title; the same title again does not call it; a message that does not address the bot still teaches the title; a private chat and a group that is no forum call nothing. Groups: a title is stored only for a connected group, cut at 128 runes, replaced by a newer one; a group holds at most 200 topics (abuse: a member cannot fill the table).
+- [x] Implement: `forum_topic_created` and `forum_topic_edited` decoded to `{name}`; `seen` calls the hook, after a per-topic in-memory check that the title changed.
+- [x] Tests, lint, code map, commit: `telegram, groups: the node remembers the titles of a connected group's topics`.
 
 ### Task 3: A module's messages go to its line's destinations
 
@@ -112,9 +112,9 @@ To string `json:"to,omitempty"` // the destination's name; "" is the owner's pri
 Destinations DestinationFunc // func(name string) (transport, conv string, ok bool, err error); NoDestinations when unset
 ```
 
-- [ ] Tests first. Module host: with no `notify_to` one event goes to the owner's chat under the old key; with `[family-k7, owner]` two events go out, the first to the topic's conversation with `To: "family-k7"` and a key ending in `:to:family-k7`, the second as before; the daily count rises by one; a name that does not resolve sends nothing there, sends the rest, and is counted as `no_destination`; the limit line and the chain line go to the owner only; changing the line and reloading changes where the next message goes; a rerun of the same run puts nothing twice. Agent: an event with `To` set sends the text, signed, to the event's conversation, writes no note into that conversation's history and does not roll its session; an event for the owner is as before; abuse: an event with `To` set whose principal is not an admin, or whose source is not the node, sends nothing.
-- [ ] Implement.
-- [ ] Tests, lint, commit: `modhost: a module's message goes to every destination its line names`.
+- [x] Tests first. Module host: with no `notify_to` one event goes to the owner's chat under the old key; with `[family-k7, owner]` two events go out, the first to the topic's conversation with `To: "family-k7"` and a key ending in `:to:family-k7`, the second as before; the daily count rises by one; a name that does not resolve sends nothing there, sends the rest, and is counted as `no_destination`; the limit line and the chain line go to the owner only; changing the line and reloading changes where the next message goes; a rerun of the same run puts nothing twice. Agent: an event with `To` set sends the text, signed, to the event's conversation, writes no note into that conversation's history and does not roll its session; an event for the owner is as before; abuse: an event with `To` set whose principal is not an admin, or whose source is not the node, sends nothing.
+- [x] Implement.
+- [x] Tests, lint, commit: `modhost: a module's message goes to every destination its line names`.
 
 ### Task 4: The admin's tools, and `message.send` by name
 
@@ -132,16 +132,36 @@ Destinations DestinationFunc // func(name string) (transport, conv string, ok bo
 
 `message.send`'s `conv` also takes a destination's name.
 
-- [ ] Tests first, per tool: the happy path through the fake file; each refusal; the question's text with a title that holds Markdown; abuse: `destination.set` to a group that is not connected, to a topic the node has not seen, or to a stranger's private chat is refused; a title never appears in a result unwrapped.
-- [ ] Implement, with the texts in three languages and the wiring.
-- [ ] Tests, lint, code map, commit: `tools: the admin names destinations and routes a module's messages in words`.
+- [x] Tests first, per tool: the happy path through the fake file; each refusal; the question's text with a title that holds Markdown; abuse: `destination.set` to a group that is not connected, to a topic the node has not seen, or to a stranger's private chat is refused; a title never appears in a result unwrapped.
+- [x] Implement, with the texts in three languages and the wiring.
+- [x] Tests, lint, code map, commit: `tools: the admin names destinations and routes a module's messages in words`.
 
 ### Task 5: End to end, and what readers are told
 
 **Files:** `cmd/groups_test.go`, `skills/builtin/module-writing/SKILL.md`, `skills/skills_test.go`, `ganglion.example.yaml`, `docs/architecture/04-runtime.md`, `docs/architecture/05-code-map.md`, `docs/README.md`, `docs/plans/p1-all-in-one.md`, `tools/chatlab/no-scenario.txt`
 
-- [ ] A test with the node's binary: a connected forum with a topic titled K7; the admin's line `notify_to` is set through the tools by a scripted model; the fake model asks for `message.send` to `family-k7` and the message lands in the topic.
-- [ ] The module-writing skill says that where messages go is the node's file, set with `module.notify_to`, never the module's code.
-- [ ] The example file, the runtime page's notify section and diagram, the code map, "Where we are".
-- [ ] `make lint`, `go test ./...`, commit, pull request.
+- [x] A test with the node's binary (`cmd.TestAnAdminNamesATopicAndSendsThere`): a connected forum whose topic's title the node learns from a message that did not address the bot; a scripted model calls `destination.set`, the admin confirms, the file has the line; the model calls `message.send` to `family-k7` and the message lands in the topic. A module's fan-out is covered in `modhost` (`TestAMessageGoesToEveryDestinationOfTheLine` and its neighbours), not here: the test node runs no module.
+- [x] The module-writing skill says that where messages go is the node's file, set with `module.notify_to`, never the module's code.
+- [x] The example file, the runtime page's notify section and diagram, the code map, "Where we are".
+- [x] `make lint`, `go test ./...`, commit, pull request.
 - [ ] Live: in the private chat, "send the battery alerts to the K7 topic and to me"; one press; the next alert is in both places. Record it here.
+
+## As built (2026-11-13)
+
+All five tasks are done except the live check. What differs from the plan:
+
+- **A topic the node has not seen can still be named.** `destination.set`
+  takes any topic of a connected group; the question then names it by its
+  number. A topic renamed before the node saw the rename is known by the
+  title it was created with, since that is what its root carries; the
+  admin can name it by number, or the next rename corrects the title.
+- **`TopicFunc` carries `renamed`,** so a title from a rename is not
+  replaced by the older one of the topic's root, also over a restart.
+- **`destination.list` is not local-safe:** its result holds titles
+  written by a group's members.
+- **The texts about groups lost their Markdown.** A fixed text is shown as
+  written, so the `**` and the backticks of the card of
+  [the first plan](telegram-groups.md) were shown literally; they are
+  quotation marks now.
+- **Where a place is named in a question, it is a text of its own**
+  (`ask.place_*`), so the question reads in the person's language.
