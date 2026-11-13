@@ -36,6 +36,7 @@ config/agent.go
 config/bootstrap.go
 config/config.go
 config/delivery.go
+config/groups.go
 config/host.go
 config/memory.go
 config/storage.go

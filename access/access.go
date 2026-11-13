@@ -164,36 +164,134 @@ func (l *List) Admins(ctx context.Context) ([]string, error) {
 }
 
 // fromPerson are the kinds of events a person sends; their payloads name
-// the sender under "from" (event.Message, event.Decision).
+// the sender under "from" and the group chat under "group" (event.Message,
+// event.Decision).
 var fromPerson = map[event.Kind]bool{event.KindMessage: true, event.KindDecision: true}
 
-// Filter wraps next so that messages and button presses from principals
-// not on the list never reach it. A dropped event returns
-// transport.ErrDropped, so the transport confirms it, answers a press at
-// once, and the stranger gets no reply; it is logged without its text.
-// Other events pass through. An error reading the list is returned, so
+// GroupsFunc reports whether a group chat is connected.
+type GroupsFunc func(ctx context.Context, group string) (bool, error)
+
+// UnknownGroupFunc is told about a group chat that is not connected, so
+// an admin can be asked. An error means it could not ask.
+type UnknownGroupFunc func(ctx context.Context, g event.GroupSeen) error
+
+// Groups is what the filter knows about group chats.
+type Groups struct {
+	Has     GroupsFunc
+	Unknown UnknownGroupFunc
+}
+
+// NoGroups connects no group and tells nobody.
+func NoGroups() Groups {
+	return Groups{
+		Has:     func(context.Context, string) (bool, error) { return false, nil },
+		Unknown: func(context.Context, event.GroupSeen) error { return nil },
+	}
+}
+
+// reason is why an event is kept out of the inbox, for the metric.
+type reason string
+
+// Reasons.
+const (
+	reasonMalformed reason = "malformed"
+	reasonStranger  reason = "stranger"
+	reasonGroup     reason = "group"  // from a group chat that is not connected
+	reasonJoined    reason = "joined" // the bot was added to a group: never for the agent
+)
+
+// Filter wraps next so that only these reach it (spec 7.8, R-DLV-17): in
+// a private chat, messages and button presses of principals on the list;
+// in a group chat, those of anyone when the group is connected, and of
+// nobody, an admin included, when it is not. A group that is not connected
+// is reported to g.Unknown when someone writes in it or adds the bot to it.
+// A dropped event returns transport.ErrDropped, so the transport confirms
+// it, answers a press at once, and nobody gets a reply; it is logged
+// without its text. Events that no person sent pass through. An error
+// reading the list or the groups, or reporting a group, is returned, so
 // the transport offers the update again later.
-func (l *List) Filter(next transport.Sink, logger *slog.Logger) transport.Sink {
-	return func(ctx context.Context, e event.Event) error {
-		if !fromPerson[e.Kind] {
-			return next(ctx, e)
-		}
-		var m event.Message
-		if err := json.Unmarshal(e.Payload, &m); err != nil || m.From == "" {
-			l.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "malformed")))
-			logger.Warn("access: malformed message dropped", "id", e.ID, "conv", e.Conv, "source", e.Source)
-			return fmt.Errorf("access: malformed: %w", transport.ErrDropped)
-		}
-		_, ok, err := l.Role(ctx, m.From)
-		if err != nil {
+func (l *List) Filter(next transport.Sink, g Groups, logger *slog.Logger) transport.Sink {
+	return filter{l: l, next: next, g: g, log: logger}.sink
+}
+
+// filter is one Filter.
+type filter struct {
+	l    *List
+	next transport.Sink
+	g    Groups
+	log  *slog.Logger
+}
+
+func (f filter) sink(ctx context.Context, e event.Event) error {
+	if e.Kind == event.KindGroupJoined {
+		return f.joined(ctx, e)
+	}
+	if !fromPerson[e.Kind] {
+		return f.next(ctx, e)
+	}
+	var m event.Message
+	if err := json.Unmarshal(e.Payload, &m); err != nil || m.From == "" {
+		return f.drop(ctx, e, reasonMalformed, event.Message{})
+	}
+	if m.Group != "" {
+		return f.fromGroup(ctx, e, m)
+	}
+	_, ok, err := f.l.Role(ctx, m.From)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return f.drop(ctx, e, reasonStranger, m)
+	}
+	return f.next(ctx, e)
+}
+
+// fromGroup passes an event of a connected group and reports a message of
+// one that is not. A press reports nothing: only a message asks.
+func (f filter) fromGroup(ctx context.Context, e event.Event, m event.Message) error {
+	ok, err := f.g.Has(ctx, m.Group)
+	if err != nil {
+		return err
+	}
+	if ok {
+		return f.next(ctx, e)
+	}
+	if e.Kind == event.KindMessage {
+		seen := event.GroupSeen{Group: m.Group, Conv: e.Conv, Title: m.GroupTitle, From: m.From, Name: m.Name}
+		if err := f.g.Unknown(ctx, seen); err != nil {
 			return err
 		}
-		if !ok {
-			l.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "stranger")))
-			logger.Warn("access: message from a stranger dropped", "kind", e.Kind,
-				"principal", m.From, "name", m.Name, "conv", e.Conv, "text_len", len(m.Text))
-			return fmt.Errorf("access: stranger: %w", transport.ErrDropped)
-		}
-		return next(ctx, e)
 	}
+	return f.drop(ctx, e, reasonGroup, m)
+}
+
+// joined reports a group the bot was added to when it is not connected.
+// The event is never for the agent.
+func (f filter) joined(ctx context.Context, e event.Event) error {
+	var g event.GroupSeen
+	if err := json.Unmarshal(e.Payload, &g); err != nil || g.Group == "" || g.From == "" {
+		return f.drop(ctx, e, reasonMalformed, event.Message{})
+	}
+	ok, err := f.g.Has(ctx, g.Group)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		if err := f.g.Unknown(ctx, g); err != nil {
+			return err
+		}
+	}
+	return f.drop(ctx, e, reasonJoined, event.Message{From: g.From, Name: g.Name})
+}
+
+// drop counts and logs an event kept out of the inbox, without its text.
+func (f filter) drop(ctx context.Context, e event.Event, why reason, m event.Message) error {
+	f.l.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", string(why))))
+	level := slog.LevelWarn
+	if why == reasonJoined {
+		level = slog.LevelInfo // nothing was refused: the event is only never the agent's
+	}
+	f.log.Log(ctx, level, "access: event dropped", "reason", string(why), "kind", e.Kind, "id", e.ID,
+		"principal", m.From, "name", m.Name, "conv", e.Conv, "source", e.Source, "text_len", len(m.Text))
+	return fmt.Errorf("access: %s: %w", why, transport.ErrDropped)
 }
