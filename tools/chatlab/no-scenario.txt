@@ -22,7 +22,6 @@ agent/model.go
 agent/modules.go
 agent/persona.go
 agent/restart.go
-agent/secrets_cmd.go
 agent/state.go
 agent/telemetry.go
 alert/**
@@ -42,7 +41,6 @@ config/delivery.go
 config/groups.go
 config/host.go
 config/memory.go
-config/secrets.go
 config/storage.go
 config/web.go
 core/**

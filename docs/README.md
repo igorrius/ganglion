@@ -24,7 +24,14 @@ Start here when coming back to the project.
 - **Next:** M6, the agent reconfigures the system. It now includes the
   encrypted secret store (task 6.5,
   [ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), owner,
-  2026-11-13) and a webhook mode for the Telegram transport beside
+  2026-11-13): built the same day on branch `m6-secret-store`
+  ([plan](plans/p1-m6-secret-store.md)): `ganglion secret set|rm|list` on
+  the host, `store:NAME` in `ganglion.yaml`, a scope per module, `/secrets`
+  in the chat, a store that locks on a key that does not fit. Left: the
+  merge, and the owner's live check on Railway (one of `deye-reader`'s
+  secrets moved from a variable into the store,
+  [runbook](deploy-railway.md#module-secrets)). Handing a secret over from
+  the chat stays open (spec section 11). M6 also has a webhook mode for the Telegram transport beside
   polling (task 6.6,
   [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md), owner,
   2026-11-13): done the same day: built, checked live on Railway with the
@@ -464,8 +471,8 @@ Start here when coming back to the project.
   - **M4a, config and models by purpose, done (2026-11-09)** on branch `m4-reflexes`, checked live on
     the test bot by the owner (turns, `/status`, memory, `/restart` with exit 75) ([plan](plans/p1-m4a-config.md), tasks 4.1 and 4.2,
     [ADR-0059](adr/0059-node-config-file.md), [ADR-0060](adr/0060-models-by-purpose.md)):
-    - one config file, `ganglion.yaml`, with `schemas/node.schema.json`; a secret is written as `env:NAME`,
-      never in the file; parsing is strict and a bad file fails the start naming the path;
+    - one config file, `ganglion.yaml`, with `schemas/node.schema.json`; a secret is written as `env:NAME`
+      (since M6 also `store:NAME`), never in the file; parsing is strict and a bad file fails the start naming the path;
     - the retired variables (`GANGLION_TZ` and the rest) fail the start with a hint to the new key;
     - models by purpose (`chat`, `check`, ...), each with an order and an effort; the tools and the live
       scripts read example files;

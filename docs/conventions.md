@@ -211,7 +211,8 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Alerts to every admin's private chat | `alert` |
 | A route the outside world can reach, and the check that the node's public address reaches this process | `publichttp` (`Handle`, `Reaches`); never the metrics listener |
 | Principal → private conversation | the transport (`telegram.PrivateConv`) |
-| Secrets from the environment and `*_FILE` | `secrets` |
+| Secrets from the environment and `*_FILE`; several sources read in order | `secrets` (`Env`, `First`) |
+| Stored secrets: reading one scope as a `secrets.Source`, setting, listing names, never a value to a person | `secrets/vault` (`Vault.Source`, `Set`, `List`) |
 | Making the process not dumpable, so its `/proc` files are shut to its user's other processes (the node, chatlab, tests) | `sandbox.Harden`, `sandbox.SetDumpable` |
 | Version, commit, toolchain of this binary | `internal/buildinfo` |
 | Comparing web addresses (lower-case host, an internationalised host in punycode, no fragment, no default port); finding them in text (`Find`, the one URL pattern), defanging text (`Defang`) | `internal/urlnorm` |

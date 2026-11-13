@@ -255,6 +255,12 @@ func named(what, name, rest string) (string, string) {
 	return fmt.Sprintf("a %s the module names %s", what, rest), text.Truncate(name, 100)
 }
 
+// unsetSecret ends the refusal of a secret the node has no value for, and
+// says how the owner gives one (ADR-0077). The words are fixed: no name
+// from the manifest goes into the command.
+const unsetSecret = "is not set on this node: the owner sets it on the host with " +
+	"`ganglion secret set --module <module> <NAME>`, the value on standard input; nothing restarts"
+
 // missing names the first secret that is the node's own or not set, or
 // required config key that is not given, as a refusal and its detail.
 func missing(m runner.Manifest, secrets Secrets, config map[string]any) (string, string) {
@@ -263,7 +269,7 @@ func missing(m runner.Manifest, secrets Secrets, config map[string]any) (string,
 			return named("the secret", name, "is the node's own")
 		}
 		if !secrets.Set(name) {
-			return named("the secret", name, "is not set on this node")
+			return named("the secret", name, unsetSecret)
 		}
 	}
 	for _, key := range sortedKeys(m.Config) {

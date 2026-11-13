@@ -153,17 +153,17 @@ type First []Source
 func (f First) Secret(name string) (string, error)
 ```
 
-- [ ] **Step 1: Failing tests** (table tests, `package secrets`):
+- [x] **Step 1: Failing tests** (table tests, `package secrets`):
   - `ModuleScope("local/x")` is `"module:local/x"`;
   - `ValidName`: `DEYE_APP_ID`, `wifi-home`, `a.b` pass; `""`, `1A`, a name with a space, with
     `/`, with `:`, and one of 129 characters fail;
   - `First`: the second source answers when the first has `""`; the first wins when both have a
     value; an error of the first is returned and the second is not asked (a source that fails
     the test when called); an empty `First` returns `""` and no error.
-- [ ] **Step 2: Run, see them fail:** `go test ./secrets -run 'Scope|ValidName|First'`.
-- [ ] **Step 3: Implement.** Update the package comment: the encrypted store is in
+- [x] **Step 2: Run, see them fail:** `go test ./secrets -run 'Scope|ValidName|First'`.
+- [x] **Step 3: Implement.** Update the package comment: the encrypted store is in
   `secrets/vault`.
-- [ ] **Step 4: `make lint test`; commit, push.**
+- [x] **Step 4: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "secrets: scopes and sources read in order (ADR-0077)"
@@ -213,7 +213,7 @@ func NewKey() (Key, error)
 func LoadKey(src secrets.Source, path string) (key Key, created bool, err error)
 ```
 
-- [ ] **Step 1: Failing tests** (`t.TempDir()`, `secrets.Env` with fake `Getenv`/`ReadFile`):
+- [x] **Step 1: Failing tests** (`t.TempDir()`, `secrets.Env` with fake `Getenv`/`ReadFile`):
   - no variable, no file: a file of exactly 32 bytes appears with mode `0600`, `created` is
     true; a second call returns the same key and `created` false;
   - the variable set to base64 of 32 bytes: that key, no file is made at `path`;
@@ -224,11 +224,11 @@ func LoadKey(src secrets.Source, path string) (key Key, created bool, err error)
     that the file `LoadKey` makes is `0600` under a `umask` of 0;
   - `path == ""`: two calls give two different keys, nothing is written in the working folder;
   - two goroutines call `LoadKey` on one new path: both return the same key.
-- [ ] **Step 2: Run, see them fail:** `go test ./secrets/vault -run Key`.
-- [ ] **Step 3: Implement.** Create with `os.OpenFile(path, O_WRONLY|O_CREATE|O_EXCL, 0o600)`,
+- [x] **Step 2: Run, see them fail:** `go test ./secrets/vault -run Key`.
+- [x] **Step 3: Implement.** Create with `os.OpenFile(path, O_WRONLY|O_CREATE|O_EXCL, 0o600)`,
   write, `Sync`, close; on `os.ErrExist` read the file. Never truncate or rewrite an existing
   file.
-- [ ] **Step 4: `make lint test`; commit, push.**
+- [x] **Step 4: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "vault: the master key — the operator's, or a file the node makes (R-CFG-10)"
@@ -321,7 +321,7 @@ The cipher (`cipher.go`, pure): `seal(aead, scope, name, plaintext) (nonce, ciph
 `open(aead, scope, name, nonce, ciphertext) ([]byte, error)`. The additional data is
 `"ganglion-secret-v1\x00" + scope + "\x00" + name`.
 
-- [ ] **Step 1: Failing tests** (`sqlitedb.Open(ctx, ":memory:")`, a fixed clock):
+- [x] **Step 1: Failing tests** (`sqlitedb.Open(ctx, ":memory:")`, a fixed clock):
   - `Set` then `Get` returns the value; `Get` of an unknown name is `""`, no error;
   - `Set` twice keeps one row with the second value and the second time;
   - two scopes hold the same name with different values;
@@ -344,8 +344,8 @@ The cipher (`cipher.go`, pure): `seal(aead, scope, name, plaintext) (nonce, ciph
   - metrics: after one `Set`, one `Get` of a stored name and one of an unknown name, the
     Prometheus text has the counter with `op`/`outcome` pairs `set/ok`, `get/ok`, `get/unset`
     (read it back as `modstore`'s telemetry test does).
-- [ ] **Step 2: Run, see them fail:** `go test ./secrets/vault`.
-- [ ] **Step 3: Implement.**
+- [x] **Step 2: Run, see them fail:** `go test ./secrets/vault`.
+- [x] **Step 3: Implement.**
   - `Open`: `fs.Sub(migrations, "migrations")`, `sqlitedb.Migrate(ctx, db, "secrets", sub)`,
     `aes.NewCipher(key[:])`, `cipher.NewGCM`. The check value is task 4: leave `secret_meta`
     unused here.
@@ -356,7 +356,7 @@ The cipher (`cipher.go`, pure): `seal(aead, scope, name, plaintext) (nonce, ciph
     `remove`, `reset`) and `outcome` (`ok`, `unset`, `locked`, `error`); name it and register
     it the way `modstore/telemetry.go` does. No scope and no name in a label.
   - Errors: `fmt.Errorf("vault: get %s %s: %w", scope, name, err)`.
-- [ ] **Step 4: `make lint test`; commit, push.**
+- [x] **Step 4: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "vault: secrets as encrypted rows, bound to their scope and name (R-CFG-9)"
@@ -400,7 +400,7 @@ English: `status.secrets_locked: "Secret store: locked"`,
 `status.reason_secrets_key: "its key does not fit the stored secrets; /secrets reset drops them"`.
 Write the Russian and Ukrainian lines in the same commit.
 
-- [ ] **Step 1: Failing tests:**
+- [x] **Step 1: Failing tests:**
   - the first `Open` on an empty database writes one `secret_meta` row with key `check`; a
     second `Open` with the same key is not locked and reads the secrets;
   - `Open` with another key on a database that has the check row: no error, `Locked()` is
@@ -415,13 +415,13 @@ Write the Russian and Ukrainian lines in the same commit.
   - `Status`: no line when unlocked; one `status.Fail` line in `status.SectionProblems` with
     `texts.StatusSecretsLocked` and `texts.StatusReasonSecretsKey` when locked;
   - the counter has `get/locked` after a `Get` on a locked store.
-- [ ] **Step 2: Run, see them fail:** `go test ./secrets/vault -run 'Lock|Reset|Status'`.
-- [ ] **Step 3: Implement.** The check value is `seal` of the constant
+- [x] **Step 2: Run, see them fail:** `go test ./secrets/vault -run 'Lock|Reset|Status'`.
+- [x] **Step 3: Implement.** The check value is `seal` of the constant
   `"ganglion-secret-store"` under scope `""` and name `"check"`. `Reset` runs in
   `sqlitedb.Immediate`: delete from `secrets`, replace the check row. `locked` is an
   `atomic.Bool`. `Open` logs nothing: `config` passes the logger's concern to `/status`, and
   `cmd` prints the locked state itself (tasks 6 and 7).
-- [ ] **Step 4: `make lint test`; commit, push.**
+- [x] **Step 4: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "vault: a key that does not fit locks the store; reset drops it (R-CFG-10)"
@@ -468,7 +468,7 @@ func (f File) StoreNames() []string
 func (m Models) Keys(s Sources) (map[string]string, error) // was (src secrets.Source)
 ```
 
-- [ ] **Step 1: Failing tests:**
+- [x] **Step 1: Failing tests:**
   - `SecretRef` unmarshals `env:TELEGRAM_BOT_TOKEN` and `store:TELEGRAM_BOT_TOKEN`; it refuses
     `store:`, `store:lower`, `vault:X`, a literal, and the error says
     `must be env:NAME or store:NAME` and never repeats the value;
@@ -483,13 +483,13 @@ func (m Models) Keys(s Sources) (map[string]string, error) // was (src secrets.S
     (`store:BOT`), not a variable;
   - `config.show` (`cmd/mcp_test.go`): an `env:` field is unchanged; a `store:` field shows
     `store:NAME (unset)` here — task 6 makes it read the database.
-- [ ] **Step 2: Run, see them fail:** `go test ./settings ./cmd`.
-- [ ] **Step 3: Implement.** Every caller that passed a `secrets.Source` passes
+- [x] **Step 2: Run, see them fail:** `go test ./settings ./cmd`.
+- [x] **Step 3: Implement.** Every caller that passed a `secrets.Source` passes
   `settings.Sources{Env: src, Store: secrets.None{}}` for now: `cmd/run.go` (`bootstrap`,
   `fromFile`, `agentSettings`), `cmd/mcp.go` (`runSettings` and below),
   `tools/modelcompare/main.go`. In `secretSetting`, `diag.Setting.Env` is set only for
   `SchemeEnv`. Update `ganglion.example.yaml`'s header comment and `run`'s `Description`.
-- [ ] **Step 4: `make lint test`; commit, push.**
+- [x] **Step 4: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "settings: a secret field takes store:NAME beside env:NAME (R-CFG-2)"
@@ -563,7 +563,7 @@ type NodeFiles struct {
 }
 ```
 
-- [ ] **Step 1: Failing tests:**
+- [x] **Step 1: Failing tests:**
   - `modhost` (the probe module of `runner/runnertest/probe`, as the existing host tests use
     it): a module whose manifest grants `PROBE_TOKEN` gets the value its own source returns; a
     second module with the same manifest and a different source gets its own value;
@@ -595,8 +595,8 @@ type NodeFiles struct {
     that names the reference and says the store is locked;
   - `cmd/mcp_test.go`: `config.show` shows `store:BOT (set)` for a row that exists and
     `(unset)` otherwise, with no key file present.
-- [ ] **Step 2: Run, see them fail:** `go test ./modhost ./tool/builtin ./config ./sandbox ./cmd`.
-- [ ] **Step 3: Implement.**
+- [x] **Step 2: Run, see them fail:** `go test ./modhost ./tool/builtin ./config ./sandbox ./cmd`.
+- [x] **Step 3: Implement.**
   - `config.Vault`: `vault.LoadKey(moduleSecrets(b), b.MasterKey)`, then
     `vault.Open(Startup, Database.DB, key, time.Now)`. A new key file is worth one log line;
     `config` holds no log lines about the product, so `LoadKey`'s `created` goes to a small
@@ -622,7 +622,7 @@ type NodeFiles struct {
     and update the rows of `secrets`, `modhost`, `sandbox`, `config`, the binary, and the
     dependency rules (`secrets/vault` imports `secrets`, `sqlitedb`, `status`, `texts`;
     `settings` does not import `secrets/vault`).
-- [ ] **Step 4: `make lint test`; commit, push.**
+- [x] **Step 4: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "config: modules read their own scope of the secret store, then the environment (R-CFG-9)"
@@ -654,7 +654,7 @@ ganglion secret list [--db <file>]
 `--module deye-reader` and `--module local/deye-reader` are the same module; without
 `--module` the scope is `node`.
 
-- [ ] **Step 1: Failing tests** (`newRootIO(strings.NewReader(value), &out, &errOut, nil)`, a
+- [x] **Step 1: Failing tests** (`newRootIO(strings.NewReader(value), &out, &errOut, nil)`, a
   database in `t.TempDir()`):
   - `secret set --module deye-reader DEYE_APP_ID` with `"abc123\n"` on standard input stores
     `abc123` in `module:local/deye-reader`; the output is one line naming the scope and the
@@ -675,13 +675,13 @@ ganglion secret list [--db <file>]
     still succeeds (ruling 2);
   - **abuse:** the value never appears in `out`, `errOut` or any returned error across every
     case above (one helper asserts it).
-- [ ] **Step 2: Run, see them fail:** `go test ./cmd -run Secret`.
-- [ ] **Step 3: Implement.** Read with `io.LimitReader(in, vault.MaxValue+1)`; trim surrounding
+- [x] **Step 2: Run, see them fail:** `go test ./cmd -run Secret`.
+- [x] **Step 3: Implement.** Read with `io.LimitReader(in, vault.MaxValue+1)`; trim surrounding
   whitespace as `secrets.Env` does. `by` is `"cli"`. The command reads the environment through
   `secrets.OSEnv()` for the operator's key only; it loads no settings file. Help text: say the
   value is read from standard input and show `printf %s "$VALUE" | ganglion secret set …` and
   `ganglion secret set … < file`.
-- [ ] **Step 4: `make lint test`; commit, push.**
+- [x] **Step 4: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "cmd: ganglion secret set, rm and list — a value on stdin, no restart (R-CFG-9)"
@@ -750,7 +750,7 @@ secrets.usage: "Usage: /secrets, /secrets rm <module|node> NAME, /secrets reset"
 The command hint: `"Stored secrets: /secrets, /secrets rm <module|node> NAME"`, in the three
 languages of `commandTable`.
 
-- [ ] **Step 1: Failing tests** (the agent's command tests, as `agent/modules_test.go` and the
+- [x] **Step 1: Failing tests** (the agent's command tests, as `agent/modules_test.go` and the
   `/memory` tests do them, with a fake `SecretsAdmin`):
   - a person who is not an admin gets `reply.not_available`; an admin in a group gets
     `secrets.private_only`; neither calls the store;
@@ -767,12 +767,12 @@ languages of `commandTable`.
     names the scope and the secret's name and nothing else;
   - `/secrets` is in `Commands()` with its hint; the turn's outcome is `OutcomeCommand` and no
     model is called.
-- [ ] **Step 2: Run, see them fail:** `go test ./agent -run Secrets`.
-- [ ] **Step 3: Implement.** Follow `agent/memory_cmd.go` for the admin and private-chat
+- [x] **Step 2: Run, see them fail:** `go test ./agent -run Secrets`.
+- [x] **Step 3: Implement.** Follow `agent/memory_cmd.go` for the admin and private-chat
   checks and `agent/modules.go` for the reply-and-note pair. The verbs are a dispatch table
   (conventions §4), not a growing `switch`. Add `withSecrets(d Deps)` beside `withMemory`.
   `config/agent.go` passes `do.MustInvoke[*vault.Vault](i)`.
-- [ ] **Step 4: `make lint test`; commit, push.**
+- [x] **Step 4: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "agent: /secrets lists names, removes one and resets a locked store (R-CFG-9, R-CFG-10)"
@@ -788,7 +788,7 @@ git commit -m "agent: /secrets lists names, removes one and resets a locked stor
   `docs/architecture/05-code-map.md`, `docs/README.md`, `docs/plans/p1-all-in-one.md`,
   `README.md` if it lists the commands
 
-- [ ] **Step 1: The acceptance test** (`config/secrets_accept_test.go`; a node container on a
+- [x] **Step 1: The acceptance test** (`config/secrets_accept_test.go`; a node container on a
   database **file** in `t.TempDir()`, the probe module installed as the module-host tests
   install it; this is the phase plan's "done when" of task 6.5, one subtest each):
   - *no restart:* the module's `secret.get` is unset; a second `vault.Open` on the same file
@@ -800,11 +800,11 @@ git commit -m "agent: /secrets lists names, removes one and resets a locked stor
     file's bytes does not find the value;
   - *the wrong key:* the node container started on the copy starts, its `/status` has the
     locked line, and the module's secret reads as unset.
-- [ ] **Step 2: The lab scenario** (`tools/chatlab/scenarios/secrets.yaml`, scripted model):
+- [x] **Step 2: The lab scenario** (`tools/chatlab/scenarios/secrets.yaml`, scripted model):
   `/secrets` on a fresh lab node answers that nothing is stored; a non-admin peer gets the
   not-available reply. Follow an existing command scenario for the shape; run it with the
   make target the other scenarios use.
-- [ ] **Step 3: Docs.**
+- [x] **Step 3: Docs.**
   - `deploy-railway.md`: a section "Module secrets": moving one from a Railway variable into
     the store (`railway ssh`, then `printf %s "$DEYE_APP_ID" | ganglion secret set --module
     deye-reader DEYE_APP_ID`), that the variable can be deleted after `/secrets` shows the
@@ -819,13 +819,41 @@ git commit -m "agent: /secrets lists names, removes one and resets a locked stor
 - [ ] **Step 4: The live check on Railway** (the owner's, recorded in `docs/README.md`): one
   of `deye-reader`'s four secrets moved into the store, its variable deleted, the module's
   next run healthy, `/secrets` showing the name.
-- [ ] **Step 5: `make lint test`; commit, push.**
+- [x] **Step 5: `make lint test`; commit, push.**
 
 ```bash
 git commit -m "secrets: acceptance for the store, the Railway steps, task 6.5 closed"
 ```
 
 ---
+
+## Notes from the implementation (2026-11-13)
+
+Where the code differs from the tasks above:
+
+- **`sqlitedb.Migrate` is safe for two processes** (task 4's commit): each
+  migration is applied under the write lock, with the version checked again
+  there. Ruling 2 lets a command open the store beside a starting node, and
+  both then migrate the `secrets` component.
+- **The key file appears by a hard link** from a temporary file, so a reader
+  never sees it half written; a file system without hard links gets it
+  written in place, created exclusively.
+- **`run` logs no warning of its own for a locked store.** The node's start
+  says the store is locked (`vault.Announce`) and `run` says which optional
+  part is off for want of its `store:NAME`.
+- **`ganglion secret set` reads 64 bytes past the longest value**, so a
+  value of 4096 bytes with its newline is stored and an endless input still
+  ends.
+- **`set` makes a database that is not there** (a secret stored before the
+  node's first start); `rm` and `list` refuse a path with no database.
+- **`modhost.OneSource` and `modhost.NothingToForget`** exist for a host
+  without a store.
+- **The refusal of an unset secret at install** now says how the owner sets
+  one (`modstore`), so the agent can pass it on.
+- **The lab scenario is `mech-secrets`**; the lab has one peer, so the
+  refusal of a person who is not an admin is held by the agent's unit test.
+- **Task 6.5 is not closed:** the merge and step 4 of task 9, the owner's
+  live check on Railway, are left.
 
 ## What this plan leaves out
 
