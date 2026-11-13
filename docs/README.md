@@ -6,6 +6,13 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
+- **Now:** Telegram groups (MG), added on 2026-11-13: the owner moved the
+  production bot's token to ganglion and removed the old bot, so the
+  family's forum needs the bot connected by a press and answering only when
+  addressed ([design](plans/telegram-groups-design.md),
+  [plan](plans/telegram-groups.md),
+  [ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md),
+  Proposed).
 - **Next:** M6, the agent reconfigures the system. The Railway deploy
   (board card G-121) is up since 2026-11-11: service `ganglion` beside the
   current bot, on the test bot, the agent through the claude CLI, the
