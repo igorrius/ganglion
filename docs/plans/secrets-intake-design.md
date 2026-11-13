@@ -6,6 +6,12 @@ plan when the work is taken into a phase; until then the spec lists it under
 [Open decisions](../spec.md#11-open-decisions) and
 [Not now](../spec.md#14-not-now).
 
+**2026-11-13:** the store (part 1 of section 4) and the command on the host
+are decided in [ADR-0077](../adr/0077-encrypted-secret-store-on-the-nodes-key.md)
+and taken into M6 (task 6.5). The master key is a file the node makes, and a
+secret belongs to a module's scope. The request, the page and the return
+channel stay as notes here.
+
 Marks: **owner** means the owner decided it in the brainstorm; **call**
 means the author's default, open to the owner's correction.
 

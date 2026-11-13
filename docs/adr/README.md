@@ -82,6 +82,7 @@ considered, how they compare, the decision and its consequences. See
 | [0074](0074-a-modules-name-goes-under-its-message.md) | A module's name goes under its message as the node's signature, not before its text | Accepted | 2026-11-11 |
 | [0075](0075-reading-a-modules-state-keeps-the-session-clean.md) | Reading a module's state keeps the session clean, and a write in a tainted session asks instead of refusing | Accepted | 2026-11-11 |
 | [0076](0076-telegram-groups-and-the-addressing-rule.md) | Connect a Telegram group by the admin's press and answer in it only when addressed | Proposed | 2026-11-13 |
+| [0077](0077-encrypted-secret-store-on-the-nodes-key.md) | Keep secrets in an encrypted store on the node's own key, scoped by module, with the environment kept as a source | Accepted | 2026-11-13 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).
