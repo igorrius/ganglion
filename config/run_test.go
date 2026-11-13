@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
+	"net/http"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -22,6 +24,7 @@ import (
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/transport/telegram"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 	"github.com/samber/do/v2"
 )
@@ -416,5 +419,83 @@ func TestHostStatsWithoutTheSandbox(t *testing.T) {
 	c.N, c.Name, c.Args = 2, "host.exec", json.RawMessage(`{"argv":["df","-h"],"reason":"space"}`)
 	if res, err := run(context.Background(), c); err == nil || !strings.Contains(err.Error(), "commands are off") {
 		t.Fatalf("host.exec with the sandbox off: %+v, %v", res, err)
+	}
+}
+
+// freeAddr is a loopback address nothing listens on.
+func freeAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	return ln.Addr().String()
+}
+
+// R-DLV-18: with telegram.updates: webhook the node checks its public
+// address, registers the webhook and answers what Telegram posts to it;
+// nobody polls. The listener is the node's one public entry, so the test
+// is also its abuse test: a forged update and a probe get nothing.
+func TestEchoOverTelegramWebhook(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	cfg := testConfig(t)
+	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
+	cfg.HTTPAddr = freeAddr(t)
+	cfg.PublicURL, cfg.TelegramWebhook = "http://"+cfg.HTTPAddr, true
+	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
+
+	eventually(t, "the webhook registered", func() bool { return len(fake.WebhookSets()) == 1 })
+	hook := cfg.PublicURL + telegram.WebhookPath
+	if set := fake.WebhookSets()[0]; set.URL != hook || set.Secret == "" || set.MaxConnections != 1 {
+		t.Fatalf("setWebhook %+v", set)
+	}
+	forged := `{"update_id":9,"message":{"message_id":9,"date":1,"chat":{"id":42,"type":"private"},"from":{"id":42,"first_name":"A"},"text":"forged"}}`
+	for path, want := range map[string]int{telegram.WebhookPath: http.StatusForbidden, "/metrics": http.StatusNotFound, "/": http.StatusNotFound} {
+		resp, err := http.Post(cfg.PublicURL+path, "application/json", strings.NewReader(forged)) //nolint:noctx // a test
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("POST %s without the secret: %d, want %d", path, resp.StatusCode, want)
+		}
+	}
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hi"})
+	fake.AddMessage(telegramtest.Incoming{ChatID: 66, UserID: 66, Text: "stranger"})
+	eventually(t, "the echo", func() bool { return len(fake.Sent()) >= 1 })
+	eventually(t, "both updates confirmed", func() bool { return fake.WebhookInfo().PendingUpdateCount == 0 })
+	time.Sleep(200 * time.Millisecond)
+	sent := fake.Sent()
+	if len(sent) != 1 || sent[0].ChatID != 42 || sent[0].Text != "echo: hi" {
+		t.Fatalf("sent %+v, want one echo to the admin: nothing for the stranger or the forged update", sent)
+	}
+	if n := fake.Calls("getUpdates"); n != 0 {
+		t.Errorf("getUpdates called %d times in webhook mode", n)
+	}
+}
+
+// Set back to polling, the node removes the webhook it set at the last
+// start and polls what waited.
+func TestBackToPollingRemovesTheNodesWebhook(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	cfg := testConfig(t)
+	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
+	cfg.HTTPAddr = freeAddr(t)
+	cfg.PublicURL, cfg.TelegramWebhook = "http://"+cfg.HTTPAddr, true
+	first := runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
+	eventually(t, "the webhook registered", func() bool { return len(fake.WebhookSets()) == 1 })
+	first.cancel()
+	_ = first.result(t)
+
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "while away"})
+	cfg.TelegramWebhook = false
+	runNode(t, []node.Role{node.Core}, cfg, slog.New(slog.DiscardHandler))
+	eventually(t, "the echo", func() bool { return len(fake.Sent()) >= 1 })
+	if sent := fake.Sent(); sent[0].Text != "echo: while away" {
+		t.Errorf("sent %+v, want the echo of what waited", sent)
+	}
+	if info := fake.WebhookInfo(); info.URL != "" || fake.Calls("deleteWebhook") != 1 {
+		t.Errorf("webhook now %q after %d deleteWebhook calls", info.URL, fake.Calls("deleteWebhook"))
 	}
 }

@@ -27,6 +27,13 @@ type Bootstrap struct {
 	// MetricsAddr is metrics.addr: where /metrics and the promtop
 	// dashboard are served (default 127.0.0.1:9464), or "off" (ADR-0026).
 	MetricsAddr string
+	// HTTPAddr is http.addr: where the public listener listens, or "off"
+	// (R-CFG-11). PublicURL is http.public_url, the address the outside
+	// reaches it at.
+	HTTPAddr, PublicURL string
+	// TelegramWebhook is telegram.updates: webhook — Telegram calls the
+	// public listener instead of being polled (R-DLV-18).
+	TelegramWebhook bool
 	// TelegramReply is telegram.reply: when answers quote the person's
 	// message — auto (default), always or off (ADR-0025).
 	TelegramReply string

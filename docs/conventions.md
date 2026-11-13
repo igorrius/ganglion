@@ -209,6 +209,7 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Start of the day in a location | `internal/clock` |
 | Cost of a call at catalogue prices | `router.Candidate.Cost` |
 | Alerts to every admin's private chat | `alert` |
+| A route the outside world can reach, and the check that the node's public address reaches this process | `publichttp` (`Handle`, `Reaches`); never the metrics listener |
 | Principal → private conversation | the transport (`telegram.PrivateConv`) |
 | Secrets from the environment and `*_FILE` | `secrets` |
 | Making the process not dumpable, so its `/proc` files are shut to its user's other processes (the node, chatlab, tests) | `sandbox.Harden`, `sandbox.SetDumpable` |

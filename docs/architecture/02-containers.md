@@ -32,6 +32,7 @@ flowchart LR
     bus{{"Bus<br/>P1: in-process<br/>P2: NATS leaf + JetStream,<br/>KV, Object Store"}}
 
     tg <--> corep
+    tg -- "updates by webhook, when the file says so:<br/>the public listener, secret header (ADR-0078)" --> corep
     corep -- "web.fetch, web.search:<br/>public addresses only (ADR-0035)" --> web
     corep <--> sqlite
     corep <--> memrepo
@@ -50,7 +51,7 @@ flowchart LR
 
 | Container | Holds | Technology | Phase |
 |---|---|---|---|
-| Core | Agent loop, router, policies, scheduler, tool registry, Telegram transport; host commands (`host.exec`, `host.stats`) run by the node's own helper process in a Landlock and seccomp sandbox (ADR-0039); the `html2md` module that turns fetched HTML into Markdown | Go; the module in Rust on wazero, embedded in the binary (ADR-0035) | P1 |
+| Core | Agent loop, router, policies, scheduler, tool registry, Telegram transport (updates by long polling, or by a webhook on the node's public listener, which is off by default and serves nothing else but a health route, ADR-0078); host commands (`host.exec`, `host.stats`) run by the node's own helper process in a Landlock and seccomp sandbox (ADR-0039); the `html2md` module that turns fetched HTML into Markdown | Go; the module in Rust on wazero, embedded in the binary (ADR-0035) | P1 |
 | SQLite | Inbox/outbox, conversation history, `turns`, scheduled jobs and `cron_runs`, the tool-call journal `tool_calls`, calls awaiting confirmation and their buttons, `allowed` | modernc.org/sqlite, WAL | P1 |
 | Memory repo | `memory/*.md` (facts; held-back ones under `memory/quarantine/`), `persona/*.md`, skills; later embeddings | git, the `git` binary (ADR-0033) | P1 (files), P2 (embeddings) |
 | Runner | Module runtime, local policies, offline scheduler | wazero, embedded NATS in P2 | P0 (spike), P1 |

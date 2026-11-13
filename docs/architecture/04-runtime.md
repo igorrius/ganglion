@@ -37,6 +37,28 @@ sequenceDiagram
     S->>Q: mark sent
 ```
 
+In webhook mode (`telegram.updates: webhook`, R-DLV-18) only the first
+three steps differ: Telegram posts the update to the node's public listener,
+and the answer `200` takes the place of the offset.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant TG as Telegram
+    participant L as Public listener
+    participant T as Telegram transport
+    participant Q as Inbox
+
+    Note over T,TG: at start: the public address is checked, waiting updates<br/>are taken by getUpdates, then setWebhook
+    TG->>L: POST /telegram/webhook, secret header
+    L->>T: request, body capped
+    Note over T: no secret: 403, nothing parsed
+    T->>Q: Put(event, idemKey = update_id)
+    Note over Q: duplicate idemKey is a no-op
+    T->>TG: 200 only after Put; 500 when Put failed
+    Note over TG: no 2xx: the same update again
+```
+
 If the process dies before `Complete` commits, the restarted core releases
 the lease and the turn runs again from its start, under the same call keys
 (R-DLV-6). That run does not count as a failed attempt; an event that more
