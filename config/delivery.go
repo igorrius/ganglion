@@ -9,6 +9,7 @@ import (
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
+	"github.com/igorrius/ganglion/groups"
 	"github.com/igorrius/ganglion/host"
 	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
@@ -41,7 +42,7 @@ func Telegram() do.Provider[*telegram.Transport] {
 		b := do.MustInvoke[Bootstrap](i)
 		return telegram.New(b.BotToken, telegram.WithBaseURL(b.BotAPIURL), telegram.WithLogger(do.MustInvoke[*slog.Logger](i)),
 			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)), telegram.WithRichMessages(b.TelegramRich), telegram.WithCommands(do.MustInvoke[[]transport.Command](i)),
-			telegram.WithHealth(do.MustInvoke[*telegram.Health](i)))
+			telegram.WithHealth(do.MustInvoke[*telegram.Health](i)), telegram.WithTopics(do.MustInvoke[groups.Topics](i).Seen))
 	}
 }
 

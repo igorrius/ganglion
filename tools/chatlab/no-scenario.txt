@@ -113,6 +113,7 @@ transport/telegram/joined.go
 transport/telegram/markdown.go
 transport/telegram/reactions.go
 transport/telegram/rich.go
+transport/telegram/topics.go
 transport/telegram/richread.go
 transport/telegram/richsend.go
 transport/telegram/tree.go

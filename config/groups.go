@@ -47,3 +47,11 @@ func GroupActions() do.Provider[groups.Actions] {
 			Chat: telegram.GroupChat, IsAdmin: do.MustInvoke[*access.List](i).IsAdmin}, nil
 	}
 }
+
+// GroupTopics provides the titles of the forum topics of connected groups.
+func GroupTopics() do.Provider[groups.Topics] {
+	return func(i do.Injector) (groups.Topics, error) {
+		connected := groups.Connected{List: do.MustInvoke[settings.TelegramFile](i).Groups, Key: telegram.GroupKey}
+		return groups.NewTopics(do.MustInvoke[*groups.Store](i), connected.Has, do.MustInvoke[*slog.Logger](i)), nil
+	}
+}
