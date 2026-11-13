@@ -493,7 +493,7 @@ func (t *Transport) seen(u update) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.last[m.Chat.ID] = max(t.last[m.Chat.ID], m.MessageID)
-	if m.Chat.Type == "group" || m.Chat.Type == "supergroup" {
+	if isGroup(m.Chat) {
 		t.groups[m.Chat.ID] = true
 	}
 }
