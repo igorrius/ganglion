@@ -189,22 +189,32 @@ func TestAnAdminNamesATopicAndSendsThere(t *testing.T) {
 	seen := n.fake.AddMessage(telegramtest.Incoming{ChatID: groupID, ThreadID: 45, Title: "Family", TopicTitle: "K7", UserID: annID, Text: "nice weather"})
 	waitFor(t, n, "the topic's message to be confirmed", func() bool { return n.fake.Confirmed() >= seen-1 })
 
-	approve := func(what string, question int) {
+	// approve presses the first button of the first question (a message
+	// with buttons) the admin got at or after index from, and returns that
+	// question. Other messages may come in between: the answer of a turn
+	// that parked a call, the answer after an approval.
+	approve := func(what string, from int) telegramtest.Outgoing {
 		t.Helper()
-		waitFor(t, n, "the question about "+what, func() bool { return len(sentTo(n, adminID)) > question })
-		q := sentTo(n, adminID)[question]
-		if q.Keyboard == "" {
-			t.Fatalf("no buttons under the question about %s: %+v", what, q)
-		}
+		var q telegramtest.Outgoing
+		waitFor(t, n, "the question about "+what, func() bool {
+			got := sentTo(n, adminID)
+			for i := from; i < len(got); i++ {
+				if got[i].Keyboard != "" {
+					q = got[i]
+					return true
+				}
+			}
+			return false
+		})
 		n.fake.AddCallback(telegramtest.Callback{ChatID: adminID, UserID: adminID, Name: "Admin", MessageID: q.MessageID, Data: callbackOf(t, q.Keyboard, 0)})
+		return q
 	}
 	say := func(text string) {
 		n.fake.AddMessage(telegramtest.Incoming{ChatID: adminID, UserID: adminID, Name: "Admin", Text: text})
 	}
 
 	say("STEP-NAME call the K7 topic family-k7")
-	approve("the destination", 0)
-	if q := sentTo(n, adminID)[0].Text; !strings.Contains(q, "K7") || !strings.Contains(q, "family-k7") {
+	if q := approve("the destination", 0).Text; !strings.Contains(q, "K7") || !strings.Contains(q, "family-k7") {
 		t.Fatalf("the question does not name the topic by its title: %q", q)
 	}
 	file := settings.DestinationsFile{Path: filepath.Join(n.dir, settings.FileName)}
@@ -212,11 +222,9 @@ func TestAnAdminNamesATopicAndSendsThere(t *testing.T) {
 		ds, err := file.Destinations()
 		return err == nil && len(ds) == 1 && ds[0] == settings.Destination{Name: "family-k7", Conv: topicConv}
 	})
-	waitFor(t, n, "the turn after the first approval", func() bool {
-		got := sentTo(n, adminID)
-		return len(got) >= 2 && got[len(got)-1].Text == "done"
-	})
 
+	// The second question is the one that comes after everything the
+	// admin's chat holds once the first change is in the file.
 	before := len(sentTo(n, adminID))
 	say("STEP-SEND tell the family")
 	approve("the message", before)
