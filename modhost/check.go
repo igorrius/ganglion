@@ -37,7 +37,7 @@ func (h *Host) Check(ctx context.Context, b modstore.Build, cfg map[string]any) 
 	}
 	m.ConfigValues = configValues(m, cfg)
 	short := modstore.ShortName(b.Module)
-	g := h.newGiven(m)
+	g := h.newGiven(b.Module, m)
 	log := h.moduleLog(g)
 	mod, err := runner.Load(ctx, b.Wasm, m, runner.Deps{Secrets: h.secret(b.Module, g), State: runner.NewMemState(),
 		Cells: checkCells{cellPort{cells: h.d.Cells, module: b.Module, prefix: short}}, Notify: checkNotify{}, Prefix: short, Logger: log})

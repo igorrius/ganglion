@@ -34,7 +34,7 @@ func Sandbox() do.Provider[*sandbox.Sandbox] {
 		}
 		home, _ := os.UserHomeDir() // none: no home secrets to deny, and HOME=/
 		node := sandbox.NodeFiles{Binary: binary, DB: b.DB, Settings: settingsFile(b), LogDir: b.LogDir, ModulesDir: b.ModulesDir, ClaudeDir: b.ClaudeDir,
-			Workspace: b.Agent.Workspace, Languages: b.Languages}
+			Workspace: b.Agent.Workspace, Languages: b.Languages, MasterKey: b.MasterKey}
 		environ := os.Environ()
 		p := sandbox.Policy{
 			Deny:      func() []string { return sandbox.DenyList(home, cwd, node, environ, b.SandboxDeny) },

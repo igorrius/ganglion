@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/igorrius/ganglion/mcp"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/secrets"
+	"github.com/igorrius/ganglion/secrets/vault"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/urfave/cli/v3"
@@ -54,11 +56,29 @@ func mcpCommand(in io.Reader, out io.Writer) *cli.Command {
 				f.Log.Dir = logDir
 			}
 			dir, _ := f.LogDir(db)
-			d := diag.New(ro, dir, runSettings(f, loadErr, settings.Sources{Env: secrets.OSEnv(), Store: secrets.None{}}, os.Getenv), time.Now)
+			d := diag.New(ro, dir, runSettings(f, loadErr, settings.Sources{Env: secrets.OSEnv(), Store: storedRows{ctx: ctx, db: ro}}, os.Getenv), time.Now)
 			srv := mcp.NewServer(diag.ClientSource, buildinfo.Read().Short(), d.Tools(), d.ExecForClient, mcp.WithInstructions(diag.ClientInstructions))
 			return srv.Serve(ctx, stdio{in, out})
 		},
 	}
+}
+
+// storedRows answers whether one of the node's own secrets is stored,
+// reading the read-only database without the store's key: this command
+// never reads a value (ADR-0077). It answers a fixed word for a row that
+// exists, which secretSetting shows as "set".
+type storedRows struct {
+	ctx context.Context //nolint:containedctx // the command's context, for a source that takes none
+	db  *sql.DB
+}
+
+// Secret implements secrets.Source.
+func (s storedRows) Secret(name string) (string, error) {
+	has, err := vault.Has(s.ctx, s.db, secrets.ScopeNode, name)
+	if err != nil || !has {
+		return "", err
+	}
+	return "stored", nil
 }
 
 // stdio joins the command's stdin and stdout into the server's stream.

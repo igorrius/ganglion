@@ -320,7 +320,7 @@ func TestScriptDenyListsEverySecretReference(t *testing.T) {
 	}
 	lab := &settings.Models{Providers: []settings.Provider{{Name: "or", Key: "env:LAB"}, {Name: "local"}}}
 	got := nodeSecrets(Bootstrap{Settings: f, Agent: AgentSettings{Models: lab}})
-	if want := []string{"BOT", "LAB", "SEARCH"}; !slices.Equal(got, want) {
+	if want := []string{"BOT", "GANGLION_MASTER_KEY", "LAB", "SEARCH"}; !slices.Equal(got, want) {
 		t.Fatalf("nodeSecrets = %q, want %q", got, want)
 	}
 }

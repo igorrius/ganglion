@@ -161,11 +161,28 @@ func TestRollbackAndRemove(t *testing.T) {
 	if ls, _ := e.host.Local(ctx); len(ls) != 0 {
 		t.Fatalf("list %+v", ls)
 	}
+	if !slices.Equal(e.forgot, []string{"local/probe"}) {
+		t.Fatalf("stored secrets dropped for %v, want the removed module by its full name", e.forgot)
+	}
 	if err := e.host.Remove(ctx, "probe"); err != nil {
 		t.Fatalf("a second remove is a no-op: %v", err)
 	}
 	if err := e.host.Remove(ctx, "never"); !errors.Is(err, modstore.ErrUnknownModule) {
 		t.Fatalf("unknown: %v", err)
+	}
+}
+
+// A module whose stored secrets cannot be dropped is removed all the same,
+// and the remove says what failed (ADR-0077).
+func TestRemoveReportsSecretsThatWereNotDropped(t *testing.T) {
+	e := startedProbe(t)
+	e.forgetErr = errors.New("the store is away")
+	err := e.host.Remove(context.Background(), "probe")
+	if !errors.Is(err, e.forgetErr) {
+		t.Fatalf("remove: %v", err)
+	}
+	if len(e.conf.mods) != 0 || len(e.host.Handlers()) != 0 || len(e.forgot) != 1 {
+		t.Fatalf("the module stays: %+v, forgot %v", e.conf.mods, e.forgot)
 	}
 }
 

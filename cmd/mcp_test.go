@@ -5,8 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"github.com/igorrius/ganglion/secrets/vault"
 	"github.com/igorrius/ganglion/settings"
 	"io"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -141,6 +145,35 @@ func TestMCPConfigShowsTheFile(t *testing.T) {
 		if !strings.Contains(string(raw), want) {
 			t.Errorf("config_show lacks %q: %s", want, raw)
 		}
+	}
+}
+
+// ADR-0077: config.show says whether a store: reference has its row,
+// reading the database without the store's key.
+func TestMCPConfigShowsStoreReferencesWithoutTheKey(t *testing.T) {
+	clearEnv(t)
+	db := nodeDB(t)
+	storeNodeSecret(t, db, "BOT", "7001:AAAAbbbbCCCCddddEEEEffffGGGGhhhhIII")
+	if err := os.Remove(vault.KeyPath(db)); err != nil {
+		t.Fatal(err)
+	}
+	cfg := writeConfig(t, filepath.Dir(db), quiet+"telegram: {token: \"store:BOT\"}\nagent: {search: {brave_key: \"store:BRAVE\"}}\n")
+	answers, _ := mcpSession(t, []string{"--db", db, "--config", cfg}, 2, mcpInit,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"config_show","arguments":{}}}`)
+	if len(answers) != 2 {
+		t.Fatalf("answers %v", answers)
+	}
+	raw, _ := json.Marshal(answers[1])
+	if strings.Contains(string(raw), "AAAAbbbb") {
+		t.Fatalf("config_show shows a secret: %s", raw)
+	}
+	for _, want := range []string{"store:BOT (set)", "store:BRAVE (unset)"} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("config_show lacks %q: %s", want, raw)
+		}
+	}
+	if _, err := os.Stat(vault.KeyPath(db)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("ganglion mcp made a key file: %v", err)
 	}
 }
 

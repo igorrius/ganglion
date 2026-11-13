@@ -30,6 +30,7 @@ import (
 	"github.com/igorrius/ganglion/provider/providertest"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/secrets"
+	"github.com/igorrius/ganglion/secrets/vault"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/telemetry"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
@@ -150,7 +151,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 		return err
 	}
 	b := config.Bootstrap{Examples: examplesFolder(), DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
-		Admin: fmt.Sprintf("telegram:user:%d", labChat), Build: rustenv.LocalFromEnv(os.Getenv), Secrets: labSecrets(), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
+		Admin: fmt.Sprintf("telegram:user:%d", labChat), Build: rustenv.LocalFromEnv(os.Getenv), Secrets: labSecrets(), MasterKey: filepath.Join(n.dir, vault.KeyFile), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
 		Agent: config.AgentSettings{Models: &models, Keys: keys, Workspace: n.ws, DailyBudgetUSD: 1, DailyTurns: 300,
 			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc, Memory: config.DefaultMemory()}, Timeouts: labTimeouts()}
 	rot, err := logfile.Open(logfile.DefaultConfig(n.logs), time.Now)

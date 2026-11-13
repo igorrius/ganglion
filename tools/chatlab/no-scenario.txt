@@ -40,6 +40,7 @@ config/delivery.go
 config/groups.go
 config/host.go
 config/memory.go
+config/secrets.go
 config/storage.go
 config/web.go
 core/**

@@ -19,7 +19,9 @@ import (
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/secrets"
+	"github.com/igorrius/ganglion/secrets/vault"
 	"github.com/igorrius/ganglion/settings"
+	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/telemetry"
 	"github.com/urfave/cli/v3"
 )
@@ -38,7 +40,7 @@ func runCommand(out io.Writer, start startFunc) *cli.Command {
 			if err != nil {
 				return err
 			}
-			b, err := bootstrap(v, secrets.OSEnv(), os.Getenv, os.ReadFile)
+			b, err := bootstrap(ctx, v, secrets.OSEnv(), os.Getenv, os.ReadFile)
 			if err != nil {
 				return err
 			}
@@ -95,7 +97,7 @@ func newLogger(out io.Writer, level slog.Level, b config.Bootstrap) (*slog.Logge
 // bootstrap reads the config file and the secrets it references into
 // config.Bootstrap. A retired variable fails first: a stale deploy must
 // not run on defaults (R-CFG-5).
-func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read func(string) ([]byte, error)) (config.Bootstrap, error) {
+func bootstrap(ctx context.Context, v flags.Run, src secrets.Source, getenv func(string) string, read func(string) ([]byte, error)) (config.Bootstrap, error) {
 	if err := settings.Retired(getenv); err != nil {
 		return config.Bootstrap{}, err
 	}
@@ -104,13 +106,57 @@ func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read
 		return config.Bootstrap{}, err
 	}
 	limit := memlimit.Decide(getenv("GOMEMLIMIT"), uint64(f.Node.MemoryLimit), read)
-	b, err := fromFile(f, v.DB, limit, settings.Sources{Env: src, Store: secrets.None{}})
+	store, done, err := storeSource(ctx, f, v.DB, src)
+	if err != nil {
+		return config.Bootstrap{}, err
+	}
+	defer done()
+	b, err := fromFile(f, v.DB, limit, settings.Sources{Env: src, Store: store})
 	if err != nil {
 		return config.Bootstrap{}, err
 	}
 	b.Build = rustenv.LocalFromEnv(getenv)
-	b.SettingsPath, b.Secrets = settingsPath(v.Config, v.DB), src
+	b.SettingsPath, b.Secrets, b.MasterKey = settingsPath(v.Config, v.DB), src, masterKey(v.DB)
 	return b, nil
+}
+
+// memoryDB is the database path of a node that keeps nothing on disk.
+const memoryDB = ":memory:"
+
+// masterKey is where the secret store's key file is for the database at
+// db: beside it, or nowhere for a database in memory.
+func masterKey(db string) string {
+	if db == memoryDB {
+		return ""
+	}
+	return vault.KeyPath(db)
+}
+
+// storeSource is where the file's store: references are read: the node
+// scope of the secret store in the database at db (ADR-0077). The node's
+// components need these values before the container exists, so the
+// database is opened here for a moment; a file without a store: reference
+// opens nothing. The caller calls done when it has read them. A store
+// whose key does not fit reads every reference as not set; the node says
+// so at start and in /status.
+func storeSource(ctx context.Context, f settings.File, db string, src secrets.Source) (store secrets.Source, done func(), err error) {
+	if len(f.StoreNames()) == 0 || db == memoryDB {
+		return secrets.None{}, func() {}, nil
+	}
+	key, _, err := vault.LoadKey(src, masterKey(db))
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, err := sqlitedb.Open(ctx, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	v, err := vault.Open(ctx, conn, key, time.Now)
+	if err != nil {
+		_ = conn.Close()
+		return nil, nil, err
+	}
+	return v.Source(secrets.ScopeNode), func() { _ = conn.Close() }, nil
 }
 
 // loadSettings reads the file the operator named, which must exist, or

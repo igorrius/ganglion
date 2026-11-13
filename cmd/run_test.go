@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/igorrius/ganglion/secrets"
+	"github.com/igorrius/ganglion/secrets/vault"
+	"github.com/igorrius/ganglion/sqlitedb"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -91,7 +94,7 @@ func TestBootstrapFromFile(t *testing.T) {
 	path := filepath.Join(dir, "ganglion.yaml")
 	mustWrite(t, path, "node: {tz: UTC}\nagent: {limits: {daily_turns: 7}}\ntelegram: {token: env:BOT}\n")
 	env := map[string]string{"BOT": "t0k"}
-	b, err := bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv(env), fakeEnv(env).get, os.ReadFile)
+	b, err := bootstrap(context.Background(), flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv(env), fakeEnv(env).get, os.ReadFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,6 +108,75 @@ func TestBootstrapFromFile(t *testing.T) {
 	}
 	if v, _ := b.Secrets.Secret("BOT"); v != "t0k" {
 		t.Fatalf("secret = %q", v)
+	}
+}
+
+// storeNodeSecret puts one of the node's own secrets into the store of the
+// database at db, on the key file beside it, as `ganglion secret set` does.
+func storeNodeSecret(t *testing.T, db, name, value string) {
+	t.Helper()
+	ctx := context.Background()
+	key, _, err := vault.LoadKey(secrets.None{}, vault.KeyPath(db))
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := sqlitedb.Open(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	v, err := vault.Open(ctx, conn, key, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := v.Set(ctx, secrets.ScopeNode, name, value, "cli"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// ADR-0077: run reads the file's store: references from the node scope of
+// the store before the node starts, and tells the node where its key is.
+func TestBootstrapReadsStoreReferencesFromTheDatabase(t *testing.T) {
+	dir := t.TempDir()
+	db, path := filepath.Join(dir, "g.db"), filepath.Join(dir, "ganglion.yaml")
+	mustWrite(t, path, "telegram: {token: \"store:BOT\"}\n")
+	storeNodeSecret(t, db, "BOT", "7001:stored-token")
+	env := fakeEnv{"BOT": "from-the-environment"}
+	b, err := bootstrap(context.Background(), flags.Run{Config: path, DB: db}, env, env.get, os.ReadFile)
+	if err != nil || b.BotToken != "7001:stored-token" {
+		t.Fatalf("the token from the store: %v, %v", b.BotToken == "7001:stored-token", err)
+	}
+	if b.MasterKey != filepath.Join(dir, vault.KeyFile) {
+		t.Fatalf("MasterKey = %q", b.MasterKey)
+	}
+
+	// Another key beside the database: the store is locked, and the
+	// reference reads as not set instead of stopping the start.
+	if err := os.Remove(b.MasterKey); err != nil {
+		t.Fatal(err)
+	}
+	b, err = bootstrap(context.Background(), flags.Run{Config: path, DB: db}, env, env.get, os.ReadFile)
+	if err != nil || b.BotToken != "" {
+		t.Fatalf("on a locked store: token set %v, %v", b.BotToken != "", err)
+	}
+}
+
+// A file without a store: reference opens no database before the node
+// starts, and a database in memory has no key file.
+func TestBootstrapWithoutStoreReferencesOpensNothing(t *testing.T) {
+	dir := t.TempDir()
+	db, path := filepath.Join(dir, "g.db"), filepath.Join(dir, "ganglion.yaml")
+	mustWrite(t, path, "telegram: {token: env:BOT}\n")
+	if _, err := bootstrap(context.Background(), flags.Run{Config: path, DB: db}, fakeEnv{}, fakeEnv{}.get, os.ReadFile); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{db, filepath.Join(dir, vault.KeyFile)} {
+		if _, err := os.Stat(f); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("bootstrap made %s: %v", f, err)
+		}
+	}
+	if got := masterKey(":memory:"); got != "" {
+		t.Fatalf("the key file of a database in memory = %q", got)
 	}
 }
 
@@ -129,7 +201,7 @@ func TestTurnTimeoutsFromFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ganglion.yaml")
 	mustWrite(t, path, "agent: {call_timeout: 2m, turn_timeout: 4m}\n")
-	b, err := bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	b, err := bootstrap(context.Background(), flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +209,7 @@ func TestTurnTimeoutsFromFile(t *testing.T) {
 		t.Fatalf("timeouts %+v, want %+v", b.Timeouts, want)
 	}
 	mustWrite(t, path, "agent: {turn_timeout: 9m}\n")
-	_, err = bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	_, err = bootstrap(context.Background(), flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
 	if err == nil || !strings.Contains(err.Error(), "agent.turn_timeout") || !strings.Contains(err.Error(), "lease") {
 		t.Fatalf("err = %v", err)
 	}
@@ -145,7 +217,7 @@ func TestTurnTimeoutsFromFile(t *testing.T) {
 
 func TestRetiredVariableFailsTheStart(t *testing.T) {
 	env := fakeEnv{"GANGLION_TZ": "UTC"}
-	_, err := bootstrap(flags.Run{Config: "none.yaml", DB: "g.db"}, env, env.get, os.ReadFile)
+	_, err := bootstrap(context.Background(), flags.Run{Config: "none.yaml", DB: "g.db"}, env, env.get, os.ReadFile)
 	if err == nil || !strings.Contains(err.Error(), "set node.tz in ganglion.yaml") {
 		t.Fatalf("err = %v", err)
 	}
@@ -155,7 +227,7 @@ func TestMemoryLimitInBootstrap(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ganglion.yaml")
 	mustWrite(t, path, "node: {memory_limit: 100MiB}\n")
-	b, err := bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	b, err := bootstrap(context.Background(), flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,14 +240,14 @@ func TestMemoryLimitInBootstrap(t *testing.T) {
 // path beside the database may be missing.
 func TestNamedConfigMustExist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gangilon.yaml")
-	_, err := bootstrap(flags.Run{Config: path, DB: "g.db"}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	_, err := bootstrap(context.Background(), flags.Run{Config: path, DB: "g.db"}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
 	if err == nil || err.Error() != "ganglion.yaml: "+path+": no such file" {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestDefaultConfigMayBeMissing(t *testing.T) {
-	b, err := bootstrap(flags.Run{DB: filepath.Join(t.TempDir(), "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
+	b, err := bootstrap(context.Background(), flags.Run{DB: filepath.Join(t.TempDir(), "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)
 	if err != nil || b.Settings.Node.TZ != "Europe/Kyiv" {
 		t.Fatalf("got %+v, %v", b.Settings.Node, err)
 	}
@@ -193,7 +265,7 @@ func TestMemoryLimitReadsThroughTheInjectedRead(t *testing.T) {
 		}
 		return nil, fs.ErrNotExist
 	}
-	b, err := bootstrap(flags.Run{DB: "/nowhere/g.db"}, fakeEnv{}, fakeEnv{}.get, read)
+	b, err := bootstrap(context.Background(), flags.Run{DB: "/nowhere/g.db"}, fakeEnv{}, fakeEnv{}.get, read)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +280,7 @@ func TestOperatorsGOMEMLIMITWins(t *testing.T) {
 	path := filepath.Join(dir, "ganglion.yaml")
 	mustWrite(t, path, "node: {memory_limit: 100MiB}\n")
 	env := fakeEnv{"GOMEMLIMIT": "300MiB"}
-	b, err := bootstrap(flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, env, env.get, os.ReadFile)
+	b, err := bootstrap(context.Background(), flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, env, env.get, os.ReadFile)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/schedule"
+	"github.com/igorrius/ganglion/secrets/vault"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/status"
@@ -237,12 +238,12 @@ func Skills() do.Provider[Skilled] {
 	}
 }
 
-// nodeSecrets are the node's own secrets: every secret reference of the
-// file, and the providers' keys of models set without a file (the lab),
-// sorted and each once. A skill script may not list them, and no module is
+// nodeSecrets are the node's own secrets: every env: reference of the
+// file, the providers' keys of models set without a file (the lab), and
+// the secret store's master key, sorted and each once. A skill script may not list them, and no module is
 // granted one.
 func nodeSecrets(b Bootstrap) []string {
-	deny := b.Settings.SecretNames()
+	deny := append(b.Settings.SecretNames(), vault.KeyEnv)
 	if m := b.Agent.Models; m != nil {
 		deny = append(deny, m.KeyNames()...)
 	}

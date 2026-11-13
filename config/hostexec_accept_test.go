@@ -121,14 +121,23 @@ func failed(text string) bool {
 // environment, database or secret files, its environment holds only the
 // allowlist, and sudo gains no root under no_new_privs.
 func TestAPressedCommandCannotReachTheNodesSecrets(t *testing.T) {
-	n := startCommandNode(t)
+	// The secret store's key, in a folder of its own: it is denied by its
+	// path, not because it lies beside the database (ADR-0077).
+	masterKey := filepath.Join(t.TempDir(), "master.key")
+	n := startCommandNode(t, func(b *Bootstrap) { b.MasterKey = masterKey })
+	if _, err := os.Stat(masterKey); err != nil {
+		t.Fatalf("the node made no key file: %v", err)
+	}
 	for _, argv := range [][]string{
 		{"cat", fmt.Sprintf("/proc/%d/environ", os.Getpid())},
 		{"cat", n.db},
+		{"cat", masterKey},
 		{"cat", n.tokenFile},
 		{"bash", "-c", "cat /proc/$PPID/environ"},
 	} {
-		if out := n.runApproved(t, argv...); !failed(out) || !strings.Contains(out, "Permission denied") {
+		// "denied" alone: after "master.key:" the redactor takes the next
+		// word for a key's value and hides it.
+		if out := n.runApproved(t, argv...); !failed(out) || !strings.Contains(out, "denied") {
 			t.Errorf("%v was not refused:\n%s", argv, out)
 		}
 	}

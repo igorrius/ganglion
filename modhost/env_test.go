@@ -420,17 +420,20 @@ type secretMap map[string]string
 func (s secretMap) Secret(name string) (string, error) { return s[name], nil }
 
 type env struct {
-	host   *modhost.Host
-	store  *store
-	jobs   *jobs
-	inbox  *inbox
-	conf   *conf
-	cells  *cells.Service
-	state  *runner.MemState // the modules' state, kept across a restart
-	src    secrets.Source   // the node's secrets
-	now    time.Time
-	logs   *bytes.Buffer
-	logsMu sync.Mutex
+	host      *modhost.Host
+	store     *store
+	jobs      *jobs
+	inbox     *inbox
+	conf      *conf
+	cells     *cells.Service
+	state     *runner.MemState          // the modules' state, kept across a restart
+	src       secrets.Source            // the node's secrets
+	own       map[string]secrets.Source // a module's own source, by full name, when it has one
+	forgot    []string                  // the modules whose secrets were dropped
+	forgetErr error                     // what dropping them returns
+	now       time.Time
+	logs      *bytes.Buffer
+	logsMu    sync.Mutex
 }
 
 // active is the probe installed as local/<name> from manifest.
@@ -461,7 +464,8 @@ func (e *env) newHost() *modhost.Host {
 		Cells:       e.cells,
 		Jobs:        e.jobs,
 		Inbox:       e.inbox,
-		Secrets:     e.src,
+		Secrets:     e.secretsFor,
+		Forget:      e.forget,
 		NodeSecrets: []string{"TELEGRAM_BOT_TOKEN"},
 		State:       e.state,
 		Settings:    e.conf,
@@ -560,4 +564,19 @@ func (e *env) cron(t *testing.T, op string) {
 	if err := e.host.RunCron(context.Background(), "local/probe", "slot"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// secretsFor is the module's own source when the test gave it one, else
+// the node's.
+func (e *env) secretsFor(module string) secrets.Source {
+	if src, ok := e.own[module]; ok {
+		return src
+	}
+	return e.src
+}
+
+// forget records the module whose stored secrets the host dropped.
+func (e *env) forget(_ context.Context, module string) error {
+	e.forgot = append(e.forgot, module)
+	return e.forgetErr
 }

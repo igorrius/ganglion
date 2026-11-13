@@ -709,3 +709,37 @@ func TestARotatedSecretIsHiddenToo(t *testing.T) {
 		t.Fatalf("%d redacted lines, want 4 (two logs, two failures):\n%s", n, log)
 	}
 }
+
+// counted is a source that counts its reads.
+type counted struct {
+	secrets.Source
+	reads *int
+}
+
+func (c counted) Secret(name string) (string, error) {
+	*c.reads++
+	return c.Source.Secret(name)
+}
+
+// ADR-0077: each module reads its own secret source, asked for by the
+// module's full name; another module's source is never read for it, and
+// the value it was handed is hidden from its log like any other.
+func TestAModuleReadsItsOwnSecretSource(t *testing.T) {
+	e := newEnv(t, active(t, "local/probe", probeManifest))
+	var own, other, shared int
+	e.src = counted{secretMap{"PROBE_TOKEN": "hunter2"}, &shared}
+	e.own = map[string]secrets.Source{
+		"local/probe": counted{secretMap{"PROBE_TOKEN": "scoped-secret-7"}, &own},
+		"local/other": counted{secretMap{"PROBE_TOKEN": "others-secret-8"}, &other},
+	}
+	e.host = e.newHost()
+	e.start(t)
+	e.cron(t, `{"op":"leak","name":"PROBE_TOKEN"}`)
+	if own == 0 || other != 0 || shared != 0 {
+		t.Fatalf("reads: its own %d, another module's %d, the shared source %d", own, other, shared)
+	}
+	log := e.logText()
+	if strings.Contains(log, "scoped-secret-7") || !strings.Contains(log, "token [redacted]") {
+		t.Fatalf("the module's own secret is not hidden:\n%s", log)
+	}
+}
