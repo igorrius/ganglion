@@ -2195,8 +2195,8 @@ the steps above:
   and addresses the bot in it: it used to rely on an allowed person being
   answered in any group.
 
-The live check is recorded below. Open: the owner's word on ADR-0076,
-which is still Proposed.
+The live check is recorded below; the owner accepted ADR-0076 after it
+(2026-11-13).
 
 ## Live check (2026-11-13)
 

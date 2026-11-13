@@ -6,23 +6,21 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
-- **Now:** Telegram groups (MG), added on 2026-11-13: the owner moved the
-  production bot's token to ganglion and removed the old bot, so the
-  family's forum needs the bot connected by a press and answering only when
-  addressed ([design](plans/telegram-groups-design.md),
-  [plan](plans/telegram-groups.md),
-  [ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md),
-  Proposed). Built on 2026-11-13 and passing end to end against the fake
-  Bot API: a group is connected from the card in the admin's private
-  chat, answered only when addressed, and nobody has the admin role in
-  it. Deployed to Railway and checked live in the family's forum the same
-  day ([recorded](plans/telegram-groups.md#live-check-2026-11-13)). Then
-  named destinations ([plan](plans/telegram-destinations.md),
-  [ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md),
-  Proposed): the node's file routes a module's messages (`notify_to`), the
-  node knows a forum's topics by title, and the admin names places and
-  routes modules in words; built and passing end to end, its live check
-  open. Next after it: roles with their own tools for a group.
+- **Done on 2026-11-13:** Telegram groups (MG), added that day when the
+  owner moved the production bot's token to ganglion and removed the old
+  bot. A group is connected from a card in the admin's private chat and
+  answered only when addressed; nobody has the admin role in a group
+  ([plan](plans/telegram-groups.md),
+  [ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md)). The
+  node's file routes a module's messages to named destinations, the node
+  knows a forum's topics by title or by their link, the admin routes and
+  sends in words with one confirmation, and the built-in skill
+  `telegram-chats` tells the agent how
+  ([plan](plans/telegram-destinations.md),
+  [ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
+  Both are deployed and checked live in the family's forum. Asked for
+  next by the owner: roles with their own tools for a group's members
+  (spec section 14).
 - **Next:** M6, the agent reconfigures the system. It now includes the
   encrypted secret store (task 6.5,
   [ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), owner,
