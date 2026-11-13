@@ -1,6 +1,6 @@
 # ADR-0078: Receive Telegram updates by polling or by a webhook, chosen in the node's file
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-13
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.1 Guaranteed delivery](../spec.md#71-guaranteed-delivery)
@@ -77,13 +77,13 @@ takes the webhook when it finds one, polling otherwise.
 
 ## Decision
 
-**C**, proposed. Polling must stay for nodes without a public address, so B
+**C** (accepted by the owner, 2026-11-13). Polling must stay for nodes without a public address, so B
 is out; the owner asked for a setting, so A is out; D opens a public entry
 without anybody writing it down. With C the mode is one field, polling
 remains the default, and a public listener exists only on a node whose file
 asks for one.
 
-Inside C, as calls the owner can correct (the design note marks each):
+Inside C, as the design note describes it:
 
 - The listener is a component of the node, not of the Telegram transport,
   on its own address and apart from the metrics listener. It serves the

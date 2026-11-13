@@ -1,11 +1,11 @@
 # Design note: a webhook mode for the Telegram transport
 
 Notes from a conversation with the owner on 2026-11-13 (board card G-152).
-Nothing here is built. The decision is proposed in
-[ADR-0078](../adr/0078-telegram-updates-by-polling-or-webhook.md); until the
-owner accepts it the spec lists the question under
-[Open decisions](../spec.md#11-open-decisions) and no transport code is
-written.
+Nothing here is built. The owner accepted the decision on 2026-11-13
+([ADR-0078](../adr/0078-telegram-updates-by-polling-or-webhook.md)); the
+requirements are R-DLV-16, R-DLV-17 and R-CFG-11 in the spec and the work is
+task 6.6 of the [phase plan](p1-all-in-one.md). The spike of section 12
+comes before the code.
 
 Marks: **owner** means the owner said it; **call** means the author's
 default, open to the owner's correction.
@@ -325,12 +325,13 @@ what stops it:
 Not protected: a proxy or a platform that reads or rewrites requests (it
 already runs the process), and Telegram itself.
 
-## 12. Open before the ADR is accepted
+## 12. Before the code
 
-- **The phase.** P1, as a task of its own beside M6, or with M6. The owner
-  asked for it now; the call is P1, after the ADR.
-- **`public_url` from `RAILWAY_PUBLIC_DOMAIN`** (section 4).
-- **The second guard** (section 9): fall back to polling, or alert only.
+The owner accepted the ADR as proposed (2026-11-13), so the calls above
+stand: the file is the one source of `public_url`, and failed deliveries
+return the node to polling for the run. The task is 6.6 in M6 (call: the
+owner did not name the phase).
+
 - **A spike on Railway with the test bot**, half a day:
   - the delay between a restart and Telegram's first redelivery, after a
     stop of one, five and thirty minutes;
@@ -339,7 +340,6 @@ already runs the process), and Telegram itself.
   - the target port of a generated domain for an image that exposes none,
     and whether `RAILWAY_PUBLIC_DOMAIN` is set before a domain is generated;
   - the size of the largest update the bot gets (a long rich message).
-- **On acceptance:** requirements in spec 7.1 and 7.14, the schema and
-  `ganglion.example.yaml`, the paragraph of
+- **With the code:** the schema and `ganglion.example.yaml`, the paragraph of
   [deploy-railway.md](../deploy-railway.md) that says a webhook is not
   needed, the code map and the container diagram.
