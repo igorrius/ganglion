@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -459,10 +460,23 @@ func (e *env) newHost() *modhost.Host {
 				return "telegram", "telegram:" + id, ok
 			},
 		},
-		Now:      func() time.Time { return e.now },
-		Location: kyiv,
-		Log:      slog.New(slog.NewTextHandler(syncWriter{e}, nil)),
+		Destinations: e.destination,
+		Now:          func() time.Time { return e.now },
+		Location:     kyiv,
+		Log:          slog.New(slog.NewTextHandler(syncWriter{e}, nil)),
 	})
+}
+
+// destination resolves the env's destinations: family-k7 is a topic of a
+// forum, and broken cannot be read.
+func (e *env) destination(name string) (string, string, bool, error) {
+	switch name {
+	case "family-k7":
+		return "telegram", "telegram:-1001/45", true, nil
+	case "broken":
+		return "", "", false, errors.New("the file is broken")
+	}
+	return "", "", false, nil
 }
 
 type syncWriter struct{ e *env }

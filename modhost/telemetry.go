@@ -30,7 +30,7 @@ func newInstruments() instruments {
 	in.triggers, _ = m.Int64Counter("ganglion.modhost.triggers",
 		metric.WithDescription("Cell triggers of the modules whose runs wrote cells, by producer module and outcome (put, failed, stopped: the chain is deeper than 4)."))
 	in.notifies, _ = m.Int64Counter("ganglion.modhost.notifies",
-		metric.WithDescription("Calls of notify, by module and outcome (sent, limit: past per_day, not_here: init or health, failed: the node could not count or put it)."))
+		metric.WithDescription("Calls of notify, by module and outcome (sent, limit: past per_day, not_here: init or health, failed: the node could not count or put it), and the copies not sent for a destination that does not resolve (no_destination)."))
 	return in
 }
 

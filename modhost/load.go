@@ -25,6 +25,7 @@ type loaded struct {
 	given                     *given       // the secret values it was handed, hidden from its log lines
 	log                       *slog.Logger // for the module's texts, through given (moduleLog)
 	to                        recipient
+	notifyTo                  []string      // the destinations of its messages; none is the owner alone (R-RUN-18)
 	escalate                  map[Kind]bool // the manifest's escalate kinds
 	tools                     []tool.Handler
 }
@@ -88,7 +89,7 @@ func (h *Host) prepare(ctx context.Context, a modstore.Active, s settings.Module
 	}
 	m.ConfigValues = configValues(m, s.Config)
 	l := &loaded{name: a.Module, short: modstore.ShortName(a.Module), sha: a.SHA256, version: strconv.Itoa(m.Version), m: m, to: to,
-		escalate: escalations(m), given: h.newGiven(m)}
+		escalate: escalations(m), given: h.newGiven(m), notifyTo: slices.Clone(s.NotifyTo)}
 	l.log = h.moduleLog(l.given)
 	if st, err := h.defineCells(ctx, l); err != nil || st.reason != "" {
 		return nil, st, err

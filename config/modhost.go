@@ -11,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/gitrepo"
+	"github.com/igorrius/ganglion/groups"
 	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
@@ -32,18 +33,19 @@ func ModuleHost() do.Provider[*modhost.Host] {
 	return func(i do.Injector) (*modhost.Host, error) {
 		b, logger := do.MustInvoke[Bootstrap](i), do.MustInvoke[*slog.Logger](i)
 		h := modhost.New(modhost.Deps{
-			Store:       do.MustInvoke[*modstore.Store](i),
-			Cells:       do.MustInvoke[*cells.Service](i),
-			Jobs:        do.MustInvoke[*schedule.Store](i),
-			Inbox:       do.MustInvoke[*sqlqueue.Queue](i),
-			Secrets:     moduleSecrets(b),
-			NodeSecrets: nodeSecrets(b),
-			State:       runner.NewSQLState(do.MustInvoke[Database](i).DB, runner.WithStateLogger(logger)),
-			Settings:    settings.ModulesFile{Path: settingsFile(b)},
-			Admins:      do.MustInvoke[alert.Admins](i),
-			Now:         time.Now,
-			Location:    b.Agent.TZ,
-			Log:         logger,
+			Store:        do.MustInvoke[*modstore.Store](i),
+			Cells:        do.MustInvoke[*cells.Service](i),
+			Jobs:         do.MustInvoke[*schedule.Store](i),
+			Inbox:        do.MustInvoke[*sqlqueue.Queue](i),
+			Secrets:      moduleSecrets(b),
+			NodeSecrets:  nodeSecrets(b),
+			State:        runner.NewSQLState(do.MustInvoke[Database](i).DB, runner.WithStateLogger(logger)),
+			Settings:     settings.ModulesFile{Path: settingsFile(b)},
+			Destinations: groups.Destinations{List: settings.DestinationsFile{Path: settingsFile(b)}.Destinations}.Resolve,
+			Admins:       do.MustInvoke[alert.Admins](i),
+			Now:          time.Now,
+			Location:     b.Agent.TZ,
+			Log:          logger,
 		})
 		h.Start(do.MustInvoke[Startup](i))
 		return h, nil
