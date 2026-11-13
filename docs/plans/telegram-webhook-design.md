@@ -138,8 +138,8 @@ A new component of the node, in its own package, outside
   Telegram webhook; `GET /healthz` answers a platform's health check and the
   node's own check of its address (section 7).
 - Anything else is `404`. No file serving, no listing, no redirect.
-- Limits: header and body read timeouts, a body cap of 1 MiB (the spike
-  confirms the size of the largest update), a cap on requests in flight.
+- Limits: header and body read timeouts, a body cap of 1 MiB (the spike's
+  longest text message was 18 KB), a cap on requests in flight.
 - It is not the metrics listener. `metrics.addr` stays on `127.0.0.1:9464`:
   the Prometheus endpoint has no authentication and must never share a
   public port.

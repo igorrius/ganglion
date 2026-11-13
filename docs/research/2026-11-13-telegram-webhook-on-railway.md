@@ -6,8 +6,7 @@
 - **Question:** how fast does Telegram redeliver after the node was away, does the node reach its own
   public address from inside Railway, which port and variables does Railway give a service, and how
   large is an update?
-- **Status:** measured on Railway with the test bot; **the largest update and a 30-minute stop are not
-  measured yet**.
+- **Status:** measured on Railway with the test bot; **a 30-minute stop is not measured**.
 
 ## Method
 
@@ -41,7 +40,7 @@ stop was `railway down`, then a new deploy. The owner sent the messages.
 | `/down 300` | Refused at 1, 1, 3, 7, 15, 31, 63, 127, 236 s; delivered at 301 s |
 | A real stop of about 4 minutes | `getWebhookInfo` at the next start: `pending_update_count: 1`, `last_error_message: "Wrong response from the webhook: 404 Not Found"`. The update came **93 s after `setWebhook`** (96 s after the process start, 235 s after it was sent) |
 | `setWebhook` with the same address | Does not make Telegram deliver at once: the update waited for the next retry |
-| Size of an update | 381–414 bytes for a short message; a long one not measured |
+| Size of an update | 381–414 bytes for a short message; **18,103 bytes** for a message of 4,096 Cyrillic characters, delivered in 0.7 s |
 
 ## Conclusions
 
@@ -58,9 +57,11 @@ stop was `railway down`, then a new deploy. The owner sent the messages.
    `PORT` of the listener's port. The file stays the one source (the owner accepted that with the ADR);
    this is recorded for the template install.
 5. No target port needs to be chosen by hand for a generated domain.
+6. **The body cap of 1 MiB in the design note stays.** The longest text message was 18 KB: Telegram
+   writes a character outside ASCII as `\uXXXX`, six bytes for each of the 4,096 UTF-16 units a
+   message may hold, so a text of the full length cannot pass about 25 KB before its entities. The
+   cap leaves more than forty times that.
 
 ## Still to measure
 
-- The largest update: the owner sends a message of 4,096 characters. Decides the body cap (1 MiB in
-  the design note).
 - A stop of 30 minutes, to see that the retries stay at 1–2 minutes and do not stop.
