@@ -1,6 +1,6 @@
 # ADR-0076: Connect a Telegram group by the admin's press and answer in it only when addressed
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-13
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-16, R-DLV-17),
