@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"sync/atomic"
 	"time"
 
 	"github.com/igorrius/ganglion/secrets"
@@ -28,6 +29,7 @@ var (
 	ErrName    = errors.New("vault: not a secret's name")
 	ErrEmpty   = errors.New("vault: an empty value")
 	ErrTooLong = errors.New("vault: a value over 4096 bytes")
+	ErrLocked  = errors.New("vault: the store is locked: its key does not fit")
 
 	errNonce = errors.New("vault: a nonce of the wrong length")
 )
@@ -47,9 +49,14 @@ type Vault struct {
 	aead cipher.AEAD
 	now  func() time.Time
 	in   instruments
+
+	locked atomic.Bool // the key does not fit the stored rows
+	opened time.Time   // when Open ran: since when a locked store is locked
 }
 
-// Open migrates the "secrets" component and returns the store on key.
+// Open migrates the "secrets" component and returns the store on key. A
+// key that does not fit the rows already stored is not an error: the
+// store opens locked (Locked), and nothing in it is changed.
 func Open(ctx context.Context, db *sql.DB, key Key, now func() time.Time) (*Vault, error) {
 	sub, err := fs.Sub(migrations, "migrations")
 	if err != nil {
@@ -62,7 +69,13 @@ func Open(ctx context.Context, db *sql.DB, key Key, now func() time.Time) (*Vaul
 	if err != nil {
 		return nil, fmt.Errorf("vault: %w", err)
 	}
-	return &Vault{db: db, aead: aead, now: now, in: newInstruments()}, nil
+	v := &Vault{db: db, aead: aead, now: now, in: newInstruments(), opened: now()}
+	fits, err := v.fits(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("vault: %w", err)
+	}
+	v.locked.Store(!fits)
+	return v, nil
 }
 
 // Get is the value of name in scope; "" when it is not stored. A row that
@@ -77,6 +90,9 @@ func (v *Vault) Get(ctx context.Context, scope secrets.Scope, name string) (stri
 }
 
 func (v *Vault) get(ctx context.Context, scope secrets.Scope, name string) (string, outcome, error) {
+	if v.Locked() {
+		return "", outcomeLocked, nil
+	}
 	var nonce, ciphertext []byte
 	err := v.db.QueryRowContext(ctx,
 		`SELECT nonce, ciphertext FROM secrets WHERE scope = ? AND name = ?`, string(scope), name).Scan(&nonce, &ciphertext)
@@ -97,7 +113,7 @@ func (v *Vault) get(ctx context.Context, scope secrets.Scope, name string) (stri
 // a principal.
 func (v *Vault) Set(ctx context.Context, scope secrets.Scope, name, value, by string) error {
 	err := v.set(ctx, scope, name, value, by)
-	v.in.count(ctx, opSet, done(err))
+	v.in.count(ctx, opSet, setOutcome(err))
 	if err != nil {
 		return fmt.Errorf("vault: set %s %s: %w", scope, name, err)
 	}
@@ -105,6 +121,9 @@ func (v *Vault) Set(ctx context.Context, scope secrets.Scope, name, value, by st
 }
 
 func (v *Vault) set(ctx context.Context, scope secrets.Scope, name, value, by string) error {
+	if v.Locked() {
+		return ErrLocked
+	}
 	if err := check(name, value); err != nil {
 		return err
 	}
@@ -119,6 +138,14 @@ func (v *Vault) set(ctx context.Context, scope secrets.Scope, name, value, by st
 			set_ms = excluded.set_ms, set_by = excluded.set_by`,
 		string(scope), name, nonce, ciphertext, v.now().UnixMilli(), by)
 	return err
+}
+
+// setOutcome is the outcome of a Set that returned err.
+func setOutcome(err error) outcome {
+	if errors.Is(err, ErrLocked) {
+		return outcomeLocked
+	}
+	return done(err)
 }
 
 // check refuses a name or a value the store does not take.
