@@ -144,7 +144,7 @@ Destinations DestinationFunc // func(name string) (transport, conv string, ok bo
 - [x] The module-writing skill says that where messages go is the node's file, set with `module.notify_to`, never the module's code.
 - [x] The example file, the runtime page's notify section and diagram, the code map, "Where we are".
 - [x] `make lint`, `go test ./...`, commit, pull request.
-- [ ] Live: in the private chat, "send the battery alerts to the K7 topic and to me"; one press; the next alert is in both places. Record it here.
+- [x] Live: in the private chat, "send the battery alerts to the K7 topic and to me"; one press; the next alert is in both places. Record it here.
 
 ## As built (2026-11-13)
 
@@ -213,3 +213,28 @@ a link; one or two lines after the press.
 A title the owner gives could be used to mislabel a topic from a tainted
 session, so it is stored only by a call the owner confirmed, and the
 question that asks shows the title beside the topic's number.
+
+## Live check (2026-11-13)
+
+Merged as [PR 21](https://github.com/igorrius/ganglion/pull/21) and
+deployed to Railway on the production bot; the owner accepted ADR-0079
+after it. The node's journal of tool calls agrees with what the owner saw.
+
+| Step | Result | Evidence |
+|---|---|---|
+| A module's messages routed to a topic | `battery-alerts` goes to the K7 topic | Journal, 15:05 and 15:11 UTC: `module.notify_to` approved; `destination.list` then shows `local/battery-alerts: family-k7`, and `family-k7` is topic 8 of the forum |
+| A message to a topic by a destination's name | Delivered | Journal, 15:19: `message.send` to `family-k7` approved, "message queued for telegram:-1001996291961/8" |
+| A topic the node has not seen, after the changes of the second try | The agent asked for the topic's link in one line; with the link, one call and one confirmation; the message is in the topic | Journal, 16:00: `destination.list` and no send; the owner's chat shows the request for the link. 16:31–16:32: `message.send` with `https://t.me/c/1996291961/175`, one confirmation, "message queued for …/175". No `destination.set`, no memory write |
+| A topic's link as an address | Works | The same call |
+
+Not seen in the journal: whether the agent passed the owner's name for
+that topic (`title`); the journal keeps the first 150 characters of a
+call's arguments, and the text came first. Not checked live: a module's
+own message arriving in the topic with its signature (the module writes
+when its threshold is crossed), a message to two places at once, and
+`group.disconnect`.
+
+Also found that day: the default daily limit of 1,000,000 tokens was
+reached after 39 turns of testing (1,026,731 tokens), which stopped the
+check for half an hour. The owner raised `agent.limits.daily_tokens` to
+5,000,000 in the node's file.

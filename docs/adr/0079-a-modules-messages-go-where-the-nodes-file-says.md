@@ -1,6 +1,6 @@
 # ADR-0079: Route a module's messages by the node's file, to named destinations
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-13
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-16, R-RUN-18),
