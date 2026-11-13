@@ -46,7 +46,7 @@ func lineOf(seq *yaml.Node, name string) *yaml.Node {
 		return seq.Content[i]
 	}
 	item := &yaml.Node{Kind: yaml.MappingNode, Tag: tagMap, Content: []*yaml.Node{
-		plain("name"), {Kind: yaml.ScalarNode, Tag: tagStr, Value: name}}}
+		plain(keyName), {Kind: yaml.ScalarNode, Tag: tagStr, Value: name}}}
 	seq.Content = append(seq.Content, item)
 	return item
 }
@@ -162,7 +162,7 @@ func indexOf(seq *yaml.Node, name string) int {
 			continue
 		}
 		for j := 0; j+1 < len(it.Content); j += 2 {
-			if it.Content[j].Value == "name" && it.Content[j+1].Value == name {
+			if it.Content[j].Value == keyName && it.Content[j+1].Value == name {
 				return i
 			}
 		}
