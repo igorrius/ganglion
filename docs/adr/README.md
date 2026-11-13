@@ -85,6 +85,7 @@ considered, how they compare, the decision and its consequences. See
 | [0077](0077-encrypted-secret-store-on-the-nodes-key.md) | Keep secrets in an encrypted store on the node's own key, scoped by module, with the environment kept as a source | Accepted | 2026-11-13 |
 | [0078](0078-telegram-updates-by-polling-or-webhook.md) | Receive Telegram updates by polling or by a webhook, chosen in the node's file | Accepted | 2026-11-13 |
 | [0079](0079-a-modules-messages-go-where-the-nodes-file-says.md) | Route a module's messages by the node's file, to named destinations | Accepted | 2026-11-13 |
+| [0080](0080-keep-the-own-telegram-client-and-name-the-library-to-move-to.md) | Keep the own Telegram client, and name the library to move to | Accepted | 2026-11-13 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

@@ -128,7 +128,9 @@ lists every key.
 
 ## Telegram by webhook
 
-Polling needs none of this and stays the default. To have Telegram call the
+The owner's node runs this way since 2026-11-13, on
+`ganglion-production.up.railway.app`. Polling needs none of this and stays
+the default. To have Telegram call the
 node instead (`telegram.updates: webhook`, R-DLV-18,
 [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)):
 
@@ -154,6 +156,9 @@ node instead (`telegram.updates: webhook`, R-DLV-18,
 4. If the domain does not reach the node, or Telegram's deliveries keep
    failing, the node tells the admins in the chat and polls until the next
    restart, so a wrong address never cuts the chat off (R-DLV-19).
+
+Deploying from a git worktree: `railway up` uploads the main checkout, not
+the worktree. Name the folder: `railway up <path> --path-as-root -s ganglion`.
 
 The way back: set `telegram.updates: polling` (the `http` section may stay
 or go) and restart. The node removes the webhook it set and polls. The
