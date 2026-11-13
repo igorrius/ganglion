@@ -19,6 +19,8 @@ type File struct {
 	Log Log `yaml:"log"`
 	// Metrics is the Prometheus endpoint.
 	Metrics Metrics `yaml:"metrics"`
+	// HTTP is the node's public listener (R-CFG-11).
+	HTTP HTTP `yaml:"http"`
 	// Telegram is the Telegram transport.
 	Telegram Telegram `yaml:"telegram"`
 	// Agent is the conversation agent's own settings.
@@ -60,6 +62,27 @@ type Metrics struct {
 	Addr string `yaml:"addr"`
 }
 
+// HTTP is the node's public listener: the one entry the outside world has
+// to the node (R-CFG-11, ADR-0078). It serves plain HTTP behind a proxy
+// that ends TLS.
+type HTTP struct {
+	// Addr is the listen address host:port, or "off" for no listener.
+	Addr string `yaml:"addr"`
+	// PublicURL is the HTTPS address the outside reaches the listener at;
+	// "" when nobody was told one.
+	PublicURL string `yaml:"public_url"`
+}
+
+// On reports whether the node runs the public listener: a file made in
+// code that names no address runs none.
+func (h HTTP) On() bool { return h.Addr != off && h.Addr != "" }
+
+// The ways Telegram updates reach the node (telegram.updates, R-DLV-18).
+const (
+	UpdatesPolling = "polling" // the node asks Telegram (getUpdates)
+	UpdatesWebhook = "webhook" // Telegram calls the node's public listener
+)
+
 // Telegram is the Telegram transport's settings.
 type Telegram struct {
 	// Token is the bot token, as env:NAME.
@@ -69,6 +92,8 @@ type Telegram struct {
 	// Admin is the principal that is admin from the first start, as
 	// telegram:user:<id>; "" seeds none.
 	Admin string `yaml:"admin"`
+	// Updates is how updates arrive: polling or webhook (R-DLV-18).
+	Updates string `yaml:"updates"`
 	// Reply is when the bot answers in a group: auto, always or off.
 	Reply string `yaml:"reply"`
 	// Rich turns Markdown into Telegram formatting.
@@ -250,9 +275,11 @@ func Default() File {
 		Node:    Node{TZ: "Europe/Kyiv"},
 		Log:     Log{Level: "info"},
 		Metrics: Metrics{Addr: "127.0.0.1:9464"},
+		HTTP:    HTTP{Addr: off},
 		Telegram: Telegram{
 			Token:     "env:TELEGRAM_BOT_TOKEN",
 			APIURL:    "https://api.telegram.org",
+			Updates:   UpdatesPolling,
 			Reply:     auto,
 			Rich:      true,
 			Reactions: Reactions{After: Duration(8 * time.Second), Dwell: Duration(3 * time.Second)},

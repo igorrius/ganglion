@@ -233,6 +233,8 @@ func validAdmin(v string) bool { return v == "" || principalRE.MatchString(v) }
 const (
 	keyTZ          = "node.tz"
 	keyAPIURL      = "telegram.api_url"
+	keyPublicURL   = "http.public_url"
+	keyUpdates     = "telegram.updates"
 	keyCallTimeout = "agent.call_timeout"
 	keyTurnTimeout = "agent.turn_timeout"
 )
@@ -247,6 +249,11 @@ func (f File) check() error {
 		{keyTZ, "must be an IANA time zone such as Europe/Kyiv", validTZ(f.Node.TZ)},
 		{"log.level", "must be debug, info, warn or error", slices.Contains([]string{"debug", "info", "warn", "error"}, f.Log.Level)},
 		{"metrics.addr", `must be host:port or off`, validAddr(f.Metrics.Addr)},
+		{"http.addr", `must be host:port or off`, validAddr(f.HTTP.Addr)},
+		{keyPublicURL, "must be an https address with no path, on no port or on 443, 80, 88 or 8443", validPublicURL(f.HTTP.PublicURL)},
+		{keyUpdates, "must be polling or webhook", slices.Contains([]string{UpdatesPolling, UpdatesWebhook}, f.Telegram.Updates)},
+		{keyUpdates, "webhook needs the public listener: set http.addr", f.Telegram.Updates != UpdatesWebhook || f.HTTP.On()},
+		{keyUpdates, "webhook needs " + keyPublicURL + ", the address Telegram calls", f.Telegram.Updates != UpdatesWebhook || f.HTTP.PublicURL != ""},
 		{keyAPIURL, "must be an http or https address", validURL(f.Telegram.APIURL)},
 		{keyAPIURL, "must not carry credentials; use token: env:NAME", !hasCredentials(f.Telegram.APIURL)},
 		{"telegram.admin", "must be <transport>:user:<id>, such as telegram:user:123456", validAdmin(f.Telegram.Admin)},
@@ -308,6 +315,20 @@ func validAddr(a string) bool {
 func validURL(s string) bool {
 	u, err := url.Parse(s)
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+// validPublicURL accepts "" or an address Telegram can call a webhook at:
+// https, a host, no credentials, no path, query or fragment, and no port
+// or one of the four Telegram allows.
+func validPublicURL(s string) bool {
+	if s == "" {
+		return true
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+	return (u.Path == "" || u.Path == "/") && slices.Contains([]string{"", "443", "80", "88", "8443"}, u.Port())
 }
 
 // hasCredentials reports whether an address carries a user or a password:

@@ -9,6 +9,7 @@
     "node": { "description": "The process-wide settings.", "$ref": "#/$defs/node" },
     "log": { "description": "Where and how much the node logs.", "$ref": "#/$defs/log" },
     "metrics": { "description": "The Prometheus endpoint.", "$ref": "#/$defs/metrics" },
+    "http": { "description": "The node's public listener: the one entry the outside world has to the node.", "$ref": "#/$defs/http" },
     "telegram": { "description": "The Telegram transport.", "$ref": "#/$defs/telegram" },
     "agent": { "description": "The conversation agent's own settings.", "$ref": "#/$defs/agent" },
     "sandbox": { "description": "What the command sandbox hides and denies.", "$ref": "#/$defs/sandbox" },
@@ -119,6 +120,23 @@
         }
       }
     },
+    "http": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "addr": {
+          "description": "The listen address host:port of the public listener; off runs none. It serves plain HTTP and expects a proxy that ends TLS in front. It carries the Telegram webhook and a health route, and is never the metrics endpoint.",
+          "type": "string",
+          "default": "off"
+        },
+        "public_url": {
+          "description": "The HTTPS address the outside world reaches the listener at, such as https://ganglion.up.railway.app: no path, and no port or one of 443, 80, 88 and 8443. The node checks at start that this address reaches it.",
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        }
+      }
+    },
     "telegram": {
       "type": "object",
       "additionalProperties": false,
@@ -138,6 +156,12 @@
           "description": "The principal that is admin from the first start, as telegram:user:<id>. Missing seeds no admin.",
           "type": "string",
           "pattern": "^[a-z][a-z0-9]*:user:[0-9A-Za-z_.-]+$"
+        },
+        "updates": {
+          "description": "How updates arrive: polling (the node asks Telegram) or webhook (Telegram calls the public listener; needs http.addr and http.public_url). Applies at the next start.",
+          "type": "string",
+          "enum": ["polling", "webhook"],
+          "default": "polling"
         },
         "reply": {
           "description": "When an answer quotes the message it answers: auto (in a group, or when newer messages came after it), always, or off (never).",

@@ -28,6 +28,7 @@ func TestSchemaMatchesTheLoader(t *testing.T) {
 		"/$defs/node":        settings.Node{},
 		"/$defs/log":         settings.Log{},
 		"/$defs/metrics":     settings.Metrics{},
+		"/$defs/http":        settings.HTTP{},
 		"/$defs/telegram":    settings.Telegram{},
 		"/$defs/reactions":   settings.Reactions{},
 		"/$defs/agent":       settings.Agent{},

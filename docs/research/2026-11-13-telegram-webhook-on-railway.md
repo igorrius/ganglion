@@ -63,6 +63,27 @@ stop was `railway down`, then a new deploy. The owner sent the messages.
    message may hold, so a text of the full length cannot pass about 25 KB before its entities. The
    cap leaves more than forty times that.
 
+## The live check of the code
+
+The node of task 6.6 ran the same day as its own service, `webhook-check`,
+with a volume, the test bot and no models (the echo bot), from the branch of
+the pull request. The service is deleted.
+
+| What | Seen |
+|---|---|
+| Start with `telegram.updates: webhook` | The listener bound `:8080`; the check of the node's own domain passed at the first try; `telegram: webhook registered` 0.1 s after the start |
+| `getWebhookInfo` | The node's address, `max_connections: 1`, the three kinds of update polling asks for, nothing waiting |
+| The owner's message | Answered by the echo |
+| From outside, with no secret | `/healthz` 200, `/metrics` 404, a `POST` to the webhook's path 403 |
+| `http.public_url` set to a domain that is not the node's, then a restart | Five tries 3 s apart, each `404`; no `setWebhook`; the node removed the webhook it had set, polled, and the alert reached the owner's chat 12 s after the start |
+
+Not tried live: the second guard (deliveries failing while the node runs)
+and a restart with updates waiting; the tests against the fake Bot API hold
+both.
+
+One thing to know for the runbook: `railway up` from a git worktree uploads
+the main checkout. Name the folder: `railway up <path> --path-as-root`.
+
 ## Not measured
 
 - A stop of 30 minutes, to see that the retries stay at 1–2 minutes and do not stop. It does not

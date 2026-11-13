@@ -15,6 +15,7 @@ import (
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/outbox"
+	"github.com/igorrius/ganglion/publichttp"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool/builtin"
@@ -22,6 +23,7 @@ import (
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/transport"
 	"github.com/igorrius/ganglion/transport/telegram"
+	"github.com/igorrius/ganglion/transport/telegram/hookrecord"
 	"github.com/samber/do/v2"
 )
 
@@ -42,7 +44,39 @@ func Telegram() do.Provider[*telegram.Transport] {
 		b := do.MustInvoke[Bootstrap](i)
 		return telegram.New(b.BotToken, telegram.WithBaseURL(b.BotAPIURL), telegram.WithLogger(do.MustInvoke[*slog.Logger](i)),
 			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)), telegram.WithRichMessages(b.TelegramRich), telegram.WithCommands(do.MustInvoke[[]transport.Command](i)),
-			telegram.WithHealth(do.MustInvoke[*telegram.Health](i)), telegram.WithTopics(do.MustInvoke[groups.Topics](i).Seen))
+			telegram.WithHealth(do.MustInvoke[*telegram.Health](i)), telegram.WithTopics(do.MustInvoke[groups.Topics](i).Seen),
+			telegram.WithWebhook(b.PublicURL, do.MustInvoke[*publichttp.Listener](i).Reaches),
+			telegram.WithWebhookRecord(do.MustInvoke[*hookrecord.Store](i)))
+	}
+}
+
+// WebhookRecord provides the node's record of the Telegram webhook it set.
+func WebhookRecord() do.Provider[*hookrecord.Store] {
+	return func(i do.Injector) (*hookrecord.Store, error) {
+		return hookrecord.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, time.Now)
+	}
+}
+
+// PublicListener provides the node's public listener (R-CFG-11). It
+// listens only as a component, which Listeners adds when http.addr is on.
+func PublicListener() do.Provider[*publichttp.Listener] {
+	return func(i do.Injector) (*publichttp.Listener, error) {
+		return publichttp.New(publichttp.DefaultConfig(do.MustInvoke[Bootstrap](i).HTTPAddr), do.MustInvoke[*slog.Logger](i), time.After)
+	}
+}
+
+// Listeners are the components that listen for the outside world.
+type Listeners []node.Component
+
+// PublicListeners provides the listeners that are on.
+func PublicListeners() do.Provider[Listeners] {
+	return choose[Listeners](httpOn, listenersHTTP, listenersNone)
+}
+
+// HTTPListeners provides the public listener as a component.
+func HTTPListeners() do.Provider[Listeners] {
+	return func(i do.Injector) (Listeners, error) {
+		return Listeners{do.MustInvoke[*publichttp.Listener](i)}, nil
 	}
 }
 
@@ -159,23 +193,46 @@ func Loop() do.Provider[*core.Loop] {
 // Inbound are the components that bring messages into the inbox.
 type Inbound []node.Component
 
-// Receivers provides the inbound components that are on.
+// Receivers provides the inbound components that are on: Telegram by
+// polling or by the webhook, as telegram.updates says.
 func Receivers() do.Provider[Inbound] {
-	return choose[Inbound](telegramOn, inboundTelegram, inboundNone)
+	return func(i do.Injector) (Inbound, error) {
+		b, name := do.MustInvoke[Bootstrap](i), inboundNone
+		switch {
+		case telegramOn(b) && b.TelegramWebhook:
+			name = inboundWebhook
+		case telegramOn(b):
+			name = inboundTelegram
+		}
+		return do.InvokeNamed[Inbound](i, name)
+	}
 }
 
 // TelegramReceivers provides Telegram polling behind the access list.
 func TelegramReceivers() do.Provider[Inbound] {
+	return func(i do.Injector) (Inbound, error) { return Inbound{telegramPoller(i)}, nil }
+}
+
+// TelegramWebhookReceivers provides the Telegram webhook behind the access
+// list, with its route on the public listener.
+func TelegramWebhookReceivers() do.Provider[Inbound] {
 	return func(i do.Injector) (Inbound, error) {
-		q, logger := do.MustInvoke[*sqlqueue.Queue](i), do.MustInvoke[*slog.Logger](i)
-		return Inbound{node.Poller{
-			Transport: do.MustInvoke[*telegram.Transport](i),
-			Sink:      do.MustInvoke[*access.List](i).Filter(do.MustInvoke[*telegram.Reactor](i).Noting(q.Put), do.MustInvoke[access.Groups](i), logger),
-			Admins:    do.MustInvoke[alert.Admins](i),
-			Enqueue:   q.Enqueue,
-			Started:   time.Time(do.MustInvoke[ProcessStart](i)),
-			Log:       logger,
-		}}, nil
+		p := telegramPoller(i)
+		do.MustInvoke[*publichttp.Listener](i).Handle(telegram.WebhookPath, p.Transport.WebhookHandler())
+		return Inbound{node.Webhook{Poller: p}}, nil
+	}
+}
+
+// telegramPoller is Telegram's receiving side behind the access list.
+func telegramPoller(i do.Injector) node.Poller {
+	q, logger := do.MustInvoke[*sqlqueue.Queue](i), do.MustInvoke[*slog.Logger](i)
+	return node.Poller{
+		Transport: do.MustInvoke[*telegram.Transport](i),
+		Sink:      do.MustInvoke[*access.List](i).Filter(do.MustInvoke[*telegram.Reactor](i).Noting(q.Put), do.MustInvoke[access.Groups](i), logger),
+		Admins:    do.MustInvoke[alert.Admins](i),
+		Enqueue:   q.Enqueue,
+		Started:   time.Time(do.MustInvoke[ProcessStart](i)),
+		Log:       logger,
 	}
 }
 
@@ -230,7 +287,8 @@ func AgentSchedulers() do.Provider[Schedulers] {
 }
 
 // CoreComponents provides the core role's components: the sender, the
-// turn loop, the pruners, the schedulers and the inbound components.
+// turn loop, the pruners, the schedulers, the public listener and the
+// inbound components.
 func CoreComponents() do.Provider[[]node.Component] {
 	return func(i do.Injector) ([]node.Component, error) {
 		q := do.MustInvoke[*sqlqueue.Queue](i)
@@ -242,6 +300,7 @@ func CoreComponents() do.Provider[[]node.Component] {
 		comps = append(comps, do.MustInvoke[Housekeeping](i)...)
 		comps = append(comps, do.MustInvoke[Schedulers](i)...)
 		comps = append(comps, do.MustInvoke[Reactions](i)...)
+		comps = append(comps, do.MustInvoke[Listeners](i)...)
 		return append(comps, do.MustInvoke[Inbound](i)...), nil
 	}
 }

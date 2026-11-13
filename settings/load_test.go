@@ -156,3 +156,35 @@ func TestMemorySection(t *testing.T) {
 		}
 	}
 }
+
+// R-CFG-11: the public listener and the webhook mode are checked at the
+// start, with the path that is wrong.
+func TestWebhookSettings(t *testing.T) {
+	for src, path := range map[string]string{
+		"http:\n  addr: nowhere\n":                                          "http.addr",
+		"http:\n  public_url: http://x.example\n":                           "http.public_url",
+		"http:\n  public_url: https://x.example/hook\n":                     "http.public_url",
+		"http:\n  public_url: https://x.example:9000\n":                     "http.public_url",
+		"http:\n  public_url: 'https://u:p@x.example'\n":                    "http.public_url",
+		"http:\n  public_url: 'https://x.example?a=1'\n":                    "http.public_url",
+		"telegram:\n  updates: push\n":                                      "telegram.updates",
+		"telegram:\n  updates: webhook\n":                                   "telegram.updates",
+		"telegram:\n  updates: webhook\nhttp:\n  addr: ':8080'\n":           "telegram.updates",
+		"telegram:\n  updates: webhook\nhttp:\n  public_url: https://x.y\n": "telegram.updates",
+	} {
+		_, err := settings.Parse([]byte(src))
+		if err == nil || !strings.Contains(err.Error(), "ganglion.yaml: "+path+":") {
+			t.Errorf("%q: err = %v; want path %s", src, err, path)
+		}
+	}
+	f, err := settings.Parse([]byte("telegram:\n  updates: webhook\nhttp:\n  addr: ':8080'\n  public_url: https://x.example:8443/\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.HTTP.On() || f.Telegram.Updates != settings.UpdatesWebhook {
+		t.Errorf("file %+v %+v", f.HTTP, f.Telegram.Updates)
+	}
+	if d := settings.Default(); d.HTTP.On() || d.Telegram.Updates != settings.UpdatesPolling {
+		t.Errorf("the default opens a listener or leaves polling: %+v %q", d.HTTP, d.Telegram.Updates)
+	}
+}

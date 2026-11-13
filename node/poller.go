@@ -47,12 +47,19 @@ func (p Poller) Run(ctx context.Context) error {
 // sending, and a supervisor must not restart it into the same fight.
 func alertConflict(ctx context.Context, admins alert.Admins, enqueue func(context.Context, ...event.Outgoing) error,
 	started time.Time, logger *slog.Logger) error {
-	msgs, err := admins.Messages(ctx, "alert:telegram-conflict:"+strconv.FormatInt(started.UnixMilli(), 10), conflictAlert)
+	alertAdmins(ctx, admins, enqueue, "alert:telegram-conflict:", conflictAlert, started, logger)
+	return nil
+}
+
+// alertAdmins enqueues text to every admin under key, once per process
+// start. A failure is logged, never returned.
+func alertAdmins(ctx context.Context, admins alert.Admins, enqueue func(context.Context, ...event.Outgoing) error,
+	key, text string, started time.Time, logger *slog.Logger) {
+	msgs, err := admins.Messages(ctx, key+strconv.FormatInt(started.UnixMilli(), 10), text)
 	if err == nil && len(msgs) > 0 {
 		err = enqueue(ctx, msgs...)
 	}
 	if err != nil && ctx.Err() == nil {
-		logger.Error("node: the 409 alert was not stored", "err", err)
+		logger.Error("node: an alert was not stored", "key", key, "err", err)
 	}
-	return nil
 }

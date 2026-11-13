@@ -204,6 +204,42 @@ func (c *client) getMe(ctx context.Context) (user, error) {
 	return u, err
 }
 
+// allowedUpdates are the kinds of update the node asks for, the same list
+// in both modes (R-DLV-18): messages, button presses and changes of the
+// bot's own membership.
+var allowedUpdates = []string{"message", "callback_query", "my_chat_member"}
+
+// setWebhook tells Telegram to send updates to url, with secret in the
+// secret header of every request. One connection keeps the order polling
+// gives; updates that wait are kept.
+func (c *client) setWebhook(ctx context.Context, url, secret string) error {
+	return c.call(ctx, "setWebhook", struct {
+		URL            string   `json:"url"`
+		SecretToken    string   `json:"secret_token"`
+		AllowedUpdates []string `json:"allowed_updates"`
+		MaxConnections int      `json:"max_connections"`
+	}{url, secret, allowedUpdates, 1}, nil)
+}
+
+// deleteWebhook removes the webhook and keeps the updates that wait.
+func (c *client) deleteWebhook(ctx context.Context) error {
+	return c.call(ctx, "deleteWebhook", nil, nil)
+}
+
+// webhookInfo is what Telegram says of the bot's webhook.
+type webhookInfo struct {
+	URL                string `json:"url"` // "" when none is set
+	PendingUpdateCount int    `json:"pending_update_count"`
+	LastErrorDate      int64  `json:"last_error_date"` // Unix time; 0 when no delivery failed
+}
+
+// getWebhookInfo reads the bot's webhook and its deliveries.
+func (c *client) getWebhookInfo(ctx context.Context) (webhookInfo, error) {
+	var info webhookInfo
+	err := c.call(ctx, "getWebhookInfo", nil, &info)
+	return info, err
+}
+
 // getUpdates confirms every update below offset and returns the next
 // messages, button presses and changes of the bot's own membership, waiting up to timeout for one to arrive.
 func (c *client) getUpdates(ctx context.Context, offset int64, timeout time.Duration) ([]update, error) {
@@ -211,7 +247,7 @@ func (c *client) getUpdates(ctx context.Context, offset int64, timeout time.Dura
 		Offset         int64    `json:"offset,omitempty"`
 		Timeout        int      `json:"timeout"`
 		AllowedUpdates []string `json:"allowed_updates"`
-	}{offset, int(timeout / time.Second), []string{"message", "callback_query", "my_chat_member"}}
+	}{offset, int(timeout / time.Second), allowedUpdates}
 	var ups []update
 	err := c.call(ctx, "getUpdates", params, &ups)
 	return ups, err

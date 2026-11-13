@@ -135,6 +135,7 @@ func settingsPath(named, db string) string {
 // through src.
 func fromFile(f settings.File, db string, limit memlimit.Limit, src secrets.Source) (config.Bootstrap, error) {
 	b := config.Bootstrap{DB: db, Languages: f.Agent.Languages, BotAPIURL: f.Telegram.APIURL, Admin: f.Telegram.Admin,
+		HTTPAddr: f.HTTP.Addr, PublicURL: f.HTTP.PublicURL, TelegramWebhook: f.Telegram.Updates == settings.UpdatesWebhook,
 		MetricsAddr: f.Metrics.Addr, TelegramReply: f.Telegram.Reply, TelegramRich: f.Telegram.Rich,
 		ReactionAfter: time.Duration(f.Telegram.Reactions.After), ReactionDwell: time.Duration(f.Telegram.Reactions.Dwell),
 		SandboxDeny: f.Sandbox.Deny, SandboxHideNames: f.Sandbox.HideNames,
@@ -188,6 +189,9 @@ func announce(logger *slog.Logger, b config.Bootstrap) {
 	}
 	if b.BotToken == "" {
 		logger.Warn("node: no " + b.Settings.Telegram.Token.Name() + "; the Telegram transport is off")
+	}
+	if b.Settings.HTTP.On() {
+		logger.Info("node: public listener on", "addr", b.HTTPAddr, "telegram_webhook", b.TelegramWebhook)
 	}
 	l := b.MemoryLimit
 	logger.Info("node: memory limit", "bytes", l.Bytes, "source", string(l.Source))
