@@ -375,7 +375,15 @@ sequenceDiagram
 
 A module granted `notify: {per_day: N}` writes plain text to the private
 chat of the admin who installed it, with no model (R-RUN-16,
-[ADR-0066](../adr/0066-notify-capability.md)). The port counts the message
+[ADR-0066](../adr/0066-notify-capability.md)), or to the destinations its
+line in the node's file names (R-RUN-18,
+[ADR-0079](../adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)):
+the module host puts one event per destination, each resolved from the
+file when the message is sent, and the module does not know the list. A
+copy for another conversation than the owner's chat leaves no note in that
+conversation's history. The admin changes the list in words
+(`module.notify_to`), names places with `destination.set`, and the node
+knows a forum's topics by the titles the transport reports to `groups`. The port counts the message
 for the day in the node's time zone before it puts the event; the agent
 writes the node's note into the history and the message into the outbox,
 which the queue stores together. The model never sees the text (R-RUN-13);

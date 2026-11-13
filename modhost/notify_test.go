@@ -3,6 +3,8 @@ package modhost_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/igorrius/ganglion/settings"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -190,5 +192,110 @@ func TestABuildsCheckCannotNotify(t *testing.T) {
 	}
 	if got := e.inbox.taken(); len(got) != 0 {
 		t.Fatalf("events %+v", got)
+	}
+}
+
+// copies are the module.notify events in the inbox as "conv to key".
+func (e *env) copies(t *testing.T) []string {
+	t.Helper()
+	var out []string
+	for _, ev := range e.inbox.taken() {
+		if ev.Kind != event.KindModuleNotify {
+			continue
+		}
+		var p event.ModuleNotify
+		if err := json.Unmarshal(ev.Payload, &p); err != nil {
+			t.Fatal(err)
+		}
+		if ev.Source != event.SourceModule || p.Principal != owner || p.Transport != "telegram" {
+			t.Fatalf("event %+v, payload %+v", ev, p)
+		}
+		out = append(out, ev.Conv+" to="+p.To+" key="+ev.IdemKey)
+	}
+	return out
+}
+
+// R-RUN-18: a module's message goes to every destination its line names,
+// the owner's copy under the message's own key; the day counts one
+// message; a run delivered again puts nothing twice; the module does not
+// know the list.
+func TestAMessageGoesToEveryDestinationOfTheLine(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	e := newEnv(t, active(t, "local/n", notifyManifest))
+	if err := e.conf.SetModule(settings.Module{Name: "local/n", NotifyTo: []string{"family-k7", "owner"}}); err != nil {
+		t.Fatal(err)
+	}
+	e.start(t)
+	e.runCron(t, "local/n", "cron:module:local/n:0:1")
+	if got := rec.Value(t, "ganglion.modhost.notifies", map[string]string{"module": "local/n", "outcome": "sent"}); got != 1 {
+		t.Errorf("sent = %v: a call is counted once, whatever its destinations", got)
+	}
+	e.runCron(t, "local/n", "cron:module:local/n:0:1") // the event delivered again
+	const key = "notify:local/n:cron:module:local/n:0:1:1"
+	want := []string{"telegram:-1001/45 to=family-k7 key=" + key + ":to:family-k7", "telegram:42 to= key=" + key}
+	if got := e.copies(t); !slices.Equal(got, want) {
+		t.Fatalf("copies %v, want %v", got, want)
+	}
+}
+
+// A name that resolves to nothing, or cannot be resolved now, sends
+// nothing there; the other copies go, and the module is told the message
+// was sent. With no copy at all it is told nothing was sent.
+func TestADestinationThatDoesNotResolveIsSkipped(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	e := newEnv(t, active(t, "local/n", notifyManifest))
+	if err := e.conf.SetModule(settings.Module{Name: "local/n", NotifyTo: []string{"gone", "broken", "family-k7"}}); err != nil {
+		t.Fatal(err)
+	}
+	e.start(t)
+	if got := e.send(t, 1); got != "" {
+		t.Fatalf("the module was told %q, want sent", got)
+	}
+	if got := e.copies(t); len(got) != 1 || !strings.HasPrefix(got[0], "telegram:-1001/45 to=family-k7 ") {
+		t.Fatalf("copies %v", got)
+	}
+	if got := rec.Value(t, "ganglion.modhost.notifies", map[string]string{"module": "local/n", "outcome": "no_destination"}); got != 2 {
+		t.Errorf("no_destination = %v, want 2", got)
+	}
+	if err := e.conf.SetModule(settings.Module{Name: "local/n", NotifyTo: []string{"gone"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.host.Reload(context.Background(), "local/n"); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.send(t, 2); got != "limit" {
+		t.Fatalf("with no copy sent the module was told %q, want limit (nothing was sent)", got)
+	}
+}
+
+// Changing the line and reloading changes where the next message goes;
+// the node's own lines about a module go to the owner only.
+func TestTheLineIsReadWhenTheModuleLoads(t *testing.T) {
+	e := newEnv(t, active(t, "local/n", notifyManifest))
+	e.start(t)
+	e.send(t, 1)
+	if err := e.conf.SetModule(settings.Module{Name: "local/n", NotifyTo: []string{"family-k7"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.host.Reload(context.Background(), "local/n"); err != nil {
+		t.Fatal(err)
+	}
+	e.send(t, 2)
+	got := e.copies(t)
+	if len(got) != 2 || !strings.HasPrefix(got[0], "telegram:42 to= ") || !strings.HasPrefix(got[1], "telegram:-1001/45 to=family-k7 ") {
+		t.Fatalf("copies %v", got)
+	}
+	// Past the daily limit the limit line goes to the owner, not to the topic.
+	for n := 3; n <= 26; n++ {
+		e.send(t, n)
+	}
+	var lines []string
+	for _, c := range e.copies(t) {
+		if strings.Contains(c, ":limit:") {
+			lines = append(lines, c)
+		}
+	}
+	if len(lines) != 1 || !strings.HasPrefix(lines[0], "telegram:42 to= ") {
+		t.Fatalf("limit lines %v", lines)
 	}
 }

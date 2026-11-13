@@ -72,7 +72,15 @@ type SettingsPort interface {
 	SetOff(name string, off bool, why string) error
 	SetModule(m settings.Module) error
 	RemoveModule(name string) error
+	SetNotifyTo(module string, names []string) error
 }
+
+// DestinationFunc resolves a destination's name to its transport and
+// conversation; ok is false when there is none by that name.
+type DestinationFunc func(name string) (transport, conv string, ok bool, err error)
+
+// NoDestinations knows no destination.
+func NoDestinations(string) (string, string, bool, error) { return "", "", false, nil }
 
 // Deps are the host's collaborators; all are required.
 type Deps struct {
@@ -88,7 +96,10 @@ type Deps struct {
 	State       runner.State
 	Settings    SettingsPort
 	Admins      alert.Admins
-	Now         func() time.Time
+	// Destinations resolves the names of a module's notify_to
+	// (groups.Destinations.Resolve); NoDestinations knows none.
+	Destinations DestinationFunc
+	Now          func() time.Time
 	// Location is the node's time zone: a module's daily notify limit
 	// counts its days (R-RUN-16); nil is UTC.
 	Location *time.Location

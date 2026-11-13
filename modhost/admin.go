@@ -229,6 +229,25 @@ func (h *Host) Configure(ctx context.Context, name, key, value string) error {
 	return h.Reload(ctx, module)
 }
 
+// NotifyTo sets where the messages of the module called name go: the
+// destinations its line names from now on (R-RUN-18). The line is written
+// and the module reloaded, as Configure does. An unknown module is
+// modstore.ErrUnknownModule; a name that is no destination is the
+// settings' error.
+func (h *Host) NotifyTo(ctx context.Context, name string, names []string) error {
+	module := fullName(name)
+	if _, err := h.known(ctx, module); err != nil {
+		return err
+	}
+	if slices.Equal(names, []string{settings.DestinationOwner}) {
+		names = nil // the owner alone is the default: no key in the file
+	}
+	if err := h.d.Settings.SetNotifyTo(module, names); err != nil {
+		return fmt.Errorf("modhost: %w", err)
+	}
+	return h.Reload(ctx, module)
+}
+
 // typedValue is value as the Go value of the key's declared type.
 func typedValue(m runner.Manifest, key, value string) (any, error) {
 	k, ok := m.Config[key]

@@ -148,25 +148,29 @@ When the node has not seen the topic yet, the agent says so and offers two
 ways: address the bot once in that topic, or paste a link to any message
 from it (the link holds the chat and the topic).
 
-## 8. Modules: `NotifyTo`
+## 8. Modules: the node's file routes
 
-- `Notify(text)` is unchanged: the owner's private chat.
-- `NotifyTo(destination, text)` is new in the PDK. The module names a
-  destination, never a chat id.
-- A module may use only the destinations on its own line in the node's
-  file. The admin gives them in words, with a press.
-- The name is resolved when the message is sent, so pointing a name at
-  another topic needs no rebuild.
-- An unknown or ungiven name returns an error to the module, and the admin
-  gets an alert in the private chat.
+Changed on 2026-11-13 (owner), after the first hour of live use
+([ADR-0079](../adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
+The first version of this section gave a module a `NotifyTo(destination,
+text)` call. The owner asked instead to configure the channels a module
+writes to, maybe more than one, and to move the routing onto an event bus
+later:
+
+- `Notify(text)` is unchanged, and it is the only call. The module does
+  not know where its text goes.
+- A module's line in the node's file lists `notify_to`, names of
+  destinations; every message goes to each. `owner` is the built-in name
+  of the private chat of the module's owner, and the default.
+- The admin changes the list in words, with a press; the module reloads.
+- A name is resolved when the message is sent, so pointing a name at
+  another topic needs no reload.
+- A message to a group leaves no note in the group's history.
 - A module's message in a group is marked with the module's name as
   elsewhere (ADR-0073, ADR-0074).
 
-Three options were weighed: named destinations given per module (taken,
-owner); redirecting a module's only recipient with no PDK change (one
-address per module, so errors would land in the family chat); a raw
-conversation key from the module (a module could then write to any chat
-the bot is in, which breaks the boundary of ADR-0066).
+Not built: one module sending different messages to different places.
+When it is needed, a message gets a kind and the file routes by it.
 
 ## 9. The node's file
 
@@ -176,11 +180,12 @@ telegram:
     - chat: -1001234567890
       name: family
       role: family
-  destinations:
-    family-k7: telegram:-1001234567890/45
+destinations:
+  - name: family-k7
+    conv: telegram:-1001234567890/45
 modules:
   - name: deye-report
-    notify_to: [family-k7]
+    notify_to: [family-k7, owner]
 ```
 
 The node writes these sections the way it writes a module's line today,
@@ -201,9 +206,9 @@ a confirmation press:
 - name a destination, rename it, remove it;
 - give a module a destination or take it away.
 
-When the agent builds a module that should post somewhere, it uses the
-destination's name in `NotifyTo` and asks for the grant as part of the
-install.
+When the agent builds a module that should post somewhere, the module
+only calls `Notify`; the agent then sets the module's `notify_to` with the
+admin's press.
 
 ## 11. Security
 
@@ -228,7 +233,7 @@ install.
   username, `my_chat_member` and group titles.
 - Unit tests: the addressing rule (each of the three forms and the drops),
   the access rule (the three cases of section 4), resolving a
-  destination, a refused `NotifyTo`.
+  destination, a name that no longer resolves.
 - Chatlab: connect a group through the card, a member is answered only
   when addressing the bot, a module posts to a topic.
 - Live, in the owner's family forum: the same three, plus the topic check

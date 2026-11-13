@@ -154,14 +154,18 @@ const (
 // characters: outside content, which goes to the owner escaped and never
 // to the model; the history gets the node's note without it.
 type ModuleNotify struct {
-	Module    string     `json:"module"`            // full name
-	Version   string     `json:"version,omitempty"` // the running version's number; "" from an older node
-	Text      string     `json:"text"`              // the module's text, cut; "" for a node line
-	Node      NotifyNode `json:"node"`              // a node line instead of the text
-	PerDay    int        `json:"per_day"`           // the manifest's daily limit
-	At        int64      `json:"at_ms"`             // when the module wrote it, Unix ms
-	Principal string     `json:"principal"`         // the admin it goes to
-	Transport string     `json:"transport"`         // where it goes
+	Module  string     `json:"module"`            // full name
+	Version string     `json:"version,omitempty"` // the running version's number; "" from an older node
+	Text    string     `json:"text"`              // the module's text, cut; "" for a node line
+	Node    NotifyNode `json:"node"`              // a node line instead of the text
+	PerDay  int        `json:"per_day"`           // the manifest's daily limit
+	At      int64      `json:"at_ms"`             // when the module wrote it, Unix ms
+	// To is the name of the destination the message goes to, from the
+	// module's notify_to; "" is the owner's private chat (R-RUN-18). The
+	// event's conversation is the destination's.
+	To        string `json:"to,omitempty"`
+	Principal string `json:"principal"` // the admin it goes to
+	Transport string `json:"transport"` // where it goes
 }
 
 // ModuleBuilt is the payload of an event of kind "module.built": the job
