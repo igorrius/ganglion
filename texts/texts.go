@@ -69,6 +69,12 @@ const (
 	ButtonDetails        Key = "button.details"
 	ButtonDelete         Key = "button.delete"
 	ButtonRunNow         Key = "button.run_now"
+	ButtonAllow          Key = "button.allow"
+	ButtonRefuse         Key = "button.refuse"
+	GroupRequestCard     Key = "group.request_card"  // vars: title, id, name
+	GroupNotConnected    Key = "group.not_connected" // said once in a group that is not connected
+	GroupAllowed         Key = "group.allowed"       // vars: title
+	GroupRefused         Key = "group.refused"       // vars: title
 	AskLanguage          Key = "ask.language"
 	AskLanguageNoFile    Key = "ask.language_no_file"
 	AskRunTool           Key = "ask.run_tool"
@@ -356,6 +362,7 @@ var allKeys = []Key{
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, ReplyBuildLate, ReplyRestarting, StatusCommandsOff,
+	ButtonAllow, ButtonRefuse, GroupRequestCard, GroupNotConnected, GroupAllowed, GroupRefused,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskModuleWrite, AskForgetFact, AskForgetSlug, AskForgetTopic, AskPersona, AskSkillScript, AskHostExec, AskPlan, AskModuleImport, AskModuleInstall, AskModuleNetwork, AskModuleSecrets, AskModuleCreates, AskModuleTakes, AskModuleReads, AskModuleReacts, AskModuleNotify, AskModuleRuns, AskModuleTool, AskModuleAbout, AskModuleLimits, AskModuleNew, AskModuleNewNetwork, AskModuleNewSecrets, AskModuleNewCells, AskModuleNewReads, AskModuleNewReacts, AskModuleNewNotify, AskModuleNewRuns, AskModuleNewMemory, AskModuleNewTimeout, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted,
 	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, StatusModuleFallback, StatusReasonModuleFailed, StatusModulesLocal, StatusModuleOff, StatusReasonModuleCrashloop, StatusModuleStopped, StatusModulesUnread, StatusReasonModuleInit, StatusReasonModuleCells, StatusReasonModuleLoad, StatusReasonModuleNoAdmin, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusSectionJobs, StatusJobBuild, StatusJobCommand, StatusJobBuildQueued, StatusJobCommandQueued, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled, StatusUnitDay, StatusUnitHour, StatusUnitMin, StatusUnitSec, StatusSandboxReady, StatusSandboxOff, StatusReasonSandboxNotLinux, StatusReasonSandboxRoot, StatusReasonSandboxLandlock, StatusReasonSandboxDumpable, StatusReasonSandboxSelfTest,
 	ButtonHistory, ModulesUsage, ModulesNone, ModulesHeader, ModulesPrevious, ModulesFailed, ModulesLocalRow, ModulesStateRunning, ModulesStateOff, ModulesStateCrashloop, ModulesStateStopped, ModulesUnknown, ModulesUpdated, ModulesUpToDate, ModulesRolledBack, ModulesNothingToRollBack, ModulesStays, ModulesCardRunning, ModulesCardStopped, ModulesCardVersions, ModulesCardHealthOK, ModulesCardHealthFailed, ModulesJournalRow, ModulesMarkActive, ModulesMarkPrevious, ModulesMarkFailed, ModulesMarkRetired, ModulesCardSettings, ModulesCardReacts, ModulesCardFeeds, ModulesCardNotify, ModulesSettingRow, ModulesSettingUnset, ModulesSettingDefault, ModulesSettingRequired, ModulesConfigDone, ModulesConfigUndeclared, ModulesConfigKeys, ModulesConfigNoKeys, ModulesConfigWrongType, ModulesOffDone, ModulesOnDone, ModulesNotStarted, ModulesRemoved, ModuleNotifyLimit, ModuleChainStopped, CellsNone, CellsRow, CellsNoValue, CellsMore, CellsAgeNow, CellsAgeMin, CellsAgeHour, CellsAgeDay, CellsHistoryHead, CellsHistoryRow, CellsHistoryNone, CellsGone,
@@ -404,7 +411,7 @@ func limit(k Key) int {
 // missing any of these is refused whole (R-LANG-5).
 func IsApproval(k Key) bool {
 	switch k {
-	case ButtonApprove, ButtonDeny, ButtonDelete, ButtonRunNow, MemoryProposal, ButtonRemember, ButtonSkip, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands,
+	case ButtonApprove, ButtonDeny, ButtonDelete, ButtonRunNow, ButtonAllow, ButtonRefuse, GroupRequestCard, MemoryProposal, ButtonRemember, ButtonSkip, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands,
 		SchedOnce, SchedEvery, SchedEveryNext, SchedThisChat, SchedNone:
 		return true
 	default:

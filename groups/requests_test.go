@@ -104,8 +104,8 @@ func TestSeenCapsWaitingRequests(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(in.events) != groups.MaxPending || pending(t, s) != groups.MaxPending {
-		t.Fatalf("%d events, %d pending, want %d of each", len(in.events), pending(t, s), groups.MaxPending)
+	if len(in.events) != groups.MaxPending || waiting(t, s) != groups.MaxPending {
+		t.Fatalf("%d events, %d pending, want %d of each", len(in.events), waiting(t, s), groups.MaxPending)
 	}
 	if got := rec.Value(t, "ganglion.groups.requests", map[string]string{"outcome": "capped"}); got != 5 {
 		t.Errorf("requests{outcome=capped} = %v, want 5", got)

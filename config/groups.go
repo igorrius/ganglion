@@ -38,3 +38,12 @@ func AccessGroups() do.Provider[access.Groups] {
 		return access.Groups{Has: connected.Has, Unknown: requests.Seen}, nil
 	}
 }
+
+// GroupActions provides the buttons under a group's request: Allow writes
+// the group's line to the node's file.
+func GroupActions() do.Provider[groups.Actions] {
+	return func(i do.Injector) (groups.Actions, error) {
+		return groups.Actions{Store: do.MustInvoke[*groups.Store](i), File: do.MustInvoke[settings.TelegramFile](i),
+			Chat: telegram.GroupChat, IsAdmin: do.MustInvoke[*access.List](i).IsAdmin}, nil
+	}
+}

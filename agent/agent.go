@@ -382,7 +382,15 @@ var payloads = map[event.Kind]func(t *turn) bool{
 		if json.Unmarshal(t.event.Payload, d) != nil || d.Button == "" || d.From == "" {
 			return false
 		}
-		t.msg = event.Message{From: d.From, Name: d.Name, Ref: d.Ref}
+		t.msg = event.Message{From: d.From, Name: d.Name, Ref: d.Ref, Group: d.Group}
+		return true
+	},
+	event.KindGroupRequest: func(t *turn) bool {
+		g := &t.groupReq
+		if json.Unmarshal(t.event.Payload, g) != nil || g.Group == "" || g.Conv == "" || g.Principal == "" {
+			return false
+		}
+		t.msg = event.Message{From: g.Principal}
 		return true
 	},
 	event.KindToolResult: func(t *turn) bool {

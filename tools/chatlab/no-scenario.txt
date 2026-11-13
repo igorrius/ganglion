@@ -15,6 +15,7 @@ access/**
 agent/background.go
 agent/cells.go
 agent/commands.go
+agent/group_request.go
 agent/config.go
 agent/limits.go
 agent/model.go

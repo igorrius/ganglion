@@ -100,9 +100,9 @@ Details that follow from the rulings:
   titles and their own display name.
 - **Abuse cases and what stops them.**
   - *Steering the agent into an admin's action through a group's shared
-    history.* No turn in a group has the admin role (`setAdmin` requires
-    the principal's private chat), so no admin tool is on offer there,
-    whoever writes.
+    history.* No turn that a group's message or press started has the admin role
+    (`setAdmin` reads the group the transport put on the event), so no
+    admin tool is on offer there, whoever writes.
   - *Talking to the bot from a group nobody allowed.* The access filter
     drops every event of a group that is not listed, the admin's own
     included.

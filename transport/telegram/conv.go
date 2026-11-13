@@ -62,3 +62,11 @@ func PrivateConv(principal string) (transport, conv string, ok bool) {
 // GroupKey is the key of a group chat as a whole: its conversation with
 // no topic. Every topic of a forum shares it.
 func GroupKey(chatID int64) string { return ConvKey(chatID, 0) }
+
+// GroupChat returns the chat id of a group's key; ok is false for a key
+// that is not a group chat as a whole: a private chat, a topic, another
+// transport's key.
+func GroupChat(group string) (chat int64, ok bool) {
+	chat, thread, err := ParseConv(group)
+	return chat, err == nil && thread == 0 && chat < 0
+}

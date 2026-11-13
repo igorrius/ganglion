@@ -46,7 +46,7 @@ func status(t *testing.T, s *groups.Store, group string) (groups.Status, bool) {
 	return st, ok
 }
 
-func pending(t *testing.T, s *groups.Store) int {
+func waiting(t *testing.T, s *groups.Store) int {
 	t.Helper()
 	n, err := s.Pending(context.Background())
 	if err != nil {
@@ -64,14 +64,14 @@ func TestStoreRemembersARequest(t *testing.T) {
 	if err := s.Set(ctx, family, "Family", groups.StatusPending); err != nil {
 		t.Fatal(err)
 	}
-	if st, ok := status(t, s, family); !ok || st != groups.StatusPending || pending(t, s) != 1 {
-		t.Fatalf("status %q %v, pending %d", st, ok, pending(t, s))
+	if st, ok := status(t, s, family); !ok || st != groups.StatusPending || waiting(t, s) != 1 {
+		t.Fatalf("status %q %v, pending %d", st, ok, waiting(t, s))
 	}
 	if err := s.Set(ctx, family, "Family", groups.StatusRefused); err != nil {
 		t.Fatal(err)
 	}
-	if st, ok := status(t, s, family); !ok || st != groups.StatusRefused || pending(t, s) != 0 {
-		t.Fatalf("status %q %v, pending %d", st, ok, pending(t, s))
+	if st, ok := status(t, s, family); !ok || st != groups.StatusRefused || waiting(t, s) != 0 {
+		t.Fatalf("status %q %v, pending %d", st, ok, waiting(t, s))
 	}
 	if err := s.Forget(ctx, family); err != nil {
 		t.Fatal(err)
@@ -100,8 +100,8 @@ func TestAPendingRequestExpires(t *testing.T) {
 		t.Fatal("the request ran out before its time")
 	}
 	c.at = t0.Add(groups.RequestTTL + time.Second)
-	if _, ok := status(t, s, family); ok || pending(t, s) != 0 {
-		t.Fatalf("the request did not run out: pending %d", pending(t, s))
+	if _, ok := status(t, s, family); ok || waiting(t, s) != 0 {
+		t.Fatalf("the request did not run out: pending %d", waiting(t, s))
 	}
 	c.at = t0.Add(10 * groups.RequestTTL)
 	if st, ok := status(t, s, "telegram:-1002"); !ok || st != groups.StatusRefused {

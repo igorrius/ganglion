@@ -23,6 +23,7 @@ type Confirmations interface {
 	Get(ctx context.Context, id string) (pending.Item, error)
 	Finish(ctx context.Context, id string, o pending.Outcome) error
 	Waiting(ctx context.Context, ids []string) ([]string, error)
+	AddButtons(ctx context.Context, bs ...pending.Button) error
 }
 
 // confirmationPrefix starts the user-role note that brings a confirmed
@@ -44,7 +45,7 @@ const ()
 
 // resume handles a press of a button, the expiry of a pending call, the
 // end of a host command or a module build in the background, a module's
-// escalation and a module's message, and ends the turn; a message goes on to the next
+// escalation, a module's message and a group's request, and ends the turn; a message goes on to the next
 // stages (ADR-0032, R-CMD-4).
 func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 	switch t.event.Kind {
@@ -64,7 +65,9 @@ func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 		return true, a.moduleNotifyEvent(ctx, t)
 	case event.KindMessage, event.KindSchedule:
 	case event.KindModuleTrigger: // never here: Handle runs a trigger before begin
-	case event.KindGroupJoined, event.KindGroupRequest: // never here: the access filter takes the first, begin knows no payload of the second
+	case event.KindGroupRequest:
+		return true, a.groupRequest(ctx, t)
+	case event.KindGroupJoined: // never here: the access filter takes it
 	}
 	return false, nil
 }
