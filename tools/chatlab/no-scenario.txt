@@ -100,10 +100,12 @@ tool/builtin/question.go
 tool/journal/**
 transport/errors.go
 transport/transport.go
+transport/telegram/addressed.go
 transport/telegram/client.go
 transport/telegram/commands.go
 transport/telegram/conv.go
 transport/telegram/files.go
+transport/telegram/groupcount.go
 transport/telegram/markdown.go
 transport/telegram/reactions.go
 transport/telegram/rich.go

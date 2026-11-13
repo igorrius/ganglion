@@ -66,7 +66,11 @@ func TestCrashHarness(t *testing.T) {
 			}
 			text := fmt.Sprintf("m%03d", i)
 			chats[chat] = append(chats[chat], text)
-			lastUpdate = fake.AddMessage(telegramtest.Incoming{ChatID: chat, UserID: adminID, Name: "Admin", Text: text})
+			in := telegramtest.Incoming{ChatID: chat, UserID: adminID, Name: "Admin", Text: text}
+			if chat == groupID { // a group message reaches the node only when it addresses the bot (R-DLV-16)
+				in.Extra = fake.AddressBot()
+			}
+			lastUpdate = fake.AddMessage(in)
 			time.Sleep(time.Duration(iters) * 1250 * time.Microsecond)
 		}
 	})

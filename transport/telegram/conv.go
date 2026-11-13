@@ -58,3 +58,7 @@ func PrivateConv(principal string) (transport, conv string, ok bool) {
 	}
 	return Name, ConvKey(id, 0), true
 }
+
+// GroupKey is the key of a group chat as a whole: its conversation with
+// no topic. Every topic of a forum shares it.
+func GroupKey(chatID int64) string { return ConvKey(chatID, 0) }

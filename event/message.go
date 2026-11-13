@@ -27,6 +27,12 @@ type Message struct {
 	// Reply is the message this one answers, as the channel reports it
 	// (R-DLV-13); nil when it answers none.
 	Reply *Replied `json:"reply,omitempty"`
+	// Group is the channel's key of the group chat the message came from,
+	// the same for every topic of a forum; "" in a private chat. The
+	// access filter lets a group's message through by it (R-DLV-17).
+	// GroupTitle is the group's name, outside text.
+	Group      string `json:"group,omitempty"`
+	GroupTitle string `json:"group_title,omitempty"`
 }
 
 // Replied is a message a person answered with a reply, as the channel reports it
@@ -84,6 +90,8 @@ type Decision struct {
 	Query string `json:"query,omitempty"`
 	// Lang is as Message.Lang, for the person who pressed.
 	Lang string `json:"lang,omitempty"`
+	// Group is as Message.Group, for the message holding the button.
+	Group string `json:"group,omitempty"`
 }
 
 // ToolResult is the payload of an event of kind "tool.result": a pending

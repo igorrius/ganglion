@@ -36,6 +36,7 @@ type Incoming struct {
 	Text     string // empty: a message without text, such as a sticker
 	Caption  string // caption of a photo or document
 	IsBot    bool   // the sender is a bot
+	Title    string // the group's title; "" for none
 	Language string // the sender's language_code; "" for none
 	// Extra are more Bot API message fields, set as they are: "photo",
 	// "document", "voice" and the like.
@@ -205,7 +206,7 @@ func (s *Server) AddMessage(m Incoming) int64 {
 	msg := map[string]any{
 		"message_id": s.nextMsg,
 		"date":       time.Now().Unix(),
-		"chat":       map[string]any{"id": m.ChatID, "type": chatType, "is_forum": m.ThreadID != 0},
+		"chat":       chatOf(m.ChatID, chatType, m.Title, m.ThreadID != 0),
 		"from":       sender(m.UserID, m.IsBot, name, m.Language),
 	}
 	if m.Text != "" {
@@ -250,6 +251,44 @@ func (s *Server) ReplyTo(chatID, messageID int64) map[string]any {
 		"from":       sender(s.botID, true, "Test", ""),
 		"text":       m.text,
 	}
+}
+
+// BotUsername is the bot's username, without the @.
+const BotUsername = "test_bot"
+
+// Mention is the Bot API entities of text that mark every "@test_bot" in
+// it, for Incoming.Extra: a message in a group reaches the node only when
+// it addresses the bot. Offsets count UTF-16 code units.
+func Mention(text string) map[string]any {
+	const at = "@" + BotUsername
+	out := []map[string]any{}
+	for from := 0; ; {
+		i := strings.Index(text[from:], at)
+		if i < 0 {
+			break
+		}
+		off := len(utf16.Encode([]rune(text[:from+i])))
+		out = append(out, map[string]any{"type": "mention", "offset": off, "length": len(at)})
+		from += i + len(at)
+	}
+	return map[string]any{"entities": out}
+}
+
+// AddressBot is the Bot API entities that address the bot without a word
+// in the text, for Incoming.Extra: a text mention of the bot over the
+// text's first character. A test whose text must stay as it is uses it.
+func (s *Server) AddressBot() map[string]any {
+	return map[string]any{"entities": []map[string]any{{"type": "text_mention", "offset": 0, "length": 1,
+		"user": sender(s.botID, true, "Test", "")}}}
+}
+
+// chatOf is the Bot API Chat of an update.
+func chatOf(id int64, typ, title string, forum bool) map[string]any {
+	c := map[string]any{"id": id, "type": typ, "is_forum": forum}
+	if title != "" {
+		c["title"] = title
+	}
+	return c
 }
 
 // sender is the Bot API User of an update.
@@ -498,7 +537,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 
 	switch method {
 	case "getMe":
-		writeOK(w, map[string]any{"id": s.botID, "is_bot": true, "first_name": "Test", "username": "test_bot"})
+		writeOK(w, map[string]any{"id": s.botID, "is_bot": true, "first_name": "Test", "username": BotUsername})
 	case "getUpdates":
 		s.getUpdates(w, r, params)
 	case "sendMessage":
