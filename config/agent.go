@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/diag"
+	"github.com/igorrius/ganglion/groups"
 	"github.com/igorrius/ganglion/host"
 	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
@@ -347,11 +348,12 @@ func Providers() do.Provider[map[string]provider.Provider] {
 	}
 }
 
-// quickActions are every tool's quick-action buttons by action name: the
-// scheduler's and the memory notes'.
+// quickActions are every quick-action button by action name: the
+// scheduler's, the memory notes' and those under a group's request.
 func quickActions(i do.Injector) map[string]pending.QuickAction {
 	out := do.MustInvoke[builtin.Scheduling](i).QuickActions()
 	maps.Copy(out, do.MustInvoke[Remembering](i).QuickActions)
+	maps.Copy(out, do.MustInvoke[groups.Actions](i).QuickActions())
 	return out
 }
 

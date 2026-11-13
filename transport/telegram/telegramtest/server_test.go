@@ -248,3 +248,13 @@ func TestFakeReplyToShowsTheEditedMessage(t *testing.T) {
 		t.Error("an unknown message has no reply_to_message")
 	}
 }
+
+func TestMentionCountsUTF16Units(t *testing.T) {
+	got := Mention("😀 @test_bot hi @test_bot")["entities"].([]map[string]any)
+	if len(got) != 2 || got[0]["offset"] != 3 || got[0]["length"] != 9 || got[1]["offset"] != 16 {
+		t.Fatalf("entities %v", got)
+	}
+	if got := Mention("no one")["entities"].([]map[string]any); len(got) != 0 {
+		t.Fatalf("entities %v", got)
+	}
+}

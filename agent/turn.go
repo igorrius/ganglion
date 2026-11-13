@@ -49,6 +49,7 @@ type turn struct {
 	schedule   event.Schedule
 	module     event.Module       // the escalation of a KindModule event
 	notify     event.ModuleNotify // the message of a KindModuleNotify event
+	groupReq   event.GroupRequest // the request of a KindGroupRequest event
 	built      event.ModuleBuilt  // the build of a KindModuleBuilt event
 	review     event.MemoryReview // the conversation of a KindMemoryReview event
 	// transport and replyConv are where the answer goes: the event's

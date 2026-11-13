@@ -3,7 +3,7 @@
 Notes from a conversation with the owner on 2026-11-13 (board card G-152).
 Nothing here is built. The owner accepted the decision on 2026-11-13
 ([ADR-0078](../adr/0078-telegram-updates-by-polling-or-webhook.md)); the
-requirements are R-DLV-16, R-DLV-17 and R-CFG-11 in the spec and the work is
+requirements are R-DLV-18, R-DLV-19 and R-CFG-11 in the spec and the work is
 task 6.6 of the [phase plan](p1-all-in-one.md). The spike of section 12
 comes before the code.
 
@@ -213,7 +213,7 @@ At a start in **webhook** mode:
    run and alerts the admins with the reason (section 9).
 4. The check passes. Updates that waited while the node was away are taken
    by polling first (section 8). Then `setWebhook` with the URL, the secret,
-   `allowed_updates: ["message", "callback_query"]` and
+   the `allowed_updates` list polling asks for and
    `max_connections: 1`, without `drop_pending_updates`. The call is made at
    every start; it is idempotent. The node records in its database that it
    set a webhook, and the URL.

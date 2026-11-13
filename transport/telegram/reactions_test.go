@@ -271,7 +271,7 @@ func TestStrangerGetsNoReaction(t *testing.T) {
 	var put int
 	sink := func(context.Context, event.Event) error { put++; return nil }
 	var _ transport.Sink = sink
-	filtered := list.Filter(e.r.Noting(sink), slog.New(slog.DiscardHandler))
+	filtered := list.Filter(e.r.Noting(sink), access.NoGroups(), slog.New(slog.DiscardHandler))
 	msg := func(from, ref string) event.Event {
 		p, _ := json.Marshal(event.Message{Text: "hi", From: from, Ref: ref})
 		return event.Event{Source: Name, Conv: "telegram:42", Kind: event.KindMessage, Payload: p}

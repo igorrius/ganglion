@@ -84,14 +84,18 @@ func (t *Transport) decisionEvent(botID int64, u update) (event.Event, bool) {
 	if m.IsTopicMessage {
 		thread = m.MessageThreadID
 	}
-	payload, err := json.Marshal(event.Decision{
+	d := event.Decision{
 		Button: id,
 		From:   Principal(cq.From.ID),
 		Name:   strings.TrimSpace(cq.From.FirstName + " " + cq.From.LastName),
 		Ref:    strconv.FormatInt(m.MessageID, 10),
 		Query:  cq.ID,
 		Lang:   cq.From.LanguageCode,
-	})
+	}
+	if isGroup(m.Chat) {
+		d.Group = GroupKey(m.Chat.ID)
+	}
+	payload, err := json.Marshal(d)
 	if err != nil {
 		return event.Event{}, false // a struct of strings always marshals
 	}

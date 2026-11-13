@@ -19,6 +19,9 @@ func TestKindValues(t *testing.T) {
 		event.KindModuleTrigger: "module.trigger",
 		event.KindModuleNotify:  "module.notify",
 		event.KindModuleBuilt:   "module.built",
+		event.KindMemoryReview:  "memory.review",
+		event.KindGroupJoined:   "group.joined",
+		event.KindGroupRequest:  "group.request",
 	} {
 		if string(kind) != want {
 			t.Errorf("kind %q, want %q", kind, want)

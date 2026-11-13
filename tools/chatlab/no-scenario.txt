@@ -15,6 +15,7 @@ access/**
 agent/background.go
 agent/cells.go
 agent/commands.go
+agent/group_request.go
 agent/config.go
 agent/limits.go
 agent/model.go
@@ -24,6 +25,7 @@ agent/restart.go
 agent/state.go
 agent/telemetry.go
 alert/**
+groups/**
 cmd/mcp.go
 cmd/relay.go
 cmd/root.go
@@ -35,6 +37,7 @@ config/agent.go
 config/bootstrap.go
 config/config.go
 config/delivery.go
+config/groups.go
 config/host.go
 config/memory.go
 config/storage.go
@@ -100,10 +103,13 @@ tool/builtin/question.go
 tool/journal/**
 transport/errors.go
 transport/transport.go
+transport/telegram/addressed.go
 transport/telegram/client.go
 transport/telegram/commands.go
 transport/telegram/conv.go
 transport/telegram/files.go
+transport/telegram/groupcount.go
+transport/telegram/joined.go
 transport/telegram/markdown.go
 transport/telegram/reactions.go
 transport/telegram/rich.go

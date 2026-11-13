@@ -36,6 +36,7 @@ type Incoming struct {
 	Text     string // empty: a message without text, such as a sticker
 	Caption  string // caption of a photo or document
 	IsBot    bool   // the sender is a bot
+	Title    string // the group's title; "" for none
 	Language string // the sender's language_code; "" for none
 	// Extra are more Bot API message fields, set as they are: "photo",
 	// "document", "voice" and the like.
@@ -44,15 +45,16 @@ type Incoming struct {
 
 // Outgoing is a message the bot sent.
 type Outgoing struct {
-	ChatID   int64
-	ThreadID int64
-	Text     string
-	Silent   bool
-	Entities string // the entities as sent, JSON; "" when none
-	ReplyTo  int64  // reply_parameters.message_id; 0 when not a reply
-	Keyboard string // reply_markup.inline_keyboard as sent, JSON; "" when none or empty
-	Rich     bool   // sent by sendRichMessage; Text is its plain text
-	Footer   string // the text of a rich message's footer block; "" for none
+	MessageID int64 // the id Telegram gave it, for a Callback or ReplyTo
+	ChatID    int64
+	ThreadID  int64
+	Text      string
+	Silent    bool
+	Entities  string // the entities as sent, JSON; "" when none
+	ReplyTo   int64  // reply_parameters.message_id; 0 when not a reply
+	Keyboard  string // reply_markup.inline_keyboard as sent, JSON; "" when none or empty
+	Rich      bool   // sent by sendRichMessage; Text is its plain text
+	Footer    string // the text of a rich message's footer block; "" for none
 	// NoPreview is link_preview_options.is_disabled: the message shows no
 	// link preview.
 	NoPreview bool
@@ -205,7 +207,7 @@ func (s *Server) AddMessage(m Incoming) int64 {
 	msg := map[string]any{
 		"message_id": s.nextMsg,
 		"date":       time.Now().Unix(),
-		"chat":       map[string]any{"id": m.ChatID, "type": chatType, "is_forum": m.ThreadID != 0},
+		"chat":       chatOf(m.ChatID, chatType, m.Title, m.ThreadID != 0),
 		"from":       sender(m.UserID, m.IsBot, name, m.Language),
 	}
 	if m.Text != "" {
@@ -252,6 +254,44 @@ func (s *Server) ReplyTo(chatID, messageID int64) map[string]any {
 	}
 }
 
+// BotUsername is the bot's username, without the @.
+const BotUsername = "test_bot"
+
+// Mention is the Bot API entities of text that mark every "@test_bot" in
+// it, for Incoming.Extra: a message in a group reaches the node only when
+// it addresses the bot. Offsets count UTF-16 code units.
+func Mention(text string) map[string]any {
+	const at = "@" + BotUsername
+	out := []map[string]any{}
+	for from := 0; ; {
+		i := strings.Index(text[from:], at)
+		if i < 0 {
+			break
+		}
+		off := len(utf16.Encode([]rune(text[:from+i])))
+		out = append(out, map[string]any{"type": "mention", "offset": off, "length": len(at)})
+		from += i + len(at)
+	}
+	return map[string]any{"entities": out}
+}
+
+// AddressBot is the Bot API entities that address the bot without a word
+// in the text, for Incoming.Extra: a text mention of the bot over the
+// text's first character. A test whose text must stay as it is uses it.
+func (s *Server) AddressBot() map[string]any {
+	return map[string]any{"entities": []map[string]any{{"type": "text_mention", "offset": 0, "length": 1,
+		"user": sender(s.botID, true, "Test", "")}}}
+}
+
+// chatOf is the Bot API Chat of an update.
+func chatOf(id int64, typ, title string, forum bool) map[string]any {
+	c := map[string]any{"id": id, "type": typ, "is_forum": forum}
+	if title != "" {
+		c["title"] = title
+	}
+	return c
+}
+
 // sender is the Bot API User of an update.
 func sender(id int64, isBot bool, name, language string) map[string]any {
 	from := map[string]any{"id": id, "is_bot": isBot, "first_name": name}
@@ -289,6 +329,25 @@ func (s *Server) AddCallback(c Callback) int64 {
 		"message":       msg,
 		"chat_instance": "ci" + strconv.FormatInt(c.ChatID, 10),
 		"data":          c.Data,
+	}})
+	close(s.notify)
+	s.notify = make(chan struct{})
+	return s.nextUpdate
+}
+
+// AddChatMember queues a change of the bot's own membership of the group
+// chatID, made by byUserID, and returns its update_id. status is the
+// bot's new status: "member", "administrator", "left" or "kicked".
+func (s *Server) AddChatMember(chatID int64, title string, byUserID int64, status string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nextUpdate++
+	s.updates = append(s.updates, map[string]any{"update_id": s.nextUpdate, "my_chat_member": map[string]any{
+		"chat":            chatOf(chatID, "supergroup", title, false),
+		"from":            sender(byUserID, false, "User", ""),
+		"date":            time.Now().Unix(),
+		"old_chat_member": map[string]any{"status": "left", "user": sender(s.botID, true, "Test", "")},
+		"new_chat_member": map[string]any{"status": status, "user": sender(s.botID, true, "Test", "")},
 	}})
 	close(s.notify)
 	s.notify = make(chan struct{})
@@ -498,7 +557,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 
 	switch method {
 	case "getMe":
-		writeOK(w, map[string]any{"id": s.botID, "is_bot": true, "first_name": "Test", "username": "test_bot"})
+		writeOK(w, map[string]any{"id": s.botID, "is_bot": true, "first_name": "Test", "username": BotUsername})
 	case "getUpdates":
 		s.getUpdates(w, r, params)
 	case "sendMessage":
@@ -726,8 +785,9 @@ func (s *Server) sendMessage(w http.ResponseWriter, params map[string]json.RawMe
 
 // keep records a sent message and answers with it. The caller holds s.mu.
 func (s *Server) keep(w http.ResponseWriter, out Outgoing) {
-	s.sent = append(s.sent, out)
 	s.nextMsg++
+	out.MessageID = s.nextMsg
+	s.sent = append(s.sent, out)
 	if s.messages[out.ChatID] == nil {
 		s.messages[out.ChatID] = map[int64]shown{}
 	}

@@ -110,7 +110,7 @@ func TestEchoOverTelegram(t *testing.T) {
 	eventually(t, "the echo", func() bool { return len(fake.Sent()) >= 1 })
 	time.Sleep(200 * time.Millisecond)
 	sent := fake.Sent()
-	if len(sent) != 1 || sent[0] != (telegramtest.Outgoing{ChatID: 42, Text: "echo: hi"}) {
+	if len(sent) != 1 || sent[0] != (telegramtest.Outgoing{MessageID: sent[0].MessageID, ChatID: 42, Text: "echo: hi"}) {
 		t.Fatalf("sent %+v, want one echo to the admin and nothing to the stranger", sent)
 	}
 }

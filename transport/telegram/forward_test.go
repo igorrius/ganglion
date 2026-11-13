@@ -20,7 +20,9 @@ func TestOutsideTextIsMarked(t *testing.T) {
 		t.Fatal(err)
 	}
 	const head = `"message_id":5,"date":1,"chat":{"id":42,"type":"private"},"from":{"id":42,"is_bot":false,"first_name":"Igor"}`
-	const topic = `"message_id":5,"date":1,"chat":{"id":-100,"type":"supergroup","is_forum":true},"from":{"id":42,"is_bot":false,"first_name":"Igor"},"message_thread_id":10,"is_topic_message":true`
+	// The topic's messages mention the bot: in a group only a message that
+	// addresses it becomes an event (R-DLV-16).
+	const topic = `"message_id":5,"date":1,"chat":{"id":-100,"type":"supergroup","is_forum":true},"from":{"id":42,"is_bot":false,"first_name":"Igor"},"message_thread_id":10,"is_topic_message":true,"entities":[{"type":"text_mention","offset":0,"length":1,"user":{"id":7001,"is_bot":true,"first_name":"Bot"}}]`
 	for name, tc := range map[string]struct {
 		raw  string
 		want event.Message
@@ -56,19 +58,19 @@ func TestOutsideTextIsMarked(t *testing.T) {
 		// In a forum topic Telegram points every message that is no explicit reply
 		// at the topic's root, the service message that created it: not a reply.
 		"topic message under its root": {`{` + topic + `,"text":"hi","reply_to_message":{"message_id":10,"date":1,"chat":{"id":-100,"type":"supergroup","is_forum":true},"from":{"id":42,"is_bot":false,"first_name":"Igor"},"message_thread_id":10,"forum_topic_created":{"name":"Trip","icon_color":7322096}}}`,
-			event.Message{Text: "hi"}},
+			event.Message{Text: "hi", Group: "telegram:-100"}},
 		"topic root without its service field": {`{` + topic + `,"text":"hi","reply_to_message":{"message_id":10,"date":1,"chat":{"id":-100,"type":"supergroup","is_forum":true},"from":{"id":7001,"is_bot":true,"first_name":"Bot"}}}`,
-			event.Message{Text: "hi"}},
+			event.Message{Text: "hi", Group: "telegram:-100"}},
 		"topic created message": {`{` + head + `,"text":"hi","reply_to_message":{"message_id":11,"date":1,"chat":{"id":42,"type":"private"},"from":{"id":7001,"is_bot":true,"first_name":"Bot"},"forum_topic_created":{"name":"Trip","icon_color":7322096}}}`,
 			event.Message{Text: "hi"}},
 		"reply to the bot in a topic": {`{` + topic + `,"text":"more?","reply_to_message":{"message_id":12,"date":1,"chat":{"id":-100,"type":"supergroup","is_forum":true},"from":{"id":7001,"is_bot":true,"first_name":"Bot"},"message_thread_id":10,"is_topic_message":true,"text":"Apples are red."}}`,
-			event.Message{Text: "more?", Reply: &event.Replied{Ref: "12", ByBot: true, At: time.Unix(1, 0).UTC(), Text: "Apples are red."}}},
+			event.Message{Text: "more?", Group: "telegram:-100", Reply: &event.Replied{Ref: "12", ByBot: true, At: time.Unix(1, 0).UTC(), Text: "Apples are red."}}},
 	} {
 		var u update
 		if err := json.Unmarshal([]byte(`{"update_id":9,"message":`+tc.raw+`}`), &u); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		e, ok := tr.toEvent(7001, u)
+		e, ok := tr.toEvent(user{ID: 7001, Username: "test_bot"}, u)
 		if !ok {
 			t.Fatalf("%s: no event", name)
 		}
