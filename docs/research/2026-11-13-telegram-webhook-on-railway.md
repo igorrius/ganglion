@@ -6,7 +6,8 @@
 - **Question:** how fast does Telegram redeliver after the node was away, does the node reach its own
   public address from inside Railway, which port and variables does Railway give a service, and how
   large is an update?
-- **Status:** measured on Railway with the test bot; **a 30-minute stop is not measured**.
+- **Status:** measured on Railway with the test bot and closed: the webhook is removed from the test
+  bot and the `webhook-spike` service is deleted. **A 30-minute stop is not measured.**
 
 ## Method
 
@@ -62,6 +63,8 @@ stop was `railway down`, then a new deploy. The owner sent the messages.
    message may hold, so a text of the full length cannot pass about 25 KB before its entities. The
    cap leaves more than forty times that.
 
-## Still to measure
+## Not measured
 
-- A stop of 30 minutes, to see that the retries stay at 1–2 minutes and do not stop.
+- A stop of 30 minutes, to see that the retries stay at 1–2 minutes and do not stop. It does not
+  change the design: at a start the node takes waiting updates by polling (conclusion 3). The first
+  live run of task 6.6 can check it.
