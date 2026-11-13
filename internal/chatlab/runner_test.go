@@ -350,10 +350,13 @@ func TestScriptOtherPersonIsNotTaken(t *testing.T) {
 	}
 }
 
-// A step can send a second message while the first is being answered.
+// A step can send a second message while the first is being answered. The
+// model holds its answer, so the second message arrives during the turn on
+// any machine: with an instant answer the turn could end first, and the
+// test failed about one run in eight under the race detector.
 func TestAddsStepSendsWithoutWaitingForTheTurn(t *testing.T) {
 	taken := 1
-	s := scripted("x", []ScriptStep{{Say: "answer"}},
+	s := scripted("x", []ScriptStep{{Say: "answer", Hold: time.Second}},
 		Step{Adds: &Adds{Say: "question", Then: "addition"}},
 		Step{Facts: &Facts{Taken: &taken, History: &Text{Contains: "addition"}}})
 	if o := runOne(t, RunOptions{Scenarios: []Scenario{s}}); o.Result != ResultPassed {

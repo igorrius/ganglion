@@ -31,7 +31,8 @@ telegram:
   api_url: https://api.telegram.org
   # The admin from the first start, as telegram:user:<id>. Missing seeds none.
   # admin: telegram:user:123456789
-  # When the bot answers in a group: auto (when addressed), always or off.
+  # When an answer quotes the message it answers: auto (in a group, or when
+  # newer messages came after it), always or off.
   reply: auto
   # Turn Markdown into Telegram formatting.
   rich: true
@@ -40,6 +41,14 @@ telegram:
     after: 8s
     # How long a reaction stays before the next one.
     dwell: 3s
+  # Group chats whose members may talk to the bot. In a group it answers
+  # only when addressed: a mention, a reply to its message, or /cmd@bot.
+  # The node writes a line here when you press Allow on the card it sends
+  # you the first time it is addressed in a group or added to one.
+  # groups:
+  #   - chat: -1001234567890
+  #     name: Family
+  #     role: family
 
 agent:
   # The directory of the agent's persona and memory.
@@ -98,8 +107,19 @@ models:
     compact: [{model: haiku}]
     code:    [{model: opus, effort: high}, {model: sonnet, effort: high}]
 
+# Names for the conversations a message may be sent to: a connected group, a
+# topic of a forum, a private chat. The node writes a line when you ask it, in
+# your private chat, to name a place ("call the K7 topic family-k7").
+# destinations:
+#   - name: family-k7
+#     conv: telegram:-1001234567890/45
+
 # The modules the node runs and their configuration. module.install writes this
-# list (M4b); leave it empty until then.
+# list (M4b); leave it empty until then. notify_to is where a module's messages
+# go: owner (your private chat, the default) or names from destinations, each
+# message to every one.
+#   - name: local/battery-alerts
+#     notify_to: [family-k7, owner]
 modules: []
 
 # The agent's long-term memory, kept by topic in the workspace (M5).

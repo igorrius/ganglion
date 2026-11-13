@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -263,8 +264,30 @@ func (f File) check() error {
 			return pathError(c.path, c.reason)
 		}
 	}
+	if err := checkGroups(f.Telegram.Groups); err != nil {
+		return err
+	}
+	if err := checkDestinations(f.Destinations, f.Modules); err != nil {
+		return err
+	}
 	if f.Models != nil {
 		return f.Models.check("models")
+	}
+	return nil
+}
+
+// checkGroups refuses a bad line of telegram.groups and a chat listed twice.
+func checkGroups(gs []Group) error {
+	seen := map[int64]bool{}
+	for i, g := range gs {
+		at := "telegram.groups[" + strconv.Itoa(i) + "]."
+		if key, reason := g.check(); key != "" {
+			return pathError(at+key, reason)
+		}
+		if seen[g.Chat] {
+			return pathError(at+"chat", "is listed twice")
+		}
+		seen[g.Chat] = true
 	}
 	return nil
 }
@@ -292,4 +315,45 @@ func validURL(s string) bool {
 func hasCredentials(s string) bool {
 	u, err := url.Parse(s)
 	return err == nil && u.User != nil
+}
+
+// checkDestinations refuses a bad line of destinations, a name listed
+// twice, and a module's notify_to that names what is not there.
+func checkDestinations(ds []Destination, mods []Module) error {
+	known := map[string]bool{DestinationOwner: true}
+	for i, d := range ds {
+		at := "destinations[" + strconv.Itoa(i) + "]."
+		if key, reason := d.check(); key != "" {
+			return pathError(at+key, reason)
+		}
+		if known[d.Name] {
+			return pathError(at+"name", "is listed twice")
+		}
+		known[d.Name] = true
+	}
+	for i, m := range mods {
+		if reason := notifyToReason(m.NotifyTo, known); reason != "" {
+			return pathError("modules["+strconv.Itoa(i)+"].notify_to", reason)
+		}
+	}
+	return nil
+}
+
+// notifyToReason says what is wrong with a module's notify_to; "" when
+// nothing is. It never repeats a value.
+func notifyToReason(names []string, known map[string]bool) string {
+	if len(names) > MaxNotifyTo {
+		return "names more than " + strconv.Itoa(MaxNotifyTo) + " destinations"
+	}
+	seen := map[string]bool{}
+	for _, n := range names {
+		if !known[n] {
+			return "names a destination that is not under destinations"
+		}
+		if seen[n] {
+			return "names a destination twice"
+		}
+		seen[n] = true
+	}
+	return ""
 }

@@ -80,6 +80,7 @@ pinned by a test in the task that owns the code.
 | M4 | Reflexes: config, modules built by the agent, Deye ([design](p1-m4-reflexes-design.md)) | One config file with models by purpose; the agent builds modules from source and installs them on the owner's press; modules own cells; the runner in the node with a supervisor; the Deye example deployed next to the current bot | about 1.5 weekends |
 | M4c | Reflex modules: `notify` for modules, the agent writing module source, `deye-alerts` ([design](p1-m4c-reflexes-design.md)) — **done 2026-11-10** | Routine reactions run without a model | one design, one plan |
 | M5 | **Memory by topic** ([design](p1-m5-memory-topics-design.md), [plan](p1-m5-memory-topics.md)) — **done 2026-11-11**; the number was load shedding's, which left P1 ([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)) | Facts in topic files, whole in the prompt; the agent stores the owner's corrections in the turn, a review after quiet time catches the rest; a note with Undo, `/memory` | one design, one plan |
+| MG | **Telegram groups** ([design](telegram-groups-design.md), [plan](telegram-groups.md), [ADR-0076](../adr/0076-telegram-groups-and-the-addressing-rule.md)); added on 2026-11-13, when the production token moved to ganglion ahead of task 7.5 | A group connected by the admin's press; the bot answers there only when addressed; then named destinations for modules' messages (a second plan) | one design, two plans |
 | M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback; secrets in an encrypted store instead of a variable each ([ADR-0077](../adr/0077-encrypted-secret-store-on-the-nodes-key.md)) | 0.25–0.5 weekend |
 | M7 | Migration | Memory import and consolidation, remaining skills and crons, backups, cutover, gate | 0.5–1 weekend |
 
@@ -104,7 +105,8 @@ flowchart LR
     M1 --> M4
     M4 --> M4C["M4c Reflex modules"]
     M4C --> M5["M5 Memory by topic"]
-    M5 --> M6["M6 Agent reconfigures"]
+    M5 --> MG["MG Telegram groups"]
+    MG --> M6["M6 Agent reconfigures"]
     M6 --> M7["M7 Migration"]
 ```
 
@@ -324,6 +326,25 @@ agent forgot the owner's correction. Tasks are in the plan
 | 5.5 **Done** (2026-11-11, [plan](p1-m5-memory-topics.md)). The review after quiet time: the `memory` purpose, the timer and the mark, the owner's words only, the question in a tainted session (R-MEM-8, [ADR-0072](../adr/0072-who-writes-memory.md)) | A fact the turn missed is stored after the quiet time and at `/new`; a planted fact in a page's text is not |
 | 5.6 **Done** (2026-11-11, [plan](p1-m5-memory-topics.md)). Acceptance: chatlab on the scripted and the real model, the seeded fault, `make crash-agent`, `make memory`, the live check | After `/new` the agent answers the `batt_w` question correctly with no hint; 10 runs counted |
 
+### MG · Telegram groups (ADR-0076)
+
+The owner's request of 2026-11-13: replace what the old family bot did in
+the family's forum. [Design](telegram-groups-design.md);
+[plan](telegram-groups.md) for G.1–G.9.
+
+| Task | Done when |
+|---|---|
+| G.1 **Done** (2026-11-13). The decision: spec (R-DLV-16, R-DLV-17, R-POL-10) and ADR-0076 | The spec and the ADR say what is built |
+| G.2 **Done** (2026-11-13). `telegram.groups` in the node's file, with a writer that keeps the rest of the file | A line is set, replaced and removed; a bad line is refused at load |
+| G.3 **Done** (2026-11-13). The addressing rule as a pure function | A mention, a reply to the bot and `/cmd@bot` address it; a typed name, a bare command and a topic's root do not |
+| G.4 **Done** (2026-11-13). The transport drops a group message that does not address the bot | It never becomes an event; its update is confirmed |
+| G.5 **Done** (2026-11-13). "The bot was added to a group" as an event | `my_chat_member` is polled and read |
+| G.6 **Done** (2026-11-13). The `groups` package: connected groups and requests | A group that is not connected asks an admin once; a refusal and the cap of 10 hold |
+| G.7 **Done** (2026-11-13). The access filter knows groups | A stranger in a connected group passes; anyone in another group is dropped |
+| G.8 **Done** (2026-11-13). The agent: the card with Allow and Refuse; the admin role only in a private chat | The card and the notice go out with no model; Allow writes the line |
+| G.9 Wiring, the example file, the end-to-end scenario (`cmd.TestConnectAGroupThroughTheCard`): **done** (2026-11-13). The live check in the family's forum: **done** (2026-11-13, [recorded](telegram-groups.md#live-check-2026-11-13)) | The scenario passes; the live check is recorded in the plan |
+| G.10 **Done** (2026-11-13), [checked live](telegram-destinations.md#live-check-2026-11-13) the same day. Named destinations: a module's line routes its messages (`notify_to`), topic titles, the admin's tools, `message.send` by name ([plan](telegram-destinations.md), [ADR-0079](../adr/0079-a-modules-messages-go-where-the-nodes-file-says.md), card G-153) | "Send the battery alerts to K7 and to me" holds after one press, with no rebuild |
+
 ### M6 · The agent reconfigures the system (ADR-0015)
 
 | Task | Done when |
@@ -333,6 +354,7 @@ agent forgot the owner's correction. Tasks are in the plan
 | 6.3 Validation and rollback: a change must parse and pass the config's checks (the schema, the modules' manifests) before it applies; `config.rollback` restores the previous commit | A change that fails a check is rejected with the reason; rollback restores behaviour |
 | 6.4 **Left P1 with load shedding (ADR-0058).** Risk class on backend changes: moving a cell to a backend of a higher class (e.g. `virtual` → `tuya`) is always a separate, explicitly worded approval (ADR-0014); needs a rebind path in `cells` — today `Define` with another backend is `ErrConflict` | Test: such a change cannot be bundled into a routine approval |
 | 6.5 The secret store ([plan](p1-m6-secret-store.md), [ADR-0077](../adr/0077-encrypted-secret-store-on-the-nodes-key.md), R-CFG-9, R-CFG-10; added 2026-11-13, owner): the master key made at the first start, encrypted rows by scope, `store:NAME` in the config, `ganglion secret set|rm|list`, `/secrets`, the locked state, values handed out redacted | A module's secret set with `ganglion secret set` is read by that module with no restart and by no other; a database copy without the key yields no value; with the wrong key the node starts locked and says so |
+| 6.6 A webhook mode for the Telegram transport ([ADR-0078](../adr/0078-telegram-updates-by-polling-or-webhook.md), R-DLV-18, R-DLV-19, R-CFG-11; added 2026-11-13, owner; [design note](telegram-webhook-design.md)): first the spike on Railway with the test bot, then the public listener (`http`), the webhook handler, registration and its record, the two guards against a lock-out, `/status` lines for the mode | On Railway the test bot answers in webhook mode; a restart loses and repeats no message; a wrong `public_url` leaves the node polling with an alert; set back to `polling`, the node removes its webhook and polls |
 
 ### M7 · Migration (spec 7.7, 7.8, 10.2)
 

@@ -31,7 +31,7 @@ func (a *Agent) moduleNotifyEvent(ctx context.Context, t *turn) error {
 		a.log.Warn("agent: a module message for a principal who is not an admin; dropped", "module", p.Module, "principal", p.Principal)
 		return nil
 	}
-	if p.Node == event.NotifyText { // an idle session rolls over first, as for a reminder's note
+	if p.Node == event.NotifyText && p.To == "" { // an idle session rolls over first, as for a reminder's note
 		if _, err := a.idle(ctx, t); err != nil {
 			return err
 		}
@@ -50,13 +50,16 @@ func knownNode(n event.NotifyNode) bool {
 	return false
 }
 
-// moduleNotify writes the node note into history and returns the message. The module's text
+// moduleNotify writes the node note into history and returns the message. A message for
+// another destination than the owner's chat (R-RUN-18) writes no note and leaves that
+// conversation's session as it is: "notified you" is the owner's note, and a group's
+// history is not the place for it. The module's text
 // goes only into the outgoing message, escaped and signed with the module's name; the model never sees it (R-RUN-13).
 // A node line writes no note. The note does not move the session's Last (noteQuiet), so a
 // module writing all day never keeps a session alive. The message carries a tainted origin that names the module
 // (ruling 2 of M4c, R-DLV-15): a reply to it is told the module and never its text; stamp keeps that origin.
 func (a *Agent) moduleNotify(ctx context.Context, t *turn, p event.ModuleNotify) {
-	if p.Node == event.NotifyText {
+	if p.Node == event.NotifyText && p.To == "" {
 		t.noteQuiet(fmt.Sprintf("%s%s notified you at %s", moduleNotePrefix, moduleName(p.Module), moduleClock(p.At, a.cfg.Location)))
 	}
 	t.out = append(t.out, event.Outgoing{

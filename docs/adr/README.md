@@ -81,7 +81,10 @@ considered, how they compare, the decision and its consequences. See
 | [0073](0073-a-modules-message-names-its-module.md) | A module's message records its module, and a reply to it names the module without its text | Accepted | 2026-11-11 |
 | [0074](0074-a-modules-name-goes-under-its-message.md) | A module's name goes under its message as the node's signature, not before its text | Accepted | 2026-11-11 |
 | [0075](0075-reading-a-modules-state-keeps-the-session-clean.md) | Reading a module's state keeps the session clean, and a write in a tainted session asks instead of refusing | Accepted | 2026-11-11 |
+| [0076](0076-telegram-groups-and-the-addressing-rule.md) | Connect a Telegram group by the admin's press and answer in it only when addressed | Accepted | 2026-11-13 |
 | [0077](0077-encrypted-secret-store-on-the-nodes-key.md) | Keep secrets in an encrypted store on the node's own key, scoped by module, with the environment kept as a source | Accepted | 2026-11-13 |
+| [0078](0078-telegram-updates-by-polling-or-webhook.md) | Receive Telegram updates by polling or by a webhook, chosen in the node's file | Accepted | 2026-11-13 |
+| [0079](0079-a-modules-messages-go-where-the-nodes-file-says.md) | Route a module's messages by the node's file, to named destinations | Accepted | 2026-11-13 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

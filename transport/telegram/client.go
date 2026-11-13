@@ -205,13 +205,13 @@ func (c *client) getMe(ctx context.Context) (user, error) {
 }
 
 // getUpdates confirms every update below offset and returns the next
-// messages and button presses, waiting up to timeout for one to arrive.
+// messages, button presses and changes of the bot's own membership, waiting up to timeout for one to arrive.
 func (c *client) getUpdates(ctx context.Context, offset int64, timeout time.Duration) ([]update, error) {
 	params := struct {
 		Offset         int64    `json:"offset,omitempty"`
 		Timeout        int      `json:"timeout"`
 		AllowedUpdates []string `json:"allowed_updates"`
-	}{offset, int(timeout / time.Second), []string{"message", "callback_query"}}
+	}{offset, int(timeout / time.Second), []string{"message", "callback_query", "my_chat_member"}}
 	var ups []update
 	err := c.call(ctx, "getUpdates", params, &ups)
 	return ups, err

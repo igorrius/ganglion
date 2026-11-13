@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/diag"
+	"github.com/igorrius/ganglion/groups"
 	"github.com/igorrius/ganglion/host"
 	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
@@ -196,7 +197,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
 		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i), do.MustInvoke[*builtin.HostExec](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
-		do.MustInvoke[Moduling](i).Tools, metricsTools(do.MustInvoke[Bootstrap](i)))...)
+		do.MustInvoke[Moduling](i).Tools, do.MustInvoke[builtin.Routing](i).Tools(), metricsTools(do.MustInvoke[Bootstrap](i)))...)
 }
 
 // metricsTools is metrics.show when the command line gave a renderer.
@@ -297,6 +298,10 @@ func Convs() do.Provider[builtin.Convs] {
 			Listed:  do.MustInvoke[*access.List](i).Listed,
 			Private: telegram.PrivateConv,
 			Names:   do.MustInvoke[*access.List](i).Name,
+			Dests:   do.MustInvoke[groups.Destinations](i).Resolve,
+			Place:   do.MustInvoke[builtin.Routing](i).Place,
+			Called:  do.MustInvoke[builtin.Routing](i).Called,
+			Learn:   do.MustInvoke[builtin.Routing](i).Learn,
 		}, nil
 	}
 }
@@ -347,11 +352,12 @@ func Providers() do.Provider[map[string]provider.Provider] {
 	}
 }
 
-// quickActions are every tool's quick-action buttons by action name: the
-// scheduler's and the memory notes'.
+// quickActions are every quick-action button by action name: the
+// scheduler's, the memory notes' and those under a group's request.
 func quickActions(i do.Injector) map[string]pending.QuickAction {
 	out := do.MustInvoke[builtin.Scheduling](i).QuickActions()
 	maps.Copy(out, do.MustInvoke[Remembering](i).QuickActions)
+	maps.Copy(out, do.MustInvoke[groups.Actions](i).QuickActions())
 	return out
 }
 

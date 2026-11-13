@@ -55,3 +55,36 @@ func TestPrivateConvOfAPrincipal(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupKeyAndChat(t *testing.T) {
+	if got := GroupKey(-1001); got != "telegram:-1001" {
+		t.Fatalf("GroupKey = %q", got)
+	}
+	if chat, ok := GroupChat("telegram:-1001"); !ok || chat != -1001 {
+		t.Fatalf("GroupChat = %d, %v", chat, ok)
+	}
+	for _, key := range []string{"telegram:42", "telegram:-1001/45", "matrix:-1001", "x", ""} {
+		if _, ok := GroupChat(key); ok {
+			t.Errorf("GroupChat(%q) is a group", key)
+		}
+	}
+}
+
+func TestParseLink(t *testing.T) {
+	for link, want := range map[string]string{
+		"https://t.me/c/1996291961/8":          "telegram:-1001996291961/8",
+		"https://t.me/c/1996291961/8/1234":     "telegram:-1001996291961/8",
+		" https://t.me/c/1996291961/8?single ": "telegram:-1001996291961/8",
+		"https://t.me/c/1996291961/1":          "telegram:-1001996291961",
+	} {
+		if got, ok := ParseLink(link); !ok || got != want {
+			t.Errorf("ParseLink(%q) = %q, %v; want %q", link, got, ok, want)
+		}
+	}
+	for _, link := range []string{"", "K7", "https://t.me/family_chat/8", "https://t.me/c/1996291961", "https://evil.example/c/1996291961/8",
+		"https://t.me/c/1996291961/8/9/10", "https://t.me/c/abc/8", "https://t.me/c/1996291961/8 and more", "telegram:-1001/8"} {
+		if got, ok := ParseLink(link); ok {
+			t.Errorf("ParseLink(%q) = %q: not a link to a topic", link, got)
+		}
+	}
+}

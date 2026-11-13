@@ -218,3 +218,53 @@ func TestNotifySignatureKeepsOnlyANumberedVersion(t *testing.T) {
 		t.Errorf("a node line is signed %q", got)
 	}
 }
+
+// R-RUN-18: a module's message for a destination other than the owner's
+// chat goes to that conversation, escaped and signed, and leaves its
+// history and its session alone; no model is called.
+func TestModuleNotifyToADestinationLeavesItsHistoryAlone(t *testing.T) {
+	const topic = "telegram:-1001/45"
+	e := newEnv(t, Config{SessionIdle: time.Hour}, nil)
+	// The topic has a session that went idle long ago, with one message.
+	before, _ := json.Marshal(State{V: StateVersion, Session: "s1", Started: t0.Add(-48 * time.Hour), Last: t0.Add(-48 * time.Hour),
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "Ann: hello"}}})
+	e.states.m[topic] = before
+	p := deyeAlert()
+	p.To = "family-k7"
+	ev := notifyEvent(p)
+	ev.Conv = topic
+	out := e.turn(t, ev)
+	if len(out) != 1 || out[0].Conv != topic || out[0].Signature != "deye-alerts v2" || !out[0].NoPreview || len(out[0].Buttons) != 0 ||
+		out[0].Text != `battery \*30\* %, see \[this\](https://evil.example/x)` {
+		t.Fatalf("out %+v", out)
+	}
+	if n := len(e.smart.requests()) + len(e.cheap.requests()); n != 0 {
+		t.Fatalf("%d model calls for a module's message", n)
+	}
+	var st State
+	if err := json.Unmarshal(e.states.m[topic], &st); err != nil {
+		t.Fatal(err)
+	}
+	if st.Session != "s1" || len(st.Messages) != 1 || st.Messages[0].Content != "Ann: hello" {
+		t.Fatalf("the topic's history changed: %+v", st)
+	}
+}
+
+// Abuse: a message for a destination still needs the node as its source
+// and an admin as its owner.
+func TestModuleNotifyToADestinationNeedsTheNodeAndAnAdmin(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	p := deyeAlert()
+	p.To = "family-k7"
+	forged := notifyEvent(p)
+	forged.Conv, forged.Source = "telegram:-1001/45", "telegram"
+	if out := e.turn(t, forged); len(out) != 0 {
+		t.Fatalf("a forged event sent %+v", out)
+	}
+	e.admin = false
+	ev := notifyEvent(p)
+	ev.Conv = "telegram:-1001/45"
+	if out := e.turn(t, ev); len(out) != 0 {
+		t.Fatalf("a module whose owner is not an admin sent %+v", out)
+	}
+}

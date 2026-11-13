@@ -83,13 +83,17 @@ func userContent(m event.Message, note replyNote) (content string, outside bool)
 	return content + notes, note.outside || m.ExternalReply || named
 }
 
-// setAdmin looks up whether the turn's principal may use tools.
+// setAdmin looks up whether the turn's principal may use tools. The admin
+// role does not follow an admin into a group chat (R-POL-10, ADR-0076): a
+// turn that a message or a press in a group started is nobody's admin
+// turn, so the node is never changed from a group and text others wrote in
+// a shared history cannot steer the agent into an admin's action.
 func (a *Agent) setAdmin(ctx context.Context, t *turn) error {
 	admin, err := a.d.IsAdmin(ctx, t.msg.From)
 	if err != nil {
 		return fmt.Errorf("agent: role of %s: %w", t.msg.From, err)
 	}
-	t.admin = admin
+	t.admin = admin && t.msg.Group == ""
 	return nil
 }
 

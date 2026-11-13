@@ -6,6 +6,7 @@ package settings
 
 import (
 	"path/filepath"
+	"regexp"
 	"time"
 )
 
@@ -26,6 +27,9 @@ type File struct {
 	Sandbox Sandbox `yaml:"sandbox"`
 	// Models chooses the models by purpose; nil means the agent is off.
 	Models *Models `yaml:"models"`
+	// Destinations names the conversations a message may be sent to
+	// besides the one it answers (R-CFG-12).
+	Destinations []Destination `yaml:"destinations"`
 	// Modules lists the modules the node runs and their configuration (M4b).
 	Modules []Module `yaml:"modules"`
 	// Memory is the agent's long-term memory (M5, R-CFG-8).
@@ -71,6 +75,35 @@ type Telegram struct {
 	Rich bool `yaml:"rich"`
 	// Reactions is the bot's reaction to a message while it works.
 	Reactions Reactions `yaml:"reactions"`
+	// Groups are the group chats whose members may talk to the bot
+	// (R-DLV-17). The node writes a line when the admin allows a group.
+	Groups []Group `yaml:"groups"`
+}
+
+// GroupRoleFamily is the one role a group's line may name: allowed and not
+// an admin. More roles are the spec's "Not now".
+const GroupRoleFamily = "family"
+
+// Group is one line of telegram.groups.
+type Group struct {
+	// Chat is Telegram's id of the group, a negative number.
+	Chat int64 `yaml:"chat"`
+	// Name is for people: the group's title when it was connected.
+	Name string `yaml:"name"`
+	// Role is what the group's members may do: family.
+	Role string `yaml:"role"`
+}
+
+// check says what is wrong with the line: the key and the reason; "" when
+// nothing is.
+func (g Group) check() (key, reason string) {
+	if g.Chat >= 0 {
+		return "chat", "must be a group's id, a negative number"
+	}
+	if g.Role != GroupRoleFamily {
+		return "role", "must be family"
+	}
+	return "", ""
 }
 
 // Reactions is how the bot shows that it has seen a message.
@@ -168,6 +201,46 @@ type Module struct {
 	Config map[string]any `yaml:"config"`
 	// Off keeps the module installed but not running.
 	Off bool `yaml:"off"`
+	// NotifyTo names the destinations the module's messages go to, each
+	// DestinationOwner or a name under destinations; missing means the
+	// owner alone (R-RUN-18).
+	NotifyTo []string `yaml:"notify_to"`
+}
+
+// DestinationOwner is the built-in destination: the private chat of a
+// module's owner.
+const DestinationOwner = "owner"
+
+// MaxNotifyTo is how many destinations a module's line may name.
+const MaxNotifyTo = 8
+
+// Destination is one line of destinations: a name for a conversation a
+// message may be sent to (R-CFG-12).
+type Destination struct {
+	// Name is how the admin and a module's line call it.
+	Name string `yaml:"name"`
+	// Conv is the conversation's key, such as telegram:-1001234567890/45.
+	Conv string `yaml:"conv"`
+}
+
+var (
+	destinationName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	destinationConv = regexp.MustCompile(`^[a-z][a-z0-9]*:-?[0-9]+(/[0-9]+)?$`)
+)
+
+// check says what is wrong with the line: the key and the reason; "" when
+// nothing is.
+func (d Destination) check() (key, reason string) {
+	if !destinationName.MatchString(d.Name) {
+		return "name", "must be lower-case letters, digits and dashes, starting with a letter, at most 32"
+	}
+	if d.Name == DestinationOwner {
+		return "name", "must not be owner: that name is the module owner's private chat"
+	}
+	if !destinationConv.MatchString(d.Conv) {
+		return "conv", "must be a conversation's key, such as telegram:-1001234567890/45"
+	}
+	return "", ""
 }
 
 // Default is the file a node runs with when it has none: the defaults the

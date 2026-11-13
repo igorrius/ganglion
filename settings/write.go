@@ -13,6 +13,16 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+// YAML tags of the nodes the writers make.
+const (
+	tagMap  = "!!map"
+	tagSeq  = "!!seq"
+	tagStr  = "!!str"
+	tagInt  = "!!int"
+	tagBool = "!!bool"
+	tagNull = "!!null"
+)
+
 // SetModule writes m as the line of m.Name under modules:, adding it at the
 // end when it is missing. It edits the YAML node tree, so the comments and
 // the order of everything else stay (a config that did not change keeps its
@@ -35,8 +45,8 @@ func lineOf(seq *yaml.Node, name string) *yaml.Node {
 	if i := indexOf(seq, name); i >= 0 {
 		return seq.Content[i]
 	}
-	item := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
-		plain("name"), {Kind: yaml.ScalarNode, Tag: "!!str", Value: name}}}
+	item := &yaml.Node{Kind: yaml.MappingNode, Tag: tagMap, Content: []*yaml.Node{
+		plain(keyName), {Kind: yaml.ScalarNode, Tag: tagStr, Value: name}}}
 	seq.Content = append(seq.Content, item)
 	return item
 }
@@ -90,9 +100,9 @@ func setOff(item *yaml.Node, off bool) {
 	case !off && j >= 0:
 		item.Content = append(item.Content[:j], item.Content[j+2:]...)
 	case off && j >= 0:
-		v.Kind, v.Tag, v.Value, v.Style = yaml.ScalarNode, "!!bool", "true", 0
+		v.Kind, v.Tag, v.Value, v.Style = yaml.ScalarNode, tagBool, "true", 0
 	case off:
-		item.Content = append(item.Content, plain("off"), &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
+		item.Content = append(item.Content, plain("off"), &yaml.Node{Kind: yaml.ScalarNode, Tag: tagBool, Value: "true"})
 	}
 }
 
@@ -131,6 +141,11 @@ func (f ModulesFile) SetOff(name string, off bool, why string) error {
 	})
 }
 
+// SetNotifyTo is DestinationsFile.SetNotifyTo on this file.
+func (f ModulesFile) SetNotifyTo(module string, names []string) error {
+	return DestinationsFile(f).SetNotifyTo(module, names)
+}
+
 // RemoveModule is RemoveModule on this file.
 func (f ModulesFile) RemoveModule(name string) error { return RemoveModule(f.Path, name) }
 
@@ -152,7 +167,7 @@ func indexOf(seq *yaml.Node, name string) int {
 			continue
 		}
 		for j := 0; j+1 < len(it.Content); j += 2 {
-			if it.Content[j].Value == "name" && it.Content[j+1].Value == name {
+			if it.Content[j].Value == keyName && it.Content[j+1].Value == name {
 				return i
 			}
 		}
@@ -166,9 +181,9 @@ func indexOf(seq *yaml.Node, name string) int {
 // process only; another process writing the file is not covered.
 var writeMu sync.Mutex
 
-// edit reads the file, hands the modules sequence to change and writes the
+// editDoc reads the file, hands the document to change and writes the
 // result back. A missing file is an empty one.
-func edit(path string, change func(seq *yaml.Node) error) error {
+func editDoc(path string, change func(doc *yaml.Node) error) error {
 	writeMu.Lock()
 	defer writeMu.Unlock()
 	src, err := os.ReadFile(path)
@@ -181,11 +196,7 @@ func edit(path string, change func(seq *yaml.Node) error) error {
 			return fmt.Errorf("%s: %s", FileName, syntaxReason(err))
 		}
 	}
-	seq, err := modulesNode(&doc)
-	if err != nil {
-		return err
-	}
-	if err := change(seq); err != nil {
+	if err := change(&doc); err != nil {
 		return err
 	}
 	var out bytes.Buffer
@@ -200,12 +211,23 @@ func edit(path string, change func(seq *yaml.Node) error) error {
 	return replaceFile(path, out.Bytes())
 }
 
+// edit is editDoc on the modules: sequence.
+func edit(path string, change func(seq *yaml.Node) error) error {
+	return editDoc(path, func(doc *yaml.Node) error {
+		seq, err := modulesNode(doc)
+		if err != nil {
+			return err
+		}
+		return change(seq)
+	})
+}
+
 // modulesNode finds the modules: sequence of the document, creating the
 // document, the mapping and the key as needed.
 func modulesNode(doc *yaml.Node) (*yaml.Node, error) {
 	if doc.Kind == 0 {
 		doc.Kind = yaml.DocumentNode
-		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
+		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: tagMap}}
 	}
 	root := doc.Content[0]
 	if root.Kind != yaml.MappingNode {
@@ -216,8 +238,8 @@ func modulesNode(doc *yaml.Node) (*yaml.Node, error) {
 			continue
 		}
 		v := root.Content[i+1]
-		if v.Kind == yaml.ScalarNode && v.Tag == "!!null" { // "modules:" with every item commented out
-			*v = yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", HeadComment: v.HeadComment, LineComment: v.LineComment}
+		if v.Kind == yaml.ScalarNode && v.Tag == tagNull { // "modules:" with every item commented out
+			*v = yaml.Node{Kind: yaml.SequenceNode, Tag: tagSeq, HeadComment: v.HeadComment, LineComment: v.LineComment}
 		}
 		if v.Kind != yaml.SequenceNode {
 			return nil, fmt.Errorf("%s: modules is not a list", FileName)
@@ -225,8 +247,8 @@ func modulesNode(doc *yaml.Node) (*yaml.Node, error) {
 		v.Style &^= yaml.FlowStyle // a flow list would put every module on one line
 		return v, nil
 	}
-	seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-	root.Content = append(root.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "modules"}, seq)
+	seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: tagSeq}
+	root.Content = append(root.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: tagStr, Value: "modules"}, seq)
 	return seq, nil
 }
 

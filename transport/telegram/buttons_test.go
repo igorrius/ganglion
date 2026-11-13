@@ -35,7 +35,7 @@ func TestCallbackBecomesDecisionEvent(t *testing.T) {
 	if err := json.Unmarshal(e.Payload, &d); err != nil {
 		t.Fatal(err)
 	}
-	if d != (event.Decision{Button: buttonID, From: "telegram:user:42", Name: "Igor", Ref: "17", Query: "cq1"}) {
+	if d != (event.Decision{Button: buttonID, From: "telegram:user:42", Name: "Igor", Ref: "17", Query: "cq1", Group: "telegram:-100"}) {
 		t.Fatalf("decision %+v", d)
 	}
 	// A press that became an event is acknowledged by its handler, with a
@@ -43,7 +43,7 @@ func TestCallbackBecomesDecisionEvent(t *testing.T) {
 	if got := fake.Answered(); len(got) != 0 {
 		t.Fatalf("the transport answered %v", got)
 	}
-	if got := fake.AllowedUpdates(); !reflect.DeepEqual(got, []string{"message", "callback_query"}) {
+	if got := fake.AllowedUpdates(); !reflect.DeepEqual(got, []string{"message", "callback_query", "my_chat_member"}) {
 		t.Fatalf("allowed_updates %v", got)
 	}
 }

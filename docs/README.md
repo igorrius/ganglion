@@ -6,10 +6,28 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
+- **Done on 2026-11-13:** Telegram groups (MG), added that day when the
+  owner moved the production bot's token to ganglion and removed the old
+  bot. A group is connected from a card in the admin's private chat and
+  answered only when addressed; nobody has the admin role in a group
+  ([plan](plans/telegram-groups.md),
+  [ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md)). The
+  node's file routes a module's messages to named destinations, the node
+  knows a forum's topics by title or by their link, the admin routes and
+  sends in words with one confirmation, and the built-in skill
+  `telegram-chats` tells the agent how
+  ([plan](plans/telegram-destinations.md),
+  [ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
+  Both are deployed and checked live in the family's forum. Asked for
+  next by the owner: roles with their own tools for a group's members
+  (spec section 14).
 - **Next:** M6, the agent reconfigures the system. It now includes the
   encrypted secret store (task 6.5,
   [ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), owner,
-  2026-11-13). The Railway deploy
+  2026-11-13) and a webhook mode for the Telegram transport beside
+  polling (task 6.6,
+  [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md), owner,
+  2026-11-13; a spike on Railway comes first). The Railway deploy
   (board card G-121) is up since 2026-11-11: service `ganglion` beside the
   current bot, on the test bot, the agent through the claude CLI, the
   sandbox ready on kernel 6.18, hard links work on the volume

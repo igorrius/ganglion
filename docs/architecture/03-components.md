@@ -12,7 +12,8 @@ flowchart TB
         mqt["MQTT<br/>P2"]
     end
 
-    acl["Access list<br/>strangers dropped, no reply"]
+    acl["Access list<br/>strangers dropped, no reply;<br/>a group only when connected"]
+    grp["Group chats<br/>telegram.groups in the node's file;<br/>one request to an admin for the rest"]
     inbox[("Inbox<br/>idemKey unique")]
     actors["Turn workers<br/>parallel; one turn per conversation at a time;<br/>sessions"]
     loop["Agent loop<br/>model, tools, next step"]
@@ -43,8 +44,10 @@ flowchart TB
     sender["Outbox sender<br/>retries, 429 retry_after"]
     turns[("turns<br/>trace, cost")]
 
-    tgt --> acl
+    tgt -- "in a group: only what<br/>addresses the bot" --> acl
     acl --> inbox
+    acl -- "is it connected?<br/>not connected: report" --> grp
+    grp -- "group.request" --> inbox
     mqt -.-> inbox
     sched --> inbox
     inbox --> actors

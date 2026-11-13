@@ -9,6 +9,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/clock"
 	"github.com/igorrius/ganglion/runner"
+	"github.com/igorrius/ganglion/settings"
 )
 
 // This file is notify (R-RUN-16, ADR-0066): a module's message for its
@@ -27,6 +28,9 @@ const (
 	notifyLimit   notifyOutcome = "limit"    // past the manifest's per_day
 	notifyNotHere notifyOutcome = "not_here" // init or health: no run
 	notifyFailed  notifyOutcome = "failed"   // the node could not count or put it
+	// notifyNoDestination is a name of the module's notify_to that
+	// resolved to nothing: that copy was not sent.
+	notifyNoDestination notifyOutcome = "no_destination"
 )
 
 // code is the answer the module gets for o. A failure of the node's is
@@ -37,7 +41,7 @@ func (o notifyOutcome) code() runner.NotifyCode {
 		return runner.NotifySent
 	case notifyNotHere:
 		return runner.NotifyNotHere
-	case notifyLimit, notifyFailed:
+	case notifyLimit, notifyFailed, notifyNoDestination:
 	}
 	return runner.NotifyLimit
 }
@@ -83,11 +87,52 @@ func (p notifyPort) notify(ctx context.Context, text string) notifyOutcome {
 	}
 	*r.sent++
 	key := "notify:" + p.l.name + ":" + r.ID + ":" + strconv.Itoa(*r.sent)
-	if err := p.h.putNotify(ctx, p.l, key, event.ModuleNotify{Text: text, PerDay: perDay(p.l)}, now); err != nil {
-		p.h.d.Log.Error("modhost: a module's message was not put", "module", p.l.name, "err", err)
-		return notifyFailed
+	return p.h.deliver(ctx, p.l, key, event.ModuleNotify{Text: text, PerDay: perDay(p.l)}, now)
+}
+
+// deliver puts one message of l for every destination its line names, the
+// owner alone when it names none (R-RUN-18). The message was counted once,
+// whatever the number of destinations. It is sent when at least one copy
+// was put; a name that resolves to nothing, or cannot be resolved now, is
+// logged and counted, and the other copies still go.
+func (h *Host) deliver(ctx context.Context, l *loaded, key string, p event.ModuleNotify, now time.Time) notifyOutcome {
+	names := l.notifyTo
+	if len(names) == 0 {
+		names = []string{settings.DestinationOwner}
 	}
-	return notifySent
+	out := notifyFailed
+	for _, name := range names {
+		to, toKey, ok := h.destination(ctx, l, key, name)
+		if !ok {
+			continue
+		}
+		copyOf := p
+		if name != settings.DestinationOwner {
+			copyOf.To = name
+		}
+		if err := h.put(ctx, l, to, toKey, copyOf, now); err != nil {
+			h.d.Log.Error("modhost: a module's message was not put", "module", l.name, "to", name, "err", err)
+			continue
+		}
+		out = notifySent
+	}
+	return out
+}
+
+// destination is where the copy of a message for name goes and its key.
+// The owner's copy keeps the message's own key, as before destinations;
+// another's adds the name.
+func (h *Host) destination(ctx context.Context, l *loaded, key, name string) (recipient, string, bool) {
+	if name == settings.DestinationOwner {
+		return l.to, key, true
+	}
+	transport, conv, ok, err := h.d.Destinations(name)
+	if err != nil || !ok {
+		h.d.Log.Warn("modhost: a destination of a module's messages does not resolve; that copy is not sent", "module", l.name, "to", name, "err", err)
+		h.in.notified(ctx, l.name, notifyNoDestination)
+		return recipient{}, "", false
+	}
+	return recipient{principal: l.to.principal, transport: transport, conv: conv}, key + ":to:" + name, true
 }
 
 // perDay is l's daily limit of messages; 0 when its manifest grants no
@@ -113,15 +158,22 @@ func (h *Host) limitLine(ctx context.Context, l *loaded, now, day time.Time) {
 	}
 }
 
-// putNotify puts p for l's owner under key, in their private chat. The put
-// does not end with ctx: the message was counted and the run goes on, so a
-// shutdown does not lose it.
+// putNotify puts p for l's owner under key, in their private chat: the
+// node's own lines about a module go to the owner only (R-RUN-18).
 func (h *Host) putNotify(ctx context.Context, l *loaded, key string, p event.ModuleNotify, now time.Time) error {
-	p.Module, p.Version, p.At, p.Principal, p.Transport = l.name, l.version, now.UnixMilli(), l.to.principal, l.to.transport
+	return h.put(ctx, l, l.to, key, p, now)
+}
+
+// put puts p under key in the conversation of to. The principal stays the
+// module's owner, who answers for it wherever it goes. The put does not
+// end with ctx: the message was counted and the run goes on, so a shutdown
+// does not lose it.
+func (h *Host) put(ctx context.Context, l *loaded, to recipient, key string, p event.ModuleNotify, now time.Time) error {
+	p.Module, p.Version, p.At, p.Principal, p.Transport = l.name, l.version, now.UnixMilli(), l.to.principal, to.transport
 	payload, err := json.Marshal(p)
 	if err != nil {
 		return err
 	}
 	return h.d.Inbox.Put(context.WithoutCancel(ctx), event.Event{ID: event.NewID(now), IdemKey: key, Source: event.SourceModule,
-		Conv: l.to.conv, Kind: event.KindModuleNotify, Payload: payload, At: now})
+		Conv: to.conv, Kind: event.KindModuleNotify, Payload: payload, At: now})
 }

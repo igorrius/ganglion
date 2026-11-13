@@ -56,12 +56,15 @@ type Transport struct {
 	typingEvery time.Duration
 	commands    []transport.Command // listed in the command hints at start
 	files       fileCounter
+	groupMsgs   groupCounter
 
 	health *Health // what /status shows of polling
 
 	mu     sync.Mutex
 	last   map[int64]int64 // chat → the newest incoming message id
 	groups map[int64]bool  // chats that are groups or supergroups
+	topics TopicFunc
+	titles map[topicKey]topicTitle // the title last told of each forum topic
 }
 
 var (
@@ -79,6 +82,7 @@ type config struct {
 	commands    []transport.Command
 	rich        bool
 	health      *Health
+	topics      TopicFunc
 }
 
 // Option configures a Transport.
@@ -126,7 +130,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 	if !tokenRE.MatchString(token) {
 		return nil, errors.New("telegram: token is not <bot_id>:<secret> (digits, a colon, then letters, digits, _ or -)")
 	}
-	cfg := config{now: time.Now, pollTimeout: pollTimeout, log: slog.New(slog.DiscardHandler), replyMode: ReplyAuto}
+	cfg := config{now: time.Now, pollTimeout: pollTimeout, log: slog.New(slog.DiscardHandler), replyMode: ReplyAuto, topics: noTopics}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -140,6 +144,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 		c:           newClient(cfg.baseURL, token, cfg.hc),
 		log:         cfg.log,
 		files:       newFileCounter(),
+		groupMsgs:   newGroupCounter(),
 		now:         cfg.now,
 		pollTimeout: cfg.pollTimeout,
 		retry:       backoff.Policy{Min: time.Second, Max: time.Minute},
@@ -151,6 +156,8 @@ func New(token string, opts ...Option) (*Transport, error) {
 		commands:    cfg.commands,
 		last:        map[int64]int64{},
 		groups:      map[int64]bool{},
+		topics:      cfg.topics,
+		titles:      map[topicKey]topicTitle{},
 	}, nil
 }
 
@@ -190,7 +197,7 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 		}
 		poll.Reset()
 		t.health.polledNow()
-		if offset, err = t.hand(ctx, sink, me.ID, ups, offset, sinkRetry); err != nil {
+		if offset, err = t.hand(ctx, sink, me, ups, offset, sinkRetry); err != nil {
 			return err
 		}
 	}
@@ -212,10 +219,11 @@ func (t *Transport) whoAmI(ctx context.Context, b *backoff.Backoff) (user, error
 // hand gives the updates to sink in order and returns the offset past the
 // last one handled. When sink fails, the offset stays at that update, so
 // Telegram sends it again on the next poll, after a wait.
-func (t *Transport) hand(ctx context.Context, sink transport.Sink, botID int64, ups []update, offset int64, b *backoff.Backoff) (int64, error) {
+func (t *Transport) hand(ctx context.Context, sink transport.Sink, me user, ups []update, offset int64, b *backoff.Backoff) (int64, error) {
 	for _, u := range ups {
 		t.seen(u)
-		e, ok := t.toEvent(botID, u)
+		t.noteTopic(ctx, u)
+		e, ok := t.toEvent(me, u)
 		if !ok {
 			t.answerCallback(ctx, u)
 			offset = u.UpdateID + 1
@@ -268,20 +276,26 @@ func (t *Transport) onError(ctx context.Context, err error, b *backoff.Backoff) 
 }
 
 // toEvent turns an update into an event: a text message (or caption)
-// from a person, or a press of one of our buttons.
-func (t *Transport) toEvent(botID int64, u update) (event.Event, bool) {
+// from a person, a press of one of our buttons, or the bot being added to
+// a group.
+func (t *Transport) toEvent(me user, u update) (event.Event, bool) {
 	if u.CallbackQuery != nil {
-		return t.decisionEvent(botID, u)
+		return t.decisionEvent(me.ID, u)
 	}
-	return t.messageEvent(botID, u)
+	if u.MyChatMember != nil {
+		return t.joinedEvent(me, u)
+	}
+	return t.messageEvent(me, u)
 }
 
 // messageEvent turns a message update into an event. Messages from people
 // with text, a caption or files become events; a file is described,
 // never dropped (R-DLV-10). Text the sender did not write
 // is marked (ruling R35): Telegram puts a forward in a message of its
-// own, so a forward's whole text is someone else's.
-func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
+// own, so a forward's whole text is someone else's. In a group only a
+// message that addresses the bot becomes an event (R-DLV-16): the rest is
+// dropped here, before the sink, and its text is never logged.
+func (t *Transport) messageEvent(me user, u update) (event.Event, bool) {
 	m := u.Message
 	if m == nil || m.From == nil || m.From.IsBot {
 		t.log.Debug("telegram: update skipped", "update_id", u.UpdateID, "reason", "not a message from a person")
@@ -299,11 +313,39 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 		t.log.Debug("telegram: update skipped", "update_id", u.UpdateID, "reason", "no text and no file")
 		return event.Event{}, false
 	}
+	if isGroup(m.Chat) && !addressed(m, me.ID, me.Username) {
+		t.groupMsgs.add(context.Background(), groupUnaddressed)
+		t.log.Debug("telegram: update skipped", "update_id", u.UpdateID, "reason", "a group message that does not address the bot")
+		return event.Event{}, false
+	}
 	t.files.add(context.Background(), fs)
+	payload, err := json.Marshal(t.incoming(me.ID, m, text, fs))
+	if err != nil {
+		return event.Event{}, false // a struct of strings always marshals
+	}
 	var thread int64
 	if m.IsTopicMessage {
 		thread = m.MessageThreadID
 	}
+	now := t.now()
+	at := now
+	if m.Date > 0 {
+		at = time.Unix(m.Date, 0).UTC()
+	}
+	return event.Event{
+		ID:      event.NewID(now),
+		IdemKey: idemKey(me.ID, u.UpdateID),
+		Source:  Name,
+		Conv:    ConvKey(m.Chat.ID, thread),
+		Kind:    event.KindMessage,
+		Payload: payload,
+		At:      at,
+	}, true
+}
+
+// incoming is the message m as the rest of the system sees it, with text
+// as its text and fs as its files.
+func (t *Transport) incoming(botID int64, m *message, text string, fs []event.File) event.Message {
 	msg := event.Message{
 		Text:          text,
 		From:          Principal(m.From.ID),
@@ -320,24 +362,11 @@ func (t *Transport) messageEvent(botID int64, u update) (event.Event, bool) {
 	if r := m.ReplyToMessage; r != nil && !topicRoot(m, r) {
 		msg.Reply = t.replied(botID, m.From.ID, r)
 	}
-	payload, err := json.Marshal(msg)
-	if err != nil {
-		return event.Event{}, false // a struct of strings always marshals
+	if isGroup(m.Chat) {
+		t.groupMsgs.add(context.Background(), groupAddressed)
+		msg.Group, msg.GroupTitle = GroupKey(m.Chat.ID), m.Chat.Title
 	}
-	now := t.now()
-	at := now
-	if m.Date > 0 {
-		at = time.Unix(m.Date, 0).UTC()
-	}
-	return event.Event{
-		ID:      event.NewID(now),
-		IdemKey: idemKey(botID, u.UpdateID),
-		Source:  Name,
-		Conv:    ConvKey(m.Chat.ID, thread),
-		Kind:    event.KindMessage,
-		Payload: payload,
-		At:      at,
-	}, true
+	return msg
 }
 
 // topicRoot reports whether r, the message m replies to, is the root of m's forum
@@ -493,7 +522,7 @@ func (t *Transport) seen(u update) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.last[m.Chat.ID] = max(t.last[m.Chat.ID], m.MessageID)
-	if m.Chat.Type == "group" || m.Chat.Type == "supergroup" {
+	if isGroup(m.Chat) {
 		t.groups[m.Chat.ID] = true
 	}
 }

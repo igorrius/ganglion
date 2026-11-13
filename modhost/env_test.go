@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -392,6 +393,18 @@ func (c *conf) SetModule(m settings.Module) error {
 	return nil
 }
 
+func (c *conf) SetNotifyTo(module string, names []string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i := slices.IndexFunc(c.mods, func(m settings.Module) bool { return m.Name == module })
+	if i < 0 {
+		c.mods = append(c.mods, settings.Module{Name: module})
+		i = len(c.mods) - 1
+	}
+	c.mods[i].NotifyTo = slices.Clone(names)
+	return nil
+}
+
 func (c *conf) RemoveModule(name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -459,10 +472,23 @@ func (e *env) newHost() *modhost.Host {
 				return "telegram", "telegram:" + id, ok
 			},
 		},
-		Now:      func() time.Time { return e.now },
-		Location: kyiv,
-		Log:      slog.New(slog.NewTextHandler(syncWriter{e}, nil)),
+		Destinations: e.destination,
+		Now:          func() time.Time { return e.now },
+		Location:     kyiv,
+		Log:          slog.New(slog.NewTextHandler(syncWriter{e}, nil)),
 	})
+}
+
+// destination resolves the env's destinations: family-k7 is a topic of a
+// forum, and broken cannot be read.
+func (e *env) destination(name string) (string, string, bool, error) {
+	switch name {
+	case "family-k7":
+		return "telegram", "telegram:-1001/45", true, nil
+	case "broken":
+		return "", "", false, errors.New("the file is broken")
+	}
+	return "", "", false, nil
 }
 
 type syncWriter struct{ e *env }
