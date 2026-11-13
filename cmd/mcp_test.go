@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/igorrius/ganglion/settings"
 	"io"
 	"path/filepath"
 	"slices"
@@ -140,6 +141,23 @@ func TestMCPConfigShowsTheFile(t *testing.T) {
 		if !strings.Contains(string(raw), want) {
 			t.Errorf("config_show lacks %q: %s", want, raw)
 		}
+	}
+}
+
+// A store: reference is shown whole with whether it is set, and names no
+// variable.
+func TestSecretSettingOfAStoreReference(t *testing.T) {
+	src := settings.Sources{Env: fakeEnv{"BOT": "from-the-environment"}, Store: fakeEnv{}}
+	got := secretSetting("telegram.token", "store:BOT", src)
+	if got.Value != "store:BOT (unset)" || got.Env != "" {
+		t.Fatalf("an unset store reference = %+v", got)
+	}
+	src.Store = fakeEnv{"BOT": "t0k"}
+	if got := secretSetting("telegram.token", "store:BOT", src); got.Value != "store:BOT (set)" || got.Env != "" {
+		t.Fatalf("a set store reference = %+v", got)
+	}
+	if got := secretSetting("telegram.token", "env:BOT", src); got.Value != "env:BOT (set)" || got.Env != "BOT" {
+		t.Fatalf("an env reference = %+v", got)
 	}
 }
 

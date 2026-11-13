@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/router"
-	"github.com/igorrius/ganglion/secrets"
 )
 
 // Models is the file's models: section: the providers, their models, and
@@ -32,7 +31,7 @@ type Provider struct {
 	Type string `yaml:"type"`
 	// BaseURL is an openai provider's API address.
 	BaseURL string `yaml:"base_url"`
-	// Key is the API key, as env:NAME; only a localhost provider goes
+	// Key is the API key, as env:NAME or store:NAME; only a localhost provider goes
 	// without one.
 	Key SecretRef `yaml:"key"`
 	// Command is the claude-cli binary; empty is "claude".
@@ -123,20 +122,33 @@ func choices(list []Choice) []router.Choice {
 	return out
 }
 
-// KeyNames are the variables that hold the providers' keys.
+// KeyNames are the variables that hold the providers' keys: the names of
+// the env: references. A key in the secret store is not a variable.
 func (m Models) KeyNames() []string {
 	var out []string
-	for _, p := range m.Providers {
-		if p.Key != "" {
-			out = append(out, p.Key.Name())
+	for _, r := range m.keyRefs() {
+		if r.Scheme() == SchemeEnv {
+			out = append(out, r.Name())
 		}
 	}
 	return out
 }
 
-// Keys reads each provider's key through src; a provider whose key is set
-// in the file but whose variable is empty fails, naming the variable.
-func (m Models) Keys(src secrets.Source) (map[string]string, error) {
+// keyRefs are the providers' key references that are set.
+func (m Models) keyRefs() []SecretRef {
+	var out []SecretRef
+	for _, p := range m.Providers {
+		if p.Key != "" {
+			out = append(out, p.Key)
+		}
+	}
+	return out
+}
+
+// Keys reads each provider's key through the source of its scheme; a
+// provider whose key is named in the file but is not set fails, naming
+// the reference.
+func (m Models) Keys(src Sources) (map[string]string, error) {
 	keys := map[string]string{}
 	for _, p := range m.Providers {
 		if p.Key == "" {
@@ -147,7 +159,7 @@ func (m Models) Keys(src secrets.Source) (map[string]string, error) {
 			return nil, err
 		}
 		if k == "" {
-			return nil, fmt.Errorf("%s: models.providers: %s (key of provider %s) is not set; set it or %s_FILE", FileName, p.Key.Name(), p.Name, p.Key.Name())
+			return nil, fmt.Errorf("%s: models.providers: %s (key of provider %s) is not set; %s", FileName, p.Key, p.Name, p.Key.HowToSet())
 		}
 		keys[p.Name] = k
 	}
@@ -190,7 +202,7 @@ func (m *Models) checkProviders(path string) (map[string]string, error) {
 		case hasCredentials(p.BaseURL):
 			return nil, pathError(at+".base_url", "must not carry credentials; use key: env:NAME")
 		case p.Type == TypeOpenAI && p.Key == "" && !isLocalURL(p.BaseURL):
-			return nil, pathError(at+".key", "required: env:NAME of the API key; only a base_url on localhost goes without one")
+			return nil, pathError(at+".key", "required: env:NAME or store:NAME of the API key; only a base_url on localhost goes without one")
 		}
 		types[p.Name] = p.Type
 	}

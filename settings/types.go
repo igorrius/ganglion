@@ -20,31 +20,72 @@ const off = "off"
 // auto is the value that leaves a choice to the node.
 const auto = "auto"
 
-// SecretRef is a secret by reference: "env:NAME" reads NAME or the file
-// named by NAME_FILE. A literal secret is refused when the file is read.
+// SecretRef is a secret by reference: "env:NAME" reads the variable NAME
+// or the file named by NAME_FILE; "store:NAME" reads NAME in the node
+// scope of the secret store (ADR-0077). A literal secret is refused when
+// the file is read.
 type SecretRef string
+
+// Scheme is where a secret reference reads from.
+type Scheme string
+
+// The schemes.
+const (
+	SchemeEnv   Scheme = "env"   // the variable NAME or the file NAME_FILE
+	SchemeStore Scheme = "store" // the node scope of the secret store
+)
+
+// Sources are where references are read, one per scheme.
+type Sources struct{ Env, Store secrets.Source }
 
 var envName = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 
-// UnmarshalYAML refuses anything but env:NAME; the error never repeats the value.
+// UnmarshalYAML refuses anything but env:NAME and store:NAME; the error
+// never repeats the value.
 func (r *SecretRef) UnmarshalYAML(n *yaml.Node) error {
-	name, ok := strings.CutPrefix(n.Value, "env:")
-	if n.Kind != yaml.ScalarNode || !ok || !envName.MatchString(name) {
-		return errors.New("must be env:NAME, the variable that holds the secret; a secret is never written in the file")
+	ref := SecretRef(n.Value)
+	if n.Kind != yaml.ScalarNode || ref.Scheme() == "" || !envName.MatchString(ref.Name()) {
+		return errors.New("must be env:NAME or store:NAME: the variable, or the stored secret, that holds the value; a secret is never written in the file")
 	}
-	*r = SecretRef(n.Value)
+	*r = ref
 	return nil
 }
 
-// Name is the variable's name.
-func (r SecretRef) Name() string { return strings.TrimPrefix(string(r), "env:") }
-
-// Resolve reads the secret; "" when the variable is unset.
-func (r SecretRef) Resolve(src secrets.Source) (string, error) {
-	if r == "" {
-		return "", nil
+// Scheme is where the reference reads from; "" for an empty reference and
+// for one of no known scheme.
+func (r SecretRef) Scheme() Scheme {
+	scheme, _, ok := strings.Cut(string(r), ":")
+	if s := Scheme(scheme); ok && (s == SchemeEnv || s == SchemeStore) {
+		return s
 	}
-	return src.Secret(r.Name())
+	return ""
+}
+
+// Name is the variable's or the stored secret's name, without the scheme.
+func (r SecretRef) Name() string {
+	_, name, _ := strings.Cut(string(r), ":")
+	return name
+}
+
+// Resolve reads the secret from the source of its scheme; "" when it is
+// not set.
+func (r SecretRef) Resolve(s Sources) (string, error) {
+	switch r.Scheme() {
+	case SchemeEnv:
+		return s.Env.Secret(r.Name())
+	case SchemeStore:
+		return s.Store.Secret(r.Name())
+	}
+	return "", nil
+}
+
+// HowToSet says how the secret a reference names is set, for the message
+// that says it is not.
+func (r SecretRef) HowToSet() string {
+	if r.Scheme() == SchemeStore {
+		return "set it with: ganglion secret set " + r.Name()
+	}
+	return "set it or " + r.Name() + "_FILE"
 }
 
 // Duration is a Go duration or "off" (0).

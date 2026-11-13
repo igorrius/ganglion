@@ -328,7 +328,7 @@ func TestRunAnnouncesWhatIsOff(t *testing.T) {
 	clearEnv(t)
 	_, _, out, err := captured(t, append([]string{"run"}, nodeFiles(t, quiet+"telegram: {token: env:MY_BOT}\n")...)...)
 	if err != nil || !strings.Contains(out, "no models section in ganglion.yaml; the agent is off") ||
-		!strings.Contains(out, "no MY_BOT; the Telegram transport is off") {
+		!strings.Contains(out, "no env:MY_BOT; the Telegram transport is off") {
 		t.Fatalf("%v:\n%s", err, out)
 	}
 }

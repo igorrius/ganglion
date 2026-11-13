@@ -170,7 +170,7 @@ func mainErr(modelsPath, promptsPath, only, outPath string, timeout time.Duratio
 		return fmt.Errorf("%s: no models section", modelsPath)
 	}
 	cat := *file.Models
-	keys, err := cat.Keys(secrets.OSEnv())
+	keys, err := cat.Keys(settings.Sources{Env: secrets.OSEnv(), Store: secrets.None{}})
 	if err != nil {
 		return err
 	}

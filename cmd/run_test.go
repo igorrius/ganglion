@@ -21,6 +21,7 @@ import (
 	"github.com/igorrius/ganglion/internal/memlimit"
 	"github.com/igorrius/ganglion/internal/testinputs"
 	"github.com/igorrius/ganglion/node"
+	"github.com/igorrius/ganglion/settings"
 )
 
 func TestRunStartsAllRolesByDefault(t *testing.T) {
@@ -104,6 +105,20 @@ func TestBootstrapFromFile(t *testing.T) {
 	}
 	if v, _ := b.Secrets.Secret("BOT"); v != "t0k" {
 		t.Fatalf("secret = %q", v)
+	}
+}
+
+// R-CFG-2: a store: reference reads the store's source and never the
+// environment, even when a variable has the same name.
+func TestFromFileReadsAStoreReferenceFromTheStore(t *testing.T) {
+	f, err := settings.Parse([]byte("telegram: {token: \"store:BOT\"}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := settings.Sources{Env: fakeEnv{"BOT": "from-the-environment"}, Store: fakeEnv{"BOT": "t0k"}}
+	b, err := fromFile(f, filepath.Join(t.TempDir(), "g.db"), memlimit.Limit{}, src)
+	if err != nil || b.BotToken != "t0k" {
+		t.Fatalf("token from the store: %v, %v", b.BotToken == "t0k", err)
 	}
 }
 

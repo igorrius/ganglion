@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/igorrius/ganglion/master/schemas/node.schema.json",
   "title": "ganglion.yaml",
-  "description": "ganglion.yaml: everything an operator chooses (spec 7.14, ADR-0059). Secrets appear only as env:NAME. The Go loader settings.Parse is the validator; this schema is for editors, docs and the agent. Every section has a default, so a missing or empty file is a working node.",
+  "description": "ganglion.yaml: everything an operator chooses (spec 7.14, ADR-0059). Secrets appear only as env:NAME or store:NAME. The Go loader settings.Parse is the validator; this schema is for editors, docs and the agent. Every section has a default, so a missing or empty file is a working node.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -56,9 +56,9 @@
       }
     },
     "secretRef": {
-      "description": "A secret by reference: env:NAME reads the variable NAME, or the file named by NAME_FILE. A literal secret is refused.",
+      "description": "A secret by reference: env:NAME reads the variable NAME, or the file named by NAME_FILE; store:NAME reads NAME among the node's own secrets in its secret store (ganglion secret set NAME). A literal secret is refused.",
       "type": "string",
-      "pattern": "^env:[A-Z_][A-Z0-9_]*$"
+      "pattern": "^(env|store):[A-Z_][A-Z0-9_]*$"
     },
     "duration": {
       "description": "A Go duration such as 90s or 6h, or off (0).",
@@ -142,7 +142,7 @@
       "additionalProperties": false,
       "properties": {
         "token": {
-          "description": "The bot token, as env:NAME. Without the variable set the Telegram transport does not start.",
+          "description": "The bot token, as env:NAME or store:NAME. Without it set the Telegram transport does not start.",
           "$ref": "#/$defs/secretRef",
           "default": "env:TELEGRAM_BOT_TOKEN"
         },
@@ -266,7 +266,7 @@
           "default": "auto"
         },
         "brave_key": {
-          "description": "The Brave Search API key, as env:NAME. With the variable unset, search is unavailable in auto mode.",
+          "description": "The Brave Search API key, as env:NAME or store:NAME. With it unset, search is unavailable in auto mode.",
           "$ref": "#/$defs/secretRef",
           "default": "env:BRAVE_API_KEY"
         }
@@ -323,7 +323,7 @@
           "format": "uri"
         },
         "key": {
-          "description": "The API key, as env:NAME. Only a provider on localhost goes without one; claude-cli takes none.",
+          "description": "The API key, as env:NAME or store:NAME. Only a provider on localhost goes without one; claude-cli takes none.",
           "$ref": "#/$defs/secretRef"
         },
         "command": {

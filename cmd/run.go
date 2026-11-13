@@ -30,7 +30,8 @@ func runCommand(out io.Writer, start startFunc) *cli.Command {
 		Name:  "run",
 		Usage: "run a node with the given roles until a signal",
 		Description: "Settings come from ganglion.yaml (--config; default: beside the database). Secrets never are in it:\n" +
-			"the file names each one as env:NAME, and the node reads NAME or the file named by NAME_FILE.",
+			"the file names each one as env:NAME, and the node reads NAME or the file named by NAME_FILE,\n" +
+			"or as store:NAME, one of the node's own secrets in its secret store (ganglion secret set NAME).",
 		Flags: v.Flags(),
 		Action: func(ctx context.Context, _ *cli.Command) error {
 			roles, err := node.ParseRoles(v.Roles)
@@ -103,7 +104,7 @@ func bootstrap(v flags.Run, src secrets.Source, getenv func(string) string, read
 		return config.Bootstrap{}, err
 	}
 	limit := memlimit.Decide(getenv("GOMEMLIMIT"), uint64(f.Node.MemoryLimit), read)
-	b, err := fromFile(f, v.DB, limit, src)
+	b, err := fromFile(f, v.DB, limit, settings.Sources{Env: src, Store: secrets.None{}})
 	if err != nil {
 		return config.Bootstrap{}, err
 	}
@@ -133,7 +134,7 @@ func settingsPath(named, db string) string {
 // fromFile maps the file to the node's bootstrap settings for the
 // database at db, with the decided memory limit, reading the secrets
 // through src.
-func fromFile(f settings.File, db string, limit memlimit.Limit, src secrets.Source) (config.Bootstrap, error) {
+func fromFile(f settings.File, db string, limit memlimit.Limit, src settings.Sources) (config.Bootstrap, error) {
 	b := config.Bootstrap{DB: db, Languages: f.Agent.Languages, BotAPIURL: f.Telegram.APIURL, Admin: f.Telegram.Admin,
 		HTTPAddr: f.HTTP.Addr, PublicURL: f.HTTP.PublicURL, TelegramWebhook: f.Telegram.Updates == settings.UpdatesWebhook,
 		MetricsAddr: f.Metrics.Addr, TelegramReply: f.Telegram.Reply, TelegramRich: f.Telegram.Rich,
@@ -161,7 +162,7 @@ func fromFile(f settings.File, db string, limit memlimit.Limit, src secrets.Sour
 
 // agentSettings maps the file's agent and models sections, reading the
 // search key and the providers' keys through src.
-func agentSettings(f settings.File, src secrets.Source) (config.AgentSettings, error) {
+func agentSettings(f settings.File, src settings.Sources) (config.AgentSettings, error) {
 	tz, err := time.LoadLocation(f.Node.TZ) // checked by settings
 	if err != nil {
 		return config.AgentSettings{}, fmt.Errorf("%s: node.tz: %w", settings.FileName, err)
@@ -188,7 +189,7 @@ func announce(logger *slog.Logger, b config.Bootstrap) {
 		logger.Warn("node: no models section in " + settings.FileName + "; the agent is off and the bot echoes")
 	}
 	if b.BotToken == "" {
-		logger.Warn("node: no " + b.Settings.Telegram.Token.Name() + "; the Telegram transport is off")
+		logger.Warn("node: no " + string(b.Settings.Telegram.Token) + "; the Telegram transport is off")
 	}
 	if b.Settings.HTTP.On() {
 		logger.Info("node: public listener on", "addr", b.HTTPAddr, "telegram_webhook", b.TelegramWebhook)
