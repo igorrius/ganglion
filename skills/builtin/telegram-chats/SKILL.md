@@ -1,6 +1,6 @@
 ---
 name: telegram-chats
-description: Send a message to a Telegram group or forum topic, route a module's messages there, disconnect a group, or find a topic the owner names
+description: Read before you send anything to a Telegram group or topic, set where a module's messages go, or answer what you can do in a group
 ---
 Read this before you send anything to a group, set where a module's messages go, or tell the
 owner what you can or cannot do in a group. It says how the node's Telegram side works, so you
@@ -35,12 +35,32 @@ message in it, so a topic nobody has written in since the node started is not in
 When the topic the owner names is not there:
 
 - Do not use the group's own key instead: that sends to the General topic, which is not what
-  was asked.
-- Ask once, in one line, for either of two things: write any message in that topic, or send the
-  topic's link (in Telegram: the topic's menu, Copy topic link; it looks like
-  `https://t.me/c/1234567890/8`). The tools take the link as it is, in place of a key.
+  was asked. Do not guess a topic by its number either.
+- Ask once, in one short line, for the topic's link: "I do not see the K7 topic yet. Please
+  send me its link: open the topic, its menu, Copy topic link." Nothing else, no keys, no ids.
+- When the link comes, do the thing at once, in that turn. Pass the link in place of a key, and
+  pass the name the owner used for the topic: `titles` in `module.notify_to`, `title` in
+  `message.send`. The question then says "the topic «K7» (number 8)", and after the owner's
+  press the node knows the topic by that name.
 - A topic renamed before the node saw the rename is listed under its first title. If the owner's
-  name matches nothing but a topic's number is known, say which titles you see and ask which one.
+  name matches nothing, say which titles you see and ask which one, or ask for the link.
+
+## How to talk about it
+
+The owner is not an engineer in this conversation.
+
+- Call a place the way the owner does: "the K7 topic of the family chat", "your private chat".
+  Never show a key (`telegram:-100.../8`), a topic's number, a chat id or a destination's name:
+  those are for the tools.
+- One request is one tool call and one question to the owner. Do not split it into steps, do
+  not ask for a name for anything, and do not tidy up afterwards: when a tool answers that
+  everything is set up, it is.
+- After the owner's press, answer in one or two lines: what now goes where. No list of what you
+  did.
+- Do not write to memory where messages go or what a group is called: the node keeps that, and
+  `destination.list` shows it.
+- If something is refused, say in plain words what is in the way and what the owner can do, in
+  one line.
 
 ## Sending a message
 

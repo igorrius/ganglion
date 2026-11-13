@@ -192,3 +192,24 @@ Changed in the same branch:
   topic is not known, what not to promise.
 - The Bot API has no method to list a forum's topics (checked against the
   API's page on 2026-11-13): topics are learned from messages only.
+
+## After the second live try (2026-11-13)
+
+The owner got the battery alerts routed to the K7 topic, and said it took
+"dancing with a tambourine". The node's journal of that conversation shows
+why:
+
+| What the owner saw | What happened | Changed |
+|---|---|---|
+| "It could not understand where" | Nobody had written in K7 since the deploy, so `destination.list` showed the forum with no topics. The agent first tried the forum's own key | The key of a forum as a whole is called "the General topic" in the question; the list's answer ends with what to do, and says never to use it for a named topic |
+| "It did not ask for the link" | The agent never called `skill.read` for `telegram-chats`: a skill is read only when the model chooses to | The same guidance is in the answer of `destination.list` and in the tools' descriptions, which the model always reads; the skill's description now says when to read it |
+| "/8 in the confirmation, though I asked for K7" | The topic's title was not known, so the question named it by its number | `module.notify_to` takes `titles`, and `message.send` and `destination.set` take `title`: the owner's name for a topic the node has not seen. The question shows "the topic «K7» (number 8)", and after the owner's press the node keeps that title (`groups.Store.NameTopic`). A title given for a topic the node has seen is ignored |
+| Four questions for one request | The route's answer showed the node's internal name `chat-…-topic-8`; the agent made destinations `family` and `family-k7` by hand, routed again, removed the first, and wrote the whole thing to memory | The route's answer shows no internal name and says that everything is set up; the skill says one request is one call and one question, and not to write routes to memory |
+
+The skill gained a section on how to talk about it: places by the owner's
+words, never keys, numbers or destination names; one short line to ask for
+a link; one or two lines after the press.
+
+A title the owner gives could be used to mislabel a topic from a tainted
+session, so it is stored only by a call the owner confirmed, and the
+question that asks shows the title beside the topic's number.

@@ -70,6 +70,14 @@ func (f *routingFake) Topic(_ context.Context, group string, thread int64) (grou
 	return groups.Topic{}, false, nil
 }
 
+func (f *routingFake) NameTopic(_ context.Context, group string, thread int64, title string) error {
+	if f.topics == nil {
+		f.topics = map[string][]groups.Topic{}
+	}
+	f.topics[group] = append(f.topics[group], groups.Topic{Group: group, Thread: thread, Title: title})
+	return nil
+}
+
 func (f *routingFake) ForgetTopics(_ context.Context, group string) error {
 	f.forgotten = append(f.forgotten, group)
 	return nil
@@ -190,7 +198,8 @@ func TestDestinationSetNamesATopic(t *testing.T) {
 	}
 	// A topic the node has not seen is named by its number; the group and
 	// the caller's own private chat are places too.
-	for conv, want := range map[string]string{forum + "/8": "topic number 8", forum: "the group", "telegram:42": "your private chat"} {
+	// The key of a forum as a whole is its General topic, and is called that.
+	for conv, want := range map[string]string{forum + "/8": "topic number 8", forum: "the General topic", "telegram:42": "your private chat"} {
 		q, err := ask(t, set, routeCall("destination.set", `{"name":"x","conv":"`+conv+`"}`))
 		if err != nil || !strings.Contains(q, want) {
 			t.Errorf("%s: %q, %v; want %q", conv, q, err, want)
@@ -409,5 +418,89 @@ func TestMessageSendToAPlace(t *testing.T) {
 		if _, err := send.Run(context.Background(), routeCall("message.send", `{"conv":"`+target+`","text":"x"}`)); !errors.Is(err, builtin.ErrUnknownConv) {
 			t.Errorf("%s: err = %v, want ErrUnknownConv", target, err)
 		}
+	}
+}
+
+// The live case (G-153, 2026-11-13): the owner names a topic the node has
+// not seen and sends its link. One call routes the module; the question
+// shows the owner's name for the topic beside its number; after the press
+// the node knows the topic by that name, and the answer gives the model no
+// internal name to tidy up.
+func TestRouteToATopicTheNodeHasNotSeen(t *testing.T) {
+	f := family()
+	tools := newRouting(f)
+	route := tools["module.notify_to"]
+	c := routeCall("module.notify_to", `{"module":"battery-alerts","destinations":["https://t.me/c/1/8","owner"],"titles":{"https://t.me/c/1/8":"K7 *new*"}}`)
+	q, err := ask(t, route, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(q, `the topic «K7 \*new\*» (number 8) of the group Family \*one\*`) || !strings.Contains(q, "your private chat") {
+		t.Fatalf("question %q", q)
+	}
+	if _, ok, _ := f.Topic(context.Background(), forum, 8); ok {
+		t.Fatal("a question stored the title: only the owner's press may")
+	}
+	res, err := route.Run(context.Background(), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok, _ := f.Topic(context.Background(), forum, 8); !ok || got.Title != "K7 *new*" {
+		t.Fatalf("topic %+v %v", got, ok)
+	}
+	if strings.Contains(res.Text, "chat-1001") || !strings.Contains(res.Text, "Everything is set up") {
+		t.Fatalf("the answer shows an internal name or invites more steps: %q", res.Text)
+	}
+	// From now on the list shows the topic, and a question names it plainly.
+	list, err := tools["destination.list"].Run(context.Background(), routeCall("destination.list", `{}`))
+	if err != nil || !strings.Contains(list.Text, forum+"/8  topic") {
+		t.Fatalf("list %q, %v", list.Text, err)
+	}
+	q, err = ask(t, route, routeCall("module.notify_to", `{"module":"deye","destinations":["`+forum+`/8"]}`))
+	if err != nil || !strings.Contains(q, "the topic K7") || strings.Contains(q, "number 8") {
+		t.Fatalf("question after the topic is known: %q, %v", q, err)
+	}
+	// A title given for a topic the node has seen changes nothing: what
+	// Telegram said stands.
+	if _, err := route.Run(context.Background(), routeCall("module.notify_to", `{"module":"deye","destinations":["`+k7+`"],"titles":{"`+k7+`":"Spoofed"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := f.Topic(context.Background(), forum, 45); strings.Contains(got.Title, "Spoofed") {
+		t.Fatalf("a given title replaced a seen one: %+v", got)
+	}
+}
+
+// The list ends with what to do, since a tool's answer is read every time:
+// never the group's own key for a named topic, ask for the link, speak in
+// titles.
+func TestDestinationListSaysWhatToDo(t *testing.T) {
+	res, err := newRouting(family())["destination.list"].Run(context.Background(), routeCall("destination.list", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Never use it when the owner named a topic", "Copy topic link", `"titles"`, "never by keys, numbers or destination names"} {
+		if !strings.Contains(res.Text, want) {
+			t.Errorf("the list lacks %q", want)
+		}
+	}
+}
+
+// message.send to a topic the node has not seen: the owner's name for it
+// is in the question and is remembered after the send.
+func TestMessageSendLearnsATopicsTitle(t *testing.T) {
+	f := family()
+	r := routingOf(f)
+	cv := convs()
+	cv.Place, cv.Called, cv.Learn = r.Place, r.Called, r.Learn
+	send := builtin.NewMessageSend(cv)
+	c := routeCall("message.send", `{"conv":"https://t.me/c/1/8","text":"hi","title":"K7"}`)
+	if q, err := send.Question(context.Background(), c); err != nil || !strings.Contains(q, "the topic «K7» (number 8)") {
+		t.Fatalf("question %q, %v", q, err)
+	}
+	if _, err := send.Run(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok, _ := f.Topic(context.Background(), forum, 8); !ok || got.Title != "K7" {
+		t.Fatalf("topic %+v %v", got, ok)
 	}
 }

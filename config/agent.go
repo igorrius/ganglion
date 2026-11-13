@@ -301,6 +301,7 @@ func Convs() do.Provider[builtin.Convs] {
 			Dests:   do.MustInvoke[groups.Destinations](i).Resolve,
 			Place:   do.MustInvoke[builtin.Routing](i).Place,
 			Called:  do.MustInvoke[builtin.Routing](i).Called,
+			Learn:   do.MustInvoke[builtin.Routing](i).Learn,
 		}, nil
 	}
 }

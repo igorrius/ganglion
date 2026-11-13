@@ -104,3 +104,22 @@ func TestTopicsSurviveAnError(t *testing.T) {
 		t.Fatalf("topics %v stored while the groups could not be read", got)
 	}
 }
+
+// A title the admin gave stands against the root's older one and gives
+// way to a real rename.
+func TestNameTopicIsARename(t *testing.T) {
+	ctx := context.Background()
+	s := newStore(t, &clock{at: t0})
+	tp := newTopics(t, s, map[string]bool{family: true}, nil)
+	if err := s.NameTopic(ctx, family, 8, "K7"); err != nil {
+		t.Fatal(err)
+	}
+	tp.Seen(ctx, family, 8, "Topic", false) // the root's first title
+	if got, _, _ := s.Topic(ctx, family, 8); got.Title != "K7" {
+		t.Fatalf("the admin's title was replaced by the root's: %+v", got)
+	}
+	tp.Seen(ctx, family, 8, "K7 reports", true)
+	if got, _, _ := s.Topic(ctx, family, 8); got.Title != "K7 reports" {
+		t.Fatalf("a rename did not replace the admin's title: %+v", got)
+	}
+}

@@ -71,6 +71,14 @@ func (s *Store) setTopic(ctx context.Context, group string, thread int64, title 
 	return nil
 }
 
+// NameTopic stores the title the admin gave a topic of group, when the
+// node has not seen the topic's own: the admin sent the topic's link and
+// said what it is called. It counts as a rename, so the older title of the
+// topic's root does not replace it, and a real rename does.
+func (s *Store) NameTopic(ctx context.Context, group string, thread int64, title string) error {
+	return s.setTopic(ctx, group, thread, text.Truncate(title, titleRunes), true)
+}
+
 // Topics returns the topics the node saw in group, by thread.
 func (s *Store) Topics(ctx context.Context, group string) ([]Topic, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT thread, title FROM group_topics WHERE grp = ? ORDER BY thread`, group)

@@ -45,9 +45,11 @@ type Convs struct {
 	Dests DestinationFunc
 	// Place resolves a connected group or a topic of one, by its key or by
 	// a link to it (Routing.Place); unset knows none. Called says what such
-	// a conversation is called, "" when it does not know.
+	// a conversation is called, "" when it does not know. Learn stores the
+	// title the owner gave a topic the node has not seen.
 	Place  PlaceFunc
 	Called CalledFunc
+	Learn  LearnFunc
 	Names  NameFunc // who a principal is, for the owner's question
 }
 
@@ -60,8 +62,12 @@ type DestinationFunc func(name string) (transport, conv string, ok bool, err err
 type PlaceFunc func(ctx context.Context, c tool.Call, ref string) (transport, conv string, ok bool, err error)
 
 // CalledFunc says what a conversation is called for the person asked; ""
-// when it does not know.
-type CalledFunc func(ctx context.Context, c tool.Call, conv string) string
+// when it does not know. given is the title the owner gave a topic the
+// node has not seen.
+type CalledFunc func(ctx context.Context, c tool.Call, conv, given string) string
+
+// LearnFunc stores the title the owner gave the topic of conv.
+type LearnFunc func(ctx context.Context, c tool.Call, conv, given string) error
 
 // place resolves target as a connected group or a topic of one.
 func (v Convs) place(ctx context.Context, c tool.Call, target string) (transport, conv string, ok bool, err error) {
@@ -142,10 +148,12 @@ func (*MessageSend) Spec() tool.Spec {
 		Description: "Send a message to a named destination, a conversation the assistant knows or a person on the access list. " +
 			"conv is a key from destination.list (a connected group or one of its topics), a topic's link, a destination's name, " +
 			"another conversation's key, or a person's id such as telegram:user:123456. " +
+			"Call destination.list first when the owner names a group or a topic; the skill telegram-chats says how to find it. " +
 			"The owner confirms the message before it goes out.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"conv":{"type":"string","description":"a key from destination.list, a topic's link, a destination's name, or the person's id such as telegram:user:123456"},` +
-			`"text":{"type":"string","description":"the message text"}},` +
+			`"text":{"type":"string","description":"the message text"},` +
+			`"title":{"type":"string","description":"for a topic that destination.list does not show: the name the owner called it"}},` +
 			`"required":["conv","text"],"additionalProperties":false}`),
 		Class:     tool.ClassSideEffect,
 		Policy:    tool.PolicyConfirm,
@@ -160,8 +168,9 @@ func (*MessageSend) Spec() tool.Spec {
 const MaxMessageRunes = 2500
 
 type messageArgs struct {
-	Conv string `json:"conv"`
-	Text string `json:"text"`
+	Conv  string `json:"conv"`
+	Text  string `json:"text"`
+	Title string `json:"title"`
 }
 
 // args reads and checks a call's arguments: a text the question can show
@@ -192,7 +201,7 @@ func (m *MessageSend) Question(ctx context.Context, c tool.Call) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("message.send: %w", err)
 	}
-	to, err := m.recipient(ctx, c, a.Conv, conv)
+	to, err := m.recipient(ctx, c, a, conv)
 	if err != nil {
 		return "", err
 	}
@@ -202,12 +211,13 @@ func (m *MessageSend) Question(ctx context.Context, c tool.Call) (string, error)
 // recipient names where a message to target goes (conv, resolved): this
 // chat, a person by their listed name and id, or another conversation by
 // its key.
-func (m *MessageSend) recipient(ctx context.Context, c tool.Call, target, conv string) (string, error) {
+func (m *MessageSend) recipient(ctx context.Context, c tool.Call, a messageArgs, conv string) (string, error) {
+	target := a.Conv
 	if target == c.Conv && conv == c.Conv {
 		return "this chat", nil
 	}
 	if m.convs.Called != nil {
-		if called := m.convs.Called(ctx, c, conv); called != "" {
+		if called := m.convs.Called(ctx, c, conv, a.Title); called != "" {
 			return called, nil
 		}
 	}
@@ -239,6 +249,11 @@ func (m *MessageSend) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 	transport, conv, err := m.convs.resolve(ctx, c, a.Conv)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("message.send: %w", err)
+	}
+	if a.Title != "" && m.convs.Learn != nil {
+		if err := m.convs.Learn(ctx, c, conv, a.Title); err != nil {
+			return tool.Result{}, fmt.Errorf("message.send: %w", err)
+		}
 	}
 	return tool.Result{
 		Text: "message queued for " + conv,
