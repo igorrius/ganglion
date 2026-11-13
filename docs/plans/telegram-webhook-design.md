@@ -19,6 +19,9 @@ listens on no public port. The owner wants the second way Telegram offers:
 - the agent can change that setting, and both modes work (owner);
 - on Railway a service has, or can have, a public domain, so the node
   registers its webhook on that domain itself (owner).
+- the owner's deployed node on Railway is the one that will mostly run in
+  webhook mode (owner, 2026-11-13, after the spike). Polling stays the
+  default of the file and the mode of a node with no public address.
 
 The owner asked for a transport option, not for a fix. That matters for the
 scope: polling loses nothing today (section 8), so the webhook mode must be
@@ -348,3 +351,8 @@ owner did not name the phase).
 - **With the code:** the schema and `ganglion.example.yaml`, the paragraph of
   [deploy-railway.md](../deploy-railway.md) that says a webhook is not
   needed, the code map and the container diagram.
+- **Switching the owner's node on Railway** is the last step of the task
+  and the owner's to approve: generate a domain for the `ganglion` service,
+  set `http.addr` to the port Railway gives and `http.public_url` to the
+  domain, set `telegram.updates: webhook`, deploy. The runbook gets these
+  steps and the way back (`telegram.updates: polling`, deploy).
