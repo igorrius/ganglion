@@ -1,6 +1,6 @@
 # ADR-0080: Keep the own Telegram client, and name the library to move to
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-13
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.1 Guaranteed delivery](../spec.md#71-guaranteed-delivery)
@@ -79,7 +79,8 @@ handlers, routing, polling and a webhook handler from the library.
 
 ## Decision
 
-**A now, and B is the way out when the node needs breadth.**
+**A now, and B is the way out when the node needs breadth** (accepted by
+the owner, 2026-11-13).
 
 The integration is hard where no library helps. The transport's work is
 what happens around a call: when an update counts as received, what a `409`
