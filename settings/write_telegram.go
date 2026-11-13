@@ -39,12 +39,12 @@ func (f TelegramFile) SetGroup(g Group) error {
 		}
 		item := groupLine(seq, g.Chat)
 		if item == nil {
-			item = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+			item = &yaml.Node{Kind: yaml.MappingNode, Tag: tagMap}
 			seq.Content = append(seq.Content, item)
 		}
-		setScalar(item, "chat", strconv.FormatInt(g.Chat, 10), "!!int")
-		setScalar(item, "name", g.Name, "!!str")
-		setScalar(item, "role", g.Role, "!!str")
+		setScalar(item, "chat", strconv.FormatInt(g.Chat, 10), tagInt)
+		setScalar(item, "name", g.Name, tagStr)
+		setScalar(item, "role", g.Role, tagStr)
 		return nil
 	})
 }
@@ -73,17 +73,17 @@ func (f TelegramFile) RemoveGroup(chat int64) error {
 func groupsNode(doc *yaml.Node) (*yaml.Node, error) {
 	if doc.Kind == 0 {
 		doc.Kind = yaml.DocumentNode
-		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
+		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: tagMap}}
 	}
 	root := doc.Content[0]
 	if root.Kind != yaml.MappingNode {
 		return nil, fmt.Errorf("%s: the top level is not a mapping", FileName)
 	}
-	tg, err := child(root, "telegram", yaml.MappingNode, "!!map")
+	tg, err := child(root, "telegram", yaml.MappingNode, tagMap)
 	if err != nil {
 		return nil, err
 	}
-	seq, err := child(tg, "groups", yaml.SequenceNode, "!!seq")
+	seq, err := child(tg, "groups", yaml.SequenceNode, tagSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func groupsNode(doc *yaml.Node) (*yaml.Node, error) {
 // or null ("groups:" with every line commented out).
 func child(m *yaml.Node, key string, kind yaml.Kind, tag string) (*yaml.Node, error) {
 	if v, _ := field(m, key); v != nil {
-		if v.Kind == yaml.ScalarNode && v.Tag == "!!null" {
+		if v.Kind == yaml.ScalarNode && v.Tag == tagNull {
 			*v = yaml.Node{Kind: kind, Tag: tag, HeadComment: v.HeadComment, LineComment: v.LineComment}
 		}
 		if v.Kind != kind {
