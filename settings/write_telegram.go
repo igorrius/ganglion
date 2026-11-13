@@ -71,13 +71,9 @@ func (f TelegramFile) RemoveGroup(chat int64) error {
 // groupsNode finds telegram.groups, creating the document, the mapping
 // and the keys as needed.
 func groupsNode(doc *yaml.Node) (*yaml.Node, error) {
-	if doc.Kind == 0 {
-		doc.Kind = yaml.DocumentNode
-		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: tagMap}}
-	}
-	root := doc.Content[0]
-	if root.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("%s: the top level is not a mapping", FileName)
+	root, err := rootOf(doc)
+	if err != nil {
+		return nil, err
 	}
 	tg, err := child(root, "telegram", yaml.MappingNode, tagMap)
 	if err != nil {
