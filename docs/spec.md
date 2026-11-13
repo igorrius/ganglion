@@ -292,6 +292,9 @@ Guarantee: **at-least-once + idempotency.**
   by NATS JetStream (deduplication via `Nats-Msg-Id`).
 - **R-DLV-8.** Two processes must not poll with the same Telegram token at
   once: zero overlap on deploy, or switch to a webhook.
+  A webhook as a second way to receive updates is proposed in
+  [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md) and not
+  yet a requirement (section 11).
 - **R-DLV-9.** A reply may carry attachments (a picture, a document) in a
   channel-neutral form; they go through the outbox with the same delivery
   guarantee as text. The Telegram transport sends them with `sendPhoto`
@@ -1763,6 +1766,7 @@ fallback until the gate is passed.
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
 | Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | An encrypted store, with the page served by the node and the ciphertext returned through Telegram first; the command on the host as the path without a browser (owner's brainstorm, 2026-11-12, [design note](plans/secrets-intake-design.md)). The phase is open: M6 or P2 | A spike on Telegram's `sendData`, then an ADR |
 | Logging the claude CLI provider in | A variable set by hand from `claude setup-token` · a `/login` command of the core that drives the bundled CLI and takes the one-time code from the chat · the same command with the node doing the OAuth exchange itself | The `/login` command driving the CLI; the token goes to the encrypted store and never to the chat (owner's request, 2026-11-13, [design note](plans/model-login-from-chat-design.md)). The phase is open, with the store | A spike on driving `setup-token` without a terminal, then an ADR |
+| How Telegram updates reach the node | Long polling only · a webhook only · both, chosen in `ganglion.yaml` · both, chosen by the node | Both, chosen in the file, polling by default; the webhook on the node's public listener, verified by Telegram's secret header, registered by the node, with a fallback to polling when the address does not reach it (owner's request, 2026-11-13, [design note](plans/telegram-webhook-design.md), [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md), Proposed). The phase is open | The owner accepts the ADR; a spike on Railway with the test bot before the code |
 
 Each question becomes an ADR (status Proposed) when work on it starts and is
 accepted when decided; see [docs/adr](adr/README.md). Already decided: one
@@ -1832,6 +1836,10 @@ Reviewed at each gate.
   in the transport (P3, [ADR-0017](adr/0017-extension-points.md)).
 - Telegram Mini Apps (web pages inside the chat): an HTTP server and
   `initData` validation in the core; a web UI, excluded from 0.x (ADR-0017).
+  A public listener in a narrow form, for the Telegram webhook only, is
+  under decision in
+  [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)
+  (section 11); pages and `initData` stay here either way.
 - Packaging and install paths for other users: a Docker image, a Railway
   template, a Helm chart, a systemd unit for a Pi, `ganglion init` (closer
   to the public release in P3).
