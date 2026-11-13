@@ -6,11 +6,24 @@ package telegram
 
 import "encoding/json"
 
-// update is a Bot API Update; messages and button presses are requested.
+// update is a Bot API Update; messages, button presses and the bot's own
+// membership of a chat are requested.
 type update struct {
 	UpdateID      int64          `json:"update_id"`
 	Message       *message       `json:"message,omitempty"`
 	CallbackQuery *callbackQuery `json:"callback_query,omitempty"`
+	MyChatMember  *chatMember    `json:"my_chat_member,omitempty"`
+}
+
+// chatMember is a Bot API ChatMemberUpdated about the bot itself, reduced
+// to what says the bot was added to a chat.
+type chatMember struct {
+	Chat          chat `json:"chat"`
+	From          user `json:"from"`
+	NewChatMember struct {
+		Status string `json:"status"`
+		User   user   `json:"user"`
+	} `json:"new_chat_member"`
 }
 
 // callbackQuery is a press of an inline button. Message is the message
@@ -33,6 +46,10 @@ type message struct {
 	From            *user  `json:"from,omitempty"`
 	Text            string `json:"text,omitempty"`
 	Caption         string `json:"caption,omitempty"`
+	// Entities and CaptionEntities mark the parts of Text and Caption; of
+	// them only what addresses the bot is read (R-DLV-16).
+	Entities        []inEntity `json:"entities,omitempty"`
+	CaptionEntities []inEntity `json:"caption_entities,omitempty"`
 	// RichMessage is a rich formatted message, read when there is no text (R-DLV-12).
 	RichMessage json.RawMessage `json:"rich_message,omitempty"`
 	// Outside content (ruling R35): a forward's origin, a post Telegram
@@ -82,9 +99,20 @@ func present(raw json.RawMessage) bool {
 }
 
 type chat struct {
-	ID      int64  `json:"id"`
-	Type    string `json:"type"`
+	ID   int64  `json:"id"`
+	Type string `json:"type"`
+	// Title is a group's name: outside text.
+	Title   string `json:"title,omitempty"`
 	IsForum bool   `json:"is_forum,omitempty"`
+}
+
+// inEntity is a Bot API MessageEntity of an incoming message, reduced to
+// what the addressing rule reads. Offset and Length count UTF-16 code units.
+type inEntity struct {
+	Type   string `json:"type"`
+	Offset int    `json:"offset"`
+	Length int    `json:"length"`
+	User   *user  `json:"user,omitempty"` // of a text_mention
 }
 
 type user struct {

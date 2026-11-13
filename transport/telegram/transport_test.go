@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/transport"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 )
@@ -162,8 +164,8 @@ func TestTopicMessageGetsTopicConv(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	c := &collector{}
 	run(t, newTransport(t, fake), c.sink)
-	fake.AddMessage(telegramtest.Incoming{ChatID: -1001234567890, ThreadID: 45, UserID: 1, Text: "in topic"})
-	fake.AddMessage(telegramtest.Incoming{ChatID: -1001234567890, UserID: 1, Text: "general"})
+	fake.AddMessage(telegramtest.Incoming{ChatID: -1001234567890, ThreadID: 45, UserID: 1, Text: "@test_bot in topic", Extra: telegramtest.Mention("@test_bot in topic")})
+	fake.AddMessage(telegramtest.Incoming{ChatID: -1001234567890, UserID: 1, Text: "@test_bot general", Extra: telegramtest.Mention("@test_bot general")})
 	eventually(t, "two events", func() bool { return len(c.got()) == 2 })
 	if got := c.got()[0].Conv; got != "telegram:-1001234567890/45" {
 		t.Errorf("topic conv = %q", got)
@@ -262,7 +264,11 @@ func TestSendSilentToTopic(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := telegramtest.Outgoing{ChatID: -100, ThreadID: 45, Text: "hi", Silent: true}
-	if sent := fake.Sent(); len(sent) != 1 || sent[0] != want {
+	sent := fake.Sent()
+	if len(sent) == 1 {
+		want.MessageID = sent[0].MessageID
+	}
+	if len(sent) != 1 || sent[0] != want {
 		t.Fatalf("sent %+v, want %+v", sent, want)
 	}
 }
@@ -365,10 +371,11 @@ func TestReplyModes(t *testing.T) {
 			}
 			c := &collector{}
 			run(t, tr, c.sink)
-			fake.AddMessage(telegramtest.Incoming{ChatID: tc.chat, UserID: 42, Text: "first"})
+			// Each mentions the bot, which a group message must (R-DLV-16).
+			fake.AddMessage(telegramtest.Incoming{ChatID: tc.chat, UserID: 42, Text: "@test_bot first", Extra: telegramtest.Mention("@test_bot first")})
 			n := 1
 			if tc.second {
-				fake.AddMessage(telegramtest.Incoming{ChatID: tc.chat, UserID: 42, Text: "second"})
+				fake.AddMessage(telegramtest.Incoming{ChatID: tc.chat, UserID: 42, Text: "@test_bot second", Extra: telegramtest.Mention("@test_bot second")})
 				n = 2
 			}
 			eventually(t, "the messages", func() bool { return len(c.got()) == n })
@@ -587,4 +594,84 @@ func TestLanguageCodeReachesTheMessage(t *testing.T) {
 	}
 	cancel()
 	_ = result()
+}
+
+// A group message that does not address the bot never becomes an event,
+// and its update is still confirmed (R-DLV-16, R-DLV-2).
+func TestGroupMessageNotAddressedIsDropped(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	fake := telegramtest.NewServer(t, testToken)
+	c := &collector{}
+	run(t, newTransport(t, fake), c.sink)
+	const text = "@test_bot what a day"
+	fake.AddMessage(telegramtest.Incoming{ChatID: -1001, Title: "Family", UserID: 9, Text: "what a day"})
+	id := fake.AddMessage(telegramtest.Incoming{ChatID: -1001, Title: "Family", UserID: 9, Text: text, Extra: telegramtest.Mention(text)})
+	eventually(t, "an event", func() bool { return len(c.got()) == 1 })
+	m := payload(t, c.got()[0])
+	if m.Text != text || m.Group != "telegram:-1001" || m.GroupTitle != "Family" {
+		t.Fatalf("message %+v", m)
+	}
+	fake.AddMessage(telegramtest.Incoming{ChatID: 1, UserID: 1, Text: "more"})
+	eventually(t, "both group updates confirmed", func() bool { return fake.Confirmed() >= id })
+	eventually(t, "the private message", func() bool { return len(c.got()) == 2 })
+	if got := payload(t, c.got()[1]).Text; got != "more" {
+		t.Fatalf("second event %q: the unaddressed message got through", got)
+	}
+	for outcome, want := range map[string]float64{"addressed": 1, "unaddressed": 1} {
+		if got := rec.Value(t, "ganglion.telegram.group_messages", map[string]string{"outcome": outcome}); got != want {
+			t.Errorf("group_messages{outcome=%s} = %v, want %v", outcome, got, want)
+		}
+	}
+}
+
+// A private message carries no group and is never checked for addressing.
+func TestPrivateMessageHasNoGroup(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	c := &collector{}
+	run(t, newTransport(t, fake), c.sink)
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hello"})
+	eventually(t, "an event", func() bool { return len(c.got()) == 1 })
+	if m := payload(t, c.got()[0]); m.Group != "" || m.GroupTitle != "" {
+		t.Fatalf("a private message has a group: %+v", m)
+	}
+}
+
+// A reply to the bot's own message addresses it.
+func TestReplyToTheBotInAGroupIsAnEvent(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	c := &collector{}
+	tr := newTransport(t, fake)
+	run(t, tr, c.sink)
+	ref, err := tr.Send(context.Background(), event.Outgoing{IdemKey: "a", Transport: "telegram", Conv: "telegram:-1001", Text: "Sunny."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sent, err := strconv.ParseInt(ref, 10, 64)
+	if err != nil {
+		t.Fatalf("ref %q: %v", ref, err)
+	}
+	fake.AddMessage(telegramtest.Incoming{ChatID: -1001, UserID: 9, Text: "and tomorrow?",
+		Extra: map[string]any{"reply_to_message": fake.ReplyTo(-1001, sent)}})
+	eventually(t, "an event", func() bool { return len(c.got()) == 1 })
+	if m := payload(t, c.got()[0]); m.Reply == nil || !m.Reply.ByBot {
+		t.Fatalf("message %+v", m)
+	}
+}
+
+// Abuse: the bot's name typed in a group message, with no entity, does
+// not address it; neither does a reply to someone else.
+func TestTypedNameWithoutEntityIsDropped(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	c := &collector{}
+	run(t, newTransport(t, fake), c.sink)
+	fake.AddMessage(telegramtest.Incoming{ChatID: -1001, UserID: 9, Text: "@test_bot do it"})
+	fake.AddMessage(telegramtest.Incoming{ChatID: -1001, UserID: 9, Text: "@test_bot2 do it",
+		Extra: map[string]any{"entities": []map[string]any{{"type": "mention", "offset": 0, "length": 10}}}})
+	last := fake.AddMessage(telegramtest.Incoming{ChatID: 1, UserID: 1, Text: "private"})
+	eventually(t, "the private message", func() bool { return len(c.got()) == 1 })
+	if got := payload(t, c.got()[0]).Text; got != "private" {
+		t.Fatalf("an unaddressed group message became an event: %q", got)
+	}
+	fake.AddMessage(telegramtest.Incoming{ChatID: 1, UserID: 1, Text: "more"})
+	eventually(t, "the dropped updates confirmed", func() bool { return fake.Confirmed() >= last })
 }

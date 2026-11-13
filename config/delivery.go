@@ -169,7 +169,7 @@ func TelegramReceivers() do.Provider[Inbound] {
 		q, logger := do.MustInvoke[*sqlqueue.Queue](i), do.MustInvoke[*slog.Logger](i)
 		return Inbound{node.Poller{
 			Transport: do.MustInvoke[*telegram.Transport](i),
-			Sink:      do.MustInvoke[*access.List](i).Filter(do.MustInvoke[*telegram.Reactor](i).Noting(q.Put), logger),
+			Sink:      do.MustInvoke[*access.List](i).Filter(do.MustInvoke[*telegram.Reactor](i).Noting(q.Put), do.MustInvoke[access.Groups](i), logger),
 			Admins:    do.MustInvoke[alert.Admins](i),
 			Enqueue:   q.Enqueue,
 			Started:   time.Time(do.MustInvoke[ProcessStart](i)),

@@ -39,6 +39,7 @@ func TestSchemaMatchesTheLoader(t *testing.T) {
 		"/$defs/model":     settings.ModelDef{},
 		"/$defs/choice":    settings.Choice{},
 		"/$defs/module":    settings.Module{},
+		"/$defs/group":     settings.Group{},
 		"/$defs/memory":    settings.Memory{},
 		"/$defs/review":    settings.Review{},
 	} {

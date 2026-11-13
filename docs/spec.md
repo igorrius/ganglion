@@ -333,6 +333,20 @@ Guarantee: **at-least-once + idempotency.**
   source. A message the channel says the bot wrote and this node has no record of is said to be so
   (another node of the bot may have sent it, or it is over 90 days old); its text stays outside content
   ([ADR-0073](adr/0073-a-modules-message-names-its-module.md)).
+- **R-DLV-16.** In a group chat the bot answers only when it is addressed, whatever Telegram's privacy
+  mode is set to: the message mentions the bot, replies to a message the bot sent, or is a command that
+  carries the bot's name (`/cmd@bot`). A bare command, the bot's name typed with no mention and a forum
+  topic's root do not address it. Anything else in a group is dropped by the transport before the
+  inbox: it is not stored, its text is not logged and it costs no model call. A private chat is not
+  checked ([ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md)).
+- **R-DLV-17.** A group chat is answered only when it is listed under `telegram.groups` in the node's
+  file, and then for every member, whoever they are. The first time the bot is addressed in a group
+  that is not listed, or is added to one, the node says once in that group that it has no permission
+  yet, and sends an admin, in their private chat, a card with the group's title and id and the buttons
+  Allow and Refuse. Allow writes the group's line with the role `family` and the group works from the
+  next message, with no restart. Refuse is remembered and the group is not asked about again. A
+  request nobody answers lasts 7 days; at most 10 wait at once, and further ones are dropped and
+  counted ([ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md)).
 
 ### 7.2. Conversations, history and the agent loop
 
@@ -920,6 +934,10 @@ human); module install — tests + reviewer + admin.
     never split; the journal keeps the decision.
 
   A plan (R-LIVE-8) and a message with quick actions do not fold (owner, 2026-11-05).
+- **R-POL-10.** The admin role holds only in the admin's private chat. In a group chat everyone, the
+  admin included, acts with the group's role, so the node is never changed from a group and text
+  others wrote in a shared history cannot steer the agent into an admin's action
+  ([ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md)).
 
 The rest of the baseline is in
 [ADR-0031](adr/0031-agent-security-baseline.md): no data out
@@ -1019,6 +1037,7 @@ undone with `git revert`.
 | Prompt injection | Confirmation of side effects; external text is data; tainted sessions, the clean-context check and grants (R-POL-6–8); the `web.fetch` URL rule (R-WEB-2); [ADR-0031](adr/0031-agent-security-baseline.md) | P1 |
 | Secret leakage | The model never sees secrets; modules get them via `secret.get` per manifest, from the encrypted store or the environment (R-CFG-9); secrets are redacted before the journal and logs, and the Bot API token is never logged | P1 |
 | A stranger messages the bot | `allowed` table with roles: the admin installs modules, others only ask; in M3b a `family` member gets conversation with no tools and no memory, and the family bot migration (M7) decides family access | P1 |
+| A group chat reaches the bot | Only a group listed under `telegram.groups`, connected by the admin's press, and only a message that addresses the bot (R-DLV-16, R-DLV-17); its members get the role `family`; nobody has the admin role in a group (R-POL-10); [ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md) | P1 |
 | Diagnostics expose the node | `ganglion mcp` opens no port: it runs over stdio and relies on the platform's authentication; read access to the data directory is read access to all history | P1 |
 | A host command reads secrets or gains root | Commands run in a sandbox: no privilege gain, a clean environment, the node's environment, memory and secret files unreadable; root and anything that starts a process outside the sandbox are forbidden; the tool is off where the sandbox cannot be set up (R-CMD-1–3, [ADR-0039](adr/0039-command-sandbox.md)) | P1 (M3d) |
 | The node's own files fill the disk | Everything the node creates is accounted for (what, size, age) and cleaned by age or size (R-CMD-8) | P1 (M3d) |
@@ -1883,7 +1902,7 @@ Reviewed at each gate.
     R-LIVE-7);
   - streaming answers as they are generated (needs streaming providers
     and must fit the outbox's delivery guarantee);
-  - per-group behaviour and limits in the node config.
+  - per-group behaviour and limits in the node config, beyond connecting a group (R-DLV-17).
 - Voice messages: understanding them, later, as a separate module or
   model (owner, 2026-11-02).
 - Around live turns (2026-11-05):
@@ -1945,9 +1964,12 @@ Reviewed at each gate.
     commands), an approval for a host and path with the parameter values shown, or the model's
     verdict only in a clean session (R-POL-6).
 - `notify` targets beyond the owner's private chat: channels, groups and
-  topics in a group, such as the family chat's topic "K7"; they come with
-  multi-channel delivery and need their own ADR (owner, 2026-11-10,
-  [ADR-0066](adr/0066-notify-capability.md)).
+  topics in a group, such as the family chat's topic "K7"; they need their
+  own ADR (owner, 2026-11-10,
+  [ADR-0066](adr/0066-notify-capability.md)). Designed on 2026-11-13 as
+  named destinations the admin gives to a module
+  ([design](plans/telegram-groups-design.md), sections 7, 8 and 10); the
+  plan and the ADR follow the groups work.
 - A module asking a model, the cheapest one, to word a message or for a
   light analysis: the module would write a prompt and spend the owner's
   limits, so it is its own security boundary, designed when the first
@@ -1994,21 +2016,19 @@ Reviewed at each gate.
   agent, one bot (owner, 2026-11-02).
   - Who uses a node is not settled, and "family" is only the owner's own case: a home, a company
     chat or any other group may use one, paying through an API such as OpenRouter. To work out,
-    after research: limiting Telegram users and groups, which tools a person or a group gets and
+    after research: limiting Telegram users (groups are R-DLV-17), which tools a person or a group gets and
     how that is managed, and whether an agent becomes an abstraction, say an admin agent in a private
     chat and another for a group, with its own tools and security. The role name `family` in the code
     means "allowed and not an admin" and should not shape this (owner, 2026-11-06).
   - Settings as a hierarchy (owner, 2026-11-06): a language for a chat or a group, and within it a
     forum and a forum's topic, set in the configuration; and what a person may do, such as choosing
     their own language, as a group of permissions named in the configuration.
-  - Where a bot answers, the owner's ruling (2026-11-06), to close before the repository opens:
-    - **A private chat:** every message, only from people named in the configuration.
-    - **A group or a forum:** only when the bot itself is addressed, whatever Telegram's privacy mode
-      says. Groups, forums and later other systems are named in the configuration of that channel.
-    - **Today's gap:** the node has no such rule. It answers whatever Telegram delivers from an allowed
-      person, in any group, and a bot made a group's admin receives every message.
-    - **Later, as a plugin or a worker:** reading everything and working out what to react to, such as in
-      an automated chat, needs a classifier and its own targeting.
+  - Roles a group's line may name beyond `family`, each with its own tools and filters, so that what
+    a group may do is set per group (owner, 2026-11-13). The `role` field of a line of
+    `telegram.groups` is where they plug in; until then a group gets conversation with no tools.
+  - Where a bot answers: the owner's ruling of 2026-11-06 is now R-DLV-16 and R-DLV-17. What stays for
+    later, as a plugin or a worker: reading everything and working out what to react to, such as in
+    an automated chat, needs a classifier and its own targeting.
 - Models by purpose (owner, 2026-11-05): a role for short decisions, embedding
   models for memory and search, models that read pictures. Whoever sets up an
   agent picks its models, and may have only an OpenAI-compatible API, so ganglion

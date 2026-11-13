@@ -135,7 +135,7 @@
           "pattern": "^[a-z][a-z0-9]*:user:[0-9A-Za-z_.-]+$"
         },
         "reply": {
-          "description": "When the bot answers in a group: auto (when addressed), always, or off (never).",
+          "description": "When an answer quotes the message it answers: auto (in a group, or when newer messages came after it), always, or off (never).",
           "type": "string",
           "enum": ["auto", "always", "off"],
           "default": "auto"
@@ -145,7 +145,12 @@
           "type": "boolean",
           "default": true
         },
-        "reactions": { "description": "The bot's reaction to a message while it works.", "$ref": "#/$defs/reactions" }
+        "reactions": { "description": "The bot's reaction to a message while it works.", "$ref": "#/$defs/reactions" },
+        "groups": {
+          "description": "The group chats whose members may talk to the bot; in a group it answers only when addressed. Missing means none; the node writes a line when the admin allows a group (R-DLV-17).",
+          "type": "array",
+          "items": { "$ref": "#/$defs/group" }
+        }
       }
     },
     "reactions": {
@@ -339,6 +344,16 @@
         "translate": { "description": "Translation of the node's own messages. Missing uses chat's list.", "type": "array", "items": { "$ref": "#/$defs/choice" } },
         "memory": { "description": "The memory review of a quiet conversation (R-MEM-8). Missing uses check's list.", "type": "array", "items": { "$ref": "#/$defs/choice" } },
         "code": { "description": "Writing module code. Missing means none: the node does not write code.", "type": "array", "items": { "$ref": "#/$defs/choice" } }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chat", "role"],
+      "properties": {
+        "chat": { "description": "Telegram's id of the group, a negative number.", "type": "integer", "exclusiveMaximum": 0 },
+        "name": { "description": "For people: the group's title when it was connected.", "type": "string" },
+        "role": { "description": "What the group's members may do: family, which is conversation with no tools.", "type": "string", "enum": ["family"] }
       }
     },
     "module": {

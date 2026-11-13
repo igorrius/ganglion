@@ -55,3 +55,17 @@ func TestPrivateConvOfAPrincipal(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupKeyAndChat(t *testing.T) {
+	if got := GroupKey(-1001); got != "telegram:-1001" {
+		t.Fatalf("GroupKey = %q", got)
+	}
+	if chat, ok := GroupChat("telegram:-1001"); !ok || chat != -1001 {
+		t.Fatalf("GroupChat = %d, %v", chat, ok)
+	}
+	for _, key := range []string{"telegram:42", "telegram:-1001/45", "matrix:-1001", "x", ""} {
+		if _, ok := GroupChat(key); ok {
+			t.Errorf("GroupChat(%q) is a group", key)
+		}
+	}
+}

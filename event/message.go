@@ -27,6 +27,12 @@ type Message struct {
 	// Reply is the message this one answers, as the channel reports it
 	// (R-DLV-13); nil when it answers none.
 	Reply *Replied `json:"reply,omitempty"`
+	// Group is the channel's key of the group chat the message came from,
+	// the same for every topic of a forum; "" in a private chat. The
+	// access filter lets a group's message through by it (R-DLV-17).
+	// GroupTitle is the group's name, outside text.
+	Group      string `json:"group,omitempty"`
+	GroupTitle string `json:"group_title,omitempty"`
 }
 
 // Replied is a message a person answered with a reply, as the channel reports it
@@ -84,6 +90,8 @@ type Decision struct {
 	Query string `json:"query,omitempty"`
 	// Lang is as Message.Lang, for the person who pressed.
 	Lang string `json:"lang,omitempty"`
+	// Group is as Message.Group, for the message holding the button.
+	Group string `json:"group,omitempty"`
 }
 
 // ToolResult is the payload of an event of kind "tool.result": a pending
@@ -176,4 +184,25 @@ type CommandDone struct {
 type MemoryReview struct {
 	Principal string `json:"principal"`
 	Session   string `json:"session,omitempty"`
+}
+
+// GroupSeen is a group chat that reached the node: someone addressed the
+// bot in it or added the bot to it (R-DLV-17). It is the payload of an
+// event of kind "group.joined" and what the access filter reports about a
+// group that is not connected. Title and Name are outside text.
+type GroupSeen struct {
+	Group string `json:"group"`           // the group's key, as Message.Group
+	Conv  string `json:"conv"`            // where it happened: a topic's conversation, or the group's
+	Title string `json:"title,omitempty"` // the group's title
+	From  string `json:"from"`            // principal who addressed or added the bot
+	Name  string `json:"name,omitempty"`  // their display name
+}
+
+// GroupRequest is the payload of an event of kind "group.request": the
+// node asks the admin Principal, in their private chat, whether the group
+// may talk to the bot.
+type GroupRequest struct {
+	GroupSeen
+	Principal string `json:"principal"` // the admin asked
+	Transport string `json:"transport"` // of the admin's private chat and of the group
 }
