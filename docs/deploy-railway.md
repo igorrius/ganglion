@@ -126,6 +126,44 @@ telegram:
 Add `models:` when the provider is chosen. [`ganglion.example.yaml`](../ganglion.example.yaml)
 lists every key.
 
+## Telegram by webhook
+
+Polling needs none of this and stays the default. To have Telegram call the
+node instead (`telegram.updates: webhook`, R-DLV-18,
+[ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)):
+
+1. Generate a domain for the service (Settings → Networking, or `railway
+   domain -s ganglion`). It has the form
+   `<service>-<environment>.up.railway.app`; no target port has to be chosen
+   when the node listens on the port Railway gives (`PORT`, `8080` on
+   2026-11-13).
+2. Add to `/data/ganglion.yaml`:
+
+   ```yaml
+   http:
+     addr: ":8080"
+     public_url: https://<the domain>
+   telegram:
+     updates: webhook
+   ```
+
+3. Restart the node (`/restart` in the chat, or a redeploy). At start it
+   asks its own domain for a value made for this start, takes the updates
+   that waited by polling, then registers the webhook. The log says
+   `telegram: webhook registered`, and `/status` shows `Telegram: webhook`.
+4. If the domain does not reach the node, or Telegram's deliveries keep
+   failing, the node tells the admins in the chat and polls until the next
+   restart, so a wrong address never cuts the chat off (R-DLV-19).
+
+The way back: set `telegram.updates: polling` (the `http` section may stay
+or go) and restart. The node removes the webhook it set and polls. The
+domain can then be deleted.
+
+The listener answers the webhook's path and `/healthz` and nothing else;
+the metrics stay on `127.0.0.1:9464` and are never on the domain. The
+measurements behind these steps are in the
+[research note](research/2026-11-13-telegram-webhook-on-railway.md).
+
 ## What the kernel must offer
 
 Module builds run in a Landlock sandbox that keeps writes to the build's own
@@ -210,5 +248,6 @@ and closed the comparison after one day. The by-day export above was not run.
 
 While the test bot's token runs on Railway, a local `make live-agent` on the
 same bot gets `409 Conflict` and one of the two stops polling: stop the
-service (or use another bot) for local live checks. A custom domain and a webhook are not
-needed: the bot polls Telegram.
+service (or use another bot) for local live checks. A custom domain is not
+needed, and a generated one only for the webhook mode above: by default the
+bot polls Telegram.

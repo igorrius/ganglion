@@ -364,7 +364,8 @@ Guarantee: **at-least-once + idempotency.**
 - **R-DLV-19.** A webhook that does not work must not cut the owner off from the chat. Before it
   registers, the node checks that its public address reaches this process; when it does not, it polls
   for this run and tells the admins why. While it runs, repeated delivery errors that Telegram reports
-  with updates waiting make it remove the webhook, poll for the rest of the run and tell the admins.
+  with updates waiting (three readings a minute apart) make it remove the webhook, poll for the rest
+  of the run and tell the admins; `/status` warns for the whole run.
   The node changes mode by itself in no other case.
 
 ### 7.2. Conversations, history and the agent loop

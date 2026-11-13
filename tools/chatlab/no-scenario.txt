@@ -68,6 +68,8 @@ modules/html2md/**
 node/lock_unix.go
 node/node.go
 node/poller.go
+node/webhook.go
+publichttp/**
 node/restart.go
 node/roles.go
 pdk/**
@@ -106,6 +108,9 @@ transport/errors.go
 transport/transport.go
 transport/telegram/addressed.go
 transport/telegram/client.go
+transport/telegram/hookcount.go
+transport/telegram/hookrecord/**
+transport/telegram/webhook.go
 transport/telegram/commands.go
 transport/telegram/conv.go
 transport/telegram/files.go

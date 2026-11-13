@@ -1,7 +1,8 @@
 // Package telegramtest is a fake Telegram Bot API for tests and the crash
 // harness. It keeps the semantics our transport relies on: an offset
 // confirms updates, long polling wakes on a new message, a second poller
-// ends the first with 409, a webhook blocks polling with 409, and errors
+// ends the first with 409, a webhook blocks polling with 409 and gets the
+// updates one at a time until each is answered 2xx, and errors
 // carry error_code, description and retry_after like the real API.
 package telegramtest
 
@@ -136,7 +137,9 @@ type Server struct {
 	sent       []Outgoing
 	uploads    []Upload
 	fail       map[string]failure
-	webhook    bool
+	hook       *webhook      // the webhook that is set; nil for none
+	hookRetry  time.Duration // between tries of a delivery that was refused
+	hookSets   []WebhookSet
 	kick       chan struct{}            // closed to end the getUpdates call in flight
 	notify     chan struct{}            // closed and replaced when a message arrives
 	threads    map[int64]map[int64]bool // chat → known forum topics
@@ -182,6 +185,7 @@ func NewServer(t T, token string) *Server {
 		calls:      map[string]int{},
 		messages:   map[int64]map[int64]shown{},
 		held:       map[string]chan struct{}{},
+		hookRetry:  20 * time.Millisecond,
 	}
 	s.ts = httptest.NewServer(http.HandlerFunc(s.serve))
 	t.Cleanup(func() {
@@ -518,12 +522,16 @@ func (s *Server) FailNext(method string, code, retryAfter int) {
 	s.fail[method] = failure{code: code, retryAfter: retryAfter}
 }
 
-// SetWebhook turns a webhook on or off; while it is on, getUpdates
+// SetWebhook turns somebody else's webhook on or off: one the bot under
+// test did not set and that delivers nowhere. While it is on, getUpdates
 // returns 409.
 func (s *Server) SetWebhook(on bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.webhook = on
+	s.dropHook()
+	if on {
+		s.hook = &webhook{url: ForeignWebhook, stop: make(chan struct{})}
+	}
 }
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
@@ -586,6 +594,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		writeOK(w, map[string]any{"id": s.botID, "is_bot": true, "first_name": "Test", "username": BotUsername})
 	case "getUpdates":
 		s.getUpdates(w, r, params)
+	case "setWebhook":
+		s.setWebhook(w, params)
+	case "deleteWebhook":
+		s.mu.Lock()
+		s.dropHook()
+		s.mu.Unlock()
+		writeOK(w, true)
+	case "getWebhookInfo":
+		writeOK(w, s.WebhookInfo())
 	case "sendMessage":
 		s.sendMessage(w, params)
 	case "sendRichMessage":
@@ -669,7 +686,7 @@ func (s *Server) getUpdates(w http.ResponseWriter, r *http.Request, params map[s
 	if allowed != nil {
 		s.allowed = allowed
 	}
-	if s.webhook {
+	if s.hook != nil {
 		s.mu.Unlock()
 		writeErr(w, http.StatusConflict,
 			"Conflict: can't use getUpdates method while webhook is active; use deleteWebhook to delete the webhook first", 0)

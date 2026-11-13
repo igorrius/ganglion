@@ -29,7 +29,7 @@ type ProcessStart time.Time
 var Core = do.Package(
 	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Languages()), do.Lazy(Texts()), do.Lazy(Admins()), do.Lazy(GroupStore()), do.Lazy(GroupsFile()), do.Lazy(AccessGroups()), do.Lazy(GroupActions()), do.Lazy(GroupTopics()), do.Lazy(Destinations()), do.Lazy(Routing()),
 	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Workspace()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(ReviewDue()), do.Lazy(ReviewTimer()), do.Lazy(ModuleTools()), do.Lazy(Modules()), do.Lazy(ModuleAdmin()), do.Lazy(ModuleHost()), do.Lazy(HTML2MD()), do.Lazy(Fetcher()), do.Lazy(Read()), do.Lazy(Diagnostics()), do.Lazy(Skills()), do.Lazy(Plans()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Sandbox()), do.Lazy(Builder()), do.Lazy(Places()), do.Lazy(Janitor()), do.Lazy(Stats()), do.Lazy(BackgroundJobs()), do.Lazy(Builds()), do.Lazy(Runner()), do.Lazy(Switch()), do.Lazy(HostExec()), do.Lazy(StatusSources()), do.Lazy(Agent()),
-	do.Lazy(Translator()), do.Lazy(Telegram()), do.Lazy(TelegramHealth()), do.Lazy(Reactor()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
+	do.Lazy(Translator()), do.Lazy(Telegram()), do.Lazy(TelegramHealth()), do.Lazy(WebhookRecord()), do.Lazy(PublicListener()), do.Lazy(Reactor()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(CoreComponents()),
 	// Extension points: the interface, then each implementation under its name.
 	do.Lazy(Handler()), do.LazyNamed(handlerAgent, AgentHandler()), do.EagerNamed(handlerEcho, core.Handler(core.EchoHandler)),
 	do.Lazy(GiveUp()), do.LazyNamed(giveUpAgent, AgentGiveUp()), do.EagerNamed(giveUpNone, core.GiveUp(core.NoGiveUp)),
@@ -39,7 +39,8 @@ var Core = do.Package(
 	do.Lazy(Transports()), do.LazyNamed(transportsTelegram, TelegramTransports()), do.EagerNamed(transportsNone, []transport.Transport(nil)),
 	do.Lazy(Housekeepers()), do.LazyNamed(housekeepingAgent, AgentHousekeepers()), do.EagerNamed(housekeepingNone, Housekeeping(nil)),
 	do.Lazy(JobSchedulers()), do.LazyNamed(schedulersAgent, AgentSchedulers()), do.EagerNamed(schedulersNone, Schedulers(nil)),
-	do.Lazy(Receivers()), do.LazyNamed(inboundTelegram, TelegramReceivers()), do.EagerNamed(inboundNone, Inbound(nil)),
+	do.Lazy(Receivers()), do.LazyNamed(inboundTelegram, TelegramReceivers()), do.LazyNamed(inboundWebhook, TelegramWebhookReceivers()), do.EagerNamed(inboundNone, Inbound(nil)),
+	do.Lazy(PublicListeners()), do.LazyNamed(listenersHTTP, HTTPListeners()), do.EagerNamed(listenersNone, Listeners(nil)),
 	do.Lazy(CommandHints()), do.LazyNamed(commandsAgent, AgentCommandHints()), do.EagerNamed(commandsNone, []transport.Command(nil)),
 	do.Lazy(TransportWatch()), do.LazyNamed(watchTelegram, TelegramWatch()), do.EagerNamed(watchNone, Watched(nil)),
 	// The search backends; Read picks one, or none.
@@ -99,7 +100,10 @@ const (
 	schedulersAgent    = "schedulers.agent"    // the agent's reminders and tasks
 	schedulersNone     = "schedulers.none"     // nothing runs on a schedule
 	inboundTelegram    = "inbound.telegram"    // Telegram polling
+	inboundWebhook     = "inbound.webhook"     // Telegram's webhook on the public listener
 	inboundNone        = "inbound.none"        // nothing brings messages in
+	listenersHTTP      = "listeners.http"      // the public listener
+	listenersNone      = "listeners.none"      // no public entry
 	commandsAgent      = "commands.agent"      // the agent's command table as command hints
 	commandsNone       = "commands.none"       // no command hints
 	watchTelegram      = "watch.telegram"      // Telegram's polling in /status
@@ -113,6 +117,10 @@ func agentOn(b Bootstrap) bool { return b.Agent.Models != nil }
 // telegramOn reports whether the settings turn Telegram on: a bot token
 // is set.
 func telegramOn(b Bootstrap) bool { return b.BotToken != "" }
+
+// httpOn reports whether the settings open the public listener: http.addr
+// is an address. A bootstrap made in code that names none opens none.
+func httpOn(b Bootstrap) bool { return b.HTTPAddr != "" && b.HTTPAddr != "off" }
 
 // choose provides an extension point as the implementation named ifOn or
 // ifOff, by the bootstrap settings; only that implementation is built.

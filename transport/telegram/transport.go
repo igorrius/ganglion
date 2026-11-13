@@ -58,7 +58,8 @@ type Transport struct {
 	files       fileCounter
 	groupMsgs   groupCounter
 
-	health *Health // what /status shows of polling
+	health *Health // what /status shows of receiving
+	hook   hook    // the webhook mode (R-DLV-18)
 
 	mu     sync.Mutex
 	last   map[int64]int64 // chat → the newest incoming message id
@@ -83,6 +84,9 @@ type config struct {
 	rich        bool
 	health      *Health
 	topics      TopicFunc
+	publicURL   string
+	reaches     ReachFunc
+	record      WebhookRecord
 }
 
 // Option configures a Transport.
@@ -130,7 +134,8 @@ func New(token string, opts ...Option) (*Transport, error) {
 	if !tokenRE.MatchString(token) {
 		return nil, errors.New("telegram: token is not <bot_id>:<secret> (digits, a colon, then letters, digits, _ or -)")
 	}
-	cfg := config{now: time.Now, pollTimeout: pollTimeout, log: slog.New(slog.DiscardHandler), replyMode: ReplyAuto, topics: noTopics}
+	cfg := config{now: time.Now, pollTimeout: pollTimeout, log: slog.New(slog.DiscardHandler), replyMode: ReplyAuto, topics: noTopics,
+		reaches: neverReaches, record: noRecord{}}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -158,13 +163,16 @@ func New(token string, opts ...Option) (*Transport, error) {
 		groups:      map[int64]bool{},
 		topics:      cfg.topics,
 		titles:      map[topicKey]topicTitle{},
+		hook: hook{publicURL: cfg.publicURL, reaches: cfg.reaches, record: cfg.record,
+			secret: []byte(webhookSecret(token)), every: hookEvery, count: newHookCounter()},
 	}, nil
 }
 
 // Name implements transport.Transport.
 func (t *Transport) Name() string { return Name }
 
-// Run implements transport.Transport. At start it lists its commands in
+// Run implements transport.Transport. At start it removes the webhook this
+// node recorded setting, if any, and lists its commands in
 // the command hints (registerCommands), beside polling, under one short
 // deadline. It polls updates and hands each
 // message to sink in order. The offset moves past an update only after
@@ -178,12 +186,10 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 	if err != nil {
 		return err
 	}
-	// The command hints go out beside polling, never ahead of it; Run
-	// waits for them, bounded by their deadline, before it returns.
-	hctx, stopHints := context.WithTimeout(ctx, commandsTimeout)
-	var hints sync.WaitGroup
-	hints.Go(func() { t.registerCommands(hctx) })
-	defer func() { stopHints(); hints.Wait() }()
+	if err := t.dropOwnWebhook(ctx, poll); err != nil {
+		return err
+	}
+	defer t.hints(ctx)()
 	t.log.Info("telegram: polling", "bot_id", me.ID, "username", me.Username)
 	sinkRetry := backoff.New(t.retry)
 	var offset int64
@@ -201,6 +207,15 @@ func (t *Transport) Run(ctx context.Context, sink transport.Sink) error {
 			return err
 		}
 	}
+}
+
+// hints sends the command hints beside receiving, never ahead of it. The
+// returned function waits for them, bounded by their deadline.
+func (t *Transport) hints(ctx context.Context) (wait func()) {
+	hctx, stop := context.WithTimeout(ctx, commandsTimeout)
+	var wg sync.WaitGroup
+	wg.Go(func() { t.registerCommands(hctx) })
+	return func() { stop(); wg.Wait() }
 }
 
 // whoAmI asks for the bot's identity until it gets it or onError stops.

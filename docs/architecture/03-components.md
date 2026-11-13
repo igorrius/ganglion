@@ -8,7 +8,8 @@ What is inside each role. Package names are in
 ```mermaid
 flowchart TB
     subgraph transports["Transports"]
-        tgt["Telegram<br/>long polling"]
+        tgt["Telegram<br/>long polling, or a webhook"]
+        pub["Public listener<br/>http.addr, off by default:<br/>the webhook's route, /healthz, else 404"]
         mqt["MQTT<br/>P2"]
     end
 
@@ -44,6 +45,7 @@ flowchart TB
     sender["Outbox sender<br/>retries, 429 retry_after"]
     turns[("turns<br/>trace, cost")]
 
+    pub -- "POST with Telegram's<br/>secret header" --> tgt
     tgt -- "in a group: only what<br/>addresses the bot" --> acl
     acl --> inbox
     acl -- "is it connected?<br/>not connected: report" --> grp

@@ -24,9 +24,21 @@ metrics:
   # The Prometheus endpoint, host:port; off runs none.
   addr: 127.0.0.1:9464
 
+http:
+  # The node's public listener, host:port; off runs none. It serves plain
+  # HTTP behind a proxy that ends TLS, and carries the Telegram webhook and
+  # a health route. It is never the metrics endpoint.
+  addr: off
+  # The HTTPS address the outside world reaches the listener at.
+  # public_url: https://ganglion.up.railway.app
+
 telegram:
   # The bot token; the transport does not start without the variable set.
   token: env:TELEGRAM_BOT_TOKEN
+  # How updates arrive: polling (the node asks Telegram) or webhook
+  # (Telegram calls the public listener: needs http.addr and
+  # http.public_url). Applies at the next start.
+  updates: polling
   # The Bot API's base address.
   api_url: https://api.telegram.org
   # The admin from the first start, as telegram:user:<id>. Missing seeds none.

@@ -78,3 +78,31 @@ func TestStatusAfter401(t *testing.T) {
 		t.Errorf("401: %+v", c)
 	}
 }
+
+// The webhook's lines: a quiet chat is no warning, updates that wait while
+// deliveries fail are, and a node that polls though its file says webhook
+// warns for the run (R-DLV-19).
+func TestStatusOfTheWebhook(t *testing.T) {
+	h := NewHealth(fixedClock)
+	h.hookOn()
+	if c := line(t, h, healthStart); c.Line != texts.StatusTelegramWebhookQuiet || c.State != status.OK {
+		t.Errorf("registered, no update yet: %+v", c)
+	}
+	h.receivedNow()
+	if c := line(t, h, healthStart.Add(time.Hour)); c.Line != texts.StatusTelegramWebhook || c.State != status.OK || c.Vars["time"] != "12:00" {
+		t.Errorf("an update an hour ago: %+v", c)
+	}
+	h.hookRead(3, true)
+	if c := line(t, h, healthStart); c.State != status.Warn || c.Reason != texts.StatusReasonWebhookPending || c.Vars["count"] != "3" {
+		t.Errorf("updates wait and deliveries fail: %+v", c)
+	}
+	h.hookRead(0, false)
+	if c := line(t, h, healthStart); c.State != status.OK {
+		t.Errorf("after the deliveries passed: %+v", c)
+	}
+	h.fellBack(texts.StatusReasonWebhookFailing)
+	h.polledNow()
+	if c := line(t, h, healthStart); c.Line != texts.StatusTelegram || c.State != status.Warn || c.Reason != texts.StatusReasonWebhookFailing {
+		t.Errorf("polling after a fallback: %+v", c)
+	}
+}

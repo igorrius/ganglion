@@ -27,7 +27,10 @@ Start here when coming back to the project.
   2026-11-13) and a webhook mode for the Telegram transport beside
   polling (task 6.6,
   [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md), owner,
-  2026-11-13; a spike on Railway comes first). The Railway deploy
+  2026-11-13): the spike on Railway is done and the mode is built and
+  tested against the fake Bot API; the live check on Railway and the
+  switch of the owner's node wait for the owner's word
+  ([runbook](deploy-railway.md#telegram-by-webhook)). The Railway deploy
   (board card G-121) is up since 2026-11-11: service `ganglion` beside the
   current bot, on the test bot, the agent through the claude CLI, the
   sandbox ready on kernel 6.18, hard links work on the volume

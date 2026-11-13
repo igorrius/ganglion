@@ -172,13 +172,16 @@ sequenceDiagram
     W-->>T: 200
 ```
 
-Everything is planned, so everything is dashed.
+The flow is built (task 6.6); the dashed lines stay from the design.
 
 1. `POST` only; anything else is `405`.
 2. The secret header is compared in constant time. A wrong or missing one is
    `403` and one log line without the body; the request goes no further.
 3. The body is parsed as one update. A body that does not parse is `200`
-   with a warning (call): Telegram would only repeat the same bytes.
+   with a warning (call): Telegram would only repeat the same bytes. A body
+   past the listener's cap is `413`: no update is that large, and if one
+   were, the second guard of section 9 would fetch it by polling.
+   Until the start has registered the webhook the route answers `503`.
 4. The update goes the way a polled one goes: the same `toEvent`, the same
    `idemKey` (`telegram:<bot>:<update_id>`), the same sink.
 5. `200` is sent only after the sink returned: this is the webhook's form of
@@ -218,8 +221,9 @@ At a start in **webhook** mode:
    by polling first (section 8). Then `setWebhook` with the URL, the secret,
    the `allowed_updates` list polling asks for and
    `max_connections: 1`, without `drop_pending_updates`. The call is made at
-   every start; it is idempotent. The node records in its database that it
-   set a webhook, and the URL.
+   every start; it is idempotent. Just before the call the node records
+   in its database that it sets a webhook, and the URL: a node stopped
+   between the two still knows the webhook is its own.
 5. Once a minute `getWebhookInfo` feeds `/status`: the mode, the last update
    received, `pending_update_count`, the last error and its time.
 
@@ -286,7 +290,10 @@ agent to switch back. Two guards (call):
 2. **While running:** three `getWebhookInfo` readings in a row with pending
    updates and a fresh delivery error make the node call `deleteWebhook`,
    poll for the rest of the run, and alert the admins. The next start tries
-   the webhook again.
+   the webhook again. A delivery error is fresh when it is newer than the
+   one Telegram had at this start and no older than three readings:
+   Telegram retries every one to two minutes, so an error need not fall
+   between two readings a minute apart.
 
 The alternative to the second guard is an alert only. It is simpler, and it
 leaves a node that only the host's shell can repair. The operator of a
@@ -348,9 +355,13 @@ owner did not name the phase).
   - the target port of a generated domain for an image that exposes none,
     and whether `RAILWAY_PUBLIC_DOMAIN` is set before a domain is generated;
   - the size of the largest update the bot gets (a long rich message).
-- **With the code:** the schema and `ganglion.example.yaml`, the paragraph of
-  [deploy-railway.md](../deploy-railway.md) that says a webhook is not
-  needed, the code map and the container diagram.
+- **With the code** (done): the schema and `ganglion.example.yaml`, the
+  section of [deploy-railway.md](../deploy-railway.md) on the webhook, the
+  code map and the container, component and runtime views.
+
+What the code does not have: `/status` shows the mode, the last update and
+what waits at Telegram, but not the text of Telegram's last error, which is
+outside text; and chatlab still runs its scenarios by polling.
 - **Switching the owner's node on Railway** is the last step of the task
   and the owner's to approve: generate a domain for the `ganglion` service,
   set `http.addr` to the port Railway gives and `http.public_url` to the
