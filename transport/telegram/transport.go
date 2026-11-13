@@ -63,6 +63,8 @@ type Transport struct {
 	mu     sync.Mutex
 	last   map[int64]int64 // chat → the newest incoming message id
 	groups map[int64]bool  // chats that are groups or supergroups
+	topics TopicFunc
+	titles map[topicKey]topicTitle // the title last told of each forum topic
 }
 
 var (
@@ -80,6 +82,7 @@ type config struct {
 	commands    []transport.Command
 	rich        bool
 	health      *Health
+	topics      TopicFunc
 }
 
 // Option configures a Transport.
@@ -127,7 +130,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 	if !tokenRE.MatchString(token) {
 		return nil, errors.New("telegram: token is not <bot_id>:<secret> (digits, a colon, then letters, digits, _ or -)")
 	}
-	cfg := config{now: time.Now, pollTimeout: pollTimeout, log: slog.New(slog.DiscardHandler), replyMode: ReplyAuto}
+	cfg := config{now: time.Now, pollTimeout: pollTimeout, log: slog.New(slog.DiscardHandler), replyMode: ReplyAuto, topics: noTopics}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -153,6 +156,8 @@ func New(token string, opts ...Option) (*Transport, error) {
 		commands:    cfg.commands,
 		last:        map[int64]int64{},
 		groups:      map[int64]bool{},
+		topics:      cfg.topics,
+		titles:      map[topicKey]topicTitle{},
 	}, nil
 }
 
@@ -217,6 +222,7 @@ func (t *Transport) whoAmI(ctx context.Context, b *backoff.Backoff) (user, error
 func (t *Transport) hand(ctx context.Context, sink transport.Sink, me user, ups []update, offset int64, b *backoff.Backoff) (int64, error) {
 	for _, u := range ups {
 		t.seen(u)
+		t.noteTopic(ctx, u)
 		e, ok := t.toEvent(me, u)
 		if !ok {
 			t.answerCallback(ctx, u)

@@ -65,8 +65,13 @@ type message struct {
 	Quote              *textQuote      `json:"quote,omitempty"`
 	ReplyToMessage     *message        `json:"reply_to_message,omitempty"`
 	// ForumTopicCreated marks the service message that created a forum topic,
-	// the topic's root (R-DLV-13); only its presence is read.
+	// the topic's root (R-DLV-13); its presence is read, and its name as the
+	// topic's title.
 	ForumTopicCreated json.RawMessage `json:"forum_topic_created,omitempty"`
+	// ForumTopicEdited marks the service message that renamed a forum topic
+	// or changed its icon; of both only the name is read, as the topic's
+	// title (R-CFG-12).
+	ForumTopicEdited json.RawMessage `json:"forum_topic_edited,omitempty"`
 	// Files that came with the message (R-DLV-10); only what describes
 	// them is read, never the file id.
 	Photo     []fileInfo `json:"photo,omitempty"`

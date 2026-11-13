@@ -15,8 +15,14 @@ Start here when coming back to the project.
   Proposed). Built on 2026-11-13 and passing end to end against the fake
   Bot API: a group is connected from the card in the admin's private
   chat, answered only when addressed, and nobody has the admin role in
-  it. Open: the live check in the family's forum, and the second plan
-  (named destinations and `NotifyTo` for modules).
+  it. Deployed to Railway and checked live in the family's forum the same
+  day ([recorded](plans/telegram-groups.md#live-check-2026-11-13)). Then
+  named destinations ([plan](plans/telegram-destinations.md),
+  [ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md),
+  Proposed): the node's file routes a module's messages (`notify_to`), the
+  node knows a forum's topics by title, and the admin names places and
+  routes modules in words; built and passing end to end, its live check
+  open. Next after it: roles with their own tools for a group.
 - **Next:** M6, the agent reconfigures the system. It now includes the
   encrypted secret store (task 6.5,
   [ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), owner,

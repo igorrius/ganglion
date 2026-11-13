@@ -24,8 +24,12 @@ you.
 - A module takes data in and gives data out only through cells. It listens to the cells of
   other modules (`cells.read`, a `cell` trigger) and reports its own. It never listens to its own
   cells: the node refuses that, and it would be a loop.
-- The messages it writes to the owner come from a template in code with numbers filled in. Never
+- The messages it writes come from a template in code with numbers filled in. Never
   from a model, and never text that came from outside (a page, a message, a cell's text).
+- A module does not choose who reads its messages: it only calls `notify`. Where they go is the
+  node's setting. They go to the owner's private chat unless the owner asks for another place;
+  then use `destination.list`, `destination.set` and `module.notify_to` (a group's topic, the
+  owner, or both). Never put a chat's name or id into a module's code or config.
 - Cell ids in a trigger and in `cells.read` are full ids, `<module>.<cell>` (`boiler.temp`).
 - In `src/logic.rs` keep the names `react`, `Settings`, `State` and `LISTENED`: the template's
   glue calls them. `LISTENED` must equal the manifest's `cells.read`; if they differ the module

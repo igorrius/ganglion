@@ -588,7 +588,7 @@ and `health` are planned for P1, with the supervisor). It sees only the host fun
 | `secret.get` | Secrets from an allowed list; the model never sees them |
 | `config.get` | Values from the manifest's `config` block (e.g. a device serial number) |
 | `now` | Current time |
-| `notify` | A message to the owner's private chat, within a daily limit (R-RUN-16) |
+| `notify` | A message to the owner's private chat, or to the destinations the module's line names, within a daily limit (R-RUN-16, R-RUN-18) |
 
 Example manifest (M4 form,
 [ADR-0062](adr/0062-cells-owned-by-modules.md)):
@@ -780,8 +780,9 @@ escalate:                    # when to call the model
   cron (R-RUN-12). The window says "Reacts to: …"; the cards show the
   chain both ways ("Reacts to", "Feeds").
 - **R-RUN-16.** A module granted `notify: {per_day: N}` writes plain text
-  to the private chat of the admin who installed it, through the outbox
-  (M4c, [ADR-0066](adr/0066-notify-capability.md)). The node signs the
+  to the private chat of the admin who installed it, or to the
+  destinations its line in the node's file names (R-RUN-18), through the
+  outbox (M4c, [ADR-0066](adr/0066-notify-capability.md)). The node signs the
   message with the module's name and running version under the text, apart from it (a rich
   message's footer under a divider; the last line in italics where there
   is none,
@@ -822,6 +823,16 @@ escalate:                    # when to call the model
   version and checksum; a missing or unreadable lock, or any other
   dependency, keeps them outside content
   ([ADR-0068](adr/0068-vouch-for-module-source-per-file-and-vetted-crates.md)).
+- **R-RUN-18.** Where a module's messages go is set in the node's file,
+  not in the module: its line may list `notify_to`, names of destinations
+  (R-CFG-12), and every message goes to each of them; `owner` is the
+  private chat of the module's owner and the default. The module does not
+  know the list. A name is resolved when a message is sent. The daily
+  limit counts messages, not deliveries; the node's own lines about a
+  module go to the owner only. A message to another conversation than the
+  owner's chat leaves no note in that conversation's history. A name that
+  does not resolve sends nothing there and is counted
+  ([ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
 
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation
@@ -1388,6 +1399,19 @@ phase plan).
   node starts with the store locked (stored secrets read as unset, setting
   one is refused, `/status` says why) until the admin's `/secrets reset`
   drops them.
+- **R-CFG-12.** `destinations:` in the node's file names conversations a
+  message may be sent to: a private chat on the access list, a connected
+  group (R-DLV-17) or one topic of a forum. The node remembers the titles
+  of the topics it sees in connected groups, so the admin names a topic by
+  its title. Destinations, a module's `notify_to` and disconnecting a group
+  are changed by the admin in words, each change after one confirmation, and
+  hold with no restart. The admin never has to name a destination:
+  `message.send` and a module's route take a connected group or a topic by
+  its key or by the link Telegram gives for it, and the node writes the
+  destination behind it. A
+  destination a module uses is not removed, and a group a destination
+  points at is not disconnected, until what holds it is changed
+  ([ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
 
 ## 8. First reflex: Deye (P1)
 
@@ -1963,13 +1987,11 @@ Reviewed at each gate.
     weigh in its own brainstorm: one press for a plan's listed URLs (as R-CMD-7 does for
     commands), an approval for a host and path with the parameter values shown, or the model's
     verdict only in a clean session (R-POL-6).
-- `notify` targets beyond the owner's private chat: channels, groups and
-  topics in a group, such as the family chat's topic "K7"; they need their
-  own ADR (owner, 2026-11-10,
-  [ADR-0066](adr/0066-notify-capability.md)). Designed on 2026-11-13 as
-  named destinations the admin gives to a module
-  ([design](plans/telegram-groups-design.md), sections 7, 8 and 10); the
-  plan and the ADR follow the groups work.
+- `notify` beyond what R-RUN-18 gives: a module sending different
+  messages to different places (a kind on the message that the node's file
+  routes by), and the routing on an event bus, where `notify` is a publish
+  and `notify_to` a subscription (owner, 2026-11-13,
+  [ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
 - A module asking a model, the cheapest one, to word a message or for a
   light analysis: the module would write a prompt and spend the owner's
   limits, so it is its own security boundary, designed when the first

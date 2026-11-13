@@ -37,7 +37,11 @@ type Incoming struct {
 	Caption  string // caption of a photo or document
 	IsBot    bool   // the sender is a bot
 	Title    string // the group's title; "" for none
-	Language string // the sender's language_code; "" for none
+	// TopicTitle is the title the forum topic was created with: the message
+	// then names the topic's root as its replied message, as Telegram does
+	// for a message in a topic that is no explicit reply.
+	TopicTitle string
+	Language   string // the sender's language_code; "" for none
 	// Extra are more Bot API message fields, set as they are: "photo",
 	// "document", "voice" and the like.
 	Extra map[string]any
@@ -216,6 +220,11 @@ func (s *Server) AddMessage(m Incoming) int64 {
 	if m.Caption != "" {
 		msg["caption"] = m.Caption
 	}
+	if m.TopicTitle != "" && m.ThreadID != 0 {
+		msg["reply_to_message"] = map[string]any{"message_id": m.ThreadID, "date": 1, "message_thread_id": m.ThreadID,
+			"chat": chatOf(m.ChatID, chatType, m.Title, true), "from": sender(m.UserID, false, name, ""),
+			"forum_topic_created": map[string]any{"name": m.TopicTitle, "icon_color": 7322096}}
+	}
 	maps.Copy(msg, m.Extra)
 	if m.ThreadID != 0 {
 		msg["message_thread_id"] = m.ThreadID
@@ -348,6 +357,23 @@ func (s *Server) AddChatMember(chatID int64, title string, byUserID int64, statu
 		"date":            time.Now().Unix(),
 		"old_chat_member": map[string]any{"status": "left", "user": sender(s.botID, true, "Test", "")},
 		"new_chat_member": map[string]any{"status": status, "user": sender(s.botID, true, "Test", "")},
+	}})
+	close(s.notify)
+	s.notify = make(chan struct{})
+	return s.nextUpdate
+}
+
+// AddTopicEdited queues the service message of a forum topic renamed to
+// title and returns its update_id.
+func (s *Server) AddTopicEdited(chatID, threadID int64, title string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nextUpdate++
+	s.nextMsg++
+	s.updates = append(s.updates, map[string]any{"update_id": s.nextUpdate, "message": map[string]any{
+		"message_id": s.nextMsg, "date": time.Now().Unix(), "message_thread_id": threadID, "is_topic_message": true,
+		"chat": chatOf(chatID, "supergroup", "", true), "from": sender(1, false, "User", ""),
+		"forum_topic_edited": map[string]any{"name": title},
 	}})
 	close(s.notify)
 	s.notify = make(chan struct{})

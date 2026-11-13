@@ -94,6 +94,7 @@ settings/**
 sqlitedb/**
 tool/args.go
 tool/tool.go
+tool/builtin/destinations.go
 tool/builtin/diag.go
 tool/builtin/message.go
 tool/builtin/module_read.go
@@ -113,6 +114,7 @@ transport/telegram/joined.go
 transport/telegram/markdown.go
 transport/telegram/reactions.go
 transport/telegram/rich.go
+transport/telegram/topics.go
 transport/telegram/richread.go
 transport/telegram/richsend.go
 transport/telegram/tree.go

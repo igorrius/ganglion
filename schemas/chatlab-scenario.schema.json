@@ -29,7 +29,8 @@
         "say": { "type": "string" },
         "tool": { "type": "string" },
         "args": { "description": "The tool's arguments, as JSON text. $BUILD stands for the digest the last module.build answered.", "type": "string" },
-        "writes": { "description": "A message that reaches the inbox before this answer returns, so that it is overtaken.", "$ref": "#/$defs/writing" }
+        "writes": { "description": "A message that reaches the inbox before this answer returns, so that it is overtaken.", "$ref": "#/$defs/writing" },
+        "hold": { "description": "How long the model works on this answer before it returns, a Go duration such as 1s: an adds step's second message then arrives during the turn.", "type": "string" }
       }
     },
     "writing": {

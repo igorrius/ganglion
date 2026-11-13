@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,5 +155,81 @@ func TestConnectAGroupThroughTheCard(t *testing.T) {
 	waitFor(t, n, "the admin's answer in the group", func() bool { return len(sentTo(n, familyID)) == 3 })
 	if got := sentTo(n, familyID)[2].Text; got != "answer without tools" {
 		t.Fatalf("the admin's turn in a group: %q", got)
+	}
+}
+
+// TestAnAdminNamesATopicAndSendsThere runs the node's binary (R-CFG-12,
+// G-153): in the private chat the admin has a topic of a connected forum
+// named as a destination, confirms it, and a message sent to that name
+// lands in the topic. The topic's title, learned from a message that did
+// not address the bot, is in the question the admin confirms.
+func TestAnAdminNamesATopicAndSendsThere(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds and runs the node; skipped with -short")
+	}
+	const topicConv = "telegram:-100/45"
+	n := newCrashAgentNode(t) // its file connects the group -100
+	n.model.Respond(func(r providertest.Request) providertest.Answer {
+		last := fmt.Sprint(r.Messages[len(r.Messages)-1]["content"])
+		switch {
+		case len(r.Tools) == 0:
+			return providertest.Answer{Text: `{"ok":true}`}
+		case strings.Contains(last, "STEP-NAME"):
+			return providertest.Answer{Tool: "destination.set", Args: `{"name":"family-k7","conv":"` + topicConv + `"}`}
+		case strings.Contains(last, "STEP-SEND"):
+			return providertest.Answer{Tool: "message.send", Args: `{"conv":"family-k7","text":"battery 85%"}`}
+		}
+		return providertest.Answer{Text: "done"}
+	})
+	cmd := n.start(t)
+	t.Cleanup(func() { _ = cmd.Process.Signal(syscall.SIGKILL); _ = cmd.Wait() })
+
+	// Someone talks in the topic without addressing the bot: no answer, but
+	// the node learns the topic's title.
+	seen := n.fake.AddMessage(telegramtest.Incoming{ChatID: groupID, ThreadID: 45, Title: "Family", TopicTitle: "K7", UserID: annID, Text: "nice weather"})
+	waitFor(t, n, "the topic's message to be confirmed", func() bool { return n.fake.Confirmed() >= seen-1 })
+
+	// approve presses the first button of the first question (a message
+	// with buttons) the admin got at or after index from, and returns that
+	// question. Other messages may come in between: the answer of a turn
+	// that parked a call, the answer after an approval.
+	approve := func(what string, from int) telegramtest.Outgoing {
+		t.Helper()
+		var q telegramtest.Outgoing
+		waitFor(t, n, "the question about "+what, func() bool {
+			got := sentTo(n, adminID)
+			for i := from; i < len(got); i++ {
+				if got[i].Keyboard != "" {
+					q = got[i]
+					return true
+				}
+			}
+			return false
+		})
+		n.fake.AddCallback(telegramtest.Callback{ChatID: adminID, UserID: adminID, Name: "Admin", MessageID: q.MessageID, Data: callbackOf(t, q.Keyboard, 0)})
+		return q
+	}
+	say := func(text string) {
+		n.fake.AddMessage(telegramtest.Incoming{ChatID: adminID, UserID: adminID, Name: "Admin", Text: text})
+	}
+
+	say("STEP-NAME call the K7 topic family-k7")
+	if q := approve("the destination", 0).Text; !strings.Contains(q, "K7") || !strings.Contains(q, "family-k7") {
+		t.Fatalf("the question does not name the topic by its title: %q", q)
+	}
+	file := settings.DestinationsFile{Path: filepath.Join(n.dir, settings.FileName)}
+	waitFor(t, n, "the destination's line", func() bool {
+		ds, err := file.Destinations()
+		return err == nil && len(ds) == 1 && ds[0] == settings.Destination{Name: "family-k7", Conv: topicConv}
+	})
+
+	// The second question is the one that comes after everything the
+	// admin's chat holds once the first change is in the file.
+	before := len(sentTo(n, adminID))
+	say("STEP-SEND tell the family")
+	approve("the message", before)
+	waitFor(t, n, "the message in the topic", func() bool { return len(sentTo(n, groupID)) == 1 })
+	if got := sentTo(n, groupID)[0]; got.ThreadID != 45 || got.Text != "battery 85%" {
+		t.Fatalf("the message in the group: %+v", got)
 	}
 }

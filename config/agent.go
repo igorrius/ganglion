@@ -197,7 +197,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
 		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i), do.MustInvoke[*builtin.HostExec](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
-		do.MustInvoke[Moduling](i).Tools, metricsTools(do.MustInvoke[Bootstrap](i)))...)
+		do.MustInvoke[Moduling](i).Tools, do.MustInvoke[builtin.Routing](i).Tools(), metricsTools(do.MustInvoke[Bootstrap](i)))...)
 }
 
 // metricsTools is metrics.show when the command line gave a renderer.
@@ -298,6 +298,10 @@ func Convs() do.Provider[builtin.Convs] {
 			Listed:  do.MustInvoke[*access.List](i).Listed,
 			Private: telegram.PrivateConv,
 			Names:   do.MustInvoke[*access.List](i).Name,
+			Dests:   do.MustInvoke[groups.Destinations](i).Resolve,
+			Place:   do.MustInvoke[builtin.Routing](i).Place,
+			Called:  do.MustInvoke[builtin.Routing](i).Called,
+			Learn:   do.MustInvoke[builtin.Routing](i).Learn,
 		}, nil
 	}
 }

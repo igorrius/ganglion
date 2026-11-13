@@ -13,6 +13,11 @@
     "agent": { "description": "The conversation agent's own settings.", "$ref": "#/$defs/agent" },
     "sandbox": { "description": "What the command sandbox hides and denies.", "$ref": "#/$defs/sandbox" },
     "models": { "description": "The models by purpose. Missing means the agent is off: there is no model to talk to.", "$ref": "#/$defs/models" },
+    "destinations": {
+      "description": "Names for the conversations a message may be sent to besides the one it answers: a module's notify_to and message.send use them. Missing means none; the node writes this list when the admin names a destination (R-CFG-12).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/destination" }
+    },
     "modules": {
       "description": "The modules the node runs and their configuration. Missing means none; module.install writes this list (M4b).",
       "type": "array",
@@ -346,6 +351,15 @@
         "code": { "description": "Writing module code. Missing means none: the node does not write code.", "type": "array", "items": { "$ref": "#/$defs/choice" } }
       }
     },
+    "destination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "conv"],
+      "properties": {
+        "name": { "description": "How the admin and a module's line call it; owner is reserved for the module owner's private chat.", "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$" },
+        "conv": { "description": "The conversation's key, such as telegram:-1001234567890/45 for topic 45 of a forum.", "type": "string", "pattern": "^[a-z][a-z0-9]*:-?[0-9]+(/[0-9]+)?$" }
+      }
+    },
     "group": {
       "type": "object",
       "additionalProperties": false,
@@ -363,7 +377,8 @@
       "properties": {
         "name": { "description": "The module's name.", "type": "string", "minLength": 1 },
         "config": { "description": "The module's own settings, checked against its manifest. Missing means none.", "type": "object" },
-        "off": { "description": "Keep the module installed but not running.", "type": "boolean", "default": false }
+        "off": { "description": "Keep the module installed but not running.", "type": "boolean", "default": false },
+        "notify_to": { "description": "Where the module's messages go: owner (the private chat of its owner) or names under destinations, each message to every one. Missing means the owner alone (R-RUN-18).", "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "type": "string" } }
       }
     }
   }

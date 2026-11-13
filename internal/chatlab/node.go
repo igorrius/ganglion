@@ -334,6 +334,9 @@ func scriptedModel(owner *program, script []ScriptStep, review []string, write f
 		if st.Writes != nil {
 			write(*st.Writes)
 		}
+		if st.Hold > 0 {
+			time.Sleep(st.Hold) // a model that takes its time, as a real one does
+		}
 		return providertest.Answer{Text: st.Say, Tool: st.Tool, Args: withBuild(st.Args, r)}
 	})
 	models := settings.Models{

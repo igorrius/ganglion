@@ -274,10 +274,10 @@ func TestAgentOverTelegram(t *testing.T) {
 	for _, tl := range reqs[0].Tools {
 		offered = append(offered, tl["function"].(map[string]any)["name"].(string))
 	}
-	want := "cells.get,cells.list,cells.set,host.stats,journal.search,language.set,logs.search,memory.audit,memory.forget,memory.read,memory.recall,memory.write," +
-		"message.send,module.build,module.install,module.read,module.status,module.write,persona.propose,plan.show,plan.step,schedule.create,schedule.delete,schedule.list,schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
+	want := "cells.get,cells.list,cells.set,destination.list,destination.remove,destination.set,group.disconnect,host.stats,journal.search,language.set,logs.search,memory.audit,memory.forget,memory.read,memory.recall,memory.write," +
+		"message.send,module.build,module.install,module.notify_to,module.read,module.status,module.write,persona.propose,plan.show,plan.step,schedule.create,schedule.delete,schedule.list,schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
 	if _, err := exec.LookPath("git"); err != nil {
-		want = "cells.get,cells.list,cells.set,host.stats,journal.search,language.set,logs.search,message.send,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
+		want = "cells.get,cells.list,cells.set,destination.list,destination.remove,destination.set,group.disconnect,host.stats,journal.search,language.set,logs.search,message.send,module.notify_to,plan.show,plan.step,schedule.create,schedule.delete,schedule.list," +
 			"schedule.run_now,skill.read,turns.failed,web.fetch,web.search"
 	}
 	// host.exec is on offer only where the sandbox is ready (R-CMD-1).
