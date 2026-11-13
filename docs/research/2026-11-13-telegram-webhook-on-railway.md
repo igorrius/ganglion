@@ -77,6 +77,13 @@ the pull request. The service is deleted.
 | From outside, with no secret | `/healthz` 200, `/metrics` 404, a `POST` to the webhook's path 403 |
 | `http.public_url` set to a domain that is not the node's, then a restart | Five tries 3 s apart, each `404`; no `setWebhook`; the node removed the webhook it had set, polled, and the alert reached the owner's chat 12 s after the start |
 
+The owner's node (service `ganglion`, the production bot) was switched the
+same evening by the runbook's steps: a generated domain, the `http` section
+and `telegram.updates: webhook` in `/data/ganglion.yaml`, a restart. The
+webhook was registered 0.3 s after the start; from outside `/healthz` is
+200, `/metrics` 404 and a `POST` with no secret 403. The file before the
+change is kept beside it as `ganglion.yaml.before-webhook`.
+
 Not tried live: the second guard (deliveries failing while the node runs)
 and a restart with updates waiting; the tests against the fake Bot API hold
 both.
