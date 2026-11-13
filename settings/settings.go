@@ -71,6 +71,35 @@ type Telegram struct {
 	Rich bool `yaml:"rich"`
 	// Reactions is the bot's reaction to a message while it works.
 	Reactions Reactions `yaml:"reactions"`
+	// Groups are the group chats whose members may talk to the bot
+	// (R-DLV-17). The node writes a line when the admin allows a group.
+	Groups []Group `yaml:"groups"`
+}
+
+// GroupRoleFamily is the one role a group's line may name: allowed and not
+// an admin. More roles are the spec's "Not now".
+const GroupRoleFamily = "family"
+
+// Group is one line of telegram.groups.
+type Group struct {
+	// Chat is Telegram's id of the group, a negative number.
+	Chat int64 `yaml:"chat"`
+	// Name is for people: the group's title when it was connected.
+	Name string `yaml:"name"`
+	// Role is what the group's members may do: family.
+	Role string `yaml:"role"`
+}
+
+// check says what is wrong with the line: the key and the reason; "" when
+// nothing is.
+func (g Group) check() (key, reason string) {
+	if g.Chat >= 0 {
+		return "chat", "must be a group's id, a negative number"
+	}
+	if g.Role != GroupRoleFamily {
+		return "role", "must be family"
+	}
+	return "", ""
 }
 
 // Reactions is how the bot shows that it has seen a message.

@@ -166,9 +166,9 @@ func indexOf(seq *yaml.Node, name string) int {
 // process only; another process writing the file is not covered.
 var writeMu sync.Mutex
 
-// edit reads the file, hands the modules sequence to change and writes the
+// editDoc reads the file, hands the document to change and writes the
 // result back. A missing file is an empty one.
-func edit(path string, change func(seq *yaml.Node) error) error {
+func editDoc(path string, change func(doc *yaml.Node) error) error {
 	writeMu.Lock()
 	defer writeMu.Unlock()
 	src, err := os.ReadFile(path)
@@ -181,11 +181,7 @@ func edit(path string, change func(seq *yaml.Node) error) error {
 			return fmt.Errorf("%s: %s", FileName, syntaxReason(err))
 		}
 	}
-	seq, err := modulesNode(&doc)
-	if err != nil {
-		return err
-	}
-	if err := change(seq); err != nil {
+	if err := change(&doc); err != nil {
 		return err
 	}
 	var out bytes.Buffer
@@ -198,6 +194,17 @@ func edit(path string, change func(seq *yaml.Node) error) error {
 		return fmt.Errorf("settings: %w", err)
 	}
 	return replaceFile(path, out.Bytes())
+}
+
+// edit is editDoc on the modules: sequence.
+func edit(path string, change func(seq *yaml.Node) error) error {
+	return editDoc(path, func(doc *yaml.Node) error {
+		seq, err := modulesNode(doc)
+		if err != nil {
+			return err
+		}
+		return change(seq)
+	})
 }
 
 // modulesNode finds the modules: sequence of the document, creating the

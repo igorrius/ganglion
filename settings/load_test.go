@@ -2,6 +2,7 @@ package settings_test
 
 import (
 	"io/fs"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -110,7 +111,7 @@ func TestEmptySectionKeepsDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := settings.Default()
-	if f.Telegram != d.Telegram || f.Sandbox.Deny != nil || f.Agent.Limits != d.Agent.Limits {
+	if !reflect.DeepEqual(f.Telegram, d.Telegram) || f.Sandbox.Deny != nil || f.Agent.Limits != d.Agent.Limits {
 		t.Fatalf("got %+v, %+v, %+v", f.Telegram, f.Sandbox, f.Agent.Limits)
 	}
 }

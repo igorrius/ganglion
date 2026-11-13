@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -263,8 +264,27 @@ func (f File) check() error {
 			return pathError(c.path, c.reason)
 		}
 	}
+	if err := checkGroups(f.Telegram.Groups); err != nil {
+		return err
+	}
 	if f.Models != nil {
 		return f.Models.check("models")
+	}
+	return nil
+}
+
+// checkGroups refuses a bad line of telegram.groups and a chat listed twice.
+func checkGroups(gs []Group) error {
+	seen := map[int64]bool{}
+	for i, g := range gs {
+		at := "telegram.groups[" + strconv.Itoa(i) + "]."
+		if key, reason := g.check(); key != "" {
+			return pathError(at+key, reason)
+		}
+		if seen[g.Chat] {
+			return pathError(at+"chat", "is listed twice")
+		}
+		seen[g.Chat] = true
 	}
 	return nil
 }
