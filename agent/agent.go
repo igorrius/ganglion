@@ -115,6 +115,9 @@ type Deps struct {
 	Facts FactsFunc
 	// Memory is what /memory reads (R-MEM-9); NoMemory when unset.
 	Memory MemoryView
+	// Secrets is what /secrets reads and changes (R-CFG-9); NoSecrets when
+	// unset.
+	Secrets SecretsAdmin
 	// Private finds a person's private chat, where /memory answers
 	// (telegram.PrivateConv); none when unset.
 	Private alert.PrivateConvFunc
@@ -487,6 +490,9 @@ func (a *Agent) finish(ctx context.Context, t *turn) ([]event.Outgoing, queue.St
 func withMemory(d Deps) Deps {
 	if d.Memory == nil {
 		d.Memory = NoMemory{}
+	}
+	if d.Secrets == nil {
+		d.Secrets = NoSecrets{}
 	}
 	if d.Private == nil {
 		d.Private = func(string) (string, string, bool) { return "", "", false }

@@ -104,6 +104,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Persona:       agent.PersonaDir(b.Agent.Workspace),
 		Facts:         do.MustInvoke[Remembering](i).Facts,
 		Memory:        do.MustInvoke[Remembering](i).View,
+		Secrets:       do.MustInvoke[*vault.Vault](i),
 		Private:       telegram.PrivateConv,
 		Reviews:       reviews(i),
 		Review:        do.MustInvoke[Remembering](i).Review,
