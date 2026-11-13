@@ -80,7 +80,7 @@ pinned by a test in the task that owns the code.
 | M4 | Reflexes: config, modules built by the agent, Deye ([design](p1-m4-reflexes-design.md)) | One config file with models by purpose; the agent builds modules from source and installs them on the owner's press; modules own cells; the runner in the node with a supervisor; the Deye example deployed next to the current bot | about 1.5 weekends |
 | M4c | Reflex modules: `notify` for modules, the agent writing module source, `deye-alerts` ([design](p1-m4c-reflexes-design.md)) — **done 2026-11-10** | Routine reactions run without a model | one design, one plan |
 | M5 | **Memory by topic** ([design](p1-m5-memory-topics-design.md), [plan](p1-m5-memory-topics.md)) — **done 2026-11-11**; the number was load shedding's, which left P1 ([ADR-0058](../adr/0058-load-shedding-leaves-p1.md)) | Facts in topic files, whole in the prompt; the agent stores the owner's corrections in the turn, a review after quiet time catches the rest; a note with Undo, `/memory` | one design, one plan |
-| M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback | 0.25–0.5 weekend |
+| M6 | **The agent reconfigures the system** | Approved, validated, versioned configuration changes with rollback; secrets in an encrypted store instead of a variable each ([ADR-0077](../adr/0077-encrypted-secret-store-on-the-nodes-key.md)) | 0.25–0.5 weekend |
 | M7 | Migration | Memory import and consolidation, remaining skills and crons, backups, cutover, gate | 0.5–1 weekend |
 
 Total 4.25–5.5 weekends against a 4-weekend budget, counted before the M3
@@ -332,6 +332,7 @@ agent forgot the owner's correction. Tasks are in the plan
 | 6.2 `config.propose` tool: the agent turns a request ("lower my daily turn limit", "poll the inverter every 15 minutes") into a structured change with a human-readable diff; the owner approves through a request cell | A proposal without approval is never applied; an expired request discards it |
 | 6.3 Validation and rollback: a change must parse and pass the config's checks (the schema, the modules' manifests) before it applies; `config.rollback` restores the previous commit | A change that fails a check is rejected with the reason; rollback restores behaviour |
 | 6.4 **Left P1 with load shedding (ADR-0058).** Risk class on backend changes: moving a cell to a backend of a higher class (e.g. `virtual` → `tuya`) is always a separate, explicitly worded approval (ADR-0014); needs a rebind path in `cells` — today `Define` with another backend is `ErrConflict` | Test: such a change cannot be bundled into a routine approval |
+| 6.5 The secret store ([ADR-0077](../adr/0077-encrypted-secret-store-on-the-nodes-key.md), R-CFG-9, R-CFG-10; added 2026-11-13, owner): the master key made at the first start, encrypted rows by scope, `store:NAME` in the config, `ganglion secret set|rm|list`, `/secrets`, the locked state, values handed out redacted | A module's secret set with `ganglion secret set` is read by that module with no restart and by no other; a database copy without the key yields no value; with the wrong key the node starts locked and says so |
 
 ### M7 · Migration (spec 7.7, 7.8, 10.2)
 
