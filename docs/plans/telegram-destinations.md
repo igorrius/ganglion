@@ -165,3 +165,30 @@ All five tasks are done except the live check. What differs from the plan:
   quotation marks now.
 - **Where a place is named in a question, it is a text of its own**
   (`ask.place_*`), so the question reads in the person's language.
+
+## After the first live try (2026-11-13)
+
+The owner tried it in the private chat right after the deploy. It worked,
+and took too many steps: the agent named a destination first, pointed it
+at the whole forum because the node had not yet seen a message in the K7
+topic, and asked for a confirmation per step. The owner's words: the old
+bot "found the group and started writing to it by itself"; "the group is
+just family"; a topic has a link the bot could ask for.
+
+Changed in the same branch:
+
+- **No naming step.** `module.notify_to` and `message.send` take a place's
+  key or link; the node writes the destination behind it
+  (`chat-<id>-topic-<n>`). `destination.set` stays for a name the owner
+  asks for.
+- **A topic's link is an address** (`telegram.ParseLink`):
+  `https://t.me/c/<id>/<topic>` and a link to a message in the topic.
+- **One confirmation per request** (owner): one call for the whole route.
+  Confirmations themselves stay: an outside text in the session must not
+  be able to send to the family's chat.
+- **The built-in skill `telegram-chats`** (owner: skills that ship with
+  the agent for what the Telegram side can do, so it does not ask what it
+  can find): how groups, topics, links and routes work, what to do when a
+  topic is not known, what not to promise.
+- The Bot API has no method to list a forum's topics (checked against the
+  API's page on 2026-11-13): topics are learned from messages only.

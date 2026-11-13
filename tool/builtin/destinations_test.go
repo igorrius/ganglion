@@ -102,14 +102,27 @@ func parseConv(conv string) (chat, thread int64, err error) {
 }
 
 func newRouting(f *routingFake) map[string]tool.Handler {
-	r := builtin.Routing{Dests: f, Groups: f, Topics: f, Router: f, Parse: parseConv, Private: private,
-		Modules: func() ([]settings.Module, error) { return f.mods, nil },
-		Key:     func(chat int64) string { return "telegram:" + strconv.FormatInt(chat, 10) }}
 	out := map[string]tool.Handler{}
-	for _, h := range r.Tools() {
+	for _, h := range routingOf(f).Tools() {
 		out[h.Spec().Name] = h
 	}
 	return out
+}
+
+// link is telegram.ParseLink in miniature.
+func link(s string) (string, bool) {
+	rest, ok := strings.CutPrefix(s, "https://t.me/c/")
+	if !ok {
+		return "", false
+	}
+	id, thread, ok := strings.Cut(rest, "/")
+	return "telegram:-100" + id + "/" + thread, ok
+}
+
+func routingOf(f *routingFake) builtin.Routing {
+	return builtin.Routing{Dests: f, Groups: f, Topics: f, Router: f, Parse: parseConv, Private: private, Link: link,
+		Modules: func() ([]settings.Module, error) { return f.mods, nil },
+		Key:     func(chat int64) string { return "telegram:" + strconv.FormatInt(chat, 10) }}
 }
 
 func family() *routingFake {
@@ -228,17 +241,47 @@ func TestDestinationRemove(t *testing.T) {
 
 func TestModuleNotifyToRoutesAModule(t *testing.T) {
 	f := family()
-	f.dests = []settings.Destination{{Name: "family-k7", Conv: k7}}
 	route := newRouting(f)["module.notify_to"]
-	c := routeCall("module.notify_to", `{"module":"battery-alerts","destinations":["family-k7","owner"]}`)
-	if q, err := ask(t, route, c); err != nil || !strings.Contains(q, "battery-alerts") || !strings.Contains(q, "family-k7, owner") {
-		t.Fatalf("question %q, %v", q, err)
+	// A topic by its key and the owner: one question that names the places
+	// by their titles, one run that also writes the destination nobody had
+	// to name.
+	c := routeCall("module.notify_to", `{"module":"battery-alerts","destinations":["`+k7+`","owner"]}`)
+	q, err := ask(t, route, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"battery-alerts", `the topic K7 \[x\](http://evil.example) of the group Family \*one\*`, "your private chat"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("the question lacks %q: %q", want, q)
+		}
+	}
+	if len(f.dests) != 0 {
+		t.Fatalf("a question wrote destinations %+v", f.dests)
 	}
 	if _, err := route.Run(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.routed["battery-alerts"]; !slices.Equal(got, []string{"family-k7", "owner"}) {
+	const made = "chat-1001-topic-45"
+	if len(f.dests) != 1 || f.dests[0] != (settings.Destination{Name: made, Conv: k7}) {
+		t.Fatalf("destinations %+v", f.dests)
+	}
+	if got := f.routed["battery-alerts"]; !slices.Equal(got, []string{made, "owner"}) {
 		t.Fatalf("routed %v", got)
+	}
+	// The same place again reuses its destination; so does its link, and a
+	// place named twice counts once.
+	for _, args := range []string{
+		`{"module":"deye","destinations":["` + k7 + `"]}`,
+		`{"module":"deye","destinations":["` + made + `"]}`,
+		`{"module":"deye","destinations":["https://t.me/c/1/45","` + k7 + `"]}`,
+	} {
+		f.routed = nil
+		if _, err := route.Run(context.Background(), routeCall("module.notify_to", args)); err != nil {
+			t.Fatalf("%s: %v", args, err)
+		}
+		if got := f.routed["deye"]; !slices.Equal(got, []string{made}) || len(f.dests) != 1 {
+			t.Fatalf("%s: routed %v, destinations %+v", args, got, f.dests)
+		}
 	}
 	// An empty list is the owner alone.
 	if _, err := route.Run(context.Background(), routeCall("module.notify_to", `{"module":"battery-alerts","destinations":[]}`)); err != nil {
@@ -247,12 +290,21 @@ func TestModuleNotifyToRoutesAModule(t *testing.T) {
 	if got := f.routed["battery-alerts"]; !slices.Equal(got, []string{"owner"}) {
 		t.Fatalf("routed %v after an empty list", got)
 	}
-	// Abuse: a raw conversation key is no destination, so a module cannot be
-	// pointed at a place nobody named.
-	for _, args := range []string{`{"module":"battery-alerts","destinations":["telegram:-2002"]}`, `{"module":"","destinations":["owner"]}`} {
+	// Abuse: a group nobody connected, a stranger's chat and a made-up name
+	// are no places, so a module cannot be pointed at them.
+	for _, args := range []string{
+		`{"module":"battery-alerts","destinations":["telegram:-2002"]}`,
+		`{"module":"battery-alerts","destinations":["https://t.me/c/2/5"]}`,
+		`{"module":"battery-alerts","destinations":["telegram:666"]}`,
+		`{"module":"battery-alerts","destinations":["nowhere"]}`,
+		`{"module":"","destinations":["owner"]}`,
+	} {
 		if _, err := route.Run(context.Background(), routeCall("module.notify_to", args)); err == nil {
 			t.Errorf("%s was accepted", args)
 		}
+	}
+	if len(f.dests) != 1 {
+		t.Fatalf("a refused route wrote destinations %+v", f.dests)
 	}
 }
 
@@ -333,8 +385,29 @@ func TestMessageSendToADestination(t *testing.T) {
 	if err != nil || len(res.Out) != 1 || res.Out[0].Conv != k7 || res.Out[0].Transport != "telegram" || res.Out[0].Text != "battery 85%" {
 		t.Fatalf("result %+v, %v", res, err)
 	}
-	// The forum as a whole is still no conversation the node knows.
-	if _, err := send.Run(context.Background(), routeCall("message.send", `{"conv":"`+forum+`","text":"x"}`)); !errors.Is(err, builtin.ErrUnknownConv) {
-		t.Fatalf("err = %v, want ErrUnknownConv", err)
+}
+
+// message.send reaches a topic of a connected group by its key or by its
+// link, with nothing named first, and the question says where in words;
+// a group nobody connected stays out of reach.
+func TestMessageSendToAPlace(t *testing.T) {
+	r := routingOf(family())
+	cv := convs()
+	cv.Place, cv.Called = r.Place, r.Called
+	send := builtin.NewMessageSend(cv)
+	for _, target := range []string{k7, "https://t.me/c/1/45"} {
+		c := routeCall("message.send", `{"conv":"`+target+`","text":"battery 85%"}`)
+		if q, err := send.Question(context.Background(), c); err != nil || !strings.Contains(q, "the topic K7") {
+			t.Fatalf("%s: question %q, %v", target, q, err)
+		}
+		res, err := send.Run(context.Background(), c)
+		if err != nil || len(res.Out) != 1 || res.Out[0].Conv != k7 || res.Out[0].Transport != "telegram" {
+			t.Fatalf("%s: result %+v, %v", target, res, err)
+		}
+	}
+	for _, target := range []string{"telegram:-2002/5", "https://t.me/c/2/5"} {
+		if _, err := send.Run(context.Background(), routeCall("message.send", `{"conv":"`+target+`","text":"x"}`)); !errors.Is(err, builtin.ErrUnknownConv) {
+			t.Errorf("%s: err = %v, want ErrUnknownConv", target, err)
+		}
 	}
 }

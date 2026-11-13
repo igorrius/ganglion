@@ -79,6 +79,7 @@ func Routing() do.Provider[builtin.Routing] {
 			Router:  do.MustInvoke[*modhost.Host](i),
 			Parse:   telegram.ParseConv,
 			Key:     telegram.GroupKey,
+			Link:    telegram.ParseLink,
 			Private: telegram.PrivateConv,
 		}, nil
 	}

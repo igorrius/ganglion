@@ -92,7 +92,20 @@ Details:
   so the admin names a topic by its title.
 - Destinations, a module's list and disconnecting a group are managed by
   admin tools, each with a confirmation; the admin role exists only in the
-  private chat (R-POL-10). `message.send` takes a destination's name.
+  private chat (R-POL-10).
+- The owner never has to name a destination (owner, 2026-11-13, after the
+  first live try took three confirmations and named the whole forum
+  "family-k7"). `module.notify_to` and `message.send` take a place
+  directly: the key of a connected group or of one of its topics, or the
+  link Telegram gives for a topic (`https://t.me/c/<id>/<topic>`). One
+  request is one call and one confirmation; the node writes the
+  destination behind a place itself, named by the chat's and the topic's
+  numbers, since a title is outside text and may be in any script.
+- Telegram's Bot API has no method that lists a forum's topics (checked on
+  2026-11-13), so a topic nobody wrote in since the node started is
+  unknown; the agent then asks for a message in it or for its link, and
+  never falls back to the group's own key. A built-in skill,
+  `telegram-chats`, tells the agent all of this.
 - A destination that a module uses cannot be removed, and a group that a
   destination points at cannot be disconnected: the tool names what holds
   it.

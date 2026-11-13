@@ -1404,8 +1404,11 @@ phase plan).
   group (R-DLV-17) or one topic of a forum. The node remembers the titles
   of the topics it sees in connected groups, so the admin names a topic by
   its title. Destinations, a module's `notify_to` and disconnecting a group
-  are changed by the admin in words, each change after a confirmation, and
-  hold with no restart; `message.send` takes a destination's name. A
+  are changed by the admin in words, each change after one confirmation, and
+  hold with no restart. The admin never has to name a destination:
+  `message.send` and a module's route take a connected group or a topic by
+  its key or by the link Telegram gives for it, and the node writes the
+  destination behind it. A
   destination a module uses is not removed, and a group a destination
   points at is not disconnected, until what holds it is changed
   ([ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).

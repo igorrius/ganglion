@@ -299,6 +299,8 @@ func Convs() do.Provider[builtin.Convs] {
 			Private: telegram.PrivateConv,
 			Names:   do.MustInvoke[*access.List](i).Name,
 			Dests:   do.MustInvoke[groups.Destinations](i).Resolve,
+			Place:   do.MustInvoke[builtin.Routing](i).Place,
+			Called:  do.MustInvoke[builtin.Routing](i).Called,
 		}, nil
 	}
 }

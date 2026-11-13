@@ -43,12 +43,33 @@ type Convs struct {
 	// Dests resolves a named destination (groups.Destinations.Resolve);
 	// unset knows none.
 	Dests DestinationFunc
-	Names NameFunc // who a principal is, for the owner's question
+	// Place resolves a connected group or a topic of one, by its key or by
+	// a link to it (Routing.Place); unset knows none. Called says what such
+	// a conversation is called, "" when it does not know.
+	Place  PlaceFunc
+	Called CalledFunc
+	Names  NameFunc // who a principal is, for the owner's question
 }
 
 // DestinationFunc resolves a destination's name to its transport and
 // conversation; ok is false when there is none by that name.
 type DestinationFunc func(name string) (transport, conv string, ok bool, err error)
+
+// PlaceFunc resolves a reference to a place a message may go to with no
+// destination named for it; ok is false when it is none.
+type PlaceFunc func(ctx context.Context, c tool.Call, ref string) (transport, conv string, ok bool, err error)
+
+// CalledFunc says what a conversation is called for the person asked; ""
+// when it does not know.
+type CalledFunc func(ctx context.Context, c tool.Call, conv string) string
+
+// place resolves target as a connected group or a topic of one.
+func (v Convs) place(ctx context.Context, c tool.Call, target string) (transport, conv string, ok bool, err error) {
+	if v.Place == nil {
+		return "", "", false, nil
+	}
+	return v.Place(ctx, c, target)
+}
 
 // destination resolves target as a destination's name.
 func (v Convs) destination(target string) (transport, conv string, ok bool, err error) {
@@ -89,6 +110,11 @@ func (v Convs) resolve(ctx context.Context, c tool.Call, target string) (transpo
 		}
 		return tr, cv, nil
 	}
+	if tr, cv, ok, err := v.place(ctx, c, target); err != nil {
+		return "", "", fmt.Errorf("builtin: places: %w", err)
+	} else if ok {
+		return tr, cv, nil
+	}
 	state, err := v.States.State(ctx, target)
 	if err != nil {
 		return "", "", fmt.Errorf("builtin: state of %s: %w", target, err)
@@ -114,10 +140,11 @@ func (*MessageSend) Spec() tool.Spec {
 	return tool.Spec{
 		Name: "message.send",
 		Description: "Send a message to a named destination, a conversation the assistant knows or a person on the access list. " +
-			"conv is a destination's name from destination.list (such as family-k7), a conversation key, or a person's id such as telegram:user:123456. " +
+			"conv is a key from destination.list (a connected group or one of its topics), a topic's link, a destination's name, " +
+			"another conversation's key, or a person's id such as telegram:user:123456. " +
 			"The owner confirms the message before it goes out.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
-			`"conv":{"type":"string","description":"a destination's name, a conversation key, or the person's id such as telegram:user:123456"},` +
+			`"conv":{"type":"string","description":"a key from destination.list, a topic's link, a destination's name, or the person's id such as telegram:user:123456"},` +
 			`"text":{"type":"string","description":"the message text"}},` +
 			`"required":["conv","text"],"additionalProperties":false}`),
 		Class:     tool.ClassSideEffect,
@@ -178,6 +205,11 @@ func (m *MessageSend) Question(ctx context.Context, c tool.Call) (string, error)
 func (m *MessageSend) recipient(ctx context.Context, c tool.Call, target, conv string) (string, error) {
 	if target == c.Conv && conv == c.Conv {
 		return "this chat", nil
+	}
+	if m.convs.Called != nil {
+		if called := m.convs.Called(ctx, c, conv); called != "" {
+			return called, nil
+		}
 	}
 	if _, _, ok, err := m.convs.destination(target); err == nil && ok {
 		return "the destination " + oneLine(target) + " (" + oneLine(conv) + ")", nil
