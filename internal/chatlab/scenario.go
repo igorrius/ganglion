@@ -53,6 +53,10 @@ type ScriptStep struct {
 	Tool   string   `yaml:"tool"`
 	Args   string   `yaml:"args"`   // JSON
 	Writes *Writing `yaml:"writes"` // someone writes while the model works on this answer
+	// Hold is how long the model works on this answer before it returns: an
+	// Adds step's second message, sent with no pause, then arrives while the
+	// first is being answered, whatever the machine's speed.
+	Hold time.Duration `yaml:"hold"`
 }
 
 // Writing is a message that reaches the inbox before the scripted model's
