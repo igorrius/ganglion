@@ -211,7 +211,8 @@ At a start in **webhook** mode:
    this process.
 3. The check fails: the node does not call `setWebhook`. It polls for this
    run and alerts the admins with the reason (section 9).
-4. The check passes: `setWebhook` with the URL, the secret,
+4. The check passes. Updates that waited while the node was away are taken
+   by polling first (section 8). Then `setWebhook` with the URL, the secret,
    `allowed_updates: ["message", "callback_query"]` and
    `max_connections: 1`, without `drop_pending_updates`. The call is made at
    every start; it is idempotent. The node records in its database that it
@@ -260,9 +261,13 @@ What happens to an update sent while the node is down:
 - **During the downtime** Telegram's request fails; Telegram keeps the
   update and retries.
 - **The risk the webhook adds** is delay: after a restart the node waits for
-  Telegram's retry. If the spike shows that delay to be long, the start
-  drains first: `deleteWebhook`, `getUpdates` until empty, `setWebhook`
-  (call, only if measured).
+  Telegram's retry. The spike measured it
+  ([research](../research/2026-11-13-telegram-webhook-on-railway.md)):
+  retries come every 1–2 minutes once the node has been away for a minute,
+  and an update that waited through a real stop came 93 s after
+  `setWebhook`. So the start drains first: when `getWebhookInfo` shows
+  updates waiting, the node calls `deleteWebhook`, reads with `getUpdates`
+  until none is left, then `setWebhook`.
 - **A switch of mode** can deliver one update by both ways. The `idemKey` is
   the same in both, so the second copy is rejected.
 

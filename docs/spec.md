@@ -341,7 +341,9 @@ Guarantee: **at-least-once + idempotency.**
   listener. A request is accepted only with Telegram's secret header, compared in constant time; the
   secret is derived from the bot token and is in no file, address or log. An update takes the path a
   polled one takes, with the same `idemKey` (R-DLV-1), and `200` is sent only after it is in the inbox
-  (R-DLV-2); a failed write is `500`, so Telegram sends it again. Back in polling mode the node removes
+  (R-DLV-2); a failed write is `500`, so Telegram sends it again. Updates that waited while the node
+  was away are taken by polling before the webhook is registered, since Telegram's next retry can be
+  two minutes off ([research](research/2026-11-13-telegram-webhook-on-railway.md)). Back in polling mode the node removes
   only a webhook it recorded setting itself; another process's webhook stays and is the 409 alert of
   R-DLV-8. When another process takes the bot from a node in webhook mode, the node alerts the admins
   and does not set its webhook again.
