@@ -1762,6 +1762,7 @@ fallback until the gate is passed.
 | Telemetry of edge nodes | Each edge to an OpenTelemetry collector over OTLP · Prometheus scrapes each edge · snapshots over the NATS bus, collected by the core | Decided by the owner (2026-11-03): over the bus, collected by the core, without JetStream for metrics (R-OBS-9). A collector needs one more link and one more service for every edge; the bus is already there. An outside collector can later be fed by the core | ADR at the start of P2, with the protocol |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
 | Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | An encrypted store, with the page served by the node and the ciphertext returned through Telegram first; the command on the host as the path without a browser (owner's brainstorm, 2026-11-12, [design note](plans/secrets-intake-design.md)). The phase is open: M6 or P2 | A spike on Telegram's `sendData`, then an ADR |
+| Logging the claude CLI provider in | A variable set by hand from `claude setup-token` · a `/login` command of the core that drives the bundled CLI and takes the one-time code from the chat · the same command with the node doing the OAuth exchange itself | The `/login` command driving the CLI; the token goes to the encrypted store and never to the chat (owner's request, 2026-11-13, [design note](plans/model-login-from-chat-design.md)). The phase is open, with the store | A spike on driving `setup-token` without a terminal, then an ADR |
 
 Each question becomes an ADR (status Proposed) when work on it starts and is
 accepted when decided; see [docs/adr](adr/README.md). Already decided: one
@@ -1844,6 +1845,12 @@ Reviewed at each gate.
   secret; a device gets its Wi-Fi credentials when it is provisioned, not
   in its firmware (owner's brainstorm, 2026-11-12,
   [design note](plans/secrets-intake-design.md); section 11).
+- Logging the model provider in from the chat: the owner sends `/login`,
+  the node answers it without a model, sends the sign-in link and takes the
+  one-time code before the inbox; the token goes to the secret store. With
+  a Railway template the install then needs no shell in the container
+  (owner's request, 2026-11-13,
+  [design note](plans/model-login-from-chat-design.md); section 11).
 - Telegram, beyond formatting, typing and replies (ADR-0025). Each item
   is to be checked against the Bot API docs of the day:
   - a reaction in groups, useful when someone addresses the agent directly;
