@@ -650,10 +650,6 @@ Start here when coming back to the project.
       - the Landlock write checks assert only a non-zero exit.
       - from the live check (not M3d code): the agent asked two separate questions instead of showing a plan
         until told to, and did not tick the plan's steps after the work (the plan is a prompt directive);
-      - from the live check: fixed texts alternated between English and Ukrainian although the person's
-        language is `en` and none is chosen (the language subsystem, task 3.35);
-      - from the live check: a path like `/tmp/ganglion` in a plan step's text or the agent's reason renders as
-        a bot-command link in Telegram (step text and reason are not escaped);
       - from the live check: the fallback MCP socket dir under a relative `TMPDIR` stays relative
         (pre-existing).
 - **Open decisions:** [spec section 11](spec.md#11-open-decisions)

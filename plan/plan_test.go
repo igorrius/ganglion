@@ -118,6 +118,16 @@ func TestRenderIsPure(t *testing.T) {
 	}
 }
 
+// A path in the agent's words shows as a path: Telegram would make "/tmp" a
+// bot-command link anywhere but in code.
+func TestRenderKeepsPathsFromBecomingCommands(t *testing.T) {
+	got := Render(Plan{Steps: []Step{{Text: "clean /tmp/ganglion", Status: Failed, Note: "/tmp is busy"}}, Outcome: "freed /var/cache"})
+	want := "❌ 1. clean `/tmp/ganglion`: `/tmp` is busy\n\nfreed `/var/cache`"
+	if got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+}
+
 func TestShowEnqueuesOneMessageAtOnce(t *testing.T) {
 	e := newEnv(t)
 	e.show(t, "one", "two")

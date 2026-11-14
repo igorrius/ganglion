@@ -55,3 +55,5 @@ While a turn runs, the bot reacts to your message with an emoji. See the [config
 ## Language
 
 The bot's fixed texts exist in English, Russian and Ukrainian. It uses your chosen language, or your Telegram language otherwise. The agent itself answers in whatever language you write.
+
+Your Telegram language is the language of the app you wrote from last. If your phone and your computer run Telegram in different languages, the fixed texts switch with every device you write from. To keep one language, choose it: tell the bot, for example, "show your texts in English". An admin can choose this way; other people follow their Telegram language.
