@@ -1,14 +1,64 @@
-# ganglion
+<!--
+This README is the project's front page. Keep the order of sections:
+pitch and badges, how it works, status, what works, install, documentation,
+contributing, license. Install has fixed subsections: when a step lands,
+fill its subsection in place instead of adding a new section:
+- "From a container image" is filled by #179 (images published by tag);
+- "Configure" and "First conversation" link into the user guide (#177)
+  once it is on the site.
+The documentation site is https://igorrius.github.io/ganglion/ (ADR-0084);
+the repository's "About" box links to it.
+-->
 
-A self-hosted agent in Go that talks to you in Telegram, remembers, and
-builds its own automations. A routine task the agent has worked out is
-compiled into a small WASM module (a "reflex") that then runs on a schedule
-with no model at all; the model is called for conversation and for
-exceptions.
+<h1 align="center">ganglion</h1>
+
+<p align="center">
+  <strong>A self-hosted agent that talks to you in Telegram, remembers,
+  and builds its own automations.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/igorrius/ganglion/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/igorrius/ganglion/actions/workflows/ci.yml/badge.svg?branch=master"></a>
+  <a href="https://igorrius.github.io/ganglion/"><img alt="Docs" src="https://github.com/igorrius/ganglion/actions/workflows/docs.yml/badge.svg?branch=master"></a>
+  <a href="go.mod"><img alt="Go version" src="https://img.shields.io/github/go-mod/go-version/igorrius/ganglion"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/github/license/igorrius/ganglion"></a>
+  <img alt="Status: 0.x, early" src="https://img.shields.io/badge/status-0.x%20early-orange">
+</p>
+
+<p align="center">
+  <a href="https://igorrius.github.io/ganglion/">Documentation</a> ·
+  <a href="#install">Install</a> ·
+  <a href="https://igorrius.github.io/ganglion/architecture/">Architecture</a> ·
+  <a href="https://github.com/igorrius/ganglion/issues">Report a bug</a>
+</p>
+
+---
+
+ganglion is an agent written in Go. You talk to it in Telegram; it
+remembers, searches, runs commands in a sandbox, and when a task repeats it
+writes a small program for it. That program, a **reflex**, is compiled to
+WebAssembly and then runs on a schedule **without the model**: the model is
+called for conversation and for exceptions, not for every tick.
 
 The long-term shape is a network of nodes: a core that holds conversations
 and memory, edge runners next to devices, and workers where the model
 runtimes are. Today it is one process that carries all three roles.
+
+## How it works
+
+```mermaid
+flowchart LR
+    you([You in Telegram]) <--> agent[Agent<br/>model, memory, skills, tools]
+    agent -- "writes a module<br/>for a routine task" --> build[Build to WASM]
+    build -- "you approve" --> reflex[Reflex in wazero<br/>runs on a schedule]
+    reflex -- "reads and writes" --> cells[(State cells)]
+    outside[Outside services<br/>and devices] --> cells
+    reflex -- "notifies, or escalates<br/>an exception" --> agent
+```
+
+A reflex gets only the capabilities its manifest asks for, every build is
+versioned, and a bad version rolls back. State-changing actions of the
+agent are confirmed with a button.
 
 ## Status
 
@@ -20,85 +70,107 @@ wait for an answer. The public release is planned for a later phase
 ([ADR-0082](docs/adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)).
 
 One node has been running the author's family bot since November 2026.
+[Where we are](https://igorrius.github.io/ganglion/#where-we-are) is kept
+up to date.
 
 ## What works today
 
-- **A Telegram agent** in private chats and in groups (it answers in a
-  group only when addressed), with an access list: strangers get no reply.
-- **Models by purpose** from one file: the `claude` CLI on your own
-  subscription, or any OpenAI-compatible API.
-- **Memory** kept by topic in plain files, sessions, reminders and
-  scheduled tasks.
-- **Tools under policies:** web search and reading, host commands in a
-  sandbox (Landlock, no new privileges, a clean environment), each
-  state-changing action confirmed by a button.
-- **Reflex modules:** the agent writes a module in Rust, the node builds it
-  to `wasm32-wasip1` and, after the owner approves, runs it in
-  [wazero](https://wazero.io) on a schedule, with only the capabilities
-  its manifest asks for. Modules are versioned and roll back.
-- **Skills:** procedures in Markdown the agent reads before it acts.
-- **An encrypted secret store**, one configuration file with a JSON schema,
-  logs and a tool-call journal, and read-only diagnostics over MCP
-  (`ganglion mcp`).
+| | |
+|---|---|
+| **Telegram agent** | Private chats and groups (in a group it answers only when addressed), an access list: strangers get no reply. |
+| **Models by purpose** | The `claude` CLI on your own subscription, or any OpenAI-compatible API, chosen per purpose in one file. |
+| **Memory** | Kept by topic in plain files; sessions, reminders and scheduled tasks. |
+| **Tools under policies** | Web search and reading; host commands in a sandbox (Landlock, no new privileges, a clean environment); every state-changing action confirmed by a button. |
+| **Reflex modules** | The agent writes a module in Rust, the node builds it to `wasm32-wasip1` and, after you approve, runs it in [wazero](https://wazero.io). Versioned, with rollback. |
+| **Skills** | Procedures in Markdown the agent reads before it acts. |
+| **Operations** | An encrypted secret store, one configuration file with a JSON schema, logs, a tool-call journal, `/status`, read-only diagnostics over MCP (`ganglion mcp`). |
 
 Not built yet: nodes talking to each other (the network of the name),
 prebuilt binaries and images, updating a node from a release, a user guide.
-[docs/README.md](docs/README.md) says where the work is right now.
 
-## Build and run
+## Install
 
-Needs Linux and Go 1.27. Host commands and module builds need kernel 6.2 or
-later (Landlock); building modules needs Rust with the `wasm32-wasip1`
-target. Linting needs golangci-lint v2 built with Go 1.27.
+ganglion runs on **Linux**. Host commands and module builds need kernel 6.2
+or later (Landlock). You need a Telegram bot token from
+[@BotFather](https://t.me/BotFather), your Telegram user id, and access to
+at least one model (the `claude` CLI or an OpenAI-compatible API key).
+
+### From a container image
+
+Not published yet: images built by tag are the next install path
+([#179](https://github.com/igorrius/ganglion/issues/179)). Until then,
+build the image yourself: the [`Dockerfile`](Dockerfile) holds the node,
+Rust and the `claude` CLI, runs as an unprivileged user and keeps its data
+on a volume at `/data`.
 
 ```sh
-make build                      # ./bin/ganglion
-./bin/ganglion version
-
-cp ganglion.example.yaml ganglion.yaml
-# In ganglion.yaml: set telegram.admin to telegram:user:<your Telegram id>
-# and choose the providers and models you have.
-
-export TELEGRAM_BOT_TOKEN=...   # from @BotFather; plus the provider keys the file names
-./bin/ganglion run
+docker build -t ganglion .
 ```
 
-The file holds every setting and no secret: a secret is named there as
+### From source
+
+Needs Go 1.27; building modules also needs Rust with the `wasm32-wasip1`
+target.
+
+```sh
+git clone https://github.com/igorrius/ganglion.git
+cd ganglion
+make build                      # ./bin/ganglion
+./bin/ganglion version
+```
+
+### Configure
+
+One file holds every setting and no secret. A secret is named there as
 `env:NAME` (an environment variable) or `store:NAME` (the node's encrypted
 store, filled with `ganglion secret set NAME`). The node keeps its database
 beside the file.
 
-In a container: the [`Dockerfile`](Dockerfile) builds an image with the
-node, Rust and the `claude` CLI, running as an unprivileged user with its
-data on a volume at `/data`.
-[docs/deploy-railway.md](docs/deploy-railway.md) is the runbook for one
-hosting platform; most of it applies to any.
+```sh
+cp ganglion.example.yaml ganglion.yaml
+# In ganglion.yaml: set telegram.admin to telegram:user:<your Telegram id>
+# and choose the providers and models you have.
+```
 
-The agent starts a module from one of two templates in
+### First conversation
+
+```sh
+export TELEGRAM_BOT_TOKEN=...   # plus the provider keys the file names
+./bin/ganglion run
+```
+
+Write to your bot in Telegram. To have it build something, describe a
+routine task; it starts a module from one of two templates in
 [examples/modules](examples/modules): a reader that brings an outside
 service's numbers into cells, and a reflex that reacts to cells and writes
-to the owner.
+to you.
+
+Running on a hosting platform:
+[the Railway runbook](https://igorrius.github.io/ganglion/deploy-railway/);
+most of it applies to any.
 
 ## Documentation
 
-`docs/` is the project's engineering record, written as the work goes, and
-is published as a site: **<https://igorrius.github.io/ganglion/>**. It is
-not a user guide yet.
+The documentation site is **<https://igorrius.github.io/ganglion/>**. Today
+it is the project's engineering record, written as the work goes; a user
+guide is coming ([#177](https://github.com/igorrius/ganglion/issues/177)).
 
 | Question | Read |
 |---|---|
-| Where is the project now? | [docs/README.md](docs/README.md) |
-| What is being built, and in what order? | [docs/spec.md](docs/spec.md) |
-| What does it look like inside? | [docs/architecture/](docs/architecture/README.md) |
-| Why was it decided this way? | [docs/adr/](docs/adr/README.md) |
-| How is the code written? | [docs/conventions.md](docs/conventions.md) |
+| Where is the project now? | [Where we are](https://igorrius.github.io/ganglion/) |
+| What is being built, and in what order? | [Specification](https://igorrius.github.io/ganglion/spec/) |
+| What does it look like inside? | [Architecture](https://igorrius.github.io/ganglion/architecture/) |
+| Why was it decided this way? | [Decision records](https://igorrius.github.io/ganglion/adr/) |
+| How is the code written? | [Conventions](https://igorrius.github.io/ganglion/conventions/) |
 
-## Reporting bugs and vulnerabilities
+## Contributing and security
 
-Bugs go to [GitHub Issues](https://github.com/igorrius/ganglion/issues).
-A vulnerability is reported privately: see [SECURITY.md](SECURITY.md).
+Bugs and ideas go to [GitHub Issues](https://github.com/igorrius/ganglion/issues);
+what is in work and what comes next is on the
+[project board](https://github.com/users/igorrius/projects/13).
 Before a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md).
+A vulnerability is reported privately: see [SECURITY.md](SECURITY.md).
 
 ## License
 
-Apache License 2.0, see [LICENSE](LICENSE).
+[Apache License 2.0](LICENSE).
