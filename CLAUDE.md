@@ -46,6 +46,27 @@ the ADRs.
   `example.com`, `telegram:user:123456`, `telegram:-1001234567890`,
   `@test_bot`, `<service>`. A live check is recorded by what was done and
   what was seen, without the address it was done on.
+- **Work is tracked in GitHub Issues** and on the
+  [ganglion project](https://github.com/users/igorrius/projects/13). A bug
+  or open item found in a review, a lab run or a live check becomes an
+  issue (English; labels: type `bug`/`enhancement`/`chore`/`decision`,
+  priority `P0`–`P3`, `area/<package>`; the milestone of the phase). A PR
+  that closes one says `Fixes #N`. Decisions still go to the spec and ADRs;
+  `docs/plans/` keeps the step-by-step plans. Issues #38–#174 came from
+  the old backlog board (G-ids); that board is read-only now.
+- **Pick the cheapest model that does the job.** At the start of a task,
+  say in one line which model it needs; if the session runs a heavier one
+  than that, say so, so the owner can switch. Pass `model` explicitly to
+  every subagent:
+  - **Opus** (or the top model when Opus is stuck): design, ADRs, spec
+    changes, concurrency and security reasoning, debugging a failure whose
+    cause is unclear, reviewing a risky change.
+  - **Sonnet**: implementing a written plan, tests, keeping docs in sync,
+    translation, migrations, routine reviews and live checks.
+  - **Haiku**: searches and lookups, inventories, formatting, and
+    mechanical bulk steps whose input is already prepared.
+  - No model at all when a script does it: bulk `gh` calls, renames,
+    format fixes.
 - Docs format: standard Markdown links with relative paths (no
   `[[wikilinks]]`), diagrams as Mermaid `flowchart`, `sequenceDiagram` or
   `stateDiagram-v2`, planned parts drawn dashed.
