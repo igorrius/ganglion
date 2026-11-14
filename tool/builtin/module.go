@@ -93,8 +93,9 @@ type Modules struct {
 	// Builds is the folder builds wait in until they are installed:
 	// <data>/modules/builds, which the janitor sweeps (ruling 6 of M4b).
 	Builds string
-	// Examples is the folder of example modules module.import copies from
-	// (examples/modules in a checkout, /app/examples/modules in the image).
+	// Examples is the folder of module templates module.import copies from:
+	// the ones the binary ships, written out at start, or a folder a test
+	// named.
 	Examples string
 	// Provenance is the folder of the records of each module folder as the
 	// node's own tools left it: <data>/modules/provenance, outside the

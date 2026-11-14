@@ -115,10 +115,35 @@ func agentDeps(i do.Injector) agent.Deps {
 
 func TestExamplesDirIsTheNamedFolderWhenItExists(t *testing.T) {
 	dir := t.TempDir()
-	if got := examplesDir(Bootstrap{Examples: dir}); got != dir {
-		t.Fatalf("examples %q, want %q", got, dir)
+	if got, err := examplesDir(Bootstrap{Examples: dir}); err != nil || got != dir {
+		t.Fatalf("examples %q, %v, want %q", got, err, dir)
 	}
-	if got := examplesDir(Bootstrap{Examples: filepath.Join(dir, "missing")}); got != "" {
-		t.Fatalf("a missing folder is %q", got)
+	if got, err := examplesDir(Bootstrap{Examples: filepath.Join(dir, "missing")}); err != nil || got != "" {
+		t.Fatalf("a missing folder is %q, %v", got, err)
+	}
+}
+
+// With no folder named, a node's templates are the ones its binary ships,
+// written anew at each start (R-RDR-1).
+func TestExamplesDirIsTheBinarysTemplates(t *testing.T) {
+	modules := t.TempDir()
+	stale := filepath.Join(modules, "templates", "reader-template", "old.rs")
+	if err := os.MkdirAll(filepath.Dir(stale), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte("from an older version"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := examplesDir(Bootstrap{ModulesDir: modules})
+	if err != nil || got != filepath.Join(modules, "templates") {
+		t.Fatalf("examples %q, %v", got, err)
+	}
+	for _, name := range []string{"reader-template", "reflex-template"} {
+		if _, err := os.Stat(filepath.Join(got, name, "manifest.yaml")); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("a file of an older version is still there: %v", err)
 	}
 }

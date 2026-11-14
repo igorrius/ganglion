@@ -50,7 +50,6 @@ RUN useradd --uid 10001 --create-home --home-dir /home/ganglion --shell /usr/sbi
  && mkdir /data && chown ganglion:ganglion /data
 
 COPY --from=build /out/ganglion /usr/local/bin/ganglion
-COPY examples/ /app/examples/
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # Rustup must never try to install or update at run time: its home is read-only.

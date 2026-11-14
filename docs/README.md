@@ -21,10 +21,11 @@ Start here when coming back to the project.
   outside service and names no device, whose shared rules the agent does
   not change, and the built-in skill `module-writing`, which now says
   which template fits a request and how modules are linked through cells.
-  The lab's build-and-install scenario passes on the template. Still to
-  do, each its own pull request: the templates embedded in the binary, so
-  they are updated with the node as the skills are, and Deye's name as a
-  sample string in tests, comments and documents.
+  The lab's build-and-install scenario passes on the template. The
+  templates are embedded in the binary and written to the modules folder
+  at each start, so they are updated with the node as the skills are.
+  Still to do, its own pull request: Deye's name as a sample string in
+  tests, comments and documents.
 - **Done on 2026-11-13:** Telegram groups (MG), added that day when the
   owner moved the production bot's token to ganglion and removed the old
   bot. A group is connected from a card in the admin's private chat and
