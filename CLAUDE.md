@@ -52,8 +52,12 @@ the ADRs.
   issue (English; labels: type `bug`/`enhancement`/`chore`/`decision`,
   priority `P0`–`P3`, `area/<package>`; the milestone of the phase). A PR
   that closes one says `Fixes #N`. Decisions still go to the spec and ADRs;
-  `docs/plans/` keeps the step-by-step plans. Issues #38–#174 came from
-  the old backlog board (G-ids); that board is read-only now.
+  `docs/plans/` keeps the step-by-step plans. Hierarchy stays light:
+  milestones group the work; a phase-plan task that spans several PRs or
+  gathers bugs found along the way gets a parent issue (link to the plan
+  and its "done when") with sub-issues; an issue that cannot start before
+  another is marked "blocked by" it. Issues #38–#174 came from the old
+  backlog board (G-ids); that board is read-only now.
 - **Pick the cheapest model that does the job.** At the start of a task,
   say in one line which model it needs; if the session runs a heavier one
   than that, say so, so the owner can switch. Pass `model` explicitly to
