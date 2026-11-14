@@ -66,7 +66,7 @@ func TestZeroDailyLimitsAreOff(t *testing.T) {
 }
 
 func TestSessionCommandsAnswerWithoutAModel(t *testing.T) {
-	for _, text := range []string{"/new", "/reset", "/sessions", "/resume 1", "/NEW@ganglion_bot"} {
+	for _, text := range []string{"/new", "/reset", "/sessions", "/resume 1", "/NEW@test_bot"} {
 		e := newEnv(t, Config{}, nil)
 		ev := message("telegram:user:42", "Igor", text)
 		e.turn(t, ev)

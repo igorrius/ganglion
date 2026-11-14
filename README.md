@@ -1,64 +1,100 @@
 # ganglion
 
-A distributed agent network in Go. The agent designs automations with a
-model, then compiles regular tasks into small WASM modules ("reflexes") that
-run on edge nodes without the model. The model is called only on exceptions.
+A self-hosted agent in Go that talks to you in Telegram, remembers, and
+builds its own automations. A routine task the agent has worked out is
+compiled into a small WASM module (a "reflex") that then runs on a schedule
+with no model at all; the model is called for conversation and for
+exceptions.
 
-Status: early R&D, nothing runs yet. Versions are 0.x and the API is unstable.
+The long-term shape is a network of nodes: a core that holds conversations
+and memory, edge runners next to devices, and workers where the model
+runtimes are. Today it is one process that carries all three roles.
 
-## Shape
+## Status
 
-- **core** — conversation history, memory, the model router, the tool
-  registry, guaranteed delivery (inbox/outbox).
-- **edge** — the runner next to devices: WASM modules (wazero), local
-  policies, a scheduler, an embedded NATS leaf node for offline buffering.
-- **worker** — model execution where resources are (API providers, Ollama,
-  the user's own Claude Code CLI).
+**Early, 0.x, no guarantees.** One person builds it on weekends, with
+Claude writing most of the code. The repository is open so that people can
+read it, try it and report bugs; it is not a released product. Formats,
+commands and the configuration file change without notice, and an issue may
+wait for an answer. The public release is planned for a later phase
+([ADR-0082](docs/adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)).
 
-One binary; roles are enabled with flags. A single Raspberry Pi can carry
-all three.
+One node has been running the author's family bot since November 2026.
 
-## First milestone
+## What works today
 
-The Deye battery monitor as a WASM module, plus staged load shedding through
-Tuya smart plugs: below 50% charge the big boiler turns off, below 40% the
-kitchen one. It runs without a model and escalates only on errors.
+- **A Telegram agent** in private chats and in groups (it answers in a
+  group only when addressed), with an access list: strangers get no reply.
+- **Models by purpose** from one file: the `claude` CLI on your own
+  subscription, or any OpenAI-compatible API.
+- **Memory** kept by topic in plain files, sessions, reminders and
+  scheduled tasks.
+- **Tools under policies:** web search and reading, host commands in a
+  sandbox (Landlock, no new privileges, a clean environment), each
+  state-changing action confirmed by a button.
+- **Reflex modules:** the agent writes a module in Rust, the node builds it
+  to `wasm32-wasip1` and, after the owner approves, runs it in
+  [wazero](https://wazero.io) on a schedule, with only the capabilities
+  its manifest asks for. Modules are versioned and roll back.
+- **Skills:** procedures in Markdown the agent reads before it acts.
+- **An encrypted secret store**, one configuration file with a JSON schema,
+  logs and a tool-call journal, and read-only diagnostics over MCP
+  (`ganglion mcp`).
 
-## Building
+Not built yet: nodes talking to each other (the network of the name),
+prebuilt binaries and images, updating a node from a release, a user guide.
+[docs/README.md](docs/README.md) says where the work is right now.
 
-Requires Go 1.27 and, for linting, golangci-lint v2 built with Go 1.27.
+## Build and run
+
+Needs Linux and Go 1.27. Host commands and module builds need kernel 6.2 or
+later (Landlock); building modules needs Rust with the `wasm32-wasip1`
+target. Linting needs golangci-lint v2 built with Go 1.27.
 
 ```sh
-make check                      # lint, test, build
-./bin/ganglion version          # version, commit, toolchain
+make build                      # ./bin/ganglion
+./bin/ganglion version
 
-# Run: settings live in ganglion.yaml beside the database; secrets stay in the environment
-# or in the node's encrypted store.
-cp ganglion.example.yaml ganglion.yaml   # set telegram.admin and the models you use
-export TELEGRAM_BOT_TOKEN=...                      # and the provider keys the file names
-./bin/ganglion run --roles core,edge,worker
+cp ganglion.example.yaml ganglion.yaml
+# In ganglion.yaml: set telegram.admin to telegram:user:<your Telegram id>
+# and choose the providers and models you have.
 
-# A module's secret: stored encrypted, read at the module's next run, no restart.
-printf %s "$VALUE" | ./bin/ganglion secret set --module <name> NAME
-
-make example-deye modrun        # build the Deye example module (Rust) and the module runner
-./bin/modrun -wasm bin/deye-reader.rust.wasm \
-  -manifest examples/modules/deye-reader/manifest.yaml -config inverter_sn=<serial>
+export TELEGRAM_BOT_TOKEN=...   # from @BotFather; plus the provider keys the file names
+./bin/ganglion run
 ```
 
-The Deye reader is an example the agent copies into its workspace, builds
-and installs ([examples/modules/deye-reader](examples/modules/deye-reader/README.md)).
-`make modules` and `make modules-tinygo` build the Go reference reader
-(`internal/deyeref`) with Go and TinyGo 0.44+; `make bench` compares the
-builds. Module secrets are read from `.env`.
+The file holds every setting and no secret: a secret is named there as
+`env:NAME` (an environment variable) or `store:NAME` (the node's encrypted
+store, filled with `ganglion secret set NAME`). The node keeps its database
+beside the file.
 
-## Design
+In a container: the [`Dockerfile`](Dockerfile) builds an image with the
+node, Rust and the `claude` CLI, running as an unprivileged user with its
+data on a volume at `/data`.
+[docs/deploy-railway.md](docs/deploy-railway.md) is the runbook for one
+hosting platform; most of it applies to any.
 
-The implementation spec — requirements, architecture, protocol drafts and
-the phased plan with exit gates — is in [docs/spec.md](docs/spec.md).
+An example module, the reader of a Deye solar inverter, is in
+[examples/modules/deye-reader](examples/modules/deye-reader/README.md).
 
-The underlying product and architecture decision lives in a design document
-(private for now).
+## Documentation
+
+`docs/` is the project's engineering record, written as the work goes. It
+is not a user guide yet.
+
+| Question | Read |
+|---|---|
+| Where is the project now? | [docs/README.md](docs/README.md) |
+| What is being built, and in what order? | [docs/spec.md](docs/spec.md) |
+| What does it look like inside? | [docs/architecture/](docs/architecture/README.md) |
+| Why was it decided this way? | [docs/adr/](docs/adr/README.md) |
+| How is the code written? | [docs/conventions.md](docs/conventions.md) |
+
+## Reporting bugs and vulnerabilities
+
+Bugs go to [GitHub Issues](https://github.com/igorrius/ganglion/issues).
+A vulnerability is reported privately: see [SECURITY.md](SECURITY.md).
+Before a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

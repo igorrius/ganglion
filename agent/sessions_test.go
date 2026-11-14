@@ -96,7 +96,7 @@ func TestNewOnEmptySessionArchivesNothing(t *testing.T) {
 func TestCommandWithBotSuffix(t *testing.T) {
 	e := newEnv(t, Config{}, nil)
 	e.turn(t, message("telegram:user:42", "Igor", "раз"))
-	if out := e.turn(t, message("telegram:user:42", "Igor", "/new@ganglion_test_bot")); out[0].Text != "New session started." {
+	if out := e.turn(t, message("telegram:user:42", "Igor", "/new@test_bot")); out[0].Text != "New session started." {
 		t.Fatalf("out %+v", out)
 	}
 }

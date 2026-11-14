@@ -548,7 +548,7 @@ dependencies.
   clock: a message 7 h after the last one → the old session archived,
   the model sees no old messages), `TestWithinIdleKeepsSession` (5 h),
   `TestNewArchivesAndResets`, `TestNewOnEmptySessionArchivesNothing`,
-  `TestCommandWithBotSuffix` (`/new@ganglion_test_bot`),
+  `TestCommandWithBotSuffix` (`/new@test_bot`),
   `TestSessionsList` (format and order), `TestResumeSwapsSessions` (the
   resumed history reaches the model; the replaced one is archived),
   `TestResumeBadIndex`, `TestArchiveRerunIsIdempotent`.
@@ -699,7 +699,7 @@ showed it raw.
   `GANGLION_MODELS_FILE=models.local.yaml` (git-ignored) and
   `OPENROUTER_API_KEY` from `.env`. The CLI uses the owner's local login.
 
-  Run 2026-11-02 on @ganglion_test_bot by the owner. Haiku answered
+  Run 2026-11-02 on @test_bot by the owner. Haiku answered
   through the CLI, under a persona from workspace files. A table and a Go
   code block arrived formatted after task 11. The run surfaced four
   changes, each made the same day:

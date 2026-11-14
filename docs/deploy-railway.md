@@ -50,7 +50,7 @@ the provider at deploy time, with the owner:
 
 1. Create a second service in the same project as the current bot, from this
    repository and branch (Railway builds the `Dockerfile` by itself), or with
-   the CLI: `railway add -s ganglion`, then `railway up -s ganglion` from the
+   the CLI: `railway add -s <service>`, then `railway up -s <service>` from the
    repository. Always name the service: `railway link` selects the current
    bot's service by itself. Do not point it at the current bot's token: use
    the test bot's.
@@ -145,8 +145,8 @@ setpriv --reuid=10001 --regid=10001 --clear-groups \
 - **Moving a secret from a variable:** the command above reads the variable
   the service still has. When `/secrets` shows the name and the module's
   next run is healthy, delete the variable in Railway
-  (`railway variable delete NAME -s ganglion`) and then redeploy
-  (`railway redeploy -s ganglion --yes`): deleting a variable does not
+  (`railway variable delete NAME -s <service>`) and then redeploy
+  (`railway redeploy -s <service> --yes`): deleting a variable does not
   restart the service, and the running container keeps the old value until
   it does. A module reads its own stored secret first and the environment
   second, so both may exist during the move.
@@ -179,7 +179,7 @@ node instead (`telegram.updates: webhook`, R-DLV-18,
 [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)):
 
 1. Generate a domain for the service (Settings → Networking, or `railway
-   domain -s ganglion`). It has the form
+   domain -s <service>`). It has the form
    `<service>-<environment>.up.railway.app`; no target port has to be chosen
    when the node listens on the port Railway gives (`PORT`, `8080` on
    2026-11-13).
@@ -202,7 +202,7 @@ node instead (`telegram.updates: webhook`, R-DLV-18,
    restart, so a wrong address never cuts the chat off (R-DLV-19).
 
 Deploying from a git worktree: `railway up` uploads the main checkout, not
-the worktree. Name the folder: `railway up <path> --path-as-root -s ganglion`.
+the worktree. Name the folder: `railway up <path> --path-as-root -s <service>`.
 
 The way back: set `telegram.updates: polling` (the `http` section may stay
 or go) and restart. The node removes the webhook it set and polls. The

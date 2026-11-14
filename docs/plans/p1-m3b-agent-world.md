@@ -1078,7 +1078,7 @@ OpenRouter. Only these parts are test-only:
   address checks still run;
 - clocks that the test moves, for confirmations and the scheduler.
 
-12b is the same scenarios by hand on @ganglion_test_bot with `make
+12b is the same scenarios by hand on @test_bot with `make
 live-agent`, by the owner. Steps 1–5 are ticked as scripted. **The
 owner's first live run (2026-11-03) found seven issues, fixed under
  rulings R38–R47; the owner merged M3b and rechecks the mechanics in
@@ -1096,7 +1096,7 @@ owner's first live run (2026-11-03) found seven issues, fixed under
    history; the model had said a reminder "may not have fired" minutes
    after it was sent.
 
-- [x] **Step 1: Rates, live on @ganglion_test_bot,** with Haiku through
+- [x] **Step 1: Rates, live on @test_bot,** with Haiku through
   the CLI and with the API model (scripted 2026-11-03; on the bot:
   pending):
   1. "Every hour, until I cancel, send me the hryvnia rates for USD and

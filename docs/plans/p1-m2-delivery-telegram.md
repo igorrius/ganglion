@@ -656,7 +656,7 @@ could collide with old ones and be dropped as duplicates.
      stops polling and sends one alert.
   5. Kill and restart during a burst of 20 messages: none is lost.
 
-  Run 2026-11-02 on a dedicated test bot, @ganglion_test_bot (the
+  Run 2026-11-02 on a dedicated test bot, @test_bot (the
   development bot has another project's webhook; our run met it with
   `409`, stopped polling and sent one alert per start, which is check 4's
   path against a webhook):
