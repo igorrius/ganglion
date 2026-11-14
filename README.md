@@ -3,7 +3,6 @@ This README is the project's front page. Keep the order of sections:
 pitch and badges, how it works, status, what works, install, documentation,
 contributing, license. Install has fixed subsections: when a step lands,
 fill its subsection in place instead of adding a new section:
-- "From a container image" is filled by #179 (images published by tag);
 - "Configure" and "First conversation" link into the user guide (#177)
   once it is on the site.
 The documentation site is https://igorrius.github.io/ganglion/: the user
@@ -87,7 +86,7 @@ up to date.
 | **Operations** | An encrypted secret store, one configuration file with a JSON schema, logs, a tool-call journal, `/status`, read-only diagnostics over MCP (`ganglion mcp`). |
 
 Not built yet: nodes talking to each other (the network of the name),
-prebuilt binaries and images, updating a node from a release, a user guide.
+prebuilt binaries, updating a node from a release in the chat.
 
 ## Install
 
@@ -100,15 +99,21 @@ guide has every step in full; below is the short version.
 
 ### From a container image
 
-Not published yet: images built by tag are the next install path
-([#179](https://github.com/igorrius/ganglion/issues/179)). Until then,
-build the image yourself: the [`Dockerfile`](Dockerfile) holds the node,
-Rust and the `claude` CLI, runs as an unprivileged user and keeps its data
-on a volume at `/data`.
+Each release tag publishes an image for `linux/amd64` and `linux/arm64`
+(a Raspberry Pi): the node, Rust and the `claude` CLI, run as an
+unprivileged user, with its data on a volume at `/data`. Pin a version
+(`0.1.0`) or a line (`0.1`) instead of `latest` once you rely on it.
 
 ```sh
-docker build -t ganglion .
+docker run -d --name ganglion --restart on-failure \
+  -v ganglion-data:/data \
+  -e TELEGRAM_BOT_TOKEN=... -e CLAUDE_CODE_OAUTH_TOKEN=... \
+  ghcr.io/igorrius/ganglion:latest
 ```
+
+The settings file goes to `/data/ganglion.yaml` (see Configure below);
+[Install](https://igorrius.github.io/ganglion/getting-started/install/)
+has the details, and how to build the image yourself.
 
 ### From source
 

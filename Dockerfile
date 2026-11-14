@@ -1,6 +1,8 @@
 # The ganglion node with a Rust toolchain for module builds (R-RUN-9, R-LS-4).
-# Build:  docker build -t ganglion:m4 .
-# Run:    docker run -v ganglion-data:/data ganglion:m4
+# Releases publish it as ghcr.io/igorrius/ganglion for amd64 and arm64
+# (ADR-0086, .github/workflows/image.yml, checked by scripts/check-image.sh).
+# Build:  docker build -t ganglion .
+# Run:    docker run -v ganglion-data:/data ganglion
 # The runbook is docs/deploy-railway.md.
 
 FROM golang:1.27 AS build

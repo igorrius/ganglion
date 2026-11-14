@@ -91,6 +91,7 @@ considered, how they compare, the decision and its consequences. See
 | [0083](0083-the-repository-holds-the-core-and-no-users-module.md) | The repository holds the core and no user's module | Accepted | 2026-11-14 |
 | [0084](0084-publish-docs-with-zensical-on-github-pages.md) | Publish docs/ as a site with Zensical on GitHub Pages | Superseded by 0085 (scope) | 2026-11-14 |
 | [0085](0085-the-site-publishes-the-user-guide-not-the-engineering-record.md) | The site publishes the user guide, not the engineering record | Accepted | 2026-11-14 |
+| [0086](0086-publish-the-nodes-image-to-ghcr-on-a-core-tag.md) | Publish the node's image to GHCR on a core tag | Accepted | 2026-11-14 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

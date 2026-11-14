@@ -1082,6 +1082,7 @@ undone with `git revert`.
 | Exhausted limits | Regular work as reflexes with no model where it can be; a model out of limits cools down and the next one in its purpose's list takes over; usage counter in `turns` | P1 |
 | Self-modification broke something | Regression scenarios (question → expected tool call) after every change | P3 |
 | A release that is not the project's becomes the node | A release is installed and started only with the project's signature, from GitHub's hosts, never older than the running version, and only at an admin's command; the agent has no tool for it (R-UPD-2–4, [ADR-0081](adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)) | P1 (M6) |
+| An image that is not the project's is run as a node | The image is pushed only by the release workflow on a tag of a commit on `master`, with every action in its pushing jobs pinned by commit SHA; its index carries a provenance attestation a user checks with `gh attestation verify` (R-UPD-8, [ADR-0086](adr/0086-publish-the-nodes-image-to-ghcr-on-a-core-tag.md)) | P1 |
 | Lost volume or corrupted DB | Daily backup of SQLite (`VACUUM INTO`) and the memory git repo to S3 or a private remote | P1 |
 
 ### 7.9. Observability
@@ -1455,7 +1456,8 @@ phase plan).
 A merge changes nothing on a running node: a node moves to a new version
 only at its owner's command, from a release the project signed
 ([ADR-0081](adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)).
-The first install of a node is not covered here (section 14).
+A node is first installed from the image a core tag publishes (R-UPD-8);
+other install paths are in section 14.
 
 - **R-UPD-1.** A core release is a tag `vX.Y.Z` on a commit of `master`.
   CI builds the binary for `linux/amd64` and `linux/arm64`, writes
@@ -1492,6 +1494,16 @@ The first install of a node is not covered here (section 14).
 - **R-UPD-7.** Nothing a release page says (its title, its notes) reaches
   a reply, the history or the model: the node shows the version, the date
   and a link.
+- **R-UPD-8.** The same tag publishes the node's container image to
+  `ghcr.io/igorrius/ganglion` for `linux/amd64` and `linux/arm64`, built
+  from the repository's `Dockerfile` with the tag as the version
+  `ganglion version` reports. It is tagged `X.Y.Z`; `X.Y` and `latest`
+  follow the newest release of the line and of all, never a pre-release.
+  Each platform's image is checked before it is published: the version,
+  the toolchain as the node's user, and a start with the user guide's
+  minimum configuration. The index carries a provenance attestation of
+  the workflow
+  ([ADR-0086](adr/0086-publish-the-nodes-image-to-ghcr-on-a-core-tag.md)).
 
 <a id="8-first-reflex-deye-p1"></a>
 
@@ -2020,9 +2032,10 @@ Reviewed at each gate.
   Telegram webhook only (R-CFG-11,
   [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)); pages
   and `initData` stay here.
-- Packaging and install paths for other users: a Docker image, a Railway
-  template, a Helm chart, a systemd unit for a Pi, `ganglion init` (closer
-  to the public release in P3).
+- Packaging and install paths for other users beyond the image published
+  by tag (R-UPD-8, [ADR-0086](adr/0086-publish-the-nodes-image-to-ghcr-on-a-core-tag.md)):
+  a Railway template, a Helm chart, a systemd unit for a Pi,
+  `ganglion init` (closer to the public release in P3).
 - First-run onboarding without hand-written ids: the node prints a one-time
   pairing code, and the first person to send it to the bot becomes the
   admin (the same idea as node enrolment with a one-time token, 9.3).

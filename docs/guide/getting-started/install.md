@@ -2,7 +2,33 @@
 
 ## From a container image
 
-Prebuilt images are not published yet. They are tracked in [issue 179](https://github.com/igorrius/ganglion/issues/179). Until then, build the image yourself from a clone of the repository:
+Each release is published as an image for `linux/amd64` and `linux/arm64` (a Raspberry Pi 4 or 5 with a 64-bit system):
+
+```sh
+docker pull ghcr.io/igorrius/ganglion:latest
+```
+
+The tags are:
+
+| Tag | Points at |
+|---|---|
+| `latest` | The newest release |
+| `<major>.<minor>`, for example `0.1` | The newest release of that line |
+| `<version>`, for example `0.1.0` | Exactly that release; it never moves |
+
+In 0.x a new minor version can change the configuration or stored formats, so pin a line or a version once you rely on the node. The [package page](https://github.com/igorrius/ganglion/pkgs/container/ganglion) lists every published version. `ganglion version` inside the container prints the release tag.
+
+The image is about 1.2 GB. Most of it is the Rust toolchain that module builds need. It also holds the `claude` CLI.
+
+To check that an image was built by the project's release workflow from the repository, use the GitHub CLI:
+
+```sh
+gh attestation verify oci://ghcr.io/igorrius/ganglion:latest -R igorrius/ganglion
+```
+
+### Build the image yourself
+
+Build it from a clone when you want unreleased code or an image without the `claude` CLI (`--build-arg CLAUDE_CLI=off`):
 
 ```sh
 git clone https://github.com/igorrius/ganglion.git
@@ -10,7 +36,7 @@ cd ganglion
 docker build -t ganglion .
 ```
 
-The image is about 1.2 GB. Most of it is the Rust toolchain that module builds need. To leave the `claude` CLI out, add `--build-arg CLAUDE_CLI=off`.
+Then use `ganglion` instead of `ghcr.io/igorrius/ganglion:latest` in the commands below.
 
 ### Run it
 
@@ -21,7 +47,7 @@ docker run -d --name ganglion --restart on-failure \
   -v ganglion-data:/data \
   -e TELEGRAM_BOT_TOKEN=... \
   -e CLAUDE_CODE_OAUTH_TOKEN=... \
-  ganglion
+  ghcr.io/igorrius/ganglion:latest
 ```
 
 Things to know:
