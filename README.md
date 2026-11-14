@@ -165,7 +165,9 @@ guide is coming ([#177](https://github.com/igorrius/ganglion/issues/177)).
 
 ## Contributing and security
 
-Bugs and ideas go to [GitHub Issues](https://github.com/igorrius/ganglion/issues).
+Bugs and ideas go to [GitHub Issues](https://github.com/igorrius/ganglion/issues);
+what is in work and what comes next is on the
+[project board](https://github.com/users/igorrius/projects/13).
 Before a pull request, read [CONTRIBUTING.md](CONTRIBUTING.md).
 A vulnerability is reported privately: see [SECURITY.md](SECURITY.md).
 
