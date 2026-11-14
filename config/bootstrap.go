@@ -74,9 +74,8 @@ type Bootstrap struct {
 	// without one), which the parts that edit its modules: section write;
 	// "" is ganglion.yaml beside the database.
 	SettingsPath string
-	// Examples is the folder of example modules module.import copies from;
-	// "" finds the image's /app/examples/modules or examples/modules where
-	// the node runs (a checkout).
+	// Examples is a folder of module templates module.import copies from,
+	// in place of the ones the binary ships; "" uses the binary's.
 	Examples string
 	// Secrets is where the node reads secrets that are not in the file, such
 	// as those a module's manifest names (R-RUN-1); nil reads none.

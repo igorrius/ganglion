@@ -150,7 +150,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	if err != nil {
 		return err
 	}
-	b := config.Bootstrap{Examples: examplesFolder(), DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
+	b := config.Bootstrap{DB: filepath.Join(n.dir, "node.db"), BotToken: labToken, BotAPIURL: fake.URL(),
 		Admin: fmt.Sprintf("telegram:user:%d", labChat), Build: rustenv.LocalFromEnv(os.Getenv), Secrets: labSecrets(), MasterKey: filepath.Join(n.dir, vault.KeyFile), MetricsAddr: "off", LogDir: n.logs, ModulesDir: filepath.Join(n.dir, "modules"),
 		Agent: config.AgentSettings{Models: &models, Keys: keys, Workspace: n.ws, DailyBudgetUSD: 1, DailyTurns: 300,
 			DailyTokens: 1_000_000, SessionIdle: 6 * time.Hour, TZ: loc, Memory: config.DefaultMemory()}, Timeouts: labTimeouts()}
@@ -198,17 +198,6 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	n.db = n.lab.DB
 	n.peer = NewTelegram(fake, labChat, labOwner)
 	return nil
-}
-
-// examplesFolder is the repository's examples/modules, where module.import
-// copies from; "" outside a repository, which leaves the node to look for the
-// image's or the working folder's own.
-func examplesFolder() string {
-	root, err := RepoRoot()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(root, "examples", "modules")
 }
 
 // labSecrets is the node's secret source: the reader template's secret is

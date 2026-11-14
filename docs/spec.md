@@ -1522,7 +1522,10 @@ which belongs with the flow engine (9.6).
   cells), builds and installs it. Every reader reports the cell `sample`,
   the whole reading, and the cells its logic names. The rules of R-RDR-2
   and R-RDR-3 are in a file the agent does not change and whose tests do
-  not depend on the service.
+  not depend on the service. The templates are embedded in the binary,
+  as the built-in skills are: each start writes them to `templates/` in
+  the modules folder, replacing what was there, so a node's templates
+  are those of its own version and an update of the node updates them.
 - **R-RDR-2.** A reader polls on its cron. On HTTP 429 it waits until
   `Retry-After` has passed; a reading older than the reader's limit is
   reported once per episode (`stale`); a read the service refuses (HTTP

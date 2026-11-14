@@ -120,10 +120,9 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 		"destination.list", "destination.set", "destination.remove", "module.notify_to", "group.disconnect"}
 	if _, err := exec.LookPath("git"); err == nil {
 		// The module tools need the workspace's git too; module.import is
-		// on offer only where the node finds its examples folder, which a
-		// test's folder has not.
+		// among them on every node, since the binary ships the templates.
 		want = append(want, "memory.audit", "memory.forget", "memory.read", "memory.recall", "memory.write", "persona.propose",
-			"module.build", "module.install", "module.read", "module.status", "module.write")
+			"module.build", "module.import", "module.install", "module.read", "module.status", "module.write")
 	}
 	// host.exec is registered always and on offer only while the sandbox is
 	// ready (R-CMD-1, R-CMD-3).

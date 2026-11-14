@@ -21,6 +21,7 @@ covers:
   - modstore/local.go
   - modhost/**
   - examples/modules/reader-template/**
+  - examples/modules/templates.go
 repeat: 1
 model: scripted
 config:

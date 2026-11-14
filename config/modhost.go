@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/cells"
+	templates "github.com/igorrius/ganglion/examples/modules"
 	"github.com/igorrius/ganglion/gitrepo"
 	"github.com/igorrius/ganglion/groups"
 	"github.com/igorrius/ganglion/modhost"
@@ -95,6 +97,10 @@ func ModuleTools() do.Provider[Moduling] {
 			return Moduling{}, err
 		}
 		b := do.MustInvoke[Bootstrap](i)
+		examples, err := examplesDir(b)
+		if err != nil {
+			return Moduling{}, err
+		}
 		return Moduling{Tools: builtin.NewModuleTools(builtin.Modules{
 			Workspace:   ws,
 			Builder:     do.MustInvoke[builder.Builder](i),
@@ -105,7 +111,7 @@ func ModuleTools() do.Provider[Moduling] {
 			Cells:       do.MustInvoke[*cells.Service](i),
 			Host:        do.MustInvoke[*modhost.Host](i),
 			Builds:      buildsDir(b),
-			Examples:    examplesDir(b),
+			Examples:    examples,
 			Provenance:  provenanceDir(b),
 			Now:         time.Now,
 			Queue:       do.MustInvoke[*builtin.BuildQueue](i),
@@ -126,25 +132,26 @@ func provenanceDir(b Bootstrap) string { return filepath.Join(b.ModulesDir, "pro
 // its answer: build-jobs/ in the modules folder, beside the builds.
 func buildJobsDir(b Bootstrap) string { return filepath.Join(b.ModulesDir, "build-jobs") }
 
-// imageExamples is where the container image keeps the example modules.
-const imageExamples = "/app/examples/modules"
-
-// examplesDir is the folder of example modules module.import copies from:
-// the one the command line named, else the image's, else examples/modules
-// in the folder the node runs in (a checkout); "" when there is none.
-func examplesDir(b Bootstrap) string {
-	candidates := []string{imageExamples, filepath.Join("examples", "modules")}
+// examplesDir is the folder of module templates module.import copies from.
+// A node ships its templates in its binary (R-RDR-1): each start writes them
+// to templates/ in the modules folder, beside the builds and out of the
+// command sandbox's reach, so they are always those of the running version.
+// A folder named in Bootstrap replaces them, for a test or a lab; "" when
+// that folder does not exist.
+func examplesDir(b Bootstrap) (string, error) {
 	if b.Examples != "" {
-		candidates = []string{b.Examples}
-	}
-	for _, c := range candidates {
-		abs, err := filepath.Abs(c)
+		abs, err := filepath.Abs(b.Examples)
 		if err != nil {
-			continue
+			return "", fmt.Errorf("config: the templates folder %s: %w", b.Examples, err)
 		}
-		if info, err := os.Stat(abs); err == nil && info.IsDir() {
-			return abs
+		if info, statErr := os.Stat(abs); statErr != nil || !info.IsDir() {
+			return "", nil
 		}
+		return abs, nil
 	}
-	return ""
+	dir := filepath.Join(b.ModulesDir, "templates")
+	if err := templates.Write(dir); err != nil {
+		return "", err
+	}
+	return dir, nil
 }
