@@ -24,13 +24,17 @@ Start here when coming back to the project.
 - **Next:** M6, the agent reconfigures the system. It now includes the
   encrypted secret store (task 6.5,
   [ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), owner,
-  2026-11-13): built the same day on branch `m6-secret-store`
-  ([plan](plans/p1-m6-secret-store.md)): `ganglion secret set|rm|list` on
-  the host, `store:NAME` in `ganglion.yaml`, a scope per module, `/secrets`
-  in the chat, a store that locks on a key that does not fit. Left: the
-  merge, and the owner's live check on Railway (one of `deye-reader`'s
-  secrets moved from a variable into the store,
-  [runbook](deploy-railway.md#module-secrets)). Handing a secret over from
+  2026-11-13): done 2026-11-14 ([plan](plans/p1-m6-secret-store.md)):
+  `ganglion secret set|rm|list` on the host, `store:NAME` in
+  `ganglion.yaml`, a scope per module, `/secrets` in the chat, a store that
+  locks on a key that does not fit. Checked live on Railway
+  ([runbook](deploy-railway.md#module-secrets)): the node made
+  `/data/master.key` at its first start on the new build; `deye-reader`'s
+  four secrets were stored from the service's variables with no restart
+  and its 07:30 UTC run read them from the store; the four variables were
+  then deleted and the service redeployed, and the 08:00 UTC run was
+  healthy with the secrets in the store alone; `/secrets` listed the four
+  names to the owner. Handing a secret over from
   the chat stays open (spec section 11). How the node itself is updated
   is decided in
   [ADR-0081](adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)

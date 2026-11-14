@@ -223,8 +223,8 @@ after it. The node's journal of tool calls agrees with what the owner saw.
 | Step | Result | Evidence |
 |---|---|---|
 | A module's messages routed to a topic | `battery-alerts` goes to the K7 topic | Journal, 15:05 and 15:11 UTC: `module.notify_to` approved; `destination.list` then shows `local/battery-alerts: family-k7`, and `family-k7` is topic 8 of the forum |
-| A message to a topic by a destination's name | Delivered | Journal, 15:19: `message.send` to `family-k7` approved, "message queued for telegram:-1001996291961/8" |
-| A topic the node has not seen, after the changes of the second try | The agent asked for the topic's link in one line; with the link, one call and one confirmation; the message is in the topic | Journal, 16:00: `destination.list` and no send; the owner's chat shows the request for the link. 16:31–16:32: `message.send` with `https://t.me/c/1996291961/175`, one confirmation, "message queued for …/175". No `destination.set`, no memory write |
+| A message to a topic by a destination's name | Delivered | Journal, 15:19: `message.send` to `family-k7` approved, "message queued for telegram:-1001234567890/8" |
+| A topic the node has not seen, after the changes of the second try | The agent asked for the topic's link in one line; with the link, one call and one confirmation; the message is in the topic | Journal, 16:00: `destination.list` and no send; the owner's chat shows the request for the link. 16:31–16:32: `message.send` with `https://t.me/c/1234567890/175`, one confirmation, "message queued for …/175". No `destination.set`, no memory write |
 | A topic's link as an address | Works | The same call |
 
 Not seen in the journal: whether the agent passed the owner's name for

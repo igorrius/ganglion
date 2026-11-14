@@ -35,6 +35,17 @@ the ADRs.
   the diagram on the matching level page.
 - When a spec task or phase closes, update "Where we are" in
   `docs/README.md`.
+- **Nothing real about a running node goes into the repository** (owner,
+  2026-11-14): not in code, tests, docs, plans, ADRs, commit messages or
+  pull requests. That covers the address or domain of a live node, a bot's
+  name, Telegram ids of people, groups and topics, the names of a
+  platform's project and service, serial numbers and account names of
+  devices, and any secret. Real values are used while working (a deploy, a
+  live check) and stay in the environment, the node's own files and the
+  session's notes. A text that needs one takes a placeholder:
+  `example.com`, `telegram:user:123456`, `telegram:-1001234567890`,
+  `@test_bot`, `<service>`. A live check is recorded by what was done and
+  what was seen, without the address it was done on.
 - Docs format: standard Markdown links with relative paths (no
   `[[wikilinks]]`), diagrams as Mermaid `flowchart`, `sequenceDiagram` or
   `stateDiagram-v2`, planned parts drawn dashed.

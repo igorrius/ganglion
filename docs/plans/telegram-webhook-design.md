@@ -104,7 +104,7 @@ http:
   # The public listener, host:port; off runs none.
   addr: off
   # The address the outside world reaches this listener at.
-  # public_url: https://ganglion.up.railway.app
+  # public_url: https://ganglion.example.com
 
 telegram:
   # How updates arrive: polling or webhook.

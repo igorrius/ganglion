@@ -72,17 +72,17 @@ func TestGroupKeyAndChat(t *testing.T) {
 
 func TestParseLink(t *testing.T) {
 	for link, want := range map[string]string{
-		"https://t.me/c/1996291961/8":          "telegram:-1001996291961/8",
-		"https://t.me/c/1996291961/8/1234":     "telegram:-1001996291961/8",
-		" https://t.me/c/1996291961/8?single ": "telegram:-1001996291961/8",
-		"https://t.me/c/1996291961/1":          "telegram:-1001996291961",
+		"https://t.me/c/1234567890/8":          "telegram:-1001234567890/8",
+		"https://t.me/c/1234567890/8/1234":     "telegram:-1001234567890/8",
+		" https://t.me/c/1234567890/8?single ": "telegram:-1001234567890/8",
+		"https://t.me/c/1234567890/1":          "telegram:-1001234567890",
 	} {
 		if got, ok := ParseLink(link); !ok || got != want {
 			t.Errorf("ParseLink(%q) = %q, %v; want %q", link, got, ok, want)
 		}
 	}
-	for _, link := range []string{"", "K7", "https://t.me/family_chat/8", "https://t.me/c/1996291961", "https://evil.example/c/1996291961/8",
-		"https://t.me/c/1996291961/8/9/10", "https://t.me/c/abc/8", "https://t.me/c/1996291961/8 and more", "telegram:-1001/8"} {
+	for _, link := range []string{"", "K7", "https://t.me/family_chat/8", "https://t.me/c/1234567890", "https://evil.example/c/1234567890/8",
+		"https://t.me/c/1234567890/8/9/10", "https://t.me/c/abc/8", "https://t.me/c/1234567890/8 and more", "telegram:-1001/8"} {
 		if got, ok := ParseLink(link); ok {
 			t.Errorf("ParseLink(%q) = %q: not a link to a topic", link, got)
 		}
