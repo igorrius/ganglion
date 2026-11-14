@@ -54,3 +54,5 @@ for the models that work here, and holding for people too) and
 
 By contributing you agree that your work is licensed under the
 [Apache License 2.0](LICENSE).
+
+<!-- review rule test, not to be merged -->
