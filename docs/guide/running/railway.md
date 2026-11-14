@@ -1,6 +1,6 @@
 # Deploying on Railway
 
-This page shows how to run a node on [Railway](https://railway.com). Most of it applies to any container platform. The image is built from the `Dockerfile` in the repository.
+This page shows how to run a node on [Railway](https://railway.com). Most of it applies to any container platform. Railway either runs the project's published image, `ghcr.io/igorrius/ganglion`, or builds the `Dockerfile` from the repository.
 
 ## Before you start
 
@@ -14,7 +14,7 @@ The image is about 1.2 GB, mostly the Rust toolchain. It runs as the user `gangl
 
 ## Create the service
 
-1. Create a new service from the repository. Railway builds the `Dockerfile` by itself. With the CLI: `railway add -s <service>`, then `railway up -s <service>`. Always name the service in CLI commands, so you do not act on another service by accident.
+1. Create a new service from the image `ghcr.io/igorrius/ganglion:<version>` (Railway pulls it, no build), or from the repository (Railway builds the `Dockerfile` by itself). With the CLI, from a clone of the repository: `railway add -s <service>`, then `railway up -s <service>`. Always name the service in CLI commands, so you do not act on another service by accident.
 2. **Add a volume** mounted at `/data`. The image has no `VOLUME` line on purpose, because Railway refuses one.
 3. **Leave the user alone.** Railway mounts volumes as root. Do not set `RAILWAY_RUN_UID=0`: the sandbox and module builds are off for root. The image starts as root only to hand `/data` to uid 10001 and then drops to that user. Check with `ls -ld /data` (owner `ganglion`).
 4. **Set variables:**

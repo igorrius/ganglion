@@ -19,8 +19,13 @@ Start here when coming back to the project.
   [ADR-0085](adr/0085-the-site-publishes-the-user-guide-not-the-engineering-record.md);
   Zensical per
   [ADR-0084](adr/0084-publish-docs-with-zensical-on-github-pages.md));
-  this engineering record stays on GitHub. The image by tag is next
-  ([#179](https://github.com/igorrius/ganglion/issues/179)).
+  this engineering record stays on GitHub. A core tag `vX.Y.Z` now
+  publishes the node's image to `ghcr.io/igorrius/ganglion` for amd64 and
+  arm64, checked on each platform before the push (R-UPD-8,
+  [ADR-0086](adr/0086-publish-the-nodes-image-to-ghcr-on-a-core-tag.md),
+  [#179](https://github.com/igorrius/ganglion/issues/179)); the guide's
+  install page uses it. No core tag is pushed yet: the first one also
+  creates the package, which the owner then makes public once.
 - **The repository holds the core, not anyone's modules** (owner,
   2026-11-14, [ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md),
   spec principle 10): the Go reader of the owner's inverter is removed, and

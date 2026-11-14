@@ -57,14 +57,24 @@ Copying a live `ganglion.db` together with its `-wal` and `-shm` files is not sa
 
 ## Updating
 
-There is no built-in updater yet. To update, get the new code, rebuild and restart:
+There is no built-in updater yet. Take a [backup](#backups) first, because formats can change between 0.x versions, and read the release notes.
+
+With the image, pull the new one and start a new container from it with the same volume and settings:
+
+```sh
+docker pull ghcr.io/igorrius/ganglion:latest
+docker stop ganglion && docker rm ganglion
+# then the same docker run as in Install
+```
+
+From source, get the new code, rebuild and restart:
 
 ```sh
 git pull
-make build        # or: docker build -t ganglion .
+make build
 ```
 
-Then restart the process or container. Module templates and built-in skills update with the program. Take a [backup](#backups) first, because formats can change between 0.x versions. Prebuilt images are planned ([issue 179](https://github.com/igorrius/ganglion/issues/179)).
+Module templates and built-in skills update with the program.
 
 ## Restarting
 

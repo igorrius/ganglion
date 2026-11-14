@@ -1,0 +1,215 @@
+name: Image
+
+# The node's container image (ADR-0086). A core tag vX.Y.Z on a commit of
+# master builds the Dockerfile for linux/amd64 and linux/arm64 on native
+# runners, checks each image, and publishes one multi-platform index to
+# ghcr.io/igorrius/ganglion as X.Y.Z, plus X.Y and latest when the tag is the
+# newest release and not a pre-release. A pull request that changes the image
+# and a run by hand build and check both platforms and push nothing. Module
+# tags (html2md/v…, ADR-0041) never run this.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "docker-entrypoint.sh"
+      - ".dockerignore"
+      - ".github/workflows/image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One release of a tag at a time; a pull request's newer push replaces its
+# older run.
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/igorrius/ganglion
+  PUBLISH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write # push by digest; used on a tag only
+    steps:
+      # Actions in the jobs that can push are pinned by commit SHA (ADR-0086).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0 # tags for the version, master for the tag check
+
+      - name: Version and tag check
+        id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$PUBLISH" = true ]; then
+            echo "$REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || {
+              echo "::error::a core tag is vX.Y.Z or vX.Y.Z-<pre>, not $REF_NAME"
+              exit 1
+            }
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/master || {
+              echo "::error::an image is released only from a commit on master"
+              exit 1
+            }
+            version="$REF_NAME"
+          else
+            version="$(git describe --tags --match 'v*' --always)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "created=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+          echo "version: $version"
+
+      # The docker-container driver keeps the build's cache for the push
+      # below and can attach BuildKit's provenance to the pushed image.
+      - name: Builder
+        run: docker buildx create --use --name ganglion --driver docker-container
+
+      - name: Build
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CREATED: ${{ steps.version.outputs.created }}
+        run: |
+          set -- \
+            --platform "$PLATFORM" \
+            --build-arg "VERSION=$VERSION" \
+            --label "org.opencontainers.image.title=ganglion" \
+            --label "org.opencontainers.image.description=A self-hosted agent node: Telegram, memory, WASM reflex modules" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.url=https://igorrius.github.io/ganglion/" \
+            --label "org.opencontainers.image.licenses=Apache-2.0" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.created=$CREATED"
+          printf '%s\n' "$@" > "$RUNNER_TEMP/build-args"
+          docker buildx build "$@" --load -t ganglion:check .
+
+      - name: Check the image
+        env:
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/check-image.sh ganglion:check "$VERSION" "$ARCH"
+
+      - name: Push by digest
+        if: env.PUBLISH == 'true'
+        env:
+          ARCH: ${{ matrix.arch }}
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          mapfile -t args < "$RUNNER_TEMP/build-args"
+          # The same arguments as the checked build: BuildKit reuses its cache.
+          docker buildx build "${args[@]}" \
+            --provenance=mode=max \
+            --output "type=image,name=$IMAGE,push-by-digest=true,name-canonical=true,push=true" \
+            --metadata-file "$RUNNER_TEMP/metadata.json" .
+          mkdir -p "$RUNNER_TEMP/digests"
+          digest="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata.json")"
+          echo "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          echo "$digest" > "$RUNNER_TEMP/digests/$ARCH"
+          echo "pushed $IMAGE@$digest"
+
+      - if: env.PUBLISH == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  # Joins the platforms into one index, tags it and attests it.
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write # tag the index, push the attestation
+      id-token: write # sign the attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      # X.Y moves only to the highest release of its line and latest only to
+      # the highest release of all, so a patch on an older line does not take
+      # latest back. A pre-release gets its exact tag only.
+      - name: Tags
+        id: tags
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          v="${REF_NAME#v}"
+          minor="${v%.*}"
+          newest() { git tag --list "$1" | grep -Fv -e - | sort -V | tail -1; }
+          tags="$IMAGE:$v"
+          case "$v" in
+            *-*) echo "pre-release: $v only" ;;
+            *)
+              if [ "$(newest "v$minor.*")" = "$REF_NAME" ]; then
+                tags="$tags $IMAGE:$minor"
+              fi
+              if [ "$(newest 'v*.*.*')" = "$REF_NAME" ]; then
+                tags="$tags $IMAGE:latest"
+              fi
+              ;;
+          esac
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "tags: $tags"
+
+      - name: Join the platforms
+        id: index
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          args=()
+          for t in $TAGS; do args+=(-t "$t"); done
+          for f in "$RUNNER_TEMP"/digests/*; do args+=("$IMAGE@$(cat "$f")"); done
+          [ "$(ls "$RUNNER_TEMP"/digests | wc -l)" = 2 ] || { echo "::error::expected two platform digests"; exit 1; }
+          docker buildx imagetools create "${args[@]}" \
+            --annotation "index:org.opencontainers.image.title=ganglion" \
+            --annotation "index:org.opencontainers.image.description=A self-hosted agent node: Telegram, memory, WASM reflex modules" \
+            --annotation "index:org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --annotation "index:org.opencontainers.image.url=https://igorrius.github.io/ganglion/" \
+            --annotation "index:org.opencontainers.image.licenses=Apache-2.0" \
+            --annotation "index:org.opencontainers.image.version=$REF_NAME" \
+            --annotation "index:org.opencontainers.image.revision=$GITHUB_SHA"
+          docker buildx imagetools inspect "$IMAGE:${REF_NAME#v}"
+          digest="$(docker buildx imagetools inspect "$IMAGE:${REF_NAME#v}" --format '{{json .Manifest}}' | jq -r .digest)"
+          echo "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.index.outputs.digest }}
+          push-to-registry: true

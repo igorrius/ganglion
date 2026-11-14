@@ -27,7 +27,7 @@ A reflex gets only the capabilities its manifest asks for, every build is versio
 - Reflex modules the agent writes, builds and runs after you approve them, with versions and rollback.
 - An encrypted secret store, one configuration file, logs, `/status` and read-only diagnostics.
 
-Not built yet: nodes talking to each other, prebuilt binaries and images, and updating a node from a release.
+Not built yet: nodes talking to each other, prebuilt binaries, and updating a node from inside the chat.
 
 ## Status: 0.x
 
