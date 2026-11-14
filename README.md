@@ -6,8 +6,9 @@ fill its subsection in place instead of adding a new section:
 - "From a container image" is filled by #179 (images published by tag);
 - "Configure" and "First conversation" link into the user guide (#177)
   once it is on the site.
-The documentation site is https://igorrius.github.io/ganglion/ (ADR-0084);
-the repository's "About" box links to it.
+The documentation site is https://igorrius.github.io/ganglion/: the user
+guide in docs/guide/ (ADR-0085); the repository's "About" box links to it.
+Install steps here stay short and link to the guide's pages.
 -->
 
 <h1 align="center">ganglion</h1>
@@ -28,7 +29,7 @@ the repository's "About" box links to it.
 <p align="center">
   <a href="https://igorrius.github.io/ganglion/">Documentation</a> ·
   <a href="#install">Install</a> ·
-  <a href="https://igorrius.github.io/ganglion/architecture/">Architecture</a> ·
+  <a href="https://igorrius.github.io/ganglion/getting-started/install/">Install guide</a> ·
   <a href="https://github.com/igorrius/ganglion/issues">Report a bug</a>
 </p>
 
@@ -70,7 +71,7 @@ wait for an answer. The public release is planned for a later phase
 ([ADR-0082](docs/adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)).
 
 One node has been running the author's family bot since November 2026.
-[Where we are](https://igorrius.github.io/ganglion/#where-we-are) is kept
+[Where we are](docs/README.md#where-we-are) is kept
 up to date.
 
 ## What works today
@@ -94,6 +95,8 @@ ganglion runs on **Linux**. Host commands and module builds need kernel 6.2
 or later (Landlock). You need a Telegram bot token from
 [@BotFather](https://t.me/BotFather), your Telegram user id, and access to
 at least one model (the `claude` CLI or an OpenAI-compatible API key).
+The [Getting started](https://igorrius.github.io/ganglion/getting-started/requirements/)
+guide has every step in full; below is the short version.
 
 ### From a container image
 
@@ -146,22 +149,25 @@ service's numbers into cells, and a reflex that reacts to cells and writes
 to you.
 
 Running on a hosting platform:
-[the Railway runbook](https://igorrius.github.io/ganglion/deploy-railway/);
+[Deploying on Railway](https://igorrius.github.io/ganglion/running/railway/);
 most of it applies to any.
 
 ## Documentation
 
-The documentation site is **<https://igorrius.github.io/ganglion/>**. Today
-it is the project's engineering record, written as the work goes; a user
-guide is coming ([#177](https://github.com/igorrius/ganglion/issues/177)).
+**User guide: <https://igorrius.github.io/ganglion/>**: install,
+configure, commands, modules, operations, troubleshooting.
 
-| Question | Read |
+| You want to | Read |
 |---|---|
-| Where is the project now? | [Where we are](https://igorrius.github.io/ganglion/) |
-| What is being built, and in what order? | [Specification](https://igorrius.github.io/ganglion/spec/) |
-| What does it look like inside? | [Architecture](https://igorrius.github.io/ganglion/architecture/) |
-| Why was it decided this way? | [Decision records](https://igorrius.github.io/ganglion/adr/) |
-| How is the code written? | [Conventions](https://igorrius.github.io/ganglion/conventions/) |
+| Install and run a node | [Getting started](https://igorrius.github.io/ganglion/getting-started/requirements/) |
+| Know every command and setting | [Commands](https://igorrius.github.io/ganglion/using/commands/), [Configuration reference](https://igorrius.github.io/ganglion/running/configuration/) |
+| Fix something | [Troubleshooting](https://igorrius.github.io/ganglion/troubleshooting/) |
+
+The engineering record lives in the repository, beside the code:
+[where we are](docs/README.md), the [specification](docs/spec.md),
+[architecture](docs/architecture/README.md),
+[decision records](docs/adr/README.md) and
+[conventions](docs/conventions.md).
 
 ## Contributing and security
 

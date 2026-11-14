@@ -78,12 +78,16 @@ the ADRs.
     format fixes.
 - Docs format: standard Markdown links with relative paths (no
   `[[wikilinks]]`), diagrams as Mermaid `flowchart`, `sequenceDiagram` or
-  `stateDiagram-v2`, planned parts drawn dashed. `docs/` is also published
-  as [a site](https://igorrius.github.io/ganglion/)
-  ([ADR-0084](docs/adr/0084-publish-docs-with-zensical-on-github-pages.md)),
-  so: a link from `docs/` to a file outside it is a full GitHub link
-  (`https://github.com/igorrius/ganglion/blob/master/...`); a placeholder
-  in prose is always in backticks (`` `<name>` ``), since a bare tag
-  vanishes on GitHub and can swallow a page on the site. The `Docs`
-  workflow builds strictly, so a broken link or anchor fails the pull
-  request.
+  `stateDiagram-v2`, planned parts drawn dashed. A placeholder in prose is
+  always in backticks (`` `<name>` ``): a bare tag vanishes on GitHub and
+  can swallow a page on the site.
+- **The user guide is `docs/guide/`**, published as
+  [the site](https://igorrius.github.io/ganglion/)
+  ([ADR-0085](docs/adr/0085-the-site-publishes-the-user-guide-not-the-engineering-record.md)).
+  The rest of `docs/` is the engineering record and stays on GitHub. A
+  change to a command, a setting, the install path or anything else a user
+  sees updates the guide in the same pull request. In the guide: write for
+  someone running a node (no spec ids, no ADR talk), placeholders only, a
+  link outside `docs/guide/` is a full GitHub link, a new page gets a line
+  in `mkdocs.yml`'s `nav`. The `Docs` workflow builds strictly, so a broken
+  link or anchor fails the pull request.

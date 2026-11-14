@@ -14,11 +14,13 @@ Start here when coming back to the project.
   Next for outside readers, each its own step: a user guide and a
   documentation site, and an image published by tag
   ([#176](https://github.com/igorrius/ganglion/issues/176)). The site is
-  up: `docs/` is published at <https://igorrius.github.io/ganglion/> by
-  Zensical from `master`
-  ([ADR-0084](adr/0084-publish-docs-with-zensical-on-github-pages.md),
-  [#178](https://github.com/igorrius/ganglion/issues/178)); the guide and
-  the image are next.
+  up at <https://igorrius.github.io/ganglion/> and holds the user guide
+  (`docs/guide/`,
+  [ADR-0085](adr/0085-the-site-publishes-the-user-guide-not-the-engineering-record.md);
+  Zensical per
+  [ADR-0084](adr/0084-publish-docs-with-zensical-on-github-pages.md));
+  this engineering record stays on GitHub. The image by tag is next
+  ([#179](https://github.com/igorrius/ganglion/issues/179)).
 - **The repository holds the core, not anyone's modules** (owner,
   2026-11-14, [ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md),
   spec principle 10): the Go reader of the owner's inverter is removed, and
