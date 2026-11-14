@@ -301,8 +301,8 @@ func TestConcurrentUpdatesInstallOnce(t *testing.T) {
 
 func TestUnknownModule(t *testing.T) {
 	s := newEnv(t).open(t)
-	if _, err := s.Update(context.Background(), "deye", fakeSource{}); !errors.Is(err, modstore.ErrUnknownModule) {
-		t.Fatalf("Update(deye) = %v", err)
+	if _, err := s.Update(context.Background(), "demo", fakeSource{}); !errors.Is(err, modstore.ErrUnknownModule) {
+		t.Fatalf("Update(demo) = %v", err)
 	}
 }
 

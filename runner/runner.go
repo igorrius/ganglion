@@ -59,7 +59,7 @@ type Deps struct {
 	// Notify is the port for notify; nil means every call is denied.
 	Notify NotifyPort
 	// Prefix is the module's short name, the owner part of its cell ids
-	// ("deye-reader" for deye-reader.soc). It defaults to the manifest's name.
+	// ("demo-reader" for demo-reader.soc). It defaults to the manifest's name.
 	Prefix string
 	HTTP   *http.Client
 	Logger *slog.Logger

@@ -62,15 +62,15 @@ func TestSecretSetStoresTheValueFromStdin(t *testing.T) {
 	clearEnv(t)
 	ctx := context.Background()
 	db := filepath.Join(t.TempDir(), "g.db")
-	out, err := secretRun(t, strings.NewReader(cliSecret+"\n"), "set", "--db", db, "--module", "deye-reader", "DEYE_APP_ID")
-	if err != nil || out != "module:local/deye-reader: DEYE_APP_ID is set\n" {
+	out, err := secretRun(t, strings.NewReader(cliSecret+"\n"), "set", "--db", db, "--module", "demo-reader", "DEMO_APP_ID")
+	if err != nil || out != "module:local/demo-reader: DEMO_APP_ID is set\n" {
 		t.Fatalf("set: %q, %v", out, err)
 	}
 	if info, err := os.Stat(vault.KeyPath(db)); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("the key file: %v, %v", info, err)
 	}
 	// The full name names the same module; no --module is the node's own.
-	if _, err := secretRun(t, strings.NewReader("second-"+cliSecret), "set", "--db", db, "--module", "local/deye-reader", "DEYE_APP_ID"); err != nil {
+	if _, err := secretRun(t, strings.NewReader("second-"+cliSecret), "set", "--db", db, "--module", "local/demo-reader", "DEMO_APP_ID"); err != nil {
 		t.Fatal(err)
 	}
 	if out, err := secretRun(t, strings.NewReader(cliSecret), "set", "--db", db, "BOT"); err != nil || out != "node: BOT is set\n" {
@@ -78,7 +78,7 @@ func TestSecretSetStoresTheValueFromStdin(t *testing.T) {
 	}
 	v, _ := storeOf(t, db)
 	for scope, want := range map[secrets.Scope][2]string{
-		"module:local/deye-reader": {"DEYE_APP_ID", "second-" + cliSecret}, secrets.ScopeNode: {"BOT", cliSecret},
+		"module:local/demo-reader": {"DEMO_APP_ID", "second-" + cliSecret}, secrets.ScopeNode: {"BOT", cliSecret},
 	} {
 		if got, err := v.Get(ctx, scope, want[0]); err != nil || got != want[1] {
 			t.Errorf("%s %s: stored right %v, %v", scope, want[0], got == want[1], err)
@@ -204,19 +204,19 @@ func rows(t *testing.T, conn *sql.DB) string {
 func TestSecretCommandsOnALockedStore(t *testing.T) {
 	clearEnv(t)
 	db := filepath.Join(t.TempDir(), "g.db")
-	if _, err := secretRun(t, strings.NewReader(cliSecret), "set", "--db", db, "--module", "deye-reader", "DEYE_APP_ID"); err != nil {
+	if _, err := secretRun(t, strings.NewReader(cliSecret), "set", "--db", db, "--module", "demo-reader", "DEMO_APP_ID"); err != nil {
 		t.Fatal(err)
 	}
 	_, conn := storeOf(t, db)
 	before := rows(t, conn)
 
 	t.Setenv(vault.KeyEnv, base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, vault.KeySize)))
-	_, err := secretRun(t, strings.NewReader(cliSecret), "set", "--db", db, "--module", "deye-reader", "OTHER")
+	_, err := secretRun(t, strings.NewReader(cliSecret), "set", "--db", db, "--module", "demo-reader", "OTHER")
 	if !errors.Is(err, vault.ErrLocked) || !strings.Contains(err.Error(), "/secrets reset") {
 		t.Fatalf("set on a locked store: %v", err)
 	}
 	out, err := secretRun(t, strings.NewReader(""), "list", "--db", db)
-	if err != nil || !strings.Contains(out, "DEYE_APP_ID") || !strings.Contains(out, "the secret store is locked") {
+	if err != nil || !strings.Contains(out, "DEMO_APP_ID") || !strings.Contains(out, "the secret store is locked") {
 		t.Fatalf("list on a locked store: %q, %v", out, err)
 	}
 	if after := rows(t, conn); after != before {

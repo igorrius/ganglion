@@ -75,7 +75,7 @@ func TestModuleScopeNamesTheModule(t *testing.T) {
 
 func TestValidName(t *testing.T) {
 	for name, want := range map[string]bool{
-		"DEYE_APP_ID":            true,
+		"DEMO_APP_ID":            true,
 		"wifi-home":              true,
 		"a.b":                    true,
 		"_x":                     true,

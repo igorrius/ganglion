@@ -96,7 +96,7 @@ func (*ModuleStatus) Spec() tool.Spec {
 			"(a key left at its manifest default is set: false, has_default: true). " +
 			"Use it when a module fails, before guessing the cause.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
-			`"name":{"type":"string","description":"the module's name, as in its tools (deye-reader)"}},` +
+			`"name":{"type":"string","description":"the module's name, as in its tools (demo-reader)"}},` +
 			`"required":["name"],"additionalProperties":false}`),
 		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true}
 }

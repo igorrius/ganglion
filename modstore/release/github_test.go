@@ -67,7 +67,7 @@ func (f *fakeGitHub) client() *GitHub {
 
 func TestLatestPicksTheNewestStableRelease(t *testing.T) {
 	f := newFake(t)
-	for _, tag := range []string{"html2md/v0.1.0", "html2md/v0.10.0", "html2md/v0.3.0", "deye/v9.0.0", "v1.0.0", "html2md/not-semver"} {
+	for _, tag := range []string{"html2md/v0.1.0", "html2md/v0.10.0", "html2md/v0.3.0", "demo/v9.0.0", "v1.0.0", "html2md/not-semver"} {
 		f.add(tag, 1, false, false)
 	}
 	f.add("html2md/v0.11.0", 1, true, false) // a draft
@@ -95,7 +95,7 @@ func TestLatestSkipsAnABIThisCoreDoesNotSpeak(t *testing.T) {
 	if err != nil || r.Version != "0.2.0" {
 		t.Fatalf("release %+v, %v", r, err)
 	}
-	if _, err := f.client().Latest(context.Background(), "deye", 1); err == nil {
+	if _, err := f.client().Latest(context.Background(), "demo", 1); err == nil {
 		t.Fatal("a module with no release was found")
 	}
 }

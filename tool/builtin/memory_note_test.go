@@ -18,7 +18,7 @@ import (
 // under the same key (R-MEM-9).
 func TestMemoryWriteSendsANoteWithUndo(t *testing.T) {
 	tools, m, buttons := memoryToolsWith(t)
-	c := call("memory.write", `{"topic":"Inverter","summary":"The Deye inverter","fact":"Negative batt_w is the battery charging."}`)
+	c := call("memory.write", `{"topic":"Inverter","summary":"The Acme inverter","fact":"Negative batt_w is the battery charging."}`)
 	res := run(t, tools["memory.write"], c)
 	if len(res.Out) != 1 {
 		t.Fatalf("out %+v", res.Out)

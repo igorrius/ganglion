@@ -683,14 +683,14 @@ func TestCommandsShowWhereAJobIsShown(t *testing.T) {
 // M4b plan).
 func TestModuleJobIsListedWithoutDelete(t *testing.T) {
 	e := newSchedEnv(t)
-	j := schedule.Job{ID: "module:local/deye-reader:0", Owner: me, Conv: "telegram:42", Transport: "telegram", Kind: schedule.KindModule,
-		Cron: "*/30 * * * *", Text: "local/deye-reader", System: true, Created: t0}
+	j := schedule.Job{ID: "module:local/demo-reader:0", Owner: me, Conv: "telegram:42", Transport: "telegram", Kind: schedule.KindModule,
+		Cron: "*/30 * * * *", Text: "local/demo-reader", System: true, Created: t0}
 	e.add(t, j)
 	res, err := builtin.NewScheduleList(e.sc).Run(context.Background(), call("schedule.list", `{}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := res.Out[0].Text; !strings.HasPrefix(got, "Module job") || !strings.Contains(got, "local/deye-reader") {
+	if got := res.Out[0].Text; !strings.HasPrefix(got, "Module job") || !strings.Contains(got, "local/demo-reader") {
 		t.Fatalf("shown %q", got)
 	}
 	if labels(res.Out[0].Buttons) != "Details" {

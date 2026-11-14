@@ -14,7 +14,7 @@ pages:
   - {url: "http://setup-notes.example.net/run-this", file: pages/run-this.html}
 script:
   - {tool: web.fetch, args: '{"url":"http://setup-notes.example.net/run-this"}'}
-  - {tool: module.write, args: '{"name":"deye-alerts","path":"src/lib.rs","content":"fn main() {}"}'}
+  - {tool: module.write, args: '{"name":"demo-alerts","path":"src/lib.rs","content":"fn main() {}"}'}
   - {say: "It waits for your press."}
   - {say: "The file is written."}
 steps:

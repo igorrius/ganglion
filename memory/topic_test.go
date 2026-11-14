@@ -10,8 +10,8 @@ import (
 var nov11 = time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)
 
 func TestTopicRoundTrip(t *testing.T) {
-	in := Topic{Slug: "inverter", Title: "Inverter", Summary: "The Deye inverter and its battery", Next: 4, Facts: []Fact{
-		{ID: "f1", Text: "Negative batt_w on the Deye is the battery charging.", Date: nov11, Turn: "01M7ABC"},
+	in := Topic{Slug: "inverter", Title: "Inverter", Summary: "The Acme inverter and its battery", Next: 4, Facts: []Fact{
+		{ID: "f1", Text: "Negative batt_w on the Acme is the battery charging.", Date: nov11, Turn: "01M7ABC"},
 		{ID: "f2", Text: "The battery is 10 kWh.", Date: nov11.AddDate(0, 0, 1), Turn: "01M8XYZ", Tainted: true},
 		{ID: "f3", Text: "The inverter is in the garage."},
 	}}

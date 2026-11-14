@@ -39,7 +39,7 @@ func notifyTo(t *testing.T, f settings.DestinationsFile, module string) []string
 }
 
 func TestSetDestinationAddsReplacesAndKeepsTheRest(t *testing.T) {
-	f := destFile(t, "# the node\nmodules:\n  - name: local/deye # the reader\n    config: {poll: 5m}\n")
+	f := destFile(t, "# the node\nmodules:\n  - name: local/demo # the reader\n    config: {poll: 5m}\n")
 	for _, conv := range []string{"telegram:-1001/7", k7} {
 		if err := f.SetDestination(settings.Destination{Name: "family-k7", Conv: conv}); err != nil {
 			t.Fatal(err)

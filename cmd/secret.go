@@ -39,7 +39,7 @@ func secretCommand(in io.Reader, out io.Writer) *cli.Command {
 		Usage: "set, remove and list the secrets the node stores, encrypted, in its database",
 		Description: "A secret belongs to one module (--module) or to the node itself (no --module: a store:NAME of ganglion.yaml).\n" +
 			"A module reads only its own. The value is read from standard input, never from an argument:\n\n" +
-			"  printf %s \"$VALUE\" | ganglion secret set --module deye-reader DEYE_APP_ID\n" +
+			"  printf %s \"$VALUE\" | ganglion secret set --module demo-reader DEMO_APP_ID\n" +
 			"  ganglion secret set TELEGRAM_BOT_TOKEN < token.txt\n\n" +
 			"The node reads the new value at its next use; nothing restarts. No command shows a value.\n" +
 			"The key of the store is " + vault.KeyEnv + " (or its _FILE), else the file " + vault.KeyFile + " beside the database:\n" +
@@ -54,7 +54,7 @@ type secretTarget struct{ db, module string }
 
 func (t *secretTarget) flags() []cli.Flag {
 	return []cli.Flag{flags.DBFlag(&t.db),
-		&cli.StringFlag{Name: "module", Usage: "the module the secret belongs to (deye-reader or local/deye-reader); without it, the node's own",
+		&cli.StringFlag{Name: "module", Usage: "the module the secret belongs to (demo-reader or local/demo-reader); without it, the node's own",
 			Local: true, Destination: &t.module}}
 }
 

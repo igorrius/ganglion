@@ -101,7 +101,7 @@ func TestSensorRejectsDesired(t *testing.T) {
 	if _, err := s.SetDesired(ctx, "battery.soc", json.RawMessage(`57`), "test", 0); !errors.Is(err, cells.ErrWrongKind) {
 		t.Fatalf("SetDesired on a sensor = %v, want ErrWrongKind", err)
 	}
-	c, err := s.Report(ctx, "battery.soc", json.RawMessage(`57`), cells.CauseExternal, "module:deye-reader")
+	c, err := s.Report(ctx, "battery.soc", json.RawMessage(`57`), cells.CauseExternal, "module:demo-reader")
 	if err != nil || string(c.Reported) != `57` {
 		t.Fatalf("Report on a sensor = %+v (%v)", c, err)
 	}
@@ -238,48 +238,48 @@ func jsonUnmarshal(b []byte, v any) error { return json.Unmarshal(b, v) }
 
 func TestDefineAcceptsDashedIDs(t *testing.T) {
 	s, _ := newService(t)
-	define(t, s, "deye-reader.soc", cells.KindSensor)
-	if _, err := s.Get(context.Background(), "deye-reader.soc"); err != nil {
+	define(t, s, "demo-reader.soc", cells.KindSensor)
+	if _, err := s.Get(context.Background(), "demo-reader.soc"); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func defineOwned(t *testing.T, s *cells.Service, owner, about string) error {
 	t.Helper()
-	return s.DefineOwned(context.Background(), cells.OwnedDef{ID: "deye-reader.soc", Owner: owner, About: about, Kind: cells.KindSensor})
+	return s.DefineOwned(context.Background(), cells.OwnedDef{ID: "demo-reader.soc", Owner: owner, About: about, Kind: cells.KindSensor})
 }
 
 func TestDefineOwnedCreatesWithOwnerAndAbout(t *testing.T) {
 	s, _ := newService(t)
-	if err := defineOwned(t, s, "deye-reader", "battery charge, %"); err != nil {
+	if err := defineOwned(t, s, "demo-reader", "battery charge, %"); err != nil {
 		t.Fatal(err)
 	}
-	c, err := s.Get(context.Background(), "deye-reader.soc")
-	if err != nil || c.Owner != "deye-reader" || c.About != "battery charge, %" || c.Kind != cells.KindSensor {
+	c, err := s.Get(context.Background(), "demo-reader.soc")
+	if err != nil || c.Owner != "demo-reader" || c.About != "battery charge, %" || c.Kind != cells.KindSensor {
 		t.Fatalf("cell = %+v (%v)", c, err)
 	}
 }
 
 func TestDefineOwnedByAnotherOwnerIsRefused(t *testing.T) {
 	s, _ := newService(t)
-	if err := defineOwned(t, s, "deye-reader", "a"); err != nil {
+	if err := defineOwned(t, s, "demo-reader", "a"); err != nil {
 		t.Fatal(err)
 	}
 	if err := defineOwned(t, s, "thief", "b"); !errors.Is(err, cells.ErrOwned) {
 		t.Fatalf("second owner = %v, want ErrOwned", err)
 	}
-	if c, _ := s.Get(context.Background(), "deye-reader.soc"); c.Owner != "deye-reader" || c.About != "a" {
+	if c, _ := s.Get(context.Background(), "demo-reader.soc"); c.Owner != "demo-reader" || c.About != "a" {
 		t.Fatalf("cell changed: %+v", c)
 	}
 }
 
 func TestDefineOwnedSameOwnerUpdatesAbout(t *testing.T) {
 	s, _ := newService(t)
-	_ = defineOwned(t, s, "deye-reader", "old")
-	if err := defineOwned(t, s, "deye-reader", "new"); err != nil {
+	_ = defineOwned(t, s, "demo-reader", "old")
+	if err := defineOwned(t, s, "demo-reader", "new"); err != nil {
 		t.Fatal(err)
 	}
-	c, _ := s.Get(context.Background(), "deye-reader.soc")
+	c, _ := s.Get(context.Background(), "demo-reader.soc")
 	if c.About != "new" || c.Version != 1 {
 		t.Fatalf("cell = %+v", c)
 	}
@@ -287,23 +287,23 @@ func TestDefineOwnedSameOwnerUpdatesAbout(t *testing.T) {
 
 func TestDefineOwnedOfAnotherKindConflicts(t *testing.T) {
 	s, _ := newService(t)
-	define(t, s, "deye-reader.soc", cells.KindSwitch)
-	err := defineOwned(t, s, "deye-reader", "soc")
-	if !errors.Is(err, cells.ErrConflict) || !strings.Contains(err.Error(), "deye-reader.soc") {
+	define(t, s, "demo-reader.soc", cells.KindSwitch)
+	err := defineOwned(t, s, "demo-reader", "soc")
+	if !errors.Is(err, cells.ErrConflict) || !strings.Contains(err.Error(), "demo-reader.soc") {
 		t.Fatalf("a switch taken as a sensor = %v, want ErrConflict naming the cell", err)
 	}
-	if c, _ := s.Get(context.Background(), "deye-reader.soc"); c.Owner != "" || c.Kind != cells.KindSwitch {
+	if c, _ := s.Get(context.Background(), "demo-reader.soc"); c.Owner != "" || c.Kind != cells.KindSwitch {
 		t.Fatalf("cell changed: %+v", c)
 	}
 }
 
 func TestDefineOwnedTakesAnOwnerlessCell(t *testing.T) {
 	s, _ := newService(t)
-	define(t, s, "deye-reader.soc", cells.KindSensor)
-	if err := defineOwned(t, s, "deye-reader", "soc"); err != nil {
+	define(t, s, "demo-reader.soc", cells.KindSensor)
+	if err := defineOwned(t, s, "demo-reader", "soc"); err != nil {
 		t.Fatal(err)
 	}
-	if c, _ := s.Get(context.Background(), "deye-reader.soc"); c.Owner != "deye-reader" {
+	if c, _ := s.Get(context.Background(), "demo-reader.soc"); c.Owner != "demo-reader" {
 		t.Fatalf("cell = %+v", c)
 	}
 }
@@ -325,22 +325,22 @@ func TestDefineOwnedValidates(t *testing.T) {
 func TestDisownThenRedefineKeepsHistory(t *testing.T) {
 	ctx := context.Background()
 	s, _ := newService(t)
-	_ = defineOwned(t, s, "deye-reader", "soc")
-	if _, err := s.Report(ctx, "deye-reader.soc", json.RawMessage(`55`), cells.CauseExternal, "module:deye-reader"); err != nil {
+	_ = defineOwned(t, s, "demo-reader", "soc")
+	if _, err := s.Report(ctx, "demo-reader.soc", json.RawMessage(`55`), cells.CauseExternal, "module:demo-reader"); err != nil {
 		t.Fatal(err)
 	}
 	define(t, s, "other.x", cells.KindSensor)
-	n, err := s.Disown(ctx, "deye-reader")
+	n, err := s.Disown(ctx, "demo-reader")
 	if err != nil || n != 1 {
 		t.Fatalf("Disown = %d, %v", n, err)
 	}
-	if c, _ := s.Get(ctx, "deye-reader.soc"); c.Owner != "" {
+	if c, _ := s.Get(ctx, "demo-reader.soc"); c.Owner != "" {
 		t.Fatalf("owner after Disown = %q", c.Owner)
 	}
-	if err := defineOwned(t, s, "deye-reader", "soc again"); err != nil {
+	if err := defineOwned(t, s, "demo-reader", "soc again"); err != nil {
 		t.Fatal(err)
 	}
-	h, _ := s.History(ctx, "deye-reader.soc", 10)
+	h, _ := s.History(ctx, "demo-reader.soc", 10)
 	if len(h) != 2 || string(h[0].Value) != "55" {
 		t.Fatalf("history = %+v", h)
 	}
@@ -353,9 +353,9 @@ func TestListReturnsOwnerAndAbout(t *testing.T) {
 	ctx := context.Background()
 	s, _ := newService(t)
 	define(t, s, "load.a", cells.KindSwitch)
-	_ = defineOwned(t, s, "deye-reader", "soc")
+	_ = defineOwned(t, s, "demo-reader", "soc")
 	l, err := s.List(ctx)
-	if err != nil || len(l) != 2 || l[0].ID != "deye-reader.soc" || l[0].Owner != "deye-reader" || l[0].About != "soc" || l[1].Owner != "" {
+	if err != nil || len(l) != 2 || l[0].ID != "demo-reader.soc" || l[0].Owner != "demo-reader" || l[0].About != "soc" || l[1].Owner != "" {
 		t.Fatalf("list = %+v (%v)", l, err)
 	}
 }
@@ -363,23 +363,23 @@ func TestListReturnsOwnerAndAbout(t *testing.T) {
 func TestHistorySinceIsOldestFirstAndLimited(t *testing.T) {
 	ctx := context.Background()
 	s, clk := newService(t)
-	_ = defineOwned(t, s, "deye-reader", "soc")
+	_ = defineOwned(t, s, "demo-reader", "soc")
 	start := clk.Now()
 	for i := range 4 {
 		clk.Add(time.Minute)
-		if _, err := s.Report(ctx, "deye-reader.soc", json.RawMessage(strconv.Itoa(i)), cells.CauseExternal, "m"); err != nil {
+		if _, err := s.Report(ctx, "demo-reader.soc", json.RawMessage(strconv.Itoa(i)), cells.CauseExternal, "m"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	got, err := s.HistorySince(ctx, "deye-reader.soc", start.Add(90*time.Second), 10)
+	got, err := s.HistorySince(ctx, "demo-reader.soc", start.Add(90*time.Second), 10)
 	if err != nil || len(got) != 3 || string(got[0].Value) != "1" || string(got[2].Value) != "3" {
 		t.Fatalf("since = %+v (%v)", got, err)
 	}
-	got, _ = s.HistorySince(ctx, "deye-reader.soc", start.Add(90*time.Second), 2)
+	got, _ = s.HistorySince(ctx, "demo-reader.soc", start.Add(90*time.Second), 2)
 	if len(got) != 2 || string(got[1].Value) != "2" {
 		t.Fatalf("limited = %+v", got)
 	}
-	if got, _ = s.HistorySince(ctx, "deye-reader.soc", start.Add(time.Hour), 10); len(got) != 0 {
+	if got, _ = s.HistorySince(ctx, "demo-reader.soc", start.Add(time.Hour), 10); len(got) != 0 {
 		t.Fatalf("future = %+v", got)
 	}
 }

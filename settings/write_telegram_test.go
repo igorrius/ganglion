@@ -15,7 +15,7 @@ func family(chat int64, name string) settings.Group {
 
 func TestSetGroupAddsALineAndKeepsTheRest(t *testing.T) {
 	path := filepath.Join(t.TempDir(), settings.FileName)
-	src := "# the node\ntelegram:\n  reply: auto # quoted in groups\nmodules:\n  - name: local/deye\n"
+	src := "# the node\ntelegram:\n  reply: auto # quoted in groups\nmodules:\n  - name: local/demo\n"
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestSetGroupAddsALineAndKeepsTheRest(t *testing.T) {
 		t.Fatalf("groups = %+v", got)
 	}
 	out, _ := os.ReadFile(path)
-	for _, want := range []string{"# the node", "# quoted in groups", "name: local/deye"} {
+	for _, want := range []string{"# the node", "# quoted in groups", "name: local/demo"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("the file lost %q:\n%s", want, out)
 		}

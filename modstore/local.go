@@ -53,7 +53,7 @@ var wasmMagic = []byte("\x00asm")
 
 // Build is what the builder made of a module's source.
 type Build struct {
-	Module   string // "local/deye-reader"
+	Module   string // "local/demo-reader"
 	Wasm     []byte
 	Manifest []byte
 	Language string

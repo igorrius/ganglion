@@ -42,8 +42,8 @@ func (f *fakeSecrets) Locked() bool { return f.locked }
 func storedSecrets() *fakeSecrets {
 	at := time.Date(2026, 11, 13, 21, 9, 0, 0, time.UTC)
 	return &fakeSecrets{entries: []vault.Entry{
-		{Scope: "module:local/deye-reader", Name: "DEYE_APP_ID", SetAt: at, By: "cli"},
-		{Scope: "module:local/deye-reader", Name: "DEYE_APP_SECRET", SetAt: at.AddDate(0, 0, 1), By: "cli"},
+		{Scope: "module:local/demo-reader", Name: "DEMO_APP_ID", SetAt: at, By: "cli"},
+		{Scope: "module:local/demo-reader", Name: "DEMO_APP_SECRET", SetAt: at.AddDate(0, 0, 1), By: "cli"},
 		{Scope: secrets.ScopeNode, Name: "TELEGRAM_BOT_TOKEN", SetAt: at, By: "cli"},
 	}}
 }
@@ -76,7 +76,7 @@ func TestSecretsCommandLists(t *testing.T) {
 	e.turn(t, message(owner, "Igor", "hi"))
 	calls, history := len(e.smart.requests()), len(e.state(t).Messages)
 	out := e.turn(t, message(owner, "Igor", "/secrets"))
-	want := "Stored secrets. Values are never shown.\n\ndeye-reader\n- DEYE\\_APP\\_ID, set 13.11\n- DEYE\\_APP\\_SECRET, set 14.11\n\n" +
+	want := "Stored secrets. Values are never shown.\n\ndemo-reader\n- DEMO\\_APP\\_ID, set 13.11\n- DEMO\\_APP\\_SECRET, set 14.11\n\n" +
 		"The node's own\n- TELEGRAM\\_BOT\\_TOKEN, set 13.11"
 	if len(out) != 1 || out[0].Text != want {
 		t.Fatalf("list %q", out[0].Text)
@@ -96,7 +96,7 @@ func TestSecretsCommandEmptyLockedAndRefused(t *testing.T) {
 	s.locked = true
 	e = secretsCmdEnv(t, s)
 	out := e.turn(t, message(owner, "Igor", "/secrets"))
-	if len(out) != 1 || !strings.HasPrefix(out[0].Text, "The store is locked") || !strings.Contains(out[0].Text, "DEYE\\_APP\\_ID") {
+	if len(out) != 1 || !strings.HasPrefix(out[0].Text, "The store is locked") || !strings.Contains(out[0].Text, "DEMO\\_APP\\_ID") {
 		t.Fatalf("locked %+v", out)
 	}
 
@@ -104,7 +104,7 @@ func TestSecretsCommandEmptyLockedAndRefused(t *testing.T) {
 	e = secretsCmdEnv(t, s)
 	ev := message(owner, "Igor", "/secrets")
 	ev.Conv = "telegram:-100500" // a group
-	if out := e.turn(t, ev); len(out) != 1 || !strings.Contains(out[0].Text, "private chat") || strings.Contains(out[0].Text, "DEYE") {
+	if out := e.turn(t, ev); len(out) != 1 || !strings.Contains(out[0].Text, "private chat") || strings.Contains(out[0].Text, "DEMO") {
 		t.Fatalf("in a group %+v", out)
 	}
 	e.admin = false
@@ -120,36 +120,36 @@ func TestSecretsCommandRemoves(t *testing.T) {
 	s := storedSecrets()
 	e := secretsCmdEnv(t, s)
 	for cmd, want := range map[string]string{
-		"/secrets rm deye-reader DEYE_APP_ID":       "deye-reader: DEYE\\_APP\\_ID is removed.",
-		"/secrets rm local/deye-reader DEYE_APP_ID": "deye-reader: DEYE\\_APP\\_ID is removed.",
+		"/secrets rm demo-reader DEMO_APP_ID":       "demo-reader: DEMO\\_APP\\_ID is removed.",
+		"/secrets rm local/demo-reader DEMO_APP_ID": "demo-reader: DEMO\\_APP\\_ID is removed.",
 		"/secrets rm node TELEGRAM_BOT_TOKEN":       "The node's own: TELEGRAM\\_BOT\\_TOKEN is removed.",
-		"/secrets rm deye-reader NOPE":              "deye-reader has no secret NOPE.",
+		"/secrets rm demo-reader NOPE":              "demo-reader has no secret NOPE.",
 	} {
 		if out := e.turn(t, message(owner, "Igor", cmd)); len(out) != 1 || out[0].Text != want {
 			t.Errorf("%s: %+v", cmd, out)
 		}
 	}
 	slices.Sort(s.removed)
-	if want := []string{"module:local/deye-reader DEYE_APP_ID", "module:local/deye-reader DEYE_APP_ID",
-		"module:local/deye-reader NOPE", "node TELEGRAM_BOT_TOKEN"}; !slices.Equal(s.removed, want) {
+	if want := []string{"module:local/demo-reader DEMO_APP_ID", "module:local/demo-reader DEMO_APP_ID",
+		"module:local/demo-reader NOPE", "node TELEGRAM_BOT_TOKEN"}; !slices.Equal(s.removed, want) {
 		t.Fatalf("removed %q", s.removed)
 	}
 
 	// The history notes a removal by scope and name, and nothing else.
 	e = secretsCmdEnv(t, storedSecrets())
-	e.turn(t, message(owner, "Igor", "/secrets rm deye-reader DEYE_APP_ID"))
-	if got, want := lastNote(t, e), "[command] the owner ran /secrets: removed the stored secret DEYE_APP_ID of deye-reader"; got != want {
+	e.turn(t, message(owner, "Igor", "/secrets rm demo-reader DEMO_APP_ID"))
+	if got, want := lastNote(t, e), "[command] the owner ran /secrets: removed the stored secret DEMO_APP_ID of demo-reader"; got != want {
 		t.Fatalf("note %q", got)
 	}
-	e.turn(t, message(owner, "Igor", "/secrets rm deye-reader NOPE"))
+	e.turn(t, message(owner, "Igor", "/secrets rm demo-reader NOPE"))
 	if got := lastNote(t, e); strings.Contains(got, "NOPE") {
 		t.Fatalf("a removal of nothing left a note: %q", got)
 	}
 
 	s = storedSecrets()
 	e = secretsCmdEnv(t, s)
-	for _, cmd := range []string{"/secrets rm", "/secrets rm deye-reader", "/secrets rm deye-reader A B", "/secrets rm bad/../name X",
-		"/secrets rm deye-reader 1BAD", "/secrets show", "/secrets get deye-reader DEYE_APP_ID"} {
+	for _, cmd := range []string{"/secrets rm", "/secrets rm demo-reader", "/secrets rm demo-reader A B", "/secrets rm bad/../name X",
+		"/secrets rm demo-reader 1BAD", "/secrets show", "/secrets get demo-reader DEMO_APP_ID"} {
 		if out := e.turn(t, message(owner, "Igor", cmd)); len(out) != 1 || !strings.HasPrefix(out[0].Text, "Usage: /secrets") {
 			t.Errorf("%s: %+v", cmd, out)
 		}

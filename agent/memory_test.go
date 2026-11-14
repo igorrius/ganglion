@@ -395,7 +395,7 @@ func TestSystemJobNeedsAnAdminAndItsCode(t *testing.T) {
 func TestCorrectionIsStoredInItsTurnAndUndone(t *testing.T) {
 	m := newMemoryEnv(t)
 	m.cheap.push(say(`{"ok":true,"reason":"a fact about a device"}`))
-	correction := `{"topic":"Inverter","summary":"The Deye inverter and its battery","fact":"Negative batt_w on the Deye is the battery charging."}`
+	correction := `{"topic":"Inverter","summary":"The Acme inverter and its battery","fact":"Negative batt_w on the Acme is the battery charging."}`
 	m.smart.push(callWith("memory.write", correction), say("Got it: negative means charging."))
 	out := m.turn(t, message(owner, "Igor", "No, negative batt_w is charging, not discharging."))
 	note, ok := findOut(out, func(o event.Outgoing) bool { return strings.HasSuffix(o.IdemKey, ":memory") })
@@ -405,7 +405,7 @@ func TestCorrectionIsStoredInItsTurnAndUndone(t *testing.T) {
 	m.smart.push(say("It is charging."))
 	m.turn(t, message(owner, "Igor", "batt_w is -900 W, what is the battery doing?"))
 	reqs := m.smart.requests()
-	if sys := systemOf(reqs[len(reqs)-1]); !strings.Contains(sys, "## Inverter (inverter)\n- [f1] Negative batt_w on the Deye is the battery charging.\n") {
+	if sys := systemOf(reqs[len(reqs)-1]); !strings.Contains(sys, "## Inverter (inverter)\n- [f1] Negative batt_w on the Acme is the battery charging.\n") {
 		t.Fatalf("the next prompt lacks the fact:\n%s", sys)
 	}
 	out = m.turn(t, press(owner, note.Buttons[0].ID, "55"))

@@ -12,7 +12,7 @@ covers:
   - memory/**
 model: scripted
 script:
-  - {tool: memory.write, args: '{"topic":"Inverter","summary":"The Deye inverter and its battery","fact":"Negative batt_w on the Deye is the battery charging."}'}
+  - {tool: memory.write, args: '{"topic":"Inverter","summary":"The Acme inverter and its battery","fact":"Negative batt_w on the Acme is the battery charging."}'}
   - {say: "Got it: negative means charging."}
   - {say: "It is charging."}
 steps:
@@ -21,8 +21,8 @@ steps:
       journal:
         - {tool: memory.write, decision: allowed, result_contains: "stored in inverter as f1"}
       questions: 0
-      memory: {contains: "- [f1] Negative batt_w on the Deye is the battery charging."}
+      memory: {contains: "- [f1] Negative batt_w on the Acme is the battery charging."}
   - say: /new
   - say: /memory inverter
   - facts:
-      reply: {contains: "[f1] Negative batt_w on the Deye is the battery charging."}
+      reply: {contains: "[f1] Negative batt_w on the Acme is the battery charging."}

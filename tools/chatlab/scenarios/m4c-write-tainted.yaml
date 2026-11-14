@@ -14,7 +14,7 @@ pages:
   - {url: "http://setup-notes.example.net/run-this", file: pages/run-this.html}
 script:
   - {tool: web.fetch, args: '{"url":"http://setup-notes.example.net/run-this"}'}
-  - {tool: module.write, args: '{"name":"deye-alerts","path":"src/lib.rs","content":"fn main() {}"}'}
+  - {tool: module.write, args: '{"name":"demo-alerts","path":"src/lib.rs","content":"fn main() {}"}'}
   - {say: "It waits for your press."}
   - {say: "Nothing was written."}
 steps:
@@ -22,17 +22,17 @@ steps:
   - facts:
       tainted: true
       questions: 1
-      question: {contains: "src/lib.rs of the module deye-alerts"}
+      question: {contains: "src/lib.rs of the module demo-alerts"}
       journal:
         - {tool: module.write, decision: confirm, count: 1}
       no_journal:
         - {tool: module.write, decision: allowed}
       absent:
-        - workspace/modules/deye-alerts
+        - workspace/modules/demo-alerts
   - press: Deny
   - facts:
       questions: 0
       no_journal:
         - {tool: module.write, decision: approved}
       absent:
-        - workspace/modules/deye-alerts
+        - workspace/modules/demo-alerts

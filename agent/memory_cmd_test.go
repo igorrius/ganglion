@@ -25,7 +25,7 @@ func (v topicsView) Topic(slug string) (memory.Topic, error) {
 
 var memoryTopics = topicsView{
 	{Slug: "car", Title: "Car", Summary: "The family car", Facts: []memory.Fact{{ID: "f1", Text: "The car is blue."}}},
-	{Slug: "inverter", Title: "Inverter", Summary: "The Deye inverter", Facts: []memory.Fact{
+	{Slug: "inverter", Title: "Inverter", Summary: "The Acme inverter", Facts: []memory.Fact{
 		{ID: "f1", Text: "Negative batt_w is the battery charging.", Date: time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)},
 		{ID: "f2", Text: "The battery is 10 kWh.", Date: time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC), Tainted: true},
 	}},
@@ -48,12 +48,12 @@ func TestMemoryCommandListsAndShows(t *testing.T) {
 	e.turn(t, message(owner, "Igor", "hi"))
 	calls, history := len(e.smart.requests()), len(e.state(t).Messages)
 	out := e.turn(t, message(owner, "Igor", "/memory"))
-	want := "What I remember, by topic:\n- Car (car), facts: 1 — The family car\n- Inverter (inverter), facts: 2 — The Deye inverter"
+	want := "What I remember, by topic:\n- Car (car), facts: 1 — The family car\n- Inverter (inverter), facts: 2 — The Acme inverter"
 	if len(out) != 1 || out[0].Text != want {
 		t.Fatalf("list %+v", out)
 	}
 	out = e.turn(t, message(owner, "Igor", "/memory inverter"))
-	want = "Inverter (inverter) — The Deye inverter\n- [f1] Negative batt\\_w is the battery charging. (2026-11-11)\n" +
+	want = "Inverter (inverter) — The Acme inverter\n- [f1] Negative batt\\_w is the battery charging. (2026-11-11)\n" +
 		"- [f2] The battery is 10 kWh. (2026-11-12, from outside content)"
 	if len(out) != 1 || out[0].Text != want {
 		t.Fatalf("topic %q", out[0].Text)

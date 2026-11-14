@@ -325,7 +325,7 @@ sequenceDiagram
 
 ## A module run on cron (P1)
 
-The Deye reader as a reflex: no model in the normal path (R-RUN-12). The
+A reader module as a reflex: no model in the normal path (R-RUN-12). The
 module's cron line is a `module` job of the admin who installed it; its
 event reaches the agent only to be handed to the module host.
 
@@ -337,20 +337,20 @@ sequenceDiagram
     participant A as Agent (admin's chat)
     participant H as Module host
     participant R as Runner (wazero)
-    participant D as deye-reader module
+    participant D as demo-reader module
     participant C as Cells
     participant J as Module journal
 
-    S->>Q: Put(schedule event, job module:local/deye-reader:0)
+    S->>Q: Put(schedule event, job module:local/demo-reader:0)
     Q->>A: turn (kind schedule, job kind module)
-    A->>H: ModuleCron("local/deye-reader"), no model, no reply
+    A->>H: ModuleCron("local/demo-reader"), no model, no reply
     H->>R: Handle(trigger cron)
     R->>D: handle
     D->>R: http.fetch, secret.get (only what the manifest grants)
     D->>R: cell_report("soc", 78)
     R->>R: declared under cells.report? fits its type?
-    R->>H: CellPort.Report("deye-reader.soc")
-    H->>C: owned by local/deye-reader? Report
+    R->>H: CellPort.Report("demo-reader.soc")
+    H->>C: owned by local/demo-reader? Report
     D-->>R: OK
     R-->>H: answer
     H->>J: Count(run)
@@ -369,25 +369,25 @@ escalated, towards the crash loop.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant P as deye-reader run
+    participant P as demo-reader run
     participant H as Module host
     participant Q as Inbox
     participant A as Agent.Handle
-    participant L as deye-alerts module
+    participant L as demo-alerts module
 
     P->>H: cell_report soc, grid (noted in the run's context)
     Note over H: the run ends: settle (count, escalate, crash loop)
     H->>H: running listeners of the cells written, not the producer
     alt depth + 1 at most 4
-        H->>Q: Put(module.trigger, conv module:deye-alerts, key trigger:local/deye-alerts:local/deye-reader:RUN, cells sorted, depth)
+        H->>Q: Put(module.trigger, conv module:demo-alerts, key trigger:local/demo-alerts:local/demo-reader:RUN, cells sorted, depth)
     else deeper
         H->>H: no event; a log line once per build
-        H->>Q: Put(module.notify, node line chain, key notify:local/deye-reader:chain:SHA)
+        H->>Q: Put(module.notify, node line chain, key notify:local/demo-reader:chain:SHA)
     end
     Q->>A: kind module.trigger, before begin: no state, no turn, no model
     A->>H: RunTrigger(payload, event id)
     H->>L: Handle(trigger cell, cells and producer)
-    L->>H: cell_get(deye-reader.soc), ...
+    L->>H: cell_get(demo-reader.soc), ...
     H->>H: settle as unattended; fan out its own cells, depth + 1
     H-->>A: nil (a failure is the supervisor's); an error only when the run could not start
     A-->>Q: acknowledged, or retried after the lease on an error
@@ -419,7 +419,7 @@ writing all day never keeps a session (or its taint) alive.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant M as deye-alerts run
+    participant M as demo-alerts run
     participant R as Runner
     participant H as Notify port (module host)
     participant St as modstore notify_days
@@ -435,25 +435,25 @@ sequenceDiagram
     else a run
         H->>St: CountNotify(module, day in the node's zone)
         alt count at most per_day
-            H->>Q: Put(module.notify, conv: the owner's private chat, key notify:local/deye-alerts:RUN:N)
+            H->>Q: Put(module.notify, conv: the owner's private chat, key notify:local/demo-alerts:RUN:N)
             H-->>M: 0 sent
         else over the limit
             opt the limit line not sent today
-                H->>Q: Put(module.notify, node line limit, key notify:local/deye-alerts:limit:DAY)
+                H->>Q: Put(module.notify, node line limit, key notify:local/demo-alerts:limit:DAY)
                 H->>St: MarkLimited
             end
             H-->>M: -2 limit
         end
     end
     Q->>A: kind module.notify, through begin, no model
-    A->>A: note "[module] deye-alerts notified you at 14:30" (a node line adds none)
-    A->>O: "<text escaped>" signed deye-alerts, no preview, tainted module origin
+    A->>A: note "[module] demo-alerts notified you at 14:30" (a node line adds none)
+    A->>O: "<text escaped>" signed demo-alerts, no preview, tainted module origin
     Note over A,O: the state with the note and the message are stored in one transaction
 ```
 
 ## A module tool call (P1)
 
-The agent calls `deye-reader.status` like any read tool; the answer is
+The agent calls `demo-reader.status` like any read tool; the answer is
 the data its manifest promised, checked, and outside content only when it
 holds a string (R-RUN-13). A failure reaches the model in the node's words
 (R-RUN-14).
@@ -468,7 +468,7 @@ sequenceDiagram
     participant R as Runner
     participant D as Module
 
-    M->>P: deye-reader.status {}
+    M->>P: demo-reader.status {}
     P->>T: Lookup: fixed tools, then the host's (a fixed name wins)
     P->>H: run (read, auto, admin only)
     H->>R: Handle(trigger tool:status)
@@ -480,7 +480,7 @@ sequenceDiagram
         H-->>M: JSON, External if it holds a string
     else contract break, trap, timeout or failure
         R-->>H: module.format (node's words) or an error
-        H-->>M: "deye-reader.status: field soc: expected integer, got string"
+        H-->>M: "demo-reader.status: field soc: expected integer, got string"
         Note over H: the module's own text goes to the log only
     end
 ```
@@ -516,7 +516,7 @@ sequenceDiagram
         H->>Q: Put(module event, kind module.crashloop)
     end
     Q->>A: turn in the admin's private chat
-    A->>A: note "[module] deye-reader: auth_failed (version 3, 14:30). (the node's detail and hint)"
+    A->>A: note "[module] demo-reader: auth_failed (version 3, 14:30). (the node's detail and hint)"
     A->>LLM: chat purpose, with tools
     LLM-->>A: explanation and a proposal
     A->>O: reply
@@ -611,8 +611,8 @@ sequenceDiagram
     participant Old as Module v2
     participant New as Module v3
 
-    Core->>OS: put modules/deye-monitor v3 .wasm
-    Core->>KV: modules.deye-monitor = version, sha256, signature, manifest
+    Core->>OS: put modules/demo-monitor v3 .wasm
+    Core->>KV: modules.demo-monitor = version, sha256, signature, manifest
     Core->>KV: nodes.edge-home.desired = v3
     KV-->>E: watch fires
     E->>OS: download v3

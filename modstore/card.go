@@ -15,7 +15,7 @@ const (
 
 // LocalModule is one local module in the list of /modules.
 type LocalModule struct {
-	Name    string // the short name, "deye-reader"
+	Name    string // the short name, "demo-reader"
 	State   RunState
 	Version string // the active version's number
 }

@@ -54,7 +54,7 @@ func TestModulesCommand(t *testing.T) {
 		{"/modules", "html2md: 0.2.0 (html2md/v0.2.0); previous: builtin; 0.3.0 failed: the self-test failed: x"},
 		{"/modules update html2md", "html2md stays on builtin: the self-test failed: trap"},
 		{"/modules rollback html2md", "html2md rolled back from 0.2.0 to builtin."},
-		{"/modules update deye", "No module named deye."},
+		{"/modules update demo", "No module named demo."},
 		{"/modules update", `Usage: /modules, /modules \<name\>, /modules config \<name\> key=value, /modules update, rollback, off, on or remove \<name\>`},
 	} {
 		text, want := c[0], c[1]
@@ -66,7 +66,7 @@ func TestModulesCommand(t *testing.T) {
 	if len(e.smart.requests()) != 0 {
 		t.Fatal("a model was called")
 	}
-	if got := strings.Join(m.calls, ","); got != "list,update html2md,rollback html2md,update deye" {
+	if got := strings.Join(m.calls, ","); got != "list,update html2md,rollback html2md,update demo" {
 		t.Fatalf("calls %s", got)
 	}
 }
@@ -88,11 +88,11 @@ type fakeLocal struct {
 }
 
 func (f *fakeLocal) Local(context.Context) ([]modstore.LocalModule, error) {
-	return []modstore.LocalModule{{Name: "deye-reader", State: modstore.RunRunning, Version: "3"}, {Name: "boiler", State: modstore.RunCrashloop, Version: "1"}}, nil
+	return []modstore.LocalModule{{Name: "demo-reader", State: modstore.RunRunning, Version: "3"}, {Name: "boiler", State: modstore.RunCrashloop, Version: "1"}}, nil
 }
 
 func (f *fakeLocal) known(name string) error {
-	if name != "deye-reader" && name != "local/deye-reader" {
+	if name != "demo-reader" && name != "local/demo-reader" {
 		return modstore.ErrUnknownModule
 	}
 	return nil
@@ -121,7 +121,7 @@ func (f *fakeLocal) Rollback(_ context.Context, name string) (modstore.Outcome, 
 	if err := f.known(name); err != nil {
 		return modstore.Outcome{}, err
 	}
-	return modstore.Outcome{Module: "local/deye-reader", From: "3", To: "2", Result: modstore.ResultRolledBack}, nil
+	return modstore.Outcome{Module: "local/demo-reader", From: "3", To: "2", Result: modstore.ResultRolledBack}, nil
 }
 
 func (f *fakeLocal) Remove(_ context.Context, name string) error {
@@ -133,7 +133,7 @@ func ownModulesEnv(t *testing.T) (*env, *fakeLocal, *fakeModules) {
 	t.Helper()
 	e, m := modulesEnv(t)
 	l := &fakeLocal{card: modstore.Card{
-		LocalModule: modstore.LocalModule{Name: "deye-reader", State: modstore.RunRunning, Version: "3"},
+		LocalModule: modstore.LocalModule{Name: "demo-reader", State: modstore.RunRunning, Version: "3"},
 		Health:      modstore.HealthOK,
 		Journal: []modstore.Entry{
 			{Version: "3", State: "active", Note: "temperature arrives as a string", Installed: time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC), Runs: 1340},
@@ -164,7 +164,7 @@ func oneReply(t *testing.T, e *env, text string) string {
 func TestModulesListsLocalModulesWithTheirState(t *testing.T) {
 	e, _, _ := ownModulesEnv(t)
 	want := "Modules:\n- html2md: 0.2.0 (html2md/v0.2.0); previous: builtin; 0.3.0 failed: the self-test failed: x\n" +
-		"- deye-reader: running, version 3\n- boiler: off after failing 5 times in an hour, version 1"
+		"- demo-reader: running, version 3\n- boiler: off after failing 5 times in an hour, version 1"
 	if got := oneReply(t, e, "/modules"); got != want {
 		t.Fatalf("list:\n%s\nwant:\n%s", got, want)
 	}
@@ -175,7 +175,7 @@ func TestModulesListsLocalModulesWithTheirState(t *testing.T) {
 // and never noted for the model (R-RUN-10, R-RUN-13).
 func TestModulesCardGolden(t *testing.T) {
 	e, _, _ := ownModulesEnv(t)
-	want := "deye-reader: running since 02.11\n" +
+	want := "demo-reader: running since 02.11\n" +
 		"Health: ok\n" +
 		"Versions:\n" +
 		"v3  14.11  \"temperature arrives as a string\"  1,340 runs, 0 failures  ← active\n" +
@@ -185,7 +185,7 @@ func TestModulesCardGolden(t *testing.T) {
 		"site\\_id: 12345 (number, required)\n" +
 		"region: eu (default) (string)\n" +
 		"token\\_name: not set (string)"
-	if got := oneReply(t, e, "/modules deye-reader"); got != want {
+	if got := oneReply(t, e, "/modules demo-reader"); got != want {
 		t.Fatalf("card:\n%s\nwant:\n%s", got, want)
 	}
 	for _, m := range e.state(t).Messages {
@@ -206,14 +206,14 @@ func TestModulesCardShowsReactionsAndMessages(t *testing.T) {
 	l.card.Feeds = []string{"boiler", "a_b"}
 	l.card.ReactsTo = []string{"grid.power", "x_y.z"}
 	l.card.NotifyPerDay, l.card.NotifiedToday = 5, 7
-	got := oneReply(t, e, "/modules deye-reader")
+	got := oneReply(t, e, "/modules demo-reader")
 	for _, want := range []string{"Reacts to: grid.power, x\\_y.z\n", "Feeds: boiler, a\\_b\n", "Messages today: 5 of 5\n"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("card\n%s\nwant %q", got, want)
 		}
 	}
 	l.card.Feeds, l.card.ReactsTo, l.card.NotifyPerDay = nil, nil, 0
-	got = oneReply(t, e, "/modules deye-reader")
+	got = oneReply(t, e, "/modules demo-reader")
 	if strings.Contains(got, "Reacts to") || strings.Contains(got, "Feeds") || strings.Contains(got, "Messages today") {
 		t.Fatalf("a plain module shows reactions:\n%s", got)
 	}
@@ -225,7 +225,7 @@ func TestModulesCardHealth(t *testing.T) {
 	for health, want := range map[modstore.Health]string{"auth_failed": "\nHealth: failed (auth\\_failed)\n", "": "02.11\nVersions:"} {
 		e, l, _ := ownModulesEnv(t)
 		l.card.Health = health
-		if got := oneReply(t, e, "/modules deye-reader"); !strings.Contains(got, want) {
+		if got := oneReply(t, e, "/modules demo-reader"); !strings.Contains(got, want) {
 			t.Fatalf("health %q: card\n%s\nwant %q", health, got, want)
 		}
 	}
@@ -239,14 +239,14 @@ func TestModulesConfigAnswers(t *testing.T) {
 		cmd, want string
 		err       error
 	}{
-		{"/modules config deye-reader site_id=7", "deye-reader: site\\_id is set; it applies now.", nil},
-		{"/modules config deye-reader nope=hunter2", "deye-reader has no setting nope. Its settings: site\\_id, region.",
+		{"/modules config demo-reader site_id=7", "demo-reader: site\\_id is set; it applies now.", nil},
+		{"/modules config demo-reader nope=hunter2", "demo-reader has no setting nope. Its settings: site\\_id, region.",
 			&modstore.ConfigError{Err: modstore.ErrUndeclaredKey, Key: "nope", Declared: []string{"site_id", "region"}}},
-		{"/modules config deye-reader site_id=lots", "deye-reader: site\\_id takes a number value.",
+		{"/modules config demo-reader site_id=lots", "demo-reader: site\\_id takes a number value.",
 			&modstore.ConfigError{Err: modstore.ErrWrongType, Key: "site_id", Type: "number"}},
-		{"/modules config deye-reader site_id=1", "deye-reader did not start; see /status.", modstore.ErrNotStarted},
+		{"/modules config demo-reader site_id=1", "demo-reader did not start; see /status.", modstore.ErrNotStarted},
 		{"/modules config ghost site_id=1", "No module named ghost.", nil},
-		{"/modules config deye-reader site_id", `Usage: /modules, /modules \<name\>, /modules config \<name\> key=value, /modules update, rollback, off, on or remove \<name\>`, nil},
+		{"/modules config demo-reader site_id", `Usage: /modules, /modules \<name\>, /modules config \<name\> key=value, /modules update, rollback, off, on or remove \<name\>`, nil},
 	} {
 		l.config = c.err
 		if got := oneReply(t, e, c.cmd); got != c.want {
@@ -258,7 +258,7 @@ func TestModulesConfigAnswers(t *testing.T) {
 			t.Fatalf("the history holds a key or a value: %q", m.Content)
 		}
 	}
-	if !strings.Contains(strings.Join(l.calls, ";"), "config deye-reader nope=hunter2") {
+	if !strings.Contains(strings.Join(l.calls, ";"), "config demo-reader nope=hunter2") {
 		t.Fatalf("calls %v", l.calls)
 	}
 }
@@ -266,10 +266,10 @@ func TestModulesConfigAnswers(t *testing.T) {
 func TestModulesOffOnRemoveRollback(t *testing.T) {
 	e, l, m := ownModulesEnv(t)
 	for _, c := range [][2]string{
-		{"/modules off deye-reader", "deye-reader is off."},
-		{"/modules on deye-reader", "deye-reader is on."},
-		{"/modules remove deye-reader", "deye-reader is removed. Its cells stay, read-only."},
-		{"/modules rollback deye-reader", "deye-reader rolled back from 3 to 2."},
+		{"/modules off demo-reader", "demo-reader is off."},
+		{"/modules on demo-reader", "demo-reader is on."},
+		{"/modules remove demo-reader", "demo-reader is removed. Its cells stay, read-only."},
+		{"/modules rollback demo-reader", "demo-reader rolled back from 3 to 2."},
 		{"/modules off ghost", "No module named ghost."},
 		{"/modules remove ghost", "No module named ghost."},
 		{"/modules rollback html2md", "html2md rolled back from 0.2.0 to builtin."},
@@ -278,7 +278,7 @@ func TestModulesOffOnRemoveRollback(t *testing.T) {
 			t.Errorf("%s: %q, want %q", c[0], got, c[1])
 		}
 	}
-	if got := strings.Join(l.calls, ";"); got != "off deye-reader true;off deye-reader false;remove deye-reader;rollback deye-reader;off ghost true;remove ghost;rollback html2md" {
+	if got := strings.Join(l.calls, ";"); got != "off demo-reader true;off demo-reader false;remove demo-reader;rollback demo-reader;off ghost true;remove ghost;rollback html2md" {
 		t.Fatalf("local calls %s", got)
 	}
 	if got := strings.Join(m.calls, ","); got != "rollback html2md" {

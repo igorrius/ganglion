@@ -22,8 +22,8 @@ func triggerEvent(m event.ModuleTrigger) event.Event {
 }
 
 func alertsTrigger() event.ModuleTrigger {
-	return event.ModuleTrigger{Module: "local/deye-alerts", Producer: "local/deye-reader", Run: "cron:module:local/deye-reader:0:1",
-		Cells: []string{"deye-reader.grid", "deye-reader.soc"}, Depth: 1}
+	return event.ModuleTrigger{Module: "local/demo-alerts", Producer: "local/demo-reader", Run: "cron:module:local/demo-reader:0:1",
+		Cells: []string{"demo-reader.grid", "demo-reader.soc"}, Depth: 1}
 }
 
 // noModel makes both test providers fail the test if a model is called.
@@ -99,7 +99,7 @@ func TestAForeignOrBrokenTriggerRunsNothing(t *testing.T) {
 	foreign.Source = "telegram"
 	broken := triggerEvent(alertsTrigger())
 	broken.Payload = json.RawMessage(`{"module":`)
-	empty := triggerEvent(event.ModuleTrigger{Producer: "local/deye-reader", Run: "x", Cells: []string{"a.b"}})
+	empty := triggerEvent(event.ModuleTrigger{Producer: "local/demo-reader", Run: "x", Cells: []string{"a.b"}})
 	for _, ev := range []event.Event{foreign, broken, empty} {
 		out, st, err := e.a.Handle(context.Background(), ev)
 		if err != nil || len(out) != 0 || st.Conv != "" {
