@@ -89,6 +89,7 @@ considered, how they compare, the decision and its consequences. See
 | [0081](0081-update-the-node-from-signed-releases-at-the-owners-command.md) | Update the node from the project's signed releases, at the owner's command | Accepted | 2026-11-13 |
 | [0082](0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md) | Open the repository now, and keep the announced release in P3 | Accepted | 2026-11-14 |
 | [0083](0083-the-repository-holds-the-core-and-no-users-module.md) | The repository holds the core and no user's module | Accepted | 2026-11-14 |
+| [0084](0084-publish-docs-with-zensical-on-github-pages.md) | Publish docs/ as a site with Zensical on GitHub Pages | Proposed | 2026-11-14 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).
