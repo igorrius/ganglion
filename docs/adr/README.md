@@ -61,7 +61,8 @@ considered, how they compare, the decision and its consequences. See
 | [0053](0053-fixed-texts-in-the-persons-language.md) | Send fixed texts in the person's language, from a catalogue with a one-time machine translation | Accepted | 2026-11-06 |
 | [0054](0054-structured-replies-as-rich-blocks-the-transport-builds.md) | Send structured replies as Telegram rich messages, from blocks the transport builds | Accepted | 2026-11-06 |
 | [0055](0055-a-reply-carries-the-replied-messages-origin.md) | Let a reply carry the replied message's origin, from the node's own outbox | Accepted | 2026-11-07 |
-| [0056](0056-small-hosts-as-a-soft-target.md) | Treat small hosts as a soft target held by GOMEMLIMIT, not as a 128 MB line | Accepted | 2026-11-08 |
+| [0056](0056-small-hosts-as-a-soft-target.md) | Treat small hosts as a soft target held by GOMEMLIMIT, not as a 128 MB line | Superseded by ADR-0087 (small hosts as the aim) | 2026-11-08 |
+| [0087](0087-distribute-to-any-machine-and-drop-small-hosts-as-a-target.md) | Aim the node at any machine it is distributed to, and drop small hosts as a target | Accepted | 2026-11-14 |
 | [0057](0057-commands-may-list-split-folders.md) | Let commands list the folders the sandbox splits | Accepted | 2026-11-08 |
 | [0058](0058-load-shedding-leaves-p1.md) | Take load shedding out of P1 and pass the gate without the two-week clock | Accepted | 2026-11-09 |
 | [0059](0059-node-config-file.md) | Make `ganglion.yaml` the node's single source of configuration, with secrets as `env:NAME` (D-3) | Accepted | 2026-11-10 |

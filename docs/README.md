@@ -173,8 +173,8 @@ Start here when coming back to the project.
     ([ADR-0013](adr/0013-protocol-envelope-around-stateless-mcp.md),
     [research](research/2026-11-01-mcp-a2a-coverage.md)).
   - 0.5 runner memory: fits a 128 MB container with room to spare
-    ([research](research/2026-11-01-runner-memory.md)); a Pi run later
-    confirms arm64 timings.
+    ([research](research/2026-11-01-runner-memory.md)); the Pi run for
+    arm64 timings is dropped ([ADR-0087](adr/0087-distribute-to-any-machine-and-drop-small-hosts-as-a-target.md)).
   - 0.6 Tuya access: moved to P1; loads are state cells with a `virtual`
     backend until the plugs are linked
     ([ADR-0014](adr/0014-state-cells.md)).
@@ -409,11 +409,12 @@ Start here when coming back to the project.
       which is its own rule. Seen on the way: two presses for two currency pages and a third for the same
       weather site with another city (in "Not now", security first); the first-run introduction did not
       run because the workspace was copied from the example persona.
-  - **Memory is a target, not a line (2026-11-08,
-    [ADR-0056](adr/0056-small-hosts-as-a-soft-target.md)):** principle 8 aims at small hosts, held by
-    `GOMEMLIMIT`; each milestone compares its numbers with the previous one; a feature that does not fit
-    a small host runs on a denser node. The memory tests report and no longer fail above 128 MB.
-    Setting `GOMEMLIMIT` from the container's limit is M4 task 4.1.
+  - **Memory and size are goals; the node runs on any machine (2026-11-14,
+    [ADR-0087](adr/0087-distribute-to-any-machine-and-drop-small-hosts-as-a-target.md)):** no device is the
+    aim, and the device measurements are dropped. Memory and size are still weighed in every decision and
+    compared with the previous milestone. `GOMEMLIMIT` still bounds a node in its container. The memory
+    tests report and no longer fail above 128 MB. Setting `GOMEMLIMIT` from the container's limit is M4
+    task 4.1. ADR-0056 is superseded.
   - **`/status` (task 3.38), closed 2026-11-08**
     ([design](plans/p1-status-design.md), [plan](plans/p1-status.md), R-OBS-11):
     - an admin's `/status`, with no model and no note in the history: a verdict, then the node (the full
@@ -450,7 +451,7 @@ Start here when coming back to the project.
       replaced, a `.env` symlink, Unix sockets to gpg-agent and the keyring); each is closed with an
       abuse test;
     - measured: binary 46.4 MB, as on `master`; the agent with tools 44.7 MB after 1,000 turns;
-    - open: Railway and a Pi not measured (`tools/sandboxprobe`); hard links and bind mounts made
+    - open: hard links and bind mounts made
       before are out of reach of path rules; a `.env` deeper than three folders stays readable;
       Windows and macOS have no commands ("Not now");
     - the owner's look on the test bot: "✅ Command sandbox: ready, Landlock 7".
@@ -509,7 +510,7 @@ Start here when coming back to the project.
     - the live check found a bug the tests had missed: with a relative database path the claude CLI's work
       folder was relative, so the CLI could not find its system prompt and every model call failed. Fixed in
       6821fb4 (an absolute work folder) with tests;
-    - open: Railway and a Pi are still to measure; Docker does not work from commands below Landlock ABI 9
+    - open: Docker does not work from commands below Landlock ABI 9
       (commands are classed and asked for as designed, then fail to reach the daemon); `make lab-faults` was
       not run; the merge.
   - **M4a, config and models by purpose, done (2026-11-09)** on branch `m4-reflexes`, checked live on
