@@ -1089,7 +1089,7 @@ owner's first live run (2026-11-03) found seven issues, fixed under
    done", and the directive says so too; the model had said "I updated
    the record" while the memory write waited.
  - R49: `memory.recall` labels a hit "stored fact" or "said in an earlier
-   chat on <date>, not a stored fact"; the model had said "memory still
+   chat on `<date>`, not a stored fact"; the model had said "memory still
    holds Deye 5 kW" when that write had expired unconfirmed and only the
    owner's words were in the archive.
  - R50: a sent reminder leaves a `[reminder]` note in the chat's

@@ -99,7 +99,7 @@ Package `guard`:
   the model, and every admin gets, once per held-back write (key
   `alert:memory:quarantine:<slug>:<short hash of the body>`, so a rerun
   alerts once and a second write under the same title alerts again): "A
-  fact was held back as a possible injection: <title> — <reason>." The
+  fact was held back as a possible injection: `<title>` — `<reason>`." The
   model is told only that the fact was held back; the reason, a model's
   words about outside text, goes to the owner and not into its context.
 - **On schedule.** A system job (`system:memory-audit`, kind `system`,

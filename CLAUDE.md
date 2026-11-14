@@ -56,7 +56,12 @@ the ADRs.
   milestones group the work; a phase-plan task that spans several PRs or
   gathers bugs found along the way gets a parent issue (link to the plan
   and its "done when") with sub-issues; an issue that cannot start before
-  another is marked "blocked by" it. Issues #38–#174 came from the old
+  another is marked "blocked by" it. **Keep the board in step by hand:**
+  the project's workflows only add new issues (Backlog) and move an item
+  on a linked PR (In progress) or on close and merge (Done). When work on
+  an issue starts, set its Status to In progress and assign it, together
+  with its parent; a task agreed as the next one goes to Next; after a
+  close, check it reached Done. Issues #38–#174 came from the old
   backlog board (G-ids); that board is read-only now.
 - **Pick the cheapest model that does the job.** At the start of a task,
   say in one line which model it needs; if the session runs a heavier one
@@ -73,4 +78,12 @@ the ADRs.
     format fixes.
 - Docs format: standard Markdown links with relative paths (no
   `[[wikilinks]]`), diagrams as Mermaid `flowchart`, `sequenceDiagram` or
-  `stateDiagram-v2`, planned parts drawn dashed.
+  `stateDiagram-v2`, planned parts drawn dashed. `docs/` is also published
+  as [a site](https://igorrius.github.io/ganglion/)
+  ([ADR-0084](docs/adr/0084-publish-docs-with-zensical-on-github-pages.md)),
+  so: a link from `docs/` to a file outside it is a full GitHub link
+  (`https://github.com/igorrius/ganglion/blob/master/...`); a placeholder
+  in prose is always in backticks (`` `<name>` ``), since a bare tag
+  vanishes on GitHub and can swallow a page on the site. The `Docs`
+  workflow builds strictly, so a broken link or anchor fails the pull
+  request.

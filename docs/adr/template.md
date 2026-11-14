@@ -1,6 +1,6 @@
 # ADR-NNNN: Title in the imperative ("Use X for Y")
 
-- **Status:** Proposed | Accepted | Superseded by [ADR-NNNN](NNNN-title.md) | Deprecated
+- **Status:** Proposed | Accepted | Superseded by ADR-NNNN, linked | Deprecated
 - **Date:** YYYY-MM-DD
 - **Deciders:** Igor Artasevych
 - **Spec:** links to the affected sections of [the spec](../spec.md)

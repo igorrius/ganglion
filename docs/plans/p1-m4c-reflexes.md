@@ -613,7 +613,7 @@ message went out (owner's ruling, 2026-11-10: a refused message keeps the previo
 same rule fires again later; messages after a refusal are not attempted), and returns
 `{"ok":true}`. `lib.rs` names no rule or setting. The template's own rule is a
 neutral example: one listened cell `producer.value`, a message when it crosses a configured
-`threshold` downwards, once until it rises again, and "no data for <n> min" once from the hourly
+`threshold` downwards, once until it rises again, and "no data for `<n>` min" once from the hourly
 cron when the cell is older than `stale_after` minutes (default 60). Its tests cover each rule on
 the fake host.
 
@@ -833,12 +833,12 @@ type ModuleBuilt struct {
   session's jobs, e.g. after `/new`) sends one fixed line; otherwise a note `[build finished]
   <name>: <answer>` that taints only when the answer is outside content, then `converse` at depth
   + 1, so the agent fixes and builds again or calls `module.install`.
-- `module.write` and `module.build` of a module whose build runs or waits are refused: "<name> is
+- `module.write` and `module.build` of a module whose build runs or waits are refused: "`<name>` is
   being built; wait for its result".
 - `agent.call_timeout` (3m) and `agent.turn_timeout` (5m) in `ganglion.yaml` and its schema; the
   core loop's turn timeout is the turn's plus 1 min; the start fails if that reaches the lease.
-- The builder says "the caller stopped it after <d>" when the caller's deadline ended it, and "it
-  ran past <limit>" only for its own limit.
+- The builder says "the caller stopped it after `<d>`" when the caller's deadline ended it, and "it
+  ran past `<limit>`" only for its own limit.
 - The skill says the build runs in the background and the result comes back as a note.
 
 - As built (task 10): the build runs under the build queue's own context (a node component,
@@ -849,7 +849,7 @@ type ModuleBuilt struct {
   only its own records. `module.built` carries the module's short name.
   Fix round 1 (owner, 2026-11-10): the `module.built` turn converses at the build call's own depth,
   not + 1, and a 6th build of a module in a row without a person's message in the conversation is
-  refused ("<name> was built 5 times in a row; ask the owner before building again"; the count is
+  refused ("`<name>` was built 5 times in a row; ask the owner before building again"; the count is
   in memory per conversation and module, so a restart resets it).
 
 - [x] **Step 1: Failing tests:** `module.build` answers at once with a job and a card; the build's

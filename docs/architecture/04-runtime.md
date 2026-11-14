@@ -253,7 +253,7 @@ sequenceDiagram
 
 A module build takes a minute or more, longer than a model call may wait,
 so `module.build` never builds inside its turn (R-RUN-9, ADR-0069). The
-call checks the module, refuses one whose build runs or waits ("<name> is
+call checks the module, refuses one whose build runs or waits ("`<name>` is
 being built; wait for its result", and `module.write` refuses the same),
 stores a record of the build under `<data>/modules/build-jobs`, starts its
 card and answers at once with the job's key, which the session keeps. The

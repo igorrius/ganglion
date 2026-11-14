@@ -12,7 +12,13 @@ Start here when coming back to the project.
   announcement stays in the P3 gate
   ([ADR-0082](adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)).
   Next for outside readers, each its own step: a user guide and a
-  documentation site, and an image published by tag.
+  documentation site, and an image published by tag
+  ([#176](https://github.com/igorrius/ganglion/issues/176)). The site is
+  up: `docs/` is published at <https://igorrius.github.io/ganglion/> by
+  Zensical from `master`
+  ([ADR-0084](adr/0084-publish-docs-with-zensical-on-github-pages.md),
+  [#178](https://github.com/igorrius/ganglion/issues/178)); the guide and
+  the image are next.
 - **The repository holds the core, not anyone's modules** (owner,
   2026-11-14, [ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md),
   spec principle 10): the Go reader of the owner's inverter is removed, and
@@ -661,16 +667,16 @@ is needed for tests: they run against a fake Bot API.
   "user info" bot shows it, or the `from.id` of your message in
   `getUpdates`.
 - **Running locally:** a `.env` file in the repository root (git-ignored); copy
-  [`.env.example`](../.env.example), which also lists the optional variables:
+  [`.env.example`](https://github.com/igorrius/ganglion/blob/master/.env.example), which also lists the optional variables:
 
   ```sh
   TELEGRAM_TEST_BOT_TOKEN=<token from @BotFather>
   ```
 
   Settings go in `ganglion.local.yaml` (git-ignored): copy
-  [`ganglion.example.yaml`](../ganglion.example.yaml) and set `telegram.admin` to
+  [`ganglion.example.yaml`](https://github.com/igorrius/ganglion/blob/master/ganglion.example.yaml) and set `telegram.admin` to
   `telegram:user:<your id>`. For `make live-echo`, set it in
-  [`examples/ganglion.echo.yaml`](../examples/ganglion.echo.yaml) instead.
+  [`examples/ganglion.echo.yaml`](https://github.com/igorrius/ganglion/blob/master/examples/ganglion.echo.yaml) instead.
 
 - **Running in a Claude Code cloud session:** a local `.env` does not reach
   the container. In the cloud environment's settings (the environment menu
@@ -772,7 +778,7 @@ boundary. Do not run diagnostics in a session that approves commands by itself
 Ids of the form `G-<n>` in plans, ADRs and comments are cards of the
 owner's own backlog, which is not public: read them as labels, not links.
 Bugs found from outside go to GitHub Issues
-([CONTRIBUTING.md](../CONTRIBUTING.md)).
+([CONTRIBUTING.md](https://github.com/igorrius/ganglion/blob/master/CONTRIBUTING.md)).
 
 Suggested path after a long break: this page → the
 [one-picture overview](architecture/README.md#the-idea-in-one-picture) →
@@ -781,7 +787,7 @@ Suggested path after a long break: this page → the
 
 ## Deploy on Railway
 
-The image is built from the [`Dockerfile`](../Dockerfile): the node, Rust with
+The image is built from the [`Dockerfile`](https://github.com/igorrius/ganglion/blob/master/Dockerfile): the node, Rust with
 `wasm32-wasip1` in `/opt/rust`, an unprivileged user `ganglion` (uid 10001)
 the claude CLI, and a volume at `/data` that holds `ganglion.yaml` and the
 database. The

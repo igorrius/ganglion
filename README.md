@@ -81,8 +81,9 @@ to the owner.
 
 ## Documentation
 
-`docs/` is the project's engineering record, written as the work goes. It
-is not a user guide yet.
+`docs/` is the project's engineering record, written as the work goes, and
+is published as a site: **<https://igorrius.github.io/ganglion/>**. It is
+not a user guide yet.
 
 | Question | Read |
 |---|---|

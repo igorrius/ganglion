@@ -1,0 +1,47 @@
+# The documentation site (ADR-0084): built by Zensical from docs/ as it is,
+# published on GitHub Pages by .github/workflows/docs.yml.
+site_name: ganglion
+site_description: A distributed agent network in Go
+site_url: https://igorrius.github.io/ganglion/
+repo_url: https://github.com/igorrius/ganglion
+repo_name: igorrius/ganglion
+edit_uri: edit/master/docs/
+copyright: Apache-2.0
+docs_dir: docs
+site_dir: site
+
+theme:
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+
+markdown_extensions:
+  - tables
+  - admonition
+  - toc:
+      permalink: true
+      # Heading anchors exactly as GitHub makes them: docs/ links to about
+      # 250 of them, e.g. #101-p0--recon--tasks-and-acceptance.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+

@@ -168,7 +168,7 @@ The model never chooses the class.
   owner needs (build caches, logs). So ignored paths are not hidden: their
   names and sizes are read class like any other. A content command on a
   file that git ignores in its repository adds a warning to the press:
-  "git ignores this file in <repo>; such files often hold passwords and
+  "git ignores this file in `<repo>`; such files often hold passwords and
   keys".
 - Unknown programs are **Change**, never Read (default deny, call).
 - Docker is reached through its command-line tool; only the subcommands in
@@ -251,7 +251,7 @@ the owner to clean by hand.
 Fail closed (call): if the node cannot establish 1–4 at start (an old
 kernel, no Landlock, a container without user namespaces), `host.exec` is
 not offered to the model at all, the node logs why, and `/status` or the
-basic stats say "commands are off: <reason>". The basic stats in section
+basic stats say "commands are off: `<reason>`". The basic stats in section
 6 do not depend on the sandbox.
 
 Note for the ADR: Landlock grants access to whole trees and cannot carve a

@@ -33,7 +33,7 @@ What stands against it:
   `.env` or database file was ever tracked. It does hold the owner's name
   and commit email, which are public already, and the generated address of
   the owner's live node, which the tree no longer names
-  ([CLAUDE.md](../../CLAUDE.md), the rule of 2026-11-14).
+  ([CLAUDE.md](https://github.com/igorrius/ganglion/blob/master/CLAUDE.md), the rule of 2026-11-14).
 - The project runs module code written by a model and host commands in a
   sandbox. A reader who finds a hole needs a private way to report it
   before the code is public, not after.
@@ -84,7 +84,7 @@ What "open" means until the release:
 - Bug reports come through GitHub Issues. The owner's own backlog stays
   where it is; its card ids (`G-<n>`) that appear in documents are not
   links.
-- Vulnerabilities are reported privately ([SECURITY.md](../../SECURITY.md)).
+- Vulnerabilities are reported privately ([SECURITY.md](https://github.com/igorrius/ganglion/blob/master/SECURITY.md)).
 - Only the owner merges into `master`.
 
 ## Security
