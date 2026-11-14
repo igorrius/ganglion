@@ -123,6 +123,12 @@ We build from scratch. Neighbours are a source of ideas, not a base.
      code:** the ADR template's Security section,
      [conventions](conventions.md) section 11. What stops an abuse is
      code, not a prompt.
+10. **The repository holds the core, not anyone's modules** (owner,
+    2026-11-14, [ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md)). A module is what the node builds at a
+    user's request. A module, a reader or a fixture for one person's device
+    or account is not added to the repository; what the agent needs in
+    order to write one is carried by neutral templates and by built-in
+    skills, which are updated with the node.
 
 ## 3. Deliberately NOT in 0.x
 
@@ -1499,6 +1505,12 @@ Load shedding, planned here until M4, left P1 (owner, 2026-11-09,
 [ADR-0058](adr/0058-load-shedding-leaves-p1.md)): switching loads by
 rules over sensor values is a flow of ready modules linked through cells,
 which belongs with the flow engine (9.6).
+
+Deye is the owner's own module and the example the project grew up on. It
+leaves the repository ([ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md), principle 10): the Go reader
+it was ported from is gone, and the Rust example below stays until a
+neutral reader template and the `module-writing` skill take its place
+(P1 task 6.8); the requirements below then become that template's.
 
 - **R-DEYE-1.** `deye-reader` is an example in the repository
   (`examples/modules/deye-reader`, Rust), not a part of the agent: the

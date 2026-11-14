@@ -1,5 +1,4 @@
-//! Reading the inverter through the DeyeCloud OpenAPI, ported from the Go
-//! reference `internal/deyeref`, which was ported from `deye.py`.
+//! Reading the inverter through the DeyeCloud OpenAPI, ported from `deye.py`.
 
 use crate::host::{Host, Request};
 use serde::Serialize;

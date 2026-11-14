@@ -59,12 +59,11 @@ The rules it keeps:
 ```sh
 cargo test                       # the unit tests (CI runs them with clippy and fmt)
 make example-deye                # bin/deye-reader.rust.wasm, built as the node builds it
-go test ./tools/modbench -run TestTheRustExample   # built by the node's builder, compared with internal/deyeref
+go test ./tools/modbench -run TestTheRustExample   # built by the node's builder, run on recorded answers
 ./bin/modrun -wasm bin/deye-reader.rust.wasm \
   -manifest examples/modules/deye-reader/manifest.yaml -config inverter_sn=<serial>
 ```
 
-The Go reader it was ported from, `internal/deyeref`, stays as the
-reference: the Go test above runs both on the recorded DeyeCloud answers in
-`tools/modbench/testdata` and requires the `sample` cell to equal the Go
-reader's sample.
+The Go test above runs it on the recorded DeyeCloud answers in
+`tools/modbench/testdata` and requires the `sample` cell to equal the
+recorded sample.

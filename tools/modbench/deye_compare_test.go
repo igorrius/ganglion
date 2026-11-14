@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -43,15 +44,21 @@ func TestTheRustExample(t *testing.T) {
 		t.Skip("it fetches crates from crates.io: set GANGLION_NET_TESTS=1 (make test-net)")
 	}
 	art := buildExample(t)
-	t.Run("agrees with the Go reference", func(t *testing.T) { agreesWithTheReference(t, art) })
+	t.Run("reads the recorded answers", func(t *testing.T) { readsTheRecordedAnswers(t, art) })
+	t.Run("is measured end to end", func(t *testing.T) { isMeasuredEndToEnd(t, art) })
 	t.Run("waits out Retry-After", func(t *testing.T) { waitsOutRetryAfter(t, art) })
 }
 
-// R-LS-4's spirit: the example and the Go reference reader read the same
-// answers and agree. The example's sample cell must equal the reference's
-// sample, its status tool must answer within its contract, and init and
-// health must make no request.
-func agreesWithTheReference(t *testing.T, art builder.Artifact) {
+// recordedSample is what testdata/deye-replay.json holds, as the reader the
+// example was ported from read it; ts is the time of the reading and is set
+// by the test.
+const recordedSample = `{"soc":55,"batt_v":52.44,"batt_w":329,"batt_a":6.28,"grid_v":4.5,"freq":0,
+	"grid_w":0,"inv_w":276,"temp_dc":43.3,"temp_hs":35.6,"grid_on":0}`
+
+// The example reads the recorded answers: its sample cell must equal the
+// recorded sample, its status tool must answer within its contract, and init
+// and health must make no request.
+func readsTheRecordedAnswers(t *testing.T, art builder.Artifact) {
 	now := time.Now().Truncate(time.Second)
 
 	srv, hits := replayServer(t, "testdata/deye-replay.json", now)
@@ -70,16 +77,10 @@ func agreesWithTheReference(t *testing.T, art builder.Artifact) {
 	got := cells.Values()
 	t.Logf("the example's cells: %s", got)
 
-	manifest, err := os.ReadFile(exampleManifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ref := handle(t, load(t, buildReference(t), manifest, srv.URL, runner.NewMemCells(time.Now)), "cron")
-	t.Logf("the reference's sample: %s", ref.Result)
-
-	want := decode(t, ref.Result)
+	want := decode(t, json.RawMessage(recordedSample))
+	want["ts"] = float64(now.Unix())
 	if sample := decode(t, got["deye-reader.sample"]); !reflect.DeepEqual(sample, want) {
-		t.Fatalf("the example's sample cell\n%v\ndiffers from the reference's\n%v", sample, want)
+		t.Fatalf("the example's sample cell\n%v\ndiffers from the recorded one\n%v", sample, want)
 	}
 	if !reflect.DeepEqual(decode(t, out.Result), want) {
 		t.Errorf("the example's cron answer %s is not its sample", out.Result)
@@ -94,6 +95,36 @@ func agreesWithTheReference(t *testing.T, art builder.Artifact) {
 	status := decode(t, handle(t, rust, "tool:status").Result)
 	if status["fresh"] != true || !reflect.DeepEqual(status["sample"], want) {
 		t.Errorf("status = %v, want a fresh answer with the same sample", status)
+	}
+}
+
+// modbench itself, on the example: five calls against the replay, a report
+// with every measure filled in.
+func isMeasuredEndToEnd(t *testing.T, art builder.Artifact) {
+	wasm := filepath.Join(t.TempDir(), "deye.wasm")
+	if err := os.WriteFile(wasm, art.Wasm, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	err := run(context.Background(), []string{
+		"-wasm", wasm, "-manifest", exampleManifest,
+		"-replay", "testdata/deye-replay.json", "-config", "inverter_sn=2400000001", "-n", "5",
+	}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, stderr.String())
+	}
+	var r report
+	if err := json.Unmarshal(stdout.Bytes(), &r); err != nil {
+		t.Fatalf("report %s: %v", stdout.String(), err)
+	}
+	if r.Calls != 5 || r.Failures != 0 || r.WasmBytes == 0 || r.CallP50Micros <= 0 || r.RSSAfterCallsMiB <= 0 {
+		t.Fatalf("report = %+v", r)
+	}
+	if r.RSSPeakMiB < r.RSSAfterCallsMiB {
+		t.Fatalf("peak RSS %.1f MiB is below the final RSS %.1f MiB", r.RSSPeakMiB, r.RSSAfterCallsMiB)
+	}
+	if !strings.Contains(r.LastResult, `"soc"`) {
+		t.Fatalf("last result %q lacks a sample", r.LastResult)
 	}
 }
 
