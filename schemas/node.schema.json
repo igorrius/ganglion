@@ -130,7 +130,7 @@
           "default": "off"
         },
         "public_url": {
-          "description": "The HTTPS address the outside world reaches the listener at, such as https://ganglion.up.railway.app: no path, and no port or one of 443, 80, 88 and 8443. The node checks at start that this address reaches it.",
+          "description": "The HTTPS address the outside world reaches the listener at, such as https://ganglion.example.com: no path, and no port or one of 443, 80, 88 and 8443. The node checks at start that this address reaches it.",
           "type": "string",
           "format": "uri",
           "pattern": "^https://"

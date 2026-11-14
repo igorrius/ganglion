@@ -31,7 +31,7 @@ http:
   # a health route. It is never the metrics endpoint.
   addr: off
   # The HTTPS address the outside world reaches the listener at.
-  # public_url: https://ganglion.up.railway.app
+  # public_url: https://ganglion.example.com
 
 telegram:
   # The bot token; the transport does not start without the variable set.

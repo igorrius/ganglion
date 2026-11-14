@@ -4,6 +4,8 @@
 # The html2md module is committed: a Go build needs no Rust (ADR-0035).
 !/modules/html2md/html2md.wasm
 *.db
+# The secret store's key lies beside the database (ADR-0077): never commit it.
+master.key
 *.sqlite3
 # Logs beside a local database (R-OBS-6)
 /logs/

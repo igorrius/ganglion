@@ -816,7 +816,7 @@ git commit -m "agent: /secrets lists names, removes one and resets a locked stor
   - `docs/README.md`, "Where we are": task 6.5 closed, with the date; what remains open (the
     intake from the chat, spec section 11).
   - `p1-all-in-one.md`: task 6.5 marked **Done** with the date and a link to this plan.
-- [ ] **Step 4: The live check on Railway** (the owner's, recorded in `docs/README.md`): one
+- [x] **Step 4: The live check on Railway** (the owner's, recorded in `docs/README.md`): one
   of `deye-reader`'s four secrets moved into the store, its variable deleted, the module's
   next run healthy, `/secrets` showing the name.
 - [x] **Step 5: `make lint test`; commit, push.**
@@ -852,8 +852,14 @@ Where the code differs from the tasks above:
   one (`modstore`), so the agent can pass it on.
 - **The lab scenario is `mech-secrets`**; the lab has one peer, so the
   refusal of a person who is not an admin is held by the agent's unit test.
-- **Task 6.5 is not closed:** the merge and step 4 of task 9, the owner's
-  live check on Railway, are left.
+- **The live check (2026-11-14)** moved all four of `deye-reader`'s
+  secrets, not one. Deleting a variable with the Railway CLI did not
+  restart the service: the running container kept the old values until
+  `railway redeploy`. After it the module's 08:00 UTC run was healthy and
+  the store counted its reads (`ganglion.secrets.ops`, `get`/`ok`).
+- **`master.key` is ignored by git** since the live check: a node started
+  with its database in a checkout's root left the key as an untracked
+  file.
 
 ## What this plan leaves out
 

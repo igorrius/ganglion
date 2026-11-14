@@ -77,7 +77,7 @@ the provider at deploy time, with the owner:
 
    Secrets are written in `ganglion.yaml` as `env:NAME` and never in the file.
    A module's secrets need no variable: see [Module secrets](#module-secrets).
-   A variable can refer to the current bot's (`${{openclaw.DEYE_APP_ID}}`),
+   A variable can refer to the current bot's (`${{<other-service>.DEYE_APP_ID}}`),
    but not to a sealed one: a sealed variable resolves to an empty value, so
    set those by value.
 5. **Memory:** give the service 1 GB while builds run (cargo and rustc peak
@@ -144,9 +144,12 @@ setpriv --reuid=10001 --regid=10001 --clear-groups \
   `ganglion secret list` does the same on the host.
 - **Moving a secret from a variable:** the command above reads the variable
   the service still has. When `/secrets` shows the name and the module's
-  next run is healthy, delete the variable in Railway. A module reads its
-  own stored secret first and the environment second, so both may exist
-  during the move.
+  next run is healthy, delete the variable in Railway
+  (`railway variable delete NAME -s ganglion`) and then redeploy
+  (`railway redeploy -s ganglion --yes`): deleting a variable does not
+  restart the service, and the running container keeps the old value until
+  it does. A module reads its own stored secret first and the environment
+  second, so both may exist during the move.
 - **The key** is `/data/master.key`, made by the node at its first start
   (mode `0600`). It lies on the volume with the database: a backup or a
   copy of the volume must hold both, and the database without the key
@@ -166,9 +169,12 @@ setpriv --reuid=10001 --regid=10001 --clear-groups \
 
 ## Telegram by webhook
 
-The owner's node runs this way since 2026-11-13, on
-`ganglion-production.up.railway.app`. Polling needs none of this and stays
-the default. To have Telegram call the
+The owner's node runs this way since 2026-11-13. Polling needs none of
+this and stays the default. The address of a running node is never written
+in this repository: anyone can send requests to a public address, and the
+platform bills the traffic. For the same reason prefer a domain that cannot
+be guessed from the service's name (Railway lets a generated domain be
+edited) over the default `<service>-<environment>` one. To have Telegram call the
 node instead (`telegram.updates: webhook`, R-DLV-18,
 [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)):
 
@@ -232,7 +238,7 @@ first start, the line must read `sandbox: ready ...`; if it reads `sandbox:
 commands are off`, its `reason` names what is missing (kernel, root, or
 dumpable) and nothing can be built.
 
-Checked on Railway (2026-11-11, project `openclaw`, service `ganglion`):
+Checked on Railway (2026-11-11, on the owner's service):
 kernel `6.18.15+deb13-cloud-amd64`; the volume is ext4, handed to `ganglion` by
 the entrypoint, and hard links work on it; the node runs as uid 10001 and logs
 `sandbox: ready denied=62 hide_names=false`, `node: memory limit
