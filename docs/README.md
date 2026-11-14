@@ -15,9 +15,16 @@ Start here when coming back to the project.
   documentation site, and an image published by tag.
 - **The repository holds the core, not anyone's modules** (owner,
   2026-11-14, [ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md),
-  spec principle 10): the Go reader of the owner's inverter is removed.
-  Next, task 6.8: a neutral reader template and the `module-writing` skill
-  take the place of the Deye example, which then leaves too.
+  spec principle 10): the Go reader of the owner's inverter is removed, and
+  so is the Deye example. In its place (task 6.8, spec section 8,
+  R-RDR-1..4): `examples/modules/reader-template`, a module that reads an
+  outside service and names no device, whose shared rules the agent does
+  not change, and the built-in skill `module-writing`, which now says
+  which template fits a request and how modules are linked through cells.
+  The lab's build-and-install scenario passes on the template. Still to
+  do, each its own pull request: the templates embedded in the binary, so
+  they are updated with the node as the skills are, and Deye's name as a
+  sample string in tests, comments and documents.
 - **Done on 2026-11-13:** Telegram groups (MG), added that day when the
   owner moved the production bot's token to ganglion and removed the old
   bot. A group is connected from a card in the admin's private chat and

@@ -1,9 +1,9 @@
 // Command modrun runs a WASM module once, outside a node: a development and
 // acceptance tool for P0 (docs/spec.md, tasks 0.2–0.5).
 //
-//	modrun -wasm bin/deye-reader.rust.wasm \
-//	       -manifest examples/modules/deye-reader/manifest.yaml \
-//	       -config inverter_sn=XXXX -env .env
+//	modrun -wasm bin/reader-template.wasm \
+//	       -manifest examples/modules/reader-template/manifest.yaml \
+//	       -config station=roof-1 -env .env
 //
 // Secrets come from the env file and the process environment; the module
 // sees only those its manifest grants. Module state persists in -state

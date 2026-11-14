@@ -25,7 +25,7 @@ import (
 )
 
 // TestMain lets the test binary be the sandbox's helper, as the ganglion
-// binary is: the Rust example is built in the command sandbox.
+// binary is: the template is built in the command sandbox.
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == sandbox.HelperArg {
 		os.Exit(sandbox.Helper())
@@ -33,82 +33,75 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-const exampleDir = "../../examples/modules/deye-reader"
+const templateDir = "../../examples/modules/reader-template"
 
-// The Rust example, built once by the node's own builder, run on the
-// recorded DeyeCloud answers. Its build fetches crates from crates.io, so it
-// runs only with GANGLION_NET_TESTS=1 (make test-net, docs/conventions.md
+// The reader template, built once by the node's own builder, run on recorded
+// answers of its example service. Its build fetches crates from crates.io, so
+// it runs only with GANGLION_NET_TESTS=1 (make test-net, docs/conventions.md
 // section 9).
-func TestTheRustExample(t *testing.T) {
+func TestTheReaderTemplate(t *testing.T) {
 	if os.Getenv("GANGLION_NET_TESTS") == "" {
 		t.Skip("it fetches crates from crates.io: set GANGLION_NET_TESTS=1 (make test-net)")
 	}
-	art := buildExample(t)
+	art := buildTemplate(t)
 	t.Run("reads the recorded answers", func(t *testing.T) { readsTheRecordedAnswers(t, art) })
 	t.Run("is measured end to end", func(t *testing.T) { isMeasuredEndToEnd(t, art) })
 	t.Run("waits out Retry-After", func(t *testing.T) { waitsOutRetryAfter(t, art) })
 }
 
-// recordedSample is what testdata/deye-replay.json holds, as the reader the
-// example was ported from read it; ts is the time of the reading and is set
-// by the test.
-const recordedSample = `{"soc":55,"batt_v":52.44,"batt_w":329,"batt_a":6.28,"grid_v":4.5,"freq":0,
-	"grid_w":0,"inv_w":276,"temp_dc":43.3,"temp_hs":35.6,"grid_on":0}`
-
-// The example reads the recorded answers: its sample cell must equal the
-// recorded sample, its status tool must answer within its contract, and init
-// and health must make no request.
+// R-RDR-1 and R-RDR-3 through the runner: the cells hold the recorded
+// reading, the status tool answers within its contract, and init and health
+// make no request.
 func readsTheRecordedAnswers(t *testing.T, art builder.Artifact) {
 	now := time.Now().Truncate(time.Second)
 
-	srv, hits := replayServer(t, "testdata/deye-replay.json", now)
+	srv, hits := replayServer(t, "testdata/reader-replay.json", now)
 	cells := runner.NewMemCells(func() time.Time { return now })
-	rust := load(t, art.Wasm, art.Manifest, srv.URL, cells)
-	if err := rust.Init(t.Context()); err != nil {
+	mod := load(t, art.Wasm, art.Manifest, srv.URL, cells)
+	if err := mod.Init(t.Context()); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	if err := rust.Health(t.Context()); err != nil {
+	if err := mod.Health(t.Context()); err != nil {
 		t.Fatalf("Health: %v", err)
 	}
 	if n := hits.Load(); n != 0 {
 		t.Fatalf("init and health made %d requests", n)
 	}
-	out := handle(t, rust, "cron")
+	out := handle(t, mod, "cron")
 	got := cells.Values()
-	t.Logf("the example's cells: %s", got)
+	t.Logf("the template's cells: %s", got)
 
-	want := decode(t, json.RawMessage(recordedSample))
-	want["ts"] = float64(now.Unix())
-	if sample := decode(t, got["deye-reader.sample"]); !reflect.DeepEqual(sample, want) {
-		t.Fatalf("the example's sample cell\n%v\ndiffers from the recorded one\n%v", sample, want)
+	want := map[string]any{"ts": float64(now.Unix()), "value": 21.5, "online": true}
+	if sample := decode(t, got["reader-template.sample"]); !reflect.DeepEqual(sample, want) {
+		t.Fatalf("the sample cell\n%v\ndiffers from the recorded reading\n%v", sample, want)
 	}
 	if !reflect.DeepEqual(decode(t, out.Result), want) {
-		t.Errorf("the example's cron answer %s is not its sample", out.Result)
+		t.Errorf("the cron answer %s is not the reading", out.Result)
 	}
-	if soc := value(t, got["deye-reader.soc"]); soc != want["soc"] {
-		t.Errorf("soc cell %v, sample soc %v", soc, want["soc"])
+	if v := value(t, got["reader-template.value"]); v != 21.5 {
+		t.Errorf("value cell %v, want 21.5", v)
 	}
-	if grid := value(t, got["deye-reader.grid"]); grid != (want["grid_on"] == 1.0) {
-		t.Errorf("grid cell %v, sample grid_on %v", grid, want["grid_on"])
+	if v := value(t, got["reader-template.online"]); v != true {
+		t.Errorf("online cell %v, want true", v)
 	}
 
-	status := decode(t, handle(t, rust, "tool:status").Result)
+	status := decode(t, handle(t, mod, "tool:status").Result)
 	if status["fresh"] != true || !reflect.DeepEqual(status["sample"], want) {
-		t.Errorf("status = %v, want a fresh answer with the same sample", status)
+		t.Errorf("status = %v, want a fresh answer with the same reading", status)
 	}
 }
 
-// modbench itself, on the example: five calls against the replay, a report
+// modbench itself, on the template: five calls against the replay, a report
 // with every measure filled in.
 func isMeasuredEndToEnd(t *testing.T, art builder.Artifact) {
-	wasm := filepath.Join(t.TempDir(), "deye.wasm")
+	wasm := filepath.Join(t.TempDir(), "reader.wasm")
 	if err := os.WriteFile(wasm, art.Wasm, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
 	err := run(context.Background(), []string{
-		"-wasm", wasm, "-manifest", exampleManifest,
-		"-replay", "testdata/deye-replay.json", "-config", "inverter_sn=2400000001", "-n", "5",
+		"-wasm", wasm, "-manifest", templateManifest,
+		"-replay", "testdata/reader-replay.json", "-config", "station=roof-1", "-n", "5",
 	}, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, stderr.String())
@@ -123,24 +116,24 @@ func isMeasuredEndToEnd(t *testing.T, art builder.Artifact) {
 	if r.RSSPeakMiB < r.RSSAfterCallsMiB {
 		t.Fatalf("peak RSS %.1f MiB is below the final RSS %.1f MiB", r.RSSPeakMiB, r.RSSAfterCallsMiB)
 	}
-	if !strings.Contains(r.LastResult, `"soc"`) {
-		t.Fatalf("last result %q lacks a sample", r.LastResult)
+	if !strings.Contains(r.LastResult, `"value"`) {
+		t.Fatalf("last result %q lacks a reading", r.LastResult)
 	}
 }
 
-// R-DEYE-2 through the runner: a 429 with Retry-After 120 is answered OK,
+// R-RDR-2 through the runner: a 429 with Retry-After 120 is answered OK,
 // and no request follows within the wait, from cron or from the tool.
 func waitsOutRetryAfter(t *testing.T, art builder.Artifact) {
 	now := time.Now().Truncate(time.Second)
-	srv, hits := replayServer(t, "testdata/deye-replay-429.json", now)
+	srv, hits := replayServer(t, "testdata/reader-replay-429.json", now)
 	state := runner.NewMemState()
 	rust := loadWith(t, art.Wasm, art.Manifest, srv.URL, runner.NewMemCells(time.Now), state)
 
 	handle(t, rust, "cron")
-	if n := hits.Load(); n != 2 {
-		t.Fatalf("the first run made %d requests, want a login and a read", n)
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("the first run made %d requests, want one read", n)
 	}
-	raw, _ := state.Get("deye-reader", "not_before")
+	raw, _ := state.Get("reader-template", "not_before")
 	until, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || until < now.Unix()+119 || until > time.Now().Unix()+121 {
 		t.Fatalf("not_before = %q, want about now + 120 s", raw)
@@ -150,14 +143,14 @@ func waitsOutRetryAfter(t *testing.T, art builder.Artifact) {
 	if err != nil || out.OK {
 		t.Fatalf("status with no reading = %+v, %v; want a failure", out, err)
 	}
-	if n := hits.Load(); n != 2 {
-		t.Fatalf("%d requests within Retry-After", n-2)
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("%d requests within Retry-After", n-1)
 	}
 }
 
 // buildExample builds the Rust example with the node's local builder in
 // this machine's command sandbox, or skips naming what is missing.
-func buildExample(t *testing.T) builder.Artifact {
+func buildTemplate(t *testing.T) builder.Artifact {
 	t.Helper()
 	b := builder.NewLocal(realSandbox(t), rustConfig(t))
 	can, err := b.Can(t.Context())
@@ -167,14 +160,14 @@ func buildExample(t *testing.T) builder.Artifact {
 	if can[builder.Rust] == "" {
 		t.Skip("the wasm32-wasip1 target is not installed (`rustup target add wasm32-wasip1`)")
 	}
-	art, log, err := b.Build(t.Context(), builder.Source{Name: "deye-reader", Dir: exampleDir})
+	art, log, err := b.Build(t.Context(), builder.Source{Name: "reader-template", Dir: templateDir})
 	if err != nil && offline(string(log)) {
 		t.Skipf("crates.io is out of reach:\n%s", log)
 	}
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
-	t.Logf("built the example: %d bytes, sha %s, %s", len(art.Wasm), art.SHA256, can[builder.Rust])
+	t.Logf("built the template: %d bytes, sha %s, %s", len(art.Wasm), art.SHA256, can[builder.Rust])
 	return art
 }
 
@@ -286,7 +279,7 @@ func loadWith(t *testing.T, wasm, manifest []byte, target string, cells runner.C
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.ConfigValues = map[string]string{"inverter_sn": "2400000001"}
+	m.ConfigValues = map[string]string{"station": "roof-1"}
 	mod, err := runner.Load(t.Context(), wasm, m, runner.Deps{
 		Secrets: func(name string) (string, bool) { return "test-" + strings.ToLower(name), true },
 		State:   state,

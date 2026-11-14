@@ -43,7 +43,7 @@ func (t *ModuleImport) Spec() tool.Spec {
 			"from names the example: its folder name, or examples/modules/<example> (the node keeps them in " + t.m.Examples + "). " +
 			"The owner approves the copy with a press; the copy is committed to the workspace's history. A name already in the workspace is refused.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
-			`"from":{"type":"string","description":"the example, such as deye-reader or examples/modules/deye-reader"},` +
+			`"from":{"type":"string","description":"the example, such as reader-template or examples/modules/reader-template"},` +
 			`"name":{"type":"string","description":"the module's name: lower-case letters, digits, - and _, starting with a letter"}},` +
 			`"required":["from","name"],"additionalProperties":false}`),
 		Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm, AdminOnly: true}

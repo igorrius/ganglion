@@ -74,8 +74,10 @@ data on a volume at `/data`.
 [docs/deploy-railway.md](docs/deploy-railway.md) is the runbook for one
 hosting platform; most of it applies to any.
 
-An example module, the reader of a Deye solar inverter, is in
-[examples/modules/deye-reader](examples/modules/deye-reader/README.md).
+The agent starts a module from one of two templates in
+[examples/modules](examples/modules): a reader that brings an outside
+service's numbers into cells, and a reflex that reacts to cells and writes
+to the owner.
 
 ## Documentation
 

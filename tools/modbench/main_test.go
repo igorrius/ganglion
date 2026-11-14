@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-// exampleManifest is the manifest of the Rust example.
-const exampleManifest = "../../examples/modules/deye-reader/manifest.yaml"
+// templateManifest is the manifest of the reader template.
+const templateManifest = "../../examples/modules/reader-template/manifest.yaml"
 
 func TestReplayServesRecordedBodiesWithCurrentTime(t *testing.T) {
 	h, err := newReplay([]byte(`[{"path": "/v1/a", "body": {"ts": __NOW__}}, {"path": "/v1/b", "body": "plain"}]`))
@@ -75,13 +75,13 @@ func TestRedirectSendsEveryHostToTheReplayServer(t *testing.T) {
 	}))
 	defer srv.Close()
 	client := &http.Client{Transport: redirect(srv.URL)}
-	resp, err := client.Get("https://eu1-developer.deyecloud.com/v1.0/account/token?appId=1")
+	resp, err := client.Get("https://api.example.com/v1/stations/roof-1/latest?unit=c")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
-	if string(b) != "/v1.0/account/token?appId=1" {
+	if string(b) != "/v1/stations/roof-1/latest?unit=c" {
 		t.Fatalf("server saw %q", b)
 	}
 }

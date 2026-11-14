@@ -1,6 +1,6 @@
 ---
 name: module-writing
-description: Write, build and offer a module of the owner's system, such as a reflex that reacts to cells and writes to the owner
+description: Write, build and offer a module of the owner's system - a reader that brings an outside service's numbers into cells, or a reflex that reacts to cells and writes to the owner
 ---
 The system you are changing is what you run on as an agent. Be careful not to break it: if it
 breaks, you stop working.
@@ -12,18 +12,44 @@ model works after the module on clean, prepared data, or not at all.
 
 ## When to make a module
 
-Make one when a reaction repeats and needs no thought: "tell me when the battery falls below
-30", "say so when a reading goes quiet". The module does it every time without a model, so it is
-cheaper and cannot be talked into anything. Do not make one for a thing that happens once, for a
-decision that needs judgment, or for text you would have to read to understand. Those stay with
-you.
+Make one when a task repeats and needs no thought: "read my meter every half hour", "tell me
+when the battery falls below 30", "say so when a reading goes quiet". The module does it every
+time without a model, so it is cheaper and cannot be talked into anything. Do not make one for a
+thing that happens once, for a decision that needs judgment, or for text you would have to read
+to understand. Those stay with you.
+
+## Which template
+
+A module starts from a template the node ships; you never write one from nothing.
+
+- **`reader-template`** when numbers have to come in from outside: a service with an API that is
+  asked on a schedule. It makes one request, turns the answer into cells and answers a `status`
+  tool. It already waits out a rate limit, reports stale data once, never repeats a refused
+  login, and answers from its cells when the service is down. It needs the network and usually a
+  secret; it writes nothing to the owner.
+- **`reflex-template`** when something has to happen because cells changed: a rule over values
+  that are already in cells, which writes to the owner. It needs no network and no secrets.
+
+A request is often both: "watch my meter and tell me when it drops" is a reader for the meter
+and a reflex that listens to the reader's cells. Make them as two modules, the reader first,
+and install it before you build the reflex, so the cells the reflex names exist. If the cells
+are already there (`cells.list`), the reflex alone is enough.
+
+Before you start a reader, find out from the owner or the service's documentation: the address
+to ask and what it answers, how it authenticates, how often it may be asked, and how old a
+reading it can return. If the service needs a login step before the read, or cannot be asked
+over HTTPS with a secret in a header or the body, say so to the owner instead of bending the
+template. Ask the owner to store each secret themselves, on the host: `ganglion secret set --module <name>
+NAME`. Never ask for a secret's value in the chat.
 
 ## The shape of a module
 
 - One module, one responsibility. If you are about to write "and also", write a second module.
-- A module takes data in and gives data out only through cells. It listens to the cells of
-  other modules (`cells.read`, a `cell` trigger) and reports its own. It never listens to its own
-  cells: the node refuses that, and it would be a loop.
+- Modules are linked only through cells. One module reports a cell (`cells.report`), another
+  listens to it (`cells.read`, a `cell` trigger) by its full id, `<module>.<cell>`. A module
+  never calls another module and never listens to its own cells: the node refuses that, and it
+  would be a loop. To link two modules, check the reporting one's cells with `module.status` or
+  `cells.list` and use exactly those ids.
 - The messages it writes come from a template in code with numbers filled in. Never
   from a model, and never text that came from outside (a page, a message, a cell's text).
 - A module does not choose who reads its messages: it only calls `notify`. Where they go is the
@@ -31,21 +57,29 @@ you.
   then use `destination.list`, `destination.set` and `module.notify_to` (a group's topic, the
   owner, or both). Never put a chat's name or id into a module's code or config.
 - Cell ids in a trigger and in `cells.read` are full ids, `<module>.<cell>` (`boiler.temp`).
-- In `src/logic.rs` keep the names `react`, `Settings`, `State` and `LISTENED`: the template's
-  glue calls them. `LISTENED` must equal the manifest's `cells.read`; if they differ the module
-  builds but never reads the cell.
-- Least rights. Ask for no network and no secrets a reflex does not need. Size
-  `notify.per_day` to what the rules can really say in a day, not to 100.
-- Dependencies only from the template's `Cargo.lock` (`serde`, `serde_json`). A build whose
-  lock lists anything else is not clean.
+- In a reflex's `src/logic.rs` keep the names `react`, `Settings`, `State` and `LISTENED`: the
+  template's glue calls them. `LISTENED` must equal the manifest's `cells.read`; if they differ
+  the module builds but never reads the cell.
+- In a reader's `src/logic.rs` keep `Service` and its `Source` functions (`settings`, `request`,
+  `parse`, `taken_at`, `cells`) and the constants `SECRETS` and `STALE_AFTER_SECS`.
+  `SECRETS` must equal the manifest's `secret.get`, the host in `request` must be in
+  `http.fetch`, and every cell `cells` names, and `sample`, must be in `cells.report`. A secret
+  goes into a header or the body, never into the address. Only numbers, flags and short fixed
+  values go into cells: never text the service sent.
+- Least rights. A reader asks for the hosts it calls and the secrets it reads, nothing more; a
+  reflex asks for no network and no secrets. Size `notify.per_day` to what the rules can really
+  say in a day, not to 100. Set a reader's cron no more often than the service allows.
+- Dependencies only from the template's `Cargo.lock`. A build whose lock lists anything else
+  is not clean.
 
 ## The loop
 
-1. `module.import` the example `reflex-template` under the new name. It waits for the owner's press.
+1. `module.import` the template (`reader-template` or `reflex-template`) under the new name. It
+   waits for the owner's press.
 2. `module.read` its `manifest.yaml` and `src/logic.rs` (and the README).
-3. `module.write` `manifest.yaml` and `src/logic.rs` only: the rules, the settings, the state and
-   their tests. `src/lib.rs`, `src/host.rs` and `Cargo.lock` stay as the template has them. Write
-   a Rust test in `logic.rs` for every rule, and keep `react` free of host calls.
+3. `module.write` `manifest.yaml` and `src/logic.rs` only: the rules or the service, the settings
+   and their tests. Every other file and `Cargo.lock` stay as the template has them. Write a Rust
+   test in `logic.rs` for every rule or function, and keep `react` and `parse` free of host calls.
 4. When you change a module that is already installed, raise `version` in `manifest.yaml` by one
    before you build: the node refuses to install a build under a number it has already had, and
    the owner tells versions apart by that number.

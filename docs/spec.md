@@ -658,7 +658,7 @@ escalate:                    # when to call the model
   through our code, so policies, audit and timeouts apply to each request,
   and a failed request is an error the module handles, not a trap. Module
   glue exists for Go/TinyGo (`pdk/guest`) and Rust
-  (`examples/modules/deye-reader/src/guest.rs`); a new
+  (`examples/modules/reader-template/src/guest.rs`); a new
   language needs its own small glue.
 - **R-RUN-6.** Every node sets a soft memory limit (`GOMEMLIMIT`): the
   operator's own `GOMEMLIMIT` when set, else from its config, else about
@@ -1493,47 +1493,56 @@ The first install of a node is not covered here (section 14).
   a reply, the history or the model: the node shows the version, the date
   and a link.
 
-## 8. First reflex: Deye (P1)
+<a id="8-first-reflex-deye-p1"></a>
 
-Deye battery monitoring as the first reflex: a module the agent builds
-from source and installs with the owner's approval (R-RUN-9), polling
-DeyeCloud on cron and writing sensor cells, with no model in the loop.
-The agent answers "how is the battery?" and "how did it discharge
-overnight?" from the module's tool and the cells' history.
+## 8. First reflex: a reader (P1)
+
+The first module of an owner's system is a reader: a module the agent
+builds from source and installs with the owner's approval (R-RUN-9), which
+asks an outside service on cron and writes sensor cells, with no model in
+the loop. The agent answers "how is it now?" and "how did it go overnight?"
+from the module's tool and the cells' history.
+
+The project grew up on one such reader, of the owner's Deye inverter. It
+is the owner's own module and is not in the repository
+([ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md),
+principle 10); what it taught is kept in a template that names no device
+and in the built-in skill `module-writing`. The requirements below were
+R-DEYE-1..3 until 2026-11-14.
 
 Load shedding, planned here until M4, left P1 (owner, 2026-11-09,
 [ADR-0058](adr/0058-load-shedding-leaves-p1.md)): switching loads by
 rules over sensor values is a flow of ready modules linked through cells,
 which belongs with the flow engine (9.6).
 
-Deye is the owner's own module and the example the project grew up on. It
-leaves the repository ([ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md), principle 10): the Go reader
-it was ported from is gone, and the Rust example below stays until a
-neutral reader template and the `module-writing` skill take its place
-(P1 task 6.8); the requirements below then become that template's.
-
-- **R-DEYE-1.** `deye-reader` is an example in the repository
-  (`examples/modules/deye-reader`, Rust), not a part of the agent: the
-  agent copies it into its workspace, builds and installs it. Its cells
-  are `deye-reader.soc` (state of charge, %), `deye-reader.grid` (grid
-  present) and `deye-reader.sample` (the whole reading, the 12 fields of
-  `deye.py`).
-- **R-DEYE-2.** It polls every 30 minutes. On HTTP 429 it waits until
-  `Retry-After` has passed; a reading older than 20 minutes is reported
-  once per episode; a refused login is never retried with the same
-  credentials and raises `auth_failed` (task 0.7).
-- **R-DEYE-3.** `deye-reader.status` reads fresh under the same 429 rule;
-  when the cloud cannot answer it returns the cells' last values with
-  their age, and when the cells hold no reading it answers the read's own
-  failure, never an answer outside its declared output. Its `health`
-  checks without network that `inverter_sn` looks like a serial number
-  and that its secrets are set (owner's live check, 2026-11-10).
-- **R-LS-4.** Until the bot migrates, the module runs alongside `deye.py`
-  and their readings are compared.
-
-The home router runs on the inverter and its own battery, and on
-2026-11-01 DeyeCloud kept serving fresh data during an outage, so the
-cloud path works when it is needed (task 0.7).
+- **R-RDR-1.** `reader-template` is a template in the repository
+  (`examples/modules/reader-template`, Rust), not a part of the agent: the
+  agent copies it into its workspace under a new name, changes the
+  manifest and `src/logic.rs` (the request, the answer, the settings, the
+  cells), builds and installs it. Every reader reports the cell `sample`,
+  the whole reading, and the cells its logic names. The rules of R-RDR-2
+  and R-RDR-3 are in a file the agent does not change and whose tests do
+  not depend on the service.
+- **R-RDR-2.** A reader polls on its cron. On HTTP 429 it waits until
+  `Retry-After` has passed; a reading older than the reader's limit is
+  reported once per episode (`stale`); a read the service refuses (HTTP
+  401 or 403, or a secret that is not set) raises `auth_failed` and is
+  never retried with the same secrets (task 0.7). To notice that a secret
+  changed, the module keeps a 16-bit mark of its secrets, never the
+  secrets.
+- **R-RDR-3.** The tool `status` reads fresh under the same 429 rule; when
+  the service cannot answer it returns the last reading with its age, and
+  when there is no reading it answers the read's own failure, never an
+  answer outside its declared output. `health` checks without network
+  that the settings parse and that the secrets are set (owner's live
+  check, 2026-11-10).
+- **R-RDR-4.** The built-in skill `module-writing` says which template
+  fits a request (a reader, a reflex, or both linked through cells), what
+  to find out about a service before writing a reader, and how the
+  modules are linked. It is embedded in the binary, so it is updated with
+  the node.
+- **R-LS-4.** Until the owner's bot migrates, his reader runs alongside
+  `deye.py` and their readings are compared.
 
 ## 9. P2–P3: outline
 
