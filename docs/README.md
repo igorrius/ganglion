@@ -31,7 +31,12 @@ Start here when coming back to the project.
   merge, and the owner's live check on Railway (one of `deye-reader`'s
   secrets moved from a variable into the store,
   [runbook](deploy-railway.md#module-secrets)). Handing a secret over from
-  the chat stays open (spec section 11). M6 also has a webhook mode for the Telegram transport beside
+  the chat stays open (spec section 11). How the node itself is updated
+  is decided in
+  [ADR-0081](adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)
+  (owner, 2026-11-13: signed releases and `/update`, task 6.7, not built):
+  until it is, a deploy is `railway up` by hand, and a merge changes
+  nothing on Railway. M6 also has a webhook mode for the Telegram transport beside
   polling (task 6.6,
   [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md), owner,
   2026-11-13): done the same day: built, checked live on Railway with the

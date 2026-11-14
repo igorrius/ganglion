@@ -86,6 +86,7 @@ considered, how they compare, the decision and its consequences. See
 | [0078](0078-telegram-updates-by-polling-or-webhook.md) | Receive Telegram updates by polling or by a webhook, chosen in the node's file | Accepted | 2026-11-13 |
 | [0079](0079-a-modules-messages-go-where-the-nodes-file-says.md) | Route a module's messages by the node's file, to named destinations | Accepted | 2026-11-13 |
 | [0080](0080-keep-the-own-telegram-client-and-name-the-library-to-move-to.md) | Keep the own Telegram client, and name the library to move to | Accepted | 2026-11-13 |
+| [0081](0081-update-the-node-from-signed-releases-at-the-owners-command.md) | Update the node from the project's signed releases, at the owner's command | Accepted | 2026-11-13 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

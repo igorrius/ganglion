@@ -1075,6 +1075,7 @@ undone with `git revert`.
 | Infinite loop | R-AGT-4 | P1 |
 | Exhausted limits | Regular work as reflexes with no model where it can be; a model out of limits cools down and the next one in its purpose's list takes over; usage counter in `turns` | P1 |
 | Self-modification broke something | Regression scenarios (question → expected tool call) after every change | P3 |
+| A release that is not the project's becomes the node | A release is installed and started only with the project's signature, from GitHub's hosts, never older than the running version, and only at an admin's command; the agent has no tool for it (R-UPD-2–4, [ADR-0081](adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)) | P1 (M6) |
 | Lost volume or corrupted DB | Daily backup of SQLite (`VACUUM INTO`) and the memory git repo to S3 or a private remote | P1 |
 
 ### 7.9. Observability
@@ -1442,6 +1443,49 @@ phase plan).
   destination a module uses is not removed, and a group a destination
   points at is not disconnected, until what holds it is changed
   ([ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
+
+### 7.15. Updating the node
+
+A merge changes nothing on a running node: a node moves to a new version
+only at its owner's command, from a release the project signed
+([ADR-0081](adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)).
+The first install of a node is not covered here (section 14).
+
+- **R-UPD-1.** A core release is a tag `vX.Y.Z` on a commit of `master`.
+  CI builds the binary for `linux/amd64` and `linux/arm64`, writes
+  `SHA256SUMS`, signs it with the project's Ed25519 key and publishes the
+  files with a `release.json` that names the environment the binary needs
+  (`env`). The public keys are embedded in the binary and published in the
+  repository, so `openssl` checks a release too.
+- **R-UPD-2.** `/update`, for an admin in their private chat and with no
+  model, shows the running version and the newest release that fits the
+  machine. `/update install vX.Y.Z` installs that release and restarts
+  into it; `/update rollback` restarts into the previous version.
+  `ganglion update` does the same on the host. No tool of the agent
+  updates the node, and the agent never proposes it as a configuration
+  change.
+- **R-UPD-3.** A release is installed only when it comes from GitHub's
+  hosts, its `SHA256SUMS` carries a valid signature of the project, the
+  binary matches its sum, the version is newer than the running one, the
+  platform is this machine's and its `env` is not above the image's. A
+  refusal keeps the running version and says why in the node's own words.
+- **R-UPD-4.** The node keeps the active and the previous release under
+  `<data>/releases`, which no host command and no module can write. The
+  binary the image or the package ships is never replaced: `ganglion run`
+  starts, verifies the active release again and continues as it. A file
+  that is not a signed release of the project is never run.
+- **R-UPD-5.** A newly installed release gets two starts. A version whose
+  components have run for two minutes is confirmed and the admins are
+  told. One that is not confirmed after two starts gives way to the
+  previous version with an alert. The database is copied before the
+  switch, and the copy is put back when the failed version had migrated
+  it.
+- **R-UPD-6.** Once a day the node asks for the newest release and tells
+  the admins when there is one; it never installs by itself.
+  `update.check: off` in `ganglion.yaml` stops the asking.
+- **R-UPD-7.** Nothing a release page says (its title, its notes) reaches
+  a reply, the history or the model: the node shows the version, the date
+  and a link.
 
 ## 8. First reflex: Deye (P1)
 
@@ -1849,6 +1893,7 @@ fallback until the gate is passed.
 |---|---|---|---|
 | Language of model-written modules | TinyGo · Go · Rust · AssemblyScript | Decided (owner, 2026-11-09, [ADR-0063](adr/0063-module-language.md)): Rust by default, TinyGo for existing Go code, standard Go only when TinyGo cannot | — |
 | Tuya access | Cloud · LAN | Cloud: the internet stays up during outages (0.7); LAN later with a home runner | With load shedding, after P1 (ADR-0058) |
+| How the node itself is updated | Deploy on every push · an image per tag · a chat command through the platform's API · the node replaces its binary from a signed release | Decided (owner, 2026-11-13, [ADR-0081](adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)): the signed binary, at the owner's command `/update`, with a fall back to the previous version (R-UPD-1…7); the image's environment stays a manual rebuild | — |
 | Worker protocol | NATS request/reply · gRPC · HTTP | NATS: one bus for events and tasks | Two-node spike in P2 |
 | History and tool format | Own · Anthropic Messages · OpenAI | Decided: neutral own format + MCP tool schemas ([ADR-0020](adr/0020-neutral-history-as-conversation-state.md)) | — |
 | First API provider | Anthropic · Gemini · OpenAI-compatible | Decided for development: the operator's choice ([ADR-0021](adr/0021-providers-chosen-by-the-operator-claude-cli-included.md)); the claude CLI only, as chosen in [ADR-0047](adr/0047-sonnet-answers-during-development.md); OpenRouter fallbacks are a later topic | Revisit with more users or stronger tasks |
@@ -1901,6 +1946,21 @@ Ideas that come up along the way and are outside the current phase go here.
 Reviewed at each gate.
 
 - Classifier and learning in the router (P2 / P3).
+- The first install of a node (owner, 2026-11-13): a script that takes a
+  machine with nothing on it to a running node. It fetches a release and
+  checks its signature
+  ([ADR-0081](adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)),
+  checks what the machine offers (the sandbox's kernel features, the
+  toolchain for builds), creates the node's user and its data folder,
+  writes a first `ganglion.yaml`, and does not finish until one channel
+  works: today that is Telegram, so it asks for the bot token and the
+  admin, puts the token where the node reads it without leaving it in the
+  shell's history, and waits for the admin's first message. It also sets
+  up the supervisor that restarts the node. Larger than it looks, a step
+  of its own with its own ADR: where the token goes (the secret store or a
+  variable), which supervisors and platforms it knows (systemd, a
+  container, Railway), and what it does on a machine that already has a
+  node. It comes after ADR-0081: the releases it installs are made there.
 - Tiny trained models inside modules (owner, 2026-11-11): the agent trains
   a model of tens to a few thousand parameters (a decision tree, a
   logistic regression, a small neural net) for one narrow task and ships
