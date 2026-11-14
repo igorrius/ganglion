@@ -211,12 +211,12 @@ func examplesFolder() string {
 	return filepath.Join(root, "examples", "modules")
 }
 
-// labSecrets is the node's secret source: the Deye example's four secrets
-// are set, to placeholders that name no account, so its install window has
-// nothing to refuse (the node never asks the cloud at install).
+// labSecrets is the node's secret source: the reader template's secret is
+// set, to a placeholder that names no account, so its install window has
+// nothing to refuse (the node never asks the service at install).
 func labSecrets() secrets.Source {
 	return secrets.Env{Getenv: func(name string) string {
-		if strings.HasPrefix(name, "DEYE_") && !strings.HasSuffix(name, "_FILE") {
+		if name == "API_TOKEN" {
 			return "lab-placeholder"
 		}
 		return ""

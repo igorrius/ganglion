@@ -1,0 +1,8 @@
+[
+  {
+    "path": "/v1/stations/roof-1/latest",
+    "status": 429,
+    "headers": {"Retry-After": "120"},
+    "body": {"error": "too many requests"}
+  }
+]

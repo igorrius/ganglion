@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
 name: m4-build-and-install
 why: >-
-  M4 check 3 (R-RUN-9, ADR-0061, ADR-0064): "build and install deye-reader" imports the example into the
+  M4 check 3 (R-RUN-9, ADR-0061, ADR-0064): "build and install reader-template" imports the reader template into the
   workspace, builds it in the sandbox, shows the install window with the build's rights, and after the press
   installs exactly that build and runs it; no build folder (target/) is left in the workspace.
 covers:
@@ -20,30 +20,30 @@ covers:
   - modstore/install.go
   - modstore/local.go
   - modhost/**
-  - examples/modules/deye-reader/**
+  - examples/modules/reader-template/**
 repeat: 1
 model: scripted
 config:
-  deye-reader: {inverter_sn: "2400000000"}
+  reader-template: {station: "roof-1"}
 script:
-  - {tool: module.import, args: '{"from":"deye-reader","name":"deye-reader"}'}
+  - {tool: module.import, args: '{"from":"reader-template","name":"reader-template"}'}
   - {say: "The copy waits for your press."}
-  - {tool: module.build, args: '{"name":"deye-reader","note":"first build"}'}
+  - {tool: module.build, args: '{"name":"reader-template","note":"first build"}'}
   - {say: "The build runs in the background."}
   - {tool: module.install, args: '{"build":"$BUILD","note":"first install"}'}
   - {say: "The install waits for your press."}
-  - {say: "deye-reader is installed and running."}
+  - {say: "reader-template is installed and running."}
 steps:
-  - say: "Build and install deye-reader"
+  - say: "Build and install reader-template"
   - facts:
       questions: 1
-      question: {contains: "deye-reader"}
+      question: {contains: "reader-template"}
       journal:
         - {tool: module.build, count: 0}
   - press: Approve
   - facts:
       questions: 1
-      question: {contains: "eu1-developer.deyecloud.com"}
+      question: {contains: "api.example.com"}
       journal:
         - {tool: module.import, decision: approved, count: 1}
         - {tool: module.build, decision: allowed, count: 1}
@@ -56,5 +56,5 @@ steps:
         - {tool: module.install, decision: approved, result_contains: "and running", count: 1}
       reply: {contains: "installed and running"}
       absent:
-        - workspace/modules/deye-reader/target
-        - workspace/modules/deye-reader/.cargo
+        - workspace/modules/reader-template/target
+        - workspace/modules/reader-template/.cargo

@@ -1,0 +1,6 @@
+[
+  {
+    "path": "/v1/stations/roof-1/latest",
+    "body": {"ts": __NOW__, "value": 21.5, "online": true}
+  }
+]

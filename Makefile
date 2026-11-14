@@ -1,7 +1,7 @@
 # Core tags only: a module's tag, html2md/vX.Y.Z (ADR-0041), is not the node's version.
 VERSION ?= $(shell git describe --tags --match 'v*' --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test test-net lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-rust example-deye clean-modules modrun modbench bench bench-html2md lab lab-all lab-skip-full lab-faults
+.PHONY: build test test-net lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-rust example-reader clean-modules modrun modbench bench bench-html2md lab lab-all lab-skip-full lab-faults
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
@@ -124,17 +124,17 @@ modules-html2md:
 	cargo build --quiet --release --locked --target wasm32-wasip1
 	cp modules/html2md/target/wasm32-wasip1/release/html2md.wasm modules/html2md/html2md.wasm
 
-# The deye-reader example (R-DEYE-1) is a Rust module the agent builds in its
-# workspace. example-deye builds it as the node's builder does, in a
-# temporary target folder it removes, into bin/deye-reader.rust.wasm.
-example-deye:
+# The reader template (R-RDR-1..4) is a Rust module the agent copies and builds in its
+# workspace. example-reader builds it as the node's builder does, in a
+# temporary target folder it removes, into bin/reader-template.wasm.
+example-reader:
 	@mkdir -p bin
 	tmp=$$(mktemp -d) && trap 'rm -rf -- "$$tmp"' EXIT && \
-	cd examples/modules/deye-reader && \
+	cd examples/modules/reader-template && \
 	CARGO_TARGET_DIR="$$tmp" cargo build --quiet --release --locked --target wasm32-wasip1 && \
-	cp "$$tmp/wasm32-wasip1/release/deye_reader.wasm" $(CURDIR)/bin/deye-reader.rust.wasm
+	cp "$$tmp/wasm32-wasip1/release/reader_template.wasm" $(CURDIR)/bin/reader-template.wasm
 
-modules-rust: example-deye
+modules-rust: example-reader
 
 # Cargo keeps every build of the Rust modules in their target/ folders:
 # host builds from `cargo test`, clippy and examples grow to gigabytes,
@@ -142,7 +142,7 @@ modules-rust: example-deye
 # the next build fills them again. bin/ (the live database) is not touched.
 clean-modules:
 	cd modules/html2md && cargo clean --quiet
-	cd examples/modules/deye-reader && cargo clean --quiet
+	cd examples/modules/reader-template && cargo clean --quiet
 
 modrun:
 	go build -o bin/modrun ./tools/modrun
@@ -155,8 +155,8 @@ bench-html2md: modbench
 	for f in modules/html2md/testdata/*.html; do \
 	  ./bin/modbench -wasm modules/html2md/html2md.wasm -manifest modules/html2md/html2md.yaml -html $$f -n 100 || exit 1; done
 
-# Measure the built deye-reader example (make example-deye).
+# Measure the built reader template (make example-reader).
 bench: modbench
-	for f in bin/deye-reader.*.wasm; do \
-	  ./bin/modbench -wasm $$f -manifest examples/modules/deye-reader/manifest.yaml \
-	    -replay tools/modbench/testdata/deye-replay.json -config inverter_sn=2400000001 -n 300 || exit 1; done
+	for f in bin/reader-template.wasm; do \
+	  ./bin/modbench -wasm $$f -manifest examples/modules/reader-template/manifest.yaml \
+	    -replay tools/modbench/testdata/reader-replay.json -config station=roof-1 -n 300 || exit 1; done

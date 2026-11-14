@@ -9,7 +9,7 @@ import (
 )
 
 func TestTheExamplesLockParses(t *testing.T) {
-	raw, err := os.ReadFile("../examples/modules/deye-reader/Cargo.lock")
+	raw, err := os.ReadFile("../examples/modules/reader-template/Cargo.lock")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +23,7 @@ func TestTheExamplesLockParses(t *testing.T) {
 	roots := 0
 	for _, c := range crates {
 		switch {
-		case c.Source == "" && c.Name == "deye-reader" && c.Checksum == "":
+		case c.Source == "" && c.Name == "reader-template" && c.Checksum == "":
 			roots++
 		case c.Source != builder.CratesIO || len(c.Checksum) != 64 || c.Version == "":
 			t.Fatalf("crate %+v", c)

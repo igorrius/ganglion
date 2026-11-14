@@ -15,7 +15,7 @@ C linker that builds with a `build.rs` need).
 | Rust (stable, target `wasm32-wasip1`) | `/opt/rust` (`RUSTUP_HOME=/opt/rust/rustup`, `CARGO_HOME=/opt/rust/cargo`), owned by root, readable by all, not writable by the node's user |
 | The node's user | `ganglion`, uid 10001, home `/home/ganglion` |
 | Builds | `/home/ganglion/.cache/ganglion/builds` (the builder's root is `os.UserCacheDir()/ganglion/builds`) |
-| Examples | `/app/examples`, e.g. `/app/examples/modules/deye-reader` for `module.import` |
+| Examples | `/app/examples`, e.g. `/app/examples/modules/reader-template` for `module.import` |
 | Data | `/data` (a volume): `ganglion.db`, `ganglion.yaml`, `logs/`, `modules/`, the workspace |
 
 Three details matter to the builder:
@@ -269,9 +269,10 @@ client at `railway ssh -- setpriv --reuid=10001 --regid=10001 --clear-groups
 ganglion mcp --db /data/ganglion.db` (see
 [diagnostics](README.md#diagnosing-the-node-from-outside)).
 
-Then, in the bot: `module.import` the Deye example from
-`/app/examples/modules/deye-reader`, build it, press the install window, set
-`inverter_sn` under `modules:` and check `/modules` and `/cells`.
+Then, in the bot: ask for a module. The agent imports a template from
+`/app/examples/modules`, writes the module, builds it and offers the install
+window; set the module's settings under `modules:` and check `/modules` and
+`/cells`.
 
 ## Comparing with `deye.py` (R-LS-4)
 

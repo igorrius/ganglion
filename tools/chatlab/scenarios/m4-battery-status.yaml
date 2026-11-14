@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
 name: m4-battery-status
 why: >-
-  M4 check 6 (R-RUN-10, R-DEYE-1): "how is the battery?" is answered by the module's own tool
+  M4 check 6 (R-RUN-10, R-RDR-3): "how is the battery?" is answered by the module's own tool
   deye-reader.status, "overnight?" by the history of its cell, not by a guess or by a command; the module's
   cron reports the cell with no model call.
 covers:

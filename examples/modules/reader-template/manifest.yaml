@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=../../../schemas/module-manifest.schema.json
+name: reader-template
+version: 1
+abi: 1
+triggers:
+  - cron: "*/30 * * * *"
+  # The agent sees the tool as <module>.status. Its output is the same for every reader:
+  # the last reading, its age and whether it was read just now. Change only `about` and `sample`.
+  - tool: status
+    about: "The last reading of the station: its value and whether it is online."
+    output:
+      age_s: integer
+      fresh: boolean
+      sample: {ts: integer, value: number, online: boolean}
+capabilities:
+  # Only the hosts the module calls and the secrets it reads; each must match src/logic.rs.
+  http.fetch: [api.example.com]
+  secret.get: [API_TOKEN]
+  state: true
+cells:
+  report:
+    value:  {kind: sensor, type: number, about: "The station's value"}
+    online: {kind: sensor, type: boolean, about: "The station is online"}
+    # The whole reading. The status tool answers from it when the service cannot be read.
+    sample: {kind: sensor, about: "The whole reading",
+             type: {ts: integer, value: number, online: boolean}}
+config:
+  station: {type: string, required: true}
+limits: {memory: 32MiB, timeout: 20s}
+escalate:
+  - on: module.exception
+  - on: auth_failed
+  - on: stale

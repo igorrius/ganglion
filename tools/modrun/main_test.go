@@ -78,7 +78,7 @@ func TestRunModuleEndToEnd(t *testing.T) {
 		t.Errorf("state did not survive between runs: %s", out.Result)
 	}
 
-	if out := runOnce(`{"op":"config","name":"inverter_sn"}`, "-config", "inverter_sn=42"); !strings.Contains(string(out.Result), `"42"`) {
+	if out := runOnce(`{"op":"config","name":"station"}`, "-config", "station=42"); !strings.Contains(string(out.Result), `"42"`) {
 		t.Errorf("-config override not applied: %s", out.Result)
 	}
 }

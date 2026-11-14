@@ -1,8 +1,8 @@
 [package]
-name = "deye-reader"
+name = "reader-template"
 version = "0.1.0"
 edition = "2024"
-description = "The deye-reader module: Deye inverter readings from DeyeCloud as ganglion cells (spec R-DEYE-1..3)"
+description = "The reader template: a module that reads an outside service on a schedule and reports cells (spec R-RDR-1..4)"
 license = "Apache-2.0"
 publish = false
 
@@ -12,7 +12,6 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.11"
 base64 = "0.23"
 
 [profile.release]

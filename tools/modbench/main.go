@@ -3,10 +3,10 @@
 // memory. HTTP is answered from a replay file, so the numbers compare
 // modules and toolchains rather than the network (P0, ADR-0011).
 //
-//	modbench -wasm bin/deye-reader.rust.wasm \
-//	         -manifest examples/modules/deye-reader/manifest.yaml \
-//	         -replay tools/modbench/testdata/deye-replay.json \
-//	         -config inverter_sn=2400000001 -n 200
+//	modbench -wasm bin/reader-template.wasm \
+//	         -manifest examples/modules/reader-template/manifest.yaml \
+//	         -replay tools/modbench/testdata/reader-replay.json \
+//	         -config station=roof-1 -n 200
 //
 // A tool module that makes no requests is measured with a tool call's
 // payload instead of a replay, or for html2md with a saved page

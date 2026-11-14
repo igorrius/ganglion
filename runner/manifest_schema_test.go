@@ -42,10 +42,10 @@ func TestManifestSchemaMatchesLoader(t *testing.T) {
 	}
 }
 
-// The example the agent builds first (R-DEYE-1) parses, with its three
-// cells, its status tool's contract and its required serial number.
-func TestDeyeManifestParses(t *testing.T) {
-	src, err := os.ReadFile("../examples/modules/deye-reader/manifest.yaml")
+// The reader template (R-RDR-1) parses, with its three cells, its status
+// tool's contract and its required setting.
+func TestTheReaderTemplatesManifestParses(t *testing.T) {
+	src, err := os.ReadFile("../examples/modules/reader-template/manifest.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestDeyeManifestParses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, c := range []string{"soc", "grid", "sample"} {
+	for _, c := range []string{"value", "online", "sample"} {
 		if _, ok := m.Cells.Report[c]; !ok {
 			t.Errorf("cell %s is not declared", c)
 		}
@@ -61,7 +61,7 @@ func TestDeyeManifestParses(t *testing.T) {
 	if len(m.Triggers) != 2 || m.Triggers[1].Tool != "status" || m.Triggers[1].Output == nil {
 		t.Errorf("triggers = %+v, want cron and the status tool with an output", m.Triggers)
 	}
-	if !m.Config["inverter_sn"].Required {
-		t.Error("inverter_sn is not required")
+	if !m.Config["station"].Required {
+		t.Error("station is not required")
 	}
 }
