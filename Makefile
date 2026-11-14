@@ -1,7 +1,7 @@
 # Core tags only: a module's tag, html2md/vX.Y.Z (ADR-0041), is not the node's version.
 VERSION ?= $(shell git describe --tags --match 'v*' --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test test-net lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-tinygo modules-rust example-deye clean-modules modrun modbench bench bench-html2md lab lab-all lab-skip-full lab-faults
+.PHONY: build test test-net lint check live-echo live-agent accept compare crash-agent memory modules modules-html2md modules-rust example-deye clean-modules modrun modbench bench bench-html2md lab lab-all lab-skip-full lab-faults
 
 build:
 	go build -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(VERSION)" -o bin/ganglion .
@@ -117,7 +117,6 @@ memory:
 # toolchain pinned in modules/html2md/rust-toolchain.toml. Paths are
 # remapped so the module does not carry the builder's directories.
 modules: modules-html2md
-	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o bin/deye-reader.go.wasm ./internal/deyeref/wasm
 
 modules-html2md:
 	cd modules/html2md && \
@@ -127,10 +126,7 @@ modules-html2md:
 
 # The deye-reader example (R-DEYE-1) is a Rust module the agent builds in its
 # workspace. example-deye builds it as the node's builder does, in a
-# temporary target folder it removes, into bin/deye-reader.rust.wasm. The Go
-# reference reader (internal/deyeref) is built by `modules` and, with
-# TinyGo, by modules-tinygo, to compare toolchains (ADR-0011); TinyGo is
-# optional and not built in CI.
+# temporary target folder it removes, into bin/deye-reader.rust.wasm.
 example-deye:
 	@mkdir -p bin
 	tmp=$$(mktemp -d) && trap 'rm -rf -- "$$tmp"' EXIT && \
@@ -139,9 +135,6 @@ example-deye:
 	cp "$$tmp/wasm32-wasip1/release/deye_reader.wasm" $(CURDIR)/bin/deye-reader.rust.wasm
 
 modules-rust: example-deye
-
-modules-tinygo:
-	tinygo build -target=wasip1 -buildmode=c-shared -opt=2 -no-debug -o bin/deye-reader.tinygo.wasm ./internal/deyeref/wasm
 
 # Cargo keeps every build of the Rust modules in their target/ folders:
 # host builds from `cargo test`, clippy and examples grow to gigabytes,
@@ -162,8 +155,7 @@ bench-html2md: modbench
 	for f in modules/html2md/testdata/*.html; do \
 	  ./bin/modbench -wasm modules/html2md/html2md.wasm -manifest modules/html2md/html2md.yaml -html $$f -n 100 || exit 1; done
 
-# Measure every built deye-reader variant (make modules example-deye), one
-# process each.
+# Measure the built deye-reader example (make example-deye).
 bench: modbench
 	for f in bin/deye-reader.*.wasm; do \
 	  ./bin/modbench -wasm $$f -manifest examples/modules/deye-reader/manifest.yaml \

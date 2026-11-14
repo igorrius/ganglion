@@ -48,11 +48,11 @@ func TestSourcesOfAWasmBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := sources("../../internal/deyeref/wasm", []string{"GOOS=wasip1", "GOARCH=wasm"})
+	got, err := sources("../../runner/runnertest/probe/wasm", []string{"GOOS=wasip1", "GOARCH=wasm"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(root, "internal/deyeref/wasm/main.go"); !slices.Contains(got, want) {
+	if want := filepath.Join(root, "runner/runnertest/probe/wasm/main.go"); !slices.Contains(got, want) {
 		t.Errorf("no %s in %v", want, got)
 	}
 }

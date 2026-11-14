@@ -13,6 +13,11 @@ Start here when coming back to the project.
   ([ADR-0082](adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)).
   Next for outside readers, each its own step: a user guide and a
   documentation site, and an image published by tag.
+- **The repository holds the core, not anyone's modules** (owner,
+  2026-11-14, [ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md),
+  spec principle 10): the Go reader of the owner's inverter is removed.
+  Next, task 6.8: a neutral reader template and the `module-writing` skill
+  take the place of the Deye example, which then leaves too.
 - **Done on 2026-11-13:** Telegram groups (MG), added that day when the
   owner moved the production bot's token to ganglion and removed the old
   bot. A group is connected from a card in the admin's private chat and
