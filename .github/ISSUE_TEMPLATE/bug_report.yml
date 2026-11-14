@@ -1,0 +1,46 @@
+name: Bug report
+description: Something a node did wrong, or did not do.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ganglion is 0.x with one maintainer: an answer may take a while.
+        **A vulnerability is not reported here**: see SECURITY.md.
+        Remove tokens, Telegram ids and the address of your node from what you paste.
+  - type: textarea
+    id: version
+    attributes:
+      label: Version
+      description: The output of `ganglion version`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Where it runs
+      description: The OS and kernel (`uname -sr`), bare process or container, and the model provider.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did
+      description: The steps, the message you sent, the relevant part of `ganglion.yaml` with secrets removed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: The bot's answer, and the lines of the node's log around that time.
+      render: text
+    validations:
+      required: true

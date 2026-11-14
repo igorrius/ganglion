@@ -539,7 +539,7 @@ func TestPlanInjectedTextIsNotMarkup(t *testing.T)
 
 - [x] **Step 3: Run the checks:** `make lint`, `go test -race ./...`, `make accept`, `make memory`. Expected: all pass; record RSS and binary size against M3c's (44 MB RSS after 1,000 turns, 47.7 MB binary).
 
-- [x] **Step 4: The owner's live check on @ganglion_test_bot** (`make live-agent`), since chatlab cannot see real Telegram. Say in advance why it is manual. To try:
+- [x] **Step 4: The owner's live check on @test_bot** (`make live-agent`), since chatlab cannot see real Telegram. Say in advance why it is manual. To try:
 - a question, then an addition while a web search runs: 👌, one final answer;
 - an addition while the model writes: a collapsed quote, then the answer;
 - short questions: no reaction and no buzz; is 8 s right? Tune it through `GANGLION_REACTION_AFTER`;

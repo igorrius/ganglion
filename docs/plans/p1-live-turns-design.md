@@ -227,7 +227,7 @@ taken ones counted through that record.
 
 ### 4.1 What the live try showed
 
-A throwaway build ran on @ganglion_test_bot on 2026-11-05 (not kept; the patch stayed
+A throwaway build ran on @test_bot on 2026-11-05 (not kept; the patch stayed
 outside the repository until this design is settled):
 
 - With a 2 s threshold: 15 reaction changes over 5 messages, none refused by

@@ -6,6 +6,13 @@ Start here when coming back to the project.
 
 - **Phase:** P0 · Recon is complete; P1 · All-in-one is in progress
   ([plan](spec.md#10-plan-phases-and-gates)).
+- **Open source since 2026-11-14:** the repository is public, with no
+  announcement: 0.x, no guarantees, for invited colleagues to install, try
+  and report bugs in GitHub Issues. The public release with an
+  announcement stays in the P3 gate
+  ([ADR-0082](adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)).
+  Next for outside readers, each its own step: a user guide and a
+  documentation site, and an image published by tag.
 - **Done on 2026-11-13:** Telegram groups (MG), added that day when the
   owner moved the production bot's token to ganglion and removed the old
   bot. A group is connected from a card in the admin's private chat and
@@ -46,7 +53,7 @@ Start here when coming back to the project.
   2026-11-13): done the same day: built, checked live on Railway with the
   test bot, and the owner's node switched to the webhook
   ([runbook](deploy-railway.md#telegram-by-webhook)). The Railway deploy
-  (board card G-121) is up since 2026-11-11: service `ganglion` beside the
+  (board card G-121) is up since 2026-11-11: one service beside the
   current bot, on the test bot, the agent through the claude CLI, the
   sandbox ready on kernel 6.18, hard links work on the volume
   ([deploy-railway.md](deploy-railway.md)). Task 4.7 closed the same day:
@@ -452,7 +459,7 @@ Start here when coming back to the project.
     - full lab run 2026-11-09: 42 of 42 passed, about 1.86M tokens. `make lab-all` ran 39 and stopped at its
       1.5M-token cap; the other three (reply-topic, task-report, task-selection) passed when run on their
       own. Reports: `bin/lab/20261109-065838` and `bin/lab/20261109-071516`;
-    - the live check on @ganglion_test_bot, 2026-11-09, run by Claude through the owner's Telegram Web at
+    - the live check on @test_bot, 2026-11-09, run by Claude through the owner's Telegram Web at
       the owner's request: all eight steps passed:
       1. `host.stats` and `du` ran with no button and the tree was shown; `du -sh ~` works
          ([ADR-0057](adr/0057-commands-may-list-split-folders.md)); a `sleep 30` went to the background and
@@ -630,8 +637,8 @@ What the owner sets up by hand before the first live run on the test bot
 (M2 task 8 of the [M2 plan](plans/p1-m2-delivery-telegram.md)). Nothing here
 is needed for tests: they run against a fake Bot API.
 
-- **Test bot:** @ganglion_test_bot, used only by ganglion (since
-  2026-11-02; the development bot has another project's webhook). Its
+- **Test bot:** a bot of its own, used only by ganglion (`@test_bot`
+  below). Its
   token is `TELEGRAM_TEST_BOT_TOKEN`. Two runs at once get `409 Conflict`,
   and the older one stops polling (R-DLV-8).
 - **Your Telegram user id:** needed for the admin entry in the access list
@@ -746,6 +753,11 @@ boundary. Do not run diagnostics in a session that approves commands by itself
 | What did we find out before deciding? | [research/](research/) |
 | How do we write Go code here? | [conventions.md](conventions.md) |
 | What is the plan for the current phase? | [plans/](plans/) |
+
+Ids of the form `G-<n>` in plans, ADRs and comments are cards of the
+owner's own backlog, which is not public: read them as labels, not links.
+Bugs found from outside go to GitHub Issues
+([CONTRIBUTING.md](../CONTRIBUTING.md)).
 
 Suggested path after a long break: this page → the
 [one-picture overview](architecture/README.md#the-idea-in-one-picture) →
