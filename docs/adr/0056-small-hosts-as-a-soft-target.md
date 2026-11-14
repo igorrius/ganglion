@@ -1,6 +1,6 @@
 # ADR-0056: Treat small hosts as a soft target held by GOMEMLIMIT, not as a 128 MB line
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0087](0087-distribute-to-any-machine-and-drop-small-hosts-as-a-target.md) (the small-host aim and the device measurements; the `GOMEMLIMIT` rule stays)
 - **Date:** 2026-11-08
 - **Deciders:** Igor Artasevych
 - **Spec:** [2](../spec.md#2-principles) (principle 8), [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-6, target hosts), [10.2](../spec.md#102-p1--all-in-one--scope-and-acceptance); the global constraints of the [P1 phase plan](../plans/p1-all-in-one.md#global-constraints)

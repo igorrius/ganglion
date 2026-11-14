@@ -94,17 +94,18 @@ We build from scratch. Neighbours are a source of ideas, not a base.
 7. **Build little where something ready exists.** Chat, providers and
    channels stay minimal; the effort goes into the tool pool and skill
    compilation.
-8. **Small hosts are a target, not a hard line**
-   ([ADR-0056](adr/0056-small-hosts-as-a-soft-target.md)). The core and edge
-   roles aim at the cheapest hosts, a Raspberry Pi or a small container, and
-   stay lean: memory is measured (`make memory`, `tools/modbench`) and weighed
-   in every decision about dependencies, runtimes and module languages, and
-   each milestone compares its numbers with the previous one. Go has no hard
-   memory cap: a node sets a soft limit (`GOMEMLIMIT`, R-RUN-6) and the
-   collector works to stay under it. A feature that needs more than a small
-   host has is allowed: it runs where the resources are, on a denser edge or
-   a worker (P2), and a small node runs without it. Where work runs is the
-   operator's choice, not a rule of the code. Workers that host heavy model
+8. **Memory and size are goals; the node runs on any machine it is placed on**
+   ([ADR-0087](adr/0087-distribute-to-any-machine-and-drop-small-hosts-as-a-target.md)).
+   Memory and binary size are weighed in every decision about dependencies,
+   runtimes and module languages, and each milestone compares its numbers with
+   the previous one (`make memory`, `tools/modbench`). No device is the aim:
+   the network is distributed, and a node runs where the operator places it, on
+   a small device, a large VM, a start-worker or a Kubernetes cluster. Go has no
+   hard memory cap: a node sets a soft limit (`GOMEMLIMIT`, R-RUN-6) and the
+   collector works to stay under it. A feature that needs more memory than a
+   node has is allowed: it runs where the resources are, on a denser edge or a
+   worker (P2), and a node without the resources runs without it. Where work
+   runs is the operator's choice, not a rule of the code. Workers that host heavy model
    runtimes (claude CLI, Ollama) run where the resources are (ADR-0009).
 9. **Secure by design, and every link is hostile** (owner, 2026-11-03).
    - **Every network is open and watched.** That includes the home LAN and
@@ -870,7 +871,7 @@ on a Pi is pending:
 | Leaf node with JetStream | 18 MiB idle; 45 MiB with 117 MB buffered and `GOMEMLIMIT=40MiB` (80 MiB without) | Set a soft limit and stream size limits |
 | Edge binary | ~9 MB runner + wazero today; ~25–30 MB with embedded NATS (estimate) | Cross-compiled for arm64 |
 | One module | 161 KB (Rust) to 3.6 MB (Go) of `.wasm` | Memory per manifest limit |
-| Target hosts | A small container or a Pi Zero 2 W (512 MB, arm64); a target, not a line | Principle 8, ADR-0056 |
+| Target hosts | Any machine the operator places a node on: a small device, a VM, a start-worker or a cluster; memory and size are goals, not a device | Principle 8, ADR-0087 |
 | Microcontrollers | — | A runner does not fit; they connect over MQTT |
 
 ### 7.6. Action policies and risk classes
@@ -1870,7 +1871,7 @@ with a gate; the next phase does not start until the gate is passed.
 | 0.2 | Rewrite `deye.py` in TinyGo → WASM; run it in wazero with `http.fetch`, `state`, `secret.get` | The module returns the same SOC as `deye.py` against the real API |
 | 0.3 | The same through Extism; build the Deye reader with TinyGo, Go and Rust under both ABIs | [ADR-0011](adr/0011-module-abi.md) accepted: own ABI or Extism, backed by a 2 × 3 table of module size, call time and runner RAM |
 | 0.4 | Read the MCP transport (Streamable HTTP) and A2A specs | Recorded what part of the 9.1 protocol they cover |
-| 0.5 | Measure runner RAM (wazero + embedded NATS) on a Pi or in a container limited to 128 MB | Done: fits a 128 MB container ([research note](research/2026-11-01-runner-memory.md)); a Pi run later confirms arm64 timings, not a gate |
+| 0.5 | Measure runner RAM (wazero + embedded NATS) in a container limited to 128 MB | Done: fits a 128 MB container ([research note](research/2026-11-01-runner-memory.md)); the Pi run for arm64 timings is dropped ([ADR-0087](adr/0087-distribute-to-any-machine-and-drop-small-hosts-as-a-target.md)) |
 | 0.6 | Access to Tuya plugs: cloud or local key | Moved to P1: loads are state cells with a `virtual` backend until the plugs are linked ([ADR-0014](adr/0014-state-cells.md)) |
 | 0.7 | Does the home internet stay up on the inverter during an outage; DeyeCloud limits for polling every 5 min | Done: [research note](research/2026-11-01-outage-connectivity-and-deye-limits.md); internet outlasts the inverter; DeyeCloud quota 100,000 calls a month, worst case uses ~10% |
 
