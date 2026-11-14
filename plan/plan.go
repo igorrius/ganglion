@@ -91,24 +91,25 @@ type Plan struct {
 	Outcome   string `json:"outcome,omitempty"`
 }
 
-// Render is the plan's message.
+// Render is the plan's message. A path in the agent's words is put in code,
+// so Telegram does not make it a bot-command link.
 func Render(p Plan) string {
 	lines := make([]string, 0, len(p.Steps))
 	for i, s := range p.Steps {
-		line := marks[s.Status] + " " + strconv.Itoa(i+1) + ". " + s.Text
+		line := marks[s.Status] + " " + strconv.Itoa(i+1) + ". " + text.CodeSlashWords(s.Text)
 		if s.Note != "" {
-			line += ": " + s.Note
+			line += ": " + text.CodeSlashWords(s.Note)
 		}
 		if s.Line != "" {
 			line += "\n    " + s.Line
 		}
 		lines = append(lines, line)
 	}
-	text := strings.Join(lines, "\n")
+	out := strings.Join(lines, "\n")
 	if p.Outcome != "" {
-		text += "\n\n" + p.Outcome
+		out += "\n\n" + text.CodeSlashWords(p.Outcome)
 	}
-	return text
+	return out
 }
 
 // Outbox is where the plan's messages go (queue.Outbox).

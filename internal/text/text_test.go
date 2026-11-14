@@ -32,3 +32,25 @@ func TestCodeSpanFencesPastEveryBacktick(t *testing.T) {
 		}
 	}
 }
+
+// Telegram reads "/word" after a space or a mark as a bot command and makes
+// it a link; only code is left alone.
+func TestCodeSlashWordsKeepsPathsFromBecomingCommands(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                            "",
+		"clean /tmp/ganglion":         "clean `/tmp/ganglion`",
+		"/tmp/ganglion is full.":      "`/tmp/ganglion` is full.",
+		"sizes (/var/log, ~/src)":     "sizes (`/var/log`, `~/src`)",
+		"keep a/b and ~/.cache as is": "keep a/b and ~/.cache as is",
+		"already `/tmp/x` in code":    "already `/tmp/x` in code",
+		"`du -sh /tmp` then /srv":     "`du -sh /tmp` then `/srv`",
+		"**/etc** and /opt\n/home/o":  "**`/etc`** and `/opt`\n`/home/o`",
+		"50/50 and 1/2":               "50/50 and 1/2",
+		"a lone / slash":              "a lone / slash",
+		"файл/x and /файл":            "файл/x and /файл",
+	} {
+		if got := CodeSlashWords(in); got != want {
+			t.Errorf("CodeSlashWords(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

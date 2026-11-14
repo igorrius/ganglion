@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/igorrius/ganglion/hostcmd"
+	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/plan"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
@@ -140,7 +141,7 @@ func (t *planShow) Question(ctx context.Context, c tool.Call) (string, error) {
 	}
 	var b strings.Builder
 	for i, s := range steps {
-		fmt.Fprintf(&b, "%d. %s\n", i+1, strings.Join(strings.Fields(s.Text), " "))
+		fmt.Fprintf(&b, "%d. %s\n", i+1, text.CodeSlashWords(strings.Join(strings.Fields(s.Text), " ")))
 		if s.Command == nil {
 			continue
 		}

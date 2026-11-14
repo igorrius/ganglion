@@ -219,6 +219,23 @@ func TestPlanQuestionInThePersonsLanguage(t *testing.T) {
 	}
 }
 
+// A path in a step's words or a reason shows as a path, not as a
+// bot-command link.
+func TestPlanQuestionKeepsPathsFromBecomingCommands(t *testing.T) {
+	show := builtin.NewPlanTools(&fakePlans{}, hostExec(""))[0].(tool.Questioner)
+	step := cmdStep("Clean /tmp/ganglion", "", "rm", "-r", "/tmp/ganglion")
+	step["reason"] = "/tmp/ganglion holds old builds"
+	q, err := show.Question(context.Background(), tool.Call{Args: planArgs(step)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"1. Clean `/tmp/ganglion`\n", "The agent's reason: `/tmp/ganglion` holds old builds"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("question lacks %q:\n%s", want, q)
+		}
+	}
+}
+
 // Abuse: a step's words and a reason cannot add lines that pose as a
 // command's fixed line, and a secret in argv refuses the question, so the
 // owner sees all they approve.
