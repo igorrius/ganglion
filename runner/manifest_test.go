@@ -9,8 +9,8 @@ import (
 	"github.com/igorrius/ganglion/internal/size"
 )
 
-const deyeManifest = `
-name: deye-reader
+const demoManifest = `
+name: demo-reader
 version: 1
 triggers:
   - cron: "*/30 * * * *"
@@ -18,8 +18,8 @@ triggers:
     about: Battery, grid and load now.
     output: {soc: integer, grid: boolean}
 capabilities:
-  http.fetch: [eu1-developer.deyecloud.com]
-  secret.get: [DEYE_APP_ID, DEYE_APP_SECRET]
+  http.fetch: [api.example.com]
+  secret.get: [DEMO_APP_ID, DEMO_APP_SECRET]
   event.emit: [battery.changed]
   state: true
 config:
@@ -39,18 +39,18 @@ escalate:
 `
 
 func TestParseManifest(t *testing.T) {
-	m, err := ParseManifest([]byte(deyeManifest))
+	m, err := ParseManifest([]byte(demoManifest))
 	if err != nil {
 		t.Fatalf("ParseManifest: %v", err)
 	}
-	if m.Name != "deye-reader" || m.Version != 1 {
+	if m.Name != "demo-reader" || m.Version != 1 {
 		t.Errorf("name/version = %s/%d", m.Name, m.Version)
 	}
 	if len(m.Triggers) != 2 || m.Triggers[0].Cron != "*/30 * * * *" || m.Triggers[1].Tool != "status" {
 		t.Errorf("triggers = %+v", m.Triggers)
 	}
 	c := m.Capabilities
-	if !slices.Equal(c.HTTPFetch, []string{"eu1-developer.deyecloud.com"}) || !slices.Equal(c.SecretGet, []string{"DEYE_APP_ID", "DEYE_APP_SECRET"}) || !c.State {
+	if !slices.Equal(c.HTTPFetch, []string{"api.example.com"}) || !slices.Equal(c.SecretGet, []string{"DEMO_APP_ID", "DEMO_APP_SECRET"}) || !c.State {
 		t.Errorf("capabilities = %+v", c)
 	}
 	if k := m.Config["inverter_sn"]; k.Type != "string" || !k.Required {

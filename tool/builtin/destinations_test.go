@@ -280,15 +280,15 @@ func TestModuleNotifyToRoutesAModule(t *testing.T) {
 	// The same place again reuses its destination; so does its link, and a
 	// place named twice counts once.
 	for _, args := range []string{
-		`{"module":"deye","destinations":["` + k7 + `"]}`,
-		`{"module":"deye","destinations":["` + made + `"]}`,
-		`{"module":"deye","destinations":["https://t.me/c/1/45","` + k7 + `"]}`,
+		`{"module":"demo","destinations":["` + k7 + `"]}`,
+		`{"module":"demo","destinations":["` + made + `"]}`,
+		`{"module":"demo","destinations":["https://t.me/c/1/45","` + k7 + `"]}`,
 	} {
 		f.routed = nil
 		if _, err := route.Run(context.Background(), routeCall("module.notify_to", args)); err != nil {
 			t.Fatalf("%s: %v", args, err)
 		}
-		if got := f.routed["deye"]; !slices.Equal(got, []string{made}) || len(f.dests) != 1 {
+		if got := f.routed["demo"]; !slices.Equal(got, []string{made}) || len(f.dests) != 1 {
 			t.Fatalf("%s: routed %v, destinations %+v", args, got, f.dests)
 		}
 	}
@@ -348,7 +348,7 @@ func TestGroupDisconnect(t *testing.T) {
 func TestDestinationListWrapsTitles(t *testing.T) {
 	f := family()
 	f.dests = []settings.Destination{{Name: "family-k7", Conv: k7}}
-	f.mods = []settings.Module{{Name: "local/battery-alerts", NotifyTo: []string{"family-k7"}}, {Name: "local/deye-reader"}}
+	f.mods = []settings.Module{{Name: "local/battery-alerts", NotifyTo: []string{"family-k7"}}, {Name: "local/demo-reader"}}
 	list := newRouting(f)["destination.list"]
 	if s := list.Spec(); s.Class != tool.ClassExternal || s.Policy != tool.PolicyAuto {
 		t.Fatalf("spec %+v", s)
@@ -357,7 +357,7 @@ func TestDestinationListWrapsTitles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"- family-k7: " + k7, "- owner:", forum + "/45  topic", "- local/battery-alerts: family-k7", "- local/deye-reader: owner"} {
+	for _, want := range []string{"- family-k7: " + k7, "- owner:", forum + "/45  topic", "- local/battery-alerts: family-k7", "- local/demo-reader: owner"} {
 		if !strings.Contains(res.Text, want) {
 			t.Errorf("the list lacks %q:\n%s", want, res.Text)
 		}
@@ -456,13 +456,13 @@ func TestRouteToATopicTheNodeHasNotSeen(t *testing.T) {
 	if err != nil || !strings.Contains(list.Text, forum+"/8  topic") {
 		t.Fatalf("list %q, %v", list.Text, err)
 	}
-	q, err = ask(t, route, routeCall("module.notify_to", `{"module":"deye","destinations":["`+forum+`/8"]}`))
+	q, err = ask(t, route, routeCall("module.notify_to", `{"module":"demo","destinations":["`+forum+`/8"]}`))
 	if err != nil || !strings.Contains(q, "the topic K7") || strings.Contains(q, "number 8") {
 		t.Fatalf("question after the topic is known: %q, %v", q, err)
 	}
 	// A title given for a topic the node has seen changes nothing: what
 	// Telegram said stands.
-	if _, err := route.Run(context.Background(), routeCall("module.notify_to", `{"module":"deye","destinations":["`+k7+`"],"titles":{"`+k7+`":"Spoofed"}}`)); err != nil {
+	if _, err := route.Run(context.Background(), routeCall("module.notify_to", `{"module":"demo","destinations":["`+k7+`"],"titles":{"`+k7+`":"Spoofed"}}`)); err != nil {
 		t.Fatal(err)
 	}
 	if got, _, _ := f.Topic(context.Background(), forum, 45); strings.Contains(got.Title, "Spoofed") {

@@ -21,23 +21,23 @@ func cellsEnv(t *testing.T) (*env, *cells.Service) {
 	e := newEnv(t, Config{}, nil)
 	svc := cells.NewService(cells.NewMemStore(), cells.WithClock(func() time.Time { return e.now }))
 	ctx := context.Background()
-	if err := svc.DefineOwned(ctx, cells.OwnedDef{ID: "deye-reader.soc", Owner: "local/deye-reader", Kind: cells.KindSensor, About: "Battery *charge*, %"}); err != nil {
+	if err := svc.DefineOwned(ctx, cells.OwnedDef{ID: "demo-reader.soc", Owner: "local/demo-reader", Kind: cells.KindSensor, About: "Battery *charge*, %"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.Define(ctx, cells.Def{ID: "load.boiler", Kind: cells.KindSwitch}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.DefineOwned(ctx, cells.OwnedDef{ID: "deye-reader.mode", Owner: "local/deye-reader", Kind: cells.KindSensor}); err != nil {
+	if err := svc.DefineOwned(ctx, cells.OwnedDef{ID: "demo-reader.mode", Owner: "local/demo-reader", Kind: cells.KindSensor}); err != nil {
 		t.Fatal(err)
 	}
 	report := func(id, v string, ago time.Duration) {
 		e.now = t0.Add(-ago)
-		if _, err := svc.Report(ctx, id, json.RawMessage(v), cells.CauseExternal, "module:deye-reader"); err != nil {
+		if _, err := svc.Report(ctx, id, json.RawMessage(v), cells.CauseExternal, "module:demo-reader"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	report("deye-reader.soc", "70", 40*time.Minute)
-	report("deye-reader.soc", "78", 12*time.Minute)
+	report("demo-reader.soc", "70", 40*time.Minute)
+	report("demo-reader.soc", "78", 12*time.Minute)
 	e.now = t0
 	e.deps.Cells, e.deps.Buttons = svc, e.pending
 	e.a = New(overDefaults(Config{}), e.deps)
@@ -50,8 +50,8 @@ func TestCellsCommandGolden(t *testing.T) {
 	e, _ := cellsEnv(t)
 	out := e.turn(t, message(owner, "Igor", "/cells"))
 	want := []string{
-		"deye-reader.mode  no value  just now",
-		"deye-reader.soc  78  12 min ago\nBattery \\*charge\\*, %",
+		"demo-reader.mode  no value  just now",
+		"demo-reader.soc  78  12 min ago\nBattery \\*charge\\*, %",
 		"load.boiler  no value  just now",
 	}
 	var got []string
@@ -68,7 +68,7 @@ func TestCellsCommandGolden(t *testing.T) {
 		t.Fatal("a model was called")
 	}
 	for _, m := range e.state(t).Messages {
-		if strings.Contains(m.Content, "charge") || strings.Contains(m.Content, "deye-reader") {
+		if strings.Contains(m.Content, "charge") || strings.Contains(m.Content, "demo-reader") {
 			t.Fatalf("the history holds the module's words: %q", m.Content)
 		}
 	}
@@ -81,7 +81,7 @@ func TestCellsHistoryButton(t *testing.T) {
 	out := e.turn(t, message(owner, "Igor", "/cells"))
 	var soc event.Outgoing
 	for _, o := range out {
-		if strings.HasPrefix(o.Text, "deye-reader.soc") {
+		if strings.HasPrefix(o.Text, "demo-reader.soc") {
 			soc = o
 		}
 	}
@@ -96,7 +96,7 @@ func TestCellsHistoryButton(t *testing.T) {
 	if edit.Text == "" {
 		t.Fatalf("no history edit in %+v", res)
 	}
-	want := "deye-reader.soc  78  12 min ago\nBattery \\*charge\\*, %\n\ndeye-reader.soc: the last changes\n" +
+	want := "demo-reader.soc  78  12 min ago\nBattery \\*charge\\*, %\n\ndemo-reader.soc: the last changes\n" +
 		"03.11 09:48  78\n03.11 09:20  70"
 	if edit.Text != want {
 		t.Fatalf("edit:\n%s\nwant:\n%s", edit.Text, want)

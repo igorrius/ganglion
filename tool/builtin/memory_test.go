@@ -150,8 +150,8 @@ func TestMemoryWriteNewTopicNeedsASummary(t *testing.T) {
 func TestMemoryWriteQuestionShowsTheFact(t *testing.T) {
 	tools := memoryTools(t)
 	q, err := tools["memory.write"].(tool.Questioner).Question(context.Background(),
-		call("memory.write", `{"topic":"inverter","fact":"Negative batt_w on the Deye is the battery charging."}`))
-	if err != nil || !strings.Contains(q, "inverter: Negative batt_w on the Deye is the battery charging.") {
+		call("memory.write", `{"topic":"inverter","fact":"Negative batt_w on the Acme is the battery charging."}`))
+	if err != nil || !strings.Contains(q, "inverter: Negative batt_w on the Acme is the battery charging.") {
 		t.Fatalf("question %q %v", q, err)
 	}
 }
@@ -194,19 +194,19 @@ func (o oneEpisode) Search(context.Context, string, []string, int) ([]memory.Epi
 
 // What the owner once said in a chat is not a stored fact, and recall
 // says which is which (ruling R49). The live run of 2026-11-03: the
-// write of "Deye 5 kW" expired unconfirmed, recall found the owner's
+// write of "Acme 5 kW" expired unconfirmed, recall found the owner's
 // words in the archive, and the model said memory still held them.
 func TestMemoryRecallTellsEpisodesFromFacts(t *testing.T) {
 	said := memory.Episode{Conv: "telegram:42", Session: "s1", Ended: time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC),
-		Text: "Igor: my inverter is a Deye 5 kW"}
+		Text: "Igor: my inverter is a Acme 5 kW"}
 	tools := memoryTools(t, memory.WithEpisodes(oneEpisode{said}))
 	res := run(t, tools["memory.recall"], call("memory.recall", `{"query":"inverter"}`))
-	if res.Text != "[said in an earlier chat on 2026-11-02, not a stored fact] Igor: my inverter is a Deye 5 kW" {
+	if res.Text != "[said in an earlier chat on 2026-11-02, not a stored fact] Igor: my inverter is a Acme 5 kW" {
 		t.Fatalf("episode only: %q", res.Text)
 	}
-	run(t, tools["memory.write"], call("memory.write", `{"topic":"Inverter","summary":"The inverter","fact":"A Deye 8 kW inverter."}`))
+	run(t, tools["memory.write"], call("memory.write", `{"topic":"Inverter","summary":"The inverter","fact":"A Acme 8 kW inverter."}`))
 	res = run(t, tools["memory.recall"], call("memory.recall", `{"query":"inverter"}`))
-	if !strings.HasPrefix(res.Text, "[stored fact (inverter f1), saved 2026-11-03] Inverter: A Deye 8 kW inverter.") ||
+	if !strings.HasPrefix(res.Text, "[stored fact (inverter f1), saved 2026-11-03] Inverter: A Acme 8 kW inverter.") ||
 		!strings.Contains(res.Text, "[said in an earlier chat on 2026-11-02, not a stored fact]") {
 		t.Fatalf("fact and episode: %q", res.Text)
 	}

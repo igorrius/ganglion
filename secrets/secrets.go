@@ -68,7 +68,7 @@ const ScopeNode Scope = "node"
 const modulePrefix = "module:"
 
 // ModuleScope is the scope of the module with this full name
-// ("local/deye-reader" → "module:local/deye-reader").
+// ("local/demo-reader" → "module:local/demo-reader").
 func ModuleScope(module string) Scope { return Scope(modulePrefix + module) }
 
 // maxName is the longest name of a stored secret.

@@ -14,7 +14,7 @@ import (
 )
 
 // moduleNotePrefix starts the user-role note of a module's escalation:
-// "[module] deye-reader: auth_failed (version 3, 14:30). <detail>".
+// "[module] demo-reader: auth_failed (version 3, 14:30). <detail>".
 const moduleNotePrefix = "[module] "
 
 // localPrefix starts the full name of a module built on this node; the

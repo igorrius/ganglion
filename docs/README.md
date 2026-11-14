@@ -24,8 +24,10 @@ Start here when coming back to the project.
   The lab's build-and-install scenario passes on the template. The
   templates are embedded in the binary and written to the modules folder
   at each start, so they are updated with the node as the skills are.
-  Still to do, its own pull request: Deye's name as a sample string in
-  tests, comments and documents.
+  The sample module in tests, comments, lab scenarios and the spec's
+  examples is now `demo-reader`. Deye is still named where it is a fact:
+  as the first user's device in the spec and the context view, in the
+  record of finished phases and live checks, and in the owner's runbook.
 - **Done on 2026-11-13:** Telegram groups (MG), added that day when the
   owner moved the production bot's token to ganglion and removed the old
   bot. A group is connected from a card in the admin's private chat and

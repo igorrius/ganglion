@@ -20,8 +20,8 @@ var errNotOwn = errors.New("modhost: not a cell the module owns")
 // removed) or another module's is never written.
 type cellPort struct {
 	cells  *cells.Service
-	module string // the owner, "local/deye-reader"
-	prefix string // the short name, "deye-reader"
+	module string // the owner, "local/demo-reader"
+	prefix string // the short name, "demo-reader"
 }
 
 // Report implements runner.CellPort.

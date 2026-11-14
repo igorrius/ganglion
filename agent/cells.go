@@ -130,7 +130,7 @@ func (a *Agent) historyButtons(ctx context.Context, sp texts.Speaker, t *turn, i
 	return []event.Button{{ID: b.ID, Label: b.Label}}, nil
 }
 
-// cellRow is `deye-reader.soc  78  12 min ago`, and under it the cell's
+// cellRow is `demo-reader.soc  78  12 min ago`, and under it the cell's
 // about when withAbout.
 func (a *Agent) cellRow(sp texts.Speaker, c cells.Cell, withAbout bool) string {
 	about := ""

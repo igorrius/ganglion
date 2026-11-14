@@ -17,7 +17,7 @@ node:
 
 modules:
   # the solar reader
-  - name: local/deye-reader
+  - name: local/demo-reader
     config:
       host: 192.168.1.5 # inverter
   - name: local/other
@@ -70,7 +70,7 @@ func TestSetModuleChangesOnlyItsLine(t *testing.T) {
 		t.Fatalf("off stayed:\n%s", got)
 	}
 	f := loaded(t, p)
-	if len(f.Modules) != 2 || f.Modules[0].Name != "local/deye-reader" || f.Modules[1].Name != "local/other" {
+	if len(f.Modules) != 2 || f.Modules[0].Name != "local/demo-reader" || f.Modules[1].Name != "local/other" {
 		t.Fatalf("modules %+v", f.Modules)
 	}
 	if f.Modules[1].Config["interval"] != 30 || f.Modules[0].Config["host"] != "192.168.1.5" {
@@ -80,7 +80,7 @@ func TestSetModuleChangesOnlyItsLine(t *testing.T) {
 
 func TestSetModuleOffKeepsConfigAndAddsAtTheEnd(t *testing.T) {
 	p := writeFile(t, twoModules)
-	if err := settings.SetModule(p, settings.Module{Name: "local/deye-reader", Config: map[string]any{"host": "192.168.1.5"}, Off: true}); err != nil {
+	if err := settings.SetModule(p, settings.Module{Name: "local/demo-reader", Config: map[string]any{"host": "192.168.1.5"}, Off: true}); err != nil {
 		t.Fatal(err)
 	}
 	if err := settings.SetModule(p, settings.Module{Name: "local/third"}); err != nil {
@@ -114,7 +114,7 @@ func TestSetModuleCreatesTheSectionAndTheFile(t *testing.T) {
 
 func TestRemoveModule(t *testing.T) {
 	p := writeFile(t, twoModules)
-	if err := settings.RemoveModule(p, "local/deye-reader"); err != nil {
+	if err := settings.RemoveModule(p, "local/demo-reader"); err != nil {
 		t.Fatal(err)
 	}
 	f := loaded(t, p)
@@ -188,7 +188,7 @@ func TestConcurrentWritersLoseNoEdit(t *testing.T) {
 func TestModulesFileSetOff(t *testing.T) {
 	p := writeFile(t, twoModules)
 	f := settings.ModulesFile{Path: p}
-	if err := f.SetOff("local/deye-reader", true, "crashloop"); err != nil {
+	if err := f.SetOff("local/demo-reader", true, "crashloop"); err != nil {
 		t.Fatal(err)
 	}
 	got := read(t, p)
@@ -200,7 +200,7 @@ func TestModulesFileSetOff(t *testing.T) {
 	if err != nil || len(mods) != 2 || !mods[0].Off || mods[0].Config["host"] != "192.168.1.5" || !mods[1].Off {
 		t.Fatalf("modules %+v, %v", mods, err)
 	}
-	if err := f.SetOff("local/deye-reader", false, ""); err != nil {
+	if err := f.SetOff("local/demo-reader", false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, p); strings.Contains(got, "crashloop") {

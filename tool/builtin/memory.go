@@ -426,7 +426,7 @@ func (r *MemoryRecall) Run(ctx context.Context, c tool.Call) (tool.Result, error
 // hitLabel opens a recall hit with its level of memory in plain words, so
 // the model does not report what was once said in a chat as a stored
 // fact (ruling R49: the live run of 2026-11-03 said "memory still holds
-// Deye 5 kW" while no fact was stored). A fact keeps its topic's slug and
+// Acme 5 kW" while no fact was stored). A fact keeps its topic's slug and
 // its id, which memory.read, memory.write and memory.forget take.
 func hitLabel(h memory.Hit) string {
 	day := h.When.Format(time.DateOnly)

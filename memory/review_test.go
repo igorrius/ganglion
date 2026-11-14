@@ -11,9 +11,9 @@ func TestParseOps(t *testing.T) {
 	good := map[string][]memory.Op{
 		`{"ops":[]}`:                 nil,
 		"```json\n{\"ops\":[]}\n```": nil,
-		`{"ops":[{"kind":"add","topic":"Inverter","summary":"The Deye inverter","text":"Negative batt_w is charging."},` +
+		`{"ops":[{"kind":"add","topic":"Inverter","summary":"The Acme inverter","text":"Negative batt_w is charging."},` +
 			`{"kind":"replace","topic":"car","fact":"f2","text":"The car is red."},{"kind":"remove","topic":"car","fact":"f1"}]}`: {
-			{Kind: memory.OpAdd, Topic: "Inverter", Summary: "The Deye inverter", Text: "Negative batt_w is charging."},
+			{Kind: memory.OpAdd, Topic: "Inverter", Summary: "The Acme inverter", Text: "Negative batt_w is charging."},
 			{Kind: memory.OpReplace, Topic: "car", Fact: "f2", Text: "The car is red."},
 			{Kind: memory.OpRemove, Topic: "car", Fact: "f1"},
 		},

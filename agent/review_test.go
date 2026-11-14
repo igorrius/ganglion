@@ -68,7 +68,7 @@ func (m *memoryEnv) reviewCalls() []provider.ChatRequest {
 	return out
 }
 
-const reviewAddInverter = `{"ops":[{"kind":"add","topic":"Inverter","summary":"The Deye inverter","text":"Negative batt_w is the battery charging."}]}`
+const reviewAddInverter = `{"ops":[{"kind":"add","topic":"Inverter","summary":"The Acme inverter","text":"Negative batt_w is the battery charging."}]}`
 
 // The owner's correction the turn did not store is stored by the review
 // after the quiet time: a note with Undo, the mark at the end, the outcome

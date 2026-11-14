@@ -13,10 +13,10 @@ covers:
 repeat: 1
 model: scripted
 modules:
-  - {name: deye-reader, manifest: modules/deye-failing.yaml}
+  - {name: demo-reader, manifest: modules/demo-failing.yaml}
 script:
-  - {say: "deye-reader's credentials were refused; I told you once."}
-  - {say: "deye-reader failed five times and the node turned it off."}
+  - {say: "demo-reader's credentials were refused; I told you once."}
+  - {say: "demo-reader failed five times and the node turned it off."}
 steps:
   - advance: {scheduler: 31m}
   - facts: {replies: 1, reply: {contains: "credentials were refused"}}
@@ -30,6 +30,6 @@ steps:
   - facts:
       replies: 1
       reply: {contains: "turned it off"}
-      history: {contains: "[module] deye-reader: module.crashloop"}
+      history: {contains: "[module] demo-reader: module.crashloop"}
   - advance: {scheduler: 31m}
   - facts: {replies: 0}

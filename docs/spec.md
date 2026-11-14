@@ -620,17 +620,17 @@ Example manifest (M4 form,
 [ADR-0062](adr/0062-cells-owned-by-modules.md)):
 
 ```yaml
-name: deye-reader
+name: demo-reader
 version: 3
 triggers:
   - cron: "*/30 * * * *"
-  - tool: status             # the agent sees it as deye-reader.status
+  - tool: status             # the agent sees it as demo-reader.status
 capabilities:
-  http.fetch: [eu1-developer.deyecloud.com]
-  secret.get: [DEYE_APP_ID, DEYE_APP_SECRET, DEYE_EMAIL, DEYE_PASSWORD]
+  http.fetch: [api.example.com]
+  secret.get: [DEMO_APP_ID, DEMO_APP_SECRET, DEMO_EMAIL, DEMO_PASSWORD]
   state: true
 cells:
-  report:                    # the module's own cells: deye-reader.soc, ...
+  report:                    # the module's own cells: demo-reader.soc, ...
     soc:    {kind: sensor, about: "Battery state of charge, %"}
     grid:   {kind: sensor, about: "Grid present: true/false"}
     sample: {kind: sensor, about: "The whole reading, 12 fields"}
@@ -671,7 +671,7 @@ escalate:                    # when to call the model
   through the same policies as any tool. The first one is `html2md`
   (7.11), a pure function granted no host functions, embedded in the
   binary (M3b). M4 extends the path to modules the agent builds
-  (`deye-reader.status`, R-RUN-9).
+  (`demo-reader.status`, R-RUN-9).
 - **R-RUN-8.** Modules are installed, updated and rolled back without
   restarting the node (M3c, admin only):
   - the source in P1 is a URL plus a sha256 sum; built-in modules come
@@ -748,7 +748,7 @@ escalate:                    # when to call the model
   owner; a module writes only its own cells (`cell.report` names a cell
   without the prefix) and reads others' only when `cells.read` lists them
   by full name. A removed module's cells stay, read-only. A module's tools
-  take the same prefix (`deye-reader.status`). The agent reads any cell
+  take the same prefix (`demo-reader.status`). The agent reads any cell
   (`cells.list`, `cells.get` with a condensed history) and never writes a
   sensor; the owner sees cells with `/cells`, without a model.
 - **R-RUN-12.** The runner in the node runs a module on its cron lines
@@ -793,7 +793,7 @@ escalate:                    # when to call the model
   to the node's log on every failed run, whatever the verdict.
 
 - **R-RUN-15.** A module can run when cells it listens to change
-  (`triggers: - cell: [deye-reader.soc, …]`), with no model (M4c,
+  (`triggers: - cell: [demo-reader.soc, …]`), with no model (M4c,
   [ADR-0065](adr/0065-cell-triggers-through-the-inbox.md)). Every cell a
   trigger names is in `cells.read`; a module never listens to its own
   cells, and the install and a rollback refuse a loop between modules. When a run that
@@ -817,7 +817,7 @@ escalate:                    # when to call the model
   characters. `N` is at most 100 a day in the node's time
   zone; over it nothing is sent, the module gets the code "limit" and the
   owner one node line that day. A repeated run sends nothing twice. The
-  model gets a node note without the text (`[module] deye-alerts notified
+  model gets a node note without the text (`[module] demo-alerts notified
   you at 14:30`), which does not taint; a reply to the message names the
   module the same way (R-DLV-15). The window says "Writes to you: up
   to N messages a day". Other targets wait in "Not now".

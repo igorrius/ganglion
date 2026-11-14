@@ -115,7 +115,7 @@ type Schedule struct {
 // is one of the node's kinds and Detail is the node's description, so the
 // agent's note of it is not outside content (R-RUN-14).
 type Module struct {
-	Module    string `json:"module"`    // the full name, "local/deye-reader"
+	Module    string `json:"module"`    // the full name, "local/demo-reader"
 	Version   string `json:"version"`   // the manifest's version
 	Kind      string `json:"kind"`      // module.exception, auth_failed, stale, module.crashloop, module.format
 	Detail    string `json:"detail"`    // the node's words only

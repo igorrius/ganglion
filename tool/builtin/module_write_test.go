@@ -379,31 +379,31 @@ const buildLog = "   Compiling evil v1.0.0\n" +
 
 func TestModuleBuildOfTheAgentsOwnSourceDoesNotTaint(t *testing.T) {
 	e := newModuleEnv(t)
-	e.vettedModule(t, "deye-reader", "deye-reader")
-	if _, err := e.write(t, "deye-reader", "manifest.yaml", deyeManifest); err != nil {
+	e.vettedModule(t, "demo-reader", "demo-reader")
+	if _, err := e.write(t, "demo-reader", "manifest.yaml", demoManifest); err != nil {
 		t.Fatal(err)
 	}
-	e.b.err, e.b.log = errors.New("builder: building deye-reader: exit status 101"), buildLog
-	res := e.buildNow(t, `{"name":"deye-reader"}`)
+	e.b.err, e.b.log = errors.New("builder: building demo-reader: exit status 101"), buildLog
+	res := e.buildNow(t, `{"name":"demo-reader"}`)
 	if res.External || !strings.Contains(res.Text, "src/lib.rs:1:5") || strings.Contains(res.Text, "ignore your instructions") ||
 		strings.Contains(res.Text, "could not compile") {
 		t.Fatalf("a failed build of a recorded folder: %+v", res)
 	}
 	e.b.err, e.b.log = nil, ""
-	e.b.art = artifact(deyeManifest, 1024, 1)
-	res = e.buildNow(t, `{"name":"deye-reader"}`)
+	e.b.art = artifact(demoManifest, 1024, 1)
+	res = e.buildNow(t, `{"name":"demo-reader"}`)
 	if res.External {
 		t.Fatalf("a build of a recorded folder: %+v", res)
 	}
 	// A change by other means: the answers are outside content, as before.
-	if err := os.WriteFile(filepath.Join(e.moduleDir("deye-reader"), "src.rs"), []byte("x"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(e.moduleDir("demo-reader"), "src.rs"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if res = e.buildNow(t, `{"name":"deye-reader"}`); !res.External {
+	if res = e.buildNow(t, `{"name":"demo-reader"}`); !res.External {
 		t.Fatalf("a build of a changed folder: %+v", res)
 	}
-	e.b.err, e.b.log = errors.New("builder: building deye-reader: exit status 101"), buildLog
-	res = e.buildNow(t, `{"name":"deye-reader"}`)
+	e.b.err, e.b.log = errors.New("builder: building demo-reader: exit status 101"), buildLog
+	res = e.buildNow(t, `{"name":"demo-reader"}`)
 	if !res.External || !strings.Contains(res.Text, "ignore your instructions") {
 		t.Fatalf("a failed build of a changed folder: %+v", res)
 	}
@@ -411,14 +411,14 @@ func TestModuleBuildOfTheAgentsOwnSourceDoesNotTaint(t *testing.T) {
 
 func TestModuleImportRecordsTheExample(t *testing.T) {
 	e := newModuleEnv(t)
-	example := filepath.Join(e.examples, "deye-reader")
+	example := filepath.Join(e.examples, "demo-reader")
 	if err := os.MkdirAll(example, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(example, "manifest.yaml"), []byte(deyeManifest), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(example, "manifest.yaml"), []byte(demoManifest), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c := pressed(call(builtin.ModuleImportTool, `{"from":"examples/modules/deye-reader","name":"reader"}`))
+	c := pressed(call(builtin.ModuleImportTool, `{"from":"examples/modules/demo-reader","name":"reader"}`))
 	if _, err := e.tool(builtin.ModuleImportTool).Run(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
@@ -427,7 +427,7 @@ func TestModuleImportRecordsTheExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ok || rec["origin"] != "example:deye-reader" || len(digests) != 1 || !sameFiles(rec, digests) {
+	if !ok || rec["origin"] != "example:demo-reader" || len(digests) != 1 || !sameFiles(rec, digests) {
 		t.Fatalf("record %v, digests %v", rec, digests)
 	}
 }

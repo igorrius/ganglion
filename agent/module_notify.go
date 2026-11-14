@@ -71,7 +71,7 @@ func (a *Agent) moduleNotify(ctx context.Context, t *turn, p event.ModuleNotify)
 	})
 }
 
-// notifySignature is the module's short name and running version ("deye-alerts
+// notifySignature is the module's short name and running version ("demo-alerts
 // v2") under its own text, as the node's signature (ADR-0074); a node line is
 // the node's and has none. A version that is not a number is left out.
 func notifySignature(p event.ModuleNotify) string {

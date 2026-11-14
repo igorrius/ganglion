@@ -155,18 +155,18 @@ func (e *moduleEnv) buildNow(t *testing.T, args string) tool.Result {
 // puts module.built into the call's conversation.
 func TestModuleBuildAnswersAtOnceAndItsEndResumesTheConversation(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
-	art := artifact(deyeManifest, 1024, 1)
+	e.source(t, "demo-reader")
+	art := artifact(demoManifest, 1024, 1)
 	e.b.art = art
-	res, err := e.startBuild(t, `{"name":"deye-reader","note":"first"}`)
+	res, err := e.startBuild(t, `{"name":"demo-reader","note":"first"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.External || res.Job == "" || !strings.HasPrefix(res.Job, "build:deye-reader:") {
+	if res.External || res.Job == "" || !strings.HasPrefix(res.Job, "build:demo-reader:") {
 		t.Fatalf("answer %+v", res)
 	}
 	var ans struct{ Building, Job, Next string }
-	if err := json.Unmarshal([]byte(res.Text), &ans); err != nil || ans.Building != "deye-reader" || ans.Job != res.Job ||
+	if err := json.Unmarshal([]byte(res.Text), &ans); err != nil || ans.Building != "demo-reader" || ans.Job != res.Job ||
 		ans.Next != "the result comes back as a note when the build ends; a card in the chat shows its progress" {
 		t.Fatalf("answer %s, %v", res.Text, err)
 	}
@@ -174,13 +174,13 @@ func TestModuleBuildAnswersAtOnceAndItsEndResumesTheConversation(t *testing.T) {
 		t.Fatal("the build ran inside the call")
 	}
 	st := e.jobs.starts(res.Job)
-	if len(st) == 0 || st[0].Kind != jobs.KindBuild || st[0].Title != "deye-reader" || st[0].Conv != "telegram:42" ||
+	if len(st) == 0 || st[0].Kind != jobs.KindBuild || st[0].Title != "demo-reader" || st[0].Conv != "telegram:42" ||
 		st[0].Transport != "telegram" || st[0].Principal != "telegram:user:42" {
 		t.Fatalf("card %+v", st)
 	}
 	o := e.runBuild(t, res.Job)
 	if !strings.Contains(o.Answer, art.SHA256) || !o.External || o.State != jobs.StateDone || o.Conv != "telegram:42" ||
-		o.Principal != "telegram:user:42" || o.Module != "deye-reader" {
+		o.Principal != "telegram:user:42" || o.Module != "demo-reader" {
 		t.Fatalf("outcome %+v", o)
 	}
 	if e.jobs.endOf(res.Job) != jobs.StateDone {
@@ -192,7 +192,7 @@ func TestModuleBuildAnswersAtOnceAndItsEndResumesTheConversation(t *testing.T) {
 		t.Fatalf("events %+v", evs)
 	}
 	var p event.ModuleBuilt
-	if err := json.Unmarshal(evs[0].Payload, &p); err != nil || p.Key != res.Job || p.Module != "deye-reader" {
+	if err := json.Unmarshal(evs[0].Payload, &p); err != nil || p.Key != res.Job || p.Module != "demo-reader" {
 		t.Fatalf("payload %s", evs[0].Payload)
 	}
 }
@@ -201,9 +201,9 @@ func TestModuleBuildAnswersAtOnceAndItsEndResumesTheConversation(t *testing.T) {
 // end, outside content, as module.build answered before.
 func TestAFailedBuildEndsItsCardAsFailed(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
-	e.b.err, e.b.log = errors.New("builder: building deye-reader: exit status 101"), "error[E0425]: a hostile line"
-	res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+	e.source(t, "demo-reader")
+	e.b.err, e.b.log = errors.New("builder: building demo-reader: exit status 101"), "error[E0425]: a hostile line"
+	res, err := e.startBuild(t, `{"name":"demo-reader"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,9 +216,9 @@ func TestAFailedBuildEndsItsCardAsFailed(t *testing.T) {
 // The build tells the card how many crates it compiled.
 func TestABuildsProgressReachesItsCard(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
-	e.b.art, e.b.crates = artifact(deyeManifest, 1024, 1), 14
-	res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+	e.source(t, "demo-reader")
+	e.b.art, e.b.crates = artifact(demoManifest, 1024, 1), 14
+	res, err := e.startBuild(t, `{"name":"demo-reader"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,9 +231,9 @@ func TestABuildsProgressReachesItsCard(t *testing.T) {
 // The same call asked again (a turn run once more) queues no second build.
 func TestTheSameCallQueuesOneBuild(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
-	e.b.art = artifact(deyeManifest, 1024, 1)
-	c := call(builtin.ModuleBuildTool, `{"name":"deye-reader"}`)
+	e.source(t, "demo-reader")
+	e.b.art = artifact(demoManifest, 1024, 1)
+	c := call(builtin.ModuleBuildTool, `{"name":"demo-reader"}`)
 	first, err := e.tool(builtin.ModuleBuildTool).Run(context.Background(), c)
 	if err != nil {
 		t.Fatal(err)
@@ -252,18 +252,18 @@ func TestTheSameCallQueuesOneBuild(t *testing.T) {
 // a write to it are refused in the node's words; other modules are not.
 func TestAModuleBeingBuiltRefusesABuildAndAWrite(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
+	e.source(t, "demo-reader")
 	e.source(t, "other")
-	e.b.art = artifact(deyeManifest, 1024, 1)
-	res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+	e.b.art = artifact(demoManifest, 1024, 1)
+	res, err := e.startBuild(t, `{"name":"demo-reader"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "deye-reader is being built; wait for its result"
-	if _, err := e.startBuild(t, `{"name":"deye-reader"}`); err == nil || !strings.Contains(err.Error(), want) {
+	const want = "demo-reader is being built; wait for its result"
+	if _, err := e.startBuild(t, `{"name":"demo-reader"}`); err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("a second build while one waits: %v", err)
 	}
-	if _, err := e.write(t, "deye-reader", "src/lib.rs", "x"); err == nil || !strings.Contains(err.Error(), want) {
+	if _, err := e.write(t, "demo-reader", "src/lib.rs", "x"); err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("a write while a build waits: %v", err)
 	}
 	if _, err := e.write(t, "other", "src/lib.rs", "x"); err != nil {
@@ -274,12 +274,12 @@ func TestAModuleBeingBuiltRefusesABuildAndAWrite(t *testing.T) {
 	done := make(chan struct{})
 	go func() { e.m.Queue.Step(context.Background()); close(done) }()
 	<-e.b.running
-	if _, err := e.write(t, "deye-reader", "src/lib.rs", "x"); err == nil || !strings.Contains(err.Error(), want) {
+	if _, err := e.write(t, "demo-reader", "src/lib.rs", "x"); err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("a write while the build runs: %v", err)
 	}
 	close(e.b.gate)
 	<-done
-	if _, err := e.write(t, "deye-reader", "src/lib.rs", "x"); err != nil {
+	if _, err := e.write(t, "demo-reader", "src/lib.rs", "x"); err != nil {
 		t.Fatalf("a write after the build ended: %v", err)
 	}
 	if _, err := e.m.Queue.Outcome(context.Background(), res.Job); err != nil {
@@ -291,10 +291,10 @@ func TestAModuleBeingBuiltRefusesABuildAndAWrite(t *testing.T) {
 // it runs once the first ended, its time counted from then.
 func TestBuildsRunOneAfterTheOther(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
+	e.source(t, "demo-reader")
 	e.source(t, "other")
-	e.b.art = artifact(deyeManifest, 1024, 1)
-	first, err := e.startBuild(t, `{"name":"deye-reader"}`)
+	e.b.art = artifact(demoManifest, 1024, 1)
+	first, err := e.startBuild(t, `{"name":"demo-reader"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestBuildsRunOneAfterTheOther(t *testing.T) {
 		t.Fatalf("the second card %+v", st)
 	}
 	e.runBuild(t, first.Job)
-	if len(e.b.built) != 1 || e.b.built[0].Name != "deye-reader" || e.jobs.endOf(second.Job) != "" {
+	if len(e.b.built) != 1 || e.b.built[0].Name != "demo-reader" || e.jobs.endOf(second.Job) != "" {
 		t.Fatalf("built %+v", e.b.built)
 	}
 	e.runBuild(t, second.Job)
@@ -321,13 +321,13 @@ func TestBuildsRunOneAfterTheOther(t *testing.T) {
 // Run works the queue until its context ends.
 func TestTheQueueRunsWhatItIsGiven(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
-	e.b.art = artifact(deyeManifest, 1024, 1)
+	e.source(t, "demo-reader")
+	e.b.art = artifact(demoManifest, 1024, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan error, 1)
 	go func() { stopped <- e.m.Queue.Run(ctx) }()
 	e.b.running = make(chan string, 1)
-	res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+	res, err := e.startBuild(t, `{"name":"demo-reader"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,8 +345,8 @@ func TestTheQueueRunsWhatItIsGiven(t *testing.T) {
 // node's words, and puts module.built so the agent is told; it is told once.
 func TestARestartDuringABuildEndsItAsInterruptedAndTellsTheAgent(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
-	res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+	e.source(t, "demo-reader")
+	res, err := e.startBuild(t, `{"name":"demo-reader"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,11 +380,11 @@ func TestARestartDuringABuildEndsItAsInterruptedAndTellsTheAgent(t *testing.T) {
 // The key names the module and the call, so a second call builds again.
 func TestEachCallIsABuildOfItsOwn(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
-	e.b.art = artifact(deyeManifest, 1024, 1)
+	e.source(t, "demo-reader")
+	e.b.art = artifact(demoManifest, 1024, 1)
 	keys := map[string]bool{}
 	for i := range 2 {
-		res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+		res, err := e.startBuild(t, `{"name":"demo-reader"}`)
 		if err != nil {
 			t.Fatal(strconv.Itoa(i), err)
 		}
@@ -402,18 +402,18 @@ func TestEachCallIsABuildOfItsOwn(t *testing.T) {
 // afresh. Another module and another conversation count apart.
 func TestBuildsInARowAreCappedUntilTheOwnerWrites(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
+	e.source(t, "demo-reader")
 	e.source(t, "other")
-	e.b.err, e.b.log = errors.New("builder: building deye-reader: exit status 101"), "error[E0308]"
+	e.b.err, e.b.log = errors.New("builder: building demo-reader: exit status 101"), "error[E0308]"
 	for i := range builtin.MaxBuildsInARow {
-		res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+		res, err := e.startBuild(t, `{"name":"demo-reader"}`)
 		if err != nil {
 			t.Fatalf("build %d: %v", i+1, err)
 		}
 		e.runBuild(t, res.Job)
 	}
-	const want = "deye-reader was built 5 times in a row; ask the owner before building again"
-	if _, err := e.startBuild(t, `{"name":"deye-reader"}`); err == nil || !strings.Contains(err.Error(), want) {
+	const want = "demo-reader was built 5 times in a row; ask the owner before building again"
+	if _, err := e.startBuild(t, `{"name":"demo-reader"}`); err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("the sixth build: %v", err)
 	}
 	if res, err := e.startBuild(t, `{"name":"other"}`); err != nil {
@@ -422,11 +422,11 @@ func TestBuildsInARowAreCappedUntilTheOwnerWrites(t *testing.T) {
 		e.runBuild(t, res.Job)
 	}
 	e.m.Queue.OwnerSpoke("telegram:7")
-	if _, err := e.startBuild(t, `{"name":"deye-reader"}`); err == nil {
+	if _, err := e.startBuild(t, `{"name":"demo-reader"}`); err == nil {
 		t.Fatal("a message in another conversation reset the count")
 	}
 	e.m.Queue.OwnerSpoke("telegram:42")
-	res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+	res, err := e.startBuild(t, `{"name":"demo-reader"}`)
 	if err != nil {
 		t.Fatalf("after the owner wrote: %v", err)
 	}
@@ -437,15 +437,15 @@ func TestBuildsInARowAreCappedUntilTheOwnerWrites(t *testing.T) {
 // only at the next start.
 func TestAFailedAnnouncementIsPutAgainByTheNextPass(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
-	e.b.art = artifact(deyeManifest, 1024, 1)
+	e.source(t, "demo-reader")
+	e.b.art = artifact(demoManifest, 1024, 1)
 	p := &puts{fail: 1, tried: make(chan error, 4)}
 	tick := make(chan time.Time)
 	e.m.Queue = newQueueAfter(e.jobsDir(), e.jobs, p, func(time.Duration) <-chan time.Time { return tick })
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan error, 1)
 	go func() { stopped <- e.m.Queue.Run(ctx) }()
-	if _, err := e.startBuild(t, `{"name":"deye-reader"}`); err != nil {
+	if _, err := e.startBuild(t, `{"name":"demo-reader"}`); err != nil {
 		t.Fatal(err)
 	}
 	if err := <-p.tried; err == nil {
@@ -469,13 +469,13 @@ func TestAFailedAnnouncementIsPutAgainByTheNextPass(t *testing.T) {
 // start ends that running record as interrupted and tells the agent.
 func TestABuildCutShortByShutdownIsToldAtTheNextStart(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "deye-reader")
-	e.b.art = artifact(deyeManifest, 1024, 1)
+	e.source(t, "demo-reader")
+	e.b.art = artifact(demoManifest, 1024, 1)
 	e.b.running, e.b.gate = make(chan string, 1), make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan error, 1)
 	go func() { stopped <- e.m.Queue.Run(ctx) }()
-	res, err := e.startBuild(t, `{"name":"deye-reader"}`)
+	res, err := e.startBuild(t, `{"name":"demo-reader"}`)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,7 +23,7 @@ func moduleEvent(m event.Module) event.Event {
 }
 
 func authFailed() event.Module {
-	return event.Module{Module: "local/deye-reader", Version: "3", Kind: "auth_failed",
+	return event.Module{Module: "local/demo-reader", Version: "3", Kind: "auth_failed",
 		Detail: "the module reported a failure of kind auth_failed", At: t0.Add(4*time.Hour + 30*time.Minute).UnixMilli(),
 		Principal: owner, Transport: "telegram"}
 }
@@ -39,14 +39,14 @@ func TestModuleJobCallsModuleCronAndSendsNothing(t *testing.T) {
 		return nil
 	}
 	e.a = New(overDefaults(Config{}), e.deps)
-	j := schedule.Job{ID: "module:local/deye-reader:0", Owner: owner, Conv: "telegram:42", Transport: "telegram",
-		Kind: schedule.KindModule, Cron: "*/30 * * * *", Text: "local/deye-reader", System: true, Created: t0}
+	j := schedule.Job{ID: "module:local/demo-reader:0", Owner: owner, Conv: "telegram:42", Transport: "telegram",
+		Kind: schedule.KindModule, Cron: "*/30 * * * *", Text: "local/demo-reader", System: true, Created: t0}
 	e.jobs[j.ID] = j
 	ev := fired(j)
 	if out := e.turn(t, ev); len(out) != 0 {
 		t.Fatalf("a module run sent %+v", out)
 	}
-	if strings.Join(ran, ",") != "local/deye-reader" {
+	if strings.Join(ran, ",") != "local/demo-reader" {
 		t.Fatalf("ModuleCron ran %v", ran)
 	}
 	if len(runs) != 1 || runs[0] != ev.IdemKey {
@@ -69,13 +69,13 @@ func TestModuleJobCallsModuleCronAndSendsNothing(t *testing.T) {
 // model answers the owner (design section 8.4).
 func TestModuleEventBecomesATurnWithTheNote(t *testing.T) {
 	e := newEnv(t, Config{}, nil)
-	e.smart.push(say("The Deye cloud refused the login; check DEYE_PASSWORD."))
+	e.smart.push(say("The Acme cloud refused the login; check DEMO_PASSWORD."))
 	ev := moduleEvent(authFailed())
 	out := e.turn(t, ev)
 	if len(out) != 1 || out[0].Conv != "telegram:42" || out[0].Transport != "telegram" || !strings.Contains(out[0].Text, "refused the login") {
 		t.Fatalf("out %+v", out)
 	}
-	want := "[module] deye-reader: auth_failed (version 3, 14:30). the module reported a failure of kind auth_failed"
+	want := "[module] demo-reader: auth_failed (version 3, 14:30). the module reported a failure of kind auth_failed"
 	if got := e.userTexts(t, 0); len(got) != 1 || got[0] != want {
 		t.Fatalf("the model saw %q, want %q", got, want)
 	}

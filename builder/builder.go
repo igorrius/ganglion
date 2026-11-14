@@ -26,7 +26,7 @@ type Abilities map[Language]string
 
 // Source is a module's source folder in the workspace.
 type Source struct {
-	Name string // short name, e.g. "deye-reader"
+	Name string // short name, e.g. "demo-reader"
 	Dir  string // the folder in the workspace
 	// Progress is told how many crates the build has compiled so far, as
 	// cargo prints its "Compiling" lines, for the job's card (R-LIVE-9); nil

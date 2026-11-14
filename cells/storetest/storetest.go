@@ -175,11 +175,11 @@ func Run(t *testing.T, newStore func(t *testing.T) cells.Store) {
 
 	t.Run("owner and about", func(t *testing.T) {
 		s := newStore(t)
-		c := cells.Cell{ID: "deye-reader.soc", Kind: cells.KindSensor, Owner: "deye-reader", About: "soc", Version: 1, Updated: t0}
+		c := cells.Cell{ID: "demo-reader.soc", Kind: cells.KindSensor, Owner: "demo-reader", About: "soc", Version: 1, Updated: t0}
 		_, _ = s.Create(ctx, c, "test")
 		_, _ = s.Create(ctx, switchCell("load.a"), "test")
-		got, err := s.Get(ctx, "deye-reader.soc")
-		if err != nil || got.Owner != "deye-reader" || got.About != "soc" {
+		got, err := s.Get(ctx, "demo-reader.soc")
+		if err != nil || got.Owner != "demo-reader" || got.About != "soc" {
 			t.Fatalf("got %+v (%v)", got, err)
 		}
 		if err := s.SetOwner(ctx, "load.a", "m", "about"); err != nil {
@@ -200,7 +200,7 @@ func Run(t *testing.T, newStore func(t *testing.T) cells.Store) {
 		if got.Owner != "" || got.About != "about" {
 			t.Fatalf("after Disown %+v", got)
 		}
-		if l, _ := s.List(ctx); len(l) != 2 || l[0].Owner != "deye-reader" {
+		if l, _ := s.List(ctx); len(l) != 2 || l[0].Owner != "demo-reader" {
 			t.Fatalf("list = %+v", l)
 		}
 	})

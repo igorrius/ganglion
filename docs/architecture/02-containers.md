@@ -20,7 +20,7 @@ flowchart LR
 
     subgraph edgerole["edge role"]
         runner["Runner<br/>wazero, supervisor,<br/>policies, scheduler"]
-        mods["WASM modules<br/>deye-reader, load-shedding"]
+        mods["WASM modules<br/>a reader, a reflex"]
         cells[("State cells<br/>desired / reported<br/>P1")]
     end
 

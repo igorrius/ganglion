@@ -88,11 +88,11 @@ func lockOf(root string, extra ...string) string {
 // package is pkg and whose lock lists only the example's crates.
 func (e *moduleEnv) vettedModule(t *testing.T, name, pkg string) {
 	t.Helper()
-	example := filepath.Join(e.examples, "deye-reader")
+	example := filepath.Join(e.examples, "demo-reader")
 	if err := os.MkdirAll(example, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(example, "Cargo.lock"), []byte(lockOf("deye-reader")), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(example, "Cargo.lock"), []byte(lockOf("demo-reader")), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range []struct{ path, content string }{

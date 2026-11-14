@@ -19,7 +19,7 @@ func TestCheckLanguage(t *testing.T) {
 		{"numbers only", "ru", "USD: 45,666 ₴ EUR: 51,0582 ₴", true},
 		{"nothing", "ru", "", false},
 		{"a quoted phrase", "ru", "На странице указано только «станом на сьогодні» (на сегодня), без даты.", true},
-		{"names and codes", "ru", "Igor, Deye 8 kW и Wi-Fi логгер: обновите прошивку до зимы.", true},
+		{"names and codes", "ru", "Igor, Acme 8 kW и Wi-Fi логгер: обновите прошивку до зимы.", true},
 		{"an address", "uk", "Джерело: rates.example.net/today, офіційний курс НБУ.", true},
 		{"an apostrophe", "uk", "М'ясо запікайте при 200 °C близько години.", true},
 		{"unknown language", "de", "Hallo", false},

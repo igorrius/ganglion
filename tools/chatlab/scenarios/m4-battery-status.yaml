@@ -2,7 +2,7 @@
 name: m4-battery-status
 why: >-
   M4 check 6 (R-RUN-10, R-RDR-3): "how is the battery?" is answered by the module's own tool
-  deye-reader.status, "overnight?" by the history of its cell, not by a guess or by a command; the module's
+  demo-reader.status, "overnight?" by the history of its cell, not by a guess or by a command; the module's
   cron reports the cell with no model call.
 covers:
   - modhost/**
@@ -13,19 +13,19 @@ covers:
 repeat: 2
 model: scripted
 script:
-  - {tool: deye-reader.status, args: '{}'}
+  - {tool: demo-reader.status, args: '{}'}
   - {say: "The battery is at 87 percent."}
-  - {tool: cells.get, args: '{"id":"deye-reader.soc","since":"12h"}'}
+  - {tool: cells.get, args: '{"id":"demo-reader.soc","since":"12h"}'}
   - {say: "Overnight the charge held at 87 percent."}
 modules:
-  - {name: deye-reader, manifest: modules/deye-working.yaml}
+  - {name: demo-reader, manifest: modules/demo-working.yaml}
 steps:
   - advance: {scheduler: 31m}
   - facts: {replies: 0}
   - say: "How is the battery?"
   - facts:
       journal:
-        - {tool: deye-reader.status, result_contains: "87"}
+        - {tool: demo-reader.status, result_contains: "87"}
   - facts: {reply: {contains: "87 percent"}}
   - say: "And how did it behave overnight?"
   - facts:
