@@ -2,7 +2,7 @@
 
 A runbook for running the node on Railway next to the current bot (R-LS-4,
 task 4.7 of the [M4b plan](plans/p1-m4b-modules.md)). The image is built from
-the [`Dockerfile`](../Dockerfile) in the repository root.
+the [`Dockerfile`](https://github.com/igorrius/ganglion/blob/master/Dockerfile) in the repository root.
 
 ## The image
 
@@ -62,7 +62,7 @@ the provider at deploy time, with the owner:
    documentation suggests `RAILWAY_RUN_UID=0` for images that default to a
    non-root user. Do not set it: the node's command sandbox and the builder
    are off for root. The image starts as root only for
-   [`docker-entrypoint.sh`](../docker-entrypoint.sh), which `chown`s `/data` to
+   [`docker-entrypoint.sh`](https://github.com/igorrius/ganglion/blob/master/docker-entrypoint.sh), which `chown`s `/data` to
    uid 10001 when it is not already owned by it and then drops to that user
    (`setpriv`) before the node starts. Tried locally with a root-owned Docker
    volume; confirm on Railway with `ls -ld /data` (owner `ganglion`) and that
@@ -124,7 +124,7 @@ telegram:
   admin: telegram:user:<your id>
 ```
 
-Add `models:` when the provider is chosen. [`ganglion.example.yaml`](../ganglion.example.yaml)
+Add `models:` when the provider is chosen. [`ganglion.example.yaml`](https://github.com/igorrius/ganglion/blob/master/ganglion.example.yaml)
 lists every key.
 
 ## Module secrets

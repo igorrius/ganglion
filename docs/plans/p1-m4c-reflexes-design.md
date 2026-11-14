@@ -194,7 +194,7 @@ on the install window.
     symlinks on the way; the folder is created for a new module, whose
     name passes the module-name rules (pattern, reserved names);
   - at most 256 KB a file, 16 MB and 200 files a module (call);
-  - every write is a workspace commit "module <name>: write <path>";
+  - every write is a workspace commit "module `<name>`: write `<path>`";
   - no press; no delete in M4c (the template's files are rewritten, not
     removed).
 - **`module.read {name, path?}`** returns a file of the source, or the

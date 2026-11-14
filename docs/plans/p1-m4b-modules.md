@@ -81,7 +81,7 @@ plan. M4a ([plan](p1-m4a-config.md)) is done: `settings`, `ganglion.yaml`, `/res
    not know a trigger answers OK. One entry point keeps every guest's glue unchanged.
 4. **The builder builds Rust only in M4.** Go and TinyGo builds need the ganglion module from a
    private repository and a Go toolchain in the image; `Can` reports what it finds, `Build`
-   refuses other languages with "no builder for <language> on this node". ADR-0063's rule stands;
+   refuses other languages with "no builder for `<language>` on this node". ADR-0063's rule stands;
    the builder for TinyGo comes when a module needs it (backlog card).
 5. **Sources reach the workspace through `module.import`.** The sandbox denies writing the
    workspace (ADR-0039), so `host.exec cp` cannot do it. `module.import {from, name}` copies a
@@ -711,7 +711,7 @@ git commit -m "modhost: the owner's modules run in the node — cron, tools, con
 
 | Tool | Args | Class / policy | Does |
 |---|---|---|---|
-| `module.import` | `{from, name}` | side_effect / confirm, question `ask.module_import` "Copy {from} into the workspace as modules/{name}?" | copies the folder (no `target/`, no symlinks, 16 MiB cap) into `workspace/modules/<name>/` and commits "module <name>: import from <from>" |
+| `module.import` | `{from, name}` | side_effect / confirm, question `ask.module_import` "Copy {from} into the workspace as modules/{name}?" | copies the folder (no `target/`, no symlinks, 16 MiB cap) into `workspace/modules/<name>/` and commits "module `<name>`: import from `<from>`" |
 | `module.build` | `{name, note}` | read / auto (ruling: no press; ADR-0061) | builds `workspace/modules/<name>` via the builder; writes `<data>/modules/builds/<sha>.{wasm,yaml}`; plans it; answers `{build: <sha>, language, size, version, rights, widening, refusal, log_tail}` — `log_tail` only on failure, as External text |
 | `module.install` | `{build, note}` | side_effect / confirm with its own question (below) | installs exactly that sha, writes the `modules:` line (with config defaults), `Reload`s, answers the journal line |
 

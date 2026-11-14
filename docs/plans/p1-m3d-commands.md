@@ -4977,7 +4977,7 @@ git commit -m "sandbox: commands may list the folders it splits; GANGLION_SANDBO
   - The owner accepts ADR-0038 and ADR-0040: their status becomes `Accepted (<date>)`, and their
     row in `docs/adr/README.md` changes.
   - Spec 7.12's header drops "(Proposed)".
-  - The phase plan ticks 3.21–3.27, each with "closed <date>" and a link to this plan.
+  - The phase plan ticks 3.21–3.27, each with "closed `<date>`" and a link to this plan.
   - "Where we are" gets an M3d entry like M3c's: what it brought, acceptance, measured, the
     owner's look, open points (Railway and the Pi still to measure; Docker below ABI 9).
   - Add `/commands` to the owner's setup notes, if they list commands.

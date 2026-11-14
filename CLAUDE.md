@@ -78,4 +78,12 @@ the ADRs.
     format fixes.
 - Docs format: standard Markdown links with relative paths (no
   `[[wikilinks]]`), diagrams as Mermaid `flowchart`, `sequenceDiagram` or
-  `stateDiagram-v2`, planned parts drawn dashed.
+  `stateDiagram-v2`, planned parts drawn dashed. `docs/` is also published
+  as [a site](https://igorrius.github.io/ganglion/)
+  ([ADR-0084](docs/adr/0084-publish-docs-with-zensical-on-github-pages.md)),
+  so: a link from `docs/` to a file outside it is a full GitHub link
+  (`https://github.com/igorrius/ganglion/blob/master/...`); a placeholder
+  in prose is always in backticks (`` `<name>` ``), since a bare tag
+  vanishes on GitHub and can swallow a page on the site. The `Docs`
+  workflow builds strictly, so a broken link or anchor fails the pull
+  request.

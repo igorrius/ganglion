@@ -1,6 +1,6 @@
 # ADR-0084: Publish docs/ as a site with Zensical on GitHub Pages
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-14
 - **Deciders:** Igor Artasevych
 - **Spec:** [3. Deliberately NOT in 0.x](../spec.md#3-deliberately-not-in-0x),
@@ -81,7 +81,7 @@ How it is set up:
   fails the check) and deploys to GitHub Pages from `master`.
 - Links from `docs/` to files outside it are full GitHub links
   (`https://github.com/igorrius/ganglion/blob/master/...`); the
-  conventions say so.
+  docs-format rule in `CLAUDE.md` says so.
 
 ## Security
 
@@ -104,7 +104,8 @@ repository covers the site too.
   ten placeholders written as bare tags (`<title>`, `<name>`) go into
   backticks: GitHub already drops them, and on the site a bare `<title>`
   swallows the rest of the page. A strict build does not catch that; the
-  conventions say placeholders in prose are always in backticks.
+  docs-format rule in `CLAUDE.md` says placeholders in prose are always in
+  backticks.
 - While Zensical is a beta, an upgrade is a deliberate change of the pinned
   version, checked by the strict build.
 

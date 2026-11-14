@@ -10,7 +10,7 @@ Marks, as in the [M3d design](p1-m3d-host-commands-design.md): **(owner)** the o
 
 The owner has no one place that answers "is everything all right with the bot?". `/last` shows one
 turn, `/metrics` a picture of numbers; what is off and why (a skill not loaded, a module fallen back,
-Telegram's `409`) sits only in the logs. M3d adds one more such fact ("commands are off: <reason>",
+Telegram's `409`) sits only in the logs. M3d adds one more such fact ("commands are off: `<reason>`",
 [M3d design](p1-m3d-host-commands-design.md) section 5), and the network of P2 adds nodes and NATS.
 
 **What success looks like:** one command, one screen, no model: a verdict first, then the node, the
@@ -107,7 +107,7 @@ A new package `status` holds the entity and the collector, nothing else:
 - `Source`: `Status(ctx, Scope) []Check`. `Scope` is the conversation and the person who asked; only
   the session's model line uses it.
 - `Collect(ctx, scope, sources)` asks every source at once, each under its own timeout of about 2 s
-  **(call)**. A source that times out, fails or panics becomes one `warn` line, "<component>: no
+  **(call)**. A source that times out, fails or panics becomes one `warn` line, "`<component>`: no
   answer", and the others are shown as usual. `Collect` never fails.
 
 Sources, each owned by the component that knows the fact:
