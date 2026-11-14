@@ -1,7 +1,8 @@
 name: Docs
 
-# The documentation site (ADR-0084): Zensical builds docs/ as it is. A pull
-# request that touches the docs runs a strict build, so a broken link or
+# The documentation site: Zensical (ADR-0084) builds the user guide in
+# docs/guide/ (ADR-0085). A pull request that touches the guide runs a strict
+# build, so a broken link or
 # heading anchor fails the check; a push to master publishes the site on
 # GitHub Pages. This check is not required by master, so a paths filter on
 # pull requests is safe here (see ci.yml for why CI cannot have one).
@@ -9,12 +10,12 @@ on:
   push:
     branches: [master]
     paths:
-      - "docs/**"
+      - "docs/guide/**"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
-      - "docs/**"
+      - "docs/guide/**"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   workflow_dispatch:

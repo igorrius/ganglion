@@ -1,6 +1,6 @@
 # ADR-0084: Publish docs/ as a site with Zensical on GitHub Pages
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0085](0085-the-site-publishes-the-user-guide-not-the-engineering-record.md) in what the site publishes; the choice of Zensical stands
 - **Date:** 2026-11-14
 - **Deciders:** Igor Artasevych
 - **Spec:** [3. Deliberately NOT in 0.x](../spec.md#3-deliberately-not-in-0x),

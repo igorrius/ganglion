@@ -1,18 +1,45 @@
-# The documentation site (ADR-0084): built by Zensical from docs/ as it is,
-# published on GitHub Pages by .github/workflows/docs.yml.
+# The documentation site: the user guide in docs/guide/ (ADR-0085), built by
+# Zensical (ADR-0084) and published on GitHub Pages by
+# .github/workflows/docs.yml. The engineering record in the rest of docs/
+# is read on GitHub, not published here.
 site_name: ganglion
-site_description: A distributed agent network in Go
+site_description: A self-hosted agent that talks to you in Telegram, remembers, and builds its own automations
 site_url: https://igorrius.github.io/ganglion/
 repo_url: https://github.com/igorrius/ganglion
 repo_name: igorrius/ganglion
-edit_uri: edit/master/docs/
+edit_uri: edit/master/docs/guide/
 copyright: Apache-2.0
-docs_dir: docs
+docs_dir: docs/guide
 site_dir: site
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Requirements: getting-started/requirements.md
+      - Install: getting-started/install.md
+      - Configure: getting-started/configure.md
+      - First conversation: getting-started/first-conversation.md
+  - Using ganglion:
+      - Talking to the agent: using/talking.md
+      - Commands: using/commands.md
+      - Memory and reminders: using/memory.md
+      - Modules and reflexes: using/modules.md
+      - Tools and safety: using/tools-and-safety.md
+  - Running a node:
+      - Configuration reference: running/configuration.md
+      - Models and providers: running/models.md
+      - "Telegram: polling or webhook": running/telegram-updates.md
+      - Operations: running/operations.md
+      - Deploying on Railway: running/railway.md
+  - Troubleshooting: troubleshooting.md
+  - For contributors: contributors.md
 
 theme:
   features:
+    - navigation.tabs
     - navigation.sections
+    - navigation.footer
+    - navigation.top
     - navigation.indexes
     - search.highlight
     - content.code.copy
@@ -33,8 +60,8 @@ markdown_extensions:
   - admonition
   - toc:
       permalink: true
-      # Heading anchors exactly as GitHub makes them: docs/ links to about
-      # 250 of them, e.g. #101-p0--recon--tasks-and-acceptance.
+      # Heading anchors exactly as GitHub makes them, so a link to a heading
+      # works on GitHub and on the site alike.
       slugify: !!python/object/apply:pymdownx.slugs.slugify
         kwds:
           case: lower
