@@ -24,8 +24,14 @@ Start here when coming back to the project.
   arm64, checked on each platform before the push (R-UPD-8,
   [ADR-0086](adr/0086-publish-the-nodes-image-to-ghcr-on-a-core-tag.md),
   [#179](https://github.com/igorrius/ganglion/issues/179)); the guide's
-  install page uses it. No core tag is pushed yet: the first one also
-  creates the package, which the owner then makes public once.
+  install page uses it. The first signed core release is `v0.2.1`
+  (2026-11-15): two binaries, `release.json`, `SHA256SUMS` and its
+  Ed25519 signature, checked by hand with `openssl` and
+  `tools/releasecheck` ([runbook](releasing.md), task 6.7 step 2,
+  [#192](https://github.com/igorrius/ganglion/issues/192)); the same tag
+  published the image. `v0.2.0` was tagged before the release workflow
+  was merged and has neither. Next in 6.7: `/update`
+  ([#188](https://github.com/igorrius/ganglion/issues/188)).
 - **The repository holds the core, not anyone's modules** (owner,
   2026-11-14, [ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md),
   spec principle 10): the Go reader of the owner's inverter is removed, and

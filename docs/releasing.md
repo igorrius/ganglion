@@ -34,14 +34,23 @@ workflows:
    target, a new entrypoint), raise the number in `update/image-env` in
    the same pull request. A node refuses a release whose `env` is above
    its image's until the image is rebuilt.
-3. Tag and push:
+3. Fetch first, check the commit carries the release workflow and a
+   key, then tag and push:
 
    ```sh
+   git fetch origin
+   git ls-tree --name-only origin/master .github/workflows/release.yml update/keys/
    git tag -a vX.Y.Z -m vX.Y.Z origin/master
    git push origin vX.Y.Z
    ```
 
-4. Both workflows end green; the release page lists five files.
+   A tag cannot be deleted or moved (a repository rule): a tag on the
+   wrong commit is left as it is, and the next version is released.
+   `v0.2.0` is such a tag, made before the release workflow was merged;
+   it has no release and no image.
+
+4. Both workflows end green; the release page lists five files. Check
+   them as below.
 
 A tag that is not on `master`, or not of the form above, fails the
 workflows and publishes nothing.
