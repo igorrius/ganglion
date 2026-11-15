@@ -63,10 +63,15 @@ the ADRs.
   with its parent; a task agreed as the next one goes to Next; after a
   close, check it reached Done. Issues #38–#174 came from the old
   backlog board (G-ids); that board is read-only now.
-- **Pick the cheapest model that does the job.** At the start of a task,
-  say in one line which model it needs; if the session runs a heavier one
-  than that, say so, so the owner can switch. Pass `model` explicitly to
-  every subagent:
+- **Spend the cheapest model that does the job, through subagents.** The
+  session's own model is the owner's choice; do not announce which model a
+  task needs or that the session could run a cheaper one: switching mid-task
+  re-reads the whole context and saves nothing. Save instead by delegating
+  a self-contained piece of work (a written plan to implement, a bulk
+  rewrite, a search, an inventory) to a subagent with an explicit `model`,
+  when the piece is big enough that a fresh, short brief costs less than
+  doing it here; small fixes stay in the session. The session reviews what
+  comes back. Pass `model` explicitly to every subagent:
   - **Opus** (or the top model when Opus is stuck): design, ADRs, spec
     changes, concurrency and security reasoning, debugging a failure whose
     cause is unclear, reviewing a risky change.
