@@ -35,10 +35,11 @@ Start here when coming back to the project.
   [#188](https://github.com/igorrius/ganglion/issues/188)): the admin's
   `/update`, `/update install vX.Y.Z` and `/update rollback`, `ganglion
   update`, the launcher in `run`, two starts and the fall back with an
-  alert, and the watch that confirms a version. Left in 6.7: the lab check
-  of two real versions, the live check on Railway after the service moves
-  to the image once, and the daily check
-  ([#196](https://github.com/igorrius/ganglion/issues/196)).
+  alert, and the watch that says a version started and confirms it. The
+  owner's node runs from the image since 2026-11-15 and was moved by
+  `/update` to `v0.3.1`, then `v0.3.2`, and rolled back, live. Left in 6.7:
+  the daily check ([#196](https://github.com/igorrius/ganglion/issues/196))
+  and an automated lab test of the whole path.
 - **The repository holds the core, not anyone's modules** (owner,
   2026-11-14, [ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md),
   spec principle 10): the Go reader of the owner's inverter is removed, and

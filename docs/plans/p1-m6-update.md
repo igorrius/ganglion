@@ -303,9 +303,21 @@ component), `texts`.
   - Not covered: the database restore on real SQLite files (unit-tested with a fake; the
     migrations listing is tested on a real database), the admins' messages (the test node had
     no admins), a real download from GitHub.
-- [ ] Live, by the owner's word: the Railway service moved to the image once; `/update` shows
-  the running version; `/update install` of the next release and `/update rollback`. Recorded
-  by what was done and seen, without the service's address.
+- [x] Live, 2026-11-15, on the owner's Railway node:
+  - the service was moved once from `railway up` builds (version `dev`) to the image
+    `ghcr.io/igorrius/ganglion:0.3.0`; the node started as `v0.3.0` with its modules and webhook;
+    `/update` said it was up to date;
+  - `/update install v0.3.1`: "installed, restarting"; the node started as `v0.3.1` three
+    seconds later and confirmed itself two minutes after;
+  - the silence between the restart and the confirmation was not friendly (owner): v0.3.2
+    (#202) tells the admins at once that a version started, and after a rollback which version
+    runs;
+  - `/update install v0.3.2`: "installed, restarting", "v0.3.2 has started…" at once, the
+    confirmation two minutes later;
+  - `/update rollback`: back on `v0.3.1` (older code, so no "started" message) and its
+    confirmation two minutes later; `state.json` showed `active v0.3.1`, `previous v0.3.2`,
+    `confirmed v0.3.1`.
+  - Not seen live: a fall back after two failed starts, a database restore.
 
 ## Done when
 
