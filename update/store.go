@@ -291,9 +291,9 @@ func (s *Store) Install(ctx context.Context, src Fetcher, version string, runnin
 	how := outcomeOf(err)
 	s.tel.install(ctx, how)
 	if err != nil {
-		s.log.Warn("update: install refused", "version", version, "reason", string(how))
+		s.log.Warn("update: install refused", "release", version, "reason", string(how))
 	} else {
-		s.log.Info("update: installed", "version", got.Version, "previous", got.Previous)
+		s.log.Info("update: installed", "release", got.Version, "previous", got.Previous)
 	}
 	return got, err
 }

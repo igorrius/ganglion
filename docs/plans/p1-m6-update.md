@@ -286,11 +286,23 @@ component), `texts`.
 
 ## Task 8: lab check and live check
 
-- [ ] A test in `cmd` (build tag `lab` if it needs building binaries) that builds two versions
-  of the node with `-ldflags` versions into a temporary releases folder signed with a test key
-  injected through a store option, and drives: install → launcher execs the new one → it
-  confirms; a version that exits at once twice → fall back to the previous with the alert row in
-  the outbox.
+- [ ] An automated lab test of the whole path (two built versions, a test key) — not built; the
+  manual check below covers it once. Follow-up if the path changes.
+- [x] Manual end-to-end check, 2026-11-15, on a developer machine: a copy of the repository with
+  a throwaway test key added to `update/keys`, the node built as `v0.2.1` (the floor) and as
+  `v0.3.0`, release folders signed with that key by hand (`openssl pkeyutl`):
+  - the floor verified `v0.3.0`, counted attempt 1 and `exec`ed it; the node logged
+    `version=v0.3.0`;
+  - after two minutes of running, `update: confirmed`; `state.json` had no pending and
+    `confirmed: v0.3.0`;
+  - a release `v0.4.0` whose binary exits at once: two starts died, the third start logged
+    "v0.4.0 is given up (failed); back on v0.3.0", the node ran `v0.3.0`, the watch logged the
+    fall back and cleared it;
+  - the active binary replaced by a script after install: it did not run; "v0.3.0 is given up
+    (unverified); back on the binary of the image", the node ran `v0.2.1`.
+  - Not covered: the database restore on real SQLite files (unit-tested with a fake; the
+    migrations listing is tested on a real database), the admins' messages (the test node had
+    no admins), a real download from GitHub.
 - [ ] Live, by the owner's word: the Railway service moved to the image once; `/update` shows
   the running version; `/update install` of the next release and `/update rollback`. Recorded
   by what was done and seen, without the service's address.

@@ -118,14 +118,14 @@ func (w *Watch) confirm(ctx context.Context, p Pending) {
 		return true
 	})
 	if err != nil {
-		w.log.Warn("update: the version was not confirmed", "version", p.Version, "err", err)
+		w.log.Warn("update: the version was not confirmed", "release", p.Version, "err", err)
 		return
 	}
 	if !cleared {
 		return
 	}
 	w.tel.confirmed(ctx)
-	w.log.Info("update: confirmed", "version", p.Version)
+	w.log.Info("update: confirmed", "release", p.Version)
 	key := "update:confirmed:" + p.Version + ":" + strconv.FormatInt(p.Since.Unix(), 10)
 	w.tell(ctx, key, func(ctx context.Context, principal string) string {
 		return w.texts.Text(w.langOf(ctx, principal), texts.UpdateConfirmed, texts.Vars{"version": texts.Escape(p.Version)})
