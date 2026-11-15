@@ -61,3 +61,41 @@ func TestMeasureOfAMissingPlaceIsZero(t *testing.T) {
 		t.Fatalf("usage = %+v", u)
 	}
 }
+
+func TestCheckPlacesRejectsAnAgedPlaceThatWouldEmptyASharedFolder(t *testing.T) {
+	data := t.TempDir()
+	home, _ := os.UserHomeDir()
+	db := Place{Name: PlaceDatabase, Path: data, Prefix: "ganglion.db"}
+	cases := map[string]Place{
+		"relative":          {Name: PlaceClaude, Path: "claude", MaxAge: time.Hour},
+		"empty path":        {Name: PlaceClaude, Path: "", MaxAge: time.Hour},
+		"root":              {Name: PlaceClaude, Path: string(filepath.Separator), MaxAge: time.Hour},
+		"temp folder":       {Name: PlaceTemp, Path: os.TempDir(), MaxAge: time.Hour},
+		"home":              {Name: PlaceClaude, Path: home, MaxAge: time.Hour},
+		"another's folder":  {Name: PlaceClaude, Path: data, MaxAge: time.Hour},
+		"above another's":   {Name: PlaceClaude, Path: filepath.Dir(data), MaxAge: time.Hour},
+		"unclean, the same": {Name: PlaceClaude, Path: data + "/sub/..", MaxAge: time.Hour},
+	}
+	for name, p := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := CheckPlaces([]Place{db, p}); err == nil {
+				t.Fatalf("CheckPlaces accepted %+v", p)
+			}
+		})
+	}
+}
+
+func TestCheckPlacesAcceptsTheNodesOwnAgedFolders(t *testing.T) {
+	data := t.TempDir()
+	ps := []Place{
+		{Name: PlaceDatabase, Path: data, Prefix: "ganglion.db"},
+		{Name: PlaceModules, Path: filepath.Join(data, "modules")},
+		{Name: PlaceClaude, Path: filepath.Join(data, "claude"), MaxAge: time.Hour},
+		{Name: PlaceBuilds, Path: filepath.Join(data, "modules", "builds"), MaxAge: time.Hour},
+		{Name: PlaceTemp, Path: os.TempDir(), Prefix: "ganglion-claude-", MaxAge: time.Hour},
+		{Name: PlaceLogs, Path: string(filepath.Separator)}, // not aged: never emptied
+	}
+	if err := CheckPlaces(ps); err != nil {
+		t.Fatal(err)
+	}
+}
