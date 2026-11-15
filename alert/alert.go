@@ -37,6 +37,16 @@ type TextFunc func(ctx context.Context, principal string) string
 // Each is Messages with a text per admin: text is called for each admin
 // who has a private conversation.
 func (a Admins) Each(ctx context.Context, key string, text TextFunc) ([]event.Outgoing, error) {
+	return a.EachWith(ctx, key, text, func(context.Context, string, string) ([]event.Button, error) { return nil, nil })
+}
+
+// ButtonsFunc makes the buttons of an alert for one admin and the private
+// conversation it goes to.
+type ButtonsFunc func(ctx context.Context, principal, conv string) ([]event.Button, error)
+
+// EachWith is Each with buttons per admin: buttons is called for each admin
+// who has a private conversation, after text.
+func (a Admins) EachWith(ctx context.Context, key string, text TextFunc, buttons ButtonsFunc) ([]event.Outgoing, error) {
 	admins, err := a.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("alert: %w", err)
@@ -44,7 +54,11 @@ func (a Admins) Each(ctx context.Context, key string, text TextFunc) ([]event.Ou
 	var out []event.Outgoing
 	for _, adm := range admins {
 		if transport, conv, ok := a.Private(adm); ok {
-			out = append(out, event.Outgoing{IdemKey: key + ":" + adm, Transport: transport, Conv: conv, Text: text(ctx, adm)})
+			bs, err := buttons(ctx, adm, conv)
+			if err != nil {
+				return nil, fmt.Errorf("alert: %w", err)
+			}
+			out = append(out, event.Outgoing{IdemKey: key + ":" + adm, Transport: transport, Conv: conv, Text: text(ctx, adm), Buttons: bs})
 		}
 	}
 	return out, nil

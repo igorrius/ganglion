@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/alert"
+	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/ghfetch"
 	"github.com/igorrius/ganglion/texts"
+	"github.com/igorrius/ganglion/tool/pending"
 )
 
 // The daily check's timing (R-UPD-6). The first check waits so that a
@@ -20,6 +22,8 @@ import (
 const (
 	FirstCheckAfter = 10 * time.Minute
 	CheckEvery      = 24 * time.Hour
+	// NoticeButtonsTTL is how long the Install button of the notice works.
+	NoticeButtonsTTL = 7 * 24 * time.Hour
 )
 
 // NotifiedFile is the file in the releases folder that keeps the version
@@ -53,6 +57,7 @@ type Checker struct {
 	lang    LangFunc
 	texts   *texts.Catalog
 	after   AfterFunc
+	buttons Buttons
 	now     func() time.Time
 	loc     *time.Location
 	log     *slog.Logger
@@ -64,6 +69,10 @@ type CheckerOption func(*Checker)
 
 // WithCheckAfter sets how the checks are waited for (tests).
 func WithCheckAfter(f AfterFunc) CheckerOption { return func(c *Checker) { c.after = f } }
+
+// WithCheckButtons sets where the Install buttons of the notice are stored;
+// without it the notice has none.
+func WithCheckButtons(b Buttons) CheckerOption { return func(c *Checker) { c.buttons = b } }
 
 // WithCheckClock sets the clock that stamps the record (tests).
 func WithCheckClock(f func() time.Time) CheckerOption { return func(c *Checker) { c.now = f } }
@@ -77,7 +86,7 @@ func WithCheckLocation(l *time.Location) CheckerOption { return func(c *Checker)
 func NewChecker(src Latester, dir, running string, admins alert.Admins, enqueue EnqueueFunc, lang LangFunc,
 	cat *texts.Catalog, log *slog.Logger, opts ...CheckerOption) *Checker {
 	c := &Checker{src: src, dir: dir, running: running, admins: admins, enqueue: enqueue, lang: lang, texts: cat,
-		after: time.After, now: time.Now, loc: time.UTC, log: log, tel: newTelemetry()}
+		after: time.After, buttons: NoButtons{}, now: time.Now, loc: time.UTC, log: log, tel: newTelemetry()}
 	for _, o := range opts {
 		o(c)
 	}
@@ -152,9 +161,11 @@ func failureReason(err error) string {
 func (c *Checker) tell(ctx context.Context, rel Release) bool {
 	date := rel.Published.In(c.loc).Format("2006-01-02")
 	key := "update:available:" + rel.Version.String()
-	msgs, err := c.admins.Each(ctx, key, func(ctx context.Context, principal string) string {
+	msgs, err := c.admins.EachWith(ctx, key, func(ctx context.Context, principal string) string {
 		return c.texts.Text(c.langOf(ctx, principal), texts.UpdateAvailable, texts.Vars{varVersion: texts.Escape(rel.Version.String()),
 			"date": date, "page": rel.Page})
+	}, func(ctx context.Context, principal, conv string) ([]event.Button, error) {
+		return c.installButtons(ctx, rel.Version.String(), principal, conv)
 	})
 	if err == nil && len(msgs) > 0 {
 		err = c.enqueue(ctx, msgs...)
@@ -166,6 +177,23 @@ func (c *Checker) tell(ctx context.Context, rel Release) bool {
 		return false
 	}
 	return true
+}
+
+// installButtons is the Install button of version for one admin, stored for
+// them in their private conversation; none when the node stores no buttons.
+// Its label holds the version and nothing else.
+func (c *Checker) installButtons(ctx context.Context, version, principal, conv string) ([]event.Button, error) {
+	if c.buttons == (NoButtons{}) {
+		return nil, nil
+	}
+	b := pending.Button{ID: pending.NewButtonID(), Action: ActionInstall, Principal: principal, Conv: conv,
+		Label:   c.texts.Label(c.langOf(ctx, principal), texts.UpdateButtonInstall, texts.Vars{varVersion: version}),
+		Args:    InstallArgs(version),
+		Expires: c.now().Add(NoticeButtonsTTL)}
+	if err := c.buttons.AddButtons(ctx, b); err != nil {
+		return nil, fmt.Errorf("update: %w", err)
+	}
+	return []event.Button{{ID: b.ID, Label: b.Label}}, nil
 }
 
 func (c *Checker) langOf(ctx context.Context, principal string) texts.Lang {

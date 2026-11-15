@@ -21,7 +21,11 @@ type fakeUpdater struct {
 	installed   []string
 	rollbacks   int
 	statuses    int
+	target      string
+	hasTarget   bool
 }
+
+func (f *fakeUpdater) RollbackTarget() (string, bool) { return f.target, f.hasTarget }
 
 func (f *fakeUpdater) Status(context.Context) (update.Status, error) {
 	f.statuses++

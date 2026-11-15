@@ -21,6 +21,9 @@ type Updater interface {
 	Install(ctx context.Context, version string) (string, error)
 	// Rollback moves to the previous version, "" for the image's binary.
 	Rollback(ctx context.Context) (string, error)
+	// RollbackTarget is the version a rollback would go to, "" for the
+	// image's binary, and whether there is one; it reads and changes nothing.
+	RollbackTarget() (to string, ok bool)
 }
 
 // NoUpdater is a node that cannot update itself: every call is refused.
@@ -37,6 +40,9 @@ func (NoUpdater) Install(context.Context, string) (string, error) { return "", e
 
 // Rollback refuses.
 func (NoUpdater) Rollback(context.Context) (string, error) { return "", errNoUpdater }
+
+// RollbackTarget has none.
+func (NoUpdater) RollbackTarget() (string, bool) { return "", false }
 
 // Words of /update and the names of the values its texts take.
 const (
@@ -78,7 +84,7 @@ func (a *Agent) updateCmd(ctx context.Context, t *turn, arg string) error {
 	words := strings.Fields(arg)
 	switch {
 	case len(words) == 0:
-		t.reply(a.updateStatus(ctx, t))
+		a.updateStatus(ctx, t)
 	case words[0] == wordInstall && len(words) == 2:
 		a.updateInstall(ctx, t, words[1])
 	case words[0] == wordRollback && len(words) == 1:
@@ -89,15 +95,28 @@ func (a *Agent) updateCmd(ctx context.Context, t *turn, arg string) error {
 	return nil
 }
 
-// updateStatus is the reply of /update on its own.
-func (a *Agent) updateStatus(ctx context.Context, t *turn) string {
+// updateStatus is the reply of /update on its own, with the buttons of
+// what it offers.
+func (a *Agent) updateStatus(ctx context.Context, t *turn) {
 	st, err := a.d.Updater.Status(ctx)
 	if err != nil {
-		return a.refusal(ctx, t, err)
+		t.reply(a.refusal(ctx, a.speaker(ctx, t), err))
+		return
 	}
 	if st.Dev {
-		return a.devBuild(ctx, t, st)
+		t.reply(a.devBuild(a.speaker(ctx, t), st))
+		return
 	}
+	buttons, err := a.updateButtons(ctx, a.speaker(ctx, t), t, st)
+	if err != nil {
+		a.log.Warn("agent: /update: the buttons were not stored", "err", err)
+	}
+	t.out = append(t.out, event.Outgoing{IdemKey: t.event.IdemKey + ":reply:0", Transport: t.transport, Conv: t.replyConv,
+		Text: a.statusText(ctx, t, st), ReplyTo: t.msg.Ref, Buttons: buttons})
+}
+
+// statusText is the text of the status of a release build.
+func (a *Agent) statusText(ctx context.Context, t *turn, st update.Status) string {
 	var b strings.Builder
 	b.WriteString(a.say(ctx, t, texts.UpdateStatus, texts.Vars{"running": texts.Escape(st.Running.String()),
 		"newest": texts.Escape(st.Newest.Version.String()), varDate: st.Newest.Published.In(a.cfg.Location).Format("2006-01-02"),
@@ -115,22 +134,61 @@ func (a *Agent) updateStatus(ctx context.Context, t *turn) string {
 
 // devBuild says a build without a release version moves to the image once,
 // naming the image of the newest release when it is known.
-func (a *Agent) devBuild(ctx context.Context, t *turn, st update.Status) string {
+func (a *Agent) devBuild(sp texts.Speaker, st update.Status) string {
 	if st.Newest.Version.IsZero() {
-		return a.say(ctx, t, texts.UpdateDevBuildAny, nil)
+		return sp.Text(texts.UpdateDevBuildAny, nil)
 	}
-	return a.say(ctx, t, texts.UpdateDevBuild, texts.Vars{varImage: update.ImageRef(st.Newest.Version)})
+	return sp.Text(texts.UpdateDevBuild, texts.Vars{varImage: update.ImageRef(st.Newest.Version)})
 }
 
 // refusal is the owner's words for an update that did not happen. The
 // cause is logged; it is never shown, whatever the network said.
-func (a *Agent) refusal(ctx context.Context, t *turn, err error) string {
+func (a *Agent) refusal(ctx context.Context, sp texts.Speaker, err error) string {
 	if errors.Is(err, update.ErrDevBuild) {
 		st, _ := a.d.Updater.Status(ctx) // the image of the newest release, when it can be had
-		return a.devBuild(ctx, t, st)
+		return a.devBuild(sp, st)
 	}
 	a.log.Warn("agent: /update refused", "reason", string(refusalKey(err)), "err", err)
-	return a.say(ctx, t, refusalKey(err), nil)
+	return sp.Text(refusalKey(err), nil)
+}
+
+// updateOutcome is what an install or a rollback did: the words for the
+// owner, what the history says (after the caller's prefix) and whether the
+// node changed and restarts.
+type updateOutcome struct {
+	Text string
+	Note string
+	Done bool
+	Err  error // the refusal, when there was one
+}
+
+// installVersion installs version and, on success, restarts the node so the
+// launcher runs it. The command and the Install button both run it.
+func (a *Agent) installVersion(ctx context.Context, sp texts.Speaker, version, by string) updateOutcome {
+	got, err := a.d.Updater.Install(ctx, version)
+	if err != nil {
+		return updateOutcome{Text: a.refusal(ctx, sp, err), Note: "was refused: " + string(refusalKey(err)), Err: err}
+	}
+	a.log.Info("agent: update installed, restarting", "release", got, "by", by)
+	a.d.Restart()
+	return updateOutcome{Text: sp.Text(texts.UpdateInstalled, texts.Vars{varVersion: texts.Escape(got)}), Note: "installed " + got, Done: true}
+}
+
+// rollbackVersion rolls back to the previous version and restarts the node.
+// The command and the Rollback button both run it.
+func (a *Agent) rollbackVersion(ctx context.Context, sp texts.Speaker, by string) updateOutcome {
+	to, err := a.d.Updater.Rollback(ctx)
+	if err != nil {
+		return updateOutcome{Text: a.refusal(ctx, sp, err), Note: "was refused: " + string(refusalKey(err)), Err: err}
+	}
+	name := to
+	if to == "" {
+		name = sp.Text(texts.UpdateImageVersion, nil)
+	}
+	a.log.Info("agent: update rolled back, restarting", "to", to, "by", by)
+	a.d.Restart()
+	return updateOutcome{Text: sp.Text(texts.UpdateRolledBack, texts.Vars{varVersion: texts.Escape(name)}),
+		Note: fmt.Sprintf("rolled back to %s", versionNoteName(to)), Done: true}
 }
 
 // updateInstall is /update install vX.Y.Z: it says it has started, installs,
@@ -141,34 +199,16 @@ func (a *Agent) updateInstall(ctx context.Context, t *turn, version string) {
 		return
 	}
 	a.updateEarly(ctx, t, a.say(ctx, t, texts.UpdateInstalling, texts.Vars{varVersion: texts.Escape(version)}))
-	got, err := a.d.Updater.Install(ctx, version)
-	if err != nil {
-		t.reply(a.refusal(ctx, t, err))
-		t.note(updateNote + "was refused: " + string(refusalKey(err)))
-		return
-	}
-	t.reply(a.say(ctx, t, texts.UpdateInstalled, texts.Vars{varVersion: texts.Escape(got)}))
-	t.note(updateNote + "installed " + got)
-	a.log.Info("agent: update installed, restarting", "release", got, "by", t.msg.From)
-	a.d.Restart()
+	out := a.installVersion(ctx, a.speaker(ctx, t), version, t.msg.From)
+	t.reply(out.Text)
+	t.note(updateNote + out.Note)
 }
 
 // updateRollback is /update rollback.
 func (a *Agent) updateRollback(ctx context.Context, t *turn) {
-	to, err := a.d.Updater.Rollback(ctx)
-	if err != nil {
-		t.reply(a.refusal(ctx, t, err))
-		t.note(updateNote + "was refused: " + string(refusalKey(err)))
-		return
-	}
-	name := to
-	if to == "" {
-		name = a.say(ctx, t, texts.UpdateImageVersion, nil)
-	}
-	t.reply(a.say(ctx, t, texts.UpdateRolledBack, texts.Vars{varVersion: texts.Escape(name)}))
-	t.note(updateNote + fmt.Sprintf("rolled back to %s", versionNoteName(to)))
-	a.log.Info("agent: update rolled back, restarting", "to", to, "by", t.msg.From)
-	a.d.Restart()
+	out := a.rollbackVersion(ctx, a.speaker(ctx, t), t.msg.From)
+	t.reply(out.Text)
+	t.note(updateNote + out.Note)
 }
 
 // versionNoteName is the version a note names: "the image's version" for "".

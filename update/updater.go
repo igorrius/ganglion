@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -41,6 +42,10 @@ type Status struct {
 	// Image says the node knows its image's environment, so the check that
 	// a release fits the image runs.
 	Image bool
+	// CanRollback says there is a version to go back to; RollbackTo is it,
+	// "" for the binary of the image.
+	CanRollback bool
+	RollbackTo  string
 }
 
 // Updater is what the agent updates the node with: the release source and
@@ -74,6 +79,7 @@ func NewUpdater(src Releases, dir string, open StoreFunc, running string, opts .
 // the error, except for such a build, which only lacks the newest.
 func (u *Updater) Status(ctx context.Context) (Status, error) {
 	st := Status{Image: u.image}
+	st.RollbackTo, st.CanRollback = u.RollbackTarget()
 	running, err := Running(u.running)
 	st.Dev = err != nil
 	newest, lerr := u.src.Latest(ctx)
@@ -120,4 +126,28 @@ func (u *Updater) Rollback(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("update: %w", err)
 	}
 	return s.Rollback(ctx)
+}
+
+// RollbackTarget is the version a rollback would go to, "" for the binary of
+// the image, and whether there is one. It only reads state.json and never
+// makes the folder; an unreadable state or a previous release gone from the
+// disk is no target.
+func (u *Updater) RollbackTarget() (to string, ok bool) {
+	if !HasState(u.dir) {
+		return "", false
+	}
+	s, err := u.open()
+	if err != nil {
+		return "", false
+	}
+	st, err := s.State()
+	if err != nil || (st.Active == "" && st.Previous == "") {
+		return "", false
+	}
+	if st.Previous != "" {
+		if fi, err := os.Stat(s.BinaryPath(st.Previous)); err != nil || !fi.Mode().IsRegular() {
+			return "", false
+		}
+	}
+	return st.Previous, true
 }

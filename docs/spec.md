@@ -1469,7 +1469,10 @@ other install paths are in section 14.
 - **R-UPD-2.** `/update`, for an admin in their private chat and with no
   model, shows the running version and the newest release that fits the
   machine. `/update install vX.Y.Z` installs that release and restarts
-  into it; `/update rollback` restarts into the previous version.
+  into it; `/update rollback` restarts into the previous version. The
+  status and the daily notice (R-UPD-6) carry buttons that do the same for
+  the version they name: a press is the confirmation, as writing the
+  version is, by an admin at the time of the press (owner, 2026-11-15).
   `ganglion update` does the same on the host. No tool of the agent
   updates the node, and the agent never proposes it as a configuration
   change.

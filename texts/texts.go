@@ -404,9 +404,14 @@ const (
 	UpdateNoImage           Key = "update.no_image"
 	UpdateDevBuild          Key = "update.dev_build" // vars: image
 	UpdateDevBuildAny       Key = "update.dev_build_any"
-	UpdateInstalling        Key = "update.installing"  // vars: version
-	UpdateInstalled         Key = "update.installed"   // vars: version
-	UpdateRolledBack        Key = "update.rolled_back" // vars: version
+	UpdateInstalling        Key = "update.installing"            // vars: version
+	UpdateInstalled         Key = "update.installed"             // vars: version
+	UpdateRolledBack        Key = "update.rolled_back"           // vars: version
+	UpdateButtonInstall     Key = "update.button_install"        // label, vars: version
+	UpdateButtonRollback    Key = "update.button_rollback"       // label, vars: version
+	UpdateButtonRollbackImg Key = "update.button_rollback_image" // label
+	UpdateButtonStale       Key = "update.button_stale"
+	UpdateAlreadyInstalled  Key = "update.already_installed" // vars: version
 	UpdateRefusedBadVersion Key = "update.refused_bad_version"
 	UpdateRefusedNotNewer   Key = "update.refused_not_newer"
 	UpdateRefusedNotFound   Key = "update.refused_not_found"
@@ -440,7 +445,7 @@ var allKeys = []Key{
 	MemoryUpdated, MemoryLineAdded, MemoryLineReplaced, MemoryLineRemoved, MemoryLineDropped, MemoryUndoConflict, MemoryEmpty, MemoryTopicsHead, MemoryTopicRow, MemoryNoTopic, MemoryPrivateOnly, MemoryFromOutside, MemoryByHand, ButtonUndo, LineUndone, MemoryProposal, MemoryLineForget, MemoryHeld, ButtonRemember, ButtonSkip, LineSkipped, StatusMemoryReviewOff,
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
 	UpdateAlertFailed, UpdateAlertUnverified, UpdateAlertNoExec, UpdateAlertExec, UpdateDBRestored, UpdateDBKept, UpdateImageVersion, UpdateConfirmed, UpdateStarted, UpdateAvailable,
-	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
+	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateButtonInstall, UpdateButtonRollback, UpdateButtonRollbackImg, UpdateButtonStale, UpdateAlreadyInstalled, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.
@@ -558,6 +563,9 @@ func (s Speaker) Has() bool { return s.catalog().Has(s.Lang) }
 
 // Label is Catalog.Label in s's language.
 func (s Speaker) Label(k Key) string { return s.catalog().Label(s.Lang, k, nil) }
+
+// LabelWith is Catalog.Label in s's language, with values.
+func (s Speaker) LabelWith(k Key, v Vars) string { return s.catalog().Label(s.Lang, k, v) }
 
 // Option configures a Catalog.
 type Option func(*Catalog)

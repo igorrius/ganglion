@@ -23,6 +23,7 @@ agent/modules.go
 agent/persona.go
 agent/restart.go
 agent/update_cmd.go
+agent/update_buttons.go
 agent/state.go
 agent/telemetry.go
 alert/**

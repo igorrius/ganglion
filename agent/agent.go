@@ -19,6 +19,7 @@ import (
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/turns"
+	"github.com/igorrius/ganglion/update"
 )
 
 // StateReader returns a conversation's stored state (the queue).
@@ -313,6 +314,8 @@ func New(cfg Config, d Deps) *Agent {
 	cfg = withTimeouts(cfg)
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
 	a.d.QuickActions[ActionCellHistory] = a.historyButton
+	a.d.QuickActions[update.ActionInstall] = a.installButton
+	a.d.QuickActions[update.ActionRollback] = a.rollbackButton
 	a.stages = []stage{a.resume, a.scheduled, a.ownerSpoke, a.dropStale, a.idle, a.command, a.limits, a.answer, a.compactHistory}
 	a.commands = map[string]command{}
 	for _, c := range a.commandTable() {
