@@ -169,6 +169,7 @@ func (a *Agent) quick(ctx context.Context, t *turn, b pending.Button) error {
 		return nil
 	}
 	a.acknowledge(ctx, t, texts.ToastAccepted, "", "")
+	a.hideButtons(ctx, t)
 	e, err := run(ctx, pending.QuickPress{Speak: a.speaker(ctx, t), Button: b, Transport: t.event.Source, Event: t.event.ID})
 	if err != nil {
 		return fmt.Errorf("agent: quick action %s: %w", b.Action, err)
