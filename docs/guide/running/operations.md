@@ -57,7 +57,7 @@ Copying a live `ganglion.db` together with its `-wal` and `-shm` files is not sa
 
 ## Updating
 
-A node moves to a new version only when you say so, and only to a release the project has signed. Nothing updates by itself. Take a [backup](#backups) first, because formats can change between 0.x versions, and read the release page before you install.
+A node moves to a new version only when you say so, and only to a release the project has signed. Nothing updates by itself. Once a day the node asks for the newest release and, when there is a newer one, tells the admins once in their private chat: the version, its date and a link to its page. To stop the asking, set `update.check: off` in `ganglion.yaml`. Take a [backup](#backups) first, because formats can change between 0.x versions, and read the release page before you install.
 
 **From the chat.** In your private chat (an admin only):
 

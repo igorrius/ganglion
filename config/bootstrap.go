@@ -57,6 +57,9 @@ type Bootstrap struct {
 	// image's env file; 0 means the node knows no image, and an update skips
 	// the check that a release fits it (R-UPD-3).
 	ImageEnv int
+	// UpdateCheck is update.check: the node asks once a day for a newer
+	// release and tells the admins (R-UPD-6).
+	UpdateCheck bool
 	// SandboxDeny is sandbox.deny: paths the owner adds to what commands
 	// may neither read nor write (R-CMD-3).
 	SandboxDeny []string

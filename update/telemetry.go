@@ -28,6 +28,17 @@ const (
 	outcomeOther        outcome = "other"
 )
 
+// checkOutcome is how a daily check ended, a label of
+// ganglion.update.checks. The set is closed.
+type checkOutcome string
+
+const (
+	checkNewer   checkOutcome = "newer"
+	checkCurrent checkOutcome = "current"
+	checkFailed  checkOutcome = "failed"
+	checkSkipped checkOutcome = "skipped"
+)
+
 // refusals maps a sentinel to its outcome; the first that matches wins.
 var refusals = []struct {
 	err error
@@ -57,6 +68,7 @@ type telemetry struct {
 	installs      metric.Int64Counter
 	fallbacks     metric.Int64Counter
 	confirmations metric.Int64Counter
+	checks        metric.Int64Counter
 }
 
 func newTelemetry() telemetry {
@@ -68,6 +80,8 @@ func newTelemetry() telemetry {
 		metric.WithDescription("Releases the launcher gave up on, by reason: failed, unverified, noexec, exec."))
 	t.confirmations, _ = m.Int64Counter("ganglion.update.confirmations",
 		metric.WithDescription("Releases that ran their confirmation time and were confirmed."))
+	t.checks, _ = m.Int64Counter("ganglion.update.checks",
+		metric.WithDescription("Daily checks for a newer release, by outcome: newer, current, failed, skipped."))
 	return t
 }
 
@@ -80,3 +94,7 @@ func (t telemetry) fallback(ctx context.Context, r Reason) {
 }
 
 func (t telemetry) confirmed(ctx context.Context) { t.confirmations.Add(ctx, 1) }
+
+func (t telemetry) check(ctx context.Context, o checkOutcome) {
+	t.checks.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", string(o))))
+}

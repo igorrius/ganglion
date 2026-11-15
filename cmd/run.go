@@ -192,7 +192,7 @@ func fromFile(f settings.File, db string, limit memlimit.Limit, src settings.Sou
 		HTTPAddr: f.HTTP.Addr, PublicURL: f.HTTP.PublicURL, TelegramWebhook: f.Telegram.Updates == settings.UpdatesWebhook,
 		MetricsAddr: f.Metrics.Addr, TelegramReply: f.Telegram.Reply, TelegramRich: f.Telegram.Rich,
 		ReactionAfter: time.Duration(f.Telegram.Reactions.After), ReactionDwell: time.Duration(f.Telegram.Reactions.Dwell),
-		SandboxDeny: f.Sandbox.Deny, SandboxHideNames: f.Sandbox.HideNames,
+		SandboxDeny: f.Sandbox.Deny, SandboxHideNames: f.Sandbox.HideNames, UpdateCheck: f.Update.Check,
 		ModulesDir:  filepath.Join(filepath.Dir(db), "modules"),
 		MemoryLimit: limit, Settings: f,
 		Timeouts: config.Timeouts{Call: time.Duration(f.Agent.CallTimeout), Turn: time.Duration(f.Agent.TurnTimeout),

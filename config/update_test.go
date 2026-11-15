@@ -73,3 +73,35 @@ func TestUpdaterMakesNoReleasesFolderUntilAnInstall(t *testing.T) {
 		t.Fatalf("in memory: %T %v", u, err)
 	}
 }
+
+// The daily check is a component only when update.check is on and the
+// database is a file; it makes no releases folder by itself.
+func TestUpdateCheckRunsOnlyWhenOnAndOnAFile(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		on    bool
+		mem   bool
+		wants bool
+	}{{"on", true, false, true}, {"off", false, false, false}, {"in memory", true, true, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := testConfig(t)
+			b.UpdateCheck = tc.on
+			if tc.mem {
+				b.DB = ":memory:"
+			}
+			dir, _ := update.DirFor(b.DB)
+			i := New(context.Background(), b, slog.New(slog.DiscardHandler))
+			defer func() { _ = i.Shutdown() }()
+			comps, err := do.Invoke[UpdateChecks](i)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wants != (len(comps) == 1 && comps[0].Name() == "update-check") {
+				t.Fatalf("%v", comps)
+			}
+			if _, err := os.Stat(dir); err == nil && dir != "" {
+				t.Fatal("the releases folder was created")
+			}
+		})
+	}
+}
