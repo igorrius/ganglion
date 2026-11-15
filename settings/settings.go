@@ -36,6 +36,15 @@ type File struct {
 	Modules []Module `yaml:"modules"`
 	// Memory is the agent's long-term memory (M5, R-CFG-8).
 	Memory Memory `yaml:"memory"`
+	// Update is how the node follows the core releases (R-UPD-6).
+	Update Update `yaml:"update"`
+}
+
+// Update is the settings of the node's own updates.
+type Update struct {
+	// Check asks once a day for a newer release and tells the admins; it
+	// never installs one.
+	Check bool `yaml:"check"`
 }
 
 // Node is the process-wide settings.
@@ -292,6 +301,7 @@ func Default() File {
 			Limits:      Limits{DailyBudgetUSD: 1.0, DailyTurns: 300, DailyTokens: 1_000_000},
 			Search:      Search{Mode: auto, BraveKey: "env:BRAVE_API_KEY"},
 		},
+		Update: Update{Check: true},
 		Memory: Memory{PromptBudget: 24000, Review: Review{Enabled: true, Quiet: Duration(10 * time.Minute)}},
 	}
 }

@@ -363,6 +363,7 @@ update.db_kept: база данных осталась как есть
 update.image_version: версию образа
 update.confirmed: "Узел теперь работает на {version}."
 update.started: "{version} запущена. Если она проработает {minutes} минуты, я подтвержу это здесь."
+update.available: "Вышел новый релиз: {version} ({date}), {page}. Чтобы установить его, отправьте /update install {version}."
 update.private_only: "Спроси /update в нашем личном чате."
 update.usage: "Использование: /update, /update install vX.Y.Z, /update rollback"
 update.unavailable: "Этот узел не может обновлять сам себя."

@@ -394,6 +394,7 @@ const (
 	UpdateImageVersion      Key = "update.image_version"    // inside an alert: the version the image or package holds
 	UpdateConfirmed         Key = "update.confirmed"        // vars: version
 	UpdateStarted           Key = "update.started"          // vars: version, minutes: a new version started, to be confirmed
+	UpdateAvailable         Key = "update.available"        // vars: version, date, page: the daily check found a newer release
 	UpdatePrivateOnly       Key = "update.private_only"
 	UpdateUsage             Key = "update.usage"
 	UpdateUnavailable       Key = "update.unavailable"
@@ -438,7 +439,7 @@ var allKeys = []Key{
 	HintModuleAuthFailed, HintModuleStale, HintModuleFormat, HintModuleException, HintModuleTimeout, HintModuleTrap, HintModuleNotRunning,
 	MemoryUpdated, MemoryLineAdded, MemoryLineReplaced, MemoryLineRemoved, MemoryLineDropped, MemoryUndoConflict, MemoryEmpty, MemoryTopicsHead, MemoryTopicRow, MemoryNoTopic, MemoryPrivateOnly, MemoryFromOutside, MemoryByHand, ButtonUndo, LineUndone, MemoryProposal, MemoryLineForget, MemoryHeld, ButtonRemember, ButtonSkip, LineSkipped, StatusMemoryReviewOff,
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
-	UpdateAlertFailed, UpdateAlertUnverified, UpdateAlertNoExec, UpdateAlertExec, UpdateDBRestored, UpdateDBKept, UpdateImageVersion, UpdateConfirmed, UpdateStarted,
+	UpdateAlertFailed, UpdateAlertUnverified, UpdateAlertNoExec, UpdateAlertExec, UpdateDBRestored, UpdateDBKept, UpdateImageVersion, UpdateConfirmed, UpdateStarted, UpdateAvailable,
 	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
 }
 

@@ -24,9 +24,21 @@
       "type": "array",
       "items": { "$ref": "#/$defs/module" }
     },
-    "memory": { "description": "The agent's long-term memory by topic (M5, R-MEM-6–9).", "$ref": "#/$defs/memory" }
+    "memory": { "description": "The agent's long-term memory by topic (M5, R-MEM-6–9).", "$ref": "#/$defs/memory" },
+    "update": { "description": "How the node follows the core releases (R-UPD-6).", "$ref": "#/$defs/update" }
   },
   "$defs": {
+    "update": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "check": {
+          "description": "Ask once a day for a newer release and tell the admins once per version. It never installs one. Off, the node does not ask.",
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
     "memory": {
       "type": "object",
       "additionalProperties": false,

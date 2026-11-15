@@ -127,6 +127,25 @@ func TestDuplicateKeysFail(t *testing.T) {
 	}
 }
 
+func TestUpdateSection(t *testing.T) {
+	if !settings.Default().Update.Check {
+		t.Fatal("update.check is on by default")
+	}
+	for src, want := range map[string]bool{"": true, "update: {check: true}\n": true, "update: {check: false}\n": false,
+		"update: {check: off}\n": false, "update:\n  check: on\n": true} {
+		f, err := settings.Parse([]byte(src))
+		if err != nil || f.Update.Check != want {
+			t.Errorf("%q: check %v, %v; want %v", src, f.Update.Check, err, want)
+		}
+	}
+	if _, err := settings.Parse([]byte("update:\n  check: sometimes\n")); err == nil {
+		t.Error("a word that is not a bool was accepted")
+	}
+	if _, err := settings.Parse([]byte("update:\n  every: 1h\n")); err == nil {
+		t.Error("an unknown key was accepted")
+	}
+}
+
 func TestMemorySection(t *testing.T) {
 	f, err := settings.Parse([]byte("memory:\n  prompt_budget: 12000\n  review: {enabled: false, quiet: 30m}\n"))
 	if err != nil {

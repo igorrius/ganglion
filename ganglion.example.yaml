@@ -145,3 +145,9 @@ memory:
     enabled: true
     # How long the chat is silent before it is reviewed.
     quiet: 10m
+
+# How the node follows its own releases.
+update:
+  # Once a day, ask for a newer release and tell the admins once per version.
+  # It never installs one; /update install does. off stops the asking.
+  check: true

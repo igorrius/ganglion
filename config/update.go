@@ -81,3 +81,36 @@ func UpdateWatch() do.Provider[Updates] {
 		return Updates{w}, nil
 	}
 }
+
+// UpdateChecks are the components that look for a newer core release.
+type UpdateChecks []node.Component
+
+// UpdateCheckComponents provides the daily check when update.check is on
+// and the node keeps its database in a file, and nothing otherwise.
+func UpdateCheckComponents() do.Provider[UpdateChecks] {
+	return choose[UpdateChecks](updateCheckOn, updateCheck, updateCheckNone)
+}
+
+// updateCheckOn reports whether the node asks for a newer release: the
+// setting is on and there is a releases folder to keep the record in.
+func updateCheckOn(b Bootstrap) bool {
+	_, ok := update.DirFor(b.DB)
+	return ok && b.UpdateCheck
+}
+
+// UpdateCheck provides the daily check for a newer release; it tells the
+// admins and never installs.
+func UpdateCheck() do.Provider[UpdateChecks] {
+	return func(i do.Injector) (UpdateChecks, error) {
+		b := do.MustInvoke[Bootstrap](i)
+		dir, _ := update.DirFor(b.DB)
+		var opts []update.CheckerOption
+		if b.Agent.TZ != nil {
+			opts = append(opts, update.WithCheckLocation(b.Agent.TZ))
+		}
+		c := update.NewChecker(update.NewSource(ghfetch.New()), dir, buildinfo.Read().Version, do.MustInvoke[alert.Admins](i),
+			do.MustInvoke[*sqlqueue.Queue](i).Enqueue, do.MustInvoke[*language.Store](i).Resolve,
+			do.MustInvoke[*texts.Catalog](i), do.MustInvoke[*slog.Logger](i), opts...)
+		return UpdateChecks{c}, nil
+	}
+}

@@ -123,3 +123,9 @@ modules:
 | `prompt_budget` | `24000` | The size in characters of the known-facts block of the agent's instructions. Over it, the topics changed longest ago fold to one line. |
 | `review.enabled` | `true` | Read your quiet private chat once for facts the turn missed. |
 | `review.quiet` | `10m` | How long the chat is silent before it is reviewed. |
+
+## update
+
+| Key | Default | Meaning |
+|---|---|---|
+| `check` | `true` | Ask once a day for a newer release and tell the admins once per version, with the version, its date and a link. It never installs one: you do, with `/update install`. Set `off` to stop the asking. Without a release version (a build from source) and with the database in memory, the node asks nothing. |
