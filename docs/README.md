@@ -40,7 +40,10 @@ Start here when coming back to the project.
   `/update` to `v0.3.1`, then `v0.3.2`, and rolled back, live. The daily check
   ([#196](https://github.com/igorrius/ganglion/issues/196), `update.check`)
   is built too: once a day the node tells the admins once per new version.
-  Left in 6.7: an automated lab test of the whole path.
+  `/update` and the notice carry Install and Roll back buttons, and the
+  update messages have icons. **Task 6.7 closed on 2026-11-15**; the node
+  runs `v0.3.6`. An automated lab test of the whole path is a P3 task of
+  its own ([#204](https://github.com/igorrius/ganglion/issues/204)).
 - **The repository holds the core, not anyone's modules** (owner,
   2026-11-14, [ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md),
   spec principle 10): the Go reader of the owner's inverter is removed, and
