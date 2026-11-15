@@ -19,14 +19,8 @@ import (
 // or no state.json, which is a node that never updated. The folder is
 // never created here.
 func releasesDir(db string) (dir string, ok bool) {
-	if db == memoryDB {
-		return "", false
-	}
-	dir = filepath.Join(filepath.Dir(db), "releases")
-	if _, err := os.Stat(filepath.Join(dir, update.StateFile)); err != nil {
-		return "", false
-	}
-	return dir, true
+	dir, ok = update.DirFor(db)
+	return dir, ok && update.HasState(dir)
 }
 
 // launch is the first step of `run`: it moves the process onto the active

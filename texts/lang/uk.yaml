@@ -353,3 +353,12 @@ ask.place_topic: "топік {topic} групи {title}"
 ask.place_topic_number: "топік номер {n} групи {title}"
 ask.place_topic_given: "топік «{topic}» (номер {n}) групи {title}"
 ask.place_general: "загальний топік (General) групи {title}"
+
+update.alert_failed: "Версія {from} не запустилась за дві спроби. Вузол повернувся на {to}; {db}."
+update.alert_unverified: "Версія {from} більше не збігається з підписаним релізом, тому її не запустили. Вузол повернувся на {to}; {db}."
+update.alert_noexec: "Версію {from} не вдалося запустити: том із даними не дозволяє запускати програми. Вузол повернувся на {to}; {db}."
+update.alert_exec: "Версію {from} не вдалося запустити. Вузол повернувся на {to}; {db}."
+update.db_restored: базу даних повернуто до стану до оновлення
+update.db_kept: базу даних залишено як є
+update.image_version: версію образу
+update.confirmed: "Вузол тепер працює на {version}."

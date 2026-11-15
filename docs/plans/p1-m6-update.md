@@ -96,7 +96,7 @@ three is safe on a node without the others (owner, 2026-11-15). The daily check
   "active": "v0.3.0",
   "previous": "v0.2.1",
   "pending": {"version": "v0.3.0", "attempts": 1, "since": "2026-11-15T12:00:00Z"},
-  "fallback": {"from": "v0.3.0", "to": "v0.2.1", "restored_db": true, "at": "..."},
+  "fallback": {"from": "v0.3.0", "to": "v0.2.1", "restored_db": true, "reason": "failed", "at": "..."},
   "confirmed": ""
 }
 ```
@@ -216,18 +216,18 @@ three is safe on a node without the others (owner, 2026-11-15). The daily check
 **Files:** create `update/watch.go`, `update/watch_test.go`; modify `config` (provider, node
 component), `texts`.
 
-- [ ] `Watch` is a node component (`Name() "update"`): at start, when `state.fallback` is set,
+- [x] `Watch` is a node component (`Name() "update"`): at start, when `state.fallback` is set,
   it sends one alert to every admin (`alert.Admins`, through the outbox, key
   `update:fallback:<from>:<at>`) — "vX did not start twice; back on vY (database restored |
   database kept)" — and clears it. When the running version is `pending.version`, it waits 2
   minutes on the injected `after` (ctx ending first: nothing), then clears `pending`, sets
-  `confirmed`, and sends "now running vX" once (key `update:confirmed:<version>`).
-- [ ] **A restart is not a failed attempt** (ADR-0046): when a pending version stops with
+  `confirmed`, and sends "now running vX" once (key `update:confirmed:<version>:<since>`, so a later rollback to the same version is told again).
+- [x] **A restart is not a failed attempt** (ADR-0046): when a pending version stops with
   `node.ErrRestart` (`/restart`, a config change), `run` takes one attempt back
   (`Store.CleanStop`) before it exits 75, so only starts that end some other way count.
-- [ ] Tests with a fake clock: confirmation after 2 minutes, none when ctx ends first, the
+- [x] Tests with a fake clock: confirmation after 2 minutes, none when ctx ends first, the
   fallback alert once, no second "now running" after a restart of a confirmed version.
-- [ ] Metrics: `ganglion.update.installs` by outcome (installed, refused reason),
+- [x] Metrics: `ganglion.update.installs` by outcome (installed, refused reason),
   `ganglion.update.fallbacks`, `ganglion.update.confirmations`. Log lines: install, refusal
   (reason, never the network's text), fall back, confirmation.
 

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -106,6 +107,8 @@ type Store struct {
 	imageEnv int
 	keys     []Key
 	copyDB   CopyDBFunc
+	log      *slog.Logger
+	tel      telemetry
 }
 
 // StoreOption configures a Store.
@@ -128,15 +131,37 @@ func WithKeys(keys []Key) StoreOption { return func(s *Store) { s.keys = keys } 
 // before.db is made.
 func WithCopyDB(f CopyDBFunc) StoreOption { return func(s *Store) { s.copyDB = f } }
 
+// WithLogger sets the logger; the default discards.
+func WithLogger(l *slog.Logger) StoreOption { return func(s *Store) { s.log = l } }
+
 func noCopy(context.Context, string) error { return nil }
+
+// DirFor is the folder of the core releases of the node whose database is
+// the file at db: releases/ beside it. ok is false for a database that is
+// not a file, which keeps no releases.
+func DirFor(db string) (dir string, ok bool) {
+	if db == "" || db == ":memory:" {
+		return "", false
+	}
+	return filepath.Join(filepath.Dir(db), "releases"), true
+}
+
+// HasState reports whether the store in dir has a state.json, which a node
+// that never updated has not. Nothing is created.
+func HasState(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, StateFile))
+	return err == nil
+}
 
 // Open opens the store in dir, creating it (mode 0700) when it is not
 // there.
 func Open(dir string, opts ...StoreOption) (*Store, error) {
-	s := &Store{dir: dir, now: time.Now, platform: runtime.GOOS + "/" + runtime.GOARCH, copyDB: noCopy}
+	s := &Store{dir: dir, now: time.Now, platform: runtime.GOOS + "/" + runtime.GOARCH, copyDB: noCopy,
+		log: slog.New(slog.DiscardHandler)}
 	for _, o := range opts {
 		o(s)
 	}
+	s.tel = newTelemetry()
 	if s.keys == nil {
 		keys, err := Keys()
 		if err != nil {
@@ -262,6 +287,18 @@ type Installed struct {
 // Step 6 comes before the move so that a failed copy leaves nothing in
 // place.
 func (s *Store) Install(ctx context.Context, src Fetcher, version string, running Version) (Installed, error) {
+	got, err := s.install(ctx, src, version, running)
+	how := outcomeOf(err)
+	s.tel.install(ctx, how)
+	if err != nil {
+		s.log.Warn("update: install refused", "version", version, "reason", string(how))
+	} else {
+		s.log.Info("update: installed", "version", got.Version, "previous", got.Previous)
+	}
+	return got, err
+}
+
+func (s *Store) install(ctx context.Context, src Fetcher, version string, running Version) (Installed, error) {
 	unlock, err := lockDir(filepath.Join(s.dir, LockFile))
 	if err != nil {
 		return Installed{}, err
@@ -468,7 +505,27 @@ func (s *Store) Rollback(ctx context.Context) (string, error) {
 		return "", err
 	}
 	s.prune(next)
+	s.log.Info("update: rolled back", "from", st.Active, "to", st.Previous)
 	return st.Previous, nil
+}
+
+// mutate reads the state under the lock, lets change edit it and writes
+// the result when change says it did edit it. It returns the state read.
+func (s *Store) mutate(change func(*State) bool) (State, error) {
+	unlock, err := lockDir(filepath.Join(s.dir, LockFile))
+	if err != nil {
+		return State{}, err
+	}
+	defer unlock()
+	st, err := s.State()
+	if err != nil {
+		return State{}, err
+	}
+	next := st
+	if !change(&next) {
+		return st, nil
+	}
+	return st, s.writeState(next)
 }
 
 // prune removes every folder of a release that is neither active nor

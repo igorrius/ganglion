@@ -383,6 +383,16 @@ const (
 	ButtonSkip            Key = "button.skip"
 	LineSkipped           Key = "line.skipped"
 	StatusMemoryReviewOff Key = "status.memory_review_off"
+
+	// What the node tells its admins about an update, sent by the update watch (R-UPD-4, R-UPD-5).
+	UpdateAlertFailed     Key = "update.alert_failed"     // vars: from, to, db: it did not start twice
+	UpdateAlertUnverified Key = "update.alert_unverified" // vars: from, to, db: its files no longer verify
+	UpdateAlertNoExec     Key = "update.alert_noexec"     // vars: from, to, db: the data volume does not run programs
+	UpdateAlertExec       Key = "update.alert_exec"       // vars: from, to, db: it could not be executed
+	UpdateDBRestored      Key = "update.db_restored"      // inside an alert: the database went back to before the update
+	UpdateDBKept          Key = "update.db_kept"          // inside an alert: the database was not changed
+	UpdateImageVersion    Key = "update.image_version"    // inside an alert: the version the image or package holds
+	UpdateConfirmed       Key = "update.confirmed"        // vars: version
 )
 
 var allKeys = []Key{
@@ -400,6 +410,7 @@ var allKeys = []Key{
 	HintModuleAuthFailed, HintModuleStale, HintModuleFormat, HintModuleException, HintModuleTimeout, HintModuleTrap, HintModuleNotRunning,
 	MemoryUpdated, MemoryLineAdded, MemoryLineReplaced, MemoryLineRemoved, MemoryLineDropped, MemoryUndoConflict, MemoryEmpty, MemoryTopicsHead, MemoryTopicRow, MemoryNoTopic, MemoryPrivateOnly, MemoryFromOutside, MemoryByHand, ButtonUndo, LineUndone, MemoryProposal, MemoryLineForget, MemoryHeld, ButtonRemember, ButtonSkip, LineSkipped, StatusMemoryReviewOff,
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
+	UpdateAlertFailed, UpdateAlertUnverified, UpdateAlertNoExec, UpdateAlertExec, UpdateDBRestored, UpdateDBKept, UpdateImageVersion, UpdateConfirmed,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.

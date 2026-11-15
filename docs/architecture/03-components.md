@@ -70,6 +70,7 @@ flowchart TB
     cellsc[("Cells<br/>each owned by one module")]
     outbox[("Outbox")]
     sender["Outbox sender<br/>retries, 429 retry_after"]
+    updwatch["Update watch<br/>tells the admins about a fall back;<br/>confirms a new version after 2 minutes"]
     turns[("turns<br/>trace, cost")]
 
     pub -- "POST with Telegram's<br/>secret header" --> tgt
@@ -124,6 +125,7 @@ flowchart TB
     modhost -- "secret.get: the module's own scope,<br/>then the environment" --> vault
     loop --> outbox
     loop --> turns
+    updwatch -- "fall back, confirmed:<br/>one row per admin, their language" --> outbox
     outbox --> sender
     sender --> tgt
 

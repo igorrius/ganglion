@@ -353,3 +353,12 @@ ask.place_topic: "топик {topic} группы {title}"
 ask.place_topic_number: "топик номер {n} группы {title}"
 ask.place_topic_given: "топик «{topic}» (номер {n}) группы {title}"
 ask.place_general: "общий топик (General) группы {title}"
+
+update.alert_failed: "Версия {from} не запустилась за две попытки. Узел вернулся на {to}; {db}."
+update.alert_unverified: "Версия {from} больше не совпадает с подписанным релизом, поэтому её не запустили. Узел вернулся на {to}; {db}."
+update.alert_noexec: "Версию {from} не удалось запустить: том с данными не разрешает запускать программы. Узел вернулся на {to}; {db}."
+update.alert_exec: "Версию {from} не удалось запустить. Узел вернулся на {to}; {db}."
+update.db_restored: база данных возвращена к состоянию до обновления
+update.db_kept: база данных осталась как есть
+update.image_version: версию образа
+update.confirmed: "Узел теперь работает на {version}."

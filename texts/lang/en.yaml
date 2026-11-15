@@ -356,3 +356,12 @@ ask.place_topic: "the topic {topic} of the group {title}"
 ask.place_topic_number: "topic number {n} of the group {title}"
 ask.place_topic_given: "the topic «{topic}» (number {n}) of the group {title}"
 ask.place_general: "the General topic of the group {title}"
+
+update.alert_failed: "{from} did not start in two tries. The node is back on {to}; {db}."
+update.alert_unverified: "{from} no longer matches its signed release, so it was not run. The node is back on {to}; {db}."
+update.alert_noexec: "{from} could not be run: the data volume does not allow running programs. The node is back on {to}; {db}."
+update.alert_exec: "{from} could not be started. The node is back on {to}; {db}."
+update.db_restored: the database was restored to how it was before the update
+update.db_kept: the database was left as it is
+update.image_version: the version of the image
+update.confirmed: "The node now runs {version}."
