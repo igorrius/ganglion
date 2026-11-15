@@ -147,7 +147,7 @@ func (m *Module) Handle(ctx context.Context, in pdk.Input) (pdk.Output, error) {
 // handle is one call of Handle; result says how it ended, for the
 // metrics.
 func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, m.manifest.Limits.Timeout)
+	ctx, cancel := context.WithTimeoutCause(ctx, m.manifest.Limits.Timeout, errOwnLimit)
 	defer cancel()
 
 	input, err := marshal(in)
@@ -201,11 +201,19 @@ func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResu
 	return out, resultOK, nil
 }
 
-// callError is a call that did not finish: a timeout, or a trap (out of
-// memory among them: the module cannot grow and aborts).
+// errOwnLimit is the cause of a call's context ending at the manifest's
+// timeout, told apart from the caller's context ending first.
+var errOwnLimit = errors.New("runner: the module's time limit")
+
+// callError is a call that did not finish: a timeout, the caller's context
+// ending, or a trap (out of memory among them: the module cannot grow and
+// aborts).
 func (m *Module) callError(ctx context.Context, stage string, err error, stderr *limitedBuffer) (callResult, error) {
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	switch cause := context.Cause(ctx); {
+	case errors.Is(cause, errOwnLimit):
 		return resultTimeout, fmt.Errorf("runner: %s: %w after %v", m.manifest.Name, ErrTimeout, m.manifest.Limits.Timeout)
+	case cause != nil: // the caller's deadline or cancel, not the module's limit
+		return resultCanceled, fmt.Errorf("runner: %s: stopped by its caller: %w", m.manifest.Name, cause)
 	}
 	if s := stderr.String(); s != "" {
 		return resultTrap, fmt.Errorf("runner: %s %s: %w\n%s", m.manifest.Name, stage, err, s)

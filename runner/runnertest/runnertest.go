@@ -235,6 +235,21 @@ func Run(t *testing.T, load Loader, probe []byte) {
 		call(t, inst, `{"op":"echo"}`) // the next call gets a fresh instance
 	})
 
+	// The caller's deadline is not the module's time limit: the error says
+	// who stopped the call, so a slow caller is not read as a slow module.
+	t.Run("a caller's deadline is not the module's timeout", func(t *testing.T) {
+		e := fresh()
+		e.manifest.Limits.Timeout = time.Minute
+		inst := e.instance(t)
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		_, err := inst.Handle(ctx, pdk.Input{Trigger: "cron", Payload: json.RawMessage(`{"op":"spin"}`)})
+		if errors.Is(err, runner.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "timed out after") {
+			t.Fatalf("spinning module under its caller's deadline returned %v, want the caller's deadline", err)
+		}
+		call(t, inst, `{"op":"echo"}`)
+	})
+
 	t.Run("memory limit stops a greedy module", func(t *testing.T) {
 		e := fresh()
 		e.manifest.Limits.Memory = 32 << 20

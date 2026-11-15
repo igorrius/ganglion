@@ -44,7 +44,7 @@ Prometheus names after the exporter's conversion:
 | `ganglion_tool_calls_total` | counter | `tool` (registered, else `unknown`), `decision`, `result` (ok, error) |
 | `ganglion_tool_call_duration_seconds` | histogram | `tool` |
 | `ganglion_confirmations_pending` | gauge | — |
-| `ganglion_module_calls_total` | counter | `module`, `result` (ok, failed, timeout, trap, bad_output, error) |
+| `ganglion_module_calls_total` | counter | `module`, `result` (ok, failed, timeout, canceled, trap, bad_output, error) |
 | `ganglion_module_call_duration_seconds` | histogram | `module` |
 | `ganglion_web_fetches_total` | counter | `result` (ok or the refusal's kind) |
 | `ganglion_web_fetch_bytes` | histogram | — |

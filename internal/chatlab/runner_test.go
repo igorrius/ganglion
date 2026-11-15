@@ -279,7 +279,8 @@ func TestAKeyInAReplyDoesNotReachTheReport(t *testing.T) {
 // A scenario that builds a module reaches crates.io: it runs only under make
 // test-net, which runs nothing else, since the rest ran in the test run. A
 // scripted model answers the same way every time, so each scenario runs once:
-// repeats measure a real model.
+// repeats measure a real model. Each node has its own folder, database and
+// servers, so the scenarios run side by side.
 func TestShippedScriptedScenariosPass(t *testing.T) {
 	all, err := LoadScenarios("../../tools/chatlab/scenarios", nil)
 	if err != nil {
@@ -306,10 +307,15 @@ func TestShippedScriptedScenariosPass(t *testing.T) {
 	case len(mine) == 0:
 		t.Fatal("no scripted scenarios")
 	}
-	for _, o := range RunAll(context.Background(), RunOptions{Scenarios: mine, Repeat: 1}).Outcomes {
-		if o.Result != ResultPassed {
-			t.Errorf("%s: %+v", o.Scenario, o)
-		}
+	for _, s := range mine {
+		t.Run(s.Name, func(t *testing.T) {
+			t.Parallel()
+			for _, o := range RunAll(context.Background(), RunOptions{Scenarios: []Scenario{s}, Repeat: 1}).Outcomes {
+				if o.Result != ResultPassed {
+					t.Errorf("%+v", o)
+				}
+			}
+		})
 	}
 }
 
