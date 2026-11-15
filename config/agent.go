@@ -110,6 +110,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Review:        do.MustInvoke[Remembering](i).Review,
 		SystemJobs:    do.MustInvoke[Remembering](i).Jobs,
 		Restart:       do.MustInvoke[agent.RestartFunc](i),
+		Updater:       do.MustInvoke[agent.Updater](i),
 		Modules:       do.MustInvoke[agent.Modules](i),
 		Local:         do.MustInvoke[*modhost.Host](i),
 		Cells:         do.MustInvoke[*cells.Service](i),

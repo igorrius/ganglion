@@ -2,11 +2,13 @@ package config
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/update"
 	"github.com/samber/do/v2"
 )
@@ -39,5 +41,35 @@ func TestUpdateWatchRunsOnlyWithAReleasesState(t *testing.T) {
 		if rep := i.Shutdown(); !rep.Succeed {
 			t.Fatal(rep.Error())
 		}
+	}
+}
+
+// /update on a node that never updated shows its status and refuses a
+// rollback without making a releases folder; a node that keeps nothing on
+// disk gets the no-op updater.
+func TestUpdaterMakesNoReleasesFolderUntilAnInstall(t *testing.T) {
+	b := testConfig(t)
+	dir, _ := update.DirFor(b.DB)
+	i := New(context.Background(), b, slog.New(slog.DiscardHandler))
+	defer func() { _ = i.Shutdown() }()
+	u, err := do.Invoke[agent.Updater](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := u.(*update.Updater); !ok {
+		t.Fatalf("updater %T", u)
+	}
+	if _, err := u.Rollback(context.Background()); !errors.Is(err, update.ErrNoPrevious) {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dir); err == nil {
+		t.Fatal("the releases folder was created")
+	}
+
+	b.DB = ":memory:"
+	mem := New(context.Background(), b, slog.New(slog.DiscardHandler))
+	defer func() { _ = mem.Shutdown() }()
+	if u, err := do.Invoke[agent.Updater](mem); err != nil || u != (agent.NoUpdater{}) {
+		t.Fatalf("in memory: %T %v", u, err)
 	}
 }

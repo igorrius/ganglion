@@ -53,6 +53,10 @@ type Bootstrap struct {
 	// ClaudeDir is where the claude CLI runs: claude/ beside the database
 	// (R-CMD-8). Empty keeps a private temporary folder.
 	ClaudeDir string
+	// ImageEnv is the level of the image's environment, read from the
+	// image's env file; 0 means the node knows no image, and an update skips
+	// the check that a release fits it (R-UPD-3).
+	ImageEnv int
 	// SandboxDeny is sandbox.deny: paths the owner adds to what commands
 	// may neither read nor write (R-CMD-3).
 	SandboxDeny []string

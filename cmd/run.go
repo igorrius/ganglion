@@ -122,6 +122,7 @@ func bootstrap(ctx context.Context, v flags.Run, src secrets.Source, getenv func
 		return config.Bootstrap{}, err
 	}
 	b.Build = rustenv.LocalFromEnv(getenv)
+	b.ImageEnv = imageEnvOr0(v.ImageEnv, read)
 	b.SettingsPath, b.Secrets, b.MasterKey = settingsPath(v.Config, v.DB), src, masterKey(v.DB)
 	return b, nil
 }

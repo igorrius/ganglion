@@ -237,11 +237,11 @@ component), `texts`.
 `agent/agent.go` (Deps), `texts/texts.go` and the three language files, `cmd/update.go`,
 `cmd/root.go`, `config`.
 
-- [ ] `agent.Updater` interface: `Status(ctx) (UpdateStatus, error)` (running, newest stable
+- [x] `agent.Updater` interface: `Status(ctx) (UpdateStatus, error)` (running, newest stable
   release: version, date, page; whether it fits; image env known), `Install(ctx, version)
   (string, error)`, `Rollback(ctx) (string, error)`. `NoUpdater` refuses everything with
   `update.unavailable`. The real one in `update` (`Updater`, composing `Source` and `Store`).
-- [ ] `/update` for an admin in their private chat only (as `/secrets`), no model:
+- [x] `/update` for an admin in their private chat only (as `/secrets`), no model:
   - `/update`: running version, newest release with its date and link, and the next step
     (`/update install vX.Y.Z`) when it is newer; "up to date" otherwise; a dev build gets
     `update.dev_build`.
@@ -253,13 +253,17 @@ component), `texts`.
   - History note: `[command] the owner ran /update: installed v0.3.0` / `rolled back to
     v0.2.1` / `was refused: <reason key>`. Never any text from the release.
   - Command hints in English, Russian and Ukrainian in the command table.
-- [ ] Tests: a non-admin and a group are refused; a refusal leaves no restart; success calls
+- [x] Tests: a non-admin and a group are refused; a refusal leaves no restart; success calls
   `Restart` once; the release's notes never appear in a reply or note (abuse test with a fake
   source whose release body holds an instruction).
-- [ ] `ganglion update [--db] [--image-env]`: the status; `ganglion update install vX.Y.Z`:
+- [x] `ganglion update [--db] [--image-env]`: the status; `ganglion update install vX.Y.Z`:
   installs, then prints "installed; restart the node to start it" (the host command does not
   stop a running node); `ganglion update rollback` likewise. Exit 1 on a refusal with the same
   words in English.
+
+> Done as planned, with two choices: "installing…" goes through the outbox with a key of its own
+> (`Deps.Outbox`, as a button's acknowledgement does), ahead of the turn's reply; and a node that
+> starts with an image env file it cannot read treats it as no image instead of failing to start.
 
 ## Task 7: the sandbox, the places, the docs (#193, #194)
 

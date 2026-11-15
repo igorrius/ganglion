@@ -44,6 +44,7 @@ var Core = do.Package(
 	do.Lazy(CommandHints()), do.LazyNamed(commandsAgent, AgentCommandHints()), do.EagerNamed(commandsNone, []transport.Command(nil)),
 	do.Lazy(TransportWatch()), do.LazyNamed(watchTelegram, TelegramWatch()), do.EagerNamed(watchNone, Watched(nil)),
 	do.Lazy(UpdateComponents()), do.LazyNamed(updateWatch, UpdateWatch()), do.EagerNamed(updateNone, Updates(nil)),
+	do.Lazy(Updater()), do.LazyNamed(updaterReleases, UpdaterReleases()), do.EagerNamed(updaterNone, agent.Updater(agent.NoUpdater{})),
 	// The search backends; Read picks one, or none.
 	do.LazyNamed(searchBrave, BraveSearch()), do.LazyNamed(searchDuckDuckGo, DuckDuckGoSearch()),
 )
@@ -111,6 +112,8 @@ const (
 	watchNone          = "watch.none"          // no transport in /status
 	updateWatch        = "update.watch"        // confirm a new version, tell the admins
 	updateNone         = "update.none"         // a node that never updated
+	updaterReleases    = "updater.releases"    // /update over GitHub's releases
+	updaterNone        = "updater.none"        // a node with no releases folder
 )
 
 // agentOn reports whether the settings turn the agent on: the file has a

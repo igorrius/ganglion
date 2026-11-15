@@ -385,14 +385,41 @@ const (
 	StatusMemoryReviewOff Key = "status.memory_review_off"
 
 	// What the node tells its admins about an update, sent by the update watch (R-UPD-4, R-UPD-5).
-	UpdateAlertFailed     Key = "update.alert_failed"     // vars: from, to, db: it did not start twice
-	UpdateAlertUnverified Key = "update.alert_unverified" // vars: from, to, db: its files no longer verify
-	UpdateAlertNoExec     Key = "update.alert_noexec"     // vars: from, to, db: the data volume does not run programs
-	UpdateAlertExec       Key = "update.alert_exec"       // vars: from, to, db: it could not be executed
-	UpdateDBRestored      Key = "update.db_restored"      // inside an alert: the database went back to before the update
-	UpdateDBKept          Key = "update.db_kept"          // inside an alert: the database was not changed
-	UpdateImageVersion    Key = "update.image_version"    // inside an alert: the version the image or package holds
-	UpdateConfirmed       Key = "update.confirmed"        // vars: version
+	UpdateAlertFailed       Key = "update.alert_failed"     // vars: from, to, db: it did not start twice
+	UpdateAlertUnverified   Key = "update.alert_unverified" // vars: from, to, db: its files no longer verify
+	UpdateAlertNoExec       Key = "update.alert_noexec"     // vars: from, to, db: the data volume does not run programs
+	UpdateAlertExec         Key = "update.alert_exec"       // vars: from, to, db: it could not be executed
+	UpdateDBRestored        Key = "update.db_restored"      // inside an alert: the database went back to before the update
+	UpdateDBKept            Key = "update.db_kept"          // inside an alert: the database was not changed
+	UpdateImageVersion      Key = "update.image_version"    // inside an alert: the version the image or package holds
+	UpdateConfirmed         Key = "update.confirmed"        // vars: version
+	UpdatePrivateOnly       Key = "update.private_only"
+	UpdateUsage             Key = "update.usage"
+	UpdateUnavailable       Key = "update.unavailable"
+	UpdateStatus            Key = "update.status"      // vars: running, newest, date, page
+	UpdateStatusNext        Key = "update.status_next" // vars: newest
+	UpdateStatusCurrent     Key = "update.status_current"
+	UpdateNoImage           Key = "update.no_image"
+	UpdateDevBuild          Key = "update.dev_build" // vars: image
+	UpdateDevBuildAny       Key = "update.dev_build_any"
+	UpdateInstalling        Key = "update.installing"  // vars: version
+	UpdateInstalled         Key = "update.installed"   // vars: version
+	UpdateRolledBack        Key = "update.rolled_back" // vars: version
+	UpdateRefusedBadVersion Key = "update.refused_bad_version"
+	UpdateRefusedNotNewer   Key = "update.refused_not_newer"
+	UpdateRefusedNotFound   Key = "update.refused_not_found"
+	UpdateRefusedNoPlatform Key = "update.refused_no_platform"
+	UpdateRefusedIncomplete Key = "update.refused_incomplete"
+	UpdateRefusedSignature  Key = "update.refused_signature"
+	UpdateRefusedSums       Key = "update.refused_sums"
+	UpdateRefusedMismatch   Key = "update.refused_mismatch"
+	UpdateRefusedManifest   Key = "update.refused_manifest"
+	UpdateRefusedEnv        Key = "update.refused_env"
+	UpdateRefusedBusy       Key = "update.refused_busy"
+	UpdateRefusedFetch      Key = "update.refused_fetch"
+	UpdateRefusedNoPrevious Key = "update.refused_no_previous"
+	UpdateRefusedState      Key = "update.refused_state"
+	UpdateRefusedOther      Key = "update.refused_other"
 )
 
 var allKeys = []Key{
@@ -411,6 +438,7 @@ var allKeys = []Key{
 	MemoryUpdated, MemoryLineAdded, MemoryLineReplaced, MemoryLineRemoved, MemoryLineDropped, MemoryUndoConflict, MemoryEmpty, MemoryTopicsHead, MemoryTopicRow, MemoryNoTopic, MemoryPrivateOnly, MemoryFromOutside, MemoryByHand, ButtonUndo, LineUndone, MemoryProposal, MemoryLineForget, MemoryHeld, ButtonRemember, ButtonSkip, LineSkipped, StatusMemoryReviewOff,
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
 	UpdateAlertFailed, UpdateAlertUnverified, UpdateAlertNoExec, UpdateAlertExec, UpdateDBRestored, UpdateDBKept, UpdateImageVersion, UpdateConfirmed,
+	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.
