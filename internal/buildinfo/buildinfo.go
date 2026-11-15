@@ -9,9 +9,11 @@ import (
 	"time"
 )
 
-// version is set at build time:
+// version and commit are set at build time:
 // -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=$(git describe)".
-var version string
+// commit is for builds without the repository's history, such as the image,
+// whose context has no .git: Go stamps no VCS information there.
+var version, commit string
 
 // Info describes the running binary.
 type Info struct {
@@ -27,7 +29,7 @@ type Info struct {
 // Read returns the running binary's Info.
 func Read() Info {
 	bi, ok := debug.ReadBuildInfo()
-	return from(version, bi, ok)
+	return withCommit(from(version, bi, ok), commit)
 }
 
 // from builds Info from the linker version and Go's build information.
@@ -64,6 +66,14 @@ func from(ldVersion string, bi *debug.BuildInfo, ok bool) Info {
 		case "GOARCH":
 			in.Arch = s.Value
 		}
+	}
+	return in
+}
+
+// withCommit fills in the linker's commit when Go stamped none.
+func withCommit(in Info, ldCommit string) Info {
+	if in.Commit == "" {
+		in.Commit = ldCommit
 	}
 	return in
 }

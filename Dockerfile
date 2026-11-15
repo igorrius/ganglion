@@ -7,12 +7,14 @@
 
 FROM golang:1.27 AS build
 ARG VERSION=dev
+# The commit, for a build whose context has no .git (the image's).
+ARG COMMIT=
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath \
-    -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=${VERSION}" \
+    -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=${VERSION} -X github.com/igorrius/ganglion/internal/buildinfo.commit=${COMMIT}" \
     -o /out/ganglion .
 
 FROM debian:stable-slim
