@@ -1,0 +1,129 @@
+name: Release
+
+# A core release (R-UPD-1, ADR-0081). A core tag vX.Y.Z on a commit of master
+# builds the node's binary for linux/amd64 and linux/arm64, writes
+# release.json and SHA256SUMS, signs SHA256SUMS with the project's Ed25519
+# key and publishes the files as the tag's GitHub release. The image of the
+# same tag is image.yml's (ADR-0086). Module tags (html2md/v…, ADR-0041)
+# never run this. How to release and how to replace the key:
+# docs/releasing.md.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      # Actions in this workflow are pinned by commit SHA, as in image.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0 # master for the tag check
+
+      - name: Tag check
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          echo "$REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || {
+            echo "::error::a core tag is vX.Y.Z or vX.Y.Z-<pre>, not $REF_NAME"
+            exit 1
+          }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master || {
+            echo "::error::a release is made only from a commit on master"
+            exit 1
+          }
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false # a release builds from nothing a cache could carry
+
+      - name: Build
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
+              -ldflags "-X github.com/igorrius/ganglion/internal/buildinfo.version=${VERSION}" \
+              -o "dist/ganglion-linux-$arch" .
+          done
+          env_level="$(tr -d '[:space:]' < update/image-env)"
+          printf '{"version":"%s","commit":"%s","env":%s}\n' "$VERSION" "$GITHUB_SHA" "$env_level" > dist/release.json
+          (cd dist && sha256sum ganglion-linux-amd64 ganglion-linux-arm64 release.json > SHA256SUMS && cat SHA256SUMS release.json)
+
+      - name: The amd64 binary names the tag
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: dist/ganglion-linux-amd64 version | grep -F "$VERSION"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    # The signing key is a secret of this environment, which only core tags
+    # may deploy to (scripts/release-key.sh sets it up).
+    environment: release
+    permissions:
+      contents: write # create the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: dist
+
+      - name: Sign SHA256SUMS
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          [ -n "$RELEASE_SIGNING_KEY" ] || { echo "::error::the release environment has no RELEASE_SIGNING_KEY"; exit 1; }
+          key="$RUNNER_TEMP/release-key.pem"
+          (umask 077 && printf '%s\n' "$RELEASE_SIGNING_KEY" > "$key")
+          openssl pkeyutl -sign -inkey "$key" -rawin -in dist/SHA256SUMS -out dist/SHA256SUMS.sig
+          rm -f "$key"
+
+      - name: Verify with openssl against the published keys
+        run: |
+          for pub in update/keys/*.pem; do
+            if openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in dist/SHA256SUMS -sigfile dist/SHA256SUMS.sig; then
+              echo "signed by $pub"; exit 0
+            fi
+          done
+          echo "::error::no key in update/keys verifies the signature"
+          exit 1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Verify as a node will
+        env:
+          TAG: ${{ github.ref_name }}
+        run: go run ./tools/releasecheck -dir dist -tag "$TAG"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          pre=""
+          case "$TAG" in *-*) pre="--prerelease" ;; esac
+          gh release create "$TAG" $pre --verify-tag --title "$TAG" \
+            --notes "Core release $TAG. Image: ghcr.io/igorrius/ganglion:${TAG#v}. Check the files: docs/releasing.md." \
+            dist/ganglion-linux-amd64 dist/ganglion-linux-arm64 dist/release.json dist/SHA256SUMS dist/SHA256SUMS.sig

@@ -777,6 +777,7 @@ boundary. Do not run diagnostics in a session that approves commands by itself
 | Where is X in the code, and does it exist yet? | [architecture/05-code-map.md](architecture/05-code-map.md) |
 | What did we find out before deciding? | [research/](research/) |
 | How do we write Go code here? | [conventions.md](conventions.md) |
+| How is a core release made and its signing key kept? | [releasing.md](releasing.md) |
 | What is the plan for the current phase? | [plans/](plans/) |
 
 Ids of the form `G-<n>` in plans, ADRs and comments are cards of the
