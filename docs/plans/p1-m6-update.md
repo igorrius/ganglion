@@ -155,11 +155,11 @@ three is safe on a node without the others (owner, 2026-11-15). The daily check
 
 **Files:** create `update/store.go`, `update/store_test.go`.
 
-- [ ] `Store` over `<data>/releases` with `Open(dir string, opts ...StoreOption)`: the clock,
+- [x] `Store` over `<data>/releases` with `Open(dir string, opts ...StoreOption)`: the clock,
   the platform (`runtime.GOOS/GOARCH` by default), the image env (`ImageEnv int`, 0 = no image),
   the keys (`Keys()` by default), the database copier (`CopyDB func(ctx, dst string) error`,
   `VACUUM INTO` on the node's database, wired in `config`).
-- [ ] `State()`, and `Install(ctx, src Fetcher, version string, running Version) (Installed,
+- [x] `State()`, and `Install(ctx, src Fetcher, version string, running Version) (Installed,
   error)`, in this order; any refusal leaves the state and the active folder untouched:
   1. take the lock (`ErrBusy`);
   2. `ParseVersion`, newer than `running` (`ErrNotNewer`);
@@ -172,14 +172,14 @@ three is safe on a node without the others (owner, 2026-11-15). The daily check
   7. `CopyDB` to `<version>/before.db`;
   8. write the state: `previous` = old `active`, `active` = version, `pending` = {version,
      attempts 0, since now}, `fallback` none; remove the other versions' folders.
-- [ ] `Rollback(ctx) (to string, error)`: `ErrNoPrevious` when there is none; else `active` and
+- [x] `Rollback(ctx) (to string, error)`: `ErrNoPrevious` when there is none; else `active` and
   `previous` swap, `pending` = the target with attempts 0 (the image binary as a target confirms
   at once: no pending).
-- [ ] Every refusal is a sentinel error the agent maps to a text: `ErrDevBuild`, `ErrNotNewer`,
+- [x] Every refusal is a sentinel error the agent maps to a text: `ErrDevBuild`, `ErrNotNewer`,
   `ErrNotFound`, `ErrNoPlatform`, `ErrIncomplete`, `ErrBadSignature` (and `ErrBadSums`),
   `ErrSumMismatch`, `ErrBadManifest`, `ErrEnv`, `ErrBusy`, `ErrFetch` (network; the cause is
   logged, not shown).
-- [ ] Abuse tests: a release signed by another key; a binary changed after the sums; a
+- [x] Abuse tests: a release signed by another key; a binary changed after the sums; a
   `release.json` naming another version; an older version; the same version; a downgrade by a
   pre-release tag; a second install while the lock is held; a state file with an unknown field;
   after each refusal the state file is byte-for-byte what it was.
