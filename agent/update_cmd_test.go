@@ -76,9 +76,9 @@ func TestUpdateStatusSaysWhatToSend(t *testing.T) {
 	f := &fakeUpdater{status: newerStatus(t)}
 	e, restarts := updateEnv(t, f)
 	out := e.turn(t, message(owner, "Igor", "/update"))
-	want := "The node runs v0.2.1. The newest release is v0.3.0, published 2026-11-15: " +
+	want := "📦 The node runs v0.2.1. The newest release is v0.3.0, published 2026-11-15: " +
 		"https://github.com/igorrius/ganglion/releases/tag/v0.3.0\n\n" +
-		"Send /update install v0.3.0 to move to it. The version you run now stays for /update rollback."
+		"⬆️ Send /update install v0.3.0 to move to it. The version you run now stays for /update rollback."
 	if len(out) != 1 || out[0].Text != want {
 		t.Fatalf("status %+v", out)
 	}
@@ -120,7 +120,7 @@ func TestUpdateInstallSaysSoFirstThenRestartsOnce(t *testing.T) {
 	if len(early) != 1 || !strings.Contains(early[0].Text, "Installing v0.3.0") {
 		t.Fatalf("early %+v", early)
 	}
-	if len(out) != 1 || !strings.HasPrefix(out[0].Text, "Installed v0.3.0. Restarting.") {
+	if len(out) != 1 || !strings.HasPrefix(out[0].Text, "🔄 Installed v0.3.0. Restarting.") {
 		t.Fatalf("reply %+v", out)
 	}
 	if *restarts != 1 || len(f.installed) != 1 || f.installed[0] != "v0.3.0" {
@@ -162,7 +162,7 @@ func TestUpdateRollback(t *testing.T) {
 	f := &fakeUpdater{rollbackTo: "v0.2.1"}
 	e, restarts := updateEnv(t, f)
 	out := e.turn(t, message(owner, "Igor", "/update rollback"))
-	if len(out) != 1 || !strings.HasPrefix(out[0].Text, "Back to v0.2.1. Restarting.") || *restarts != 1 {
+	if len(out) != 1 || !strings.HasPrefix(out[0].Text, "↩️ Back to v0.2.1. Restarting.") || *restarts != 1 {
 		t.Fatalf("rollback %+v restarts %d", out, *restarts)
 	}
 	if got, want := lastNote(t, e), "[command] the owner ran /update: rolled back to v0.2.1"; got != want {
