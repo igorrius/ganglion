@@ -100,3 +100,18 @@ func (a *Agent) acknowledge(ctx context.Context, t *turn, toast texts.Key, quest
 		a.log.Warn("agent: press not acknowledged early", "conv", t.event.Conv, "err", err)
 	}
 }
+
+// hideButtons removes the buttons of the pressed message at once, keeping
+// its text, before a quick action runs: a press is not offered again while
+// the action works (an install takes seconds). The action's own edit then
+// sets the message's final text and buttons. Its key is the press's, so a
+// rerun stores it once; a failure is logged and the press goes on.
+func (a *Agent) hideButtons(ctx context.Context, t *turn) {
+	o, ok := t.editOut(":busy", pending.QuickEdit{})
+	if !ok {
+		return
+	}
+	if err := a.d.Outbox.Enqueue(ctx, o); err != nil {
+		a.log.Warn("agent: the pressed buttons were not hidden early", "conv", t.event.Conv, "err", err)
+	}
+}

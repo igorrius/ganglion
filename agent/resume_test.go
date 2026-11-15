@@ -941,8 +941,12 @@ func TestQuickPressIsAcknowledgedFirst(t *testing.T) {
 	}
 	ev := press(owner, b.ID, "90")
 	e.turn(t, ev)
-	if len(seen) != 1 || seen[0].Ack != queryOf(t, ev) || seen[0].Text != "Accepted" || seen[0].IdemKey != ev.IdemKey+":ack" {
+	if len(seen) != 2 || seen[0].Ack != queryOf(t, ev) || seen[0].Text != "Accepted" || seen[0].IdemKey != ev.IdemKey+":ack" {
 		t.Fatalf("the outbox held %+v when the action ran", seen)
+	}
+	// The pressed message lost its buttons before the action ran, its text kept.
+	if hide := seen[1]; hide.Edit != "90" || hide.Text != "" || len(hide.Buttons) != 0 || hide.IdemKey != ev.IdemKey+":busy" {
+		t.Fatalf("buttons not hidden first: %+v", hide)
 	}
 }
 
