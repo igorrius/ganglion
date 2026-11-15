@@ -276,6 +276,10 @@ func TestAKeyInAReplyDoesNotReachTheReport(t *testing.T) {
 }
 
 // The scenarios on a scripted model spend nothing, so they run in every test run.
+// A scenario that builds a module reaches crates.io: it runs only under make
+// test-net, which runs nothing else, since the rest ran in the test run. A
+// scripted model answers the same way every time, so each scenario runs once:
+// repeats measure a real model.
 func TestShippedScriptedScenariosPass(t *testing.T) {
 	all, err := LoadScenarios("../../tools/chatlab/scenarios", nil)
 	if err != nil {
@@ -283,21 +287,26 @@ func TestShippedScriptedScenariosPass(t *testing.T) {
 	}
 	var mine []Scenario
 	ready := sandboxReady()
+	net := os.Getenv("GANGLION_NET_TESTS") != ""
 	for _, s := range all {
 		switch {
 		case s.Model != ModelScripted:
-		case buildsModules(s) && os.Getenv("GANGLION_NET_TESTS") == "":
+		case buildsModules(s) && !net:
 			t.Logf("%s: not run, a module build reaches crates.io (make test-net runs it)", s.Name)
+		case !buildsModules(s) && net:
 		case runsCommands(s) && !ready:
 			t.Logf("%s: not run, the command sandbox is not ready on this machine", s.Name)
 		default:
 			mine = append(mine, s)
 		}
 	}
-	if len(mine) == 0 {
+	switch {
+	case len(mine) == 0 && net:
+		t.Skip("no module build can run here: the command sandbox is not ready")
+	case len(mine) == 0:
 		t.Fatal("no scripted scenarios")
 	}
-	for _, o := range RunAll(context.Background(), RunOptions{Scenarios: mine}).Outcomes {
+	for _, o := range RunAll(context.Background(), RunOptions{Scenarios: mine, Repeat: 1}).Outcomes {
 		if o.Result != ResultPassed {
 			t.Errorf("%s: %+v", o.Scenario, o)
 		}
