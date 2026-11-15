@@ -27,6 +27,16 @@ func DefaultHosts() []string {
 	return []string{"api.github.com", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"}
 }
 
+// StatusError is a response other than 200. A caller that must tell a
+// missing release from a failed read looks for it with errors.As.
+type StatusError struct {
+	Path   string
+	Code   int
+	Status string
+}
+
+func (e *StatusError) Error() string { return fmt.Sprintf("release: %s: %s", e.Path, e.Status) }
+
 // Client fetches from GitHub's hosts.
 type Client struct {
 	hosts []string
@@ -118,7 +128,7 @@ func (c *Client) Copy(ctx context.Context, raw string, w io.Writer, limit int64)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("release: %s: %s", u.Path, resp.Status)
+		return 0, &StatusError{Path: u.Path, Code: resp.StatusCode, Status: resp.Status}
 	}
 	n, err := io.Copy(w, io.LimitReader(resp.Body, limit+1))
 	if err != nil {

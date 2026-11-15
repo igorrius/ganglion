@@ -133,11 +133,11 @@ three is safe on a node without the others (owner, 2026-11-15). The daily check
 
 **Files:** create `update/version.go`, `update/github.go` with tests.
 
-- [ ] `Version` (parsed), `ParseVersion(string) (Version, error)`, `Compare(a, b) int`,
+- [x] `Version` (parsed), `ParseVersion(string) (Version, error)`, `Compare(a, b) int`,
   `Running(v string) (Version, error)` (`ErrDevBuild` for anything not an exact core version).
   Table tests: ordering of pre-releases, `v1.2.3` vs `v1.10.0`, refusals (`1.2.3`, `v1.2`,
   `v01.2.3`, `v1.2.3-`, describe output, `dev`).
-- [ ] `Source` over `ghfetch.Client` for repo `igorrius/ganglion`:
+- [x] `Source` over `ghfetch.Client` for repo `igorrius/ganglion`:
   - `Latest(ctx) (Release, error)`: the newest non-draft, non-pre-release whose tag is a core
     version (module tags like `html2md/v0.1.0` are passed over).
   - `Get(ctx, tag) (Release, error)`: that tag's release (`/releases/tags/<tag>`), a draft
@@ -147,7 +147,7 @@ three is safe on a node without the others (owner, 2026-11-15). The daily check
   - `Fetch(ctx, r Release, dir string, platform string) error`: downloads `SHA256SUMS`,
     `SHA256SUMS.sig`, `release.json` and `BinaryName(platform)` into `dir`. A missing asset is
     `ErrIncomplete` (for the binary: `ErrNoPlatform`).
-- [ ] Tests against an `httptest` server (as `modstore/release` does): the list with drafts,
+- [x] Tests against an `httptest` server (as `modstore/release` does): the list with drafts,
   pre-releases and module tags; a redirect to a host not allowed; a release page whose `body`
   holds an instruction does not reach any returned field (abuse test).
 
