@@ -1,7 +1,8 @@
 #!/bin/sh
 # Checks a built node image before it is published (ADR-0086):
-#   scripts/check-image.sh <image> <version> <arch>
-# The binary reports the version and the architecture; Rust with the
+#   scripts/check-image.sh <image> <version> <arch> [<commit>]
+# The binary reports the version, the architecture and, when given, the
+# commit; Rust with the
 # wasm32-wasip1 target and the claude CLI run as the node's user; and the
 # node starts with the user guide's minimum configuration
 # (docs/guide/getting-started/configure.md) on a fresh volume and gets as
@@ -12,6 +13,7 @@ set -eu
 image=$1
 version=$2
 arch=$3
+commit=${4:-}
 
 fail() {
 	echo "check-image: $*" >&2
@@ -23,6 +25,7 @@ out=$(docker run --rm --entrypoint ganglion "$image" version --json)
 echo "$out"
 echo "$out" | grep -q "\"version\": \"$version\"" || fail "version is not $version"
 echo "$out" | grep -q "\"arch\": \"$arch\"" || fail "arch is not $arch"
+[ -z "$commit" ] || echo "$out" | grep -q "\"commit\": \"$commit\"" || fail "commit is not $commit"
 
 echo "== toolchain as uid 10001"
 docker run --rm --user 10001 --entrypoint sh "$image" -c \

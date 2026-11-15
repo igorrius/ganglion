@@ -38,6 +38,16 @@ func TestFromFallsBackToTheModuleVersionThenDev(t *testing.T) {
 	}
 }
 
+func TestTheLinkerCommitFillsABuildWithoutVCS(t *testing.T) {
+	const c = "0123456789abcdef0123456789abcdef01234567"
+	if got := withCommit(from("v0.3.1", info("(devel)"), true), c); got.Commit != c {
+		t.Errorf("image build: commit %q", got.Commit)
+	}
+	if got := withCommit(from("v0.3.1", info("(devel)", vcs...), true), c); got.Commit != vcs[2].Value {
+		t.Errorf("a VCS stamp wins: commit %q", got.Commit)
+	}
+}
+
 func TestShort(t *testing.T) {
 	for _, tc := range []struct {
 		in   Info

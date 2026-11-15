@@ -90,6 +90,7 @@ jobs:
           set -- \
             --platform "$PLATFORM" \
             --build-arg "VERSION=$VERSION" \
+            --build-arg "COMMIT=$GITHUB_SHA" \
             --label "org.opencontainers.image.title=ganglion" \
             --label "org.opencontainers.image.description=A self-hosted agent node: Telegram, memory, WASM reflex modules" \
             --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
@@ -105,7 +106,7 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: scripts/check-image.sh ganglion:check "$VERSION" "$ARCH"
+        run: scripts/check-image.sh ganglion:check "$VERSION" "$ARCH" "$GITHUB_SHA"
 
       - name: Push by digest
         if: env.PUBLISH == 'true'
