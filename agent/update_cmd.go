@@ -149,7 +149,7 @@ func (a *Agent) updateInstall(ctx context.Context, t *turn, version string) {
 	}
 	t.reply(a.say(ctx, t, texts.UpdateInstalled, texts.Vars{varVersion: texts.Escape(got)}))
 	t.note(updateNote + "installed " + got)
-	a.log.Info("agent: update installed, restarting", "version", got, "by", t.msg.From)
+	a.log.Info("agent: update installed, restarting", "release", got, "by", t.msg.From)
 	a.d.Restart()
 }
 

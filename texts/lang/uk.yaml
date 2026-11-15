@@ -362,6 +362,7 @@ update.db_restored: базу даних повернуто до стану до 
 update.db_kept: базу даних залишено як є
 update.image_version: версію образу
 update.confirmed: "Вузол тепер працює на {version}."
+update.started: "{version} запущено. Якщо вона пропрацює {minutes} хвилини, я підтверджу це тут."
 update.private_only: "Запитай /update в нашому приватному чаті."
 update.usage: "Використання: /update, /update install vX.Y.Z, /update rollback"
 update.unavailable: "Цей вузол не може оновлювати сам себе."
