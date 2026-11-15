@@ -365,6 +365,7 @@ update.db_restored: the database was restored to how it was before the update
 update.db_kept: the database was left as it is
 update.image_version: the version of the image
 update.confirmed: "The node now runs {version}."
+update.started: "{version} has started. If it keeps running for {minutes} minutes, I will confirm it here."
 update.private_only: "Ask /update in our private chat."
 update.usage: "Usage: /update, /update install vX.Y.Z, /update rollback"
 update.unavailable: "This node cannot update itself."

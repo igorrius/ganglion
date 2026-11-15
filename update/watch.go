@@ -15,6 +15,9 @@ import (
 // node calls it good (R-UPD-4).
 const ConfirmAfter = 2 * time.Minute
 
+// varVersion is the name of the version in the update texts.
+const varVersion = "version"
+
 // AfterFunc waits for d: its channel fires after d (time.After).
 type AfterFunc func(d time.Duration) <-chan time.Time
 
@@ -70,13 +73,51 @@ func (w *Watch) Run(ctx context.Context) error {
 		w.log.Warn("update: the state is not readable; nothing to watch", "err", err)
 		return nil
 	}
-	if st.Fallback != nil {
-		w.tellFallback(ctx, *st.Fallback)
-	}
-	if st.Pending != nil && st.Pending.Version == w.running {
+	switch {
+	case st.Fallback != nil:
+		w.tellFallback(ctx, *st.Fallback) // says which version runs now
+	case st.Pending != nil && st.Pending.Version == w.running:
+		w.tellStarted(ctx, *st.Pending)
 		w.confirm(ctx, *st.Pending)
+	case st.Pending == nil && w.running != st.Confirmed && (st.Active == "" || st.Active == w.running):
+		w.tellRunning(ctx) // after a rollback: a version that needs no confirmation
 	}
 	return nil
+}
+
+// tellStarted tells the admins at once that a new version has started and
+// will be confirmed after ConfirmAfter, so a restart is never followed by
+// silence; once per start attempt.
+func (w *Watch) tellStarted(ctx context.Context, p Pending) {
+	key := "update:started:" + p.Version + ":" + strconv.FormatInt(p.Since.Unix(), 10) + ":" + strconv.Itoa(p.Attempts)
+	w.tell(ctx, key, func(ctx context.Context, principal string) string {
+		return w.texts.Text(w.langOf(ctx, principal), texts.UpdateStarted, texts.Vars{varVersion: texts.Escape(p.Version),
+			"minutes": strconv.Itoa(int(ConfirmAfter / time.Minute))})
+	})
+}
+
+// tellRunning records the running version as confirmed and tells the
+// admins which version the node runs now: the end of a rollback, which
+// goes to a version that already ran.
+func (w *Watch) tellRunning(ctx context.Context) {
+	changed := false
+	_, err := w.store.mutate(func(st *State) bool {
+		if st.Pending != nil || st.Confirmed == w.running {
+			return false
+		}
+		st.Confirmed, changed = w.running, true
+		return true
+	})
+	if err != nil || !changed {
+		if err != nil {
+			w.log.Warn("update: the running version was not recorded", "release", w.running, "err", err)
+		}
+		return
+	}
+	w.log.Info("update: running", "release", w.running)
+	w.tell(ctx, "update:running:"+w.running, func(ctx context.Context, principal string) string {
+		return w.texts.Text(w.langOf(ctx, principal), texts.UpdateConfirmed, texts.Vars{varVersion: texts.Escape(w.running)})
+	})
 }
 
 // tellFallback tells every admin once and clears the record. A record that
@@ -93,6 +134,7 @@ func (w *Watch) tellFallback(ctx context.Context, fb Fallback) {
 			return false // a newer one, or already cleared: not ours to clear
 		}
 		st.Fallback = nil
+		st.Confirmed = w.running // the alert said which version runs now
 		return true
 	})
 	if err != nil {
@@ -128,7 +170,7 @@ func (w *Watch) confirm(ctx context.Context, p Pending) {
 	w.log.Info("update: confirmed", "release", p.Version)
 	key := "update:confirmed:" + p.Version + ":" + strconv.FormatInt(p.Since.Unix(), 10)
 	w.tell(ctx, key, func(ctx context.Context, principal string) string {
-		return w.texts.Text(w.langOf(ctx, principal), texts.UpdateConfirmed, texts.Vars{"version": texts.Escape(p.Version)})
+		return w.texts.Text(w.langOf(ctx, principal), texts.UpdateConfirmed, texts.Vars{varVersion: texts.Escape(p.Version)})
 	})
 }
 

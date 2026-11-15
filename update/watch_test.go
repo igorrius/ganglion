@@ -95,10 +95,12 @@ func TestWatchConfirmsAfterTwoMinutesAndTellsOnce(t *testing.T) {
 	if st.Pending != nil || st.Confirmed != "v0.3.0" || len(w.waited) != 1 || w.waited[0] != 2*time.Minute {
 		t.Fatalf("%+v %v", st, w.waited)
 	}
-	if len(w.sent) != 2 || !strings.Contains(w.sent[0].Text, "now runs v0") {
+	// At once: started, in each admin's language; after the time: confirmed.
+	if len(w.sent) != 4 || !strings.Contains(w.sent[0].Text, "v0.3.0 has started") || !strings.Contains(w.sent[1].Text, "запущена") {
 		t.Fatalf("%+v", w.sent)
 	}
-	if !strings.HasPrefix(w.sent[0].IdemKey, "update:confirmed:v0.3.0:") || !strings.Contains(w.sent[1].Text, "Узел") {
+	if !strings.HasPrefix(w.sent[2].IdemKey, "update:confirmed:v0.3.0:") || !strings.Contains(w.sent[2].Text, "now runs v0") ||
+		!strings.Contains(w.sent[3].Text, "Узел") {
 		t.Fatalf("%+v", w.sent)
 	}
 	for name, want := range map[string]float64{"ganglion.update.confirmations": 1} {
@@ -124,8 +126,32 @@ func TestWatchDoesNotConfirmWhenTheContextEndsFirst(t *testing.T) {
 	if err := w.watch("v0.3.0").Run(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if st := w.state(); st.Pending == nil || st.Confirmed != "" || len(w.sent) != 0 {
+	// Only the start was told; nothing was confirmed.
+	if st := w.state(); st.Pending == nil || st.Confirmed != "" || len(w.sent) != 2 || !strings.HasPrefix(w.sent[0].IdemKey, "update:started:") {
 		t.Fatalf("%+v %+v", st, w.sent)
+	}
+}
+
+func TestWatchTellsTheVersionAfterARollbackOnce(t *testing.T) {
+	w := newWatchKit(t)
+	w.pending("v0.3.0")
+	w.fire <- time.Time{}
+	if err := w.watch("v0.3.0").Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.store.Rollback(context.Background()); err != nil { // to the image's binary
+		t.Fatal(err)
+	}
+	w.sent = nil
+	if err := w.watch("v0.2.1").Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.sent) != 2 || !strings.Contains(w.sent[0].Text, "now runs v0.2.1") || w.state().Confirmed != "v0.2.1" {
+		t.Fatalf("%+v %+v", w.sent, w.state())
+	}
+	w.sent = nil
+	if err := w.watch("v0.2.1").Run(context.Background()); err != nil || len(w.sent) != 0 {
+		t.Fatalf("told twice: %v %+v", err, w.sent)
 	}
 }
 

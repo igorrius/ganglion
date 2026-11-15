@@ -362,6 +362,7 @@ update.db_restored: база данных возвращена к состоян
 update.db_kept: база данных осталась как есть
 update.image_version: версию образа
 update.confirmed: "Узел теперь работает на {version}."
+update.started: "{version} запущена. Если она проработает {minutes} минуты, я подтвержу это здесь."
 update.private_only: "Спроси /update в нашем личном чате."
 update.usage: "Использование: /update, /update install vX.Y.Z, /update rollback"
 update.unavailable: "Этот узел не может обновлять сам себя."
