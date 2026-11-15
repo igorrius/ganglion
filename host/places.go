@@ -4,6 +4,7 @@
 package host
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -103,4 +104,40 @@ func children(p Place) []string {
 		}
 	}
 	return out
+}
+
+// CheckPlaces rejects an aged place without a Prefix that is not a folder of
+// the node's own: the janitor would empty all of it. Such a place must be
+// an absolute path that is not the root, the temp folder or the user's
+// home, and that holds no other place.
+func CheckPlaces(ps []Place) error {
+	home, _ := os.UserHomeDir()
+	shared := map[string]bool{filepath.Clean(os.TempDir()): true}
+	if home != "" {
+		shared[filepath.Clean(home)] = true
+	}
+	for i, p := range ps {
+		if p.MaxAge <= 0 || p.Prefix != "" {
+			continue
+		}
+		dir := filepath.Clean(p.Path)
+		switch {
+		case p.Path == "" || !filepath.IsAbs(dir):
+			return fmt.Errorf("host: the %s place %q is aged without a prefix and is not an absolute path", p.Name, p.Path)
+		case dir == filepath.Dir(dir) || shared[dir]:
+			return fmt.Errorf("host: the %s place %q is aged without a prefix and is a shared folder", p.Name, p.Path)
+		}
+		for j, q := range ps {
+			if j != i && within(dir, filepath.Clean(q.Path)) {
+				return fmt.Errorf("host: the %s place %q is aged without a prefix and holds the %s place", p.Name, p.Path, q.Name)
+			}
+		}
+	}
+	return nil
+}
+
+// within reports whether path is dir or inside it.
+func within(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

@@ -25,7 +25,8 @@ const leftoverAge = 24 * time.Hour
 var tempPrefixes = []string{"ganglion-claude-", "ganglion-mcp-", "ganglion-skill-", "ganglion-sandbox-", "ganglion-build-"}
 
 // Places provides the node's places on disk, the one list host.stats and the
-// janitor read.
+// janitor read. A list with an aged place that would empty a shared folder
+// is rejected, and the node does not start.
 func Places() do.Provider[[]host.Place] {
 	return func(i do.Injector) ([]host.Place, error) {
 		b := do.MustInvoke[Bootstrap](i)
@@ -44,9 +45,16 @@ func Places() do.Provider[[]host.Place] {
 		for _, p := range tempPrefixes {
 			ps = append(ps, host.Place{Name: host.PlaceTemp, Path: os.TempDir(), Prefix: p, MaxAge: leftoverAge})
 		}
-		ps = append(ps, host.Place{Name: host.PlaceBuilds, Path: buildsDir(b), MaxAge: leftoverAge})
+		builds, err := filepath.Abs(buildsDir(b))
+		if err != nil {
+			return nil, err
+		}
+		ps = append(ps, host.Place{Name: host.PlaceBuilds, Path: builds, MaxAge: leftoverAge})
 		if root := buildConfig(b).TempRoot; root != "" {
 			ps = append(ps, host.Place{Name: host.PlaceTemp, Path: root, Prefix: "ganglion-build-", MaxAge: leftoverAge})
+		}
+		if err := host.CheckPlaces(ps); err != nil {
+			return nil, err
 		}
 		return ps, nil
 	}
