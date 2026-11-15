@@ -168,7 +168,7 @@ func TestCheckerNoticeCarriesAnInstallButtonPerAdmin(t *testing.T) {
 		t.Fatalf("%d messages, %d buttons", len(k.sent), len(fb.got))
 	}
 	for i, want := range []struct{ principal, conv, label string }{
-		{"telegram:user:1", "chat-telegram:user:1", "Install v0.3.3"}, {"telegram:user:2", "chat-telegram:user:2", "Установить v0.3.3"}} {
+		{"telegram:user:1", "chat-telegram:user:1", "⬆️ Install v0.3.3"}, {"telegram:user:2", "chat-telegram:user:2", "⬆️ Установить v0.3.3"}} {
 		b := fb.got[i]
 		if b.Principal != want.principal || b.Conv != want.conv || b.Label != want.label || b.Action != ActionInstall ||
 			string(b.Args) != `{"version":"v0.3.3"}` || !b.Expires.Equal(testNow.Add(7*24*time.Hour)) || b.Pending != "" {
