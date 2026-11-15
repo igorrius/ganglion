@@ -3,6 +3,32 @@
 What is inside each role. Package names are in
 [05-code-map.md](05-code-map.md).
 
+## The start of the process
+
+`ganglion run` begins with the launcher, before the logger, the database and
+the node ([ADR-0081](../adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)).
+It reads `<data>/releases/state.json` under the store's lock, so it never
+creates the folder of a node that did not update.
+
+```mermaid
+flowchart TB
+    start(["ganglion run"]) --> state{"state.json,<br/>an active release?"}
+    state -- "none: the floor" --> node["the node starts"]
+    state -- "this process is the active release" --> node
+    state -- "busy lock: an install runs" --> node
+    state -- "pending with two attempts used" --> back["fall back: restore before.db<br/>when the version migrated it,<br/>previous becomes active"]
+    state -- "otherwise" --> verify["verify again:<br/>signature, sums, release.json"]
+    verify -- "fails" --> back
+    verify -- "passes" --> exec["count an attempt when pending;<br/>exec the active binary"]
+    exec -- "EACCES (noexec) or another failure" --> back
+    exec -. "the new process runs this again,<br/>and is the active release" .-> start
+    back --> state
+```
+
+A stop for a restart the node was asked to make (`node.ErrRestart`) takes one
+attempt back before exit 75, so only starts that end some other way count
+([ADR-0046](../adr/0046-a-restart-is-not-a-failed-attempt.md)).
+
 ## Core
 
 ```mermaid

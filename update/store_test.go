@@ -374,3 +374,30 @@ func TestWriteStateLeavesNoTempFile(t *testing.T) {
 		t.Fatalf("dir %v %v", fi, err)
 	}
 }
+
+// A state that cannot be written after the folder is in place removes the
+// folder, unless the state still names it as active or previous.
+func TestPlaceKeepsTheFolderTheStateNames(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		kept    bool
+	}{{"v0.3.0", true}, {"v0.4.0", true}, {"v0.5.0", false}} {
+		t.Run(tc.version, func(t *testing.T) {
+			k := newKit(t)
+			incoming := filepath.Join(k.store.Dir(), incomingFx+"x")
+			if err := os.Mkdir(incoming, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			// A bad confirmed version makes the state unwritable.
+			st := State{Active: "v0.4.0", Previous: "v0.3.0", Confirmed: "junk"}
+			err := k.store.place(st, incoming, &Installed{Version: tc.version})
+			if !errors.Is(err, ErrBadState) {
+				t.Fatalf("%v", err)
+			}
+			_, serr := os.Stat(filepath.Join(k.store.Dir(), tc.version))
+			if kept := serr == nil; kept != tc.kept {
+				t.Fatalf("folder kept = %v, want %v", kept, tc.kept)
+			}
+		})
+	}
+}

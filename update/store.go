@@ -49,6 +49,7 @@ type Fallback struct {
 	From       string    `json:"from"`
 	To         string    `json:"to"`
 	RestoredDB bool      `json:"restored_db"`
+	Reason     Reason    `json:"reason,omitempty"`
 	At         time.Time `json:"at"`
 }
 
@@ -74,6 +75,9 @@ func (s State) validate() error {
 	}
 	if s.Fallback != nil {
 		vs = append(vs, s.Fallback.From, s.Fallback.To)
+		if !s.Fallback.Reason.valid() {
+			return fmt.Errorf("%w: fallback reason %q", ErrBadState, s.Fallback.Reason)
+		}
 	}
 	for _, v := range vs {
 		if v == "" {
@@ -408,11 +412,27 @@ func (s *Store) place(st State, incoming string, got *Installed) error {
 	next := State{Active: got.Version, Previous: st.Active, Confirmed: st.Confirmed,
 		Pending: &Pending{Version: got.Version, Since: s.now().UTC()}}
 	if err := s.writeState(next); err != nil {
-		_ = os.RemoveAll(target)
+		// The folder is the release the state still names when the version is
+		// the active or the previous one: it stays.
+		if got.Version != st.Active && got.Version != st.Previous {
+			_ = os.RemoveAll(target)
+		}
 		return err
 	}
 	s.prune(next)
 	return nil
+}
+
+// Verify checks an installed release again, as the launcher does before it
+// runs one: the signature over its SHA256SUMS, the sums of its binary and
+// release.json, and that release.json names version. The files may have
+// been changed since the install; nothing in the folder is trusted.
+func (s *Store) Verify(version string) error {
+	if _, err := ParseVersion(version); err != nil {
+		return err
+	}
+	_, _, err := s.verify(filepath.Join(s.dir, version), version)
+	return err
 }
 
 // Rollback makes the previous release the active one and the active one

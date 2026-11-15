@@ -189,7 +189,7 @@ three is safe on a node without the others (owner, 2026-11-15). The daily check
 **Files:** create `update/launch.go`, `update/launch_test.go`; modify `cmd/run.go`; create
 `cmd/launch_unix.go` (the `syscall.Exec`).
 
-- [ ] `Decide(state, self string, verify func(version) error) Decision` — pure, table-tested:
+- [x] `Decide(state, self string, verify func(version) error) Decision` — pure, table-tested:
   - no state, or `active` "": run on (the floor).
   - `self` is the active release's binary (`os.Executable` resolved): run on — this process is
     the release the launcher already started.
@@ -198,17 +198,17 @@ three is safe on a node without the others (owner, 2026-11-15). The daily check
   - otherwise: verify the active release again (signature with the embedded keys, then the
     binary's sum); a failure falls back as above with the reason `unverified`; success: count
     an attempt when `pending`, then `exec` the active binary with the same argv and environment.
-- [ ] Fall back: copy `before.db` over the database (removing `-wal` and `-shm`) only when the
+- [x] Fall back: copy `before.db` over the database (removing `-wal` and `-shm`) only when the
   failed version's `schema_migrations` rows differ from `before.db`'s; set `active` =
   `previous`, `previous` = "", `pending` none, `fallback` = {from, to, restored_db, at}; then
   decide again (the target may itself need an `exec`).
-- [ ] `cmd/run.go`: the launcher runs first in `run`'s action, before the logger and the
+- [x] `cmd/run.go`: the launcher runs first in `run`'s action, before the logger and the
   database, from the folder of `--db`. Its own errors (a state it cannot read) are written to
   stderr and the node runs on the floor; it never stops the node from starting.
-- [ ] Abuse tests: a file planted as `<data>/releases/v9.9.9/ganglion` with a state naming it is
+- [x] Abuse tests: a file planted as `<data>/releases/v9.9.9/ganglion` with a state naming it is
   never executed (the verification fails, the node falls back and the state says so); a binary
   replaced after install is not run; a state naming `../x` as a version is refused.
-- [ ] `noexec` (#191): when `exec` fails with `EACCES` on the data volume, fall back with the
+- [x] `noexec` (#191): when `exec` fails with `EACCES` on the data volume, fall back with the
   reason `noexec` rather than loop.
 
 ## Task 5: the watch component, confirm and tell (#195)
