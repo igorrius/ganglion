@@ -17,6 +17,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/texts"
+	"github.com/igorrius/ganglion/tool/pending"
 )
 
 // fakeLatest is a source that answers from a function and counts calls.
@@ -144,6 +145,50 @@ func (k *checkKit) notified() (notified, bool) {
 		k.t.Fatal(err)
 	}
 	return n, true
+}
+
+// fakeButtons records the buttons it is asked to store.
+type fakeButtons struct{ got []pending.Button }
+
+func (f *fakeButtons) AddButtons(_ context.Context, bs ...pending.Button) error {
+	f.got = append(f.got, bs...)
+	return nil
+}
+
+func TestCheckerNoticeCarriesAnInstallButtonPerAdmin(t *testing.T) {
+	k := newCheckKit(t, "v0.3.3")
+	fb := &fakeButtons{}
+	c := k.checker("v0.3.0")
+	WithCheckButtons(fb)(c)
+	step, stop := k.run(c)
+	defer stop()
+	step()
+	k.next(step)
+	if len(k.sent) != 2 || len(fb.got) != 2 {
+		t.Fatalf("%d messages, %d buttons", len(k.sent), len(fb.got))
+	}
+	for i, want := range []struct{ principal, conv, label string }{
+		{"telegram:user:1", "chat-telegram:user:1", "Install v0.3.3"}, {"telegram:user:2", "chat-telegram:user:2", "Установить v0.3.3"}} {
+		b := fb.got[i]
+		if b.Principal != want.principal || b.Conv != want.conv || b.Label != want.label || b.Action != ActionInstall ||
+			string(b.Args) != `{"version":"v0.3.3"}` || !b.Expires.Equal(testNow.Add(7*24*time.Hour)) || b.Pending != "" {
+			t.Fatalf("button %d: %+v", i, b)
+		}
+		if len(k.sent[i].Buttons) != 1 || k.sent[i].Buttons[0].ID != b.ID || k.sent[i].Buttons[0].Label != want.label {
+			t.Fatalf("message %d: %+v", i, k.sent[i].Buttons)
+		}
+	}
+}
+
+func TestCheckerNoticeWithoutButtonStoreHasNone(t *testing.T) {
+	k := newCheckKit(t, "v0.3.3")
+	step, stop := k.run(k.checker("v0.3.0"))
+	defer stop()
+	step()
+	k.next(step)
+	if len(k.sent) != 2 || len(k.sent[0].Buttons) != 0 {
+		t.Fatalf("%+v", k.sent)
+	}
 }
 
 func TestCheckerChecksAfterTenMinutesThenDaily(t *testing.T) {

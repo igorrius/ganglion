@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/igorrius/ganglion/texts"
+	"github.com/igorrius/ganglion/tool/pending"
 	"github.com/igorrius/ganglion/update"
 	"github.com/samber/do/v2"
 )
@@ -104,7 +105,7 @@ func UpdateCheck() do.Provider[UpdateChecks] {
 	return func(i do.Injector) (UpdateChecks, error) {
 		b := do.MustInvoke[Bootstrap](i)
 		dir, _ := update.DirFor(b.DB)
-		var opts []update.CheckerOption
+		opts := []update.CheckerOption{update.WithCheckButtons(do.MustInvoke[*pending.Store](i))}
 		if b.Agent.TZ != nil {
 			opts = append(opts, update.WithCheckLocation(b.Agent.TZ))
 		}

@@ -57,15 +57,17 @@ Copying a live `ganglion.db` together with its `-wal` and `-shm` files is not sa
 
 ## Updating
 
-A node moves to a new version only when you say so, and only to a release the project has signed. Nothing updates by itself. Once a day the node asks for the newest release and, when there is a newer one, tells the admins once in their private chat: the version, its date and a link to its page. To stop the asking, set `update.check: off` in `ganglion.yaml`. Take a [backup](#backups) first, because formats can change between 0.x versions, and read the release page before you install.
+A node moves to a new version only when you say so, and only to a release the project has signed. Nothing updates by itself. Once a day the node asks for the newest release and, when there is a newer one, tells the admins once in their private chat: the version, its date and a link to its page, with an Install button. To stop the asking, set `update.check: off` in `ganglion.yaml`. Take a [backup](#backups) first, because formats can change between 0.x versions, and read the release page before you install.
 
 **From the chat.** In your private chat (an admin only):
 
-- `/update` shows the version the node runs and the newest release, with its date and a link to its page. When the newest is newer, it tells you the command to send.
+- `/update` shows the version the node runs and the newest release, with its date and a link to its page. When the newest is newer, it tells you the command to send and has an Install button for it; when there is a version to go back to, it has a Roll back button too.
 - `/update install vX.Y.Z` downloads that release, checks the project's signature and the file's checksum, keeps a copy of the database and restarts the node into the new version. Writing the version is the confirmation. You can name a pre-release too, if it is newer than the version you run.
 - `/update rollback` goes back to the version you ran before. Send it again to go forward.
 
 A release is refused, and the node keeps running as it was, when it is not signed by the project, does not match its checksum, is not newer than the running version, has no build for your machine, or needs a newer image than yours. The reply says which. A refusal never changes anything.
+
+**Buttons.** The Install button of `/update` and of the daily notice does what `/update install` does for the version it names, and the Roll back button does what `/update rollback` does. Pressing one is the confirmation, and only an admin can press it. The buttons of `/update` work for a day and the one in the daily notice for a week. After a press the message says what happened and the buttons go. A button for a version that is already installed changes nothing, and a Roll back button that no longer matches the version you would go back to says it is out of date; send `/update` for fresh ones.
 
 **From the host.** `ganglion update` does the same on the machine, as the node's user, with `--db` pointing at the node's database: `ganglion update` shows the versions, `ganglion update install vX.Y.Z` installs and `ganglion update rollback` goes back. It does not stop a running node; the new version starts at the node's next restart (`/restart`, or restart the container).
 
