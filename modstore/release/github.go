@@ -11,40 +11,31 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/igorrius/ganglion/internal/ghfetch"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/runner"
-	"github.com/igorrius/ganglion/web"
 )
 
 // Limits of a download.
 const (
 	MaxFileBytes = 8 << 20 // a .wasm, a manifest or SHA256SUMS
 	maxListBytes = 4 << 20 // the releases list
-	maxRedirects = 5       // the store bounds the time of a whole update
 )
 
 // ProjectRepo is where ganglion's own module releases are published.
 const ProjectRepo = "igorrius/ganglion"
 
-// defaultHosts are GitHub's API and the hosts its release downloads
-// redirect to.
-var defaultHosts = []string{"api.github.com", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"}
-
 // GitHub finds and fetches a repository's module releases.
 type GitHub struct {
-	repo  string
-	api   string
-	hosts []string
-	hc    *http.Client
-	plain bool // tests: an httptest server is plain http on a port
+	repo string
+	api  string
+	opts []ghfetch.Option
+	c    *ghfetch.Client
 }
 
 // Option configures a GitHub source.
@@ -54,78 +45,28 @@ type Option func(*GitHub)
 func WithAPI(u string) Option { return func(g *GitHub) { g.api = strings.TrimSuffix(u, "/") } }
 
 // WithHosts replaces the hosts that may be reached (tests).
-func WithHosts(hosts ...string) Option { return func(g *GitHub) { g.hosts = hosts } }
+func WithHosts(hosts ...string) Option {
+	return func(g *GitHub) { g.opts = append(g.opts, ghfetch.WithHosts(hosts...)) }
+}
 
 // WithTransport replaces the transport, keeping the host and redirect
 // rules, and lets a test server's plain http through (tests).
 func WithTransport(rt http.RoundTripper) Option {
-	return func(g *GitHub) { g.hc.Transport, g.plain = rt, true }
+	return func(g *GitHub) { g.opts = append(g.opts, ghfetch.WithTransport(rt)) }
 }
 
 // NewGitHub is the source for repo ("owner/name").
 func NewGitHub(repo string, opts ...Option) *GitHub {
-	g := &GitHub{repo: repo, api: "https://api.github.com", hosts: defaultHosts}
-	g.hc = &http.Client{
-		Transport: &http.Transport{Proxy: nil, DialContext: web.PublicDial(10 * time.Second), TLSHandshakeTimeout: 10 * time.Second,
-			MaxResponseHeaderBytes: 64 << 10},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= maxRedirects {
-				return errors.New("too many redirects")
-			}
-			return g.check(req.URL)
-		},
-	}
+	g := &GitHub{repo: repo, api: "https://api.github.com"}
 	for _, o := range opts {
 		o(g)
 	}
+	g.c = ghfetch.New(g.opts...)
 	return g
 }
 
-func (g *GitHub) allowed(host string) bool { return slices.Contains(g.hosts, strings.ToLower(host)) }
-
-// check refuses a URL that is not https on the default port of one of
-// GitHub's hosts.
-func (g *GitHub) check(u *url.URL) error {
-	if u.Scheme != "https" || (u.Port() != "" && u.Port() != "443") {
-		if !g.plain {
-			return fmt.Errorf("release: %s: only https on port 443 is fetched", u.Redacted())
-		}
-	}
-	if !g.allowed(u.Hostname()) {
-		return fmt.Errorf("release: %s is not one of GitHub's hosts", u.Hostname())
-	}
-	return nil
-}
-
 func (g *GitHub) get(ctx context.Context, raw string, limit int64) ([]byte, error) {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return nil, fmt.Errorf("release: %w", err)
-	}
-	if err := g.check(u); err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("release: %w", err)
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := g.hc.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("release: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("release: %s: %s", u.Path, resp.Status)
-	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
-	if err != nil {
-		return nil, fmt.Errorf("release: %w", err)
-	}
-	if int64(len(b)) > limit {
-		return nil, fmt.Errorf("release: %s is over %d MiB", u.Path, limit>>20)
-	}
-	return b, nil
+	return g.c.Get(ctx, raw, limit)
 }
 
 type ghRelease struct {

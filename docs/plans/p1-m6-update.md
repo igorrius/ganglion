@@ -116,7 +116,7 @@ three is safe on a node without the others (owner, 2026-11-15). The daily check
 **Files:** create `internal/ghfetch/ghfetch.go`, `ghfetch_test.go`; modify
 `modstore/release/github.go`.
 
-- [ ] Move the HTTP plumbing of `modstore/release.GitHub` into `ghfetch.Client`: the host list
+- [x] Move the HTTP plumbing of `modstore/release.GitHub` into `ghfetch.Client`: the host list
   (`api.github.com`, `github.com`, `objects.githubusercontent.com`,
   `release-assets.githubusercontent.com`), `https` on 443 only, `web.PublicDial`, redirects
   checked against the hosts (at most 5), `MaxResponseHeaderBytes`, the test options
@@ -124,9 +124,9 @@ three is safe on a node without the others (owner, 2026-11-15). The daily check
   - `Get(ctx, url string, limit int64) ([]byte, error)`: as `get` today.
   - `Copy(ctx, url string, w io.Writer, limit int64) (int64, error)`: streams the body into
     `w`, failing past `limit`.
-- [ ] `modstore/release.GitHub` holds a `*ghfetch.Client`; its exported options keep working.
+- [x] `modstore/release.GitHub` holds a `*ghfetch.Client`; its exported options keep working.
   Its existing tests pass unchanged.
-- [ ] Tests for `Copy`: a body over the limit fails, a redirect to another host fails, a plain
+- [x] Tests for `Copy`: a body over the limit fails, a redirect to another host fails, a plain
   http URL fails without the test transport.
 
 ## Task 2: versions and the release source (#193)

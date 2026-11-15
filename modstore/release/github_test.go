@@ -137,11 +137,11 @@ func TestFetchRefusesAnOversizedFile(t *testing.T) {
 func TestDefaultHostsAreGitHubs(t *testing.T) {
 	g := NewGitHub("igorrius/ganglion")
 	for _, h := range []string{"api.github.com", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"} {
-		if !g.allowed(h) {
+		if !g.c.Allowed(h) {
 			t.Errorf("%s not allowed", h)
 		}
 	}
-	if g.allowed("evil.example") || g.allowed("github.com.evil.example") {
+	if g.c.Allowed("evil.example") || g.c.Allowed("github.com.evil.example") {
 		t.Error("another host allowed")
 	}
 }
