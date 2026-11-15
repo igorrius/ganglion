@@ -12,7 +12,8 @@ test:
 
 # Tests that need the network (crates.io for Rust builds with dependencies):
 # out of go test ./... and never cached (docs/conventions.md, section 9). They
-# skip without Rust's wasm32-wasip1 target or the command sandbox.
+# skip without Rust's wasm32-wasip1 target or the command sandbox. Of the
+# scripted chat lab scenarios it runs only those that build a module.
 test-net:
 	GANGLION_NET_TESTS=1 go test -count=1 -timeout 20m -run 'TestTheRustExample|TestARealRustModuleWithADependencyBuilds|TestTheReflexTemplate' -v ./tools/modbench/ ./builder/ ./modhost/
 	GANGLION_NET_TESTS=1 go test -count=1 -timeout 20m -tags lab -run 'TestShippedScriptedScenariosPass' -v ./internal/chatlab/
