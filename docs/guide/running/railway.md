@@ -31,6 +31,10 @@ The image is about 1.2 GB, mostly the Rust toolchain. It runs as the user `gangl
 
 `railway ssh` needs an SSH key registered in your Railway account (`railway ssh keys add`).
 
+## Updating the service
+
+Run the service from the image `ghcr.io/igorrius/ganglion:<version>` with the volume at `/data`. After that, send `/update` in your private chat to see the newest release and `/update install vX.Y.Z` to move to it. The node restarts itself, and the restart policy brings it back. See [Updating](operations.md#updating). A service built from the repository's `Dockerfile` or from a local checkout reports a build without a release version: switch it to the image once. Pull a newer image only when `/update` says a release needs one, or to update the Rust toolchain and the `claude` CLI.
+
 ## Create `ganglion.yaml` in the volume
 
 The file is `/data/ganglion.yaml`. It must be a file inside the volume, not a single-file mount, because the node rewrites it. Create it as the node's user, so the node can rewrite it. A file made by root is root's.

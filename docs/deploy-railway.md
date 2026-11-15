@@ -99,6 +99,32 @@ the provider at deploy time, with the owner:
 `railway ssh` and `railway volume files` need an SSH key registered in the
 Railway account (`railway ssh keys add`); the CLI's login is not enough.
 
+## Updating the node from the chat
+
+A service built from the repository (`railway up`) reports a build without a
+release version, which `/update` refuses (it says so and names the image).
+Move the service to the published image once, then update from the chat:
+
+1. In the service's settings change the source to the image
+   `ghcr.io/igorrius/ganglion:<version>` (the version of a release, without the
+   `v`), keeping the volume at `/data`, the variables and the restart policy.
+   Redeploy. The data, the database and `ganglion.yaml` stay on the volume.
+2. After the start, `/update` in the admin's private chat shows the running
+   version and the newest release.
+3. `/update install vX.Y.Z` installs the next release and the node restarts
+   into it; `/update rollback` goes back. The release files live in
+   `/data/releases`, on the volume, so a redeploy of the same image keeps the
+   active release: the entrypoint starts the image's own binary, and the launcher
+   at the start of `ganglion run` moves on to the installed one. The image's
+   binary is the floor the node falls back to.
+
+Pull a newer image (change the tag) only when a release needs one (`/update`
+says so) or to update the Rust toolchain and the `claude` CLI; `/update`
+replaces the node's program and nothing else. Take a copy of the volume first
+when a release changes the database. Check after an install: `/status` shows
+the version, and the admins are told when the new version is confirmed two
+minutes after its start, or that the node went back.
+
 ## `ganglion.yaml` in the volume
 
 The file is `/data/ganglion.yaml`, beside the database (R-CFG-1). It must be a

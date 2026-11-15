@@ -30,8 +30,15 @@ Start here when coming back to the project.
   `tools/releasecheck` ([runbook](releasing.md), task 6.7 step 2,
   [#192](https://github.com/igorrius/ganglion/issues/192)); the same tag
   published the image. `v0.2.0` was tagged before the release workflow
-  was merged and has neither. Next in 6.7: `/update`
-  ([#188](https://github.com/igorrius/ganglion/issues/188)).
+  was merged and has neither. `/update` is built (2026-11-15, task 6.7,
+  [plan](plans/p1-m6-update.md),
+  [#188](https://github.com/igorrius/ganglion/issues/188)): the admin's
+  `/update`, `/update install vX.Y.Z` and `/update rollback`, `ganglion
+  update`, the launcher in `run`, two starts and the fall back with an
+  alert, and the watch that confirms a version. Left in 6.7: the lab check
+  of two real versions, the live check on Railway after the service moves
+  to the image once, and the daily check
+  ([#196](https://github.com/igorrius/ganglion/issues/196)).
 - **The repository holds the core, not anyone's modules** (owner,
   2026-11-14, [ADR-0083](adr/0083-the-repository-holds-the-core-and-no-users-module.md),
   spec principle 10): the Go reader of the owner's inverter is removed, and

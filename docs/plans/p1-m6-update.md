@@ -270,10 +270,10 @@ component), `texts`.
 **Files:** modify `sandbox/deny.go` (`NodeFiles.Releases`), `config/sandbox.go`,
 `config/host.go` (`host.PlaceReleases`, no age), `host/places.go`; docs.
 
-- [ ] `<data>/releases` is denied to host commands (read and write); a test in `sandbox` that a
+- [x] `<data>/releases` is denied to host commands (read and write); a test in `sandbox` that a
   command cannot list or write it.
-- [ ] `host.stats` shows the releases folder.
-- [ ] Docs in the same commit:
+- [x] `host.stats` shows the releases folder.
+- [x] Docs in the same commit:
   - `docs/guide/running/operations.md`, "Updating": replace "There is no built-in updater yet"
     with `/update`, `/update install`, `/update rollback`, `ganglion update`, the two starts and
     the fall back, the dev-build note, and the image path for what `/update` does not change

@@ -57,15 +57,33 @@ Copying a live `ganglion.db` together with its `-wal` and `-shm` files is not sa
 
 ## Updating
 
-There is no built-in updater yet. Take a [backup](#backups) first, because formats can change between 0.x versions, and read the release notes.
+A node moves to a new version only when you say so, and only to a release the project has signed. Nothing updates by itself. Take a [backup](#backups) first, because formats can change between 0.x versions, and read the release page before you install.
 
-With the image, pull the new one and start a new container from it with the same volume and settings:
+**From the chat.** In your private chat (an admin only):
+
+- `/update` shows the version the node runs and the newest release, with its date and a link to its page. When the newest is newer, it tells you the command to send.
+- `/update install vX.Y.Z` downloads that release, checks the project's signature and the file's checksum, keeps a copy of the database and restarts the node into the new version. Writing the version is the confirmation. You can name a pre-release too, if it is newer than the version you run.
+- `/update rollback` goes back to the version you ran before. Send it again to go forward.
+
+A release is refused, and the node keeps running as it was, when it is not signed by the project, does not match its checksum, is not newer than the running version, has no build for your machine, or needs a newer image than yours. The reply says which. A refusal never changes anything.
+
+**From the host.** `ganglion update` does the same on the machine, as the node's user, with `--db` pointing at the node's database: `ganglion update` shows the versions, `ganglion update install vX.Y.Z` installs and `ganglion update rollback` goes back. It does not stop a running node; the new version starts at the node's next restart (`/restart`, or restart the container).
+
+**What happens at the restart.** The new version gets two tries to start. When it has run for two minutes, the node confirms it and tells the admins in the chat. When it fails to start twice, the node goes back to the version it ran before, puts back the database as it was before the update if the new version had changed it, and tells the admins what happened. The update restarts the node with exit code 75, so the node must run under a supervisor that restarts it (see [Restarting](#restarting)).
+
+The program that came with the image is never replaced. Releases are kept in the `releases/` folder beside the database, which host commands and modules cannot read or write; the node keeps the running version and the one before it.
+
+**A build without a release version.** A node built from source, or any build whose version is not exactly a release (`dev`, or a version with a commit suffix), cannot be moved with `/update`. Move it once to the image `ghcr.io/igorrius/ganglion:<version>` (the version of the newest release, without the `v`), with the same volume and settings. After that `/update` works. `/update` says this and names the image.
+
+**What `/update` does not change.** It replaces the node's program only. The Rust toolchain used for module builds, the `claude` command line tool and the rest of the image are updated by pulling a newer image:
 
 ```sh
-docker pull ghcr.io/igorrius/ganglion:latest
+docker pull ghcr.io/igorrius/ganglion:<version>
 docker stop ganglion && docker rm ganglion
-# then the same docker run as in Install
+# then the same docker run as in Install, with the new tag
 ```
+
+A release that needs a newer image than yours is refused with a message that says so; pull the new image first. If the node does not know its image (it is not run from one), `/update` says that it cannot check this.
 
 From source, get the new code, rebuild and restart:
 

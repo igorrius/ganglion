@@ -15,6 +15,7 @@ import (
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool/builtin"
+	"github.com/igorrius/ganglion/update"
 	"github.com/samber/do/v2"
 )
 
@@ -35,6 +36,9 @@ func Places() do.Provider[[]host.Place] {
 			{Name: host.PlaceWorkspace, Path: b.Agent.Workspace},
 			{Name: host.PlaceModules, Path: b.ModulesDir},
 			{Name: host.PlaceLanguages, Path: b.Languages},
+		}
+		if releases, ok := update.DirFor(b.DB); ok {
+			ps = append(ps, host.Place{Name: host.PlaceReleases, Path: releases})
 		}
 		if b.LogDir != "" {
 			ps = append(ps, host.Place{Name: host.PlaceLogs, Path: b.LogDir})

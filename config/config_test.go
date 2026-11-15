@@ -183,6 +183,27 @@ func TestPlacesHoldTheClaudeFolderBesideTheDatabase(t *testing.T) {
 	t.Fatalf("no claude place in %+v", places)
 }
 
+// host.stats shows the releases folder beside the database, and never ages
+// it: the janitor leaves the node's releases alone.
+func TestPlacesHoldTheReleasesFolderBesideTheDatabase(t *testing.T) {
+	b := agentConfig(t)
+	i := New(context.Background(), b, slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = i.Shutdown() })
+	places, err := do.Invoke[[]host.Place](i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range places {
+		if p.Name == host.PlaceReleases {
+			if p.Path != filepath.Join(filepath.Dir(b.DB), "releases") || p.MaxAge != 0 {
+				t.Fatalf("releases place = %+v", p)
+			}
+			return
+		}
+	}
+	t.Fatalf("no releases place in %+v", places)
+}
+
 // The policy the core wires allows a call one level deep (a scheduled
 // task's turn) and parks a confirmation with a real asker, not a nil one.
 func TestPolicyHasDepthAndAsker(t *testing.T) {
