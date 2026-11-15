@@ -44,7 +44,7 @@ var (
 type FetchConfig struct {
 	MaxBytes     int64         // the largest response body read
 	MaxHTMLBytes int64         // the largest HTML page; html2md's memory limit is sized for it (ADR-0035)
-	Timeout      time.Duration // the whole fetch, redirects included
+	Timeout      time.Duration // the request and the body, redirects included; not the conversion
 	DialTimeout  time.Duration // connecting to one address of a host
 	MaxRedirects int           // redirects followed
 	MaxChars     int           // runes of text returned; the rest is cut
@@ -150,14 +150,17 @@ func (f *Fetcher) fetch(ctx context.Context, rawURL string, scope Scope) (Page, 
 	if err != nil {
 		return Page{}, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, f.cfg.Timeout)
+	// The time limit is the server's: the request and the body. Converting
+	// the page is the node's own work, bounded by the module's limit, so the
+	// first page's compile of html2md is not charged to the server (#207).
+	netCtx, cancel := context.WithTimeout(ctx, f.cfg.Timeout)
 	defer cancel()
-	resp, err := f.get(ctx, u, scope)
+	resp, err := f.get(netCtx, u, scope)
 	if err != nil {
-		return Page{}, f.requestError(ctx, err)
+		return Page{}, f.requestError(netCtx, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	kind, mediaType, body, err := f.read(ctx, resp)
+	kind, mediaType, body, err := f.read(netCtx, resp)
 	if err != nil {
 		return Page{}, err
 	}

@@ -22,12 +22,15 @@ type conv struct {
 	mu    sync.Mutex
 	calls []string // url|html
 	err   error
+	// deadline is whether the last conversion's context had one.
+	deadline bool
 }
 
-func (c *conv) Convert(_ context.Context, url, html string) (string, string, error) {
+func (c *conv) Convert(ctx context.Context, url, html string) (string, string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.calls = append(c.calls, url+"|"+html)
+	_, c.deadline = ctx.Deadline()
 	if c.err != nil {
 		return "", "", c.err
 	}
@@ -197,6 +200,20 @@ func TestFetchHTMLGoesThroughTheConverter(t *testing.T) {
 	}
 	if len(c.calls) != 1 || c.calls[0] != "http://news.example/a|<p>Привіт</p>" {
 		t.Fatalf("converter got %q", c.calls)
+	}
+}
+
+// The fetch's time limit is the server's: converting the page is the node's
+// own work, bounded by the module's limit. Charged to the fetch, the first
+// page's compile of html2md under load left the conversion no time (#207).
+func TestConvertingIsNotBoundedByTheFetchTimeout(t *testing.T) {
+	f, n, c := newFetcher(t, web.DefaultFetchConfig())
+	site := n.Site(t, "news.example", "93.184.216.10", webtest.Reply("text/html", "<p>hi</p>"))
+	if _, err := f.Fetch(context.Background(), site, web.AnyHost); err != nil {
+		t.Fatal(err)
+	}
+	if c.deadline {
+		t.Fatal("the conversion ran under the fetch's deadline")
 	}
 }
 
