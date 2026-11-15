@@ -344,6 +344,47 @@ func TestRollbackSwapsActiveAndPrevious(t *testing.T) {
 	}
 }
 
+func TestRollbackTakesAFreshCopyOfTheDatabase(t *testing.T) {
+	k := newKit(t)
+	for _, v := range []string{"v0.3.0", "v0.4.0"} {
+		if _, err := k.install(v, "v0.2.1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := filepath.Join(k.store.Dir(), "v0.3.0", BeforeDB)
+	if err := os.WriteFile(before, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := k.store.Rollback(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(before); string(got) != "db" {
+		t.Fatalf("before.db of the target = %q, want the copy taken at the rollback", got)
+	}
+}
+
+func TestRollbackKeepsTheStateWhenTheCopyFails(t *testing.T) {
+	fail := false
+	k2 := newKit(t, WithCopyDB(func(_ context.Context, dst string) error {
+		if fail {
+			return errors.New("disk full")
+		}
+		return os.WriteFile(dst, []byte("db"), 0o600)
+	}))
+	for _, v := range []string{"v0.3.0", "v0.4.0"} {
+		if _, err := k2.install(v, "v0.2.1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fail = true
+	k2.refused(nil, "", func() error {
+		if _, err := k2.store.Rollback(context.Background()); err == nil {
+			return errors.New("rolled back without a copy")
+		}
+		return nil
+	})
+}
+
 func TestRollbackWithTheTargetGoneIsRefused(t *testing.T) {
 	k := newKit(t)
 	for _, v := range []string{"v0.3.0", "v0.4.0"} {

@@ -500,6 +500,12 @@ func (s *Store) Rollback(ctx context.Context) (string, error) {
 	next := State{Active: st.Previous, Previous: st.Active, Confirmed: st.Confirmed}
 	if st.Previous != "" { // the image's binary confirms at once
 		next.Pending = &Pending{Version: st.Previous, Since: s.now().UTC()}
+		// The target's before.db is from its own install, older than what
+		// the node wrote since. Should the target fail its two starts, the
+		// fall back must restore the database as it is now, not that one.
+		if err := s.freshCopy(ctx, st.Previous); err != nil {
+			return "", err
+		}
 	}
 	if err := s.writeState(next); err != nil {
 		return "", err
@@ -507,6 +513,27 @@ func (s *Store) Rollback(ctx context.Context) (string, error) {
 	s.prune(next)
 	s.log.Info("update: rolled back", "from", st.Active, "to", st.Previous)
 	return st.Previous, nil
+}
+
+// freshCopy replaces version's before.db with a copy of the database as
+// it is now: a temporary file, then a rename, so a failed copy keeps the
+// old one.
+func (s *Store) freshCopy(ctx context.Context, version string) error {
+	dst := filepath.Join(s.dir, version, BeforeDB)
+	tmp := dst + ".new"
+	_ = os.Remove(tmp)
+	if err := s.copyDB(ctx, tmp); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("update: the database copy: %w", err)
+	}
+	if _, err := os.Stat(tmp); errors.Is(err, os.ErrNotExist) {
+		return nil // a copier that copies nothing (no database wired)
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("update: %w", err)
+	}
+	return nil
 }
 
 // mutate reads the state under the lock, lets change edit it and writes

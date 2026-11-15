@@ -138,3 +138,7 @@ sandbox/sandbox.go
 sandbox/harden.go
 sandbox/*_linux.go
 sandbox/*_other.go
+update/**
+internal/ghfetch/**
+config/update.go
+cmd/launch*.go
