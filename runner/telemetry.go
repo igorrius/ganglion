@@ -19,6 +19,7 @@ const (
 	resultOK        callResult = "ok"         // the module answered OK
 	resultFailed    callResult = "failed"     // the module reported a failure
 	resultTimeout   callResult = "timeout"    // stopped at the manifest's timeout
+	resultCanceled  callResult = "canceled"   // stopped by the caller's context
 	resultTrap      callResult = "trap"       // the module trapped or aborted
 	resultBadOutput callResult = "bad_output" // the answer could not be read
 	resultError     callResult = "error"      // the runner could not make the call

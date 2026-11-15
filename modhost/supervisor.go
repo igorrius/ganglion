@@ -41,7 +41,7 @@ const (
 	ResultFailed    Result = "failed"    // the module reported a failure
 	ResultFormat    Result = "format"    // the answer or a cell value broke the contract
 	ResultTimeout   Result = "timeout"   // stopped at the time limit
-	ResultException Result = "exception" // a trap or an unreadable answer
+	ResultException Result = "exception" // a trap, an unreadable answer or a call its caller stopped
 )
 
 // maxLogged caps the module's own text in a log line.
@@ -73,6 +73,8 @@ func judge(out pdk.Output, err error, where string) outcome {
 	switch {
 	case errors.Is(err, runner.ErrTimeout):
 		return outcome{result: ResultTimeout, kind: KindException, detail: "the module ran past its time limit", logged: err.Error()}
+	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
+		return outcome{result: ResultException, kind: KindException, detail: "the call was stopped before the module finished", logged: err.Error()}
 	case err != nil:
 		return outcome{result: ResultException, kind: KindException,
 			detail: "the module stopped with an error (a trap, or an answer the node cannot read)", logged: err.Error()}
