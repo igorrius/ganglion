@@ -80,6 +80,10 @@ func (a *Agent) commandTable() []commandEntry {
 			transport.LangDefault:   "Stored secrets: /secrets, /secrets rm <module|node> NAME",
 			transport.LangRussian:   "Сохранённые секреты: /secrets, /secrets rm <модуль|node> ИМЯ",
 			transport.LangUkrainian: "Збережені секрети: /secrets, /secrets rm <модуль|node> НАЗВА"}},
+		{"/update", a.updateCmd, map[transport.Lang]string{
+			transport.LangDefault:   "Update the node: /update, /update install vX.Y.Z, /update rollback",
+			transport.LangRussian:   "Обновить ноду: /update, /update install vX.Y.Z, /update rollback",
+			transport.LangUkrainian: "Оновити вузол: /update, /update install vX.Y.Z, /update rollback"}},
 		{"/cells", a.listCells, map[transport.Lang]string{
 			transport.LangDefault: "Cells: sensors and switches with their values", transport.LangRussian: "Ячейки: датчики и выключатели со значениями",
 			transport.LangUkrainian: "Комірки: датчики та вимикачі зі значеннями"}},

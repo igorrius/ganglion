@@ -90,6 +90,7 @@ func TestCheckPlacesAcceptsTheNodesOwnAgedFolders(t *testing.T) {
 	ps := []Place{
 		{Name: PlaceDatabase, Path: data, Prefix: "ganglion.db"},
 		{Name: PlaceModules, Path: filepath.Join(data, "modules")},
+		{Name: PlaceReleases, Path: filepath.Join(data, "releases")},
 		{Name: PlaceClaude, Path: filepath.Join(data, "claude"), MaxAge: time.Hour},
 		{Name: PlaceBuilds, Path: filepath.Join(data, "modules", "builds"), MaxAge: time.Hour},
 		{Name: PlaceTemp, Path: os.TempDir(), Prefix: "ganglion-claude-", MaxAge: time.Hour},

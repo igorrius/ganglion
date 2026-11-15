@@ -20,6 +20,7 @@ There are no `/start` and `/help` commands. Telegram's command menu is set by th
 | `/secrets` | Lists secret names, dates and which modules use them. Never shows a value. `/secrets rm <module or node> <NAME>` removes one; `/secrets reset` drops all after a key mismatch. | Admin | Admin chat |
 | `/metrics` | Sends metrics as a picture. Optional filter: `all`, `ganglion`, `runtime`, `process` or a word. | Admin | Admin chat |
 | `/commands` | Shows the host-command switch. `/commands on` or `/commands off` flips it. | Admin | Admin chat |
+| `/update` | Shows the running version and the newest release. `/update install vX.Y.Z` installs a signed release and restarts into it; `/update rollback` goes back to the previous version. See [Updating](../running/operations.md#updating). | Admin | Admin chat |
 | `/restart` | Stops the node cleanly so a supervisor starts it again. Settings outside modules apply then. | Admin | Admin chat |
 
 `/reset` is an unlisted alias of `/new`.

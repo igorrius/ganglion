@@ -44,3 +44,16 @@ func TestMessagesReturnTheListError(t *testing.T) {
 		t.Fatalf("err = %v, want the list error", err)
 	}
 }
+
+func TestEachBuildsATextPerAdmin(t *testing.T) {
+	admins := alert.Admins{
+		List: func(context.Context) ([]string, error) {
+			return []string{"telegram:user:1", "mqtt:user:9", "telegram:user:2"}, nil
+		},
+		Private: private,
+	}
+	got, err := admins.Each(context.Background(), "k", func(_ context.Context, p string) string { return "for " + p })
+	if err != nil || len(got) != 2 || got[0].Text != "for telegram:user:1" || got[1].Text != "for telegram:user:2" || got[1].IdemKey != "k:telegram:user:2" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}

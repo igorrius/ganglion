@@ -32,10 +32,14 @@ var homeAutorun = []string{
 var skipped = []string{".git", "node_modules", ".cache", ".cargo", ".rustup", "go"}
 
 // NodeFiles are the node's own files: its binary, data, settings file,
-// logs, modules and the claude CLI work folder (its prompts and, during a
+// logs, modules, core releases and the claude CLI work folder (its prompts and, during a
 // call, the MCP bridge socket) and workspace.
 type NodeFiles struct {
 	Binary, DB, Settings, LogDir, ModulesDir, ClaudeDir, Workspace, Languages string
+	// Releases is the folder of the node's core releases (ADR-0081): a
+	// command that wrote a binary there would have it run, unconfined, as
+	// the node at its next start.
+	Releases string
 	// MasterKey is the secret store's key file (ADR-0077); "" when the
 	// node keeps none.
 	MasterKey string
@@ -70,7 +74,7 @@ func HomeSecrets(home string) []string {
 // became a symlink is followed.
 func DenyList(home, cwd string, node NodeFiles, environ, extra []string) []string {
 	raw := slices.Concat([]string{node.Binary, node.Settings}, dataFiles(node.DB, cwd, home),
-		[]string{node.LogDir, node.ModulesDir, node.ClaudeDir, node.Workspace, node.Languages, node.MasterKey})
+		[]string{node.LogDir, node.ModulesDir, node.ClaudeDir, node.Workspace, node.Languages, node.MasterKey, node.Releases})
 	for _, kv := range environ {
 		if name, v, ok := strings.Cut(kv, "="); ok && strings.HasSuffix(name, "_FILE") && v != "" {
 			raw = append(raw, v)

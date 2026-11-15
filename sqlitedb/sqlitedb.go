@@ -178,3 +178,12 @@ func Immediate(ctx context.Context, db *sql.DB, fn func(c *sql.Conn) error) (err
 	_, err = conn.ExecContext(ctx, "COMMIT")
 	return err
 }
+
+// CopyTo writes a consistent copy of the database to dst, a file that does
+// not exist yet (VACUUM INTO). The node keeps running while it is made.
+func CopyTo(ctx context.Context, db *sql.DB, dst string) error {
+	if _, err := db.ExecContext(ctx, "VACUUM INTO ?", dst); err != nil {
+		return fmt.Errorf("sqlitedb: copy: %w", err)
+	}
+	return nil
+}

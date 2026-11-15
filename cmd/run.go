@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -26,7 +27,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func runCommand(out io.Writer, start startFunc) *cli.Command {
+func runCommand(out, errOut io.Writer, start startFunc) *cli.Command {
 	var v flags.Run
 	return &cli.Command{
 		Name:  "run",
@@ -36,6 +37,7 @@ func runCommand(out io.Writer, start startFunc) *cli.Command {
 			"or as store:NAME, one of the node's own secrets in its secret store (ganglion secret set NAME).",
 		Flags: v.Flags(),
 		Action: func(ctx context.Context, _ *cli.Command) error {
+			launch(ctx, v.DB, errOut) // first: the process may be replaced by the active release
 			roles, err := node.ParseRoles(v.Roles)
 			if err != nil {
 				return err
@@ -61,7 +63,11 @@ func runCommand(out io.Writer, start startFunc) *cli.Command {
 				b.Metrics = tel.Renderer()
 			}
 			announce(logger, b)
-			return start(ctx, roles, b, logger)
+			err = start(ctx, roles, b, logger)
+			if errors.Is(err, node.ErrRestart) {
+				cleanStop(v.DB, in, errOut)
+			}
+			return err
 		},
 	}
 }
@@ -116,6 +122,7 @@ func bootstrap(ctx context.Context, v flags.Run, src secrets.Source, getenv func
 		return config.Bootstrap{}, err
 	}
 	b.Build = rustenv.LocalFromEnv(getenv)
+	b.ImageEnv = imageEnvOr0(v.ImageEnv, read)
 	b.SettingsPath, b.Secrets, b.MasterKey = settingsPath(v.Config, v.DB), src, masterKey(v.DB)
 	return b, nil
 }

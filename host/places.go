@@ -21,6 +21,7 @@ const (
 	PlaceLogs      PlaceName = "logs"
 	PlaceWorkspace PlaceName = "workspace"
 	PlaceModules   PlaceName = "modules"
+	PlaceReleases  PlaceName = "releases"
 	PlaceLanguages PlaceName = "languages"
 	PlaceClaude    PlaceName = "claude work folder"
 	PlaceTemp      PlaceName = "leftovers in the temp folder"

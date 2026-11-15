@@ -208,3 +208,31 @@ func TestMigrateFromTwoConnectionsAtOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestCopyToMakesAReadableCopyAndRefusesAnExistingFile(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, openFile(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE t (n INTEGER); INSERT INTO t VALUES (7)"); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(t.TempDir(), "copy.db")
+	if err := CopyTo(ctx, db, dst); err != nil {
+		t.Fatal(err)
+	}
+	cp, err := OpenReadOnly(ctx, dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cp.Close() }()
+	var n int
+	if err := cp.QueryRowContext(ctx, "SELECT n FROM t").Scan(&n); err != nil || n != 7 {
+		t.Fatalf("copy: %d %v", n, err)
+	}
+	if err := CopyTo(ctx, db, dst); err == nil {
+		t.Fatal("a copy over an existing file succeeded")
+	}
+}

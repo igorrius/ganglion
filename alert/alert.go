@@ -28,6 +28,15 @@ type Admins struct {
 // alert built again with the same key (a rerun turn, a repeat on the same
 // day) is sent once.
 func (a Admins) Messages(ctx context.Context, key, text string) ([]event.Outgoing, error) {
+	return a.Each(ctx, key, func(context.Context, string) string { return text })
+}
+
+// TextFunc is the text of an alert for one admin, in their language.
+type TextFunc func(ctx context.Context, principal string) string
+
+// Each is Messages with a text per admin: text is called for each admin
+// who has a private conversation.
+func (a Admins) Each(ctx context.Context, key string, text TextFunc) ([]event.Outgoing, error) {
 	admins, err := a.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("alert: %w", err)
@@ -35,7 +44,7 @@ func (a Admins) Messages(ctx context.Context, key, text string) ([]event.Outgoin
 	var out []event.Outgoing
 	for _, adm := range admins {
 		if transport, conv, ok := a.Private(adm); ok {
-			out = append(out, event.Outgoing{IdemKey: key + ":" + adm, Transport: transport, Conv: conv, Text: text})
+			out = append(out, event.Outgoing{IdemKey: key + ":" + adm, Transport: transport, Conv: conv, Text: text(ctx, adm)})
 		}
 	}
 	return out, nil

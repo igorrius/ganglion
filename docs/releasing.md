@@ -55,6 +55,34 @@ workflows:
 A tag that is not on `master`, or not of the form above, fails the
 workflows and publishes nothing.
 
+## How a node takes a release
+
+A release changes no running node. The owner sends `/update` in the admin's
+private chat, then `/update install vX.Y.Z` (or runs `ganglion update install
+vX.Y.Z` on the host), and the node:
+
+1. asks GitHub, on its own hosts only, for that tag's release and downloads
+   the files above (the binary at most 256 MiB, a whole install at most five
+   minutes);
+2. checks `SHA256SUMS` against the embedded keys, the binary and
+   `release.json` against it, that `release.json` names the tag, that the
+   version is newer than the running one, that the platform has a binary and
+   that `env` is not above the image's (`update/image-env`, copied into the
+   image; a node run outside an image skips this check);
+3. copies the database to `<data>/releases/<version>/before.db`, moves the
+   release into place and records it as pending in `state.json`;
+4. restarts (exit 75). The launcher at the start of `run` verifies the active
+   release once more and runs it. The release has two starts and 2 minutes of
+   running to confirm itself; otherwise the node goes back to the previous
+   version, restores `before.db` when the failed version had migrated the
+   database, and alerts the admins.
+
+Only the version, the date and a link to the release page are ever shown;
+what a release's page says is not read. `/update` lists the newest stable
+release, and a pre-release is installed only by naming its tag. A node built
+without a release version (`dev`, a `git describe` string) is not updated: it
+moves once to the image of a release.
+
 ## Check a release by hand
 
 ```sh

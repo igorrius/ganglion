@@ -487,3 +487,40 @@ func TestTheImagesDataFolderKeepsTheSettingsAndTheLock(t *testing.T) {
 		}
 	}
 }
+
+// TestACommandCannotListOrWriteTheReleasesFolder: a binary a command put in
+// <data>/releases would be run, unconfined, as the node at its next start;
+// the folder is denied whole, so a command can neither read the state nor
+// plant or remove a release in it; with hide_names it cannot list it either
+// (a folder's names stay listable otherwise, ADR-0057).
+func TestACommandCannotListOrWriteTheReleasesFolder(t *testing.T) {
+	data, _ := secretDir(t)
+	releases := filepath.Join(data, "releases")
+	if err := os.MkdirAll(filepath.Join(releases, "v9.9.9"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	state := filepath.Join(releases, "state.json")
+	if err := os.WriteFile(state, []byte(`{"active":"v9.9.9"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	node := NodeFiles{DB: filepath.Join(data, "ganglion.db"), Releases: releases, Workspace: filepath.Join(data, "workspace")}
+	s := ready(t, Policy{HideNames: true, Deny: func() []string { return DenyList("", data, node, nil, nil) }})
+	for _, script := range []string{
+		"ls releases",
+		"cat releases/state.json",
+		"echo '{}' > releases/state.json",
+		"echo x > releases/v9.9.9/ganglion",
+		"mkdir releases/v9.9.8",
+		"rm -rf releases",
+	} {
+		if out, code := output(t, s, data, "sh", "-c", script); code == 0 || strings.Contains(out, "active") {
+			t.Errorf("%s: exit %d, %q", script, code, out)
+		}
+	}
+	if b, err := os.ReadFile(state); err != nil || string(b) != `{"active":"v9.9.9"}` {
+		t.Fatalf("the state changed: %q %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(releases, "v9.9.8")); err == nil {
+		t.Fatal("a command made a release folder")
+	}
+}

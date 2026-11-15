@@ -121,6 +121,9 @@ type Deps struct {
 	// Private finds a person's private chat, where /memory answers
 	// (telegram.PrivateConv); none when unset.
 	Private alert.PrivateConvFunc
+	// Updater moves the node to another core release, for /update;
+	// NoUpdater when unset.
+	Updater Updater
 	// Restart ends the node so its supervisor starts it again, for
 	// /restart (R-CFG-6); a no-op when unset.
 	Restart RestartFunc
@@ -493,6 +496,9 @@ func withMemory(d Deps) Deps {
 	}
 	if d.Secrets == nil {
 		d.Secrets = NoSecrets{}
+	}
+	if d.Updater == nil {
+		d.Updater = NoUpdater{}
 	}
 	if d.Private == nil {
 		d.Private = func(string) (string, string, bool) { return "", "", false }

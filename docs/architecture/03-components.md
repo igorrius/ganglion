@@ -3,6 +3,60 @@
 What is inside each role. Package names are in
 [05-code-map.md](05-code-map.md).
 
+## The start of the process
+
+`ganglion run` begins with the launcher, before the logger, the database and
+the node ([ADR-0081](../adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)).
+It reads `<data>/releases/state.json` under the store's lock, so it never
+creates the folder of a node that did not update.
+
+```mermaid
+flowchart TB
+    start(["ganglion run"]) --> state{"state.json,<br/>an active release?"}
+    state -- "none: the floor" --> node["the node starts"]
+    state -- "this process is the active release" --> node
+    state -- "busy lock: an install runs" --> node
+    state -- "pending with two attempts used" --> back["fall back: restore before.db<br/>when the version migrated it,<br/>previous becomes active"]
+    state -- "otherwise" --> verify["verify again:<br/>signature, sums, release.json"]
+    verify -- "fails" --> back
+    verify -- "passes" --> exec["count an attempt when pending;<br/>exec the active binary"]
+    exec -- "EACCES (noexec) or another failure" --> back
+    exec -. "the new process runs this again,<br/>and is the active release" .-> start
+    back --> state
+```
+
+A stop for a restart the node was asked to make (`node.ErrRestart`) takes one
+attempt back before exit 75, so only starts that end some other way count
+([ADR-0046](../adr/0046-a-restart-is-not-a-failed-attempt.md)).
+
+### `/update` and `ganglion update`
+
+The agent's `/update` and the host's `ganglion update` use the same
+`update.Updater`: the release source over `internal/ghfetch` and the store of
+`<data>/releases`. The store is opened, and so the folder made, only for an
+install; a status and a rollback on a node that never updated touch nothing.
+
+```mermaid
+sequenceDiagram
+    participant Owner as Admin, private chat
+    participant Agent as Agent: /update
+    participant Updater as update.Updater
+    participant GH as GitHub (its hosts only)
+    participant Store as Store: releases/
+    Owner->>Agent: /update install vX.Y.Z
+    Agent-->>Owner: installing (outbox, before the turn ends)
+    Agent->>Updater: Install
+    Updater->>GH: the release, SHA256SUMS, signature, the binary
+    Updater->>Store: verify, copy the database, move into place, write state
+    Agent-->>Owner: installed; restarting
+    Agent->>Agent: Restart: the node stops with exit 75
+    Note over Store: the supervisor starts the node; the launcher runs the new version
+```
+
+Nothing a release page says reaches the reply: the agent shows the version,
+the date and a link it builds from the tag, and each refusal has a text of its
+own, never an error string.
+
 ## Core
 
 ```mermaid
@@ -44,6 +98,7 @@ flowchart TB
     cellsc[("Cells<br/>each owned by one module")]
     outbox[("Outbox")]
     sender["Outbox sender<br/>retries, 429 retry_after"]
+    updwatch["Update watch<br/>tells the admins about a fall back;<br/>confirms a new version after 2 minutes"]
     turns[("turns<br/>trace, cost")]
 
     pub -- "POST with Telegram's<br/>secret header" --> tgt
@@ -98,6 +153,7 @@ flowchart TB
     modhost -- "secret.get: the module's own scope,<br/>then the environment" --> vault
     loop --> outbox
     loop --> turns
+    updwatch -- "fall back, confirmed:<br/>one row per admin, their language" --> outbox
     outbox --> sender
     sender --> tgt
 
