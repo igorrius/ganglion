@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/modstore"
+	"github.com/igorrius/ganglion/modtrial"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -68,7 +72,10 @@ type buildAnswer struct {
 	Refusal  string        `json:"refusal,omitempty"`
 	// Detail is the refusal's text taken from the source: outside content.
 	Detail string `json:"refusal_detail,omitempty"`
-	Next   string `json:"next"`
+	// Trial is the trial run's line in the node's words, or that there was
+	// none.
+	Trial string `json:"trial,omitempty"`
+	Next  string `json:"next"`
 }
 
 // failedAnswer is the answer of a build that failed: its error and log are
@@ -178,7 +185,58 @@ func (t *ModuleBuild) build(ctx context.Context, a buildArgs, progress builder.P
 	if err != nil {
 		return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
 	}
-	return ended(jobs.StateDone)(answerPlan(b, p, own))
+	line := noTrial
+	if p.Refusal == "" {
+		r, ran, err := t.trial(ctx, dir, b)
+		if err != nil {
+			return buildEnd{}, fmt.Errorf("%s: trial run: %w", ModuleBuildTool, err)
+		}
+		if ran {
+			line = r.ModelLine()
+			if p, err = t.m.plan(ctx, b); err != nil {
+				return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
+			}
+		}
+	}
+	return ended(jobs.StateDone)(answerPlan(b, p, line, own))
+}
+
+// noTrial is the trial line of a build whose source has no examples.
+const noTrial = "no " + modtrial.FileName + ": the module was not tried"
+
+// trial tries build b on the examples in dir and keeps the report beside
+// the build; false when the source has no examples file. A file that is
+// not a plain file, or is too big, is a refused report, never read in full.
+func (t *ModuleBuild) trial(ctx context.Context, dir string, b modstore.Build) (modtrial.Report, bool, error) {
+	var r modtrial.Report
+	path := filepath.Join(dir, modtrial.FileName)
+	info, err := os.Lstat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return r, false, nil
+	}
+	if err != nil {
+		return r, false, err
+	}
+	switch {
+	case !info.Mode().IsRegular():
+		r = modtrial.Report{Refused: modtrial.FileName + ": it is not a plain file"}
+	case info.Size() > modtrial.MaxFileBytes:
+		r = modtrial.Report{Refused: fmt.Sprintf("%s: the file is %d bytes, at most %d", modtrial.FileName, info.Size(), modtrial.MaxFileBytes)}
+	default:
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return r, false, err
+		}
+		line, err := t.m.line(b.Module)
+		if err != nil {
+			return r, false, err
+		}
+		if r, err = t.m.Host.Trial(ctx, b, data, line.Config); err != nil {
+			return r, false, err
+		}
+	}
+	sha := modstore.Digest(b.Wasm, b.Manifest)
+	return r, true, t.m.saveTrial(sha, r)
 }
 
 // ended turns an answer into a build's end as s.
@@ -222,11 +280,14 @@ func (t *ModuleBuild) commit(ctx context.Context, name string) string {
 // answerPlan is the plan as the model reads it. It is outside content
 // unless the source is the node's own (own): the names of the rights are the
 // manifest's words, as is the refusal's detail (R-RUN-13, R-RUN-17).
-func answerPlan(b modstore.Build, p modstore.Plan, own bool) (tool.Result, error) {
+func answerPlan(b modstore.Build, p modstore.Plan, trial string, own bool) (tool.Result, error) {
 	ans := buildAnswer{Build: p.SHA256, Module: b.Module, Language: b.Language, Size: p.Size, Version: p.Version,
-		Refusal: p.Refusal, Detail: p.RefusalDetail}
+		Refusal: p.Refusal, Detail: p.RefusalDetail, Trial: trial}
 	if p.Refusal != "" {
 		ans.Next = "the node would refuse to install this build; change the source and build again"
+		if p.Refusal == trialRefusal {
+			ans.Next = "fix the module or its " + modtrial.FileName + " and build again"
+		}
 	} else {
 		ans.Rights, ans.Widening = rightsOf(p.Rights), rightsOf(p.Widening)
 		ans.Next = "module.install with this build shows the owner these rights and installs it after their press"

@@ -83,6 +83,7 @@ queue/sqlqueue/sqlqueue.go
 queue/sqlqueue/telemetry.go
 router/router.go
 router/rules/**
+modtrial/**
 runner/cells.go
 runner/contract.go
 runner/manifest.go
