@@ -109,21 +109,21 @@ took_ms, result, kind, calls (JSON), wrote (JSON), sent, chain (JSON)`,
 Follow the header comment style of `003_journal.sql` (times are Unix ms
 UTC).
 
-- [ ] **Step 1: Failing tests** (use the store test helpers already in
+- [x] **Step 1: Failing tests** (use the store test helpers already in
   `modstore/store_test.go`): a run written and read back with every field
   (calls, wrote, chain with two hops); the same id written twice is one
   row with the second's fields; 205 runs keep the newest 200 and `Runs(n=10)`
   is the newest 10 newest first; another module's rows are untouched by
   the prune; `RemoveLocal` drops the module's runs; `Run` of an unknown id
   is `false, nil`.
-- [ ] **Step 2:** `go test ./modstore -run Run` — FAIL.
-- [ ] **Step 3: Implement.** `INSERT OR REPLACE`, then
+- [x] **Step 2:** `go test ./modstore -run Run` — FAIL.
+- [x] **Step 3: Implement.** `INSERT OR REPLACE`, then
   `DELETE FROM module_runs WHERE module = ? AND rowid NOT IN (SELECT rowid
   FROM module_runs WHERE module = ? ORDER BY at_ms DESC, rowid DESC LIMIT ?)`,
   in one transaction. JSON columns default to `'[]'`/`'{}'`/`''` as fits;
   decode empty as nil.
-- [ ] **Step 4:** `go test ./modstore/...` — PASS.
-- [ ] **Step 5:** commit `modstore: a bounded journal of module runs`.
+- [x] **Step 4:** `go test ./modstore/...` — PASS.
+- [x] **Step 5:** commit `modstore: a bounded journal of module runs`.
 
 ### Task 2: The runner reports its host calls
 

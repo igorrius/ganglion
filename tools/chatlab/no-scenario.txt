@@ -66,6 +66,7 @@ modstore/card.go
 modstore/journal.go
 modstore/notify.go
 modstore/store.go
+modstore/runs.go
 modstore/release/**
 modtrial/**
 modules/html2md/**

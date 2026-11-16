@@ -188,13 +188,6 @@ func (t *ModuleStatus) answer(c modstore.Card) statusAnswer {
 	return out
 }
 
-// plainName is a cell id as runner's cell id pattern allows it, or a
-// module's short name: lower-case letters, digits, "_" and "-", dotted.
-var plainName = regexp.MustCompile(`^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)*$`)
-
-// maxPlainName caps a shown name's bytes.
-const maxPlainName = 253
-
 // plainCells are the plain names among ids: a cell id or a module name is
 // the manifest's text, so only one that is a legal cell id or module name
 // is shown (R-RUN-13). module.status answers JSON, so "_" is shown as it is;
@@ -202,7 +195,7 @@ const maxPlainName = 253
 func plainCells(ids []string) []string {
 	var out []string
 	for _, id := range ids {
-		if len(id) <= maxPlainName && plainName.MatchString(id) {
+		if modstore.PlainName(id) {
 			out = append(out, id)
 		}
 	}
