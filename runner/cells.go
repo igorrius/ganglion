@@ -95,6 +95,7 @@ const (
 // check comes before the port, so a name the manifest does not list (
 // another module's cell, a path) never reaches it.
 func (m *Module) cellReport(ctx context.Context, name string, value []byte) int32 {
+	m.called(ctx, CallCellReport)
 	decl, ok := m.manifest.Cells.Report[name]
 	if !ok {
 		m.deps.Logger.Warn("cell_report denied", "module", m.manifest.Name)
@@ -117,6 +118,7 @@ func (m *Module) cellReport(ctx context.Context, name string, value []byte) int3
 // cellGet is the cell_get host function: a cell the module owns by its
 // short name, or a full id listed under cells.read.
 func (m *Module) cellGet(ctx context.Context, name string) int32 {
+	m.called(ctx, CallCellGet)
 	id := name
 	if _, own := m.manifest.Cells.Report[name]; own {
 		id = m.cellID(name)

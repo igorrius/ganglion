@@ -41,6 +41,7 @@ func cutText(s string) string {
 // notify is the notify host function: the manifest's grant and the port are
 // checked before the text is cut and handed on.
 func (m *Module) notify(ctx context.Context, text string) int32 {
+	m.called(ctx, CallNotify)
 	if m.manifest.Capabilities.Notify == nil || m.deps.Notify == nil {
 		return int32(NotifyDenied)
 	}

@@ -155,17 +155,17 @@ const (
 OnCall func(ctx context.Context, kind string)
 ```
 
-- [ ] **Step 1: Failing test:** a probe call that fetches, reads and
+- [x] **Step 1: Failing test:** a probe call that fetches, reads and
   reports a cell (whatever the probe offers) with an `OnCall` that
   appends kinds; assert the kinds and their counts; a value put in
   `Handle`'s ctx is visible in `OnCall`'s ctx; `log`, `now_ms` and
   `take` report nothing.
-- [ ] **Step 2:** FAIL.
-- [ ] **Step 3: Implement.** A helper `m.called(ctx, kind)`; the
+- [x] **Step 2:** FAIL.
+- [x] **Step 3: Implement.** A helper `m.called(ctx, kind)`; the
   `state_get`, `state_put`, `secret_get` and `config_get` builders take
   `ctx context.Context` instead of `_`.
-- [ ] **Step 4:** `go test ./runner/...` — PASS.
-- [ ] **Step 5:** commit `runner: report each host call's kind`.
+- [x] **Step 4:** `go test ./runner/...` — PASS.
+- [x] **Step 5:** commit `runner: report each host call's kind`.
 
 ### Task 3: modhost records each run
 
