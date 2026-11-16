@@ -72,13 +72,41 @@ NAME`. Never ask for a secret's value in the chat.
 - Dependencies only from the template's `Cargo.lock`. A build whose lock lists anything else
   is not clean.
 
+## Examples
+
+Write `examples.yaml` beside `manifest.yaml`, starting from the template's own. After a clean
+build the node runs the real module on it in a sandbox (nothing of the node changes, no network)
+and puts a `trial` line in the build's answer: how many examples passed and, for one that did
+not, its name, the step and what was expected against what happened. The owner sees the same
+trial in the install window.
+
+- One example per behaviour the owner asked for, and one for each edge you care about (at the
+  threshold, again after a rise, a stale reading, a failing service). Steps run in order from an
+  empty state: `cells` sets values, `after` moves time on, `trigger` is `cell`, `cron` or
+  `{tool: <name>, args: {}}`.
+- Give each step counted expectations: `expect: {messages: 1}`, `reports: [<cell ids>]`,
+  `fails: true`. A step with no `expect` only has to end without an error, so it proves little.
+- A reader's examples carry the service's answers: `http` gives the answer of each exact URL
+  (status and body) and `secrets` gives fake values. Any other request fails the step.
+- Give an example a `start: 2026-01-02T15:04:05Z` (RFC 3339) when its canned data carries timestamps: the
+  example's time starts there, so a `ts` just before it is fresh and one hours earlier is stale.
+- A `cell` step reaches the module as a change of the listed cells made by the producer named
+  `trial`, never by the module itself.
+- The examples compare counts, not message text: the node never shows the text to you.
+- Put in the examples only made-up values and made-up secrets, never the owner's real data,
+  addresses or secrets.
+- A failed trial refuses the install. Either the module is wrong or the example is: read the
+  `trial` line, fix the module or `examples.yaml`, and build again. Without an `examples.yaml`
+  the build still works, but the module is not tried and the owner is told so.
+
 ## The loop
 
 1. `module.import` the template (`reader-template` or `reflex-template`) under the new name. It
    waits for the owner's press.
 2. `module.read` its `manifest.yaml` and `src/logic.rs` (and the README).
-3. `module.write` `manifest.yaml` and `src/logic.rs` only: the rules or the service, the settings
-   and their tests. Every other file and `Cargo.lock` stay as the template has them. Write a Rust
+3. `module.write` `manifest.yaml`, `src/logic.rs` and `examples.yaml` only: the rules or the service,
+   the settings, their tests and the module's examples (see "Examples"). Every other file and
+   `Cargo.lock` stay as the template has them. Write a Rust
    test in `logic.rs` for every rule or function, and keep `react` and `parse` free of host calls.
 4. When you change a module that is already installed, raise `version` in `manifest.yaml` by one
    before you build: the node refuses to install a build under a number it has already had, and
@@ -92,8 +120,9 @@ NAME`. Never ask for a secret's value in the chat.
    After 5 builds of the module in a row the node refuses another until the owner writes: stop,
    tell the owner what fails and ask how to go on.
    The node's build does not run the module's tests; the owner and CI do. Read your tests back
-   with `module.read` and keep the logic simple enough to check by reading.
-6. When the note shows a clean build, `module.install` with its digest. The owner sees what the module
+   with `module.read` and keep the logic simple enough to check by reading. What the build does
+   run is the module's `examples.yaml`: see "Examples".
+6. When the note shows a clean build and a trial that passed, `module.install` with its digest. The owner sees what the module
    reacts to, the rights it asks for and how many messages a day, and presses the button. Do not
    describe it as installed before then.
 

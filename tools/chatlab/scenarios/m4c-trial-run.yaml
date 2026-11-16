@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m4c-trial-run
+why: >-
+  Trial run before install (R-RUN-19, ADR-0090): the reflex template ships examples.yaml, so a build of the
+  imported copy is tried on it in the sandbox. The build's note carries the node's trial line and no refusal,
+  and the install window shows the owner a "Trial run" section with what the module would have sent, from the
+  stored report, so nothing of the trial reaches the model but counts and names.
+covers:
+  - tool/builtin/module_build.go
+  - tool/builtin/module_install.go
+  - tool/builtin/module_window.go
+  - modtrial/**
+  - modhost/trial.go
+  - texts/lang/en.yaml
+  - examples/modules/reflex-template/**
+repeat: 1
+model: scripted
+modules:
+  - {name: producer, manifest: modules/producer.yaml}
+script:
+  - {tool: module.import, args: '{"from":"reflex-template","name":"reflex-template"}'}
+  - {say: "The copy waits for your press."}
+  - {tool: module.build, args: '{"name":"reflex-template","note":"build with the template examples"}'}
+  - {say: "The build runs in the background; its card shows how it goes."}
+  - {tool: module.install, args: '{"build":"$BUILD","note":"install after the trial"}'}
+  - {say: "The install waits for your press."}
+  - {say: "reflex-template is installed."}
+steps:
+  - say: "Make me a reflex from the template"
+  - facts:
+      questions: 1
+      question: {contains: "reflex-template"}
+  - press: Approve
+  - facts:
+      questions: 1
+      question: {contains: "Trial run: 5 of 5 examples passed"}
+      journal:
+        - {tool: module.build, decision: allowed, result_contains: '"building":"reflex-template"', count: 1}
+      history:
+        contains: "trial: 5 examples, all passed"
+      tainted: false
+  - facts:
+      question: {contains: "fell below 30"}
+      history: {not_contains: "fell below 30"}
+  - press: Approve
+  - facts:
+      questions: 0
+      journal:
+        - {tool: module.install, decision: approved, count: 1}

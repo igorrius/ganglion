@@ -860,6 +860,18 @@ escalate:                    # when to call the model
   owner's chat leaves no note in that conversation's history. A name that
   does not resolve sends nothing there and is counted
   ([ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
+- **R-RUN-19.** A module is tried on its examples right after its build.
+  `examples.yaml` beside the manifest holds examples as steps that set
+  cells, move virtual time and fire a trigger, with counted expectations
+  (messages, cells reported, a failure) and canned HTTP answers. The real
+  `.wasm` runs in a sandbox: an empty state, cells and messages kept in
+  memory, no network, fake secrets, a virtual clock; nothing of the node
+  changes. The model reads only the node's words (counts, the step that
+  failed and why), never the module's text; the install window shows the
+  owner what the module would send and write, and what it would do on the
+  current cells. A failed trial refuses the build's install; a module
+  without examples installs, and the window says it was not tried
+  ([ADR-0090](adr/0090-a-module-is-tried-on-its-examples-before-install.md)).
 
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation

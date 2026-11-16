@@ -10,9 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/modstore"
+	"github.com/igorrius/ganglion/modtrial"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/texts"
@@ -31,9 +34,15 @@ type window struct {
 	Rights   modstore.Rights   `json:"rights"`
 	Widening modstore.Rights   `json:"widening"`
 	About    map[string]string `json:"about"` // the node's tool name → the description the agent reads
+	// Trial is the trial run's lines as the owner reads them, redacted and in
+	// the asker's language: a language change between the question and the
+	// press makes the press refuse and the owner is asked again (safe by
+	// design). Kept so the press shows the same.
+	Trial []string `json:"trial"`
 }
 
-// windowOf is the window of a build whose plan has no refusal.
+// windowOf is the window of a build whose plan has no refusal, with no trial
+// section yet (see withTrial).
 func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest) window {
 	short := modstore.ShortName(b.Module)
 	about := map[string]string{}
@@ -43,6 +52,20 @@ func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest) window {
 		}
 	}
 	return window{Module: b.Module, SHA256: p.SHA256, Version: p.Version, Size: p.Size, Rights: p.Rights, Widening: p.Widening, About: about}
+}
+
+// moreReserve is the room kept for the line that counts what the trial
+// section left out.
+const moreReserve = 40
+
+// withTrial is w with the trial section of report r (ok false: none is
+// kept). The section is capped at trialRunes and at what the rest of the
+// question leaves under tool.MaxQuestionRunes, so a long but valid window
+// stays askable. It is stored with the window, so the press shows the same.
+func withTrial(sp texts.Speaker, w window, r modtrial.Report, ok bool) window {
+	rest := utf8.RuneCountInString(windowText(sp, w)) + 1 // and the line break before the section
+	w.Trial = trialLines(sp, r, ok, min(trialRunes, tool.MaxQuestionRunes-rest-moreReserve))
+	return w
 }
 
 // recordPath is where the window a call asked with is kept until its press.
@@ -122,7 +145,110 @@ func windowText(sp texts.Speaker, w window) string {
 		}
 	}
 	lines = append(lines, sp.Text(texts.AskModuleLimits, texts.Vars{"memory": memoryShown(r.Memory), "timeout": timeoutShown(r.Timeout)}))
+	lines = append(lines, w.Trial...)
 	return strings.Join(lines, "\n")
+}
+
+// trialRunes bounds the trial section of the window, in runes of its joined
+// lines; the rest is counted, not shown.
+const trialRunes = 1200
+
+// messageRunes bounds one message or value in the trial section.
+const messageRunes = 200
+
+// trialLines is the trial run's section of the install window. A module's
+// message is shown as chat shows it (Markdown escaped, one line); a value is
+// compact JSON in a code span. These texts reach the owner's question only,
+// never a tool result. ok is false when no trial is kept.
+func trialLines(sp texts.Speaker, r modtrial.Report, ok bool, limit int) []string {
+	if !ok {
+		return []string{sp.Text(texts.AskModuleTrialNone, nil)}
+	}
+	if r.Error != "" { // the plan refuses such a build, so this is a last line of defence
+		return []string{sp.Text(texts.AskModuleTrialError, texts.Vars{"error": texts.Escape(r.Error)})}
+	}
+	passed := 0
+	for _, e := range r.Examples {
+		if e.Passed {
+			passed++
+		}
+	}
+	lines := []string{sp.Text(texts.AskModuleTrial, texts.Vars{"passed": strconv.Itoa(passed), "total": strconv.Itoa(len(r.Examples))})}
+	for _, e := range r.Examples {
+		lines = append(lines, sp.Text(texts.AskModuleTrialExample, texts.Vars{varName: item(e.Name)}))
+		out := false
+		for _, s := range e.Steps {
+			l := stepLines(sp, s)
+			out = out || len(l) > 0
+			lines = append(lines, l...)
+		}
+		if !out {
+			lines = append(lines, sp.Text(texts.AskModuleTrialNothing, nil))
+		}
+	}
+	if r.Now != nil {
+		lines = append(lines, sp.Text(texts.AskModuleTrialNow, nil))
+		l := nowLines(sp, *r.Now)
+		if len(l) == 0 {
+			l = []string{sp.Text(texts.AskModuleTrialNothing, nil)}
+		}
+		lines = append(lines, l...)
+	}
+	// Redacted as one text, after escaping and before the cap: a module's
+	// harmless words ("Monkey: 5") would otherwise make the question refused
+	// for a secret, a pair can match across a line break, and the marker
+	// changes lengths.
+	return capped(sp, strings.Split(redact.String(strings.Join(lines, "\n")), "\n"), limit)
+}
+
+// nowLines are the lines of the run on the current cells: what it did, or
+// that it did not run or failed.
+func nowLines(sp texts.Speaker, s modtrial.StepResult) []string {
+	switch {
+	case !s.Ran:
+		return []string{sp.Text(texts.AskModuleTrialNotRun, nil)}
+	case s.Kind != "":
+		return []string{sp.Text(texts.AskModuleTrialFailed, texts.Vars{"kind": s.Kind})}
+	}
+	return stepLines(sp, s)
+}
+
+// stepLines are the messages and the reported cells of one step.
+func stepLines(sp texts.Speaker, s modtrial.StepResult) []string {
+	var lines []string
+	for _, m := range s.Messages {
+		flat := text.Truncate(strings.Join(strings.Fields(m), " "), messageRunes)
+		lines = append(lines, sp.Text(texts.AskModuleTrialMessage, texts.Vars{"text": texts.Escape(flat)}))
+	}
+	for _, c := range s.Reports {
+		lines = append(lines, sp.Text(texts.AskModuleTrialCell, texts.Vars{"cell": item(c.Cell), "value": shown(compact(c.Value))}))
+	}
+	return lines
+}
+
+// compact is a reported value as one short line of JSON.
+func compact(v json.RawMessage) string {
+	var b bytes.Buffer
+	if err := json.Compact(&b, v); err != nil {
+		return text.Truncate(strings.Join(strings.Fields(string(v)), " "), messageRunes)
+	}
+	return text.Truncate(b.String(), messageRunes)
+}
+
+// capped is lines as far as their joined text stays within limit runes, then
+// a line with the number of lines left out.
+func capped(sp texts.Speaker, lines []string, limit int) []string {
+	used := 0
+	for i, l := range lines {
+		used += utf8.RuneCountInString(l)
+		if i > 0 {
+			used++ // the line break
+		}
+		if used > limit {
+			return append(lines[:i:i], sp.Text(texts.AskModuleTrialMore, texts.Vars{"n": strconv.Itoa(len(lines) - i)}))
+		}
+	}
+	return lines
 }
 
 // reflexLines are the lines of what a module reacts to and how much it may

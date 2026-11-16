@@ -3,6 +3,7 @@ package builtin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strconv"
@@ -101,6 +102,9 @@ func (t *ModuleInstall) prepare(ctx context.Context, c tool.Call) (installArgs, 
 	if err != nil {
 		return installArgs{}, modstore.Build{}, window{}, fmt.Errorf("%s: %w", ModuleInstallTool, err)
 	}
+	if t.m.Queue.Building(modstore.ShortName(b.Module)) {
+		return installArgs{}, modstore.Build{}, window{}, fmt.Errorf("%s: %w", ModuleInstallTool, errBuildRunning)
+	}
 	p, err := t.m.plan(ctx, b)
 	if err != nil {
 		return installArgs{}, modstore.Build{}, window{}, fmt.Errorf("%s: %w", ModuleInstallTool, err)
@@ -112,8 +116,16 @@ func (t *ModuleInstall) prepare(ctx context.Context, c tool.Call) (installArgs, 
 	if err != nil {
 		return installArgs{}, modstore.Build{}, window{}, fmt.Errorf("%s: %w", ModuleInstallTool, err)
 	}
-	return a, b, windowOf(b, p, m), nil
+	r, ok, err := t.m.loadTrial(p.SHA256)
+	if err != nil {
+		return installArgs{}, modstore.Build{}, window{}, fmt.Errorf("%s: %w", ModuleInstallTool, err)
+	}
+	return a, b, withTrial(c.Speak, windowOf(b, p, m), r, ok), nil
 }
+
+// errBuildRunning refuses an install while a build of the module runs or
+// waits: its trial report is not written yet.
+var errBuildRunning = errors.New("a build of this module is running; wait for its result")
 
 // check loads the build in a throwaway instance with the module's settings
 // and runs its health trigger: a build that fails is refused and nothing

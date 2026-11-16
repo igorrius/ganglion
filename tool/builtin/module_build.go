@@ -5,12 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
 	"slices"
+	"syscall"
 
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/modstore"
+	"github.com/igorrius/ganglion/modtrial"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -68,7 +73,10 @@ type buildAnswer struct {
 	Refusal  string        `json:"refusal,omitempty"`
 	// Detail is the refusal's text taken from the source: outside content.
 	Detail string `json:"refusal_detail,omitempty"`
-	Next   string `json:"next"`
+	// Trial is the trial run's line in the node's words, or that there was
+	// none.
+	Trial string `json:"trial,omitempty"`
+	Next  string `json:"next"`
 }
 
 // failedAnswer is the answer of a build that failed: its error and log are
@@ -159,6 +167,12 @@ func (t *ModuleBuild) build(ctx context.Context, a buildArgs, progress builder.P
 	}
 	own := t.m.ownSource(a.Name)
 	art, log, err := t.m.Builder.Build(ctx, builder.Source{Name: a.Name, Dir: dir, Progress: progress})
+	var ex examplesFile
+	if err == nil { // read before the source is checked again, so the check covers the file
+		if ex, err = readExamples(dir); err != nil {
+			return buildEnd{}, fmt.Errorf("%s: read %s: %w", ModuleBuildTool, modtrial.FileName, err)
+		}
+	}
 	own = own && t.m.ownSource(a.Name)
 	if errors.Is(err, builder.ErrNoBuilder) {
 		return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
@@ -171,14 +185,121 @@ func (t *ModuleBuild) build(ctx context.Context, a buildArgs, progress builder.P
 	}
 	b := modstore.Build{Module: modstore.LocalPrefix + a.Name, Wasm: art.Wasm, Manifest: art.Manifest, Language: string(art.Language),
 		Note: oneLine(a.Note), Commit: t.commit(ctx, a.Name)}
-	if err := t.m.saveBuild(art, buildRecord{Module: b.Module, Language: b.Language, Commit: b.Commit, Note: b.Note}); err != nil {
+	if err := t.m.saveBuild(art, buildRecord{Module: b.Module, Language: b.Language, Commit: b.Commit, Note: b.Note, Examples: ex.found}); err != nil {
 		return buildEnd{}, fmt.Errorf("%s: keep the build: %w", ModuleBuildTool, err)
+	}
+	// A report kept for this digest by an earlier build is about other
+	// examples: this build is tried afresh.
+	if err := os.Remove(t.m.buildPath(art.SHA256, ".trial.json")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
 	}
 	p, err := t.m.plan(ctx, b)
 	if err != nil {
 		return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
 	}
-	return ended(jobs.StateDone)(answerPlan(b, p, own))
+	p, line, err := t.tried(ctx, b, p, ex)
+	if err != nil {
+		return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
+	}
+	return ended(jobs.StateDone)(answerPlan(b, p, line, own))
+}
+
+// tried tries b on its examples when its plan p does not refuse it, and
+// returns the plan again with the trial's line ("" when the plan refused).
+func (t *ModuleBuild) tried(ctx context.Context, b modstore.Build, p modstore.Plan, ex examplesFile) (modstore.Plan, string, error) {
+	if p.Refusal != "" && p.Refusal != trialMissing { // no report yet: the trial is what is about to run
+		return p, "", nil
+	}
+	if !ex.found {
+		return p, noTrial, nil
+	}
+	// Until the real report is kept, the build has one that is not passed: a
+	// trial that never ends (a crash, a failed save) leaves the build refused.
+	sha := modstore.Digest(b.Wasm, b.Manifest)
+	if err := t.m.saveTrial(sha, modtrial.Report{Error: trialUnfinished}); err != nil {
+		return p, "", err
+	}
+	r, err := t.trial(ctx, b, ex)
+	if err != nil {
+		return p, "", err
+	}
+	p, err = t.m.plan(ctx, b)
+	return p, r.ModelLine(), err
+}
+
+// trialCannotRun is the report's error of a build the node could not try.
+const trialCannotRun = "the build does not load on this node"
+
+// trialUnfinished is the report's error of a trial that did not end.
+const trialUnfinished = "the trial did not finish"
+
+// noTrial is the trial line of a build whose source has no examples.
+const noTrial = "no " + modtrial.FileName + ": the module was not tried"
+
+// examplesFile is the module's examples.yaml as read from its source: not
+// found, refused before it is parsed (refused, in the node's words), or its
+// bytes.
+type examplesFile struct {
+	found   bool
+	refused string
+	data    []byte
+}
+
+// readExamples reads dir's examples file through a root on dir, so a link
+// out of the folder is not followed. A file that is not a plain file or is
+// too big is refused, never read in full.
+func readExamples(dir string) (examplesFile, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return examplesFile{}, err
+	}
+	defer func() { _ = root.Close() }()
+	refuse := func(why string) (examplesFile, error) {
+		return examplesFile{found: true, refused: modtrial.FileName + ": " + why}, nil
+	}
+	info, err := root.Lstat(modtrial.FileName)
+	if errors.Is(err, fs.ErrNotExist) {
+		return examplesFile{}, nil
+	}
+	if err != nil {
+		return examplesFile{}, err
+	}
+	if !info.Mode().IsRegular() {
+		return refuse("it is not a plain file")
+	}
+	f, err := root.OpenFile(modtrial.FileName, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return refuse("it cannot be opened")
+	}
+	defer func() { _ = f.Close() }()
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+		return refuse("it is not a plain file")
+	}
+	data, err := io.ReadAll(io.LimitReader(f, modtrial.MaxFileBytes+1))
+	if err != nil {
+		return examplesFile{}, err
+	}
+	if len(data) > modtrial.MaxFileBytes {
+		return refuse(fmt.Sprintf("the file is over %d bytes", modtrial.MaxFileBytes))
+	}
+	return examplesFile{found: true, data: data}, nil
+}
+
+// trial tries build b on ex and keeps the report beside the build. A trial
+// that cannot run is kept as a report with Error, so the build is not
+// installable.
+func (t *ModuleBuild) trial(ctx context.Context, b modstore.Build, ex examplesFile) (modtrial.Report, error) {
+	r := modtrial.Report{Refused: ex.refused}
+	if ex.refused == "" {
+		line, err := t.m.line(b.Module)
+		if err != nil {
+			return r, err
+		}
+		if r, err = t.m.Host.Trial(ctx, b, ex.data, line.Config); err != nil {
+			r = modtrial.Report{Error: trialCannotRun}
+		}
+	}
+	return r, t.m.saveTrial(modstore.Digest(b.Wasm, b.Manifest), r)
 }
 
 // ended turns an answer into a build's end as s.
@@ -222,11 +343,17 @@ func (t *ModuleBuild) commit(ctx context.Context, name string) string {
 // answerPlan is the plan as the model reads it. It is outside content
 // unless the source is the node's own (own): the names of the rights are the
 // manifest's words, as is the refusal's detail (R-RUN-13, R-RUN-17).
-func answerPlan(b modstore.Build, p modstore.Plan, own bool) (tool.Result, error) {
+func answerPlan(b modstore.Build, p modstore.Plan, trial string, own bool) (tool.Result, error) {
 	ans := buildAnswer{Build: p.SHA256, Module: b.Module, Language: b.Language, Size: p.Size, Version: p.Version,
-		Refusal: p.Refusal, Detail: p.RefusalDetail}
+		Refusal: p.Refusal, Detail: p.RefusalDetail, Trial: trial}
+	if p.Refusal == trialRefusal {
+		ans.Detail = "" // the trial line says the same
+	}
 	if p.Refusal != "" {
 		ans.Next = "the node would refuse to install this build; change the source and build again"
+		if p.Refusal == trialRefusal || p.Refusal == trialMissing {
+			ans.Next = "fix the module or its " + modtrial.FileName + " and build again"
+		}
 	} else {
 		ans.Rights, ans.Widening = rightsOf(p.Rights), rightsOf(p.Widening)
 		ans.Next = "module.install with this build shows the owner these rights and installs it after their press"

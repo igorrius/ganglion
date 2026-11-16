@@ -28,6 +28,7 @@ import (
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/experimental"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
+	"github.com/tetratelabs/wazero/sys"
 
 	"github.com/igorrius/ganglion/pdk"
 )
@@ -63,12 +64,20 @@ type Deps struct {
 	Prefix string
 	HTTP   *http.Client
 	Logger *slog.Logger
+	// Clock is the time the module sees, through now_ms and through the
+	// WASI clocks. It is for a trial run under a virtual clock; nil means
+	// the real clock (time.Now).
+	Clock func() time.Time
+	// Quiet turns off the runner's metrics: Handle records nothing. It is
+	// for a trial run, which must not touch the node's dashboard.
+	Quiet bool
 }
 
 // Module is a compiled module ready to handle calls. Calls are serialized.
 type Module struct {
 	manifest Manifest
 	tool     bool // a tool module (LoadTool): no log host function
+	clockSet bool // deps.Clock was injected, so the WASI clocks follow it
 	deps     Deps
 	rt       wazero.Runtime
 	compiled wazero.CompiledModule
@@ -87,6 +96,10 @@ func Load(ctx context.Context, wasm []byte, m Manifest, deps Deps) (*Module, err
 }
 
 func load(ctx context.Context, wasm []byte, m Manifest, deps Deps, tool bool) (*Module, error) {
+	clockSet := deps.Clock != nil
+	if deps.Clock == nil {
+		deps.Clock = time.Now
+	}
 	if deps.Logger == nil {
 		deps.Logger = slog.New(slog.DiscardHandler)
 	}
@@ -104,7 +117,7 @@ func load(ctx context.Context, wasm []byte, m Manifest, deps Deps, tool bool) (*
 		WithMemoryLimitPages(pages).
 		WithCloseOnContextDone(true).
 		WithCompilationCache(compilationCache))
-	mod := &Module{manifest: m, tool: tool, deps: deps, rt: rt, in: newInstruments()}
+	mod := &Module{manifest: m, tool: tool, clockSet: clockSet, deps: deps, rt: rt, in: newInstruments()}
 
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
 		_ = rt.Close(ctx)
@@ -140,7 +153,9 @@ func (m *Module) Handle(ctx context.Context, in pdk.Input) (pdk.Output, error) {
 	defer m.mu.Unlock()
 	started := time.Now()
 	out, result, err := m.handle(ctx, in)
-	m.observe(ctx, result, time.Since(started))
+	if !m.deps.Quiet {
+		m.observe(ctx, result, time.Since(started))
+	}
 	return out, err
 }
 
@@ -155,11 +170,9 @@ func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResu
 		return pdk.Output{}, resultError, err
 	}
 	var stderr limitedBuffer
-	inst, err := m.rt.InstantiateModule(experimental.WithMemoryAllocator(ctx, allocator), m.compiled, wazero.NewModuleConfig().
+	inst, err := m.rt.InstantiateModule(experimental.WithMemoryAllocator(ctx, allocator), m.compiled, m.clocks(wazero.NewModuleConfig()).
 		WithName("").
 		WithStartFunctions("_initialize").
-		WithSysWalltime().
-		WithSysNanotime().
 		WithRandSource(rand.Reader).
 		WithStderr(&stderr))
 	if err != nil {
@@ -205,6 +218,20 @@ func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResu
 // timeout, told apart from the caller's context ending first.
 var errOwnLimit = errors.New("runner: the module's time limit")
 
+// clocks gives the instance the real clocks, or the injected one when a
+// trial run set it.
+func (m *Module) clocks(cfg wazero.ModuleConfig) wazero.ModuleConfig {
+	if !m.clockSet {
+		return cfg.WithSysWalltime().WithSysNanotime()
+	}
+	return cfg.
+		WithWalltime(func() (int64, int32) {
+			t := m.deps.Clock()
+			return t.Unix(), int32(t.Nanosecond())
+		}, sys.ClockResolution(1)).
+		WithNanotime(func() int64 { return m.deps.Clock().UnixNano() }, sys.ClockResolution(1))
+}
+
 // callError is a call that did not finish: a timeout, the caller's context
 // ending, or a trap (out of memory among them: the module cannot grow and
 // aborts).
@@ -238,7 +265,7 @@ func (m *Module) instantiateHost(ctx context.Context) error {
 	}
 	_, err := b.
 		NewFunctionBuilder().WithFunc(func() int64 {
-		return time.Now().UnixMilli()
+		return m.deps.Clock().UnixMilli()
 	}).Export("now_ms").
 		NewFunctionBuilder().WithFunc(func(_ context.Context, mod api.Module, p uint32) {
 		mod.Memory().Write(p, m.pending)

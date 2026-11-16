@@ -20,6 +20,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/gitrepo"
 	"github.com/igorrius/ganglion/modstore"
+	"github.com/igorrius/ganglion/modtrial"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/sqlitedb"
@@ -126,7 +127,25 @@ type reloads struct {
 	check      error // every Check's
 	rolledBack []string
 	rollback   func(ctx context.Context, module string) (modstore.Outcome, error)
-	card       modstore.Card // every Card's; an empty name is an unknown module
+	card       modstore.Card   // every Card's; an empty name is an unknown module
+	trial      modtrial.Report // every Trial's, passed when zero
+	trialErr   error           // every Trial's error
+	trialFiles [][]byte        // the examples of every Trial call
+	inTrial    func()          // run inside every Trial call, before it answers
+}
+
+func (r *reloads) Trial(_ context.Context, _ modstore.Build, examples []byte, _ map[string]any) (modtrial.Report, error) {
+	r.trialFiles = append(r.trialFiles, examples)
+	if r.inTrial != nil {
+		r.inTrial()
+	}
+	if r.trialErr != nil {
+		return modtrial.Report{}, r.trialErr
+	}
+	if r.trial.Examples == nil && r.trial.Refused == "" {
+		return modtrial.Report{Passed: true}, nil
+	}
+	return r.trial, nil
 }
 
 func (r *reloads) Card(_ context.Context, name string) (modstore.Card, error) {
@@ -391,7 +410,8 @@ func goldenWindow(sha string) string {
 		"• Reads cells: —\n" +
 		"• Runs: `*/30 * * * *`; tool demo-reader.status\n" +
 		"• For the agent, demo-reader.status is described as `'Battery state of charge, grid and the last full reading of the Acme inverter.'`\n" +
-		"• Limits: 32 MiB, 20 s a call"
+		"• Limits: 32 MiB, 20 s a call\n" +
+		"No trial run: the module has no examples."
 }
 
 func question(t *testing.T, e *moduleEnv, c tool.Call) string {

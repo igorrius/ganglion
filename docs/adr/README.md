@@ -95,6 +95,7 @@ considered, how they compare, the decision and its consequences. See
 | [0086](0086-publish-the-nodes-image-to-ghcr-on-a-core-tag.md) | Publish the node's image to GHCR on a core tag | Accepted | 2026-11-14 |
 | [0088](0088-a-newer-question-replaces-an-older-one-of-the-same-tool.md) | Let a newer question replace a waiting one of the same tool from an earlier turn | Accepted | 2026-11-16 |
 | [0089](0089-set-a-reminder-without-a-press-in-a-clean-session.md) | Set a reminder without a press in a clean session, with a Delete button | Accepted | 2026-11-16 |
+| [0090](0090-a-module-is-tried-on-its-examples-before-install.md) | Try a module on its examples in a sandbox right after the build | Accepted | 2026-11-16 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

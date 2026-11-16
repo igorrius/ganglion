@@ -130,20 +130,32 @@ const (
 	AskModuleNewRuns     Key = "ask.module_new_runs"
 	AskModuleNewMemory   Key = "ask.module_new_memory"
 	AskModuleNewTimeout  Key = "ask.module_new_timeout"
-	SchedSummaryReminder Key = "sched.summary_reminder"
-	SchedSummaryTask     Key = "sched.summary_task"
-	SchedSummaryCommands Key = "sched.summary_commands"
-	SchedEntry           Key = "sched.entry"
-	SchedDetails         Key = "sched.details"
-	SchedOnce            Key = "sched.once"
-	SchedEvery           Key = "sched.every"
-	SchedEveryNext       Key = "sched.every_next"
-	SchedKindReminder    Key = "sched.kind_reminder"
-	SchedKindTask        Key = "sched.kind_task"
-	SchedSystem          Key = "sched.system"
-	SchedKindSystem      Key = "sched.kind_system"
-	SchedKindModule      Key = "sched.kind_module"
-	SchedAuditText       Key = "sched.audit_text"
+
+	AskModuleTrial        Key = "ask.module_trial"
+	AskModuleTrialNone    Key = "ask.module_trial_none"
+	AskModuleTrialExample Key = "ask.module_trial_example"
+	AskModuleTrialMessage Key = "ask.module_trial_message"
+	AskModuleTrialCell    Key = "ask.module_trial_cell"
+	AskModuleTrialNothing Key = "ask.module_trial_nothing"
+	AskModuleTrialNow     Key = "ask.module_trial_now"
+	AskModuleTrialMore    Key = "ask.module_trial_more"
+	AskModuleTrialNotRun  Key = "ask.module_trial_not_run"
+	AskModuleTrialFailed  Key = "ask.module_trial_failed"
+	AskModuleTrialError   Key = "ask.module_trial_error"
+	SchedSummaryReminder  Key = "sched.summary_reminder"
+	SchedSummaryTask      Key = "sched.summary_task"
+	SchedSummaryCommands  Key = "sched.summary_commands"
+	SchedEntry            Key = "sched.entry"
+	SchedDetails          Key = "sched.details"
+	SchedOnce             Key = "sched.once"
+	SchedEvery            Key = "sched.every"
+	SchedEveryNext        Key = "sched.every_next"
+	SchedKindReminder     Key = "sched.kind_reminder"
+	SchedKindTask         Key = "sched.kind_task"
+	SchedSystem           Key = "sched.system"
+	SchedKindSystem       Key = "sched.kind_system"
+	SchedKindModule       Key = "sched.kind_module"
+	SchedAuditText        Key = "sched.audit_text"
 
 	NoticeMachine      Key = "notice.machine"
 	ReportAuditClean   Key = "report.audit_clean"
@@ -440,7 +452,7 @@ var allKeys = []Key{
 	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, ReplyBuildLate, ReplyRestarting, StatusCommandsOff,
 	AskDestinationSet, AskDestinationRemove, AskModuleNotifyTo, AskGroupDisconnect, PlacePrivate, PlaceGroup, PlaceTopic, PlaceTopicNumber, PlaceTopicGiven, PlaceGeneral,
 	ButtonAllow, ButtonRefuse, GroupRequestCard, GroupNotConnected, GroupAllowed, GroupRefused,
-	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskModuleWrite, AskForgetFact, AskForgetSlug, AskForgetTopic, AskPersona, AskSkillScript, AskHostExec, AskPlan, AskModuleImport, AskModuleInstall, AskModuleNetwork, AskModuleSecrets, AskModuleCreates, AskModuleTakes, AskModuleReads, AskModuleReacts, AskModuleNotify, AskModuleRuns, AskModuleTool, AskModuleAbout, AskModuleLimits, AskModuleNew, AskModuleNewNetwork, AskModuleNewSecrets, AskModuleNewCells, AskModuleNewReads, AskModuleNewReacts, AskModuleNewNotify, AskModuleNewRuns, AskModuleNewMemory, AskModuleNewTimeout, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted, SchedReminderSet,
+	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskModuleWrite, AskForgetFact, AskForgetSlug, AskForgetTopic, AskPersona, AskSkillScript, AskHostExec, AskPlan, AskModuleImport, AskModuleInstall, AskModuleNetwork, AskModuleSecrets, AskModuleCreates, AskModuleTakes, AskModuleReads, AskModuleReacts, AskModuleNotify, AskModuleRuns, AskModuleTool, AskModuleAbout, AskModuleLimits, AskModuleNew, AskModuleNewNetwork, AskModuleNewSecrets, AskModuleNewCells, AskModuleNewReads, AskModuleNewReacts, AskModuleNewNotify, AskModuleNewRuns, AskModuleNewMemory, AskModuleNewTimeout, AskModuleTrial, AskModuleTrialNone, AskModuleTrialExample, AskModuleTrialMessage, AskModuleTrialCell, AskModuleTrialNothing, AskModuleTrialNow, AskModuleTrialMore, AskModuleTrialNotRun, AskModuleTrialFailed, AskModuleTrialError, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted, SchedReminderSet,
 	StatusNoAnswer, StatusVerdictOK, StatusVerdictWarn, StatusVerdictFail, StatusSectionNode, StatusSectionModels, StatusSectionDelivery, StatusSectionProblems, StatusSince, StatusSession, StatusSessionFallback, StatusSessionNone, StatusDay, StatusReasonLimitNear, StatusReasonLimitReached, StatusVersion, StatusVersionModified, StatusVersionUnknown, StatusUptime, StatusMemory, StatusMemoryNoLimit, StatusReasonMemoryHigh, StatusFiles, StatusFilesNoLogs, StatusModelAnswered, StatusModelSilent, StatusReasonModelFailed, StatusTurnsFailed, StatusTelegram, StatusTelegramWaiting, StatusReasonPollStale, StatusReasonConflict, StatusReasonUnauthorized, StatusTelegramWebhook, StatusTelegramWebhookQuiet, StatusReasonWebhookPending, StatusReasonWebhookFallback, StatusReasonWebhookFailing, StatusReasonWebhookTaken, StatusQueues, StatusReasonQueueOld, StatusReasonUndelivered, StatusSkills, StatusSkillRefused, StatusReasonSkillShape, StatusReasonSkillRead, StatusReasonSkillFrontmatter, StatusReasonSkillScript, StatusReasonSkillBuiltin, SecretsPrivateOnly, SecretsEmpty, SecretsHead, SecretsScopeNode, SecretsRow, SecretsLocked, SecretsRemoved, SecretsNotFound, SecretsResetAsk, SecretsResetDone, SecretsUsage, StatusSecretsLocked, StatusReasonSecretsKey, StatusModuleFallback, StatusReasonModuleFailed, StatusModulesLocal, StatusModuleOff, StatusReasonModuleCrashloop, StatusModuleStopped, StatusModulesUnread, StatusReasonModuleInit, StatusReasonModuleCells, StatusReasonModuleLoad, StatusReasonModuleNoAdmin, StatusJobs, StatusJobsIdle, StatusJobsNone, StatusSectionJobs, StatusJobBuild, StatusJobCommand, StatusJobBuildQueued, StatusJobCommandQueued, StatusReasonSchedLag, StatusReasonSchedFailing, StatusReasonSchedStalled, StatusUnitDay, StatusUnitHour, StatusUnitMin, StatusUnitSec, StatusSandboxReady, StatusSandboxOff, StatusReasonSandboxNotLinux, StatusReasonSandboxRoot, StatusReasonSandboxLandlock, StatusReasonSandboxDumpable, StatusReasonSandboxSelfTest,
 	ButtonHistory, ModulesUsage, ModulesNone, ModulesHeader, ModulesPrevious, ModulesFailed, ModulesLocalRow, ModulesStateRunning, ModulesStateOff, ModulesStateCrashloop, ModulesStateStopped, ModulesUnknown, ModulesUpdated, ModulesUpToDate, ModulesRolledBack, ModulesNothingToRollBack, ModulesStays, ModulesCardRunning, ModulesCardStopped, ModulesCardVersions, ModulesCardHealthOK, ModulesCardHealthFailed, ModulesJournalRow, ModulesMarkActive, ModulesMarkPrevious, ModulesMarkFailed, ModulesMarkRetired, ModulesCardSettings, ModulesCardReacts, ModulesCardFeeds, ModulesCardNotify, ModulesSettingRow, ModulesSettingUnset, ModulesSettingDefault, ModulesSettingRequired, ModulesConfigDone, ModulesConfigUndeclared, ModulesConfigKeys, ModulesConfigNoKeys, ModulesConfigWrongType, ModulesOffDone, ModulesOnDone, ModulesNotStarted, ModulesRemoved, ModuleNotifyLimit, ModuleChainStopped, CellsNone, CellsRow, CellsNoValue, CellsMore, CellsAgeNow, CellsAgeMin, CellsAgeHour, CellsAgeDay, CellsHistoryHead, CellsHistoryRow, CellsHistoryNone, CellsGone,
 	JobCardRunning, JobCardCount, JobCardQueued, JobCardDone, JobCardFailed, JobCardInterrupted, JobKindBuild, JobKindCommand,
