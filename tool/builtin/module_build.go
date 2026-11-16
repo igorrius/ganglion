@@ -185,7 +185,7 @@ func (t *ModuleBuild) build(ctx context.Context, a buildArgs, progress builder.P
 	}
 	b := modstore.Build{Module: modstore.LocalPrefix + a.Name, Wasm: art.Wasm, Manifest: art.Manifest, Language: string(art.Language),
 		Note: oneLine(a.Note), Commit: t.commit(ctx, a.Name)}
-	if err := t.m.saveBuild(art, buildRecord{Module: b.Module, Language: b.Language, Commit: b.Commit, Note: b.Note}); err != nil {
+	if err := t.m.saveBuild(art, buildRecord{Module: b.Module, Language: b.Language, Commit: b.Commit, Note: b.Note, Examples: ex.found}); err != nil {
 		return buildEnd{}, fmt.Errorf("%s: keep the build: %w", ModuleBuildTool, err)
 	}
 	// A report kept for this digest by an earlier build is about other
@@ -207,7 +207,7 @@ func (t *ModuleBuild) build(ctx context.Context, a buildArgs, progress builder.P
 // tried tries b on its examples when its plan p does not refuse it, and
 // returns the plan again with the trial's line ("" when the plan refused).
 func (t *ModuleBuild) tried(ctx context.Context, b modstore.Build, p modstore.Plan, ex examplesFile) (modstore.Plan, string, error) {
-	if p.Refusal != "" {
+	if p.Refusal != "" && p.Refusal != trialMissing { // no report yet: the trial is what is about to run
 		return p, "", nil
 	}
 	if !ex.found {
@@ -351,7 +351,7 @@ func answerPlan(b modstore.Build, p modstore.Plan, trial string, own bool) (tool
 	}
 	if p.Refusal != "" {
 		ans.Next = "the node would refuse to install this build; change the source and build again"
-		if p.Refusal == trialRefusal {
+		if p.Refusal == trialRefusal || p.Refusal == trialMissing {
 			ans.Next = "fix the module or its " + modtrial.FileName + " and build again"
 		}
 	} else {

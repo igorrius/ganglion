@@ -15,12 +15,12 @@ import (
 // Trial runs build b on its examples (the bytes of its examples.yaml; nil
 // when the source has none) in a sandbox that shares nothing with the node:
 // no cell is written, no state kept, no message counted or sent. Config
-// values are the manifest's defaults overlaid by each example's own config
-// only: the node's settings (the last argument, kept for the interface) do
-// not apply, so an example is deterministic and its stored report holds
-// after the settings change. A module with a cell
-// trigger and no network right also gets one run on the node's current
-// cells, which are only read.
+// values of an example are the manifest's defaults overlaid by the
+// example's own config only: the node's settings (cfg) do not apply to it,
+// so an example is deterministic and its stored report holds after the
+// settings change. A module with a cell trigger and no network right also
+// gets one run on the node's current cells, which are only read; that run
+// uses cfg, since it shows what the module does with the owner's settings.
 //
 // A refused examples file is a report with Refused set, not an error. An
 // error names what failed in the node's words (ErrCheckFailed); the

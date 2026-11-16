@@ -223,6 +223,9 @@ type buildRecord struct {
 	Language string `json:"language"`
 	Commit   string `json:"commit"`
 	Note     string `json:"note"`
+	// Examples says the source had an examples.yaml: such a build installs
+	// only with a passed trial report kept for its digest.
+	Examples bool `json:"examples,omitempty"`
 }
 
 // buildPath is the path of a build's file with ext.
@@ -339,11 +342,42 @@ func (m Modules) plan(ctx context.Context, b modstore.Build) (modstore.Plan, err
 	if err != nil {
 		return modstore.Plan{}, err
 	}
-	if ok && !r.Passed { // a build with no stored trial plans as before
+	if ok && !r.Passed {
 		p.Refusal, p.RefusalDetail = trialRefusal, r.ModelLine()
+		return p, nil
+	}
+	if !ok { // a build whose source had examples is never installed untried
+		examples, err := m.hadExamples(p.SHA256)
+		if err != nil {
+			return modstore.Plan{}, err
+		}
+		if examples {
+			p.Refusal = trialMissing
+		}
 	}
 	return p, nil
 }
+
+// hadExamples reads from the build's record whether its source had an
+// examples.yaml; a build with no record has none to try.
+func (m Modules) hadExamples(sha string) (bool, error) {
+	raw, err := os.ReadFile(m.buildPath(sha, ".json"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var rec buildRecord
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		return false, fmt.Errorf("the record of build %s is unreadable: %w", sha, err)
+	}
+	return rec.Examples, nil
+}
+
+// trialMissing is the plan's refusal of a build with examples and no trial
+// report: the trial has not run (or its report was lost).
+const trialMissing = "the trial run has not happened for this build; build the module again"
 
 // trialRefusal is the plan's refusal of a build whose trial run failed.
 const trialRefusal = "the trial run failed"

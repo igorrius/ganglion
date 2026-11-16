@@ -234,3 +234,49 @@ func TestInstallRefusedWhileTheModuleIsBuilding(t *testing.T) {
 		t.Fatal("an install ran while a build waited")
 	}
 }
+
+// (A) The first plan refused for another reason: no trial ran. Once the
+// owner fixes that, the build with examples is still not installable.
+func TestInstallOfABuildRefusedEarlierStaysUntriedUntilRebuilt(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "demo-reader")
+	e.writeExamples(t, []byte("examples: []\n"))
+	e.setConfig(t, "") // inverter_sn is required and not set
+	art := artifact(demoManifest, 1024, 1)
+	if ans := e.build(t, art); ans["refusal"] == nil || len(e.reloads.trialFiles) != 0 {
+		t.Fatalf("answer %v", ans)
+	}
+	e.setConfig(t, "SN1")
+	_, err := e.tool(builtin.ModuleInstallTool).(tool.Questioner).Question(context.Background(), installCall(art.SHA256))
+	if err == nil || !strings.Contains(err.Error(), "the trial run has not happened") {
+		t.Fatalf("question err %v", err)
+	}
+	// A rebuild now tries it and installs.
+	if ans := e.build(t, art); ans["refusal"] != nil || len(e.reloads.trialFiles) != 1 {
+		t.Fatalf("rebuild %v", ans)
+	}
+	question(t, e, installCall(art.SHA256))
+}
+
+// (B) A build whose record says it had examples and whose report is gone is
+// refused; one without examples is not.
+func TestInstallRefusesABuildWithExamplesAndNoReport(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "demo-reader")
+	e.writeExamples(t, []byte("examples: []\n"))
+	art := artifact(demoManifest, 1024, 1)
+	e.build(t, art)
+	if err := os.Remove(filepath.Join(e.m.Builds, art.SHA256+".trial.json")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := e.tool(builtin.ModuleInstallTool).(tool.Questioner).Question(context.Background(), installCall(art.SHA256))
+	if err == nil || !strings.Contains(err.Error(), "the trial run has not happened") {
+		t.Fatalf("question err %v", err)
+	}
+
+	e2 := newModuleEnv(t)
+	e2.source(t, "demo-reader")
+	art2 := artifact(demoManifest, 1024, 2)
+	e2.build(t, art2)
+	question(t, e2, installCall(art2.SHA256))
+}

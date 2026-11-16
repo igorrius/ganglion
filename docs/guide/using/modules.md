@@ -32,7 +32,7 @@ Before anything runs you get an install window with **Approve** and **Deny**. It
 
 A module comes with an `examples.yaml` beside its `manifest.yaml`: a short list of situations (a value arrives, time passes, a trigger fires) and what the module must do in each (how many messages it sends, which cells it reports, whether it fails). Right after a build, your node runs the built module on these examples in a sandbox. Nothing of your node changes: no real message goes out, no cell is written, and a module that uses the network gets the answers written in the file instead of reaching the service; a request to an address the example does not answer fails that step. The agent writes the examples for each module it builds, one per behaviour you asked for.
 
-The install window then has a "Trial run" section: how many examples passed, and for each the messages the module would have sent and the cells it would have reported. For a module that listens to cells and needs no network, a last run on your current cells shows what it would do right now.
+The install window then has a "Trial run" section: how many examples passed, and for each the messages the module would have sent and the cells it would have reported. For a module that listens to cells and needs no network, a last run on the cells as they were when the module was built, with your settings, shows what it would do with them.
 
 A failed trial blocks the install: the build is refused, no window opens, and the agent is told which example and step failed and why, so it can fix the module or the example and build again. A module with no `examples.yaml` can still be installed; the window says no trial was run.
 
