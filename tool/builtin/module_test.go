@@ -406,7 +406,8 @@ func goldenWindow(sha string) string {
 		"• Reads cells: —\n" +
 		"• Runs: `*/30 * * * *`; tool demo-reader.status\n" +
 		"• For the agent, demo-reader.status is described as `'Battery state of charge, grid and the last full reading of the Acme inverter.'`\n" +
-		"• Limits: 32 MiB, 20 s a call"
+		"• Limits: 32 MiB, 20 s a call\n" +
+		"No trial run: the module has no examples."
 }
 
 func question(t *testing.T, e *moduleEnv, c tool.Call) string {

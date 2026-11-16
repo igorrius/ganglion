@@ -112,7 +112,11 @@ func (t *ModuleInstall) prepare(ctx context.Context, c tool.Call) (installArgs, 
 	if err != nil {
 		return installArgs{}, modstore.Build{}, window{}, fmt.Errorf("%s: %w", ModuleInstallTool, err)
 	}
-	return a, b, windowOf(b, p, m), nil
+	r, ok, err := t.m.loadTrial(p.SHA256)
+	if err != nil {
+		return installArgs{}, modstore.Build{}, window{}, fmt.Errorf("%s: %w", ModuleInstallTool, err)
+	}
+	return a, b, windowOf(b, p, m, trialLines(c.Speak, r, ok)), nil
 }
 
 // check loads the build in a throwaway instance with the module's settings
