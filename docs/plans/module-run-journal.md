@@ -355,9 +355,9 @@ Last runs of demo-alerts:
   `docs/README.md` ("Where we are": one sentence with the issue link),
   this plan (tick the steps).
 
-- [ ] **Step 1:** write; placeholders only, no real names; the guide has
+- [x] **Step 1:** write; placeholders only, no real names; the guide has
   no spec ids or ADR talk.
-- [ ] **Step 2:** if `zensical` or `mkdocs` is installed, build the site
+- [x] **Step 2:** if `zensical` or `mkdocs` is installed, build the site
   strictly as the `Docs` workflow does (see `.github/workflows/`);
   otherwise check every new link by hand.
-- [ ] **Step 3:** commit `docs: the module run journal`.
+- [x] **Step 3:** commit `docs: the module run journal`.

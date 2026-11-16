@@ -57,6 +57,17 @@ All of these work in your private chat and none restarts the node.
 | `/modules off <name>` and `/modules on <name>` | Pauses and resumes a module. |
 | `/modules remove <name>` | Removes a module. Its cells and history stay, read-only. |
 | `/modules config <name> key=value` | Changes a setting the module declares. |
+| `/modules runs <name>` | Lists the module's last runs, newest first. See [Why did a module write?](#why-did-a-module-write). |
+
+## Why did a module write?
+
+The node keeps a journal of every run of a module: when it ran, what started it (the schedule, the agent's call of one of its tools, or a change in a value another module wrote), how long it took, how it ended, which kinds of calls it made (network requests, reading and writing values, messages), which values it wrote and how many messages it sent. It never keeps what the module said, the values it wrote or the arguments of a call.
+
+- **Reply to a module's message with `/why`.** The bot answers with the chain that led to it, oldest first: for example a reader that ran on its schedule and wrote a value, then an alert module that ran because that value changed and wrote to you. The chain stops at the module's own run if a schedule or the agent started it.
+- **Press Runs on a module's card** (`/modules <name>`) or send `/modules runs <name>` to see its last runs, newest first. A run started by another module's value says which module.
+- **Ask the agent.** `module.status` shows the agent the last 5 runs, and when you reply to a module's message and ask the agent about it, the agent is told how the message came about.
+
+The journal keeps the last 200 runs of each module. A message sent before the journal existed, or a run older than the last 200, has no chain: the bot says so. Removing a module drops its runs. Names that do not look like a module or a value name are shown as `?`.
 
 ## The crash-loop rule
 

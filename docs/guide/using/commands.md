@@ -16,6 +16,7 @@ There are no `/start` and `/help` commands. Telegram's command menu is set by th
 | `/tasks` | Lists reminders and scheduled tasks, each with Details, Delete and Run now buttons. | Admin | Admin chat |
 | `/memory` | Lists what the bot remembers, by topic. `/memory <topic>` shows one topic. | Admin | Admin chat |
 | `/modules` | Lists modules. See [Modules](modules.md) for the verbs. | Admin | Admin chat |
+| `/why` | Reply to a module's message with `/why` to see how it came about: the runs that led to it, each with when it ran, what started it, how long it took, how it ended, what it called and which values it wrote. Never shows the module's own text. | Admin | Admin chat |
 | `/cells` | Shows sensors and switches (cells) with their values. | Admin | Admin chat |
 | `/secrets` | Lists secret names, dates and which modules use them. Never shows a value. `/secrets rm <module or node> <NAME>` removes one; `/secrets reset` drops all after a key mismatch. | Admin | Admin chat |
 | `/metrics` | Sends metrics as a picture. Optional filter: `all`, `ganglion`, `runtime`, `process` or a word. | Admin | Admin chat |
