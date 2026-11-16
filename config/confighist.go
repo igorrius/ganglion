@@ -3,6 +3,11 @@ package config
 import (
 	"errors"
 	"log/slog"
+	"time"
+
+	"github.com/igorrius/ganglion/agent"
+	"github.com/igorrius/ganglion/tool/builtin"
+	"github.com/igorrius/ganglion/tool/pending"
 
 	"github.com/igorrius/ganglion/confighist"
 	"github.com/igorrius/ganglion/gitrepo"
@@ -44,4 +49,19 @@ func modulesFile(i do.Injector) confighist.ModulesFile {
 func destinationsFile(i do.Injector) confighist.DestinationsFile {
 	return confighist.DestinationsFile{File: settings.DestinationsFile{Path: settingsFile(do.MustInvoke[Bootstrap](i))},
 		History: do.MustInvoke[confighist.History](i)}
+}
+
+// Configuring provides the config tools (R-CFG-14 – R-CFG-16): the node's
+// file, its history, the Restart now button and the restart itself, read
+// at the press so Run's override is the one used.
+func Configuring() do.Provider[builtin.Configuring] {
+	return func(i do.Injector) (builtin.Configuring, error) {
+		return builtin.Configuring{
+			File:    settingsFile(do.MustInvoke[Bootstrap](i)),
+			History: do.MustInvoke[confighist.History](i),
+			Buttons: do.MustInvoke[*pending.Store](i),
+			Restart: func() { do.MustInvoke[agent.RestartFunc](i)() },
+			Now:     time.Now,
+		}, nil
+	}
 }

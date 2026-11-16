@@ -151,3 +151,5 @@ cmd/launch*.go
 cmd/update.go
 confighist/**
 config/confighist.go
+tool/builtin/config.go
+tool/builtin/config_history.go
