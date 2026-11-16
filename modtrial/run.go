@@ -113,18 +113,7 @@ func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix stri
 	}
 	m.ConfigValues = configValues(m, e.Config)
 	x.m = m
-	secrets := e.Secrets
-	mod, err := runner.Load(ctx, wasm, m, runner.Deps{
-		Clock:   clk.Now,
-		Quiet:   true,
-		State:   runner.NewMemState(),
-		Cells:   x.cells,
-		Notify:  x.notify,
-		HTTP:    &http.Client{Transport: newCannedTransport(e.HTTP)},
-		Secrets: func(n string) (string, bool) { v, ok := secrets[n]; return v, ok },
-		Prefix:  prefix,
-		Logger:  o.Log,
-	})
+	mod, err := x.load(ctx, wasm, e, prefix, o.Log)
 	if err != nil {
 		if ctx.Err() != nil { // the budget ended inside the load: a cut trial, not a broken module
 			res.Passed = false
@@ -156,6 +145,22 @@ func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix stri
 		res.Passed = res.Passed && res.Steps[i].OK
 	}
 	return res, nil
+}
+
+// load loads the module with the example's sandbox ports.
+func (x *exampleRun) load(ctx context.Context, wasm []byte, e Example, prefix string, log *slog.Logger) (*runner.Module, error) {
+	secrets := e.Secrets
+	return runner.Load(ctx, wasm, x.m, runner.Deps{
+		Clock:   x.clock.Now,
+		Quiet:   true,
+		State:   runner.NewMemState(),
+		Cells:   x.cells,
+		Notify:  x.notify,
+		HTTP:    &http.Client{Transport: newCannedTransport(e.HTTP)},
+		Secrets: func(n string) (string, bool) { v, ok := secrets[n]; return v, ok },
+		Prefix:  prefix,
+		Logger:  log,
+	})
 }
 
 // configValues is the manifest's defaults under the example's settings.
