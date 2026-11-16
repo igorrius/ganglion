@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/modtrial"
@@ -33,7 +34,11 @@ type window struct {
 	Rights   modstore.Rights   `json:"rights"`
 	Widening modstore.Rights   `json:"widening"`
 	About    map[string]string `json:"about"` // the node's tool name → the description the agent reads
-	Trial    []string          `json:"trial"` // the trial run's lines, as the owner reads them; kept so the press shows the same
+	// Trial is the trial run's lines as the owner reads them, redacted and in
+	// the asker's language: a language change between the question and the
+	// press makes the press refuse and the owner is asked again (safe by
+	// design). Kept so the press shows the same.
+	Trial []string `json:"trial"`
 }
 
 // windowOf is the window of a build whose plan has no refusal; trial is the
@@ -172,7 +177,11 @@ func trialLines(sp texts.Speaker, r modtrial.Report, ok bool) []string {
 		}
 		lines = append(lines, l...)
 	}
-	return capped(sp, lines, trialRunes)
+	// Redacted as one text, after escaping and before the cap: a module's
+	// harmless words ("Monkey: 5") would otherwise make the question refused
+	// for a secret, a pair can match across a line break, and the marker
+	// changes lengths.
+	return capped(sp, strings.Split(redact.String(strings.Join(lines, "\n")), "\n"), trialRunes)
 }
 
 // stepLines are the messages and the reported cells of one step.

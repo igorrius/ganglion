@@ -157,3 +157,24 @@ func TestInstallPressRefusesWhenTheTrialChanged(t *testing.T) {
 		t.Fatal("the press went through on a window with another trial")
 	}
 }
+
+func TestInstallWindowRedactsWhatTheOwnerCouldNotBeAsked(t *testing.T) {
+	for name, step := range map[string]modtrial.StepResult{
+		"pair":    {N: 1, Ran: true, OK: true, Messages: []string{"Monkey: 5"}},
+		"value":   {N: 1, Ran: true, OK: true, Reports: []modtrial.Reported{{Cell: "demo-reader.soc", Value: json.RawMessage(`{"token_count":1}`)}}},
+		"dangler": {N: 1, Ran: true, OK: true, Messages: []string{"press the key:", "second"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := modtrial.Report{Passed: true, Examples: []modtrial.ExampleResult{{Name: "a", Passed: true, Steps: []modtrial.StepResult{step}}}}
+			e, sha := trialEnv(t, &r)
+			c := installCall(sha)
+			q := question(t, e, c) // question() fails on an error, so whole() accepted it
+			if name != "dangler" && !strings.Contains(q, "[redacted]") {
+				t.Fatalf("no redaction marker:\n%s", q)
+			}
+			if _, err := e.tool(builtin.ModuleInstallTool).Run(context.Background(), pressed(c)); err != nil {
+				t.Fatalf("the press: %v", err)
+			}
+		})
+	}
+}
