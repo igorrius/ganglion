@@ -26,7 +26,26 @@ var buildRE = regexp.MustCompile(`\\?"build\\?":\s*\\?"([0-9a-f]{64})`)
 // withBuild is args with BuildToken replaced by the digest in the newest tool
 // result of r that holds one; args is returned as it is when there is none.
 func withBuild(args string, r providertest.Request) string {
-	if !strings.Contains(args, BuildToken) {
+	return fill(args, BuildToken, buildRE, r)
+}
+
+// JobToken stands in a scripted tool call's arguments for the job the newest
+// reply to a reminder names, which no script can know in advance. A note that
+// names none leaves it in place, so the call fails and so does the scenario.
+const JobToken = "$JOB"
+
+var jobRE = regexp.MustCompile(`a reminder, job ([a-z0-9][a-z0-9:._-]*[a-z0-9])`)
+
+// withJob is args with JobToken replaced by the job the newest message of r
+// that names one names; args is returned as it is when there is none.
+func withJob(args string, r providertest.Request) string {
+	return fill(args, JobToken, jobRE, r)
+}
+
+// fill is args with token replaced by the first group of re in the newest
+// message of r that matches; args as it is when none does.
+func fill(args, token string, re *regexp.Regexp, r providertest.Request) string {
+	if !strings.Contains(args, token) {
 		return args
 	}
 	for _, msg := range slices.Backward(r.Messages) {
@@ -39,8 +58,8 @@ func withBuild(args string, r providertest.Request) string {
 		if json.Unmarshal(raw, &text) != nil {
 			text = string(raw)
 		}
-		if m := buildRE.FindStringSubmatch(text); m != nil {
-			return strings.ReplaceAll(args, BuildToken, m[1])
+		if m := re.FindStringSubmatch(text); m != nil {
+			return strings.ReplaceAll(args, token, m[1])
 		}
 	}
 	return args

@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/router"
+	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/texts"
@@ -60,6 +61,17 @@ type ModuleCronFunc func(ctx context.Context, module, run string) error
 // NoModuleCron is the ModuleCronFunc of a node that hosts no modules.
 func NoModuleCron(context.Context, string, string) error { return nil }
 
+// ReminderButtonsFunc stores the buttons a sent reminder's message carries,
+// in sp's language, and returns them: Done for a recurring reminder, none
+// for a one-time one (ADR-0091).
+type ReminderButtonsFunc func(ctx context.Context, sp texts.Speaker, j schedule.Job) ([]event.Button, error)
+
+// NoReminderButtons is the ReminderButtonsFunc of a node without the schedule
+// tools: a reminder goes without buttons.
+func NoReminderButtons(context.Context, texts.Speaker, schedule.Job) ([]event.Button, error) {
+	return nil, nil
+}
+
 // ModuleTriggerFunc runs the listener of a module.trigger event once, as
 // the run with the event's id (R-RUN-15, ADR-0065): no model, no turn. A
 // run that failed is no error (its host counts it); an error is a run the
@@ -96,6 +108,9 @@ type Deps struct {
 	// register them (schedule.details, schedule.delete, schedule.run_now).
 	QuickActions map[string]pending.QuickAction
 	Jobs         Jobs // scheduled jobs, read when their time comes
+	// ReminderButtons are the buttons of a sent reminder (Done on a
+	// recurring one); NoReminderButtons when unset.
+	ReminderButtons ReminderButtonsFunc
 	// SystemJobs are the system jobs' code by job id (builtin.AuditJobID).
 	SystemJobs map[string]SystemJob
 	// ModuleCron runs a module's cron job (modhost); NoModuleCron when unset.
@@ -247,6 +262,9 @@ type Agent struct {
 func withOwnModules(d Deps) Deps {
 	if d.ModuleCron == nil {
 		d.ModuleCron = NoModuleCron
+	}
+	if d.ReminderButtons == nil {
+		d.ReminderButtons = NoReminderButtons
 	}
 	if d.ModuleTrigger == nil {
 		d.ModuleTrigger = NoModuleTrigger

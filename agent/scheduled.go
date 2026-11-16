@@ -38,12 +38,12 @@ const (
 // Only the scheduler's events count; a schedule event from any other
 // source does nothing. The job is read now, so one deleted after its
 // event was put does nothing, and an event that does not fit its job is
-// dropped. A reminder is sent as it is, with no model and no tools,
-// leaves a note in the chat's history and ends the turn. A task goes on
-// as a turn of its own conversation: the owner is the principal (an
-// admin check at run time decides the tools), the fixed instruction is
-// the message, the grant is on every call, and the answer goes to the
-// grant's reply target. A system job runs its registered code, without
+// dropped. A reminder is sent as it is, with no model and no tools (a
+// recurring one with its Done button), leaves a note in the chat's history
+// and ends the turn. A task goes on as a turn of its own conversation: the
+// owner is the principal (an admin check at run time decides the tools), the
+// fixed instruction is the message, the grant is on every call, and the
+// answer goes to the grant's reply target. A system job runs its registered code, without
 // a model, and ends the turn; so does a module job, through ModuleCron.
 func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 	if t.event.Kind != event.KindSchedule {
@@ -70,7 +70,9 @@ func (a *Agent) scheduled(ctx context.Context, t *turn) (bool, error) {
 	switch j.Kind {
 	case schedule.KindReminder:
 		t.made, t.replyConv = event.OriginReminder, j.Conv
-		t.reply(j.Text)
+		if err := a.sendReminder(ctx, t, j); err != nil {
+			return false, err
+		}
 		return true, a.noteReminder(ctx, t, j)
 	case schedule.KindTask:
 		t.record.Outcome = turns.OutcomeOK
@@ -95,6 +97,20 @@ func (a *Agent) asTask(ctx context.Context, t *turn, j schedule.Job) error {
 	g := j.Grant
 	t.grant, t.replyConv = &g, g.ReplyTo
 	return a.setRecipient(ctx, t, j.Owner)
+}
+
+// sendReminder adds reminder j's message to the turn, with the buttons it
+// carries in its owner's language (ADR-0091). The buttons are stored before
+// the message is, so a rerun of the event stores another set and the message,
+// keyed once, shows one of them.
+func (a *Agent) sendReminder(ctx context.Context, t *turn, j schedule.Job) error {
+	buttons, err := a.d.ReminderButtons(ctx, a.speaker(ctx, t), j)
+	if err != nil {
+		return fmt.Errorf("agent: buttons of reminder %s: %w", j.ID, err)
+	}
+	t.reply(j.Text)
+	t.out[len(t.out)-1].Buttons = buttons
+	return nil
 }
 
 // noteReminder adds a "[reminder]" note of the sent reminder to the

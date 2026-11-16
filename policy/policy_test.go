@@ -48,6 +48,7 @@ func with(c tool.Call, f func(*tool.Call)) tool.Call { f(&c); return c }
 func TestDecide(t *testing.T) {
 	read := spec("clock", tool.ClassRead, tool.PolicyAuto)
 	side := spec("schedule.create", tool.ClassSideEffect, tool.PolicyConfirm)
+	del := spec("schedule.delete", tool.ClassSideEffect, tool.PolicyConfirm)
 	sideAuto := spec("odd.side", tool.ClassSideEffect, tool.PolicyAuto)
 	denied := spec("danger", tool.ClassRead, tool.PolicyForbidden)
 	memory := spec("memory.write", tool.ClassSideEffect, tool.PolicyAuto)
@@ -114,6 +115,11 @@ func TestDecide(t *testing.T) {
 		{"reminder with a null grant, clean, is auto", side, with(base(), func(c *tool.Call) { c.Args = json.RawMessage(`{"kind":"reminder","grant":null}`) }), tool.PolicyAuto, journal.DecisionAllowed},
 		{"reminder, tainted, confirms", side, with(base(), func(c *tool.Call) { c.Args = args("kind", "reminder", "text", "x"); c.Tainted = true }), tool.PolicyConfirm, journal.DecisionConfirm},
 		{"reminder with a grant confirms", side, with(base(), func(c *tool.Call) { c.Args = json.RawMessage(`{"kind":"reminder","grant":{"tools":["clock"]}}`) }), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"job delete, clean, is auto (ADR-0091)", del, with(base(), func(c *tool.Call) { c.Args = args("id", "x-1") }), tool.PolicyAuto, journal.DecisionAllowed},
+		{"job delete, tainted, confirms", del, with(base(), func(c *tool.Call) { c.Args = args("id", "x-1"); c.Tainted = true }), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"job delete with unparsable arguments, clean, is auto: the tool refuses them", del, with(base(), func(c *tool.Call) { c.Args = json.RawMessage(`[1]`) }), tool.PolicyAuto, journal.DecisionAllowed},
+		{"job delete by a family principal is forbidden", del, with(base(), func(c *tool.Call) { c.Admin = false; c.Args = args("id", "x-1") }), tool.PolicyForbidden, journal.DecisionForbidden},
+		{"job delete in a task is out of its grant", del, with(base(), func(c *tool.Call) { c.Grant = grant; c.Args = args("id", "x-1") }), tool.PolicyForbidden, journal.DecisionOutOfGrant},
 		{"task, clean, confirms", side, with(base(), func(c *tool.Call) { c.Args = args("kind", "task", "text", "x") }), tool.PolicyConfirm, journal.DecisionConfirm},
 		{"schedule.create with unparsable arguments confirms", side, with(base(), func(c *tool.Call) { c.Args = json.RawMessage(`[1]`) }), tool.PolicyConfirm, journal.DecisionConfirm},
 		{"memory write, tainted, confirms", memory, with(base(), func(c *tool.Call) { c.Tainted = true }), tool.PolicyConfirm, journal.DecisionConfirm},

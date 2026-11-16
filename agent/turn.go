@@ -93,15 +93,16 @@ type turn struct {
 // origin is where what the turn stores now comes from (R-DLV-14). A reminder's text
 // was set when it was made, in a clean session or after the owner's press (R-POL-6),
 // so it is clean; a system job reports on memory outside content may have reached,
-// so it is tainted. It reads the turn's state, so it is called where that may be
-// read: in a stage, or under t.mu from a tool a CLI provider runs.
+// so it is tainted. A reminder's message names its job (ADR-0091). It reads the
+// turn's state, so it is called where that may be read: in a stage, or under t.mu
+// from a tool a CLI provider runs.
 func (t *turn) origin() event.Origin {
 	o := event.Origin{Kind: event.OriginTurn, Session: t.state.Session, Tainted: t.state.Tainted}
 	switch t.made {
 	case event.OriginTask:
 		o.Kind = event.OriginTask
 	case event.OriginReminder:
-		o.Kind, o.Tainted = event.OriginReminder, false
+		o.Kind, o.Tainted, o.Job = event.OriginReminder, false, t.schedule.Job
 	case event.OriginSystem:
 		o.Kind, o.Tainted = event.OriginSystem, true
 	case event.OriginTurn, event.OriginModule: // a module's message sets its own origin

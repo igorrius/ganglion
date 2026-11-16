@@ -33,8 +33,12 @@ type commandEntry struct {
 const commandPrefix = "[command] "
 
 // listTool is the tool /tasks runs: the list the model gets, with the
-// same messages and buttons (ruling R47).
-const listTool = "schedule.list"
+// same messages and buttons (ruling R47); listShown asks it to show them, as
+// the owner asked to see the list (ADR-0091).
+const (
+	listTool  = "schedule.list"
+	listShown = `{"show":true}`
+)
 
 // commandTable is the agent's commands, in the order they are listed: the
 // one source of what the agent answers and of the hints people see.
@@ -258,7 +262,7 @@ func (a *Agent) listTasks(ctx context.Context, t *turn, _ string) error {
 		return nil
 	}
 	shown := len(t.out)
-	text, err := a.useTool(ctx, t, provider.ToolCall{Name: listTool, Args: json.RawMessage(`{}`)}, false)
+	text, err := a.useTool(ctx, t, provider.ToolCall{Name: listTool, Args: json.RawMessage(listShown)}, false)
 	if err != nil {
 		return fmt.Errorf("agent: /tasks: %w", err)
 	}

@@ -105,7 +105,7 @@ func TestReminderCarriesACleanOrigin(t *testing.T) {
 	e.states.m["telegram:42"], _ = json.Marshal(State{V: StateVersion, Session: "cs", Started: t0, Last: t0, Tainted: true,
 		Messages: []provider.Message{{Role: provider.RoleUser, Content: "x"}}})
 	out := e.turn(t, fired(r))
-	want := event.Origin{Kind: event.OriginReminder, Session: "cs"}
+	want := event.Origin{Kind: event.OriginReminder, Session: "cs", Job: "r1"} // a reply names it (ADR-0091)
 	if got := originOf(t, out, "call mum"); got != want {
 		t.Errorf("origin %+v, want %+v", got, want)
 	}

@@ -42,4 +42,12 @@ A schedule is either a cron expression with five fields, or a single date and ti
 
 A reminder is set at once and shown back to you as a message with a **Delete** button, so a mistake is one press away. If the session is [tainted](tools-and-safety.md#tainted-sessions), the agent asks first, as it does for a task. You confirm a task when it is created. The confirmation lists what it may do: its tools, the web hosts it may fetch, the exact host commands, and who gets the reply. You approve that once. After that, runs need no button presses, and anything outside the approved list is denied with one notice. Tasks count against your [daily limits](../running/models.md#limits).
 
-`/tasks` lists them, one message each, with **Details**, **Delete** and **Run now**.
+`/tasks` lists them, one message each, with **Details**, **Delete** and **Run now**. When you ask the agent in words to show your reminders, you get the same messages; when it only looks one up for itself, nothing is posted to the chat.
+
+### Stopping a reminder
+
+A repeating reminder arrives with a **✅ Done** button. Press it and the reminder is deleted at once: the message stays, with a line saying the reminder is off. No model runs. A one-time reminder has no button, since it is over once sent. The button works for a week after the message.
+
+You can also answer in words. Reply to the reminder's message, for example "ordered" or "done, stop reminding", and the agent knows which reminder you mean and deletes it. You get one short line back, such as "🗑 Off: Order a flashlight.", and no question. The same goes for "stop the morning news task" said in plain chat.
+
+If the session is [tainted](tools-and-safety.md#tainted-sessions), the agent asks you to confirm the delete first, so a web page or a forwarded message cannot stop your jobs. System jobs, such as the nightly memory audit, and the jobs of modules cannot be deleted this way at all.
