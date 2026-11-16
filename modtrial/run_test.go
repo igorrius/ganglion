@@ -330,3 +330,13 @@ func TestInitRunsAtLoad(t *testing.T) {
 		t.Fatalf("init did not run before the step: %s", rep.Examples[2].Steps[0].out)
 	}
 }
+
+func TestFailedInitWithoutSteps(t *testing.T) {
+	m := testManifest()
+	m.Config["lifecycle"] = runner.ConfigKey{Type: "string"}
+	e := withOp(Example{Name: "none"}, "lifecycle", "fail")
+	rep := run(t, m, opts(), e)
+	if rep.Passed || rep.Examples[0].Passed {
+		t.Fatalf("report = %+v", rep)
+	}
+}

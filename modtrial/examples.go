@@ -168,6 +168,9 @@ func (c checker) example(re rawExample) (Example, error) {
 			return e, err
 		}
 	}
+	if len(re.Steps) == 0 {
+		return e, errors.New("has no steps")
+	}
 	if len(re.Steps) > MaxSteps {
 		return e, fmt.Errorf("has %d steps, at most %d", len(re.Steps), MaxSteps)
 	}

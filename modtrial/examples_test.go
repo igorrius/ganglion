@@ -123,9 +123,10 @@ func TestParseRefused(t *testing.T) {
 		{"too big", "examples: []\n#" + strings.Repeat("x", MaxFileBytes), "bytes"},
 		{"no examples", "examples: []\n", "no examples"},
 		{"too many examples", many(MaxExamples+1, func(i int) string { return "  - name: n" + string(rune('a'+i)) + "\n" }), "at most"},
+		{"no steps", ex("    steps: []\n"), "no steps"},
 		{"too many steps", ex("    steps:\n" + strings.Repeat("      - after: 1s\n", MaxSteps+1)), "steps"},
 		{"empty name", "examples:\n  - name: \"\"\n", "name"},
-		{"duplicate name", "examples:\n  - name: a\n  - name: a\n", "duplicate"},
+		{"duplicate name", "examples:\n  - name: a\n    steps: [{after: 1s}]\n  - name: a\n    steps: [{after: 1s}]\n", "duplicate"},
 		{"foreign cell", ex("    steps:\n      - cells: {other.x: 1}\n"), "cells.read"},
 		{"own cell not declared", ex("    steps:\n      - cells: {demo.nope: 1}\n"), "cells.read"},
 		{"unknown tool", ex("    steps:\n      - trigger: {tool: nope}\n"), "nope"},
@@ -192,7 +193,7 @@ func TestParseNoCronTrigger(t *testing.T) {
 
 func TestParseHTTPAllowed(t *testing.T) {
 	// The runner's fetch accepts http and https alike; so does the file.
-	_, err := Parse([]byte(ex("    http:\n      - {url: \"http://api.example.com/x\", status: 200}\n")), manifest(t), "demo")
+	_, err := Parse([]byte(ex("    http:\n      - {url: \"http://api.example.com/x\", status: 200}\n    steps:\n      - after: 1s\n")), manifest(t), "demo")
 	if err != nil {
 		t.Errorf("http: %v", err)
 	}

@@ -127,7 +127,9 @@ func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix stri
 	// modhost runs init once when it loads a module; so does the trial. A
 	// failed init is the first step's failure and nothing after it runs.
 	if err := mod.Init(ctx); err != nil {
-		res.Steps[0] = StepResult{N: 1, Ran: true, Kind: initKind(ctx, err)}
+		if len(res.Steps) > 0 { // an example built by hand may have none
+			res.Steps[0] = StepResult{N: 1, Ran: true, Kind: initKind(ctx, err)}
+		}
 		res.Passed = false
 		return res, nil
 	}
@@ -258,6 +260,9 @@ func failureKind(ctx context.Context, out pdk.Output, err error) string {
 // the node's kind already (as modhost.initOutcome reads it); any other error
 // is worded like a failed call.
 func initKind(ctx context.Context, err error) string {
+	if ctx.Err() != nil {
+		return kindBudget
+	}
 	if me, ok := errors.AsType[*runner.ModuleError](err); ok {
 		switch me.Kind {
 		case pdk.KindAuthFailed, pdk.KindFormat, kindStale:
