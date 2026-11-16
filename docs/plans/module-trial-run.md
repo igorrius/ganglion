@@ -150,7 +150,7 @@ func Parse(data []byte, m runner.Manifest, prefix string) (Examples, error)
 
 - [ ] **Step 1: Failing tests,** table-driven, with a manifest built by
   `runner.ParseManifest` from inline YAML that has a cell trigger on
-  `local/src.soc`, `cells.read: [local/src.soc]`, `cells.report: {level: …}`,
+  `src.soc`, `cells.read: [src.soc]`, `cells.report: {level: …}`,
   a cron trigger, a tool trigger `status`, `http.fetch: [api.example.com]`,
   `secret.get: [token]`, config key `threshold`. Cases:
   1. the design note's example file parses; `after: 10m` → `10*time.Minute`;
@@ -174,7 +174,7 @@ func Parse(data []byte, m runner.Manifest, prefix string) (Examples, error)
   `trigger` are `yaml.Node`s, then convert (a cell value node →
   `json.Marshal` of its decoded `any`; a trigger scalar "cell"/"cron" or
   a mapping with `tool` and optional `args`). Messages are short and in
-  the node's words, e.g. `examples.yaml: example "x" step 2: cell local/y is not in cells.read`.
+  the node's words, e.g. `examples.yaml: example "x" step 2: cell y.z is not in cells.read`.
 - [ ] **Step 4:** `go test ./modtrial` — PASS.
 - [ ] **Step 5:** commit `modtrial: the examples file of a module`.
 

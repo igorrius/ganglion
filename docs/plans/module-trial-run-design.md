@@ -33,11 +33,11 @@ sandbox where nothing of the node changes, right after the build.
 examples:
   - name: charging crosses 60%
     steps:
-      - cells: {local/inverter.soc: 55}
+      - cells: {inverter.soc: 55}
         trigger: cell
         expect: {messages: 0}
       - after: 10m
-        cells: {local/inverter.soc: 67}
+        cells: {inverter.soc: 67}
         trigger: cell
         expect: {messages: 1}
   - name: reader parses the answer
@@ -48,7 +48,7 @@ examples:
         body: '{"soc": 55}'
     steps:
       - trigger: cron
-        expect: {reports: [local/demo-reader.soc]}
+        expect: {reports: [demo-reader.soc]}
   - name: tool answers
     steps:
       - trigger: {tool: battery.status, args: {}}
