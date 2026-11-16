@@ -63,6 +63,9 @@ type repliedRow struct {
 	row    event.Outgoing
 	found  bool
 	failed bool
+	// run is the journal's row of the run that sent a module's message, when
+	// the message names one the journal still has (R-RUN-20).
+	run *modstore.Run
 }
 
 // lookupReplied reads from the outbox the message m answers when the channel
@@ -83,7 +86,31 @@ func (a *Agent) lookupReplied(ctx context.Context, transport, conv string, m eve
 		}
 		return repliedRow{failed: true}
 	}
-	return repliedRow{row: row, found: found}
+	return repliedRow{row: row, found: found, run: a.runOf(ctx, row, found)}
+}
+
+// runOf is the journal's row of the run that sent row, a module's message;
+// nil for any other message, one that names no run, one the journal no
+// longer has, and when reading it fails: the note is then what it was
+// before the journal (R-RUN-20).
+func (a *Agent) runOf(ctx context.Context, row event.Outgoing, found bool) *modstore.Run {
+	if !found || row.Origin == nil || row.Origin.Run == "" {
+		return nil
+	}
+	if _, ok := moduleOf(row.Origin); !ok {
+		return nil
+	}
+	run, ok, err := a.d.Local.Run(ctx, row.Origin.Module, row.Origin.Run)
+	if err != nil {
+		if ctx.Err() == nil {
+			a.log.Warn("agent: the run of a replied module message not read", "err", err)
+		}
+		return nil
+	}
+	if !ok {
+		return nil
+	}
+	return &run
 }
 
 // replyNoteFor sorts m's reply into a note, given what the outbox holds for it
@@ -101,7 +128,7 @@ func replyNoteFor(m event.Message, got repliedRow, session string, loc *time.Loc
 	case r.Forwarded:
 		return outsideNote(replyOutside, when(r.At, loc), cmp.Or(m.Quote, r.Text), r.HasFile)
 	case r.ByBot:
-		return botNote(m, got, session, when(r.At, loc))
+		return botNote(m, got, session, when(r.At, loc), loc)
 	case r.BySender:
 		return ownNote(when(r.At, loc), cmp.Or(m.Quote, r.Text), r.HasFile)
 	}
@@ -110,12 +137,14 @@ func replyNoteFor(m event.Message, got repliedRow, session string, loc *time.Loc
 
 // botNote is the note of a reply to the bot's message sent at, by its row.
 // A module's message brings the module's name and nothing of its text, the
-// channel's copy or a quote, so it does not taint (R-DLV-15, ADR-0073).
+// channel's copy or a quote, so it does not taint (R-DLV-15, ADR-0073); when
+// the journal has its run, the note also tells the chain of runs that led to
+// it, in the node's words (R-RUN-20).
 // The taint is checked before the session, so text written tainted is wrapped
 // even in its own session: an address in it never becomes known. A quote is not
 // checked against the row: a forged one gains nothing, since the sender's own
 // words are plain anyway.
-func botNote(m event.Message, got repliedRow, session, at string) replyNote {
+func botNote(m event.Message, got repliedRow, session, at string, loc *time.Location) replyNote {
 	r := m.Reply
 	switch {
 	case got.failed:
@@ -125,7 +154,11 @@ func botNote(m event.Message, got repliedRow, session, at string) replyNote {
 	}
 	o, body := got.row.Origin, cmp.Or(m.Quote, got.row.Text)
 	if name, ok := moduleOf(o); ok {
-		return replyNote{kind: replyModule, line: "[in reply to the message the module " + name + " sent at " + at + moduleWrote + "]"}
+		line := "[in reply to the message the module " + name + " sent at " + at
+		if got.run != nil {
+			line += "; how it came about: " + chainWords(*got.run, loc)
+		}
+		return replyNote{kind: replyModule, line: line + moduleWrote + "]"}
 	}
 	src, known := unknownSource, false
 	if o != nil {

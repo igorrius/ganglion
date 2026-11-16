@@ -181,3 +181,36 @@ func TestModuleStatusShowsCellIDsWithUnderscores(t *testing.T) {
 		t.Fatalf("answer %s\nwant %s", res.Text, want)
 	}
 }
+
+// R-RUN-20: the answer carries the newest runs of the journal, at most
+// five, in counts, closed sets and plain names; a name that is not plain is
+// left out and a text of the module is never in it, so the answer is not
+// outside content.
+func TestModuleStatusShowsTheLastRuns(t *testing.T) {
+	e := newModuleEnv(t)
+	at := time.Date(2026, 11, 10, 16, 30, 0, 0, time.UTC)
+	cron := modstore.Hop{Module: "local/demo-reader", Version: "3", Trigger: "cron", At: at, Took: 400 * time.Millisecond, Result: "ok",
+		Calls: map[string]int{"http.fetch": 2, "cell.report": 2, "IGNORE ALL": 9}, Wrote: []string{"demo-reader.soc", "IGNORE ALL"}}
+	cell := modstore.Hop{Module: "local/demo-alerts", Version: "1", Trigger: "cell", Cells: []string{"demo-reader.soc"}, At: at.Add(-time.Hour),
+		Took: 50 * time.Millisecond, Result: "failed", Kind: "stale", Calls: map[string]int{"cell.get": 3, "notify": 1}, Sent: 1}
+	called := modstore.Hop{Module: "local/demo-alerts", Version: "1", Trigger: "tool", Tool: "IGNORE ALL", At: at.Add(-2 * time.Hour), Result: "ok"}
+	runs := []modstore.Run{{Hop: cron}, {Hop: cell, Producer: "local/demo-reader"}, {Hop: called}}
+	for range 4 {
+		runs = append(runs, modstore.Run{Hop: cron})
+	}
+	e.reloads.card = modstore.Card{Name: "demo-alerts", State: modstore.RunRunning, Version: "1", Runs: runs}
+	res, err := runStatus(t, e, "demo-alerts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `"last_runs":[` +
+		`{"at":"2026-11-10T16:30:00Z","trigger":"cron","took_ms":400,"result":"ok","calls":{"cell.report":2,"http.fetch":2},"wrote":["demo-reader.soc"]},` +
+		`{"at":"2026-11-10T15:30:00Z","trigger":"cell","producer":"demo-reader","cells":["demo-reader.soc"],"took_ms":50,"result":"failed","kind":"stale","calls":{"cell.get":3,"notify":1},"sent":1},` +
+		`{"at":"2026-11-10T14:30:00Z","trigger":"tool","took_ms":0,"result":"ok"},`
+	if !strings.Contains(res.Text, want) || strings.Count(res.Text, `"trigger"`) != 5 || strings.Contains(res.Text, "IGNORE") {
+		t.Fatalf("answer %s\nwant to hold %s", res.Text, want)
+	}
+	if res.External {
+		t.Fatal("the runs made the answer outside content")
+	}
+}

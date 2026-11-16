@@ -92,6 +92,11 @@ const (
 	CallConfigGet  = "config.get"
 )
 
+// CallKinds are the host call kinds in the order a run's calls are listed.
+func CallKinds() []string {
+	return []string{CallHTTPFetch, CallCellGet, CallCellReport, CallNotify, CallStateGet, CallStatePut, CallSecretGet, CallConfigGet}
+}
+
 // called tells deps.OnCall that the module made a host call of kind.
 func (m *Module) called(ctx context.Context, kind string) {
 	if m.deps.OnCall != nil {

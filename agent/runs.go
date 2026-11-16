@@ -33,14 +33,13 @@ const (
 	runsButtonTTL = 24 * time.Hour
 	// unshown stands for a name the node does not show.
 	unshown = "?"
+	// The triggers a run's row names (modhost's closed set).
+	trigCron = "cron"
+	trigTool = "tool"
+	trigCell = "cell"
 	// hopIndent starts a hop's second line.
 	hopIndent = "   "
 )
-
-// callOrder is the host call kinds in the order a run's calls are listed:
-// the runner's constants, a closed set.
-var callOrder = []string{runner.CallHTTPFetch, runner.CallCellGet, runner.CallCellReport, runner.CallNotify,
-	runner.CallStateGet, runner.CallStatePut, runner.CallSecretGet, runner.CallConfigGet}
 
 // moduleRef is the argument of a Runs button: the module's short name.
 type moduleRef struct {
@@ -85,11 +84,11 @@ func numberOnly(s string) string {
 // empty, is the module whose run wrote the cells (shown in a list of runs).
 func (a *Agent) runCause(sp texts.Speaker, h modstore.Hop, producer string) string {
 	switch h.Trigger {
-	case "cron":
+	case trigCron:
 		return sp.Text(texts.RunCauseCron, nil)
-	case "tool":
+	case trigTool:
 		return sp.Text(texts.RunCauseTool, texts.Vars{"tool": plainShown(h.Tool)})
-	case "cell":
+	case trigCell:
 		vars := texts.Vars{varCells: plainList(h.Cells)}
 		if producer == "" {
 			return sp.Text(texts.RunCauseCell, vars)
@@ -108,18 +107,24 @@ func runResult(sp texts.Speaker, h modstore.Hop) string {
 	return sp.Text(texts.RunResultFailed, texts.Vars{varKind: plainShown(cmp.Or(h.Kind, h.Result))})
 }
 
-// runCalls is the second line of a run: its host calls by kind in a fixed
-// order, and the cells it wrote; "" when it made none and wrote none.
-func runCalls(sp texts.Speaker, h modstore.Hop) string {
+// callsList is a run's host calls as `http.fetch 2, cell.report 1`, in the
+// runner's order; "" when it made none. Only the runner's kinds are listed.
+func callsList(h modstore.Hop) string {
 	var calls []string
-	for _, kind := range callOrder {
+	for _, kind := range runner.CallKinds() {
 		if n := h.Calls[kind]; n > 0 {
 			calls = append(calls, kind+" "+strconv.Itoa(n))
 		}
 	}
+	return strings.Join(calls, ", ")
+}
+
+// runCalls is the second line of a run: its host calls by kind in a fixed
+// order, and the cells it wrote; "" when it made none and wrote none.
+func runCalls(sp texts.Speaker, h modstore.Hop) string {
 	var parts []string
-	if len(calls) > 0 {
-		parts = append(parts, strings.Join(calls, ", "))
+	if calls := callsList(h); calls != "" {
+		parts = append(parts, calls)
 	}
 	if len(h.Wrote) > 0 {
 		parts = append(parts, sp.Text(texts.RunWrote, texts.Vars{varCells: plainList(h.Wrote)}))
@@ -166,6 +171,69 @@ func (a *Agent) runsText(sp texts.Speaker, name string, runs []modstore.Run, now
 		lines = append(lines, a.hopText(sp, r.Hop, false, r.Producer, now))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// causeWords is what started a run, in the node's English words, for the
+// note the model reads (R-DLV-15).
+func causeWords(h modstore.Hop) string {
+	switch h.Trigger {
+	case trigCron:
+		return "by cron"
+	case trigTool:
+		return "by the agent's call of " + plainName(h.Tool)
+	case trigCell:
+		names := make([]string, len(h.Cells))
+		for i, c := range h.Cells {
+			names[i] = plainName(c)
+		}
+		return "on a change of " + strings.Join(names, ", ")
+	}
+	return unshown
+}
+
+// plainName is s when it passes the node's name pattern, else "?"; it is
+// not escaped, for the model's note.
+func plainName(s string) string {
+	if !modstore.PlainName(s) {
+		return unshown
+	}
+	return s
+}
+
+// hopWords is one run as the model's note tells it: `demo-reader v3 ran at
+// 16:30 by cron, called http.fetch 2 and wrote demo-reader.soc`. Names go
+// through the name pattern; no text of the module is in it.
+func hopWords(h modstore.Hop, loc *time.Location) string {
+	out := plainName(moduleName(h.Module)) + " v" + numberOnly(h.Version) + " ran at " + h.At.In(loc).Format("15:04") + " " + causeWords(h)
+	var parts []string
+	if calls := callsList(h); calls != "" {
+		parts = append(parts, "called "+calls)
+	}
+	if len(h.Wrote) > 0 {
+		names := make([]string, len(h.Wrote))
+		for i, c := range h.Wrote {
+			names[i] = plainName(c)
+		}
+		parts = append(parts, "wrote "+strings.Join(names, ", "))
+	}
+	switch len(parts) {
+	case 1:
+		out += " and " + parts[0]
+	case 2:
+		out += ", " + parts[0] + " and " + parts[1]
+	}
+	return out
+}
+
+// chainWords is the chain that led to run, oldest first, then the run
+// itself, for the model's note.
+func chainWords(run modstore.Run, loc *time.Location) string {
+	hops := append(slices.Clone(run.Chain), run.Hop)
+	words := make([]string, len(hops))
+	for i, h := range hops {
+		words[i] = hopWords(h, loc)
+	}
+	return strings.Join(words, "; then ")
 }
 
 // why is /why: replying to a module's message, it shows how the message

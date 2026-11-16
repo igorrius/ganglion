@@ -337,11 +337,11 @@ Last runs of demo-alerts:
   the answer's outside-content rule is unchanged (no string here is the
   module's text).
 
-- [ ] **Step 1: Failing tests:** the reply note with a run in the journal
+- [x] **Step 1: Failing tests:** the reply note with a run in the journal
   carries the chain and is not outside; with a run missing it is today's
   note; `module.status` golden with two runs.
-- [ ] **Step 2–4:** implement; `go test ./agent/... ./tool/...` — PASS.
-- [ ] **Step 5:** commit `agent, module.status: the agent sees a module's runs and a message's chain`.
+- [x] **Step 2–4:** implement; `go test ./agent/... ./tool/...` — PASS.
+- [x] **Step 5:** commit `agent, module.status: the agent sees a module's runs and a message's chain`.
 
 ### Task 7: Docs
 
