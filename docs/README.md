@@ -59,6 +59,10 @@ Start here when coming back to the project.
   examples is now `demo-reader`. Deye is still named where it is a fact:
   as the first user's device in the spec and the context view, in the
   record of finished phases and live checks, and in the owner's runbook.
+  A module is now tried on its examples before install: `module.build`
+  runs the build on its `examples.yaml` in a sandbox, a failed trial
+  refuses the install, and the install window shows what the module would
+  have sent ([#167](https://github.com/igorrius/ganglion/issues/167)).
 - **Done on 2026-11-13:** Telegram groups (MG), added that day when the
   owner moved the production bot's token to ganglion and removed the old
   bot. A group is connected from a card in the admin's private chat and

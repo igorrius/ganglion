@@ -12,6 +12,8 @@ import (
 
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/modstore"
+	"github.com/igorrius/ganglion/modtrial"
+	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/sandbox"
 )
 
@@ -24,7 +26,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-const templateDir = "../examples/modules/reflex-template"
+const templatesRoot = "../examples/modules"
 
 // producerReportsValue is a producer module, local/producer, whose cron run
 // reports its cell value as the operation in op_cron says.
@@ -51,7 +53,7 @@ func TestTheReflexTemplateNotifiesOnALowValue(t *testing.T) {
 	if os.Getenv("GANGLION_NET_TESTS") == "" {
 		t.Skip("it fetches crates from crates.io: set GANGLION_NET_TESTS=1 (make test-net)")
 	}
-	art := buildTemplate(t)
+	art := buildTemplate(t, "reflex-template")
 	reflex := modstore.Active{Module: "local/reflex-template", SHA256: art.SHA256, Wasm: art.Wasm, Manifest: art.Manifest}
 	e := newEnv(t, active(t, "local/producer", producerReportsValue), reflex)
 	e.start(t)
@@ -78,8 +80,44 @@ func TestTheReflexTemplateNotifiesOnALowValue(t *testing.T) {
 	}
 }
 
+// Each template's examples.yaml passes on the template built by the node's
+// own builder: the trial run a build gets is the one the template ships
+// with. Net-gated like the test above.
+func TestTheTemplatesPassTheirOwnExamples(t *testing.T) {
+	if os.Getenv("GANGLION_NET_TESTS") == "" {
+		t.Skip("it fetches crates from crates.io: set GANGLION_NET_TESTS=1 (make test-net)")
+	}
+	for _, name := range []string{"reflex-template", "reader-template"} {
+		t.Run(name, func(t *testing.T) {
+			art := buildTemplate(t, name)
+			m, err := runner.ParseManifest(art.Manifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(filepath.Join(templatesRoot, name, modtrial.FileName))
+			if err != nil {
+				t.Fatal(err)
+			}
+			ex, err := modtrial.Parse(data, m, name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rep, err := modtrial.Run(t.Context(), art.Wasm, m, name, ex, modtrial.Options{Start: time.Now()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !rep.Passed {
+				t.Fatalf("the trial failed: %s", rep.ModelLine())
+			}
+			if len(rep.Examples) != len(ex.Examples) {
+				t.Fatalf("%d of %d examples ran", len(rep.Examples), len(ex.Examples))
+			}
+		})
+	}
+}
+
 // buildTemplate builds the template with the node's builder, or skips.
-func buildTemplate(t *testing.T) builder.Artifact {
+func buildTemplate(t *testing.T, name string) builder.Artifact {
 	t.Helper()
 	b := builder.NewLocal(realSandbox(t), rustConfig(t))
 	can, err := b.Can(t.Context())
@@ -89,7 +127,7 @@ func buildTemplate(t *testing.T) builder.Artifact {
 	if can[builder.Rust] == "" {
 		t.Skip("the wasm32-wasip1 target is not installed (`rustup target add wasm32-wasip1`)")
 	}
-	art, log, err := b.Build(t.Context(), builder.Source{Name: "reflex-template", Dir: templateDir})
+	art, log, err := b.Build(t.Context(), builder.Source{Name: name, Dir: filepath.Join(templatesRoot, name)})
 	if err != nil && offline(string(log)) {
 		t.Skipf("crates.io is out of reach:\n%s", log)
 	}

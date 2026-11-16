@@ -1,6 +1,6 @@
 # Trial run of a module — implementation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** after `module.build`, run the real `.wasm` on the module's
 `examples.yaml` in a sandbox, tell the model the outcome in node words,
@@ -55,14 +55,14 @@ spec R-RUN-19. Read [conventions](../conventions.md) before writing code.
 - Produces: `runner.Deps.Clock func() time.Time` (nil = `time.Now`) and
   `runner.Deps.Quiet bool` (true = `Handle` records no metrics).
 
-- [ ] **Step 1: Failing test.** With the probe module (see how
+- [x] **Step 1: Failing test.** With the probe module (see how
   `runner/runnertest` loads it; reuse its loader), `Deps{Clock: func()
   time.Time { return time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC) }}`, call
   `Handle` with payload `{"op":"now"}` and assert the result's `unix` is
   that time's `Unix()`. A second test: `Clock` that returns a time 10 min
   later on the second call; assert the second result moved by 600.
-- [ ] **Step 2:** run `go test ./runner -run Clock` — FAIL.
-- [ ] **Step 3: Implement.**
+- [x] **Step 2:** run `go test ./runner -run Clock` — FAIL.
+- [x] **Step 3: Implement.**
   - `Deps.Clock`; in `load`, `if deps.Clock == nil { deps.Clock = time.Now }`.
   - `now_ms` returns `m.deps.Clock().UnixMilli()`.
   - In `handle`, replace `WithSysWalltime().WithSysNanotime()` with the
@@ -73,8 +73,8 @@ spec R-RUN-19. Read [conventions](../conventions.md) before writing code.
     `Module` decided in `load` (`deps.Clock != nil` before defaulting).
   - `Deps.Quiet`: `Handle` skips `m.observe` when set.
   - Doc comments on both fields say what they are for (a trial run).
-- [ ] **Step 4:** `go test ./runner/...` — PASS.
-- [ ] **Step 5:** commit `runner: an injected clock and a quiet mode for trial runs`.
+- [x] **Step 4:** `go test ./runner/...` — PASS.
+- [x] **Step 5:** commit `runner: an injected clock and a quiet mode for trial runs`.
 
 ### Task 2: The examples file
 
@@ -148,7 +148,7 @@ type Expect struct {
 func Parse(data []byte, m runner.Manifest, prefix string) (Examples, error)
 ```
 
-- [ ] **Step 1: Failing tests,** table-driven, with a manifest built by
+- [x] **Step 1: Failing tests,** table-driven, with a manifest built by
   `runner.ParseManifest` from inline YAML that has a cell trigger on
   `src.soc`, `cells.read: [src.soc]`, `cells.report: {level: …}`,
   a cron trigger, a tool trigger `status`, `http.fetch: [api.example.com]`,
@@ -168,15 +168,15 @@ func Parse(data []byte, m runner.Manifest, prefix string) (Examples, error)
      and mirror it); body over `MaxBodyBytes`; status outside 100..599; a
      secret not in `secret.get`; a config key the manifest does not
      declare; `expect.reports` naming a cell the module does not report.
-- [ ] **Step 2:** `go test ./modtrial` — FAIL.
-- [ ] **Step 3: Implement** `Parse`: decode with `yaml.NewDecoder` and
+- [x] **Step 2:** `go test ./modtrial` — FAIL.
+- [x] **Step 3: Implement** `Parse`: decode with `yaml.NewDecoder` and
   `KnownFields(true)` into raw structs whose `after`, `cells` and
   `trigger` are `yaml.Node`s, then convert (a cell value node →
   `json.Marshal` of its decoded `any`; a trigger scalar "cell"/"cron" or
   a mapping with `tool` and optional `args`). Messages are short and in
   the node's words, e.g. `examples.yaml: example "x" step 2: cell y.z is not in cells.read`.
-- [ ] **Step 4:** `go test ./modtrial` — PASS.
-- [ ] **Step 5:** commit `modtrial: the examples file of a module`.
+- [x] **Step 4:** `go test ./modtrial` — PASS.
+- [x] **Step 5:** commit `modtrial: the examples file of a module`.
 
 ### Task 3: The sandbox run
 
@@ -245,7 +245,7 @@ func Run(ctx context.Context, wasm []byte, m runner.Manifest, prefix string, ex 
 func (r Report) ModelLine() string
 ```
 
-- [ ] **Step 1: Failing tests** on the probe module (built as
+- [x] **Step 1: Failing tests** on the probe module (built as
   `runner/runnertest` does) with a manifest granting what each test
   needs; scripts go through example `config` keys `op_cron`, `op_cell`,
   `op_tool_<name>` (the probe reads them, see `probe.scripted`):
@@ -279,8 +279,8 @@ func (r Report) ModelLine() string
   12. `ModelLine` of a mixed report contains the counts, the example name
       in quotes, "step 2", the mismatch and the kind, and none of the
       message texts or values (assert with `strings.Contains`).
-- [ ] **Step 2:** `go test ./modtrial` — FAIL.
-- [ ] **Step 3: Implement.**
+- [x] **Step 2:** `go test ./modtrial` — FAIL.
+- [x] **Step 3: Implement.**
   - Per example: a virtual clock (`now := o.Start`; `after` adds), a
     `runner.Load` with `Deps{Clock: func() time.Time { return now }, Quiet:
     true, State: runner.NewMemState(), Cells: cells, Notify: notify, HTTP:
@@ -308,8 +308,8 @@ func (r Report) ModelLine() string
   - The whole run under `context.WithTimeout(ctx, Budget)`; steps not run
     are recorded `Ran: false`.
   - `Passed` = every example passed and `Refused == ""`.
-- [ ] **Step 4:** `go test ./modtrial ./runner/...` — PASS.
-- [ ] **Step 5:** commit `modtrial: run a build on its examples in a sandbox`.
+- [x] **Step 4:** `go test ./modtrial ./runner/...` — PASS.
+- [x] **Step 5:** commit `modtrial: run a build on its examples in a sandbox`.
 
 ### Task 4: The host and the build job
 
@@ -333,7 +333,7 @@ func (r Report) ModelLine() string
   - `buildAnswer.Trial string \`json:"trial,omitempty"\``.
   - Refusal text constant `trialRefusal = "the trial run failed"`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `modhost`: `Trial` with examples parses them, runs them with the
     manifest's config values from `cfg` over defaults, and for a module
     with a cell trigger and no `http.fetch` sets `Options.Current` from
@@ -352,8 +352,8 @@ func (r Report) ModelLine() string
   - `module.install` on a build whose stored trial failed refuses before
     asking (the plan's refusal), and on one with no trial file (a build
     from before this change) plans as before.
-- [ ] **Step 2:** run them — FAIL.
-- [ ] **Step 3: Implement.**
+- [x] **Step 2:** run them — FAIL.
+- [x] **Step 3: Implement.**
   - `modhost/trial.go`: parse the manifest (an error → wrap
     `ErrCheckFailed` as `Check` does), `configValues`, `modtrial.Parse`
     (a refusal → `Report{Refused: err.Error()}`), `Options{Start:
@@ -371,8 +371,8 @@ func (r Report) ModelLine() string
   - `answerPlan` gets the trial line (a parameter) and sets
     `buildAnswer.Trial`; `Next` on a trial refusal: "fix the module or
     its examples.yaml and build again".
-- [ ] **Step 4:** `go test ./modhost ./tool/... ./config/...` — PASS.
-- [ ] **Step 5:** commit `modhost, module.build: try a build on its examples and refuse a failed trial`.
+- [x] **Step 4:** `go test ./modhost ./tool/... ./config/...` — PASS.
+- [x] **Step 5:** commit `modhost, module.build: try a build on its examples and refuse a failed trial`.
 
 ### Task 5: The install window's trial section
 
@@ -393,7 +393,7 @@ func (r Report) ModelLine() string
   `AskModuleTrialNothing` ("nothing sent or written"), `AskModuleTrialNow`
   ("Now, on the current cells:"), `AskModuleTrialMore` ("… and {n} more").
 
-- [ ] **Step 1: Failing tests.** A window with a report of two examples
+- [x] **Step 1: Failing tests.** A window with a report of two examples
   (messages, a reported cell) and a `Now` shows, after the limits line,
   the section in order; message text with Markdown, a newline and a fake
   "✅ Approve" line is shown escaped on one line exactly as a module's
@@ -402,13 +402,13 @@ func (r Report) ModelLine() string
   whose lines pass 1200 runes ends with "… and N more" and the whole
   question stays under `tool.MaxQuestionRunes`; no trial file → the
   "No trial run" line; `sameWindow` holds between two `prepare` calls.
-- [ ] **Step 2:** run — FAIL.
-- [ ] **Step 3: Implement** `trialLines(sp, report) []string` with the
+- [x] **Step 2:** run — FAIL.
+- [x] **Step 3: Implement** `trialLines(sp, report) []string` with the
   cap, set `window.Trial` in `prepare` from `loadTrial`, and append the
   lines in `windowText` after `AskModuleLimits`. Add the keys and their
   `uk`/`ru` texts.
-- [ ] **Step 4:** `go test ./tool/... ./texts/... ./agent/...` — PASS.
-- [ ] **Step 5:** commit `module.install: the trial run in the install window`.
+- [x] **Step 4:** `go test ./tool/... ./texts/... ./agent/...` — PASS.
+- [x] **Step 5:** commit `module.install: the trial run in the install window`.
 
 ### Task 6: Templates, skill, lab and docs
 
@@ -427,27 +427,27 @@ func (r Report) ModelLine() string
   `examples.yaml` is for); `docs/plans/p1-all-in-one.md` only if #167 is
   listed there; tick this plan.
 
-- [ ] **Step 1:** write the two `examples.yaml` files so that, against
+- [x] **Step 1:** write the two `examples.yaml` files so that, against
   each template's `logic.rs` and manifest, every example passes: the
   reflex — a value under the threshold sends nothing, a crossing sends
   one message, a stale reading (`after` past `stale_after`) behaves as
   `logic.rs` decides; the reader — a canned answer of the template's API
   shape reports its cells, an HTTP 500 fails as the template fails it
   (`fails: true`). Read `logic.rs`/`engine.rs` to get them right.
-- [ ] **Step 2:** the skill: a short section "Examples": write
+- [x] **Step 2:** the skill: a short section "Examples": write
   `examples.yaml` with each module, one example per behaviour the owner
   asked for, counted expectations; the build's answer carries a `trial`
   line; a failed trial refuses the install, so fix the module or the
   example and build again; never put the owner's real data or secrets in
   examples.
-- [ ] **Step 3:** lab scenario `m4c-trial-run.yaml` modelled on
+- [x] **Step 3:** lab scenario `m4c-trial-run.yaml` modelled on
   `m4c-write-build-template.yaml`: build the reflex template with its
   examples → the build note carries `trial` and no refusal → the install
   question has the trial section. A second scripted scenario with an
   `examples.yaml` whose expectation fails → refusal, and the model's
   history holds the step and the mismatch but not the message text.
-- [ ] **Step 4:** docs as listed; the guide in a runner's words, no spec
+- [x] **Step 4:** docs as listed; the guide in a runner's words, no spec
   ids or ADR talk.
-- [ ] **Step 5:** `go build ./... && go vet ./... && go test ./... && go test -tags lab ./internal/chatlab/...`;
+- [x] **Step 5:** `go build ./... && go vet ./... && go test ./... && go test -tags lab ./internal/chatlab/...`;
   `GANGLION_NET_TESTS=1 go test ./modhost -run Template` when the network
   is available (report if not run). Commit `templates, skill, lab: examples and the trial run`.

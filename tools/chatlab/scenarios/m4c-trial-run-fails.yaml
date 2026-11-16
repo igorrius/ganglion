@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m4c-trial-run-fails
+why: >-
+  A failed trial blocks the install (R-RUN-19, ADR-0090): the agent writes an examples.yaml whose expectation
+  the module does not meet. The build's plan is refused with "the trial run failed", the model's history holds
+  the example's name, the step and the mismatch in the node's words but not the text of the message the module
+  sent, and the install, tried on that build, opens no window.
+covers:
+  - tool/builtin/module_build.go
+  - tool/builtin/module_install.go
+  - modtrial/**
+  - modhost/trial.go
+  - examples/modules/reflex-template/**
+repeat: 1
+model: scripted
+modules:
+  - {name: producer, manifest: modules/producer.yaml}
+script:
+  - {tool: module.import, args: '{"from":"reflex-template","name":"reflex-template"}'}
+  - {say: "The copy waits for your press."}
+  - {tool: module.write, args: '{"name":"reflex-template","path":"examples.yaml","content":"examples:\n  - name: a low value is said twice\n    steps:\n      - cells: {producer.value: 12}\n        trigger: cell\n        expect: {messages: 2}\n"}'}
+  - {tool: module.build, args: '{"name":"reflex-template","note":"build with a wrong example"}'}
+  - {say: "The build runs in the background; its card shows how it goes."}
+  - {say: "The trial failed: the example expects two messages and the module sends one; I will fix the example."}
+steps:
+  - say: "Make me a reflex from the template"
+  - facts:
+      questions: 1
+  - press: Approve
+  - facts:
+      questions: 0
+      journal:
+        - {tool: module.write, decision: allowed, count: 1}
+        - {tool: module.build, decision: allowed, result_contains: '"building":"reflex-template"', count: 1}
+        - {tool: module.install, count: 0}
+      history:
+        contains: "the trial run failed"
+      tainted: false
+  - facts:
+      history: {contains: 'a low value is said twice'}
+  - facts:
+      history: {contains: 'step 1: expected 2 messages, got 1'}
+  - facts:
+      history: {not_contains: "fell below 30"}

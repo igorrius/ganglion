@@ -17,9 +17,9 @@ import (
 // here: TestEveryFileIsEmbedded says which.
 //
 //go:embed reader-template/.gitignore reader-template/Cargo.lock reader-template/Cargo.toml
-//go:embed reader-template/README.md reader-template/manifest.yaml reader-template/src
+//go:embed reader-template/README.md reader-template/manifest.yaml reader-template/examples.yaml reader-template/src
 //go:embed reflex-template/.gitignore reflex-template/Cargo.lock reflex-template/Cargo.toml
-//go:embed reflex-template/README.md reflex-template/manifest.yaml reflex-template/src
+//go:embed reflex-template/README.md reflex-template/manifest.yaml reflex-template/examples.yaml reflex-template/src
 var files embed.FS
 
 // FS is the templates, one folder each.
