@@ -15,14 +15,17 @@ import (
 // Trial runs build b on its examples (the bytes of its examples.yaml; nil
 // when the source has none) in a sandbox that shares nothing with the node:
 // no cell is written, no state kept, no message counted or sent. Config
-// values come from cfg over the manifest's defaults. A module with a cell
+// values are the manifest's defaults overlaid by each example's own config
+// only: the node's settings (the last argument, kept for the interface) do
+// not apply, so an example is deterministic and its stored report holds
+// after the settings change. A module with a cell
 // trigger and no network right also gets one run on the node's current
 // cells, which are only read.
 //
 // A refused examples file is a report with Refused set, not an error. An
 // error names what failed in the node's words (ErrCheckFailed); the
 // module's own text goes to the log only.
-func (h *Host) Trial(ctx context.Context, b modstore.Build, examples []byte, cfg map[string]any) (modtrial.Report, error) {
+func (h *Host) Trial(ctx context.Context, b modstore.Build, examples []byte, _ map[string]any) (modtrial.Report, error) {
 	if examples == nil {
 		return modtrial.Report{Passed: true}, nil
 	}
@@ -31,7 +34,6 @@ func (h *Host) Trial(ctx context.Context, b modstore.Build, examples []byte, cfg
 		h.d.Log.Warn("modhost: a build's manifest does not load", "module", b.Module, "err", err)
 		return modtrial.Report{}, fmt.Errorf("%w: its manifest does not load", ErrCheckFailed)
 	}
-	m.ConfigValues = configValues(m, cfg)
 	short := modstore.ShortName(b.Module)
 	ex, err := modtrial.Parse(examples, m, short)
 	if err != nil {
@@ -40,19 +42,9 @@ func (h *Host) Trial(ctx context.Context, b modstore.Build, examples []byte, cfg
 		}
 		return modtrial.Report{}, err
 	}
-	// The node's settings sit under an example's own config values.
-	for i := range ex.Examples {
-		e := &ex.Examples[i]
-		if e.Config == nil {
-			e.Config = map[string]string{}
-		}
-		for k, v := range m.ConfigValues {
-			if _, ok := e.Config[k]; !ok {
-				e.Config[k] = v
-			}
-		}
-	}
-	g := h.newGiven(b.Module, m)
+	// A trial reads no secret of the node's: the examples bring fake ones,
+	// so the logger hides nothing and no secret store is touched.
+	g := &given{byName: map[string][]string{}, hide: func(s string) string { return s }}
 	o := modtrial.Options{Start: h.d.Now(), Log: h.moduleLog(g)}
 	if len(m.Listens()) > 0 && len(m.Capabilities.HTTPFetch) == 0 {
 		o.Current = h.currentCells(ctx, m)

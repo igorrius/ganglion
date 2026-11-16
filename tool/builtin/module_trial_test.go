@@ -123,15 +123,52 @@ func TestModuleBuildRefusesALinkedExamplesFile(t *testing.T) {
 	}
 }
 
-// A trial that cannot run ends the build job in the node's words.
-func TestModuleBuildTrialErrorEndsTheJob(t *testing.T) {
+// A trial that cannot run fails closed: a refused report is kept and the
+// plan refuses, in the node's words.
+func TestModuleBuildTrialErrorRefusesTheBuild(t *testing.T) {
 	e := newModuleEnv(t)
 	e.source(t, "demo-reader")
 	e.writeExamples(t, []byte("examples: []\n"))
 	e.reloads.trialErr = errors.New("the build did not pass its check: it does not load on this node")
-	e.b.art = artifact(demoManifest, 1024, 1)
-	res := e.buildNow(t, `{"name":"demo-reader"}`)
-	if !strings.Contains(res.Text, "it does not load on this node") || strings.Contains(res.Text, `"build"`) {
-		t.Fatalf("answer %s", res.Text)
+	ans := e.build(t, artifact(demoManifest, 1024, 1))
+	if ans["refusal"] != "the trial run failed" || strings.Contains(ans["refusal_detail"].(string), "load") {
+		t.Fatalf("answer %v", ans)
+	}
+}
+
+// The same artifact built again is tried afresh: examples fixed, the build
+// passes; examples removed, the old failure does not stay.
+func TestModuleRebuildForgetsTheEarlierTrial(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "demo-reader")
+	art := artifact(demoManifest, 1024, 1)
+	e.writeExamples(t, []byte("examples: []\n"))
+	e.reloads.trial = failedTrial
+	if ans := e.build(t, art); ans["refusal"] != "the trial run failed" {
+		t.Fatalf("answer %v", ans)
+	}
+	e.reloads.trial = modtrial.Report{Passed: true, Examples: []modtrial.ExampleResult{{Name: "a", Passed: true}}}
+	if ans := e.build(t, art); ans["refusal"] != nil || ans["trial"] != "trial: 1 example, all passed" {
+		t.Fatalf("fixed examples: %v", ans)
+	}
+	e.reloads.trial = failedTrial
+	e.build(t, art)
+	if err := os.Remove(filepath.Join(e.m.Workspace.Dir(), "modules", "demo-reader", modtrial.FileName)); err != nil {
+		t.Fatal(err)
+	}
+	if ans := e.build(t, art); ans["refusal"] != nil || ans["trial"] != "no examples.yaml: the module was not tried" {
+		t.Fatalf("removed examples: %v", ans)
+	}
+}
+
+// A build the plan refuses for another reason says nothing of a trial.
+func TestModuleBuildRefusedForAnotherReasonHasNoTrialLine(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "demo-reader")
+	e.writeExamples(t, []byte("examples: []\n"))
+	e.setConfig(t, "") // inverter_sn is required and not set
+	ans := e.build(t, artifact(demoManifest, 1024, 1))
+	if ans["refusal"] == nil || ans["refusal"] == "the trial run failed" || ans["trial"] != nil || len(e.reloads.trialFiles) != 0 {
+		t.Fatalf("answer %v", ans)
 	}
 }

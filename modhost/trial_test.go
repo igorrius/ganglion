@@ -9,6 +9,7 @@ import (
 
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/modhost"
+	"github.com/igorrius/ganglion/secrets"
 )
 
 const trialOK = `
@@ -70,22 +71,43 @@ func TestTrialHasNoNowRunWithoutACellTrigger(t *testing.T) {
 	}
 }
 
-// Config values come from cfg over the manifest's defaults: op_tool_word
-// echoes, and a cfg value turns it into a failing tool.
-func TestTrialUsesTheModulesSettings(t *testing.T) {
+// An example's own config value wins over the manifest's default, and the
+// node's settings do not apply to an example.
+func TestTrialExampleConfigWinsAndNodeSettingsAreIgnored(t *testing.T) {
 	e := newEnv(t)
-	file := []byte("examples:\n  - name: word\n    steps:\n      - trigger: {tool: word}\n")
 	b := build(t, probeManifest)
-	rep, err := e.host.Trial(context.Background(), b, file, nil)
+	plain := []byte("examples:\n  - name: word\n    steps:\n      - trigger: {tool: word}\n")
+	failing := []byte("examples:\n  - name: word\n    config: {op_tool_word: '{\"op\":\"fail\",\"value\":\"" + hostile + "\"}'}\n    steps:\n      - trigger: {tool: word}\n")
+	settings := map[string]any{"op_tool_word": `{"op":"fail","value":"x"}`}
+	rep, err := e.host.Trial(context.Background(), b, plain, settings)
 	if err != nil || !rep.Passed {
-		t.Fatalf("defaults: %+v %v", rep, err)
+		t.Fatalf("node settings applied to an example: %+v %v", rep, err)
 	}
-	rep, err = e.host.Trial(context.Background(), b, file, map[string]any{"op_tool_word": `{"op":"fail","value":"x"}`})
+	rep, err = e.host.Trial(context.Background(), b, failing, nil)
 	if err != nil || rep.Passed {
-		t.Fatalf("settings: %+v %v", rep, err)
+		t.Fatalf("example config ignored: %+v %v", rep, err)
 	}
-	if strings.Contains(rep.ModelLine(), "IGNORE") {
-		t.Fatal(rep.ModelLine())
+	if line := rep.ModelLine(); !strings.Contains(line, "word") || strings.Contains(line, "IGNORE") {
+		t.Fatalf("model line %q", line)
+	}
+}
+
+// A countingSource is a secret store that counts every read.
+type countingSource struct{ reads int }
+
+func (c *countingSource) Secret(string) (string, error) { c.reads++; return "hunter2-hunter2", nil }
+
+// A trial reads no secret of the node's.
+func TestTrialReadsNoSecret(t *testing.T) {
+	e := newEnv(t)
+	src := &countingSource{}
+	e.own = map[string]secrets.Source{"local/probe": src}
+	file := []byte("examples:\n  - name: w\n    secrets: {PROBE_TOKEN: fake}\n    steps:\n      - trigger: {tool: word}\n")
+	if _, err := e.host.Trial(context.Background(), build(t, probeManifest), file, nil); err != nil {
+		t.Fatal(err)
+	}
+	if src.reads != 0 {
+		t.Fatalf("%d secret reads", src.reads)
 	}
 }
 

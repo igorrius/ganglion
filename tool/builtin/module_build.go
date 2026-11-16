@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"slices"
+	"syscall"
 
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/internal/redact"
@@ -166,6 +167,12 @@ func (t *ModuleBuild) build(ctx context.Context, a buildArgs, progress builder.P
 	}
 	own := t.m.ownSource(a.Name)
 	art, log, err := t.m.Builder.Build(ctx, builder.Source{Name: a.Name, Dir: dir, Progress: progress})
+	var ex examplesFile
+	if err == nil { // read before the source is checked again, so the check covers the file
+		if ex, err = readExamples(dir); err != nil {
+			return buildEnd{}, fmt.Errorf("%s: read %s: %w", ModuleBuildTool, modtrial.FileName, err)
+		}
+	}
 	own = own && t.m.ownSource(a.Name)
 	if errors.Is(err, builder.ErrNoBuilder) {
 		return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
@@ -181,62 +188,106 @@ func (t *ModuleBuild) build(ctx context.Context, a buildArgs, progress builder.P
 	if err := t.m.saveBuild(art, buildRecord{Module: b.Module, Language: b.Language, Commit: b.Commit, Note: b.Note}); err != nil {
 		return buildEnd{}, fmt.Errorf("%s: keep the build: %w", ModuleBuildTool, err)
 	}
+	// A report kept for this digest by an earlier build is about other
+	// examples: this build is tried afresh.
+	if err := os.Remove(t.m.buildPath(art.SHA256, ".trial.json")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
+	}
 	p, err := t.m.plan(ctx, b)
 	if err != nil {
 		return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
 	}
-	line := noTrial
-	if p.Refusal == "" {
-		r, ran, err := t.trial(ctx, dir, b)
-		if err != nil {
-			return buildEnd{}, fmt.Errorf("%s: trial run: %w", ModuleBuildTool, err)
-		}
-		if ran {
-			line = r.ModelLine()
-			if p, err = t.m.plan(ctx, b); err != nil {
-				return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
-			}
-		}
+	p, line, err := t.tried(ctx, b, p, ex)
+	if err != nil {
+		return buildEnd{}, fmt.Errorf("%s: %w", ModuleBuildTool, err)
 	}
 	return ended(jobs.StateDone)(answerPlan(b, p, line, own))
+}
+
+// tried tries b on its examples when its plan p does not refuse it, and
+// returns the plan again with the trial's line ("" when the plan refused).
+func (t *ModuleBuild) tried(ctx context.Context, b modstore.Build, p modstore.Plan, ex examplesFile) (modstore.Plan, string, error) {
+	if p.Refusal != "" {
+		return p, "", nil
+	}
+	if !ex.found {
+		return p, noTrial, nil
+	}
+	r, err := t.trial(ctx, b, ex)
+	if err != nil {
+		return p, "", err
+	}
+	p, err = t.m.plan(ctx, b)
+	return p, r.ModelLine(), err
 }
 
 // noTrial is the trial line of a build whose source has no examples.
 const noTrial = "no " + modtrial.FileName + ": the module was not tried"
 
-// trial tries build b on the examples in dir and keeps the report beside
-// the build; false when the source has no examples file. A file that is
-// not a plain file, or is too big, is a refused report, never read in full.
-func (t *ModuleBuild) trial(ctx context.Context, dir string, b modstore.Build) (modtrial.Report, bool, error) {
-	var r modtrial.Report
-	path := filepath.Join(dir, modtrial.FileName)
-	info, err := os.Lstat(path)
+// examplesFile is the module's examples.yaml as read from its source: not
+// found, refused before it is parsed (refused, in the node's words), or its
+// bytes.
+type examplesFile struct {
+	found   bool
+	refused string
+	data    []byte
+}
+
+// readExamples reads dir's examples file through a root on dir, so a link
+// out of the folder is not followed. A file that is not a plain file or is
+// too big is refused, never read in full.
+func readExamples(dir string) (examplesFile, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return examplesFile{}, err
+	}
+	defer func() { _ = root.Close() }()
+	refuse := func(why string) (examplesFile, error) {
+		return examplesFile{found: true, refused: modtrial.FileName + ": " + why}, nil
+	}
+	info, err := root.Lstat(modtrial.FileName)
 	if errors.Is(err, fs.ErrNotExist) {
-		return r, false, nil
+		return examplesFile{}, nil
 	}
 	if err != nil {
-		return r, false, err
+		return examplesFile{}, err
 	}
-	switch {
-	case !info.Mode().IsRegular():
-		r = modtrial.Report{Refused: modtrial.FileName + ": it is not a plain file"}
-	case info.Size() > modtrial.MaxFileBytes:
-		r = modtrial.Report{Refused: fmt.Sprintf("%s: the file is %d bytes, at most %d", modtrial.FileName, info.Size(), modtrial.MaxFileBytes)}
-	default:
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return r, false, err
-		}
+	if !info.Mode().IsRegular() {
+		return refuse("it is not a plain file")
+	}
+	f, err := root.OpenFile(modtrial.FileName, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return refuse("it cannot be opened")
+	}
+	defer func() { _ = f.Close() }()
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+		return refuse("it is not a plain file")
+	}
+	data, err := io.ReadAll(io.LimitReader(f, modtrial.MaxFileBytes+1))
+	if err != nil {
+		return examplesFile{}, err
+	}
+	if len(data) > modtrial.MaxFileBytes {
+		return refuse(fmt.Sprintf("the file is over %d bytes", modtrial.MaxFileBytes))
+	}
+	return examplesFile{found: true, data: data}, nil
+}
+
+// trial tries build b on ex and keeps the report beside the build. A trial
+// that cannot run is kept as a refused report, so the build is not
+// installable.
+func (t *ModuleBuild) trial(ctx context.Context, b modstore.Build, ex examplesFile) (modtrial.Report, error) {
+	r := modtrial.Report{Refused: ex.refused}
+	if ex.refused == "" {
 		line, err := t.m.line(b.Module)
 		if err != nil {
-			return r, false, err
+			return r, err
 		}
-		if r, err = t.m.Host.Trial(ctx, b, data, line.Config); err != nil {
-			return r, false, err
+		if r, err = t.m.Host.Trial(ctx, b, ex.data, line.Config); err != nil {
+			r = modtrial.Report{Refused: "the trial could not run on this node"}
 		}
 	}
-	sha := modstore.Digest(b.Wasm, b.Manifest)
-	return r, true, t.m.saveTrial(sha, r)
+	return r, t.m.saveTrial(modstore.Digest(b.Wasm, b.Manifest), r)
 }
 
 // ended turns an answer into a build's end as s.

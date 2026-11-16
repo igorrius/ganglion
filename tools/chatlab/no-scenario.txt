@@ -67,6 +67,7 @@ modstore/journal.go
 modstore/notify.go
 modstore/store.go
 modstore/release/**
+modtrial/**
 modules/html2md/**
 node/lock_unix.go
 node/node.go
@@ -83,7 +84,6 @@ queue/sqlqueue/sqlqueue.go
 queue/sqlqueue/telemetry.go
 router/router.go
 router/rules/**
-modtrial/**
 runner/cells.go
 runner/contract.go
 runner/manifest.go
