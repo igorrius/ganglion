@@ -136,3 +136,49 @@ func TestTrialNamesALoadFailureInTheNodesWords(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+// The run on the current cells uses the node's settings for the module; an
+// example does not.
+func TestTrialNowRunUsesTheNodesSettings(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	if err := e.cells.DefineOwned(ctx, cells.OwnedDef{ID: "p.soc", Owner: "local/p", Kind: cells.KindSensor}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.cells.Report(ctx, "p.soc", json.RawMessage("7"), cells.CauseExternal, "module:local/p"); err != nil {
+		t.Fatal(err)
+	}
+	b := build(t, listenerManifest("p.soc"))
+	rep, err := e.host.Trial(ctx, b, []byte(trialOK), nil)
+	if err != nil || rep.Now == nil || !rep.Now.OK {
+		t.Fatalf("default settings: %+v %v", rep.Now, err)
+	}
+	rep, err = e.host.Trial(ctx, b, []byte(trialOK), map[string]any{"op_cell": `{"op":"fail","value":"x"}`})
+	if err != nil || rep.Now == nil || rep.Now.OK || rep.Now.Kind == "" {
+		t.Fatalf("the owner's settings: %+v %v", rep.Now, err)
+	}
+	if !rep.Passed {
+		t.Fatalf("the settings reached an example: %+v", rep)
+	}
+}
+
+// What a trial logs is marked, so it is not read as the live module's.
+func TestTrialLogsAreMarkedAsATrial(t *testing.T) {
+	e := newEnv(t)
+	failing := []byte("examples:\n  - name: word\n    config: {op_tool_word: '{\"op\":\"log\",\"value\":\"hello\"}'}\n    steps:\n      - trigger: {tool: word}\n")
+	if _, err := e.host.Trial(context.Background(), build(t, probeManifest), failing, nil); err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for l := range strings.SplitSeq(strings.TrimSpace(e.logText()), "\n") {
+		if strings.Contains(l, "hello") {
+			seen++
+			if !strings.Contains(l, "trial=true") {
+				t.Fatalf("a trial log line is not marked: %s", l)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatalf("the module's log line did not reach the log: %q", e.logText())
+	}
+}

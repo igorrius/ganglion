@@ -2,6 +2,7 @@ package builtin_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -39,7 +40,7 @@ func TestModuleBuildRefusesAFailedTrial(t *testing.T) {
 	e.reloads.trial = failedTrial
 	ans := answerOf(t, e, demoManifest)
 	line := failedTrial.ModelLine()
-	if ans["refusal"] != "the trial run failed" || ans["refusal_detail"] != line || ans["trial"] != line {
+	if ans["refusal"] != "the trial run failed" || ans["refusal_detail"] != nil || ans["trial"] != line {
 		t.Fatalf("answer %v", ans)
 	}
 	if next, _ := ans["next"].(string); !strings.Contains(next, "examples.yaml") {
@@ -131,7 +132,7 @@ func TestModuleBuildTrialErrorRefusesTheBuild(t *testing.T) {
 	e.writeExamples(t, []byte("examples: []\n"))
 	e.reloads.trialErr = errors.New("the build did not pass its check: it does not load on this node")
 	ans := e.build(t, artifact(demoManifest, 1024, 1))
-	if ans["refusal"] != "the trial run failed" || strings.Contains(ans["refusal_detail"].(string), "load") {
+	if ans["refusal"] != "the trial run failed" || ans["trial"] != "trial: the build does not load on this node" || ans["refusal_detail"] != nil {
 		t.Fatalf("answer %v", ans)
 	}
 }
@@ -170,5 +171,66 @@ func TestModuleBuildRefusedForAnotherReasonHasNoTrialLine(t *testing.T) {
 	ans := e.build(t, artifact(demoManifest, 1024, 1))
 	if ans["refusal"] == nil || ans["refusal"] == "the trial run failed" || ans["trial"] != nil || len(e.reloads.trialFiles) != 0 {
 		t.Fatalf("answer %v", ans)
+	}
+}
+
+// Until the real report is kept, the build has one that is not passed: a
+// trial that never ends leaves the build refused (item 1).
+func TestModuleBuildKeepsAPlaceholderWhileTheTrialRuns(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "demo-reader")
+	e.writeExamples(t, []byte("examples: []\n"))
+	art := artifact(demoManifest, 1024, 1)
+	var during modtrial.Report
+	e.reloads.inTrial = func() {
+		data, err := os.ReadFile(filepath.Join(e.m.Builds, art.SHA256+".trial.json"))
+		if err != nil {
+			t.Errorf("no report while the trial runs: %v", err)
+			return
+		}
+		if err := json.Unmarshal(data, &during); err != nil {
+			t.Error(err)
+		}
+	}
+	e.build(t, art)
+	if during.Error != "the trial did not finish" || during.Passed {
+		t.Fatalf("report during the trial: %+v", during)
+	}
+	// The real report replaced it.
+	data, err := os.ReadFile(filepath.Join(e.m.Builds, art.SHA256+".trial.json"))
+	if err != nil || strings.Contains(string(data), "did not finish") {
+		t.Fatalf("stored %s %v", data, err)
+	}
+}
+
+// A build whose stored report is the placeholder is refused by the plan.
+func TestInstallRefusesAPlaceholderReport(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "demo-reader")
+	art := artifact(demoManifest, 1024, 1)
+	e.build(t, art)
+	e.keepTrial(t, art.SHA256, modtrial.Report{Error: "the trial did not finish"})
+	_, err := e.tool(builtin.ModuleInstallTool).(tool.Questioner).Question(context.Background(), installCall(art.SHA256))
+	if err == nil || !strings.Contains(err.Error(), "the trial run failed") {
+		t.Fatalf("question err %v", err)
+	}
+}
+
+// An install of a digest while a rebuild of the same module waits or runs
+// is refused, in node words.
+func TestInstallRefusedWhileTheModuleIsBuilding(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "demo-reader")
+	art := artifact(demoManifest, 1024, 1)
+	e.build(t, art)
+	if _, err := e.startBuild(t, `{"name":"demo-reader"}`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := e.tool(builtin.ModuleInstallTool).(tool.Questioner).Question(context.Background(), installCall(art.SHA256))
+	if err == nil || !strings.Contains(err.Error(), "a build of this module is running") {
+		t.Fatalf("question err %v", err)
+	}
+	if _, err := e.tool(builtin.ModuleInstallTool).Run(context.Background(), pressed(installCall(art.SHA256))); err == nil {
+		t.Fatal("an install ran while a build waited")
 	}
 }

@@ -213,3 +213,30 @@ func TestParseStart(t *testing.T) {
 		t.Fatalf("no start: %v %v", none.Examples[0].Start, err)
 	}
 }
+
+func TestParseRefusesAnUnknownTriggerKey(t *testing.T) {
+	_, err := Parse([]byte(ex("    steps:\n      - trigger: {tool: status, arg: {a: 1}}\n")), manifest(t), "demo")
+	if !errors.Is(err, ErrExamples) || !strings.Contains(err.Error(), `trigger: unknown key "arg"`) {
+		t.Fatalf("err %v", err)
+	}
+}
+
+func TestParseOfAnEmptyFile(t *testing.T) {
+	for _, f := range []string{"", "  \n# only a comment\n"} {
+		_, err := Parse([]byte(f), manifest(t), "demo")
+		if !errors.Is(err, ErrExamples) || !strings.Contains(err.Error(), "the file is empty") {
+			t.Fatalf("%q: err %v", f, err)
+		}
+	}
+}
+
+// A refusal names the same cell on every parse: the cells are checked in
+// sorted order.
+func TestParseNamesTheFirstBadCellInOrder(t *testing.T) {
+	for range 20 {
+		_, err := Parse([]byte(ex("    steps:\n      - cells: {zz.a: 1, aa.b: 1, mm.c: 1}\n")), manifest(t), "demo")
+		if err == nil || !strings.Contains(err.Error(), "cell aa.b is not in cells.read") {
+			t.Fatalf("err %v", err)
+		}
+	}
+}

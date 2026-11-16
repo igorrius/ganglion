@@ -42,6 +42,9 @@ type Options struct {
 	// Current, when set, seeds a run on the node's current cells: their ids
 	// and values, read by the host. Nil skips that run.
 	Current map[string]Seeded
+	// NowConfig is the node's settings for the module, which the run on the
+	// current cells uses over the manifest's defaults; examples never see it.
+	NowConfig map[string]string
 }
 
 // Seeded is a cell of the node as the host read it.
@@ -68,7 +71,7 @@ func Run(ctx context.Context, wasm []byte, m runner.Manifest, prefix string, ex 
 		rep.Passed = rep.Passed && r.Passed
 	}
 	if len(o.Current) > 0 {
-		now := Example{Name: "now", Steps: []Step{{Trigger: Trigger{Kind: kindCell}}}}
+		now := Example{Name: "now", Config: o.NowConfig, Steps: []Step{{Trigger: Trigger{Kind: kindCell}}}}
 		r, err := runExample(ctx, wasm, m, prefix, now, o, o.Current)
 		if err != nil {
 			return Report{}, err
@@ -93,7 +96,7 @@ type exampleRun struct {
 func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix string, e Example, o Options, seed map[string]Seeded) (ExampleResult, error) {
 	res := ExampleResult{Name: e.Name, Passed: true}
 	for i := range e.Steps {
-		res.Steps = append(res.Steps, StepResult{N: i + 1})
+		res.Steps = append(res.Steps, StepResult{N: i + 1, Skipped: SkipBudget})
 	}
 	if ctx.Err() != nil { // no time left: nothing ran
 		res.Passed = false
@@ -130,10 +133,7 @@ func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix stri
 	// modhost runs init once when it loads a module; so does the trial. A
 	// failed init is the first step's failure and nothing after it runs.
 	if err := mod.Init(ctx); err != nil {
-		if len(res.Steps) > 0 { // an example built by hand may have none
-			res.Steps[0] = StepResult{N: 1, Ran: true, Kind: initKind(ctx, err)}
-		}
-		res.Passed = false
+		failInit(ctx, &res, err)
 		return res, nil
 	}
 
@@ -150,6 +150,23 @@ func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix stri
 		res.Passed = res.Passed && res.Steps[i].OK
 	}
 	return res, nil
+}
+
+// failInit records a failed init: the first step's failure, and the later
+// steps skipped for it, unless the trial's own time ended it.
+func failInit(ctx context.Context, res *ExampleResult, err error) {
+	res.Passed = false
+	if len(res.Steps) == 0 { // an example built by hand may have none
+		return
+	}
+	kind := initKind(ctx, err)
+	res.Steps[0] = StepResult{N: 1, Ran: true, Kind: kind}
+	if kind == kindBudget {
+		return
+	}
+	for i := 1; i < len(res.Steps); i++ {
+		res.Steps[i].Skipped = SkipEarlier
+	}
 }
 
 // load loads the module with the example's sandbox ports.

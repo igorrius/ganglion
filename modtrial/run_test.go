@@ -354,3 +354,81 @@ func TestFailedInitWithoutSteps(t *testing.T) {
 		t.Fatalf("report = %+v", rep)
 	}
 }
+
+// The run on the current cells uses the node's settings over the manifest's
+// defaults; examples never see them.
+func TestNowRunUsesTheNodesSettings(t *testing.T) {
+	o := opts()
+	o.Current = map[string]Seeded{"other.level": {Value: json.RawMessage(`7`), At: start.Add(-time.Hour)}}
+	e := mkEx("ok", cron(Expect{}))
+	if rep := run(t, testManifest(), o, e); rep.Now == nil || rep.Now.OK {
+		t.Fatalf("without settings now = %+v", rep.Now)
+	}
+	o.NowConfig = map[string]string{"op_cell": `{"op":"notify","value":"hi"}`}
+	rep := run(t, testManifest(), o, e)
+	if rep.Now == nil || !rep.Now.OK || len(rep.Now.Messages) != 1 {
+		t.Fatalf("with settings now = %+v", rep.Now)
+	}
+	if len(rep.Examples[0].Steps[0].Messages) != 0 {
+		t.Fatal("the settings reached the example")
+	}
+}
+
+// After a failed init the later steps are skipped for that reason, not for
+// the budget, and the line says so.
+func TestFailedInitSkipsLaterStepsWithItsReason(t *testing.T) {
+	m := testManifest()
+	m.Config["lifecycle"] = runner.ConfigKey{Type: "string"}
+	e := withOp(mkEx("three", cron(Expect{}), cron(Expect{}), cron(Expect{})), "lifecycle", "fail")
+	rep := run(t, m, opts(), e)
+	st := rep.Examples[0].Steps
+	if !st[0].Ran || st[1].Ran || st[1].Skipped != SkipEarlier || st[2].Skipped != SkipEarlier {
+		t.Fatalf("steps %+v", st)
+	}
+	got := rep.ModelLine()
+	if !strings.Contains(got, `"three" step 1: failed (module.exception)`) || !strings.Contains(got, `"three" steps 2–3 not run: an earlier step failed`) || strings.Contains(got, "budget") {
+		t.Fatalf("line %q", got)
+	}
+}
+
+func TestModelLineIsBounded(t *testing.T) {
+	var rep Report
+	for i := range 10 {
+		e := ExampleResult{Name: strings.Repeat("n", 60) + string(rune('a'+i))}
+		for n := 1; n <= 20; n++ {
+			e.Steps = append(e.Steps, StepResult{N: n, Ran: true, Mismatch: strings.Repeat("expected 1 message, got 0; ", 10)})
+		}
+		rep.Examples = append(rep.Examples, e)
+	}
+	got := rep.ModelLine()
+	if len(got) > ModelLineBytes || !strings.Contains(got, "more") {
+		t.Fatalf("%d bytes: %q", len(got), got)
+	}
+	// Only the first failing step of an example is named.
+	if strings.Contains(got, "step 2:") {
+		t.Fatalf("line names more than one failing step: %q", got)
+	}
+	// Examples whose steps were all cut by the budget are bounded too.
+	for i := range rep.Examples {
+		for n := range rep.Examples[i].Steps {
+			rep.Examples[i].Steps[n] = StepResult{N: n + 1, Skipped: SkipBudget}
+		}
+	}
+	if got := rep.ModelLine(); len(got) > ModelLineBytes {
+		t.Fatalf("%d bytes", len(got))
+	}
+}
+
+func TestModelLineOfAnError(t *testing.T) {
+	r := Report{Error: "the trial did not finish"}
+	if got := r.ModelLine(); got != "trial: the trial did not finish" || r.Passed {
+		t.Fatalf("line %q", got)
+	}
+}
+
+func TestBudgetSkipIsWordedAsTheBudget(t *testing.T) {
+	r := Report{Examples: []ExampleResult{{Name: "a", Steps: []StepResult{{N: 1, Ran: true, Kind: "trial.budget"}, {N: 2, Skipped: SkipBudget}}}}}
+	if got := r.ModelLine(); !strings.Contains(got, "step 2 not run: the time budget ran out") {
+		t.Fatalf("line %q", got)
+	}
+}

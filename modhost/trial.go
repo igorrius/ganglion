@@ -25,7 +25,7 @@ import (
 // A refused examples file is a report with Refused set, not an error. An
 // error names what failed in the node's words (ErrCheckFailed); the
 // module's own text goes to the log only.
-func (h *Host) Trial(ctx context.Context, b modstore.Build, examples []byte, _ map[string]any) (modtrial.Report, error) {
+func (h *Host) Trial(ctx context.Context, b modstore.Build, examples []byte, cfg map[string]any) (modtrial.Report, error) {
 	if examples == nil {
 		return modtrial.Report{Passed: true}, nil
 	}
@@ -45,9 +45,9 @@ func (h *Host) Trial(ctx context.Context, b modstore.Build, examples []byte, _ m
 	// A trial reads no secret of the node's: the examples bring fake ones,
 	// so the logger hides nothing and no secret store is touched.
 	g := &given{byName: map[string][]string{}, hide: func(s string) string { return s }}
-	o := modtrial.Options{Start: h.d.Now(), Log: h.moduleLog(g)}
+	o := modtrial.Options{Start: h.d.Now(), Log: h.moduleLog(g).With("trial", true)}
 	if len(m.Listens()) > 0 && len(m.Capabilities.HTTPFetch) == 0 {
-		o.Current = h.currentCells(ctx, m)
+		o.Current, o.NowConfig = h.currentCells(ctx, m), configValues(m, cfg)
 	}
 	rep, err := modtrial.Run(ctx, b.Wasm, m, short, ex, o)
 	if err != nil {

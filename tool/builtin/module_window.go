@@ -41,9 +41,9 @@ type window struct {
 	Trial []string `json:"trial"`
 }
 
-// windowOf is the window of a build whose plan has no refusal; trial is the
-// section of its trial run (trialLines).
-func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest, trial []string) window {
+// windowOf is the window of a build whose plan has no refusal, with no trial
+// section yet (see withTrial).
+func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest) window {
 	short := modstore.ShortName(b.Module)
 	about := map[string]string{}
 	for _, t := range m.Triggers {
@@ -51,7 +51,21 @@ func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest, trial []stri
 			about[short+"."+t.Tool] = t.Description()
 		}
 	}
-	return window{Module: b.Module, SHA256: p.SHA256, Version: p.Version, Size: p.Size, Rights: p.Rights, Widening: p.Widening, About: about, Trial: trial}
+	return window{Module: b.Module, SHA256: p.SHA256, Version: p.Version, Size: p.Size, Rights: p.Rights, Widening: p.Widening, About: about}
+}
+
+// moreReserve is the room kept for the line that counts what the trial
+// section left out.
+const moreReserve = 40
+
+// withTrial is w with the trial section of report r (ok false: none is
+// kept). The section is capped at trialRunes and at what the rest of the
+// question leaves under tool.MaxQuestionRunes, so a long but valid window
+// stays askable. It is stored with the window, so the press shows the same.
+func withTrial(sp texts.Speaker, w window, r modtrial.Report, ok bool) window {
+	rest := utf8.RuneCountInString(windowText(sp, w)) + 1 // and the line break before the section
+	w.Trial = trialLines(sp, r, ok, min(trialRunes, tool.MaxQuestionRunes-rest-moreReserve))
+	return w
 }
 
 // recordPath is where the window a call asked with is kept until its press.
@@ -146,9 +160,12 @@ const messageRunes = 200
 // message is shown as chat shows it (Markdown escaped, one line); a value is
 // compact JSON in a code span. These texts reach the owner's question only,
 // never a tool result. ok is false when no trial is kept.
-func trialLines(sp texts.Speaker, r modtrial.Report, ok bool) []string {
+func trialLines(sp texts.Speaker, r modtrial.Report, ok bool, limit int) []string {
 	if !ok {
 		return []string{sp.Text(texts.AskModuleTrialNone, nil)}
+	}
+	if r.Error != "" { // the plan refuses such a build, so this is a last line of defence
+		return []string{sp.Text(texts.AskModuleTrialError, texts.Vars{"error": texts.Escape(r.Error)})}
 	}
 	passed := 0
 	for _, e := range r.Examples {
@@ -171,7 +188,7 @@ func trialLines(sp texts.Speaker, r modtrial.Report, ok bool) []string {
 	}
 	if r.Now != nil {
 		lines = append(lines, sp.Text(texts.AskModuleTrialNow, nil))
-		l := stepLines(sp, *r.Now)
+		l := nowLines(sp, *r.Now)
 		if len(l) == 0 {
 			l = []string{sp.Text(texts.AskModuleTrialNothing, nil)}
 		}
@@ -181,7 +198,19 @@ func trialLines(sp texts.Speaker, r modtrial.Report, ok bool) []string {
 	// harmless words ("Monkey: 5") would otherwise make the question refused
 	// for a secret, a pair can match across a line break, and the marker
 	// changes lengths.
-	return capped(sp, strings.Split(redact.String(strings.Join(lines, "\n")), "\n"), trialRunes)
+	return capped(sp, strings.Split(redact.String(strings.Join(lines, "\n")), "\n"), limit)
+}
+
+// nowLines are the lines of the run on the current cells: what it did, or
+// that it did not run or failed.
+func nowLines(sp texts.Speaker, s modtrial.StepResult) []string {
+	switch {
+	case !s.Ran:
+		return []string{sp.Text(texts.AskModuleTrialNotRun, nil)}
+	case s.Kind != "":
+		return []string{sp.Text(texts.AskModuleTrialFailed, texts.Vars{"kind": s.Kind})}
+	}
+	return stepLines(sp, s)
 }
 
 // stepLines are the messages and the reported cells of one step.

@@ -131,10 +131,14 @@ type reloads struct {
 	trial      modtrial.Report // every Trial's, passed when zero
 	trialErr   error           // every Trial's error
 	trialFiles [][]byte        // the examples of every Trial call
+	inTrial    func()          // run inside every Trial call, before it answers
 }
 
 func (r *reloads) Trial(_ context.Context, _ modstore.Build, examples []byte, _ map[string]any) (modtrial.Report, error) {
 	r.trialFiles = append(r.trialFiles, examples)
+	if r.inTrial != nil {
+		r.inTrial()
+	}
 	if r.trialErr != nil {
 		return modtrial.Report{}, r.trialErr
 	}

@@ -104,8 +104,13 @@ A new package `modtrial` runs one build on its examples:
 - **The run on the current cells.** For a module with a cell trigger and
   no `http.fetch`, one more run: its `cells.read` seeded from the node's
   real cells (read, never written), the cell trigger fired with them as
-  changed, an empty state. Shown to the owner, no expectations, a crash
-  there does not fail the trial (the real cells may be empty).
+  changed, an empty state. It uses the node's settings for the module over
+  the manifest's defaults (it shows what the module does with the owner's
+  settings; examples never see them). Shown to the owner, no expectations,
+  a crash there does not fail the trial (the real cells may be empty).
+- **Cell trigger payload.** A cell step's payload names the producer
+  `"trial"`, so a module that ignores its own writes (`producer` equal to
+  itself) sees the cells as another producer's.
 
 ## 5. Where it runs and what is kept
 

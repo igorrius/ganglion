@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"maps"
 	"net/url"
 	"slices"
 	"time"
@@ -110,6 +112,9 @@ func Parse(data []byte, m runner.Manifest, prefix string) (Examples, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(&raw); err != nil {
+		if errors.Is(err, io.EOF) {
+			return Examples{}, refuse("the file is empty")
+		}
 		return Examples{}, refuse("%v", err)
 	}
 	switch {
@@ -261,7 +266,8 @@ func (c checker) cells(n yaml.Node) (map[string]json.RawMessage, error) {
 		return nil, fmt.Errorf("cells: %w", err)
 	}
 	out := make(map[string]json.RawMessage, len(vals))
-	for id, v := range vals {
+	for _, id := range slices.Sorted(maps.Keys(vals)) {
+		v := vals[id]
 		if !slices.Contains(c.m.Cells.Read, id) && !c.own(id) {
 			return nil, fmt.Errorf("cell %s is not in cells.read", id)
 		}
@@ -280,6 +286,11 @@ func (c checker) trigger(n yaml.Node) (Trigger, error) {
 	}
 	if n.Kind != yaml.MappingNode {
 		return Trigger{}, errors.New("trigger must be cell, cron or {tool, args}")
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if k := n.Content[i].Value; k != "tool" && k != "args" {
+			return Trigger{}, fmt.Errorf("trigger: unknown key %q", k)
+		}
 	}
 	var tr struct {
 		Tool string    `yaml:"tool"`

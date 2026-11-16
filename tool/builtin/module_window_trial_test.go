@@ -3,6 +3,7 @@ package builtin_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,7 +66,7 @@ func TestInstallWindowShowsTheTrialInOrder(t *testing.T) {
 		"demo-reader.soc → `'{\"a\":1,\"b\":[2]}'`",
 		"Example: idle",
 		"nothing sent or written",
-		"Now, on the current cells:",
+		"On the cells at build time:",
 		"✉️ now text",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -78,7 +79,7 @@ func TestInstallWindowShowsNothingForANowWithNoOutput(t *testing.T) {
 		Now: &modtrial.StepResult{N: 1, Ran: true, OK: true}}
 	e, sha := trialEnv(t, &r)
 	got := trialSection(t, question(t, e, installCall(sha)))
-	if n := len(got); n < 2 || got[n-2] != "Now, on the current cells:" || got[n-1] != "nothing sent or written" {
+	if n := len(got); n < 2 || got[n-2] != "On the cells at build time:" || got[n-1] != "nothing sent or written" {
 		t.Fatalf("section %q", got)
 	}
 }
@@ -176,5 +177,56 @@ func TestInstallWindowRedactsWhatTheOwnerCouldNotBeAsked(t *testing.T) {
 				t.Fatalf("the press: %v", err)
 			}
 		})
+	}
+}
+
+func nowSection(t *testing.T, now modtrial.StepResult) []string {
+	t.Helper()
+	r := modtrial.Report{Passed: true, Examples: []modtrial.ExampleResult{{Name: "a", Passed: true, Steps: []modtrial.StepResult{{N: 1, Ran: true, OK: true}}}}, Now: &now}
+	e, sha := trialEnv(t, &r)
+	got := trialSection(t, question(t, e, installCall(sha)))
+	return got[len(got)-2:]
+}
+
+func TestInstallWindowSaysANowRunDidNotRun(t *testing.T) {
+	got := nowSection(t, modtrial.StepResult{N: 1})
+	if got[0] != "On the cells at build time:" || got[1] != "did not run" {
+		t.Fatalf("section %q", got)
+	}
+}
+
+func TestInstallWindowSaysANowRunFailed(t *testing.T) {
+	got := nowSection(t, modtrial.StepResult{N: 1, Ran: true, Kind: "module.trap"})
+	if got[1] != "failed (module.trap)" {
+		t.Fatalf("section %q", got)
+	}
+}
+
+// A window whose other lines are long still passes whole() with a trial
+// section: the section gives way.
+func TestInstallWindowWithLongRightsKeepsTheQuestionAskable(t *testing.T) {
+	var hosts []string
+	for i := range 24 {
+		hosts = append(hosts, fmt.Sprintf("h%02d.%s.example.com", i, strings.Repeat("a", 58)))
+	}
+	manifest := strings.Replace(demoManifest, "[api.example.com]", "["+strings.Join(hosts, ", ")+"]", 1)
+	var steps []modtrial.StepResult
+	for i := 1; i <= 40; i++ {
+		steps = append(steps, modtrial.StepResult{N: i, Ran: true, OK: true, Messages: []string{strings.Repeat("m", 60)}})
+	}
+	r := modtrial.Report{Passed: true, Examples: []modtrial.ExampleResult{{Name: "long", Passed: true, Steps: steps}}}
+	e := newModuleEnv(t)
+	e.source(t, "demo-reader")
+	art := artifact(manifest, 1024, 1)
+	e.build(t, art)
+	e.keepTrial(t, art.SHA256, r)
+	q := question(t, e, installCall(art.SHA256))
+	n := utf8.RuneCountInString(q)
+	sec := trialSection(t, q)
+	if n > tool.MaxQuestionRunes || len(sec) < 2 || !strings.HasPrefix(sec[0], "Trial run:") {
+		t.Fatalf("question is %d runes, section %q", n, sec)
+	}
+	if rest := n - utf8.RuneCountInString(strings.Join(sec, "\n")); rest < 2000 {
+		t.Fatalf("the other lines are only %d runes: the test does not press the cap", rest)
 	}
 }

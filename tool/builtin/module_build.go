@@ -213,6 +213,12 @@ func (t *ModuleBuild) tried(ctx context.Context, b modstore.Build, p modstore.Pl
 	if !ex.found {
 		return p, noTrial, nil
 	}
+	// Until the real report is kept, the build has one that is not passed: a
+	// trial that never ends (a crash, a failed save) leaves the build refused.
+	sha := modstore.Digest(b.Wasm, b.Manifest)
+	if err := t.m.saveTrial(sha, modtrial.Report{Error: trialUnfinished}); err != nil {
+		return p, "", err
+	}
 	r, err := t.trial(ctx, b, ex)
 	if err != nil {
 		return p, "", err
@@ -220,6 +226,12 @@ func (t *ModuleBuild) tried(ctx context.Context, b modstore.Build, p modstore.Pl
 	p, err = t.m.plan(ctx, b)
 	return p, r.ModelLine(), err
 }
+
+// trialCannotRun is the report's error of a build the node could not try.
+const trialCannotRun = "the build does not load on this node"
+
+// trialUnfinished is the report's error of a trial that did not end.
+const trialUnfinished = "the trial did not finish"
 
 // noTrial is the trial line of a build whose source has no examples.
 const noTrial = "no " + modtrial.FileName + ": the module was not tried"
@@ -274,7 +286,7 @@ func readExamples(dir string) (examplesFile, error) {
 }
 
 // trial tries build b on ex and keeps the report beside the build. A trial
-// that cannot run is kept as a refused report, so the build is not
+// that cannot run is kept as a report with Error, so the build is not
 // installable.
 func (t *ModuleBuild) trial(ctx context.Context, b modstore.Build, ex examplesFile) (modtrial.Report, error) {
 	r := modtrial.Report{Refused: ex.refused}
@@ -284,7 +296,7 @@ func (t *ModuleBuild) trial(ctx context.Context, b modstore.Build, ex examplesFi
 			return r, err
 		}
 		if r, err = t.m.Host.Trial(ctx, b, ex.data, line.Config); err != nil {
-			r = modtrial.Report{Refused: "the trial could not run on this node"}
+			r = modtrial.Report{Error: trialCannotRun}
 		}
 	}
 	return r, t.m.saveTrial(modstore.Digest(b.Wasm, b.Manifest), r)
@@ -334,6 +346,9 @@ func (t *ModuleBuild) commit(ctx context.Context, name string) string {
 func answerPlan(b modstore.Build, p modstore.Plan, trial string, own bool) (tool.Result, error) {
 	ans := buildAnswer{Build: p.SHA256, Module: b.Module, Language: b.Language, Size: p.Size, Version: p.Version,
 		Refusal: p.Refusal, Detail: p.RefusalDetail, Trial: trial}
+	if p.Refusal == trialRefusal {
+		ans.Detail = "" // the trial line says the same
+	}
 	if p.Refusal != "" {
 		ans.Next = "the node would refuse to install this build; change the source and build again"
 		if p.Refusal == trialRefusal {
