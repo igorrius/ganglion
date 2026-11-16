@@ -66,7 +66,7 @@
   "shared": {
     "agent/compact.go": "41f48d0c6a6f4f9e65d49e88c7f13999a103db8bf8003402b06df14580b8d7a6",
     "agent/prompt.go": "b8ef523b193058f3f257e4d247f7a987fbe941254e9e7f32bb78abd7709bc69e",
-    "agent/stages.go": "a4c7c3ef4ec3abfe7b50dd0dec1e89ec897d1687002c5676dd6bcd2ffec21c8b",
+    "agent/stages.go": "961ac84809586cc159f7946745fdd03a352b30af3eb1a7c7e6cde45006ef47a1",
     "examples/ganglion.lab.yaml": "c5dc8badeb922d907dce8eb8ec66a448bb9166feab1d36cf64d7a0e1f6e72603",
     "examples/workspace/persona/10-identity.md": "573075f5fd2004364cf3eac109a69bd86db2be5fba0688a3b0e55ed2d807adb4",
     "mcp/lines.go": "1285d34c113d364ae7c2d7735d1ca828a0b607cb280d5227adafb88b33f014c8",
