@@ -283,21 +283,21 @@ func (c checker) trigger(n yaml.Node) (Trigger, error) {
 	if err != nil {
 		return Trigger{}, fmt.Errorf("trigger tool %q: %w", tr.Tool, err)
 	}
-	return Trigger{Kind: "tool", Tool: tr.Tool, Args: args}, nil
+	return Trigger{Kind: kindTool, Tool: tr.Tool, Args: args}, nil
 }
 
 func (c checker) kindTrigger(kind string) (Trigger, error) {
-	if kind == "cell" {
+	if kind == kindCell {
 		if len(c.m.Listens()) == 0 {
 			return Trigger{}, errors.New("trigger cell: the manifest has no cell trigger")
 		}
-		return Trigger{Kind: "cell"}, nil
+		return Trigger{Kind: kindCell}, nil
 	}
-	if kind == "cron" {
+	if kind == kindCron {
 		if !slices.ContainsFunc(c.m.Triggers, func(t runner.Trigger) bool { return t.Cron != "" }) {
 			return Trigger{}, errors.New("trigger cron: the manifest has no cron trigger")
 		}
-		return Trigger{Kind: "cron"}, nil
+		return Trigger{Kind: kindCron}, nil
 	}
 	return Trigger{}, fmt.Errorf("trigger %q is not cell, cron or a tool call", kind)
 }
