@@ -104,6 +104,20 @@ func (h *Host) known(ctx context.Context, module string) ([]modstore.Version, er
 	return vs, nil
 }
 
+// cardRuns is how many of its last runs a module's card shows.
+const cardRuns = 10
+
+// Run is the journal's row of the module's run id, for /why and the runs
+// list; false when the journal has none. The name may be written with or
+// without "local/".
+func (h *Host) Run(ctx context.Context, name, id string) (modstore.Run, bool, error) {
+	r, ok, err := h.d.Store.Run(ctx, fullName(name), id)
+	if err != nil {
+		return modstore.Run{}, false, fmt.Errorf("modhost: %w", err)
+	}
+	return r, ok, nil
+}
+
 // Card is how a module stands, its health check when it runs (ruling 3 of
 // M4b), every version it has had and the config keys it declares with their
 // values now.
@@ -119,6 +133,11 @@ func (h *Host) Card(ctx context.Context, name string) (modstore.Card, error) {
 	}
 	c := modstore.Card{Name: modstore.ShortName(module), State: h.runState(module), Version: activeVersion(vs), Journal: journal,
 		Health: h.health(ctx, module)}
+	if runs, err := h.d.Store.Runs(ctx, module, cardRuns); err != nil {
+		h.d.Log.Warn("modhost: the card's runs cannot be read", "module", module, "err", err)
+	} else {
+		c.Runs = runs
+	}
 	m, ok, err := h.manifestOf(ctx, module)
 	if err != nil || !ok {
 		return c, err

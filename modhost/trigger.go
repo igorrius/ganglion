@@ -52,7 +52,7 @@ func (h *Host) RunTrigger(ctx context.Context, e event.ModuleTrigger, eventID st
 		return err
 	}
 	depth := max(e.Depth, 1) // a trigger's run is in a chain, so the cap holds whatever the event says
-	r, ok := h.call(ctx, e.Module, pdk.Input{Trigger: string(triggerCell), Payload: payload}, newRun(eventID, triggerCell, depth))
+	r, ok := h.call(ctx, e.Module, pdk.Input{Trigger: string(triggerCell), Payload: payload}, newRun(eventID, triggerCell, depth).byCells(e.Producer, e.Run, e.Cells))
 	if !ok {
 		h.d.Log.Info("modhost: the cell trigger of a module that is not running; dropped", "module", e.Module, "producer", e.Producer)
 		return nil

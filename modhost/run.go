@@ -2,6 +2,7 @@ package modhost
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"sync"
 )
@@ -16,11 +17,32 @@ type run struct {
 	Depth   int      // 0 outside a chain
 	wrote   *written // the cells the run reported, full ids
 	sent    *int     // messages notify sent so far in this run: the number in the last one's key
+	calls   *counts  // the host calls the run made, by kind (R-RUN-20)
+
+	// The cause the journal records (R-RUN-20): the tool's name for a tool
+	// run; the producer module, its run and the cells for a cell run.
+	tool        string
+	producer    string
+	producerRun string
+	cells       []string
 }
 
 // newRun is a run that has written and sent nothing yet.
 func newRun(id string, trig trigger, depth int) run {
-	return run{ID: id, Trigger: trig, Depth: depth, wrote: &written{ids: map[string]bool{}}, sent: new(int)}
+	return run{ID: id, Trigger: trig, Depth: depth, wrote: &written{ids: map[string]bool{}}, sent: new(int),
+		calls: &counts{n: map[string]int{}}}
+}
+
+// byTool is r as the run of the tool called name.
+func (r run) byTool(name string) run {
+	r.tool = name
+	return r
+}
+
+// byCells is r as the run a producer's run started by changing cells.
+func (r run) byCells(producer, producerRun string, cells []string) run {
+	r.producer, r.producerRun, r.cells = producer, producerRun, slices.Clone(cells)
+	return r
 }
 
 // runKey is the context key of a run.
@@ -63,4 +85,28 @@ func (w *written) list() []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// counts is the host calls one run made, by kind. The lock keeps it safe
+// whichever goroutine a host call comes from.
+type counts struct {
+	mu sync.Mutex
+	n  map[string]int
+}
+
+// add notes one host call of kind.
+func (c *counts) add(kind string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.n[kind]++
+}
+
+// copyOf is the counts so far; nil when there are none.
+func (c *counts) copyOf() map[string]int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.n) == 0 {
+		return nil
+	}
+	return maps.Clone(c.n)
 }

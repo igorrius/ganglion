@@ -142,6 +142,43 @@ type store struct {
 	episodes   map[string]string // "module|kind" → sha of the open episode
 	notified   map[string]int    // "module|YYYY-MM-DD" → messages counted
 	limited    map[string]bool   // "module|YYYY-MM-DD" → the limit line went
+	journal    []modstore.Run    // the run journal, oldest first
+	failRecord error             // RecordRun's, when set
+}
+
+// RecordRun keeps the run, replacing one of the same module and id.
+func (s *store) RecordRun(_ context.Context, r modstore.Run) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failRecord != nil {
+		return s.failRecord
+	}
+	s.journal = slices.DeleteFunc(s.journal, func(o modstore.Run) bool { return o.Module == r.Module && o.ID == r.ID })
+	s.journal = append(s.journal, r)
+	return nil
+}
+
+func (s *store) Run(_ context.Context, module, id string) (modstore.Run, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, r := range s.journal {
+		if r.Module == module && r.ID == id {
+			return r, true, nil
+		}
+	}
+	return modstore.Run{}, false, nil
+}
+
+func (s *store) Runs(_ context.Context, module string, n int) ([]modstore.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []modstore.Run
+	for _, r := range slices.Backward(s.journal) {
+		if r.Module == module && len(out) < n {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
 
 func notifyDay(module string, day time.Time) string { return module + "|" + day.Format(time.DateOnly) }

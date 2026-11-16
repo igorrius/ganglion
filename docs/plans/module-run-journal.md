@@ -207,7 +207,7 @@ OnCall func(ctx context.Context, kind string)
 - `Host.Run(ctx, name, id) (modstore.Run, bool, error)` accepts the name
   with or without `local/`, like the other `LocalModules` methods.
 
-- [ ] **Step 1: Failing tests** with the host test helpers in
+- [x] **Step 1: Failing tests** with the host test helpers in
   `modhost/host_test.go`/`trigger_test.go`: a cron run that reports a
   cell records a row (trigger cron, result ok, `cell.report` 1, wrote the
   cell, took ≥ 0); a tool call records trigger tool and the tool's name;
@@ -217,10 +217,10 @@ OnCall func(ctx context.Context, kind string)
   third module down the chain has a chain of two hops; a notify run's
   `module.notify` event carries the run id; a store whose `RecordRun`
   fails still settles the run and fans out; `Card` has the last runs.
-- [ ] **Step 2:** FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4:** `go test ./modhost/... ./modtrial/...` — PASS.
-- [ ] **Step 5:** commit `modhost: record each run of a module and the chain that started it`.
+- [x] **Step 2:** FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4:** `go test ./modhost/... ./modtrial/...` — PASS.
+- [x] **Step 5:** commit `modhost: record each run of a module and the chain that started it`.
 
 ### Task 4: A module's message names its run
 

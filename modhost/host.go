@@ -51,6 +51,11 @@ type Store interface {
 	MarkLimited(ctx context.Context, module string, day time.Time) error
 	// NotifiedOn is how many messages a module counted on day, for its card.
 	NotifiedOn(ctx context.Context, module string, day time.Time) (int, error)
+	// RecordRun writes a run to the journal, Run reads one and Runs the
+	// last n of a module, newest first (modstore's runs).
+	RecordRun(ctx context.Context, r modstore.Run) error
+	Run(ctx context.Context, module, id string) (modstore.Run, bool, error)
+	Runs(ctx context.Context, module string, n int) ([]modstore.Run, error)
 }
 
 // Jobs keeps the modules' cron jobs (schedule.Store).

@@ -93,7 +93,7 @@ func TestACronRunNotifiesOnceForItsSlot(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("events %+v", got)
 	}
-	want := event.ModuleNotify{Module: "local/n", Version: "1", Text: "battery *30* %", PerDay: 24, At: t0.UnixMilli(), Principal: owner, Transport: "telegram"}
+	want := event.ModuleNotify{Module: "local/n", Version: "1", Text: "battery *30* %", PerDay: 24, At: t0.UnixMilli(), Principal: owner, Transport: "telegram", Run: "cron:module:local/n:0:1"}
 	if got[0].ev.IdemKey != "notify:local/n:cron:module:local/n:0:1:1" || got[0].p != want {
 		t.Fatalf("event %+v, payload %+v", got[0].ev, got[0].p)
 	}
