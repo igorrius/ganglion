@@ -111,11 +111,7 @@ func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix stri
 	for id, s := range seed {
 		x.cells.set(id, s.Value, s.At)
 	}
-	m.ConfigValues = map[string]string{}
-	for k, c := range m.Config {
-		m.ConfigValues[k] = c.Default
-	}
-	maps.Copy(m.ConfigValues, e.Config)
+	m.ConfigValues = configValues(m, e.Config)
 	x.m = m
 	secrets := e.Secrets
 	mod, err := runner.Load(ctx, wasm, m, runner.Deps{
@@ -130,10 +126,22 @@ func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix stri
 		Logger:  o.Log,
 	})
 	if err != nil {
+		if ctx.Err() != nil { // the budget ended inside the load: a cut trial, not a broken module
+			res.Passed = false
+			return res, nil
+		}
 		return ExampleResult{}, fmt.Errorf("modtrial: load: %w", err)
 	}
 	defer func() { _ = mod.Close(context.WithoutCancel(ctx)) }()
 	x.mod = mod
+
+	// modhost runs init once when it loads a module; so does the trial. A
+	// failed init is the first step's failure and nothing after it runs.
+	if err := mod.Init(ctx); err != nil {
+		res.Steps[0] = StepResult{N: 1, Ran: true, Kind: initKind(ctx, err)}
+		res.Passed = false
+		return res, nil
+	}
 
 	for i, s := range e.Steps {
 		if ctx.Err() != nil {
@@ -148,6 +156,16 @@ func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix stri
 		res.Passed = res.Passed && res.Steps[i].OK
 	}
 	return res, nil
+}
+
+// configValues is the manifest's defaults under the example's settings.
+func configValues(m runner.Manifest, over map[string]string) map[string]string {
+	vals := map[string]string{}
+	for k, c := range m.Config {
+		vals[k] = c.Default
+	}
+	maps.Copy(vals, over)
+	return vals
 }
 
 // listened keeps the ids a cell trigger of the manifest lists.
@@ -176,8 +194,11 @@ func (x *exampleRun) step(ctx context.Context, n int, s Step, changed []string) 
 	sr.Reports = slices.Clone(x.cells.reported)
 	sr.Mismatch = mismatch(s.Expect, sr, failed)
 	sr.OK = sr.Mismatch == ""
-	if failed && !s.Expect.Fails && sr.OK {
+	if failed && !s.Expect.Fails {
 		sr.OK = false // an unexpected failure; the kind says why
+	}
+	if sr.Kind == kindBudget {
+		sr.OK = false // a step cut by the trial's own time never passes
 	}
 	return sr
 }
@@ -226,6 +247,20 @@ func failureKind(ctx context.Context, out pdk.Output, err error) string {
 		return out.Kind
 	}
 	return pdk.KindException
+}
+
+// initKind is the kind a failed init has: the runner's ModuleError carries
+// the node's kind already (as modhost.initOutcome reads it); any other error
+// is worded like a failed call.
+func initKind(ctx context.Context, err error) string {
+	if me, ok := errors.AsType[*runner.ModuleError](err); ok {
+		switch me.Kind {
+		case pdk.KindAuthFailed, pdk.KindFormat, kindStale:
+			return me.Kind
+		}
+		return pdk.KindException
+	}
+	return failureKind(ctx, pdk.Output{}, err)
 }
 
 // mismatch compares a step with its expectations, in the node's words.

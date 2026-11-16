@@ -235,7 +235,7 @@ func TestBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := rep.Examples[0].Steps
-	if rep.Passed || len(st) != 3 || st[1].Ran || st[2].Ran {
+	if rep.Passed || len(st) != 3 || st[0].Kind != "trial.budget" || st[1].Ran || st[2].Ran {
 		t.Fatalf("steps = %+v", st)
 	}
 }
@@ -295,5 +295,38 @@ func TestModelLine(t *testing.T) {
 	}
 	if got := (Report{Refused: "examples.yaml: no examples"}).ModelLine(); !strings.Contains(got, "refused") {
 		t.Errorf("refused line = %q", got)
+	}
+}
+
+func TestBudgetCutNeverPasses(t *testing.T) {
+	e := withOp(mkEx("slow", cron(Expect{Fails: true})), "op_cron", `{"op":"spin"}`)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	rep, err := Run(ctx, probe(t), testManifest(), "probe", Examples{Examples: []Example{e}}, opts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := rep.Examples[0].Steps[0]; rep.Passed || st.OK || st.Kind != "trial.budget" {
+		t.Fatalf("report = %+v", rep)
+	}
+}
+
+func TestInitRunsAtLoad(t *testing.T) {
+	m := testManifest()
+	m.Config["lifecycle"] = runner.ConfigKey{Type: "string"}
+	mk := func(mode string) Example {
+		e := withOp(mkEx(mode, cron(Expect{})), "op_cron", `{"op":"state_get","name":"last_trigger"}`)
+		return withOp(e, "lifecycle", mode)
+	}
+	rep := run(t, m, opts(), mk("fail"), mk("unknown"), mk("ok"))
+	f := rep.Examples[0]
+	if f.Passed || f.Steps[0].Kind != "module.exception" || !f.Steps[0].Ran || f.Steps[0].OK {
+		t.Fatalf("failing init: %+v", f)
+	}
+	if !rep.Examples[1].Passed || !rep.Examples[2].Passed {
+		t.Fatalf("report = %+v", rep)
+	}
+	if !strings.Contains(string(rep.Examples[2].Steps[0].out), `"value":"init"`) {
+		t.Fatalf("init did not run before the step: %s", rep.Examples[2].Steps[0].out)
 	}
 }
