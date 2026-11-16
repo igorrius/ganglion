@@ -3,44 +3,47 @@
 # answer to each exact URL, and `secrets` are fake values. Change these when
 # you change logic.rs.
 #
-# The node's virtual time starts at the build, so a reading's `ts` is judged
-# against that time: a `ts` far in the future counts as fresh, an old one as
-# stale.
+# `start` fixes the example's virtual time, so a canned reading's `ts` is
+# judged against it: just before `start` is fresh, hours before is stale.
 examples:
   - name: a reading is reported to the cells
+    start: 2026-11-16T12:00:00Z
     config: {station: roof-1}
     secrets: {API_TOKEN: fake}
     http:
       - url: https://api.example.com/v1/stations/roof-1/latest
         status: 200
-        body: '{"ts": 4102444800, "value": 21.5, "online": true}'
+        body: '{"ts": 1794830340, "value": 21.5, "online": true}'
     steps:
       - trigger: cron
         expect:
           reports: [reader-template.value, reader-template.online, reader-template.sample]
 
   - name: the status tool answers a fresh reading
+    start: 2026-11-16T12:00:00Z
     config: {station: roof-1}
     secrets: {API_TOKEN: fake}
     http:
       - url: https://api.example.com/v1/stations/roof-1/latest
         status: 200
-        body: '{"ts": 4102444800, "value": 21.5, "online": true}'
+        body: '{"ts": 1794830340, "value": 21.5, "online": true}'
     steps:
       - trigger: {tool: status, args: {}}
 
   - name: an old reading is stale and reports nothing
+    start: 2026-11-16T12:00:00Z
     config: {station: roof-1}
     secrets: {API_TOKEN: fake}
     http:
       - url: https://api.example.com/v1/stations/roof-1/latest
         status: 200
-        body: '{"ts": 1793000000, "value": 21.5, "online": true}'
+        body: '{"ts": 1794819600, "value": 21.5, "online": true}'
     steps:
       - trigger: cron
         expect: {fails: true, reports: []}
 
   - name: a server error fails the read
+    start: 2026-11-16T12:00:00Z
     config: {station: roof-1}
     secrets: {API_TOKEN: fake}
     http:
@@ -52,6 +55,7 @@ examples:
         expect: {fails: true}
 
   - name: a refused token fails the read
+    start: 2026-11-16T12:00:00Z
     config: {station: roof-1}
     secrets: {API_TOKEN: fake}
     http:

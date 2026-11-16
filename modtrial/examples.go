@@ -38,6 +38,7 @@ type Examples struct {
 // of the network and the steps in order.
 type Example struct {
 	Name    string            `yaml:"name"`
+	Start   time.Time         `yaml:"-"`       // parsed from "start" (RFC 3339); zero = the trial's start
 	Config  map[string]string `yaml:"config"`  // over the manifest's defaults; keys the manifest declares
 	Secrets map[string]string `yaml:"secrets"` // fake values; names in secret.get
 	HTTP    []Canned          `yaml:"http"`
@@ -81,6 +82,7 @@ type rawFile struct {
 
 type rawExample struct {
 	Name    string            `yaml:"name"`
+	Start   string            `yaml:"start"`
 	Config  map[string]string `yaml:"config"`
 	Secrets map[string]string `yaml:"secrets"`
 	HTTP    []Canned          `yaml:"http"`
@@ -153,6 +155,13 @@ func (c checker) own(id string) bool {
 
 func (c checker) example(re rawExample) (Example, error) {
 	e := Example{Name: re.Name, Config: re.Config, Secrets: re.Secrets, HTTP: re.HTTP}
+	if re.Start != "" {
+		t, err := time.Parse(time.RFC3339, re.Start)
+		if err != nil {
+			return e, fmt.Errorf("start %q is not an RFC 3339 time (2026-01-02T15:04:05Z)", re.Start)
+		}
+		e.Start = t
+	}
 	for k := range re.Config {
 		if _, ok := c.m.Config[k]; !ok {
 			return e, fmt.Errorf("config key %q is not declared by the manifest", k)

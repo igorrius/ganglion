@@ -145,6 +145,20 @@ func TestCellGetAndVirtualTime(t *testing.T) {
 	}
 }
 
+// An example's own start replaces the trial's start for that example.
+func TestExampleStartOverridesTheTrialStart(t *testing.T) {
+	own := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
+	e := withOp(mkEx("s", Step{Trigger: Trigger{Kind: "cron"}}), "op_cron", `{"op":"now"}`)
+	e.Start = own
+	rep := run(t, testManifest(), opts(), e)
+	var now struct {
+		Unix int64 `json:"unix"`
+	}
+	if err := json.Unmarshal(rep.Examples[0].Steps[0].out, &now); err != nil || now.Unix != own.Unix() {
+		t.Fatalf("now = %s (%v), want %d", rep.Examples[0].Steps[0].out, err, own.Unix())
+	}
+}
+
 func TestCellReportAndReadBack(t *testing.T) {
 	e := mkEx("rep",
 		Step{

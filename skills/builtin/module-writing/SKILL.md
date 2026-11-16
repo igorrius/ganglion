@@ -88,6 +88,8 @@ trial in the install window.
   `fails: true`. A step with no `expect` only has to end without an error, so it proves little.
 - A reader's examples carry the service's answers: `http` gives the answer of each exact URL
   (status and body) and `secrets` gives fake values. Any other request fails the step.
+- Give an example a `start: 2026-01-02T15:04:05Z` (RFC 3339) when its canned data carries timestamps: the
+  example's time starts there, so a `ts` just before it is fresh and one hours earlier is stale.
 - The examples compare counts, not message text: the node never shows the text to you.
 - Put in the examples only made-up values and made-up secrets, never the owner's real data,
   addresses or secrets.

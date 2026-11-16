@@ -138,6 +138,7 @@ func TestParseRefused(t *testing.T) {
 		{"bad status", ex("    http:\n      - {url: \"https://api.example.com/x\", status: 99}\n"), "status"},
 		{"foreign secret", ex("    secrets: {other: v}\n"), "secret.get"},
 		{"unknown config", ex("    config: {nope: \"1\"}\n"), "config"},
+		{"bad start", ex("    start: yesterday\n    steps: [{after: 1s}]\n"), "start"},
 		{"unknown report", ex("    steps:\n      - expect: {reports: [demo.nope]}\n"), "reports"},
 	}
 	for _, c := range cases {
@@ -196,5 +197,19 @@ func TestParseHTTPAllowed(t *testing.T) {
 	_, err := Parse([]byte(ex("    http:\n      - {url: \"http://api.example.com/x\", status: 200}\n    steps:\n      - after: 1s\n")), manifest(t), "demo")
 	if err != nil {
 		t.Errorf("http: %v", err)
+	}
+}
+
+func TestParseStart(t *testing.T) {
+	got, err := Parse([]byte(ex("    start: 2026-01-02T15:04:05Z\n    steps: [{after: 1s}]\n")), manifest(t), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := time.Date(2026, 1, 2, 15, 4, 5, 0, time.UTC); !got.Examples[0].Start.Equal(want) {
+		t.Fatalf("start %v, want %v", got.Examples[0].Start, want)
+	}
+	none, err := Parse([]byte(ex("    steps: [{after: 1s}]\n")), manifest(t), "demo")
+	if err != nil || !none.Examples[0].Start.IsZero() {
+		t.Fatalf("no start: %v %v", none.Examples[0].Start, err)
 	}
 }

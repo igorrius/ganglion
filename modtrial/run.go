@@ -100,6 +100,9 @@ func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix stri
 		return res, nil
 	}
 	clk := &clock{now: o.Start}
+	if !e.Start.IsZero() {
+		clk.now = e.Start
+	}
 	x := &exampleRun{
 		clock:  clk,
 		cells:  &trialCells{clock: clk, values: map[string]trialCell{}},

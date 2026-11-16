@@ -55,8 +55,9 @@ examples:
 ```
 
 - An example starts from an empty state, no cells, virtual time at the
-  trial's start, and the manifest's config defaults; `config:` may set
-  other values the manifest declares.
+  trial's start (or at its own `start:`, an RFC 3339 time, so canned data
+  with timestamps can be judged against a fixed time), and the manifest's
+  config defaults; `config:` may set other values the manifest declares.
 - A step, in order: `after` (a Go duration, moves virtual time on, ≥ 0),
   `cells` (values set, each stamped with the virtual time), then
   `trigger`: `cell` (the step's cells that the manifest's cell trigger
