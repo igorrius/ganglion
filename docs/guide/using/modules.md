@@ -61,9 +61,9 @@ All of these work in your private chat and none restarts the node.
 
 ## Why did a module write?
 
-The node keeps a journal of every run of a module: when it ran, what started it (the schedule, the agent's call of one of its tools, or a change in a value another module wrote), how long it took, how it ended, which kinds of calls it made (network requests, reading and writing values, messages), which values it wrote and how many messages it sent. It never keeps what the module said, the values it wrote or the arguments of a call.
+The node keeps a journal of every run of a module: when it ran, what started it (the schedule, the agent's call of one of its tools, or a change in a value another module wrote), how long it took, how it ended, which kinds of calls it made (network requests, reading and writing values, messages), the names of the values it wrote and how many messages it sent. It never keeps what the module said, the values themselves or the arguments of a call.
 
-- **Reply to a module's message with `/why`.** The bot answers with the chain that led to it, oldest first: for example a reader that ran on its schedule and wrote a value, then an alert module that ran because that value changed and wrote to you. The chain stops at the module's own run if a schedule or the agent started it.
+- **Reply to a module's message with `/why`.** The bot answers with the chain that led to it, oldest first: for example a reader that ran on its schedule and wrote a value, then an alert module that ran because that value changed and wrote to you. A module started by its schedule or by the agent has a chain of one run: its own.
 - **Press Runs on a module's card** (`/modules <name>`) or send `/modules runs <name>` to see its last runs, newest first. A run started by another module's value says which module.
 - **Ask the agent.** `module.status` shows the agent the last 5 runs, and when you reply to a module's message and ask the agent about it, the agent is told how the message came about.
 

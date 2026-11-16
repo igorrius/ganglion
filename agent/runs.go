@@ -256,7 +256,7 @@ func (a *Agent) why(ctx context.Context, t *turn, _ string) error {
 		t.reply(a.say(ctx, t, texts.WhyUsage, nil))
 		return nil
 	}
-	text, err := a.whyText(ctx, t, got.row.Origin)
+	text, err := a.whyText(ctx, t, got.row.Origin, got.run)
 	if err != nil {
 		return fmt.Errorf("agent: /why: %w", err)
 	}
@@ -265,10 +265,15 @@ func (a *Agent) why(ctx context.Context, t *turn, _ string) error {
 	return nil
 }
 
-// whyText is the answer for a message of origin o, a module's.
-func (a *Agent) whyText(ctx context.Context, t *turn, o *event.Origin) (string, error) {
+// whyText is the answer for a message of origin o, a module's. read is
+// the run lookupReplied found already; nil reads it again, so a failed
+// read is an error here rather than a missing run.
+func (a *Agent) whyText(ctx context.Context, t *turn, o *event.Origin, read *modstore.Run) (string, error) {
 	if o.Run == "" {
 		return a.say(ctx, t, texts.WhyNoRun, nil), nil
+	}
+	if read != nil {
+		return a.chainText(a.speaker(ctx, t), *read, t.now), nil
 	}
 	run, found, err := a.d.Local.Run(ctx, o.Module, o.Run)
 	if err != nil {
