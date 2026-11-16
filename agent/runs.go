@@ -252,8 +252,12 @@ func (a *Agent) why(ctx context.Context, t *turn, _ string) error {
 	if got.found {
 		name, ok = moduleOf(got.row.Origin)
 	}
-	if !ok {
+	switch {
+	case t.msg.Reply == nil:
 		t.reply(a.say(ctx, t, texts.WhyUsage, nil))
+		return nil
+	case !ok: // a reply to the node's own line, the agent's answer or someone's message
+		t.reply(a.say(ctx, t, texts.WhyNotModule, nil))
 		return nil
 	}
 	text, err := a.whyText(ctx, t, got.row.Origin, got.run)

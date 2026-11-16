@@ -85,16 +85,17 @@ func TestWhyShowsTheChain(t *testing.T) {
 	}
 }
 
-// A message with no run, a run the journal no longer has, no reply and a
-// reply to a turn's message each get their own answer.
+// A message with no run, a run the journal no longer has, no reply, and a
+// reply to a message no module wrote (a turn's, or one the outbox does not
+// hold) each get their own answer.
 func TestWhyAnswersWhenThereIsNothingToShow(t *testing.T) {
 	e, _ := whyEnv(t)
 	for _, c := range []struct{ ref, want string }{
 		{"5", "This message has no recorded run: it was sent before the node kept a journal of runs, or it is a line from the node itself."},
 		{"4", "The run that sent this message is no longer in the journal: it keeps the last 200 runs of each module."},
-		{"", "Reply with /why to a module's message to see how it came about."},
-		{"6", "Reply with /why to a module's message to see how it came about."},
-		{"99", "Reply with /why to a module's message to see how it came about."},
+		{"", "Send /why as a reply to a module's message, such as an alert, to see how it came about. A module signs its messages with its name and version."},
+		{"6", "This message was not written by a module, so there is no run to show. /why works as a reply to a module's message: it is signed with the module's name and version."},
+		{"99", "This message was not written by a module, so there is no run to show. /why works as a reply to a module's message: it is signed with the module's name and version."},
 	} {
 		out := e.why(t, c.ref)
 		if len(out) != 1 || out[0].Text != c.want {
