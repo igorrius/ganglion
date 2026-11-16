@@ -39,6 +39,7 @@ type Card struct {
 	Journal []Entry // newest first, the retired ones too
 	Config  []ConfigLine
 	Health  Health // the running instance's health check; "" when it is not running
+	Runs    []Run  // the last runs, newest first (R-RUN-20)
 
 	ReactsTo      []string // cells its triggers listen to (R-RUN-15)
 	Feeds         []string // running modules that listen to this module's cells, sorted

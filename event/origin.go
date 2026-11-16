@@ -25,6 +25,7 @@ type Origin struct {
 	Session string     `json:"session,omitempty"`
 	Tainted bool       `json:"tainted,omitempty"`
 	Module  string     `json:"module,omitempty"` // full name, for OriginModule only
+	Run     string     `json:"run,omitempty"`    // the module's run that sent it, for OriginModule only (R-RUN-20)
 	Job     string     `json:"job,omitempty"`    // the job's id, for OriginReminder only
 }
 

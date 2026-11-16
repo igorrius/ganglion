@@ -618,7 +618,10 @@ func (s *Store) RemoveLocal(ctx context.Context, module string) error {
 			return err
 		}
 		_ = rows.Close()
-		_, err = c.ExecContext(ctx, `UPDATE module_versions SET state = 'retired', reason = 'removed' WHERE `+live, module)
+		if _, err = c.ExecContext(ctx, `UPDATE module_versions SET state = 'retired', reason = 'removed' WHERE `+live, module); err != nil {
+			return err
+		}
+		_, err = c.ExecContext(ctx, `DELETE FROM module_runs WHERE module = ?`, module)
 		return err
 	})
 	if err != nil {

@@ -87,7 +87,7 @@ func (p notifyPort) notify(ctx context.Context, text string) notifyOutcome {
 	}
 	*r.sent++
 	key := "notify:" + p.l.name + ":" + r.ID + ":" + strconv.Itoa(*r.sent)
-	return p.h.deliver(ctx, p.l, key, event.ModuleNotify{Text: text, PerDay: perDay(p.l)}, now)
+	return p.h.deliver(ctx, p.l, key, event.ModuleNotify{Text: text, PerDay: perDay(p.l), Run: r.ID}, now)
 }
 
 // deliver puts one message of l for every destination its line names, the

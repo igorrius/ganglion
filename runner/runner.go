@@ -71,6 +71,37 @@ type Deps struct {
 	// Quiet turns off the runner's metrics: Handle records nothing. It is
 	// for a trial run, which must not touch the node's dashboard.
 	Quiet bool
+	// OnCall, when set, is told the kind of every host call a module
+	// makes (the Call constants), before the call's own checks, so a denied
+	// call counts too. ctx is the call's: it carries what the caller put in
+	// Handle's context. nil reports nothing (a trial run). It is told no
+	// argument and no value (R-RUN-20).
+	OnCall func(ctx context.Context, kind string)
+}
+
+// Host call kinds reported to Deps.OnCall: a closed set. log, now_ms and
+// take are not reported: they carry no effect the journal shows.
+const (
+	CallHTTPFetch  = "http.fetch"
+	CallCellGet    = "cell.get"
+	CallCellReport = "cell.report"
+	CallNotify     = "notify"
+	CallStateGet   = "state.get"
+	CallStatePut   = "state.put"
+	CallSecretGet  = "secret.get"
+	CallConfigGet  = "config.get"
+)
+
+// CallKinds are the host call kinds in the order a run's calls are listed.
+func CallKinds() []string {
+	return []string{CallHTTPFetch, CallCellGet, CallCellReport, CallNotify, CallStateGet, CallStatePut, CallSecretGet, CallConfigGet}
+}
+
+// called tells deps.OnCall that the module made a host call of kind.
+func (m *Module) called(ctx context.Context, kind string) {
+	if m.deps.OnCall != nil {
+		m.deps.OnCall(ctx, kind)
+	}
 }
 
 // Module is a compiled module ready to handle calls. Calls are serialized.
@@ -271,26 +302,24 @@ func (m *Module) instantiateHost(ctx context.Context) error {
 		mod.Memory().Write(p, m.pending)
 		m.pending = nil
 	}).Export("take").
-		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) uint32 {
-		b, _ := mod.Memory().Read(p, n)
-		resp := m.fetch(ctx, b)
-		m.pending, _ = json.Marshal(resp)
-		return uint32(len(m.pending))
-	}).Export("http_fetch").
-		NewFunctionBuilder().WithFunc(func(_ context.Context, mod api.Module, p, n uint32) int32 {
+		NewFunctionBuilder().WithFunc(m.httpFetch).Export("http_fetch").
+		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
+		m.called(ctx, CallStateGet)
 		if !caps.State {
 			return -1
 		}
 		return m.offer(m.deps.State.Get(name, readString(mod, p, n)))
 	}).Export("state_get").
-		NewFunctionBuilder().WithFunc(func(_ context.Context, mod api.Module, kp, kn, vp, vn uint32) {
+		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, kp, kn, vp, vn uint32) {
+		m.called(ctx, CallStatePut)
 		if !caps.State {
 			m.deps.Logger.Warn("state write denied: no state capability", "module", name)
 			return
 		}
 		m.deps.State.Put(name, readString(mod, kp, kn), readString(mod, vp, vn))
 	}).Export("state_put").
-		NewFunctionBuilder().WithFunc(func(_ context.Context, mod api.Module, p, n uint32) int32 {
+		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
+		m.called(ctx, CallSecretGet)
 		key := readString(mod, p, n)
 		if !slices.Contains(caps.SecretGet, key) || m.deps.Secrets == nil {
 			return -1
@@ -307,12 +336,23 @@ func (m *Module) instantiateHost(ctx context.Context) error {
 		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
 		return m.notify(ctx, readString(mod, p, n))
 	}).Export("notify").
-		NewFunctionBuilder().WithFunc(func(_ context.Context, mod api.Module, p, n uint32) int32 {
+		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
+		m.called(ctx, CallConfigGet)
 		v, ok := m.manifest.ConfigValues[readString(mod, p, n)]
 		return m.offer(v, ok)
 	}).Export("config_get").
 		Instantiate(ctx)
 	return err
+}
+
+// httpFetch is the http_fetch host function: it leaves the response for take
+// and returns its length.
+func (m *Module) httpFetch(ctx context.Context, mod api.Module, p, n uint32) uint32 {
+	m.called(ctx, CallHTTPFetch)
+	b, _ := mod.Memory().Read(p, n)
+	resp := m.fetch(ctx, b)
+	m.pending, _ = json.Marshal(resp)
+	return uint32(len(m.pending))
 }
 
 // offer leaves a value for take and returns its length, or -1 if absent.

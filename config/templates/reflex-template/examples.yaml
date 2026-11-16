@@ -1,0 +1,56 @@
+# Examples the node runs on the built module before you install it
+# (module.build does it). Each example starts from an empty state; a step
+# sets cells, moves time on and pulls a trigger, and `expect` counts what
+# must follow. Change these when you change logic.rs.
+examples:
+  - name: a value under the threshold is said once
+    steps:
+      - cells: {producer.value: 12}
+        trigger: cell
+        expect: {messages: 1}
+      - cells: {producer.value: 11}
+        trigger: cell
+        expect: {messages: 0}
+
+  - name: a value at or above the threshold says nothing
+    steps:
+      - cells: {producer.value: 30}
+        trigger: cell
+        expect: {messages: 0}
+      - cells: {producer.value: 75}
+        trigger: cell
+        expect: {messages: 0}
+
+  - name: it says again after the value rose
+    steps:
+      - cells: {producer.value: 10}
+        trigger: cell
+        expect: {messages: 1}
+      - cells: {producer.value: 40}
+        trigger: cell
+        expect: {messages: 0}
+      - cells: {producer.value: 9}
+        trigger: cell
+        expect: {messages: 1}
+
+  - name: a silent cell is said stale once
+    steps:
+      - cells: {producer.value: 50}
+        trigger: cell
+        expect: {messages: 0}
+      - after: 30m
+        trigger: cron
+        expect: {messages: 0}
+      - after: 61m
+        trigger: cron
+        expect: {messages: 1}
+      - after: 60m
+        trigger: cron
+        expect: {messages: 0}
+
+  - name: a configured threshold is used
+    config: {threshold: "50"}
+    steps:
+      - cells: {producer.value: 40}
+        trigger: cell
+        expect: {messages: 1}

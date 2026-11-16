@@ -63,6 +63,11 @@ Start here when coming back to the project.
   runs the build on its `examples.yaml` in a sandbox, a failed trial
   refuses the install, and the install window shows what the module would
   have sent ([#167](https://github.com/igorrius/ganglion/issues/167)).
+  Every run of a module is now kept in a bounded journal, and `/why` as a
+  reply, the Runs button, `/modules runs <name>` and `module.status` show
+  how a module's message came about, with no model
+  ([plan](plans/module-run-journal.md),
+  [#169](https://github.com/igorrius/ganglion/issues/169)).
 - **Done on 2026-11-13:** Telegram groups (MG), added that day when the
   owner moved the production bot's token to ganglion and removed the old
   bot. A group is connected from a card in the admin's private chat and

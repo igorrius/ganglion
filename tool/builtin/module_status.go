@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/igorrius/ganglion/modstore"
+	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
@@ -67,6 +68,64 @@ type failureAnswer struct {
 	At   string `json:"at"`
 }
 
+// maxStatusRuns is how many of its last runs module.status shows.
+const maxStatusRuns = 5
+
+// runAnswer is one run of the journal in module.status's words: counts,
+// closed sets and checked names, never a module's text (R-RUN-20).
+type runAnswer struct {
+	At       string         `json:"at"`
+	Trigger  string         `json:"trigger"`
+	Tool     string         `json:"tool,omitempty"`
+	Producer string         `json:"producer,omitempty"`
+	Cells    []string       `json:"cells,omitempty"`
+	TookMS   int64          `json:"took_ms"`
+	Result   string         `json:"result"`
+	Kind     string         `json:"kind,omitempty"`
+	Calls    map[string]int `json:"calls,omitempty"`
+	Wrote    []string       `json:"wrote,omitempty"`
+	Sent     int            `json:"sent,omitempty"`
+}
+
+// plainWord is s when it is a plain name, else "?": a closed-set word of the
+// node that, were it ever anything else, is not shown.
+func plainWord(s string) string {
+	if modstore.PlainName(s) {
+		return s
+	}
+	return "?"
+}
+
+// runsAnswer is the newest runs of the card, at most maxStatusRuns. Names go
+// through the shared name pattern: a tool, a producer and cells that fail it
+// are left out.
+func runsAnswer(runs []modstore.Run) []runAnswer {
+	var out []runAnswer
+	for _, r := range runs[:min(len(runs), maxStatusRuns)] {
+		a := runAnswer{At: r.At.Format(time.RFC3339), Trigger: plainWord(r.Trigger), TookMS: r.Took.Milliseconds(),
+			Result: plainWord(r.Result), Sent: r.Sent, Cells: plainCells(r.Cells), Wrote: plainCells(r.Wrote)}
+		if modstore.PlainName(r.Tool) {
+			a.Tool = r.Tool
+		}
+		if p := modstore.ShortName(r.Producer); modstore.PlainName(p) {
+			a.Producer = p
+		}
+		if r.Kind != "" {
+			a.Kind = plainWord(r.Kind)
+		}
+		for _, kind := range runner.CallKinds() {
+			if n := r.Calls[kind]; n > 0 {
+				if a.Calls == nil {
+					a.Calls = map[string]int{}
+				}
+				a.Calls[kind] = n
+			}
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 // statusAnswer is module.status's answer.
 type statusAnswer struct {
 	Module      string         `json:"module"`
@@ -81,6 +140,7 @@ type statusAnswer struct {
 	Feeds       []string       `json:"feeds,omitempty"`
 	MessagesDay *int           `json:"messages_today,omitempty"`
 	MessagesMax int            `json:"messages_per_day,omitempty"`
+	LastRuns    []runAnswer    `json:"last_runs,omitempty"`
 	Config      []configAnswer `json:"config"`
 	KeysHidden  int            `json:"config_keys_not_shown,omitempty"`
 }
@@ -91,6 +151,7 @@ func (*ModuleStatus) Spec() tool.Spec {
 		Description: "How an installed module of the owner stands, as its /modules card shows it: state (running; off, turned off by the owner; " +
 			"crashloop, turned off by the node after 5 failures in an hour; stopped, it should run and did not start), active version, " +
 			"health (its check now: ok, or the kind it failed with and the node's hint), runs, failures and the last failure's kind and time, " +
+			"its last runs (when, what started it, how long, how it ended, the host calls it made by kind, the cells it wrote and the messages it sent, never their text), " +
 			"the cells it reacts to, the running modules it feeds, and the messages it wrote to the owner today against its daily limit (never their text), " +
 			"and its settings: each declared key with its type, whether it is required and the value the owner set " +
 			"(a key left at its manifest default is set: false, has_default: true). " +
@@ -174,6 +235,7 @@ func (t *ModuleStatus) answer(c modstore.Card) statusAnswer {
 		}
 	}
 	out.ReactsTo, out.Feeds = plainCells(c.ReactsTo), plainCells(c.Feeds)
+	out.LastRuns = runsAnswer(c.Runs)
 	if c.NotifyPerDay > 0 {
 		n := min(c.NotifiedToday, c.NotifyPerDay)
 		out.MessagesDay, out.MessagesMax = &n, c.NotifyPerDay
@@ -188,13 +250,6 @@ func (t *ModuleStatus) answer(c modstore.Card) statusAnswer {
 	return out
 }
 
-// plainName is a cell id as runner's cell id pattern allows it, or a
-// module's short name: lower-case letters, digits, "_" and "-", dotted.
-var plainName = regexp.MustCompile(`^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)*$`)
-
-// maxPlainName caps a shown name's bytes.
-const maxPlainName = 253
-
 // plainCells are the plain names among ids: a cell id or a module name is
 // the manifest's text, so only one that is a legal cell id or module name
 // is shown (R-RUN-13). module.status answers JSON, so "_" is shown as it is;
@@ -202,7 +257,7 @@ const maxPlainName = 253
 func plainCells(ids []string) []string {
 	var out []string
 	for _, id := range ids {
-		if len(id) <= maxPlainName && plainName.MatchString(id) {
+		if modstore.PlainName(id) {
 			out = append(out, id)
 		}
 	}

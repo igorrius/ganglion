@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/igorrius/ganglion/pdk"
 	"github.com/igorrius/ganglion/runner"
@@ -73,7 +74,7 @@ var errNotRunning = errors.New("the module is not running")
 
 // runTool runs one tool call, as the run of the call's key, and settles it.
 func (h *Host) runTool(ctx context.Context, t moduleTool, c tool.Call) (tool.Result, error) {
-	r, ok := h.call(ctx, t.module, pdk.Input{Trigger: t.trigger, Payload: c.Args}, newRun(c.Key(), triggerTool, 0))
+	r, ok := h.call(ctx, t.module, pdk.Input{Trigger: t.trigger, Payload: c.Args}, newRun(c.Key(), triggerTool, 0).byTool(t.spec.Name))
 	if !ok {
 		return tool.Result{}, errors.New(t.spec.Name + ": " + errNotRunning.Error())
 	}
@@ -121,10 +122,12 @@ func (h *Host) RunCron(ctx context.Context, module, id string) error {
 // ran is one call of a module: the module, the run, its answer, the
 // runner's error.
 type ran struct {
-	l   *loaded
-	run run
-	out pdk.Output
-	err error
+	l    *loaded
+	run  run
+	out  pdk.Output
+	err  error
+	at   time.Time     // when the call started, by the host's clock
+	took time.Duration // how long it ran
 }
 
 // call runs one call of module as run r, holding h.mu for reading so it is
@@ -137,14 +140,16 @@ func (h *Host) call(ctx context.Context, module string, in pdk.Input, r run) (ra
 	if !ok {
 		return ran{}, false
 	}
+	at := h.d.Now()
 	out, err := l.mod.Handle(withRun(ctx, r), in)
-	return ran{l: l, run: r, out: out, err: err}, true
+	return ran{l: l, run: r, out: out, err: err, at: at, took: max(h.d.Now().Sub(at), 0)}, true
 }
 
 // finish settles a run judged o and then starts the listeners of the cells
 // it wrote, failed or not: the cells changed either way.
 func (h *Host) finish(ctx context.Context, r ran, o outcome) (disabled bool, err error) {
 	disabled, err = h.settle(ctx, r.l, r.run.Trigger, o)
+	h.record(ctx, r, o)
 	h.fanOut(ctx, r.l, r.run)
 	return disabled, err
 }

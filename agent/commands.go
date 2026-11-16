@@ -73,9 +73,13 @@ func (a *Agent) commandTable() []commandEntry {
 			transport.LangRussian:   "Метрики агента картинкой: /metrics [all | ganglion | runtime | process | фильтр]",
 			transport.LangUkrainian: "Метрики агента картинкою: /metrics [all | ganglion | runtime | process | фільтр]"}},
 		{"/modules", a.modules, map[transport.Lang]string{
-			transport.LangDefault:   "Modules: /modules, then /modules <name>, config, off, on, remove or rollback",
-			transport.LangRussian:   "Модули: /modules, затем /modules <имя>, config, off, on, remove или rollback",
-			transport.LangUkrainian: "Модулі: /modules, потім /modules <назва>, config, off, on, remove або rollback"}},
+			transport.LangDefault:   "Modules: /modules, then /modules <name>, runs, config, off, on, remove or rollback",
+			transport.LangRussian:   "Модули: /modules, затем /modules <имя>, runs, config, off, on, remove или rollback",
+			transport.LangUkrainian: "Модулі: /modules, потім /modules <назва>, runs, config, off, on, remove або rollback"}},
+		{"/why", a.why, map[transport.Lang]string{
+			transport.LangDefault:   "How a module's message came about: reply to it with /why",
+			transport.LangRussian:   "Как появилось сообщение модуля: ответьте на него командой /why",
+			transport.LangUkrainian: "Як з'явилося повідомлення модуля: дайте на нього відповідь командою /why"}},
 		{"/memory", a.showMemory, map[transport.Lang]string{
 			transport.LangDefault:   "What I remember: /memory, or /memory <topic>",
 			transport.LangRussian:   "Что я помню: /memory или /memory <тема>",

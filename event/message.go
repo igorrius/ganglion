@@ -166,6 +166,9 @@ type ModuleNotify struct {
 	To        string `json:"to,omitempty"`
 	Principal string `json:"principal"` // the admin it goes to
 	Transport string `json:"transport"` // where it goes
+	// Run is the id of the module's run that sent the text; "" for a node
+	// line and for a message of an older node (R-RUN-20).
+	Run string `json:"run,omitempty"`
 }
 
 // ModuleBuilt is the payload of an event of kind "module.built": the job
