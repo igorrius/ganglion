@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-reminder-done-press
+why: >-
+  Issue 226, ADR-0091. A recurring reminder's message carries Done: the press deletes
+  the job and says so in the message, with no model turn and no other message.
+covers:
+  - agent/scheduled.go
+  - agent/resume.go
+  - "tool/builtin/schedule*.go"
+model: scripted
+script:
+  - {tool: schedule.create, args: '{"kind":"reminder","cron":"0 * * * *","text":"Order a flashlight."}'}
+  - {say: It is set.}
+steps:
+  - say: "Remind me every hour to order a flashlight."
+  - advance: {scheduler: 1h}
+  - press: "Done"
+  - facts:
+      jobs: {kind: reminder, count: 0}
+      message_replaced: "this reminder is off"
+      replies: 0
+      history: {contains: "pressed Done on reminder"}

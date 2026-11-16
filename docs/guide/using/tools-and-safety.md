@@ -31,7 +31,7 @@ The kill switch is `/commands off`. `/commands on` turns them back on.
 
 By default, every action that changes something needs a button press. A decided question folds to one line such as "Approved, 21:09". A question that nobody answers expires.
 
-A reminder is the exception: in a clean session it is set at once, and you see it with a **Delete** button; a [tainted session](#tainted-sessions) still asks.
+Your reminders and scheduled tasks are the exception. In a clean session a reminder is set at once, and you see it with a **Delete** button; deleting one of your reminders or tasks also happens at once, and you get one short line saying it is off ([how to stop a reminder](memory.md#stopping-a-reminder)). A [tainted session](#tainted-sessions) still asks for both.
 
 If you change your request and the agent asks the same kind of question again (for example, a reminder for another time), the old question is replaced: its buttons go away and it folds to "Replaced by a newer question", so only the current one can be pressed.
 

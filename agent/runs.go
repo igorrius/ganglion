@@ -19,7 +19,7 @@ import (
 	"github.com/igorrius/ganglion/tool/pending"
 )
 
-// This file is how the owner sees a module's runs (R-RUN-20, ADR-0091):
+// This file is how the owner sees a module's runs (R-RUN-20, ADR-0092):
 // /why on a module's message shows the chain of runs that led to it,
 // /modules runs <name> and the card's Runs button list a module's last runs.
 // Everything shown is the node's own words and closed sets; a module's text

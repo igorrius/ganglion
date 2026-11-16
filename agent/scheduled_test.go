@@ -13,6 +13,7 @@ import (
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/tool"
+	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/journal"
 	"github.com/igorrius/ganglion/turns"
 )
@@ -287,5 +288,42 @@ func TestTaskRunIsToldItsGrantsCommands(t *testing.T) {
 	reqs := e.smart.requests()
 	if got := lastUserRaw(reqs[len(reqs)-1]); strings.Contains(got, "grant lists") {
 		t.Fatalf("a task without commands read %q", got)
+	}
+}
+
+// A recurring reminder goes out with Done; the press deletes the job and says
+// so in the message, with no model call and no further message (#226,
+// ADR-0091).
+func TestReminderDonePressStopsItWithoutAModel(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, Config{}, registry(t, newClock()))
+	st, err := schedule.NewStore(ctx, e.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := schedule.Job{ID: "r1", Owner: owner, Conv: "telegram:42", Transport: "telegram", Kind: schedule.KindReminder,
+		Cron: "0 * * * *", Text: "order a flashlight", Created: t0}
+	if err := st.Create(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	sc := builtin.Scheduling{Jobs: st, Buttons: e.pending, Loc: time.UTC, Now: func() time.Time { return e.now }}
+	e.deps.Jobs, e.deps.ReminderButtons, e.deps.QuickActions = st, sc.ReminderButtons, sc.QuickActions()
+	e.a = New(overDefaults(Config{}), e.deps)
+	out := e.turn(t, fired(r))
+	if len(out) != 1 || out[0].Text != "order a flashlight" || len(out[0].Buttons) != 1 || out[0].Buttons[0].Label != "✅ Done" {
+		t.Fatalf("out %+v", out)
+	}
+	out = noAcks(e.turn(t, press(owner, out[0].Buttons[0].ID, "70")))
+	if len(out) != 1 || out[0].Edit != "70" || out[0].Text != "order a flashlight\n\n✅ Done: this reminder is off." || len(out[0].Buttons) != 0 {
+		t.Fatalf("out %+v", out)
+	}
+	if j, err := st.Get(ctx, "r1"); err != nil || !j.Deleted {
+		t.Fatalf("job %+v, %v", j, err)
+	}
+	if n := len(e.smart.requests()) + len(e.cheap.requests()); n != 0 {
+		t.Fatalf("%d model calls", n)
+	}
+	if h := e.state(t).Messages; !strings.Contains(h[len(h)-1].Content, "pressed Done on reminder r1") {
+		t.Fatalf("history %+v", h)
 	}
 }

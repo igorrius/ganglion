@@ -7,7 +7,7 @@ import (
 	"github.com/igorrius/ganglion/modstore"
 )
 
-// This file is the run journal (R-RUN-20, ADR-0091): every run of a module
+// This file is the run journal (R-RUN-20, ADR-0092): every run of a module
 // is written to modstore's journal when it ends, with its cause, its host
 // calls by kind, the cells it reported and the messages it sent, and, for a
 // cell trigger, the chain of runs that led to it copied from the producer's

@@ -1,4 +1,4 @@
--- The journal of a module's runs (R-RUN-20, ADR-0091): when a run started,
+-- The journal of a module's runs (R-RUN-20, ADR-0092): when a run started,
 -- what caused it, how long it took, how it ended, which host calls it made,
 -- which cells it reported and how many messages it sent. The chain of runs
 -- that led to a cell-triggered run is copied in when the run is written, so

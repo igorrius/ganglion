@@ -18,7 +18,7 @@ and `agent` carry the run id in the message's origin and render the chain
 for `/why`, `/modules runs`, the Runs button and the reply note;
 `tool/builtin` adds the last runs to `module.status`.
 
-Decision: [ADR-0091](../adr/0091-a-bounded-run-journal-per-module-with-the-chain-copied-in.md),
+Decision: [ADR-0092](../adr/0092-a-bounded-run-journal-per-module-with-the-chain-copied-in.md),
 spec R-RUN-20 (and R-RUN-16, R-DLV-15). Read
 [conventions](../conventions.md) before writing code.
 

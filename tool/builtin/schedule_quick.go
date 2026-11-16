@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/igorrius/ganglion/event"
@@ -30,6 +31,7 @@ const (
 const (
 	noteDeleted   = "the owner deleted %s %s: %s"
 	noteRan       = "the owner ran %s %s now: %s"
+	noteDone      = "the owner pressed Done on reminder %s, so it is deleted and will not be sent again: %s"
 	noteHeadRunes = 100
 )
 
@@ -37,7 +39,12 @@ const (
 const (
 	markDelete = "🗑 "
 	markRunNow = "▶️ "
+	markDone   = "✅ "
 )
+
+// doneButtonTTL is how long a reminder's Done button works: a week, so the
+// owner can stop a daily or weekly reminder from an earlier message.
+const doneButtonTTL = 7 * 24 * time.Hour
 
 // buttonLabel is the label of a quick action in sp's language.
 func buttonLabel(sp texts.Speaker, action string) string {
@@ -46,6 +53,8 @@ func buttonLabel(sp texts.Speaker, action string) string {
 		return markDelete + sp.Label(texts.ButtonDelete)
 	case ActionRunNow:
 		return markRunNow + sp.Label(texts.ButtonRunNow)
+	case ActionDone:
+		return markDone + sp.Label(texts.ButtonDone)
 	default:
 		return sp.Label(texts.ButtonDetails)
 	}
@@ -54,24 +63,41 @@ func buttonLabel(sp texts.Speaker, action string) string {
 // QuickActions are the buttons of a listed job by action name, for the
 // agent (agent.Deps.QuickActions). Each edits the job's own message.
 func (s Scheduling) QuickActions() map[string]pending.QuickAction {
-	return map[string]pending.QuickAction{ActionDetails: s.details, ActionDelete: s.deleteByButton, ActionRunNow: s.runByButton}
+	return map[string]pending.QuickAction{ActionDetails: s.details, ActionDelete: s.deleteByButton, ActionRunNow: s.runByButton,
+		ActionDone: s.doneByButton}
+}
+
+// ReminderButtons stores the buttons of reminder j's sent message for its
+// owner in its conversation (agent.Deps.ReminderButtons): Done on a recurring
+// reminder, none on a one-time one, which is over once sent (ADR-0091).
+func (s Scheduling) ReminderButtons(ctx context.Context, sp texts.Speaker, j schedule.Job) ([]event.Button, error) {
+	if j.Kind != schedule.KindReminder || j.Cron == "" || j.System {
+		return nil, nil
+	}
+	return s.storeButtons(ctx, sp, j, j.Owner, j.Conv, doneButtonTTL, ActionDone)
 }
 
 // buttons stores the quick-action buttons of job j for principal in conv
 // and returns them, in the order of actions: Delete only for a job that
 // is not a system job, Run now only for a task.
 func (s Scheduling) buttons(ctx context.Context, sp texts.Speaker, j schedule.Job, principal, conv string, actions ...string) ([]event.Button, error) {
+	return s.storeButtons(ctx, sp, j, principal, conv, listButtonsTTL, actions...)
+}
+
+// storeButtons is buttons with the buttons working for ttl.
+func (s Scheduling) storeButtons(ctx context.Context, sp texts.Speaker, j schedule.Job, principal, conv string, ttl time.Duration,
+	actions ...string) ([]event.Button, error) {
 	args, err := json.Marshal(idArgs{ID: j.ID})
 	if err != nil {
 		return nil, err
 	}
 	var stored []pending.Button
 	for _, action := range actions {
-		if action == ActionDelete && j.System || action == ActionRunNow && j.Kind != schedule.KindTask {
+		if (action == ActionDelete || action == ActionDone) && j.System || action == ActionRunNow && j.Kind != schedule.KindTask {
 			continue
 		}
 		stored = append(stored, pending.Button{ID: pending.NewButtonID(), Action: action, Label: buttonLabel(sp, action),
-			Principal: principal, Conv: conv, Args: args, Expires: s.Now().Add(listButtonsTTL)})
+			Principal: principal, Conv: conv, Args: args, Expires: s.Now().Add(ttl)})
 	}
 	if err := s.Buttons.AddButtons(ctx, stored...); err != nil {
 		return nil, err
@@ -159,6 +185,61 @@ func (s Scheduling) deletedBy(ctx context.Context, p pending.QuickPress) (pendin
 		return s.deletedEdit(p, j), nil
 	}
 	return pending.QuickEdit{Text: p.Speak.Text(texts.SchedGone, nil)}, nil
+}
+
+// doneByButton stops a recurring reminder from its own message: the job is
+// deleted at once, the press being the owner's own decision, and the message
+// keeps its text with a line saying it is off. No model turn follows
+// (ADR-0091).
+func (s Scheduling) doneByButton(ctx context.Context, p pending.QuickPress) (pending.QuickEdit, error) {
+	j, ok, err := s.pressedJob(ctx, p)
+	switch {
+	case err != nil:
+		return pending.QuickEdit{}, err
+	case !ok:
+		return s.doneAlready(ctx, p)
+	}
+	err = s.Jobs.Delete(ctx, j.ID, p.Button.Principal, p.Event)
+	switch {
+	case errors.Is(err, schedule.ErrSystem):
+		return pending.QuickEdit{Text: s.entry(p.Speak, j) + "\n\n" + p.Speak.Text(texts.SchedNoDelete, nil)}, nil
+	case errors.Is(err, schedule.ErrNotFound):
+		return pending.QuickEdit{Text: p.Speak.Text(texts.SchedGone, nil)}, nil
+	case err != nil:
+		return pending.QuickEdit{}, err
+	}
+	return s.offEdit(p, j, true), nil
+}
+
+// doneAlready answers a Done press on a reminder that is no longer live: the
+// presser's own deleted reminder says it is off, with the note only when this
+// press deleted it (a rerun of its event after a crash); anything else no
+// longer exists.
+func (s Scheduling) doneAlready(ctx context.Context, p pending.QuickPress) (pending.QuickEdit, error) {
+	var a idArgs
+	if err := json.Unmarshal(p.Button.Args, &a); err != nil {
+		return pending.QuickEdit{}, fmt.Errorf("schedule: button %s: arguments: %w", p.Button.ID, err)
+	}
+	j, err := s.Jobs.Get(ctx, a.ID)
+	switch {
+	case errors.Is(err, schedule.ErrNotFound):
+		return pending.QuickEdit{Text: p.Speak.Text(texts.SchedGone, nil)}, nil
+	case err != nil:
+		return pending.QuickEdit{}, err
+	case j.Deleted && j.Owner == p.Button.Principal:
+		return s.offEdit(p, j, j.DeletedBy == p.Event), nil
+	}
+	return pending.QuickEdit{Text: p.Speak.Text(texts.SchedGone, nil)}, nil
+}
+
+// offEdit is a reminder's message once it is off: its text and the line that
+// says so, with the note for the history when noted.
+func (s Scheduling) offEdit(p pending.QuickPress, j schedule.Job, noted bool) pending.QuickEdit {
+	e := pending.QuickEdit{Text: j.Text + "\n\n" + p.Speak.Text(texts.SchedReminderOff, nil)}
+	if noted {
+		e.Note = fmt.Sprintf(noteDone, j.ID, head(j.Text))
+	}
+	return e
 }
 
 // head is the start of a job's text on one line, for a note.

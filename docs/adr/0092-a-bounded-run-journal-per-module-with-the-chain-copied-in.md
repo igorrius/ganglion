@@ -1,4 +1,4 @@
-# ADR-0091: Keep a bounded journal of each module's runs, with the chain that started a run copied into it
+# ADR-0092: Keep a bounded journal of each module's runs, with the chain that started a run copied into it
 
 - **Status:** Accepted
 - **Date:** 2026-11-16

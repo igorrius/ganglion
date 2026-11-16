@@ -327,7 +327,7 @@ func scriptedModel(owner *program, script []ScriptStep, review []string, write f
 		if st.Hold > 0 {
 			time.Sleep(st.Hold) // a model that takes its time, as a real one does
 		}
-		return providertest.Answer{Text: st.Say, Tool: st.Tool, Args: withBuild(st.Args, r)}
+		return providertest.Answer{Text: st.Say, Tool: st.Tool, Args: withJob(withBuild(st.Args, r), r)}
 	})
 	models := settings.Models{
 		Providers: []settings.Provider{{Name: provider, Type: settings.TypeOpenAI, BaseURL: fake.URL()}},

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -234,16 +235,30 @@ func TestCommandHintsComeFromTheTable(t *testing.T) {
 	}
 }
 
-// fakeList is a stand-in schedule.list: one message with buttons per job.
+// fakeList is a stand-in schedule.list: one message with buttons per job,
+// shown only when asked, as the real one (ADR-0091).
 type fakeList struct {
 	fakeTool
 	jobs []string
+}
+
+// Spec declares show, as the real one does.
+func (l *fakeList) Spec() tool.Spec {
+	s := l.fakeTool.Spec()
+	s.InputSchema = json.RawMessage(`{"type":"object","properties":{"show":{"type":"boolean"}}}`)
+	return s
 }
 
 func (l *fakeList) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	_, _ = l.fakeTool.Run(ctx, c)
 	if len(l.jobs) == 0 {
 		return tool.Result{Text: "no scheduled jobs"}, nil
+	}
+	var a struct {
+		Show bool `json:"show"`
+	}
+	if err := json.Unmarshal(c.Args, &a); err != nil || !a.Show {
+		return tool.Result{Text: "2 jobs, not shown to the owner"}, err
 	}
 	var out []event.Outgoing
 	for _, j := range l.jobs {

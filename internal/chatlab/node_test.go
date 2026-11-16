@@ -302,7 +302,7 @@ func TestRunNowQuestionClosesItself(t *testing.T) {
 	create := `{"kind":"task","cron":"0 * * * *","text":"Read the page.","grant":{"tools":["message.send"]}}`
 	n := startScripted(t, Scenario{Name: "x", Script: []ScriptStep{
 		{Tool: "schedule.create", Args: create}, {Say: "I asked."}, {Say: "It is set."},
-		{Tool: "schedule.list", Args: `{}`}, {Say: "Here they are."},
+		{Tool: "schedule.list", Args: `{"show":true}`}, {Say: "Here they are."},
 	}})
 	ctx := context.Background()
 	sayQuiet(t, n, "Create a task")

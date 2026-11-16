@@ -18,6 +18,7 @@ import (
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/sqlitedb"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/tool/pending"
@@ -363,7 +364,7 @@ func TestListHasButtons(t *testing.T) {
 	e := newSchedEnv(t)
 	ctx := context.Background()
 	list := builtin.NewScheduleList(e.sc)
-	res, err := list.Run(ctx, call("schedule.list", `{}`))
+	res, err := list.Run(ctx, call("schedule.list", `{"show":true}`))
 	if err != nil || len(res.Out) != 0 || !strings.Contains(res.Text, "no scheduled") {
 		t.Fatalf("empty list = %+v, %v", res, err)
 	}
@@ -372,7 +373,7 @@ func TestListHasButtons(t *testing.T) {
 	audit := rates("system:memory-audit")
 	audit.System, audit.Created = true, t0.Add(2*time.Second)
 	e.add(t, audit)
-	res, err = list.Run(ctx, call("schedule.list", `{}`))
+	res, err = list.Run(ctx, call("schedule.list", `{"show":true}`))
 	if err != nil || len(res.Out) != 3 {
 		t.Fatalf("list = %+v, %v", res, err)
 	}
@@ -408,7 +409,7 @@ func TestDeleteQuickAction(t *testing.T) {
 	audit := rates("system:memory-audit")
 	audit.System = true
 	e.add(t, audit)
-	res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{}`))
+	res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{"show":true}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -443,7 +444,7 @@ func TestRunNowQuickAction(t *testing.T) {
 	acts.Grant.Hosts = nil
 	e.add(t, reads)
 	e.add(t, acts)
-	res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{}`))
+	res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{"show":true}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -534,7 +535,7 @@ func TestScheduleCreateSaysHowToWriteATask(t *testing.T) {
 func TestQuickActionsLeaveNotes(t *testing.T) {
 	e := newSchedEnv(t)
 	e.add(t, rates("j1"))
-	res, err := builtin.NewScheduleList(e.sc).Run(context.Background(), call("schedule.list", `{}`))
+	res, err := builtin.NewScheduleList(e.sc).Run(context.Background(), call("schedule.list", `{"show":true}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -559,7 +560,7 @@ func TestQuickActionsLeaveNotes(t *testing.T) {
 	long := rates("j2")
 	long.Text = strings.Repeat("я", 300)
 	e.add(t, long)
-	res, _ = builtin.NewScheduleList(e.sc).Run(context.Background(), call("schedule.list", `{}`))
+	res, _ = builtin.NewScheduleList(e.sc).Run(context.Background(), call("schedule.list", `{"show":true}`))
 	if edit := e.pressAs(t, res.Out[0].Buttons[1]); edit.Note != "the owner deleted task j2: "+strings.Repeat("я", 100)+"…" {
 		t.Fatalf("a long task noted %q", edit.Note)
 	}
@@ -572,7 +573,7 @@ func TestDeleteRerunKeepsItsNote(t *testing.T) {
 	e := newSchedEnv(t)
 	ctx := context.Background()
 	e.add(t, rates("j1"))
-	res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{}`))
+	res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{"show":true}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -659,7 +660,7 @@ func TestCommandsShowWhereAJobIsShown(t *testing.T) {
 	j := rates("j9")
 	j.Grant = tool.Grant{Tools: []string{"host.exec"}, ReplyTo: "telegram:42", Commands: []tool.Command{{Argv: []string{"docker", "image", "prune", "-af"}, Dir: "/srv/x"}}}
 	e.add(t, j)
-	res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{}`))
+	res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{"show":true}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -686,7 +687,7 @@ func TestModuleJobIsListedWithoutDelete(t *testing.T) {
 	j := schedule.Job{ID: "module:local/demo-reader:0", Owner: me, Conv: "telegram:42", Transport: "telegram", Kind: schedule.KindModule,
 		Cron: "*/30 * * * *", Text: "local/demo-reader", System: true, Created: t0}
 	e.add(t, j)
-	res, err := builtin.NewScheduleList(e.sc).Run(context.Background(), call("schedule.list", `{}`))
+	res, err := builtin.NewScheduleList(e.sc).Run(context.Background(), call("schedule.list", `{"show":true}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -731,5 +732,123 @@ func TestScheduleCreateShowsAReminderWithDelete(t *testing.T) {
 	task, err := create.Run(ctx, call("schedule.create", ratesArgs))
 	if err != nil || len(task.Out) != 0 || strings.Contains(task.Text, "Delete button") {
 		t.Fatalf("task run = %+v, %v; want no message", task, err)
+	}
+}
+
+// Without show the model reads the list and the chat gets nothing: a lookup
+// must not flood the owner with cards (#226, ADR-0091).
+func TestListWithoutShowSendsNothing(t *testing.T) {
+	e := newSchedEnv(t)
+	ctx := context.Background()
+	e.add(t, rates("j1"))
+	e.add(t, remind("r1"))
+	for _, args := range []string{`{}`, ``, `{"show":false}`} {
+		res, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", args))
+		if err != nil || len(res.Out) != 0 || !strings.Contains(res.Text, "j1") || !strings.Contains(res.Text, "r1") ||
+			!strings.Contains(res.Text, "not shown") {
+			t.Fatalf("list %q = %+v, %v", args, res, err)
+		}
+	}
+	if _, err := builtin.NewScheduleList(e.sc).Run(ctx, call("schedule.list", `{"show":1}`)); err == nil {
+		t.Fatal("a show that is not a boolean was taken")
+	}
+}
+
+// schedule.delete answers with the one line the owner gets, for a reminder and
+// a task alike; a rerun of the same call gives it again; a system or module job
+// and someone else's job stay (#226, ADR-0091).
+func TestScheduleDeleteAnswersWithOneLine(t *testing.T) {
+	e := newSchedEnv(t)
+	ctx := context.Background()
+	e.add(t, remind("r1"))
+	e.add(t, rates("j1"))
+	mod := rates("module:local/x")
+	mod.Kind, mod.System, mod.Text, mod.Grant = schedule.KindModule, true, "local/x", tool.Grant{}
+	e.add(t, mod)
+	theirs := remind("r2")
+	theirs.Owner = "telegram:user:7"
+	e.add(t, theirs)
+	del := builtin.NewScheduleDelete(e.sc)
+	for _, tc := range []struct{ id, line string }{{"r1", "🗑 Off: call mum"}, {"j1", "🗑 Off: send me the exchange rates"}} {
+		for range 2 {
+			res, err := del.Run(ctx, call("schedule.delete", `{"id":"`+tc.id+`"}`))
+			if err != nil || len(res.Out) != 0 || !strings.HasSuffix(res.Text, ": "+tc.line) || !strings.Contains(res.Text, "nothing else") {
+				t.Fatalf("delete %s = %+v, %v", tc.id, res, err)
+			}
+		}
+		if j, _ := e.jobs.Get(ctx, tc.id); !j.Deleted {
+			t.Fatalf("%s not deleted", tc.id)
+		}
+	}
+	if _, err := del.Run(ctx, call("schedule.delete", `{"id":"module:local/x"}`)); !errors.Is(err, schedule.ErrSystem) {
+		t.Fatalf("delete a module job: %v", err)
+	}
+	if _, err := del.Run(ctx, call("schedule.delete", `{"id":"r2"}`)); !errors.Is(err, schedule.ErrNotFound) {
+		t.Fatalf("delete someone else's job: %v", err)
+	}
+	if j, _ := e.jobs.Get(ctx, "r2"); j.Deleted {
+		t.Fatal("someone else's job deleted")
+	}
+}
+
+// A recurring reminder's message carries Done; a one-time one, a task and a
+// system job carry none (#226, ADR-0091).
+func TestReminderButtons(t *testing.T) {
+	e := newSchedEnv(t)
+	ctx := context.Background()
+	hourly := remind("r1")
+	hourly.At, hourly.Cron = time.Time{}, "0 * * * *"
+	sysRem := hourly
+	sysRem.ID, sysRem.System = "system:r", true
+	for _, tc := range []struct {
+		j    schedule.Job
+		want string
+	}{{hourly, "Done"}, {remind("r2"), ""}, {rates("j1"), ""}, {sysRem, ""}} {
+		bs, err := e.sc.ReminderButtons(ctx, texts.Speaker{}, tc.j)
+		if err != nil || labels(bs) != tc.want {
+			t.Errorf("%s: buttons %+v, %v", tc.j.ID, bs, err)
+		}
+	}
+	bs, err := e.sc.ReminderButtons(ctx, texts.Speaker{}, hourly)
+	if err != nil || len(bs) != 1 || !strings.HasPrefix(bs[0].Label, "✅ ") {
+		t.Fatalf("buttons %+v, %v", bs, err)
+	}
+}
+
+// Done deletes the reminder at once and keeps its text with a line saying it
+// is off, leaving a note; pressing it again, or Done of an older message, says
+// the same with no second note (#226, ADR-0091).
+func TestDoneQuickAction(t *testing.T) {
+	e := newSchedEnv(t)
+	ctx := context.Background()
+	hourly := remind("r1")
+	hourly.At, hourly.Cron = time.Time{}, "0 * * * *"
+	e.add(t, hourly)
+	older, err := e.sc.ReminderButtons(ctx, texts.Speaker{}, hourly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer, err := e.sc.ReminderButtons(ctx, texts.Speaker{}, hourly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit := e.pressAs(t, newer[0])
+	if edit.Text != "call mum\n\n✅ Done: this reminder is off." || len(edit.Buttons) != 0 || !strings.Contains(edit.Note, "pressed Done on reminder r1") {
+		t.Fatalf("edit %+v", edit)
+	}
+	if j, _ := e.jobs.Get(ctx, "r1"); !j.Deleted {
+		t.Fatal("not deleted")
+	}
+	// A rerun of the same press's event gives the note back.
+	p, err := e.pending.Press(ctx, newer[0].ID, pending.By{Principal: me, Conv: "telegram:42", Event: "PRESS-" + newer[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := e.sc.QuickActions()[builtin.ActionDone](ctx, pending.QuickPress{Button: p.Button, Transport: "telegram", Event: "PRESS-" + newer[0].ID})
+	if err != nil || again.Text != edit.Text || again.Note != edit.Note {
+		t.Fatalf("rerun %+v, %v", again, err)
+	}
+	if old := e.pressAs(t, older[0]); old.Text != edit.Text || old.Note != "" {
+		t.Fatalf("older Done %+v", old)
 	}
 }

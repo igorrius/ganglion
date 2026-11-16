@@ -3,6 +3,7 @@ package agent
 import (
 	"cmp"
 	"context"
+	"regexp"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
@@ -170,12 +171,30 @@ func botNote(m event.Message, got repliedRow, session, at string, loc *time.Loca
 	case !known || o.Tainted:
 		return taintedNote(head, cmp.Or(src, unknownSource), body, current)
 	case current:
+		if job := jobOf(o); job != "" {
+			head += ", " + src + job
+		}
 		return replyNote{kind: replyCurrent, line: head + quoted(body, replyExcerptRunes, r.HasFile) + "]"}
 	}
+	src += jobOf(o)
 	if body == "" {
 		return replyNote{kind: replyEarlier, line: head + ", from " + src + filed(r.HasFile) + "]"}
 	}
 	return replyNote{kind: replyEarlier, line: head + ", from " + src + ":]\n" + text.Truncate(body, replyTextRunes)}
+}
+
+// jobPattern is what a job id may look like in a note: the node's own ids
+// (schedule.create's lower-case key and number, a system job's name).
+var jobPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9:._-]{0,127}$`)
+
+// jobOf names the job of a reminder's message for the note, ", job <id>", so
+// the model can stop it without listing the jobs (ADR-0091); "" for any other
+// message, or an id the node could not have written.
+func jobOf(o *event.Origin) string {
+	if o == nil || o.Kind != event.OriginReminder || !jobPattern.MatchString(o.Job) {
+		return ""
+	}
+	return ", job " + o.Job
 }
 
 // moduleOf is the short name of the module that wrote a message of origin
