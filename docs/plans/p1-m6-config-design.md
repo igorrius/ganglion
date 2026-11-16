@@ -133,7 +133,7 @@ sequenceDiagram
 |---|---|
 | A field off the allowlist | refused with "changed on the host" or "has its own tool"; no card |
 | The file after the change fails parsing, the schema or a module's check | refused with the path and the reason; the file is untouched |
-| The file changed while the card waited | on Apply the node checks again and shows the new card instead of writing |
+| The file changed while the card waited | on Apply the node checks again against the file as it is now: a change that no longer passes is refused with the reason; one that passes is written, and the answer names each field's value just before the write, so a value that moved is seen |
 | The commit fails after the write | the file is changed; the error is logged and said; the check at start commits it |
 | No git | proposals work; history and rollback say there is none |
 

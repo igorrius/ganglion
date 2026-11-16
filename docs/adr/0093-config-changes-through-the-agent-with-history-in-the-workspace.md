@@ -118,7 +118,8 @@ Decided with it (owner, 2026-11-16):
     press, the card shows each field's old and new value, and a proposal
     from a tainted session carries a line that says so (R-POL-6).
   - *A card approved after the file changed under it*: the press checks the
-    file again and shows what changed instead of applying blindly.
+    file again; a change that no longer passes is refused, and the answer
+    names each field's value just before the write.
   - *A forged history*: tools that write the workspace refuse `config/`;
     the live file stays the truth, and the copy is only its record, so an
     edited copy is overwritten and committed at the next start.
