@@ -10,6 +10,7 @@ toast.no_button: This button no longer works.
 toast.used: Already handled.
 toast.expired: Expired.
 toast.not_allowed: Not allowed.
+toast.replaced: Replaced by a newer question.
 
 line.running: ⏳ Approved, running…
 line.approved: Approved
@@ -17,6 +18,7 @@ line.approved_failed: Approved, but it failed
 line.declined: Declined
 line.used: Already handled.
 line.expired: Expired
+line.replaced: Replaced by a newer question
 
 reply.no_model: Sorry, no model is reachable right now. Please try again in a few minutes.
 reply.step_limit: Sorry, I could not finish that.
@@ -99,6 +101,7 @@ sched.not_task: "Only a task can run now."
 sched.this_chat: "this chat"
 sched.none: "none"
 sched.started: "Started; the answer goes to {target}."
+sched.reminder_set: "⏰ Reminder set: {timing}\n{text}"
 sched.kind_system: "system job"
 sched.kind_module: "module job"
 sched.audit_text: "Memory audit: every stored fact and persona file checked for hidden instructions; nothing is changed."

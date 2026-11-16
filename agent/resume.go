@@ -23,6 +23,7 @@ type Confirmations interface {
 	Get(ctx context.Context, id string) (pending.Item, error)
 	Finish(ctx context.Context, id string, o pending.Outcome) error
 	Waiting(ctx context.Context, ids []string) ([]string, error)
+	Replace(ctx context.Context, id string) ([]pending.Item, error)
 	AddButtons(ctx context.Context, bs ...pending.Button) error
 }
 
@@ -112,6 +113,10 @@ func (a *Agent) pressed(ctx context.Context, t *turn) error {
 	case errors.Is(err, pending.ErrExpired):
 		t.toast(a.label(ctx, t, texts.ToastExpired))
 		t.closeButtons(p.Item.Question, a.stamped(a.say(ctx, t, texts.LineExpired, nil), p.Item.Expires))
+		return nil
+	case errors.Is(err, pending.ErrReplaced):
+		t.toast(a.label(ctx, t, texts.ToastReplaced))
+		t.closeButtons(p.Item.Question, a.stamped(a.say(ctx, t, texts.LineReplaced, nil), p.Item.Answered))
 		return nil
 	case err != nil:
 		return err
@@ -414,6 +419,23 @@ func (a *Agent) closeExpired(ctx context.Context, t *turn, it pending.Item) {
 	}
 	t.out = append(t.out, event.Outgoing{IdemKey: t.event.IdemKey + ":edit", Transport: it.Transport, Conv: it.Conv,
 		Text: a.stamped(a.say(ctx, t, texts.LineExpired, nil), it.Expires), Folded: it.Question, Edit: ref})
+}
+
+// closeReplaced takes the buttons off the question of a call that a newer
+// question replaced and folds it under a line saying so (ADR-0088). A
+// question that was not delivered has nothing to close. Its key is the
+// replaced call's, so a rerun stores the edit once.
+func (a *Agent) closeReplaced(ctx context.Context, t *turn, it pending.Item) {
+	ref, err := a.d.Sent.SentRef(ctx, it.Call().Key()+pending.QuestionKeySuffix)
+	if err != nil {
+		a.log.Warn("agent: the question of a replaced call", "pending", it.ID, "err", err)
+		return
+	}
+	if ref == "" {
+		return
+	}
+	t.out = append(t.out, event.Outgoing{IdemKey: it.Call().Key() + ":replaced", Transport: it.Transport, Conv: it.Conv,
+		Text: a.stamped(a.say(ctx, t, texts.LineReplaced, nil), it.Answered), Folded: it.Question, Edit: ref})
 }
 
 // continueWith resumes the conversation: the call's outcome joins the

@@ -613,3 +613,114 @@ func TestWaitingGauge(t *testing.T) {
 		t.Fatalf("pending after a press = %v, want 1", got)
 	}
 }
+
+// askAs parks a call of tool name by principal in conv, in turn, one
+// millisecond-step later than the last call of the fixture's clock.
+func (f *fixture) askAs(t *testing.T, turn, name, principal, conv string) (string, event.Outgoing) {
+	t.Helper()
+	ctx := context.Background()
+	f.clk.add(time.Second)
+	c := tool.Call{TurnID: turn, N: 1, Conv: conv, Transport: "telegram", Principal: principal, Name: name, Args: json.RawMessage(`{}`)}
+	id, err := f.s.Ask(ctx, c, "Run "+name+"?")
+	if err != nil || id == "" {
+		t.Fatalf("Ask = %q, %v", id, err)
+	}
+	q, err := f.s.Outgoing(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id, q
+}
+
+func TestReplaceWithdrawsAnEarlierQuestionOfTheSameTool(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	oldID, oldQ := f.askAs(t, "01TURNA", "schedule.create", owner, "telegram:42")
+	newID, _ := f.askAs(t, "01TURNB", "schedule.create", owner, "telegram:42")
+	got, err := f.s.Replace(ctx, newID)
+	if err != nil || len(got) != 1 || got[0].ID != oldID || got[0].Status != pending.StatusReplaced || !got[0].Answered.Equal(f.clk.Now()) {
+		t.Fatalf("Replace = %+v, %v", got, err)
+	}
+	if it, err := f.s.Get(ctx, newID); err != nil || it.Status != pending.StatusWaiting {
+		t.Fatalf("the new call = %+v, %v; want it waiting", it, err)
+	}
+	// A rerun returns the same set.
+	again, err := f.s.Replace(ctx, newID)
+	if err != nil || len(again) != 1 || again[0].ID != oldID {
+		t.Fatalf("second Replace = %+v, %v", again, err)
+	}
+	if w, err := f.s.Waiting(ctx, []string{oldID, newID}); err != nil || len(w) != 1 || w[0] != newID {
+		t.Fatalf("Waiting = %v, %v", w, err)
+	}
+	// A press on the replaced question's button runs nothing.
+	p, err := f.s.Press(ctx, oldQ.Buttons[0].ID, by("ev1"))
+	if !errors.Is(err, pending.ErrReplaced) || p.Item.ID != oldID || p.Item.Question == "" || p.Item.Status != pending.StatusReplaced {
+		t.Fatalf("press = %+v, %v; want ErrReplaced with the item", p, err)
+	}
+	if _, err := f.s.Press(ctx, oldQ.Buttons[1].ID, by("ev2")); !errors.Is(err, pending.ErrReplaced) {
+		t.Fatalf("press of the other button: %v", err)
+	}
+	if _, err := f.s.Replace(ctx, "NOSUCHCALL"); !errors.Is(err, pending.ErrNotFound) {
+		t.Fatalf("unknown id: %v", err)
+	}
+}
+
+func TestReplaceLeavesWhatIsNotTheSameQuestion(t *testing.T) {
+	const other = "telegram:user:43"
+	for _, tc := range []struct {
+		name                        string
+		turn, tool, principal, conv string
+	}{
+		{"the same turn", "01TURNB", "schedule.create", owner, "telegram:42"},
+		{"another tool", "01TURNA", "message.send", owner, "telegram:42"},
+		{"another principal", "01TURNA", "schedule.create", other, "telegram:42"},
+		{"another conversation", "01TURNA", "schedule.create", owner, "telegram:43"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			ctx := context.Background()
+			keptID, _ := f.askAs(t, tc.turn, tc.tool, tc.principal, tc.conv)
+			newID, _ := f.askAs(t, "01TURNB", "schedule.create", owner, "telegram:42")
+			if got, err := f.s.Replace(ctx, newID); err != nil || len(got) != 0 {
+				t.Fatalf("Replace = %+v, %v; want nothing", got, err)
+			}
+			if it, _ := f.s.Get(ctx, keptID); it.Status != pending.StatusWaiting {
+				t.Fatalf("the other call is %s", it.Status)
+			}
+		})
+	}
+}
+
+func TestReplaceLeavesAnAnsweredCall(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	oldID, oldQ := f.askAs(t, "01TURNA", "schedule.create", owner, "telegram:42")
+	if _, err := f.s.Press(ctx, oldQ.Buttons[1].ID, by("ev1")); err != nil {
+		t.Fatal(err)
+	}
+	newID, _ := f.askAs(t, "01TURNB", "schedule.create", owner, "telegram:42")
+	if got, err := f.s.Replace(ctx, newID); err != nil || len(got) != 0 {
+		t.Fatalf("Replace = %+v, %v; want nothing", got, err)
+	}
+	if it, _ := f.s.Get(ctx, oldID); it.Status != pending.StatusDenied {
+		t.Fatalf("the answered call is %s", it.Status)
+	}
+}
+
+func TestExpireDueLeavesReplacedCalls(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	oldID, _ := f.askAs(t, "01TURNA", "schedule.create", owner, "telegram:42")
+	newID, _ := f.askAs(t, "01TURNB", "schedule.create", owner, "telegram:42")
+	if _, err := f.s.Replace(ctx, newID); err != nil {
+		t.Fatal(err)
+	}
+	f.clk.add(pending.DefaultTTL + time.Minute)
+	items, err := f.s.ExpireDue(ctx)
+	if err != nil || len(items) != 1 || items[0].ID != newID {
+		t.Fatalf("ExpireDue = %+v, %v; want only the new call", items, err)
+	}
+	if it, _ := f.s.Get(ctx, oldID); it.Status != pending.StatusReplaced {
+		t.Fatalf("the replaced call is %s", it.Status)
+	}
+}

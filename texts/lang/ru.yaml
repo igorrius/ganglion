@@ -9,6 +9,7 @@ toast.no_button: Эта кнопка больше не работает.
 toast.used: Уже сделано.
 toast.expired: Время вышло.
 toast.not_allowed: Нельзя.
+toast.replaced: Заменено более новым вопросом.
 
 line.running: ⏳ Разрешено, выполняю…
 line.approved: Разрешено
@@ -16,6 +17,7 @@ line.approved_failed: Разрешено, но не получилось
 line.declined: Отклонено
 line.used: Уже сделано.
 line.expired: Время вышло
+line.replaced: Заменено более новым вопросом
 
 reply.no_model: Простите, сейчас нет доступа ни к одной модели. Попробуйте через несколько минут.
 reply.step_limit: Простите, не получилось это закончить.
@@ -98,6 +100,7 @@ sched.not_task: "Запустить сейчас можно только зад�
 sched.this_chat: "этот чат"
 sched.none: "нет"
 sched.started: "Запущено; ответ придёт сюда: {target}."
+sched.reminder_set: "⏰ Напоминание создано: {timing}\n{text}"
 sched.kind_system: "системное задание"
 sched.kind_module: "задание модуля"
 sched.audit_text: "Проверка памяти: все сохранённые факты и файлы описания проверяются на скрытые инструкции; ничего не меняется."

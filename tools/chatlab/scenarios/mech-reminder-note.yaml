@@ -10,11 +10,9 @@ covers:
 model: scripted
 script:
   - {tool: schedule.create, args: '{"kind":"reminder","cron":"0 * * * *","text":"Call the plumber."}'}
-  - {say: I asked.}
   - {say: It is set.}
 steps:
   - say: "Remind me every hour to call the plumber."
-  - press: Approve
   - advance: {scheduler: 2h}
   - facts:
       history: {contains: "[reminder]"}

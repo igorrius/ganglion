@@ -44,7 +44,7 @@ const Reoffer = 24 * time.Hour
 type Status string
 
 // Statuses. Approved, denied and expired are decided but not yet handed
-// to the conversation; done means the outcome is in Result and the turn
+// to the conversation; replaced is closed for good; done means the outcome is in Result and the turn
 // that resumed the conversation has it.
 const (
 	StatusWaiting  Status = "waiting"
@@ -52,6 +52,9 @@ const (
 	StatusDenied   Status = "denied"
 	StatusExpired  Status = "expired"
 	StatusDone     Status = "done"
+	// StatusReplaced is a waiting call that a newer question of the same
+	// tool withdrew (Store.Replace); it never runs.
+	StatusReplaced Status = "replaced"
 )
 
 // Actions of the confirmation buttons; any other action is a quick action
@@ -75,6 +78,9 @@ var (
 	ErrUsed = errors.New("pending: button already used")
 	// ErrExpired is a press after the button's expiry.
 	ErrExpired = errors.New("pending: button expired")
+	// ErrReplaced is a press of a button whose question a newer one of
+	// the same tool replaced.
+	ErrReplaced = errors.New("pending: question replaced")
 	// ErrNotYours is a press by someone the button was not made for, or
 	// in another conversation.
 	ErrNotYours = errors.New("pending: button belongs to someone else")
@@ -416,6 +422,94 @@ func (s *Store) Finish(ctx context.Context, id string, o Outcome) error {
 		return fmt.Errorf("pending: finish %s: %w", id, ErrNotFound)
 	}
 	return nil
+}
+
+// Replace withdraws every call that waits, of the same tool, principal and
+// conversation as call id but parked in another turn, before it (ADR-0088):
+// each becomes replaced, answered now, with its unused buttons spent, and
+// its request cell is answered no. It returns every call replaced by id, in
+// the order they were parked, so a rerun gets the same set back. An unknown
+// id is ErrNotFound.
+func (s *Store) Replace(ctx context.Context, id string) ([]Item, error) {
+	var out []Item
+	err := s.tx(ctx, func(c *sql.Conn) error {
+		old, err := replaceable(ctx, c, id)
+		if err != nil {
+			return err
+		}
+		now := s.now().UnixMilli()
+		for _, oid := range old {
+			if _, err := c.ExecContext(ctx, `UPDATE pending_calls SET status = ?, replaced_by = ?, answered_ms = ? WHERE id = ?`,
+				string(StatusReplaced), id, now, oid); err != nil {
+				return err
+			}
+			if _, err := c.ExecContext(ctx, `UPDATE pending_buttons SET used = 1, used_by = ? WHERE pending = ? AND used = 0`,
+				spentReplaced, oid); err != nil {
+				return err
+			}
+		}
+		out, err = replacedBy(ctx, c, id)
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("pending: replace by %s: %w", id, err)
+	}
+	for _, it := range out {
+		if _, err := s.cells.Answer(ctx, cellID(it.ID), false, "replaced"); err != nil &&
+			!errors.Is(err, cells.ErrDecided) && !errors.Is(err, cells.ErrNotFound) {
+			return nil, fmt.Errorf("pending: replace by %s: answer request %s: %w", id, it.ID, err)
+		}
+	}
+	return out, nil
+}
+
+// replaceable returns the ids of the waiting calls that call id replaces: the
+// same tool, principal and conversation, from another turn, parked before it.
+func replaceable(ctx context.Context, c *sql.Conn, id string) ([]string, error) {
+	var toolName, principal, conv, turn string
+	var created int64
+	err := c.QueryRowContext(ctx, `SELECT tool, principal, conv, turn_id, created_ms FROM pending_calls WHERE id = ?`, id).
+		Scan(&toolName, &principal, &conv, &turn, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	rows, err := c.QueryContext(ctx, `SELECT id FROM pending_calls WHERE status = ? AND tool = ? AND principal = ? AND conv = ?
+		AND turn_id <> ? AND (created_ms < ? OR (created_ms = ? AND id < ?))`,
+		string(StatusWaiting), toolName, principal, conv, turn, created, created, id)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var oid string
+		if err := rows.Scan(&oid); err != nil {
+			return nil, err
+		}
+		ids = append(ids, oid)
+	}
+	return ids, rows.Err()
+}
+
+// replacedBy returns every call that call id replaced, in the order they were parked.
+func replacedBy(ctx context.Context, c *sql.Conn, id string) ([]Item, error) {
+	rows, err := c.QueryContext(ctx, `SELECT `+itemColumns+` FROM pending_calls WHERE replaced_by = ? ORDER BY created_ms, id`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Item
+	for rows.Next() {
+		it, err := scanItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
 }
 
 // Waiting returns those of ids whose calls still wait for an answer, in

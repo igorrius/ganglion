@@ -10,13 +10,13 @@ covers:
   - "tool/pending/**"
 model: scripted
 script:
-  - {tool: schedule.create, args: '{"kind":"reminder","at":"2099-01-01 09:00","text":"Call the plumber."}'}
+  - {tool: schedule.create, args: '{"kind":"task","at":"2099-01-01 09:00","text":"Call the plumber.","grant":{"tools":["cells.get"]}}'}
   - {say: I asked the owner.}
-  - {tool: schedule.create, args: '{"kind":"reminder","at":"2099-01-01 09:00","text":"Call the plumber."}'}
+  - {tool: schedule.create, args: '{"kind":"task","at":"2099-01-01 09:00","text":"Call the plumber.","grant":{"tools":["cells.get"]}}'}
   - {say: It still waits for the owner.}
 steps:
-  - say: Set a reminder for the plumber.
-  - say: Set that reminder again.
+  - say: Schedule a task for the plumber.
+  - say: Schedule that task again.
   - facts:
       questions: 1
       journal:

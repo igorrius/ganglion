@@ -180,7 +180,7 @@ func TestEveryKeyInTheInventoryHasASlot(t *testing.T) {
 		texts.ReplyNoModel, texts.ReplyStepLimit, texts.ReplyExpired, texts.ReplyDailyLimit, texts.ReplyGiveUp,
 		texts.ReplyNewSession, texts.ReplyNoSessions, texts.ReplyNoSuchResume, texts.ReplyResumed, texts.ReplySessionRow,
 		texts.ReplyNoTasks, texts.ReplyNotAvailable,
-		texts.LineRunning, texts.LineApproved, texts.LineApprovedFailed, texts.LineDeclined, texts.LineUsed, texts.LineExpired,
+		texts.LineRunning, texts.LineApproved, texts.LineApprovedFailed, texts.LineDeclined, texts.LineUsed, texts.LineExpired, texts.LineReplaced, texts.ToastReplaced,
 	} {
 		if texts.EnglishText(k) == "" {
 			t.Errorf("%s has no English text", k)

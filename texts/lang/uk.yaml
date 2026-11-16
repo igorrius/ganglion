@@ -9,6 +9,7 @@ toast.no_button: Ця кнопка більше не працює.
 toast.used: Вже зроблено.
 toast.expired: Час вийшов.
 toast.not_allowed: Не можна.
+toast.replaced: Замінено новішим запитанням.
 
 line.running: ⏳ Дозволено, виконую…
 line.approved: Дозволено
@@ -16,6 +17,7 @@ line.approved_failed: Дозволено, але не вийшло
 line.declined: Відхилено
 line.used: Вже зроблено.
 line.expired: Час вийшов
+line.replaced: Замінено новішим запитанням
 
 reply.no_model: Вибачте, зараз немає доступу до жодної моделі. Спробуйте за кілька хвилин.
 reply.step_limit: Вибачте, не вдалося це завершити.
@@ -98,6 +100,7 @@ sched.not_task: "Запустити зараз можна лише завдан�
 sched.this_chat: "цей чат"
 sched.none: "немає"
 sched.started: "Запущено; відповідь прийде сюди: {target}."
+sched.reminder_set: "⏰ Нагадування створено: {timing}\n{text}"
 sched.kind_system: "системне завдання"
 sched.kind_module: "завдання модуля"
 sched.audit_text: "Перевірка памʼяті: усі збережені факти й файли опису перевіряються на приховані інструкції; нічого не змінюється."

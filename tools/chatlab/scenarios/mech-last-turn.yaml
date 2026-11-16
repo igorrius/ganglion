@@ -8,10 +8,10 @@ covers:
   - turns/**
 model: scripted
 script:
-  - {tool: schedule.create, args: '{"kind":"reminder","at":"2099-01-01 09:00","text":"Call the plumber."}'}
+  - {tool: schedule.create, args: '{"kind":"task","at":"2099-01-01 09:00","text":"Call the plumber.","grant":{"tools":["cells.get"]}}'}
   - {say: I asked.}
 steps:
-  - say: "Remind me to call the plumber."
+  - say: "Schedule a task to call the plumber."
   - say: "/last"
   - facts:
       reply: {contains: "Last turn, "}

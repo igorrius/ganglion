@@ -158,17 +158,17 @@ func TestJudgeThatDoesNotAnswerIsNotRun(t *testing.T) {
 func TestJudgeReadsOnlyTheModelsWords(t *testing.T) {
 	m := &recordingModel{answer: `{"ok":true,"reason":""}`}
 	s := scripted("x", []ScriptStep{
-		{Tool: "schedule.create", Args: reminderArgs(t, time.Now().Add(time.Hour))}, {Say: "I asked."}, {Say: "It is set."},
+		{Tool: "schedule.create", Args: taskArgs(t, time.Now().Add(time.Hour))}, {Say: "I asked."}, {Say: "It is set."},
 	}, Step{Say: "Set a reminder"}, Step{Judge: "first"}, Step{Press: "Approve"}, Step{Judge: "second"})
 	o := runOne(t, RunOptions{Scenarios: []Scenario{s}, Judge: NewJudge(m, "m")})
 	if o.Result != ResultPassed || len(m.got) != 2 {
 		t.Fatalf("outcome %+v, %d judge calls", o, len(m.got))
 	}
 	first, second := m.got[0].Messages[1].Content, m.got[1].Messages[1].Content
-	if !strings.Contains(first, "I asked.") || strings.Contains(first, "Create a reminder") {
+	if !strings.Contains(first, "I asked.") || strings.Contains(first, "Create a scheduled task") {
 		t.Errorf("first read %q", first)
 	}
-	if !strings.Contains(second, "It is set.") || strings.Contains(second, "Create a reminder") || strings.Contains(second, "I asked.") {
+	if !strings.Contains(second, "It is set.") || strings.Contains(second, "Create a scheduled task") || strings.Contains(second, "I asked.") {
 		t.Errorf("second read %q", second)
 	}
 }
