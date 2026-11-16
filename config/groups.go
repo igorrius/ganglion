@@ -6,6 +6,7 @@ import (
 
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/alert"
+	"github.com/igorrius/ganglion/confighist"
 	"github.com/igorrius/ganglion/groups"
 	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
@@ -22,10 +23,12 @@ func GroupStore() do.Provider[*groups.Store] {
 	}
 }
 
-// GroupsFile provides the telegram: section of the node's file.
-func GroupsFile() do.Provider[settings.TelegramFile] {
-	return func(i do.Injector) (settings.TelegramFile, error) {
-		return settings.TelegramFile{Path: settingsFile(do.MustInvoke[Bootstrap](i))}, nil
+// GroupsFile provides the telegram: section of the node's file, every
+// change recorded (R-CFG-13).
+func GroupsFile() do.Provider[confighist.TelegramFile] {
+	return func(i do.Injector) (confighist.TelegramFile, error) {
+		return confighist.TelegramFile{File: settings.TelegramFile{Path: settingsFile(do.MustInvoke[Bootstrap](i))},
+			History: do.MustInvoke[confighist.History](i)}, nil
 	}
 }
 
@@ -34,7 +37,7 @@ func GroupsFile() do.Provider[settings.TelegramFile] {
 // request to an admin.
 func AccessGroups() do.Provider[access.Groups] {
 	return func(i do.Injector) (access.Groups, error) {
-		connected := groups.Connected{List: do.MustInvoke[settings.TelegramFile](i).Groups, Key: telegram.GroupKey}
+		connected := groups.Connected{List: do.MustInvoke[confighist.TelegramFile](i).Groups, Key: telegram.GroupKey}
 		requests := groups.NewRequests(do.MustInvoke[*groups.Store](i), do.MustInvoke[alert.Admins](i),
 			do.MustInvoke[*sqlqueue.Queue](i).Put, time.Now, do.MustInvoke[*slog.Logger](i))
 		return access.Groups{Has: connected.Has, Unknown: requests.Seen}, nil
@@ -45,7 +48,7 @@ func AccessGroups() do.Provider[access.Groups] {
 // the group's line to the node's file.
 func GroupActions() do.Provider[groups.Actions] {
 	return func(i do.Injector) (groups.Actions, error) {
-		return groups.Actions{Store: do.MustInvoke[*groups.Store](i), File: do.MustInvoke[settings.TelegramFile](i),
+		return groups.Actions{Store: do.MustInvoke[*groups.Store](i), File: do.MustInvoke[confighist.TelegramFile](i),
 			Chat: telegram.GroupChat, IsAdmin: do.MustInvoke[*access.List](i).IsAdmin}, nil
 	}
 }
@@ -53,7 +56,7 @@ func GroupActions() do.Provider[groups.Actions] {
 // GroupTopics provides the titles of the forum topics of connected groups.
 func GroupTopics() do.Provider[groups.Topics] {
 	return func(i do.Injector) (groups.Topics, error) {
-		connected := groups.Connected{List: do.MustInvoke[settings.TelegramFile](i).Groups, Key: telegram.GroupKey}
+		connected := groups.Connected{List: do.MustInvoke[confighist.TelegramFile](i).Groups, Key: telegram.GroupKey}
 		return groups.NewTopics(do.MustInvoke[*groups.Store](i), connected.Has, do.MustInvoke[*slog.Logger](i)), nil
 	}
 }
@@ -72,8 +75,8 @@ func Routing() do.Provider[builtin.Routing] {
 	return func(i do.Injector) (builtin.Routing, error) {
 		path := settingsFile(do.MustInvoke[Bootstrap](i))
 		return builtin.Routing{
-			Dests:   settings.DestinationsFile{Path: path},
-			Groups:  do.MustInvoke[settings.TelegramFile](i),
+			Dests:   destinationsFile(i),
+			Groups:  do.MustInvoke[confighist.TelegramFile](i),
 			Topics:  do.MustInvoke[*groups.Store](i),
 			Modules: settings.ModulesFile{Path: path}.Modules,
 			Router:  do.MustInvoke[*modhost.Host](i),

@@ -149,3 +149,5 @@ internal/ghfetch/**
 config/update.go
 cmd/launch*.go
 cmd/update.go
+confighist/**
+config/confighist.go
