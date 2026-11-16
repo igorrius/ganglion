@@ -337,7 +337,8 @@ Guarantee: **at-least-once + idempotency.**
 - **R-DLV-15.** A module's message (R-RUN-16) records the module that wrote it. A reply to it tells the
   agent the module's name and the time as the node's own words, with none of the message's text, the
   channel's copy or a selected quote, so it does not taint the session and the agent can read and
-  rewrite the module (R-RUN-17). A name that could not be a module's makes the message one of an unknown
+  rewrite the module (R-RUN-17). When the run that sent it is in the journal, the note adds its chain
+  in the node's words: causes, times, host calls by kind, cells written (R-RUN-20). A name that could not be a module's makes the message one of an unknown
   source. A message the channel says the bot wrote and this node has no record of is said to be so
   (another node of the bot may have sent it, or it is over 90 days old); its text stays outside content
   ([ADR-0073](adr/0073-a-modules-message-names-its-module.md)).
@@ -820,7 +821,8 @@ escalate:                    # when to call the model
   owner one node line that day. A repeated run sends nothing twice. The
   model gets a node note without the text (`[module] demo-alerts notified
   you at 14:30`), which does not taint; a reply to the message names the
-  module the same way (R-DLV-15). The window says "Writes to you: up
+  module the same way (R-DLV-15). The message records the run that sent
+  it (R-RUN-20). The window says "Writes to you: up
   to N messages a day". Other targets wait in "Not now".
 - **R-RUN-17.** The agent writes a module's source with `module.write`
   (one file in `workspace/modules/<name>/`, relative path without `..`,
@@ -872,6 +874,26 @@ escalate:                    # when to call the model
   current cells. A failed trial refuses the build's install; a module
   without examples installs, and the window says it was not tried
   ([ADR-0090](adr/0090-a-module-is-tried-on-its-examples-before-install.md)).
+- **R-RUN-20.** The node keeps a journal of each module's runs: the last
+  200 per module, pruned on write; a run delivered again replaces its row,
+  and a removed module's rows go with it. A row holds the version, the
+  cause (cron; the agent's call of a tool, by name; a change of cells by
+  another module's run, with the cells and that run), when, how long, the
+  outcome and kind in the node's closed sets, the host calls by kind with
+  counts (`http.fetch`, `cell.get`, `cell.report`, `notify`, `state.get`,
+  `state.put`, `secret.get`, `config.get`; a denied call counts), the cells
+  written and the messages sent; never an argument, a value, a text or the
+  module's error. A run from a cell trigger copies the producer's row and
+  its chain into its own when written, so the chain lasts as long as the
+  run does. A module's message records the run that sent it (R-RUN-16).
+  An admin sees it with no model: `/why` as a reply to a module's message
+  shows the chain from the cron line or the agent's call to the message;
+  the card of `/modules <name>` has a Runs button, and `/modules runs
+  <name>` shows the last 10 runs. The agent gets the last runs in
+  `module.status` and the chain in a reply's note (R-DLV-15). A cell id or
+  module name is shown only where it fits the node's name pattern. A row
+  that cannot be written is logged and counted; it never fails the run
+  ([ADR-0091](adr/0091-a-bounded-run-journal-per-module-with-the-chain-copied-in.md)).
 
 Resources, measured in P0 on amd64 under a 128 MB limit (task 0.5,
 [research note](research/2026-11-01-runner-memory.md)); arm64 confirmation
