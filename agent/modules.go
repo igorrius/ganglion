@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/texts"
 )
@@ -48,6 +49,9 @@ type LocalModules interface {
 	SetOff(ctx context.Context, name string, off bool) error
 	Rollback(ctx context.Context, name string) (modstore.Outcome, error)
 	Remove(ctx context.Context, name string) error
+	// Run is the journal's row of a module's run id; false when it has none
+	// (R-RUN-20).
+	Run(ctx context.Context, name, id string) (modstore.Run, bool, error)
 }
 
 // NoLocalModules is a node that hosts no local modules.
@@ -77,6 +81,11 @@ func (NoLocalModules) Rollback(context.Context, string) (modstore.Outcome, error
 // Remove has no module.
 func (NoLocalModules) Remove(context.Context, string) error { return modstore.ErrUnknownModule }
 
+// Run has no journal.
+func (NoLocalModules) Run(context.Context, string, string) (modstore.Run, bool, error) {
+	return modstore.Run{}, false, nil
+}
+
 // Words of /modules and the names of the values its texts take.
 const (
 	wordOff    = "off"
@@ -84,6 +93,9 @@ const (
 	varName    = "name"
 	varVersion = "version"
 	varValue   = "value"
+	varCells   = "cells"
+	varKind    = "kind"
+	wordRuns   = "runs"
 )
 
 const modulesNote = commandPrefix + "the owner ran /modules: "
@@ -91,7 +103,10 @@ const modulesNote = commandPrefix + "the owner ran /modules: "
 // moduleReply is what /modules answers and what the history notes. The note
 // never holds text taken from a module's source (a setting's name, a note
 // of the journal): the model does not read it (R-RUN-13).
-type moduleReply struct{ text, note string }
+type moduleReply struct {
+	text, note string
+	buttons    []event.Button // attached to the reply: the card's Runs button
+}
 
 // dateLayout is the day and month, the same in every language.
 const dateLayout = "02.01"
@@ -112,6 +127,9 @@ func (a *Agent) modules(ctx context.Context, t *turn, arg string) error {
 		return fmt.Errorf("agent: /modules: %w", err)
 	}
 	t.reply(r.text)
+	if len(r.buttons) > 0 {
+		t.out[len(t.out)-1].Buttons = r.buttons
+	}
 	t.note(modulesNote + r.note)
 	return nil
 }
@@ -133,6 +151,8 @@ func (a *Agent) modulesReply(ctx context.Context, t *turn, arg string) (moduleRe
 		return a.removeModule(ctx, t, name)
 	case verb == "config" && name != "":
 		return a.configModule(ctx, t, name)
+	case verb == wordRuns && name != "":
+		return a.runsReply(ctx, t, name)
 	case name == "" && !isModulesVerb(verb):
 		return a.moduleCard(ctx, t, verb)
 	}
@@ -141,14 +161,14 @@ func (a *Agent) modulesReply(ctx context.Context, t *turn, arg string) (moduleRe
 
 func isModulesVerb(w string) bool {
 	switch w {
-	case "update", "rollback", wordOff, wordOn, "remove", "config":
+	case "update", "rollback", wordOff, wordOn, "remove", "config", wordRuns:
 		return true
 	}
 	return false
 }
 
 // plain is a reply whose note is its text.
-func plain(text string) moduleReply { return moduleReply{text, text} }
+func plain(text string) moduleReply { return moduleReply{text: text, note: text} }
 
 // unknown is the reply to a name no module has.
 func (a *Agent) unknown(ctx context.Context, t *turn, name string) moduleReply {
@@ -267,7 +287,11 @@ func (a *Agent) moduleCard(ctx context.Context, t *turn, name string) (moduleRep
 	if len(c.Config) > 0 {
 		b.WriteString("\n" + a.say(ctx, t, texts.ModulesCardSettings, texts.Vars{"lines": a.settingRows(ctx, t, c.Config)}))
 	}
-	return moduleReply{text: b.String(), note: "the owner opened the card of " + c.Name}, nil
+	buttons, err := a.runsButtons(ctx, a.speaker(ctx, t), t, c)
+	if err != nil {
+		return moduleReply{}, err
+	}
+	return moduleReply{text: b.String(), note: "the owner opened the card of " + c.Name, buttons: buttons}, nil
 }
 
 // reflexLines are the card's lines of what the module reacts to, which
@@ -277,7 +301,7 @@ func (a *Agent) moduleCard(ctx context.Context, t *turn, name string) (moduleRep
 func (a *Agent) reflexLines(ctx context.Context, t *turn, c modstore.Card) []string {
 	var lines []string
 	if len(c.ReactsTo) > 0 {
-		lines = append(lines, a.say(ctx, t, texts.ModulesCardReacts, texts.Vars{"cells": escaped(c.ReactsTo)}))
+		lines = append(lines, a.say(ctx, t, texts.ModulesCardReacts, texts.Vars{varCells: escaped(c.ReactsTo)}))
 	}
 	if len(c.Feeds) > 0 {
 		lines = append(lines, a.say(ctx, t, texts.ModulesCardFeeds, texts.Vars{"modules": escaped(c.Feeds)}))
@@ -308,7 +332,7 @@ func (a *Agent) healthLine(ctx context.Context, t *turn, h modstore.Health) stri
 	case modstore.HealthOK:
 		return a.say(ctx, t, texts.ModulesCardHealthOK, nil)
 	}
-	return a.say(ctx, t, texts.ModulesCardHealthFailed, texts.Vars{"kind": texts.Escape(string(h))})
+	return a.say(ctx, t, texts.ModulesCardHealthFailed, texts.Vars{varKind: texts.Escape(string(h))})
 }
 
 // journalRow is one version: v3  14.11  "the note"  1,340 runs, 0 failures  ← active.
@@ -382,16 +406,16 @@ func (a *Agent) configModule(ctx context.Context, t *turn, rest string) (moduleR
 		if len(ce.Declared) > 0 {
 			vars["keys"] = a.say(ctx, t, texts.ModulesConfigKeys, texts.Vars{"keys": texts.Escape(strings.Join(ce.Declared, ", "))})
 		}
-		return moduleReply{a.say(ctx, t, texts.ModulesConfigUndeclared, vars), "the owner tried to set a setting that " + name + " does not declare"}, nil
+		return moduleReply{text: a.say(ctx, t, texts.ModulesConfigUndeclared, vars), note: "the owner tried to set a setting that " + name + " does not declare"}, nil
 	case errors.As(err, &ce):
 		vars["type"] = texts.Escape(ce.Type)
-		return moduleReply{a.say(ctx, t, texts.ModulesConfigWrongType, vars), "the owner tried to set a setting of " + name + " to a value of the wrong type"}, nil
+		return moduleReply{text: a.say(ctx, t, texts.ModulesConfigWrongType, vars), note: "the owner tried to set a setting of " + name + " to a value of the wrong type"}, nil
 	case errors.Is(err, modstore.ErrNotStarted):
-		return moduleReply{a.say(ctx, t, texts.ModulesNotStarted, vars), "the owner changed a setting of " + name + "; it did not start"}, nil
+		return moduleReply{text: a.say(ctx, t, texts.ModulesNotStarted, vars), note: "the owner changed a setting of " + name + "; it did not start"}, nil
 	case err != nil:
 		return moduleReply{}, err
 	}
-	return moduleReply{a.say(ctx, t, texts.ModulesConfigDone, vars), "the owner changed a setting of " + name}, nil
+	return moduleReply{text: a.say(ctx, t, texts.ModulesConfigDone, vars), note: "the owner changed a setting of " + name}, nil
 }
 
 // switchModule turns a local module off or on.

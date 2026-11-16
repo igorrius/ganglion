@@ -299,7 +299,7 @@ Last runs of demo-alerts:
   buttons to a message, and attach the button to the card's message the
   same way.
 
-- [ ] **Step 1: Failing tests** in `agent/runs_test.go` with the agent
+- [x] **Step 1: Failing tests** in `agent/runs_test.go` with the agent
   test helpers (see `agent/modules_test.go`, `agent/last_test.go`,
   `agent/cells_test.go` for the History button): `/why` replying to a
   module's message with a two-hop chain shows the text above; to a
@@ -309,11 +309,11 @@ Last runs of demo-alerts:
   `/modules runs demo-alerts` lists the card's runs; the card carries a
   Runs button and pressing it shows the same list; no rendered text holds
   a module's notify text.
-- [ ] **Step 2:** FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4:** `go test ./agent/... ./texts/...` — PASS (the texts
+- [x] **Step 2:** FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4:** `go test ./agent/... ./texts/...` — PASS (the texts
   tests check that every key exists in each language).
-- [ ] **Step 5:** commit `agent: /why, /modules runs and the Runs button show a module's runs`.
+- [x] **Step 5:** commit `agent: /why, /modules runs and the Runs button show a module's runs`.
 
 ### Task 6: The agent sees runs
 

@@ -314,6 +314,7 @@ func New(cfg Config, d Deps) *Agent {
 	cfg = withTimeouts(cfg)
 	a := &Agent{cfg: cfg, d: d, log: d.Log, in: newInstruments()}
 	a.d.QuickActions[ActionCellHistory] = a.historyButton
+	a.d.QuickActions[ActionModuleRuns] = a.runsButton
 	a.d.QuickActions[update.ActionInstall] = a.installButton
 	a.d.QuickActions[update.ActionRollback] = a.rollbackButton
 	a.stages = []stage{a.resume, a.scheduled, a.ownerSpoke, a.dropStale, a.idle, a.command, a.limits, a.answer, a.compactHistory}

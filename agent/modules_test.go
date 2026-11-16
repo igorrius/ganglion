@@ -55,7 +55,7 @@ func TestModulesCommand(t *testing.T) {
 		{"/modules update html2md", "html2md stays on builtin: the self-test failed: trap"},
 		{"/modules rollback html2md", "html2md rolled back from 0.2.0 to builtin."},
 		{"/modules update demo", "No module named demo."},
-		{"/modules update", `Usage: /modules, /modules \<name\>, /modules config \<name\> key=value, /modules update, rollback, off, on or remove \<name\>`},
+		{"/modules update", `Usage: /modules, /modules \<name\>, /modules config \<name\> key=value, /modules runs \<name\>, /modules update, rollback, off, on or remove \<name\>`},
 	} {
 		text, want := c[0], c[1]
 		out := e.turn(t, message(owner, "Igor", text))
@@ -85,6 +85,14 @@ type fakeLocal struct {
 	calls  []string
 	card   modstore.Card
 	config error
+	runs   map[string]modstore.Run // by "<module>|<id>"
+	runErr error
+}
+
+func (f *fakeLocal) Run(_ context.Context, name, id string) (modstore.Run, bool, error) {
+	f.calls = append(f.calls, "run "+name+" "+id)
+	r, ok := f.runs[name+"|"+id]
+	return r, ok, f.runErr
 }
 
 func (f *fakeLocal) Local(context.Context) ([]modstore.LocalModule, error) {
@@ -246,7 +254,7 @@ func TestModulesConfigAnswers(t *testing.T) {
 			&modstore.ConfigError{Err: modstore.ErrWrongType, Key: "site_id", Type: "number"}},
 		{"/modules config demo-reader site_id=1", "demo-reader did not start; see /status.", modstore.ErrNotStarted},
 		{"/modules config ghost site_id=1", "No module named ghost.", nil},
-		{"/modules config demo-reader site_id", `Usage: /modules, /modules \<name\>, /modules config \<name\> key=value, /modules update, rollback, off, on or remove \<name\>`, nil},
+		{"/modules config demo-reader site_id", `Usage: /modules, /modules \<name\>, /modules config \<name\> key=value, /modules runs \<name\>, /modules update, rollback, off, on or remove \<name\>`, nil},
 	} {
 		l.config = c.err
 		if got := oneReply(t, e, c.cmd); got != c.want {
