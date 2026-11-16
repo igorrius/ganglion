@@ -1446,7 +1446,13 @@ phase plan).
 - **R-CFG-6.** Modules apply at once: install, update, rollback, config,
   off, on and remove. Every other section applies at the next start;
   `/restart` (admin) ends the node cleanly for its supervisor to start
-  again.
+  again. After a restart asked from the chat (`/restart`, or Restart now
+  under a change of R-CFG-15) the started node tells the person who asked,
+  once, in that conversation and their language, that it is back and how
+  long it took, and names the changes from the chat that took effect
+  (owner, 2026-11-16,
+  [#238](https://github.com/igorrius/ganglion/issues/238)); `/update`
+  keeps its own messages (R-UPD-4).
 - **R-CFG-7.** `node.memory_limit` sets `GOMEMLIMIT` (R-RUN-6). A
   `GOMEMLIMIT` the operator set, the Go runtime's own setting, wins over
   it.

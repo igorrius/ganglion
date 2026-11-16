@@ -9,7 +9,7 @@ Ask in words: "raise the daily limit to 300 turns", "answer in English and Ukrai
 1. The agent shows a card: each setting with its old and new value, and the reason. If the conversation holds content from outside (a web page, a forwarded message), the card says so: check the change is what you asked for.
 2. Press **Approve** to write the change, or **Deny**. A card you leave alone expires, and nothing is written.
 3. The node checks the change again when you press. A value the node would not start with is refused with the reason, and the file stays as it was.
-4. The change takes effect after a restart. The reply has a **Restart now** button that does what [`/restart`](commands.md) does. You can make several changes and restart once.
+4. The change takes effect after a restart. The reply has a **Restart now** button that does what [`/restart`](commands.md) does. You can make several changes and restart once. When the node is up again it says so in the same chat, with how long the restart took and the settings from the chat that now apply.
 
 ## What can be changed from the chat
 
