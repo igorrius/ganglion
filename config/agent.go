@@ -24,6 +24,7 @@ import (
 	"github.com/igorrius/ganglion/provider/claudecli"
 	"github.com/igorrius/ganglion/provider/openai"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
+	"github.com/igorrius/ganglion/restart"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/router/rules"
 	"github.com/igorrius/ganglion/sandbox"
@@ -111,6 +112,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Review:          do.MustInvoke[Remembering](i).Review,
 		SystemJobs:      do.MustInvoke[Remembering](i).Jobs,
 		Restart:         do.MustInvoke[agent.RestartFunc](i),
+		RestartNote:     do.MustInvoke[restart.Asker](i),
 		Updater:         do.MustInvoke[agent.Updater](i),
 		Modules:         do.MustInvoke[agent.Modules](i),
 		Local:           do.MustInvoke[*modhost.Host](i),
