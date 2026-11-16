@@ -2036,6 +2036,20 @@ Reviewed at each gate.
   Telegram webhook only (R-CFG-11,
   [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)); pages
   and `initData` stay here.
+- Telegram widgets (Bot API 10.4, owner, 2026-11-16,
+  [research](research/2026-11-16-telegram-widgets.md)): a small HTML
+  widget inside a bot's message, sandboxed with no network, whose state
+  only the bot changes, silently. It needs no HTTP server and no
+  `initData`, so it covers part of what Mini Apps would give. Uses seen:
+  a live panel of a module's cells updated with no model call, the card
+  of a background job (R-LIVE-9), a turn's plan as a checklist, `/status`
+  as a live summary, charts. Production allows private chats only, and a
+  widget cannot be forwarded or copied, so a plain or rich message stays
+  the fallback. Open, needing an ADR: who writes a widget's HTML
+  (templates in the transport, a module's own vouched widget, or the
+  model), and how a `widget_query`, answered within 15 s, goes through
+  the inbox. New Telegram features are to be weighed for the bot as they
+  come (owner).
 - Packaging and install paths for other users beyond the image published
   by tag (R-UPD-8, [ADR-0086](adr/0086-publish-the-nodes-image-to-ghcr-on-a-core-tag.md)):
   a Railway template, a Helm chart, a systemd unit for a Pi,
