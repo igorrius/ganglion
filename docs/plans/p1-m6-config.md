@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task.
-> Steps use checkbox (`- [ ]`) syntax.
+> Steps use checkbox (`- [x]`) syntax.
 
 **Goal:** the agent changes routine fields of `ganglion.yaml` with the owner's press, every
 change to the file is recorded in the workspace repository, and a change can be rolled back
@@ -29,6 +29,14 @@ through `gitrepo`. No new dependency.
 [ADR-0093](../adr/0093-config-changes-through-the-agent-with-history-in-the-workspace.md),
 [ADR-0059](../adr/0059-node-config-file.md); the [design note](p1-m6-config-design.md). Read
 them with this plan.
+
+**Status (2026-11-16):** tasks 1–7 built on the branch `feat/m6-config-design`; task 8 (the
+pull request and the live check) is open. Where the code differs from the text below:
+`confighist.New` takes a logger as its third argument; the provider is `config.FileHistory`
+(the linter refused `ConfigHistory`), and a node with no agent keeps no history, so an echo
+node does not create a workspace; the question's texts are `ask.config_propose`,
+`ask.config_tainted`, `ask.config_kept` and `ask.config_default`; group changes are recorded by
+chat id, never by title, since a title is written by the group's members.
 
 ## Global Constraints
 
@@ -79,7 +87,7 @@ them with this plan.
   - `func Where(path string) Place` with `type Place string` and constants `PlaceHost`,
     `PlaceOwnTool`, `PlaceChat` — where a field is changed (R-CFG-14's refusal reason).
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
   The check added to `editDoc` is covered through `SetPath` below; the existing writers'
   tests in `settings/write*_test.go` must still pass with it (Step 4).
@@ -210,10 +218,10 @@ them with this plan.
   (follow `$ref`s the way `schema_test.go` reads `/$defs/...`; if `schemas.At` does not follow
   `$ref`, walk `properties` and resolve `$ref` by hand in the test).
 
-- [ ] **Step 2: Run them, expect failures.** `go test ./settings/` — undefined `SetPath`,
+- [x] **Step 2: Run them, expect failures.** `go test ./settings/` — undefined `SetPath`,
   `Apply`, `Values`, `Allowed`, `Where`.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
   `editDoc` in `settings/write.go`, after `enc.Close()` and before `replaceFile`:
 
@@ -271,10 +279,10 @@ them with this plan.
   `Values` parses `src` into a `yaml.Node`, walks each path and decodes the found node with
   `node.Decode(&v)` into `any`.
 
-- [ ] **Step 4: Run the tests.** `go test ./settings/` — PASS. Also `go test ./...` — the
+- [x] **Step 4: Run the tests.** `go test ./settings/` — PASS. Also `go test ./...` — the
   existing writers' tests still pass with the new check.
 
-- [ ] **Step 5: Commit.** `settings: SetPath, Values and the allowlist; a writer never leaves a broken file`
+- [x] **Step 5: Commit.** `settings: SetPath, Values and the allowlist; a writer never leaves a broken file`
   with `Refs #236`.
 
 ### Task 2: `gitrepo` — `Log`, `Diff`, `FileAt`
@@ -295,7 +303,7 @@ them with this plan.
   - `func (r *Repo) FileAt(ctx context.Context, commit, rel string, parent bool) ([]byte, bool, error)`
     — the file at `commit` (or its parent when `parent`); `false` when it did not exist there.
 
-- [ ] **Step 1: Write the failing test.**
+- [x] **Step 1: Write the failing test.**
 
   ```go
   func TestLogDiffFileAt(t *testing.T) {
@@ -338,9 +346,9 @@ them with this plan.
   }
   ```
 
-- [ ] **Step 2: Run it, expect a failure.** `go test ./gitrepo/ -run TestLogDiffFileAt`.
+- [x] **Step 2: Run it, expect a failure.** `go test ./gitrepo/ -run TestLogDiffFileAt`.
 
-- [ ] **Step 3: Implement** with the package's existing way of running git (the unexported
+- [x] **Step 3: Implement** with the package's existing way of running git (the unexported
   runner `Last` uses), under `r.mu`, with `checkPath(rel)` and `commitPattern` on every id.
   - `Log`: `git log -n <n> --format=%H%x00%ct%x00%B%x1e -- <rel>`; split on `\x1e`, then
     `\x00`; an empty repository (no HEAD) returns `nil, nil`.
@@ -348,9 +356,9 @@ them with this plan.
   - `FileAt`: `git cat-file -e <rev>:<rel>` to test existence, then `git show <rev>:<rel>`;
     `rev` is `commit` or `commit + "^"`; a root commit's `^` does not exist, which is `false`.
 
-- [ ] **Step 4: Run the package tests.** `go test -race ./gitrepo/` — PASS.
+- [x] **Step 4: Run the package tests.** `go test -race ./gitrepo/` — PASS.
 
-- [ ] **Step 5: Commit.** `gitrepo: Log, Diff and FileAt for the config history` with `Refs #236`.
+- [x] **Step 5: Commit.** `gitrepo: Log, Diff and FileAt for the config history` with `Refs #236`.
 
 ### Task 3: `confighist` — the recorder
 
@@ -421,7 +429,7 @@ them with this plan.
   The commit message: the reason on the first line, a blank line, `Source: <source>`.
   `Changes` parses the `Source:` trailer from `Entry.Message`; the first line is `Reason`.
 
-- [ ] **Step 1: Write the failing tests** (`confighist_test.go`; a real `gitrepo.Repo` in
+- [x] **Step 1: Write the failing tests** (`confighist_test.go`; a real `gitrepo.Repo` in
   `t.TempDir()`, skipped with `t.Skip` when `exec.LookPath("git")` fails):
 
   ```go
@@ -490,9 +498,9 @@ them with this plan.
   commit with its source (`module`, `destination`, `group`) and a reason that names the module,
   the destination or the group; a read (`Modules`, `Destinations`, `Groups`) commits nothing.
 
-- [ ] **Step 2: Run them, expect failures.** `go test ./confighist/`.
+- [x] **Step 2: Run them, expect failures.** `go test ./confighist/`.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - `Recorder{file string; repo Repo; mu sync.Mutex}`. `Record`: lock; `write()`; on error
     return it; then `copyAndCommit(ctx, msg)`. `copyAndCommit` reads the live file, writes it
     to `repo.Path(CopyPath)` (create `config/` with `0o750`, file `0o600`), and calls
@@ -513,9 +521,9 @@ them with this plan.
   - `telemetry.go`: counter `ganglion.config.changes` with the label `source` (a closed set),
     and a log line per recorded change (source, reason, commit id) — conventions, rule 11.
 
-- [ ] **Step 4: Run.** `go test -race ./confighist/` — PASS.
+- [x] **Step 4: Run.** `go test -race ./confighist/` — PASS.
 
-- [ ] **Step 5: Commit.** `confighist: record every change of the node's file in the workspace`
+- [x] **Step 5: Commit.** `confighist: record every change of the node's file in the workspace`
   with `Refs #236`.
 
 ### Task 4: wiring in `config`
@@ -531,16 +539,16 @@ them with this plan.
   (`config/memory.go:35`); `settingsFile(b)` (`config/modhost.go:72`).
 - Produces: `func ConfigHistory() do.Provider[confighist.History]`.
 
-- [ ] **Step 1: Write the failing test.** In `config/confighist_test.go`, build the agent
+- [x] **Step 1: Write the failing test.** In `config/confighist_test.go`, build the agent
   role's container over a temporary data directory with a `ganglion.yaml`, invoke
   `confighist.History`, and check that the workspace has `config/ganglion.yaml` equal to the
   live file and one commit with `Source: host` (the start's `Sync`). A second test: with a
   workspace where git is missing (set `PATH` to an empty directory with `t.Setenv`), the
   provider returns `confighist.NoHistory{}` and the node still builds.
 
-- [ ] **Step 2: Run it, expect a failure.** `go test ./config/ -run ConfigHistory`.
+- [x] **Step 2: Run it, expect a failure.** `go test ./config/ -run ConfigHistory`.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
   ```go
   // ConfigHistory is the record of the node's file (R-CFG-13, ADR-0093). It
@@ -568,9 +576,9 @@ them with this plan.
   once in the agent role's start, next to where the workspace is first used, so `Sync` runs at
   every start and not only when a tool is first built.
 
-- [ ] **Step 4: Run.** `go test -race ./config/... ./settings/... ./confighist/...` — PASS.
+- [x] **Step 4: Run.** `go test -race ./config/... ./settings/... ./confighist/...` — PASS.
 
-- [ ] **Step 5: Commit.** `config: every writer of the node's file goes through its history`
+- [x] **Step 5: Commit.** `config: every writer of the node's file goes through its history`
   with `Refs #236`.
 
 ### Task 5: `config.propose`, `config.history`, `config.rollback`, the restart button
@@ -618,7 +626,7 @@ them with this plan.
   - `config.history`: `{"limit":10}` (1–20, default 10).
   - `config.rollback`: `{"change":"<id>"}` — optional; the latest change when absent.
 
-- [ ] **Step 1: Write the failing tests** (`config_test.go`; a temp file, a fake `History`
+- [x] **Step 1: Write the failing tests** (`config_test.go`; a temp file, a fake `History`
   that records `Record` calls and returns canned `Changes`/`Versions`, a fake `ButtonStore`,
   a `Restart` that counts):
 
@@ -707,9 +715,9 @@ them with this plan.
   Fill in the bodies marked with comments in the same style as the first four; they are
   behaviour tests through `Question` and `Run`.
 
-- [ ] **Step 2: Run them, expect failures.** `go test ./tool/builtin/ -run Config`.
+- [x] **Step 2: Run them, expect failures.** `go test ./tool/builtin/ -run Config`.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - Follow `routeTool` in `tool/builtin/destinations.go:162-245` for the confirmed tools
     (`Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm, AdminOnly: true`, the
     `allowed` check refusing a grant, `whole(name, q)` for the question length).
@@ -749,9 +757,9 @@ them with this plan.
     builtin.RestartFunc(do.MustInvoke[agent.RestartFunc](i))` — invoked lazily so the
     override in `Run` (`config/config.go:73`) is the one used — and `Now`.
 
-- [ ] **Step 4: Run.** `go test -race ./tool/builtin/ ./texts/ ./config/...` — PASS.
+- [x] **Step 4: Run.** `go test -race ./tool/builtin/ ./texts/ ./config/...` — PASS.
 
-- [ ] **Step 5: Commit.** `tool: config.propose, config.history, config.rollback and the restart button`
+- [x] **Step 5: Commit.** `tool: config.propose, config.history, config.rollback and the restart button`
   with `Refs #236`.
 
 ### Task 6: chatlab scenarios
@@ -763,7 +771,7 @@ them with this plan.
 - Modify (only if a fact is missing): `internal/chatlab/facts.go`,
   `schemas/chatlab-scenario.schema.json`
 
-- [ ] **Step 1: Write the scenarios** (scripted model; follow
+- [x] **Step 1: Write the scenarios** (scripted model; follow
   `tools/chatlab/scenarios/mech-write-tainted-approved.yaml`):
   - `mech-config-propose`: `config: {agent: {limits: {daily_turns: 200}}}`; script
     `{tool: config.propose, args: '{"changes":[{"path":"agent.limits.daily_turns","value":300}],"reason":"more room"}'}`
@@ -775,12 +783,12 @@ them with this plan.
     the rollback approved.
   - `mech-config-refused`: script `config.propose` with `sandbox.deny` → `facts: {questions:
     0, journal: [{tool: config.propose, err_contains: "host"}]}`.
-- [ ] **Step 2: Run them.** `make lab LAB=mech-config-propose`, then the other two. If the
+- [x] **Step 2: Run them.** `make lab LAB=mech-config-propose`, then the other two. If the
   journal facts cannot show the file was written, add a `config` fact (the value at a path of
   the node's `ganglion.yaml`) to `facts.go` and the scenario schema, with a test.
-- [ ] **Step 3: Run the shipped scripted scenarios test.**
+- [x] **Step 3: Run the shipped scripted scenarios test.**
   `go test -race -tags lab ./internal/chatlab/... -run TestShippedScriptedScenariosPass`.
-- [ ] **Step 4: Commit.** `chatlab: scenarios for config.propose, rollback and a refusal`
+- [x] **Step 4: Commit.** `chatlab: scenarios for config.propose, rollback and a refusal`
   with `Refs #236`.
 
 ### Task 7: documents
@@ -792,19 +800,19 @@ them with this plan.
 - Create: `docs/guide/using/settings.md`; modify `mkdocs.yml` (`nav`, after "Commands") and
   `docs/guide/using/commands.md` (a line that points to the new page)
 
-- [ ] **Step 1: Code map.** Add `confighist` with one line on what it is and who uses it;
+- [x] **Step 1: Code map.** Add `confighist` with one line on what it is and who uses it;
   note `settings.SetPath` / the allowlist and `gitrepo`'s history reads.
-- [ ] **Step 2: Guide page** `docs/guide/using/settings.md`, for someone running a node: ask
+- [x] **Step 2: Guide page** `docs/guide/using/settings.md`, for someone running a node: ask
   the agent in words ("raise the daily limit to 300 turns"); a card shows the old and new value;
   Apply writes, the change works after a restart, "Restart now" does it; "what changed in the
   settings?" lists the history; "roll that back"; the list of what can be changed from the chat
   (the R-CFG-14 fields in plain words); what stays on the host and why (secrets, the admin,
   model providers, the sandbox, the public address). No spec ids, no ADR talk; placeholders
   only. Then `mkdocs.yml`'s `nav`.
-- [ ] **Step 3: Phase plan and status.** Mark 6.1–6.3 built (the date, the PR) in
+- [x] **Step 3: Phase plan and status.** Mark 6.1–6.3 built (the date, the PR) in
   `p1-all-in-one.md`; "Where we are" in `docs/README.md` says what was built and that the live
   check follows.
-- [ ] **Step 4: Commit.** `docs: the node's file through the agent — code map, guide, status`
+- [x] **Step 4: Commit.** `docs: the node's file through the agent — code map, guide, status`
   with `Refs #236`.
 
 ### Task 8: the pull request and the live check

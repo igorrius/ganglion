@@ -26,6 +26,8 @@ There are no `/start` and `/help` commands. Telegram's command menu is set by th
 
 `/reset` is an unlisted alias of `/new`.
 
+To change settings without editing the file, ask the agent: see [Settings from the chat](settings.md).
+
 If the node runs without a supervisor (a restart policy in your container platform, or systemd), `/restart` just stops it. See [Operations](../running/operations.md#restarting).
 
 A private chat with someone who is not the admin gets no reply, so these commands matter only to the admin in practice. In a group, only `/new`, `/sessions` and `/resume` work.

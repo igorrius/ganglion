@@ -83,6 +83,17 @@ Start here when coming back to the project.
   Both are deployed and checked live in the family's forum. Asked for
   next by the owner: roles with their own tools for a group's members
   (spec section 14).
+- **The node's file through the agent (2026-11-16, M6 tasks 6.1–6.3,
+  [plan](plans/p1-m6-config.md),
+  [ADR-0093](adr/0093-config-changes-through-the-agent-with-history-in-the-workspace.md),
+  [#236](https://github.com/igorrius/ganglion/issues/236)):** built, the
+  live check is open. Every change of `ganglion.yaml`, by any writer, is a
+  commit of its copy in the workspace with a reason and a source, and an
+  edit on the host is recorded at the next start; `config.propose` changes
+  an allowlist of routine fields after the owner's press, then offers
+  Restart now; `config.history` and `config.rollback` show and undo a
+  change. Adding people to the access list from the chat is its own task
+  ([#235](https://github.com/igorrius/ganglion/issues/235)).
 - **Next:** M6, the agent reconfigures the system. It now includes the
   encrypted secret store (task 6.5,
   [ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), owner,
