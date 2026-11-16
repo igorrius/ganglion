@@ -199,3 +199,16 @@ func TestTheCardsRunsButtonShowsTheList(t *testing.T) {
 		t.Fatalf("a card with no runs has a button: %+v", out)
 	}
 }
+
+// A forwarded copy of a module's message names no outbox row and its
+// signature is outside text, so /why says it is a copy instead of denying
+// that a module wrote it.
+func TestWhyOnAForwardedCopySaysItIsACopy(t *testing.T) {
+	e, _ := whyEnv(t)
+	m := event.Message{Text: "/why", From: owner, Name: "Igor"}
+	m.Reply = &event.Replied{ByBot: true, Forwarded: true, Text: "battery-alerts v1", At: repliedAt}
+	out := e.turn(t, outsideMessage(m))
+	if len(out) != 1 || !strings.HasPrefix(out[0].Text, "This is a forwarded copy") {
+		t.Fatalf("forwarded copy: %+v", out)
+	}
+}
