@@ -379,3 +379,62 @@ func mustAtoi(t *testing.T, s string) int {
 	}
 	return n
 }
+
+func TestLogDiffFileAt(t *testing.T) {
+	ctx := context.Background()
+	r := open(t)
+	const rel = "config/ganglion.yaml"
+	put := func(text, msg string) string {
+		t.Helper()
+		p, err := r.Path(rel)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		id, err := r.Commit(ctx, []string{rel}, msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	if log, err := r.Log(ctx, rel, 10); err != nil || len(log) != 0 {
+		t.Fatalf("an empty repository's Log = %+v, %v", log, err)
+	}
+	first := put("a: 1\n", "first\n\nSource: host")
+	second := put("a: 2\n", "second\n\nSource: propose")
+
+	log, err := r.Log(ctx, rel, 10)
+	if err != nil || len(log) != 2 || log[0].ID != second || log[1].ID != first ||
+		log[0].Message != "second\n\nSource: propose" || log[0].When.IsZero() {
+		t.Fatalf("Log = %+v, %v", log, err)
+	}
+	if one, _ := r.Log(ctx, rel, 1); len(one) != 1 {
+		t.Fatalf("Log(1) = %+v", one)
+	}
+	d, err := r.Diff(ctx, second, rel)
+	if err != nil || !strings.Contains(d, "-a: 1") || !strings.Contains(d, "+a: 2") {
+		t.Fatalf("Diff = %q, %v", d, err)
+	}
+	before, ok, err := r.FileAt(ctx, second, rel, true)
+	if err != nil || !ok || string(before) != "a: 1\n" {
+		t.Fatalf("FileAt parent = %q %v %v", before, ok, err)
+	}
+	after, ok, err := r.FileAt(ctx, second, rel, false)
+	if err != nil || !ok || string(after) != "a: 2\n" {
+		t.Fatalf("FileAt = %q %v %v", after, ok, err)
+	}
+	if _, ok, err = r.FileAt(ctx, first, rel, true); err != nil || ok {
+		t.Fatalf("a root commit's parent has the file: %v %v", ok, err)
+	}
+	if _, err := r.Diff(ctx, "not-a-commit", rel); err == nil {
+		t.Fatal("a bad commit id was passed to git")
+	}
+	if _, _, err := r.FileAt(ctx, second, "../x", false); err == nil {
+		t.Fatal("a path outside was read")
+	}
+}

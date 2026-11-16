@@ -237,7 +237,7 @@ func (h *HostExec) questionVars(ctx context.Context, sp texts.Speaker, cmd tool.
 	}
 	where := sp.Text(texts.CmdIn, texts.Vars{"command": shown(cmd.Argv...), "dir": shown(h.dir(cmd))})
 	return texts.Vars{"command": where, "line": sp.Text(e.Line, nil), "warning": warning,
-		"reason": sp.Text(texts.CmdReason, texts.Vars{"reason": text.CodeSlashWords(reason)})}
+		varReason: sp.Text(texts.CmdReason, texts.Vars{varReason: text.CodeSlashWords(reason)})}
 }
 
 // shown is argv as a person reads it in a question: written by hostcmd.Show,

@@ -10,10 +10,10 @@ import (
 // settings: the config path, the database path, secrets, OpenTelemetry's
 // own, the bridge's per-run token and the test tools' variables.
 var retired = []struct{ env, key string }{
-	{"GANGLION_LOG_LEVEL", "log.level"},
+	{"GANGLION_LOG_LEVEL", pathLogLevel},
 	{"GANGLION_ADMIN", "telegram.admin"},
 	{"TELEGRAM_API_URL", keyAPIURL},
-	{"GANGLION_TELEGRAM_REPLY", "telegram.reply"},
+	{"GANGLION_TELEGRAM_REPLY", pathTelegramReply},
 	{"GANGLION_TELEGRAM_RICH", "telegram.rich"},
 	{"GANGLION_REACTION_AFTER", "telegram.reactions.after"},
 	{"GANGLION_REACTION_DWELL", "telegram.reactions.dwell"},
@@ -29,7 +29,7 @@ var retired = []struct{ env, key string }{
 	{"GANGLION_DAILY_TOKENS", "agent.limits.daily_tokens"},
 	{"GANGLION_SESSION_IDLE", "agent.session_idle"},
 	{"GANGLION_TZ", keyTZ},
-	{"GANGLION_SEARCH", "agent.search.mode"},
+	{"GANGLION_SEARCH", pathSearchMode},
 }
 
 // Retired returns an error for the first retired variable that is set.

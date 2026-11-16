@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-config-rollback
+why: >-
+  ADR-0093 (R-CFG-16): config.rollback proposes the earlier value of the field the latest change set,
+  through the same card, and the press writes it back.
+covers:
+  - tool/builtin/config.go
+  - tool/builtin/config_history.go
+  - confighist/**
+  - gitrepo/history.go
+repeat: 1
+model: scripted
+script:
+  - {tool: config.propose, args: '{"changes":[{"path":"agent.limits.daily_turns","value":300}],"reason":"more room"}'}
+  - {say: "It waits for your press."}
+  - {say: "Written."}
+  - {tool: config.history, args: '{}'}
+  - {tool: config.rollback, args: '{}'}
+  - {say: "It waits for your press."}
+  - {say: "Rolled back."}
+steps:
+  - say: "Raise the daily turn limit to 300"
+  - press: Approve
+  - say: "Roll that back"
+  - facts:
+      questions: 1
+      question: {contains: "300 → default"}
+  - press: Approve
+  - facts:
+      questions: 0
+      journal:
+        - {tool: config.history, result_contains: "propose: more room", count: 1}
+        - {tool: config.rollback, decision: approved, result_contains: "agent.limits.daily_turns: 300 -> default", count: 1}

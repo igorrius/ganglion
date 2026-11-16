@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-config-refused
+why: >-
+  ADR-0093 (R-CFG-14): a field off the allowlist, such as the sandbox, is refused in code with the
+  place it is changed, and no card is shown.
+covers:
+  - tool/builtin/config.go
+  - settings/allow.go
+repeat: 1
+model: scripted
+script:
+  - {tool: config.propose, args: '{"changes":[{"path":"sandbox.deny","value":[]}],"reason":"open it up"}'}
+  - {say: "That one is changed on the host."}
+steps:
+  - say: "Turn the sandbox's deny list off"
+  - facts:
+      questions: 0
+      journal:
+        - {tool: config.propose, err_contains: "on the host", count: 1}

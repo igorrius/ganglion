@@ -22,6 +22,7 @@ nav:
   - Using ganglion:
       - Talking to the agent: using/talking.md
       - Commands: using/commands.md
+      - Settings from the chat: using/settings.md
       - Memory and reminders: using/memory.md
       - Modules and reflexes: using/modules.md
       - Tools and safety: using/tools-and-safety.md

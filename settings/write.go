@@ -182,7 +182,8 @@ func indexOf(seq *yaml.Node, name string) int {
 var writeMu sync.Mutex
 
 // editDoc reads the file, hands the document to change and writes the
-// result back. A missing file is an empty one.
+// result back. A missing file is an empty one. A result the node would not
+// start with is refused and the file is left as it was (R-CFG-15).
 func editDoc(path string, change func(doc *yaml.Node) error) error {
 	writeMu.Lock()
 	defer writeMu.Unlock()
@@ -190,25 +191,38 @@ func editDoc(path string, change func(doc *yaml.Node) error) error {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("settings: %w", err)
 	}
+	out, err := editSrc(src, change)
+	if err != nil {
+		return err
+	}
+	return replaceFile(path, out)
+}
+
+// editSrc hands the document in src to change and returns the result,
+// checked as the start checks it.
+func editSrc(src []byte, change func(doc *yaml.Node) error) ([]byte, error) {
 	var doc yaml.Node
 	if len(bytes.TrimSpace(src)) > 0 {
 		if err := yaml.Unmarshal(src, &doc); err != nil {
-			return fmt.Errorf("%s: %s", FileName, syntaxReason(err))
+			return nil, fmt.Errorf("%s: %s", FileName, syntaxReason(err))
 		}
 	}
 	if err := change(&doc); err != nil {
-		return err
+		return nil, err
 	}
 	var out bytes.Buffer
 	enc := yaml.NewEncoder(&out)
 	enc.SetIndent(2)
 	if err := enc.Encode(&doc); err != nil {
-		return fmt.Errorf("settings: %w", err)
+		return nil, fmt.Errorf("settings: %w", err)
 	}
 	if err := enc.Close(); err != nil {
-		return fmt.Errorf("settings: %w", err)
+		return nil, fmt.Errorf("settings: %w", err)
 	}
-	return replaceFile(path, out.Bytes())
+	if _, err := Parse(out.Bytes()); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }
 
 // edit is editDoc on the modules: sequence.
@@ -234,7 +248,7 @@ func modulesNode(doc *yaml.Node) (*yaml.Node, error) {
 		return nil, fmt.Errorf("%s: the top level is not a mapping", FileName)
 	}
 	for i := 0; i+1 < len(root.Content); i += 2 {
-		if root.Content[i].Value != "modules" {
+		if root.Content[i].Value != keyModules {
 			continue
 		}
 		v := root.Content[i+1]
@@ -248,7 +262,7 @@ func modulesNode(doc *yaml.Node) (*yaml.Node, error) {
 		return v, nil
 	}
 	seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: tagSeq}
-	root.Content = append(root.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: tagStr, Value: "modules"}, seq)
+	root.Content = append(root.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: tagStr, Value: keyModules}, seq)
 	return seq, nil
 }
 
