@@ -629,3 +629,24 @@ func TestATasksBackgroundCommandHasAJobAndNoCard(t *testing.T) {
 		t.Fatalf("a task's command sent %+v", sent.msgs)
 	}
 }
+
+// OK is exit 0 only: a failed command and one that printed "exit 0 after"
+// itself are not.
+func TestJobOKIsExitZeroOnly(t *testing.T) {
+	r := newRunner(t, &shell{}, &inbox{}, newGate())
+	for i, c := range []struct {
+		argv []string
+		ok   bool
+	}{{[]string{"true"}, true}, {[]string{"false"}, false}, {[]string{"sh", "-c", "echo 'exit 0 after 1ms'; exit 3"}, false}} {
+		a, err := r.Exec(t.Context(), req("t:ok"+string(rune('0'+i)), c.argv...))
+		if err != nil || !a.Done {
+			t.Fatalf("%v: %+v, %v", c.argv, a, err)
+		}
+		if a.Job.OK() != c.ok {
+			t.Errorf("%v: OK() = %v, want %v (text %q)", c.argv, a.Job.OK(), c.ok, a.Job.Text)
+		}
+	}
+	if (Job{State: JobRunning}).OK() || (Job{State: JobInterrupted, Text: okHead}).OK() {
+		t.Error("a running or interrupted job reads OK")
+	}
+}

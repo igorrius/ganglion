@@ -728,3 +728,68 @@ func TestCheckRunsTheLimits(t *testing.T) {
 		t.Fatalf("Check sent %+v", e.box.msgs)
 	}
 }
+
+// #38: a command a step lists ticks its step when it ends, so a model that
+// runs the plan without plan.step does not leave work that ran reading ⏭.
+// The step before it, never ticked, is behind it; one not reached stays ⏭.
+func TestARunCommandTicksItsStep(t *testing.T) {
+	e := newHomeEnv(t, "/home/o")
+	steps := []Step{
+		{Text: "Look"},
+		{Text: "Make", Command: &tool.Command{Argv: []string{"mkdir", "/var/tmp/x"}}},
+		{Text: "Remove", Command: &tool.Command{Argv: []string{"rm", "-r", "/var/tmp/x"}, Dir: "/home/o"}},
+		{Text: "Tell"},
+	}
+	ctx := context.Background()
+	if err := e.s.Show(ctx, call(1), steps); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Ran(ctx, conv, tool.Command{Argv: []string{"mkdir", "/var/tmp/x"}, Dir: "/home/o"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Ran(ctx, conv, argv("rm", "-r", "/var/tmp/x"), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Finish(ctx, conv, false); err != nil {
+		t.Fatal(err)
+	}
+	ed := e.edits()
+	want := "✅ 1. Look\n✅ 2. Make\n    `mkdir /var/tmp/x` in `/home/o`\n❌ 3. Remove\n    `rm -r /var/tmp/x` in `/home/o`\n⏭ 4. Tell"
+	if got := ed[len(ed)-1].Text; got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+}
+
+// A command no open step lists changes nothing: not one outside the plan,
+// not a second run of a step already ticked, and not in a conversation with
+// no plan.
+func TestARunCommandOutsideThePlanTicksNothing(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	if err := e.s.Ran(ctx, conv, argv("df", "-h"), true); err != nil {
+		t.Fatalf("no plan: %v", err)
+	}
+	if err := e.s.Show(ctx, call(1), []Step{{Text: "Look", Command: &tool.Command{Argv: []string{"df", "-h"}}}, {Text: "Tell"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Ran(ctx, conv, argv("du", "-sh", "/"), true); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(e.box.msgs); n != 1 {
+		t.Fatalf("outbox %+v; a command outside the plan sent an edit", e.box.msgs)
+	}
+	if err := e.s.Ran(ctx, conv, argv("df", "-h"), true); err != nil {
+		t.Fatal(err)
+	}
+	e.now = t0.Add(3 * time.Second)
+	if err := e.s.Ran(ctx, conv, argv("df", "-h"), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Finish(ctx, conv, false); err != nil {
+		t.Fatal(err)
+	}
+	ed := e.edits()
+	if got := ed[len(ed)-1].Text; !strings.HasPrefix(got, "✅ 1. Look") {
+		t.Fatalf("got %q; a second run must not undo the tick", got)
+	}
+}

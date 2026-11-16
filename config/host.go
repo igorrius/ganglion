@@ -11,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/internal/redact"
 	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
+	"github.com/igorrius/ganglion/plan"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/texts"
@@ -163,6 +164,7 @@ func commandHome() string {
 func HostExec() do.Provider[*builtin.HostExec] {
 	return func(i do.Injector) (*builtin.HostExec, error) {
 		s := do.MustInvoke[*sandbox.Sandbox](i)
-		return builtin.NewHostExec(do.MustInvoke[*host.Runner](i), host.NewIgnored(s), commandGate{sandboxGate{s}, do.MustInvoke[*host.Switch](i)}, commandHome()), nil
+		return builtin.NewHostExec(do.MustInvoke[*host.Runner](i), host.NewIgnored(s), commandGate{sandboxGate{s}, do.MustInvoke[*host.Switch](i)}, commandHome(),
+			builtin.WithPlanTicks(do.MustInvoke[*plan.Store](i), do.MustInvoke[*slog.Logger](i))), nil
 	}
 }

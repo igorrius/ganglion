@@ -449,7 +449,8 @@ Live turns ([design](plans/p1-live-turns-design.md);
   during the turn and edited in place with ⏳ ✅ ❌ ⏭ and an outcome line, and kept in the
   chat. A question that wants a fact gets an answer with no plan. A later step that ended
   closes the earlier ones nobody closed, and ⏭ means a line nobody reached or the model
-  skipped. It displays and approves nothing: policies decide. M3d adds its one press
+  skipped. A step that lists a host command is ticked by the node when that command ends,
+  ✅ on exit 0 and ❌ otherwise, whether or not the model calls `plan.step` (#38). It displays and approves nothing: policies decide. M3d adds its one press
   (R-CMD-7).
 - **R-LIVE-9.** Work the node runs outside a turn is a background job: a module build
   (always) and a host command past its wait (R-CMD-4). Each job has one card in the chat,

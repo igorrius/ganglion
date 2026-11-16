@@ -228,6 +228,8 @@ type Plans interface {
 	// Approved lists the commands the conversation's approved plan lets run
 	// without another press (R-CMD-7).
 	Approved(ctx context.Context, conv string) ([]tool.Command, error)
+	// Ran ticks the open step that lists cmd, done when ok (#38).
+	Ran(ctx context.Context, conv string, cmd tool.Command, ok bool) error
 }
 
 // NoPlans is the Plans of an agent with no plan tools; it approves nothing.
@@ -238,6 +240,9 @@ func (NoPlans) Finish(context.Context, string, bool) error { return nil }
 
 // Approved implements Plans.
 func (NoPlans) Approved(context.Context, string) ([]tool.Command, error) { return nil, nil }
+
+// Ran implements Plans.
+func (NoPlans) Ran(context.Context, string, tool.Command, bool) error { return nil }
 
 // StatusFunc hears where the work on a person's message stands.
 type StatusFunc func(event.Status)

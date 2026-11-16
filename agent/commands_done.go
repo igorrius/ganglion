@@ -81,6 +81,9 @@ func (a *Agent) commandDone(ctx context.Context, t *turn) error {
 func (a *Agent) continueCommand(ctx context.Context, t *turn, j host.Job) error {
 	t.state.Commands = slices.DeleteFunc(slices.Clone(t.state.Commands), func(k string) bool { return k == j.Key })
 	t.state.Tainted = true
+	if err := a.d.Plans.Ran(ctx, t.event.Conv, tool.Command{Argv: j.Argv, Dir: j.Dir}, j.OK()); err != nil {
+		a.log.Warn("agent: the plan's step was not ticked", "conv", t.event.Conv, "key", j.Key, "err", err)
+	}
 	note := provider.Message{Role: provider.RoleUser, Content: commandFinishedPrefix + hostcmd.Show(j.Argv) + ": " +
 		transcript.Cap(tool.WrapExternal(hostExecTool, j.Text))}
 	if over, _ := a.limits(ctx, t); over {
