@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-config-propose
+why: >-
+  ADR-0093 (R-CFG-14, R-CFG-15): the owner asks for a setting in words; config.propose shows a card
+  with the old and the new value, and the press writes the node's file through its history and offers
+  a restart.
+covers:
+  - tool/builtin/config.go
+  - confighist/**
+  - config/confighist.go
+  - settings/write_path.go
+  - settings/allow.go
+repeat: 1
+model: scripted
+script:
+  - {tool: config.propose, args: '{"changes":[{"path":"agent.limits.daily_turns","value":300}],"reason":"more room"}'}
+  - {say: "It waits for your press."}
+  - {say: "Written; it works after a restart."}
+steps:
+  - say: "Raise the daily turn limit to 300"
+  - facts:
+      questions: 1
+      question: {contains: "300"}
+  - press: Approve
+  - facts:
+      questions: 0
+      journal:
+        - {tool: config.propose, decision: approved, result_contains: "agent.limits.daily_turns: default -> 300", count: 1}
