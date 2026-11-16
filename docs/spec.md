@@ -1500,6 +1500,40 @@ phase plan).
   destination a module uses is not removed, and a group a destination
   points at is not disconnected, until what holds it is changed
   ([ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
+- **R-CFG-13.** Every change to the node's file is recorded (M6, owner,
+  2026-11-16,
+  [ADR-0093](adr/0093-config-changes-through-the-agent-with-history-in-the-workspace.md)):
+  each writer also copies the file to `config/ganglion.yaml` in the
+  workspace repository and commits it with a reason and its source
+  (`propose`, `rollback`, `module`, `destination`, `group`, `host`). At
+  start a live file that differs from the last copy is committed with the
+  source `host`. The live file stays at its path (R-CFG-1) and is the
+  truth; tools that write the workspace refuse `config/`. A node without
+  git works with no history.
+- **R-CFG-14.** `config.propose` (admin, private chat) changes only these
+  fields: `node.tz`, `node.memory_limit`, `log.level`, `telegram.reply`,
+  `telegram.rich`, `telegram.reactions.after`, `telegram.reactions.dwell`,
+  `agent.languages`, `agent.session_idle`, `agent.call_timeout`,
+  `agent.turn_timeout`, `agent.limits.*`, `agent.search.mode`,
+  `memory.prompt_budget`, `memory.review.enabled`, `memory.review.quiet`,
+  `update.check` and `models.purposes`. Any other field is refused with
+  the place that changes it: the host (secret references,
+  `telegram.api_url`, `telegram.admin`, `models.providers`,
+  `models.models`, `sandbox`, `http`, `metrics`, `log.dir`,
+  `agent.workspace`) or its own tool (modules, destinations, groups,
+  `telegram.updates`). A test keeps the list in step with the schema.
+- **R-CFG-15.** A proposal is checked before its card and again on the
+  press: strict parsing, the schema and the modules' checks. One that
+  fails is refused with the path and the reason, and the file is not
+  touched. The card shows each field's old and new value and the reason;
+  one from a tainted session says so (R-POL-6). It expires as any question
+  (R-POL-9). An applied change takes effect at the next start (R-CFG-6);
+  the card then offers "Restart now".
+- **R-CFG-16.** `config.history` lists the recorded changes with their
+  source, reason and diff. `config.rollback` proposes, through R-CFG-15,
+  the earlier values of the allowlisted fields a chosen change touched (the
+  latest by default); the parts outside the allowlist are named with the
+  place that changes them.
 
 ### 7.15. Updating the node
 
@@ -2036,6 +2070,10 @@ Ideas that come up along the way and are outside the current phase go here.
 Reviewed at each gate.
 
 - Classifier and learning in the router (P2 / P3).
+- Changing a field of the node's file without a restart (owner, 2026-11-16,
+  [ADR-0093](adr/0093-config-changes-through-the-agent-with-history-in-the-workspace.md)):
+  each field needs its own reload path; taken up one field at a time when a
+  restart gets in the way.
 - The first install of a node (owner, 2026-11-13): a script that takes a
   machine with nothing on it to a running node. It fetches a release and
   checks its signature

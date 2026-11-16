@@ -349,7 +349,7 @@ the family's forum. [Design](telegram-groups-design.md);
 
 | Task | Done when |
 |---|---|
-| 6.1 Configuration as versioned data: the node config lives in a git repo next to memory; every change is a commit with a reason | History of changes is visible; a restart picks up the latest commit |
+| 6.1 **Designed 2026-11-16 with 6.2 and 6.3 ([design note](p1-m6-config-design.md), [ADR-0093](../adr/0093-config-changes-through-the-agent-with-history-in-the-workspace.md), R-CFG-13 – R-CFG-16): the history is a copy of the file in the workspace repository, `config.propose` takes an allowlist of fields, a rollback is a new proposal.** Configuration as versioned data: the node config lives in a git repo next to memory; every change is a commit with a reason | History of changes is visible; a restart picks up the latest commit |
 | 6.2 `config.propose` tool: the agent turns a request ("lower my daily turn limit", "poll the inverter every 15 minutes") into a structured change with a human-readable diff; the owner approves through a request cell | A proposal without approval is never applied; an expired request discards it |
 | 6.3 Validation and rollback: a change must parse and pass the config's checks (the schema, the modules' manifests) before it applies; `config.rollback` restores the previous commit | A change that fails a check is rejected with the reason; rollback restores behaviour |
 | 6.4 **Left P1 with load shedding (ADR-0058).** Risk class on backend changes: moving a cell to a backend of a higher class (e.g. `virtual` → `tuya`) is always a separate, explicitly worded approval (ADR-0014); needs a rebind path in `cells` — today `Define` with another backend is `ErrConflict` | Test: such a change cannot be bundled into a routine approval |
