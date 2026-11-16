@@ -256,6 +256,9 @@ func (a *Agent) why(ctx context.Context, t *turn, _ string) error {
 	case t.msg.Reply == nil:
 		t.reply(a.say(ctx, t, texts.WhyUsage, nil))
 		return nil
+	case t.msg.Reply.Forwarded: // a copy has no ref to the original, and its signature is outside text
+		t.reply(a.say(ctx, t, texts.WhyForwarded, nil))
+		return nil
 	case !ok: // a reply to the node's own line, the agent's answer or someone's message
 		t.reply(a.say(ctx, t, texts.WhyNotModule, nil))
 		return nil
