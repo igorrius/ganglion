@@ -25,17 +25,20 @@ func withNonce(wasm []byte, i int) []byte {
 	return append(out, body...)
 }
 
-// #219: loading a build and closing it leaves no compiled module behind,
-// whether it loaded as a module or as a tool, or failed to load.
-func TestCloseFreesTheCompiledModule(t *testing.T) {
+// #219: closing a build's last load leaves no compiled code behind except
+// the few recently loaded builds the runner keeps, so builds compiled for
+// trials and checks and never installed do not pile up.
+func TestClosedBuildsDoNotPileUp(t *testing.T) {
 	probe, err := runnertest.BuildProbe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
 	m := runner.Manifest{Name: "probe", Version: 1, Limits: runner.Limits{Memory: 64 << 20, Timeout: 5 * time.Second}}
+	runner.ForgetKept()
+	t.Cleanup(runner.ForgetKept)
 	before := runner.CompiledModules()
-	for i := range 5 {
+	for i := range 3 { // six builds, more than the runner keeps
 		mod, err := runner.Load(ctx, withNonce(probe, i), m, runner.Deps{})
 		if err != nil {
 			t.Fatal(err)
@@ -43,6 +46,7 @@ func TestCloseFreesTheCompiledModule(t *testing.T) {
 		if err := mod.Close(ctx); err != nil {
 			t.Fatal(err)
 		}
+		_ = mod.Close(ctx) // a second Close releases nothing more
 		tool, err := runner.LoadTool(ctx, withNonce(probe, 100+i), []byte("name: probe\n"), runner.Deps{})
 		if err != nil {
 			t.Fatal(err)
@@ -51,29 +55,34 @@ func TestCloseFreesTheCompiledModule(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := runner.CompiledModules(); got != before {
-		t.Fatalf("compiled modules in the cache: %d before, %d after 10 loads and closes", before, got)
+	if got, want := runner.CompiledModules(), before+runner.KeptBuilds; got != want {
+		t.Fatalf("after six builds loaded and closed: %d compiled, want %d (the kept ones)", got, want)
 	}
 
-	// The same build loaded twice stays compiled until the last close.
-	a, err := runner.Load(ctx, withNonce(probe, 200), m, runner.Deps{})
+	// A kept build loads again from the cache; one still loaded runs after
+	// another load of it is closed.
+	a, err := runner.Load(ctx, withNonce(probe, 102), m, runner.Deps{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	one := runner.CompiledModules() // the build and a runtime's own host modules
-	b, err := runner.Load(ctx, withNonce(probe, 200), m, runner.Deps{})
+	b, err := runner.Load(ctx, withNonce(probe, 102), m, runner.Deps{})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !runner.KeepsBuildOf(b) {
+		t.Fatal("the kept reference is not the cache entry a load uses")
 	}
 	_ = a.Close(ctx)
-	if got := runner.CompiledModules(); got != one {
-		t.Fatalf("after closing one of two loads of a build: %d compiled, want %d", got, one)
-	}
 	if _, err := b.Handle(ctx, pdk.Input{Trigger: "cron", Payload: json.RawMessage(`{"op":"echo"}`)}); err != nil {
 		t.Fatalf("the build still loaded no longer runs: %v", err)
 	}
 	_ = b.Close(ctx)
+	if got, want := runner.CompiledModules(), before+runner.KeptBuilds; got != want {
+		t.Fatalf("after reloading a kept build: %d compiled, want %d", got, want)
+	}
+
+	runner.ForgetKept()
 	if got := runner.CompiledModules(); got != before {
-		t.Fatalf("after closing both loads: %d compiled, want %d", got, before)
+		t.Fatalf("with nothing kept: %d compiled, want %d", got, before)
 	}
 }

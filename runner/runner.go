@@ -45,9 +45,10 @@ var ErrTimeout = errors.New("timed out")
 
 // compilationCache is shared by every module in the process, so loading the
 // same module again (a new version rollout, a restart of a role) skips the
-// expensive compilation step. The cache holds a compiled module until every
-// load of it is closed (Module.Close): a build compiled for a trial or a
-// check and never installed must not stay behind.
+// expensive compilation step. The cache holds a compiled module while a
+// load of it is open (Module.Close) or while it is one of the recently
+// loaded builds the runner keeps (kept.go); a build compiled for a trial or
+// a check and never installed is freed after that.
 var compilationCache = wazero.NewCompilationCache()
 
 // Deps are the runner's side of the host functions.
@@ -172,12 +173,13 @@ func load(ctx context.Context, wasm []byte, m Manifest, deps Deps, tool bool) (*
 		return nil, fmt.Errorf("runner: module %s does not export handle", m.Name)
 	}
 	mod.compiled = compiled
+	kept.keep(ctx, wasm)
 	return mod, nil
 }
 
-// Close frees the module, its runtime and its compiled code: the shared
-// cache counts loads of the same build and drops the code on the last close.
-// A second Close does nothing.
+// Close frees the module, its runtime and its reference to the compiled
+// code: the shared cache drops the code when no load of it is open and the
+// build is not one the runner keeps. A second Close does nothing.
 func (m *Module) Close(ctx context.Context) error {
 	var err error
 	m.closed.Do(func() {
