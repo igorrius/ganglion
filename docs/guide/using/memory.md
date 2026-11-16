@@ -40,6 +40,6 @@ There are two kinds.
 
 A schedule is either a cron expression with five fields, or a single date and time in the node's time zone. Check `node.tz` first: the default is `Europe/Kyiv`, and it decides what "9 in the morning" means.
 
-You confirm each one when it is created. For a task, the confirmation lists what it may do: its tools, the web hosts it may fetch, the exact host commands, and who gets the reply. You approve that once. After that, runs need no button presses, and anything outside the approved list is denied with one notice. Tasks count against your [daily limits](../running/models.md#limits).
+A reminder is set at once and shown back to you as a message with a **Delete** button, so a mistake is one press away. If the session is [tainted](tools-and-safety.md#tainted-sessions), the agent asks first, as it does for a task. You confirm a task when it is created. The confirmation lists what it may do: its tools, the web hosts it may fetch, the exact host commands, and who gets the reply. You approve that once. After that, runs need no button presses, and anything outside the approved list is denied with one notice. Tasks count against your [daily limits](../running/models.md#limits).
 
 `/tasks` lists them, one message each, with **Details**, **Delete** and **Run now**.

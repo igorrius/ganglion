@@ -38,6 +38,7 @@ const (
 	toolMemoryForget = "memory.forget"
 	toolHostExec     = "host.exec"
 	toolPlanShow     = "plan.show"
+	toolSchedCreate  = "schedule.create"
 )
 
 const (
@@ -317,6 +318,10 @@ func (p *Policy) outOfGrantText(job string, c tool.Call) string {
 //     are side effects; language.set likewise, since it changes only the
 //     caller's own language (R-LANG-3); module.write confirms in a tainted
 //     session and follows its own policy otherwise (R-RUN-17);
+//     schedule.create of a reminder with no grant likewise: it only writes to
+//     the owner's own chat and the owner sees it with Delete (ADR-0089); a
+//     task, or a reminder with a grant or arguments that do not parse, falls
+//     through to the side-effect rule;
 //  8. a host command by its class: read is auto, even in a tainted
 //     session; one the conversation's approved plan lists is planned; any
 //     other confirms (R-CMD-2, R-CMD-7);
@@ -347,7 +352,7 @@ type rule func(cfg Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decis
 
 // rules are the rules of Decide, in order.
 var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleCommandForbidden, ruleGrant,
-	ruleMemoryWrite, ruleModuleWrite, ruleLanguageSet, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
+	ruleMemoryWrite, ruleReminder, ruleModuleWrite, ruleLanguageSet, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -606,6 +611,30 @@ func ruleSideEffect(_ Config, s tool.Spec, _ tool.Call) (tool.Policy, journal.De
 
 func ruleMemoryWrite(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Name != toolMemoryWrite && s.Name != toolMemoryForget {
+		return "", "", false
+	}
+	if c.Tainted {
+		return confirm()
+	}
+	return tool.PolicyAuto, journal.DecisionAllowed, true
+}
+
+// ruleReminder sets a reminder at once in a session that holds no outside
+// content, and asks in one that does, where a page may have dictated it
+// (ADR-0089). A task, a reminder with a grant, and arguments that do not
+// decode are left to the side-effect rule, which confirms.
+func ruleReminder(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if s.Name != toolSchedCreate {
+		return "", "", false
+	}
+	var args struct {
+		Kind  string          `json:"kind"`
+		Grant json.RawMessage `json:"grant"`
+	}
+	if err := json.Unmarshal(c.Args, &args); err != nil || args.Kind != "reminder" {
+		return "", "", false
+	}
+	if g := strings.TrimSpace(string(args.Grant)); g != "" && g != "null" {
 		return "", "", false
 	}
 	if c.Tainted {

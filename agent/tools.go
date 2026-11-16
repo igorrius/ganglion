@@ -246,10 +246,34 @@ func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) 
 	if result.Pending != "" && !slices.Contains(t.state.Pending, result.Pending) {
 		t.state.Pending = append(t.state.Pending, result.Pending)
 	}
+	if result.Pending != "" && a.replaceOlder(ctx, t, result.Pending) {
+		text += textReplaced
+	}
 	if result.Job != "" && !slices.Contains(t.state.Commands, result.Job) {
 		t.state.Commands = append(t.state.Commands, result.Job)
 	}
 	return text, nil
+}
+
+// textReplaced is added to what the model reads when a new question
+// replaced an earlier waiting one of the same tool (ADR-0088).
+const textReplaced = " It replaced the earlier waiting question of the same tool, which the owner can no longer press."
+
+// replaceOlder withdraws the waiting questions of the same tool that the new
+// pending call id replaces: it drops them from the session's pending list and
+// folds their messages. It reports whether any was replaced. A failure is
+// logged and leaves the old questions to expire.
+func (a *Agent) replaceOlder(ctx context.Context, t *turn, id string) bool {
+	items, err := a.d.Pending.Replace(ctx, id)
+	if err != nil {
+		a.log.Warn("agent: older questions not replaced", "pending", id, "err", err)
+		return false
+	}
+	for _, it := range items {
+		t.state.Pending = slices.DeleteFunc(slices.Clone(t.state.Pending), func(p string) bool { return p == it.ID })
+		a.closeReplaced(ctx, t, it)
+	}
+	return len(items) > 0
 }
 
 // toolCall is the context of the turn's next call.

@@ -79,6 +79,22 @@ func reminderArgs(t *testing.T, at time.Time) string {
 	return string(b)
 }
 
+// taskArgs is a call that still asks for a press: a task with a read-only
+// grant. A reminder in a clean session is set without one (ADR-0089).
+func taskArgs(t *testing.T, at time.Time) string {
+	t.Helper()
+	kyiv, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := json.Marshal(map[string]any{"kind": "task", "text": "Call the plumber.", "at": at.In(kyiv).Format("2006-01-02 15:04"),
+		"grant": map[string]any{"tools": []string{"cells.get"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func TestScriptedNodeAnswers(t *testing.T) {
 	n := startScripted(t, Scenario{Name: "x", Script: []ScriptStep{{Say: "Hello from the script."}}})
 	sayQuiet(t, n, "hi")
@@ -138,7 +154,7 @@ func TestNodeIsIsolated(t *testing.T) {
 
 func TestAdvanceConfirmations(t *testing.T) {
 	n := startScripted(t, Scenario{Name: "x", Script: []ScriptStep{
-		{Tool: "schedule.create", Args: reminderArgs(t, time.Now().Add(24*time.Hour))},
+		{Tool: "schedule.create", Args: taskArgs(t, time.Now().Add(24*time.Hour))},
 		{Say: "I asked the owner."},
 		{Say: "It expired."},
 	}})
@@ -167,17 +183,10 @@ func TestAdvanceConfirmations(t *testing.T) {
 func TestAdvanceScheduler(t *testing.T) {
 	n := startScripted(t, Scenario{Name: "x", Script: []ScriptStep{
 		{Tool: "schedule.create", Args: reminderArgs(t, time.Now().Add(time.Hour))},
-		{Say: "I asked the owner."},
 		{Say: "It is set."},
 	}})
 	sayQuiet(t, n, "Set a reminder")
 	ctx := context.Background()
-	if err := n.Peer().Press(ctx, "Approve"); err != nil {
-		t.Fatal(err)
-	}
-	if err := n.Quiet(ctx, quietLimit); err != nil {
-		t.Fatal(err)
-	}
 	if err := n.Advance("scheduler", 2*time.Hour); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +341,7 @@ func TestReadView(t *testing.T) {
 	n := startScripted(t, Scenario{Name: "x", Script: []ScriptStep{
 		{Tool: "memory.write", Args: `{"topic":"Boiler","summary":"The water boiler","fact":"The boiler holds 80 litres."}`},
 		{Say: "Stored it."},
-		{Tool: "schedule.create", Args: reminderArgs(t, time.Now().Add(time.Hour))},
+		{Tool: "schedule.create", Args: taskArgs(t, time.Now().Add(time.Hour))},
 		{Say: "I asked."},
 		{Say: "Set."},
 	}})
@@ -354,7 +363,7 @@ func TestReadView(t *testing.T) {
 		Journal: []JournalFact{{Tool: "memory.write", Decision: "allowed"}, {Tool: "schedule.create", Decision: "approved"}},
 		History: &Text{Contains: "Remember my boiler"},
 		Memory:  &Text{Contains: "80 litres"},
-		Jobs:    &JobFact{Kind: "reminder", Count: 1},
+		Jobs:    &JobFact{Kind: "task", Count: 1},
 		Reply:   &Text{Contains: last[0].Text},
 	}, v); len(got) != 0 {
 		t.Fatalf("%v\nview %+v", got, v.Jobs)

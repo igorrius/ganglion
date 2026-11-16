@@ -18,6 +18,10 @@ var errRefused = errors.New("pending: press refused")
 // event pressed it, and no event id has this form.
 const spentBy = "spent:sibling"
 
+// spentReplaced is the used_by of a button spent because a newer question
+// replaced its call (Store.Replace).
+const spentReplaced = "spent:replaced"
+
 // statusOf is what a press of a confirmation button decides.
 var statusOf = map[string]Status{ActionApprove: StatusApproved, ActionDeny: StatusDenied}
 
@@ -121,6 +125,8 @@ func (s *Store) refused(ctx context.Context, buttonID string, by By) (Press, err
 	switch {
 	case b.Used && usedBy == by.Event:
 		return p, nil
+	case p.Item.Status == StatusReplaced:
+		return p, fmt.Errorf("pending: press %s: %w", buttonID, ErrReplaced)
 	case !b.Used && !b.Expires.After(s.now()):
 		// Nobody pressed it in time; its call may be done since, by the
 		// expiry reaching the conversation.
@@ -142,8 +148,8 @@ func (s *Store) answer(ctx context.Context, id string) (string, error) {
 		return "", nil
 	}
 	var action string
-	err := s.db.QueryRowContext(ctx, `SELECT action FROM pending_buttons WHERE pending = ? AND used = 1 AND used_by <> ?
-		ORDER BY rowid LIMIT 1`, id, spentBy).Scan(&action)
+	err := s.db.QueryRowContext(ctx, `SELECT action FROM pending_buttons WHERE pending = ? AND used = 1 AND used_by NOT IN (?, ?)
+		ORDER BY rowid LIMIT 1`, id, spentBy, spentReplaced).Scan(&action)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}

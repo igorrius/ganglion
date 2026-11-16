@@ -700,3 +700,36 @@ func TestModuleJobIsListedWithoutDelete(t *testing.T) {
 		t.Fatalf("the model reads %q", res.Text)
 	}
 }
+
+// A reminder, set without a press in a clean session or after one, is shown
+// to the owner as a message with a Delete button; a task shows none
+// (ADR-0089).
+func TestScheduleCreateShowsAReminderWithDelete(t *testing.T) {
+	e := newSchedEnv(t)
+	ctx := context.Background()
+	create := builtin.NewScheduleCreate(e.sc)
+	c := call("schedule.create", `{"kind":"reminder","at":"2026-11-04 09:00","text":"buy a flashlight"}`)
+	res, err := create.Run(ctx, c)
+	if err != nil || len(res.Out) != 1 {
+		t.Fatalf("run = %+v, %v", res, err)
+	}
+	if !strings.Contains(res.Text, "Delete button") {
+		t.Errorf("the model is not told the owner sees it: %q", res.Text)
+	}
+	o := res.Out[0]
+	if o.IdemKey != c.Key()+":created" || o.Conv != "telegram:42" || o.Transport != "telegram" ||
+		!strings.HasPrefix(o.Text, "⏰ Reminder set: once at 2026-11-04 09:00") || !strings.HasSuffix(o.Text, "\nbuy a flashlight") || labels(o.Buttons) != "Delete" {
+		t.Fatalf("message %+v", o)
+	}
+	edit := e.pressAs(t, o.Buttons[0])
+	if !strings.Contains(edit.Text, "Deleted") || len(edit.Buttons) != 0 {
+		t.Fatalf("Delete: %+v", edit)
+	}
+	if j, _ := e.jobs.Get(ctx, "e1-2"); !j.Deleted {
+		t.Fatal("the reminder was not deleted")
+	}
+	task, err := create.Run(ctx, call("schedule.create", ratesArgs))
+	if err != nil || len(task.Out) != 0 || strings.Contains(task.Text, "Delete button") {
+		t.Fatalf("task run = %+v, %v; want no message", task, err)
+	}
+}

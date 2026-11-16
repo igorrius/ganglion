@@ -362,7 +362,8 @@ type ScheduleCreate struct{ s Scheduling }
 // NewScheduleCreate returns schedule.create.
 func NewScheduleCreate(s Scheduling) *ScheduleCreate { return &ScheduleCreate{s: s} }
 
-// Spec describes schedule.create: a side effect, so the owner confirms.
+// Spec describes schedule.create: a side effect, so the owner confirms, except
+// a reminder in a clean session, which the policy lets through (ADR-0089).
 func (*ScheduleCreate) Spec() tool.Spec {
 	return tool.Spec{
 		Name: toolCreate,
@@ -372,7 +373,8 @@ func (*ScheduleCreate) Spec() tool.Spec {
 			"conversation, so its earlier runs are its history. A task's final answer is delivered automatically as a message " +
 			"to the grant's reply target, so write the text as what to produce, e.g. \"Get … and write a short message " +
 			"with …\", not \"send X a message\". Write a task's text in the language the person is using, and say in it " +
-			"which language the answer is to be in: a run has only this text to go by. The owner confirms the job with its grant.",
+			"which language the answer is to be in: a run has only this text to go by. A reminder is set at once in a clean session " +
+			"and shown to the owner with a Delete button; the owner confirms a task with its grant.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"kind":{"type":"string","enum":["reminder","task"]},` +
 			`"cron":{"type":"string","description":"five fields: minute hour day-of-month month day-of-week (0 = Sunday); numbers, ranges a-b, lists a,b, steps */n; no names"},` +
@@ -414,7 +416,18 @@ func (t *ScheduleCreate) Run(ctx context.Context, c tool.Call) (tool.Result, err
 	if err := t.s.Jobs.Create(ctx, j); err != nil && !errors.Is(err, schedule.ErrExists) {
 		return tool.Result{}, fmt.Errorf("schedule.create: %w", err)
 	}
-	return tool.Result{Text: fmt.Sprintf("created %s %s; %s", j.Kind, j.ID, t.s.timing(texts.Speaker{}, j))}, nil
+	res := tool.Result{Text: fmt.Sprintf("created %s %s; %s", j.Kind, j.ID, t.s.timing(texts.Speaker{}, j))}
+	if j.Kind != schedule.KindReminder {
+		return res, nil
+	}
+	buttons, err := t.s.buttons(ctx, c.Speak, j, c.Principal, c.Conv, ActionDelete)
+	if err != nil {
+		return tool.Result{}, fmt.Errorf("schedule.create: %w", err)
+	}
+	res.Text += ". The owner sees it as a message with a Delete button; confirm in a few words without repeating it."
+	res.Out = []event.Outgoing{{IdemKey: c.Key() + ":created", Transport: c.Transport, Conv: c.Conv,
+		Text: c.Speak.Text(texts.SchedReminderSet, texts.Vars{varTiming: t.s.timing(c.Speak, j), varText: j.Text}), Buttons: buttons}}
+	return res, nil
 }
 
 // ScheduleList is the schedule.list tool.

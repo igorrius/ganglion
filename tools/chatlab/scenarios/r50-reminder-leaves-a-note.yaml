@@ -10,7 +10,6 @@ covers:
 steps:
   - say: "Remind me in one hour to call the plumber."
   - reach: {journal: {tool: schedule.create}, nudge: "Yes, please create that reminder now."}
-  - press: Approve
   - advance: {scheduler: 2h}
   - facts:
       history: {contains: "[reminder]"}

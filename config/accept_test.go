@@ -1191,7 +1191,7 @@ func (h *acceptNode) expiryScenario(t *testing.T) {
 	h.note("\n## Expiry (step 4)")
 	h.say(t, "/new")
 	start := time.Now()
-	got := h.say(t, "Create a one-time reminder for tomorrow at 09:00 that says: call the plumber. Do not ask me anything, just create it.")
+	got := h.say(t, "Create a one-time scheduled task for tomorrow at 09:00 that reads the cell plumber.note with cells.get and tells me what it says. Do not ask me anything, just create it.")
 	qs := questions(got)
 	if len(qs) == 0 {
 		got = h.say(t, "Yes, create it.")
@@ -1216,12 +1216,12 @@ func (h *acceptNode) expiryScenario(t *testing.T) {
 	if d := decisions(es, "schedule.create"); !slices.Contains(d, journal.DecisionExpired) || slices.Contains(d, journal.DecisionApproved) {
 		t.Errorf("schedule.create decisions %v, want confirm then expired", d)
 	}
-	var reminders int
-	if err := h.db.QueryRow(`SELECT count(*) FROM schedule_jobs WHERE kind = 'reminder' AND deleted = 0`).Scan(&reminders); err != nil {
+	var tasks int
+	if err := h.db.QueryRow(`SELECT count(*) FROM schedule_jobs WHERE kind = 'task' AND deleted = 0`).Scan(&tasks); err != nil {
 		t.Fatal(err)
 	}
-	if reminders != 0 {
-		t.Errorf("an expired request created %d reminders", reminders)
+	if tasks != 0 {
+		t.Errorf("an expired request created %d tasks", tasks)
 	}
 	if !saysExpired.MatchString(sentTexts(got)) {
 		t.Errorf("the model's answer does not say the request expired: %q", sentTexts(got))
@@ -1239,8 +1239,8 @@ func (h *acceptNode) expiryScenario(t *testing.T) {
 	if d := decisions(h.journalSince(t, start), "schedule.create"); slices.Contains(d, journal.DecisionApproved) {
 		t.Errorf("a late press approved the expired call: %v", d)
 	}
-	if err := h.db.QueryRow(`SELECT count(*) FROM schedule_jobs WHERE kind = 'reminder' AND deleted = 0`).Scan(&reminders); err != nil || reminders != 0 {
-		t.Errorf("reminders after the late press: %d (%v)", reminders, err)
+	if err := h.db.QueryRow(`SELECT count(*) FROM schedule_jobs WHERE kind = 'task' AND deleted = 0`).Scan(&tasks); err != nil || tasks != 0 {
+		t.Errorf("tasks after the late press: %d (%v)", tasks, err)
 	}
 	h.note("\nLast turn of the owner's chat: outcome %s, route %s", h.lastTurn(t).outcome, h.lastTurn(t).route)
 }

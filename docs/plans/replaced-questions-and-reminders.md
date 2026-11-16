@@ -8,10 +8,10 @@ spec R-POL-9, R-SCH-2. Read [conventions](../conventions.md) first.
 
 ## A. A newer question replaces a waiting one (#214)
 
-- [ ] **A1. Migration** `tool/pending/migrations/008_replaced.sql`:
+- [x] **A1. Migration** `tool/pending/migrations/008_replaced.sql`:
   `ALTER TABLE pending_calls ADD COLUMN replaced_by TEXT NOT NULL DEFAULT '';`
   with a comment in the style of `007_job.sql`.
-- [ ] **A2. Store** (`tool/pending`):
+- [x] **A2. Store** (`tool/pending`):
   - `StatusReplaced Status = "replaced"`; `ErrReplaced` beside `ErrExpired`;
     a `spentReplaced = "spent:replaced"` used_by beside `spentBy`.
   - `func (s *Store) Replace(ctx, id string) ([]Item, error)`: in one
@@ -30,7 +30,7 @@ spec R-POL-9, R-SCH-2. Read [conventions](../conventions.md) first.
     case, before the used/expired cases).
   - `ExpireDue` must not touch replaced calls (it already selects
     `waiting`; add a test).
-- [ ] **A3. Agent** (`agent`):
+- [x] **A3. Agent** (`agent`):
   - Add `Replace` to the `Confirmations` interface (`agent/agent.go`) and
     to every fake that implements it.
   - In `applyTool` (`agent/tools.go`), when `result.Pending != ""`, call
@@ -51,11 +51,11 @@ spec R-POL-9, R-SCH-2. Read [conventions](../conventions.md) first.
     pending.ErrReplaced)`: toast `texts.ToastReplaced`, and
     `t.closeButtons(p.Item.Question, a.stamped(a.say(ctx, t,
     texts.LineReplaced, nil), p.Item.Answered))`.
-- [ ] **A4. Texts**: `ToastReplaced` ("Replaced by a newer question.") and
+- [x] **A4. Texts**: `ToastReplaced` ("Replaced by a newer question.") and
   `LineReplaced` ("Replaced by a newer question"; `stamped` adds the
   time, check how `LineExpired` reads) in `texts/texts.go`, its lists, and
   `texts/lang/en.yaml`, `uk.yaml`, `ru.yaml`, worded like their neighbours.
-- [ ] **A5. Tests**: store — replaced: same tool from another turn;
+- [x] **A5. Tests**: store — replaced: same tool from another turn;
   not replaced: the same turn, another tool, another principal, another
   conv, an answered call; a second `Replace` returns the same set; a press
   on a replaced button gives `ErrReplaced`; `ExpireDue` leaves replaced
@@ -65,14 +65,14 @@ spec R-POL-9, R-SCH-2. Read [conventions](../conventions.md) first.
 
 ## B. A reminder without a press in a clean session (#215)
 
-- [ ] **B1. Policy** (`policy/policy.go`): a rule `ruleReminder` in
+- [x] **B1. Policy** (`policy/policy.go`): a rule `ruleReminder` in
   `rules`, right after `ruleMemoryWrite`: for `schedule.create` only;
   decode the args loosely (`kind`, and whether `grant` is present and not
   null); if they do not decode, or `kind != "reminder"`, or a grant is
   given, the rule does not apply (the side-effect rule then confirms).
   Clean session: auto (`journal.DecisionAllowed`); tainted: confirm.
   Update the numbered list in `Decide`'s doc comment.
-- [ ] **B2. Tool** (`tool/builtin/schedule.go`): `ScheduleCreate.Run`, for a
+- [x] **B2. Tool** (`tool/builtin/schedule.go`): `ScheduleCreate.Run`, for a
   reminder, returns an `Out` message `IdemKey: c.Key()+":created"`, to
   `c.Transport`/`c.Conv`, text from a new key `texts.SchedReminderSet`
   ("⏰ Reminder set: {{timing}}" followed by the reminder's text, built the
@@ -82,9 +82,9 @@ spec R-POL-9, R-SCH-2. Read [conventions](../conventions.md) first.
   Delete button; confirm in a few words without repeating it." Update the
   tool description: a reminder is set at once in a clean session; the
   owner confirms a task with its grant. Update `Spec`'s doc comment.
-- [ ] **B3. Texts**: `SchedReminderSet` in `texts.go`, its list and the
+- [x] **B3. Texts**: `SchedReminderSet` in `texts.go`, its list and the
   three language files.
-- [ ] **B4. Tests**: `TestDecide` cases — reminder clean: auto; reminder
+- [x] **B4. Tests**: `TestDecide` cases — reminder clean: auto; reminder
   tainted: confirm; reminder with a grant: confirm; task clean: confirm;
   args that do not parse: confirm. Builtin — `Run` of a reminder returns
   the message with one stored Delete button; a task returns none. Find
@@ -94,13 +94,13 @@ spec R-POL-9, R-SCH-2. Read [conventions](../conventions.md) first.
 
 ## C. Docs
 
-- [ ] `docs/guide/using/memory.md` (the paragraph "You confirm each one when
+- [x] `docs/guide/using/memory.md` (the paragraph "You confirm each one when
   it is created"): a reminder is set at once and shown with Delete; in a
   tainted session it asks; a task is confirmed as before.
-- [ ] `docs/guide/using/tools-and-safety.md`, "Confirmation buttons": the
+- [x] `docs/guide/using/tools-and-safety.md`, "Confirmation buttons": the
   exceptions (a reminder in a clean session) and that a question asked
   again in a later message replaces the old one, which folds.
-- [ ] `docs/architecture/05-code-map.md` if it lists pending statuses or
+- [x] `docs/architecture/05-code-map.md` if it lists pending statuses or
   policy rules (grep); nothing else in architecture changes.
 
 ## Check

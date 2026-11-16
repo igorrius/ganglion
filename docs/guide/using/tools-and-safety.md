@@ -31,6 +31,10 @@ The kill switch is `/commands off`. `/commands on` turns them back on.
 
 By default, every action that changes something needs a button press. A decided question folds to one line such as "Approved, 21:09". A question that nobody answers expires.
 
+A reminder is the exception: in a clean session it is set at once, and you see it with a **Delete** button; a [tainted session](#tainted-sessions) still asks.
+
+If you change your request and the agent asks the same kind of question again (for example, a reminder for another time), the old question is replaced: its buttons go away and it folds to "Replaced by a newer question", so only the current one can be pressed.
+
 ## Tainted sessions
 
 When the conversation reads something an outsider wrote (a web page, a search result, a forwarded message, a quote from another chat), the session is **tainted**. In a tainted session the agent might be reading instructions planted by someone else, so it becomes stricter. Any action that changes something, any message to someone else, any memory write and any script that takes input needs your press, even ones that would have run by themselves.

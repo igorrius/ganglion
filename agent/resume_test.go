@@ -1135,3 +1135,76 @@ func TestQuickEditKeepsTheQuestionsKey(t *testing.T) {
 		t.Fatalf("edit %+v, %v", edit, ok)
 	}
 }
+
+// callToolWith is callTool with arguments, so a second call of the tool is not
+// the identical one the policy would not ask about again (ruling R38).
+func callToolWith(name, args string) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return func(_ context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		return provider.ChatResponse{Message: provider.Message{Role: "assistant", ToolCalls: []provider.ToolCall{
+			{ID: fmt.Sprintf("call_%d", len(req.Messages)), Name: name, Args: json.RawMessage(args)}}}, Usage: provider.Usage{InputTokens: 50, OutputTokens: 5}}, nil
+	}
+}
+
+// argSideTool is a side-effect tool that takes the argument n.
+type argSideTool struct{ *sideTool }
+
+func (a *argSideTool) Spec() tool.Spec {
+	sp := a.sideTool.Spec()
+	sp.InputSchema = json.RawMessage(`{"type":"object","properties":{"n":{"type":"integer"}}}`)
+	return sp
+}
+
+// A question of the same tool asked in a later turn replaces the waiting
+// one: its message folds, it leaves the session's pending list, the model is
+// told, and a press on its old Approve runs nothing (ADR-0088).
+func TestANewerQuestionReplacesTheOlderOne(t *testing.T) {
+	side := &argSideTool{newSideTool()}
+	e := newConfirmEnv(t, side)
+	old, _ := e.ask(t, "schedule.create")
+	withRefs(e, old, "91")
+	e.now = e.now.Add(time.Minute)
+	e.smart.push(callToolWith("schedule.create", `{"n":2}`), say("I asked again."))
+	out := e.turn(t, message(owner, "Igor", "make it later"))
+	edit, ok := questionEdit(out)
+	if !ok || edit.Edit != "91" || len(edit.Buttons) != 0 || edit.Text != closing("Replaced by a newer question", e.now) || edit.Folded != old.Text {
+		t.Fatalf("edit %+v, %v", edit, ok)
+	}
+	if want := old.IdemKey[:strings.LastIndex(old.IdemKey, ":")] + ":replaced"; edit.IdemKey != want {
+		t.Fatalf("edit key %q, want %q", edit.IdemKey, want)
+	}
+	var fresh event.Outgoing
+	for _, o := range out {
+		if len(o.Buttons) > 0 {
+			fresh = o
+		}
+	}
+	if fresh.IdemKey == "" || fresh.IdemKey == old.IdemKey {
+		t.Fatalf("no new question in %+v", out)
+	}
+	if st := e.state(t); len(st.Pending) != 1 {
+		t.Fatalf("pending %v, want only the new question", st.Pending)
+	}
+	reqs := e.smart.requests()
+	if got := lastToolResult(reqs[len(reqs)-1]); !strings.Contains(got, "It replaced the earlier waiting question of the same tool") {
+		t.Fatalf("the model read %q", got)
+	}
+	e.now = e.now.Add(time.Minute)
+	late := noAcks(e.turn(t, press(owner, old.Buttons[0].ID, "77")))
+	if len(late) != 1 || late[0].Text != closing("Replaced by a newer question", e.now.Add(-time.Minute)) || late[0].Folded != old.Text || len(side.calls) != 0 {
+		t.Fatalf("late press out %+v, calls %d", late, len(side.calls))
+	}
+	toasts := e.turn(t, press(owner, old.Buttons[1].ID, "78"))
+	if _, ok := findOut(toasts, func(o event.Outgoing) bool { return o.Ack != "" && o.Text == "Replaced by a newer question." }); !ok {
+		t.Fatalf("no toast in %+v", toasts)
+	}
+}
+
+// lastToolResult is the content of the last tool message the model read.
+func lastToolResult(req provider.ChatRequest) string {
+	for _, m := range slices.Backward(req.Messages) {
+		if m.Role == provider.RoleTool {
+			return m.Content
+		}
+	}
+	return ""
+}

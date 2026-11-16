@@ -13,7 +13,7 @@ covers:
   - transport/telegram/buttons.go
   - transport/telegram/split.go
 steps:
-  - say: "Create a one-time reminder for tomorrow at 09:00 that says: call the plumber."
+  - say: "Create a one-time scheduled task for tomorrow at 09:00 that reads the cell plumber.note with cells.get and tells me what it says."
   - reach: {journal: {tool: schedule.create}, nudge: "Yes, please create it."}
   - advance: {confirmations: 16m}
   - facts:
@@ -21,7 +21,7 @@ steps:
         - {tool: schedule.create, decision: expired}
       no_journal:
         - {tool: schedule.create, decision: approved}
-      jobs: {kind: reminder, count: 0}
+      jobs: {kind: task, count: 0}
       message_replaced: "Expired, "
       questions: 0
-  - judge: "The reply says the reminder was not created."
+  - judge: "The reply says the task was not created."

@@ -65,7 +65,7 @@ func TestSessionPressMissingIsAnError(t *testing.T) {
 }
 
 func TestSessionAdvanceClosesAQuestion(t *testing.T) {
-	dir, _ := startSession(t, []ScriptStep{{Tool: "schedule.create", Args: reminderArgs(t, time.Now().Add(time.Hour))}, {Say: "I asked."}, {Say: "It expired."}}, time.Minute)
+	dir, _ := startSession(t, []ScriptStep{{Tool: "schedule.create", Args: taskArgs(t, time.Now().Add(time.Hour))}, {Say: "I asked."}, {Say: "It expired."}}, time.Minute)
 	if out := call(t, dir, Request{Op: OpSay, Text: "Set a reminder"}); !strings.Contains(out, "[Approve | Deny]") {
 		t.Fatalf("output %q", out)
 	}
