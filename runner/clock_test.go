@@ -9,6 +9,7 @@ import (
 	"github.com/igorrius/ganglion/pdk"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/runner/runnertest"
+	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 )
 
 // loadProbeWith loads the probe module with the given deps.
@@ -63,5 +64,20 @@ func TestClockAdvances(t *testing.T) {
 	second := probeNow(t, mod)
 	if second-first != 600 {
 		t.Fatalf("clock moved by %d s, want 600", second-first)
+	}
+}
+
+// A quiet module (a trial run) leaves the node's metrics alone.
+func TestQuietRecordsNoMetrics(t *testing.T) {
+	rec := telemetrytest.Install(t)
+	mod := loadProbeWith(t, runner.Deps{Quiet: true})
+	if _, err := mod.Handle(context.Background(), pdk.Input{Trigger: "cron", Payload: json.RawMessage(`{"op":"echo"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.Value(t, "ganglion.module.calls", nil); got != 0 {
+		t.Errorf("quiet module counted %v calls, want 0", got)
+	}
+	if got := rec.Value(t, "ganglion.module.call.duration", map[string]string{"module": "probe"}); got != 0 {
+		t.Errorf("quiet module timed %v calls, want 0", got)
 	}
 }

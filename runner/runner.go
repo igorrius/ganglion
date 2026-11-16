@@ -218,9 +218,6 @@ func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResu
 // timeout, told apart from the caller's context ending first.
 var errOwnLimit = errors.New("runner: the module's time limit")
 
-// callError is a call that did not finish: a timeout, the caller's context
-// ending, or a trap (out of memory among them: the module cannot grow and
-// aborts).
 // clocks gives the instance the real clocks, or the injected one when a
 // trial run set it.
 func (m *Module) clocks(cfg wazero.ModuleConfig) wazero.ModuleConfig {
@@ -235,6 +232,9 @@ func (m *Module) clocks(cfg wazero.ModuleConfig) wazero.ModuleConfig {
 		WithNanotime(func() int64 { return m.deps.Clock().UnixNano() }, sys.ClockResolution(1))
 }
 
+// callError is a call that did not finish: a timeout, the caller's context
+// ending, or a trap (out of memory among them: the module cannot grow and
+// aborts).
 func (m *Module) callError(ctx context.Context, stage string, err error, stderr *limitedBuffer) (callResult, error) {
 	switch cause := context.Cause(ctx); {
 	case errors.Is(cause, errOwnLimit):
