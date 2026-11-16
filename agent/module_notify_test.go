@@ -73,6 +73,23 @@ func TestModuleNotifySendsTheTextAndNotesWithoutIt(t *testing.T) {
 	}
 }
 
+// R-RUN-20: the message's origin names the run that sent it; a node line
+// has none, even when the event carries one.
+func TestModuleNotifyRecordsTheRunInTheOrigin(t *testing.T) {
+	e := newEnv(t, Config{}, nil)
+	p := demoAlert()
+	p.Run = "r1"
+	out := e.turn(t, notifyEvent(p))
+	if len(out) != 1 || out[0].Origin == nil || out[0].Origin.Run != "r1" || out[0].Origin.Module != "local/demo-alerts" {
+		t.Fatalf("out %+v", out)
+	}
+	line := demoAlert()
+	line.Text, line.Node, line.Run = "", event.NotifyLimitLine, "r1"
+	if out := e.turn(t, notifyEvent(line)); len(out) != 1 || out[0].Origin.Run != "" {
+		t.Fatalf("a node line carries a run: %+v", out)
+	}
+}
+
 // A node line (the daily limit, a stopped chain) is the node's fixed text
 // in the owner's language, and adds no note to the history.
 func TestModuleNotifyNodeLinesAddNoNote(t *testing.T) {

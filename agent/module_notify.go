@@ -62,12 +62,16 @@ func (a *Agent) moduleNotify(ctx context.Context, t *turn, p event.ModuleNotify)
 	if p.Node == event.NotifyText && p.To == "" {
 		t.noteQuiet(fmt.Sprintf("%s%s notified you at %s", moduleNotePrefix, moduleName(p.Module), moduleClock(p.At, a.cfg.Location)))
 	}
+	run := p.Run
+	if p.Node != event.NotifyText { // a node line is the node's: no run sent it
+		run = ""
+	}
 	t.out = append(t.out, event.Outgoing{
 		IdemKey: t.event.IdemKey + ":out", Transport: p.Transport, Conv: t.event.Conv,
 		Text:      a.notifyText(ctx, t, p),
 		Signature: notifySignature(p),
 		NoPreview: true,
-		Origin:    &event.Origin{Kind: event.OriginModule, Module: p.Module, Tainted: true},
+		Origin:    &event.Origin{Kind: event.OriginModule, Module: p.Module, Run: run, Tainted: true},
 	})
 }
 

@@ -230,10 +230,10 @@ OnCall func(ctx context.Context, kind string)
   message's origin carries `p.Run`)
 - Test: `agent/module_notify_test.go`
 
-- [ ] **Step 1: Failing test:** a module's text with `Run: "r1"` stores
+- [x] **Step 1: Failing test:** a module's text with `Run: "r1"` stores
   an outgoing message whose origin has `Run == "r1"`; a node line has none.
-- [ ] **Step 2–4:** implement; `go test ./event/... ./agent/...` — PASS.
-- [ ] **Step 5:** commit `agent: a module's message records the run that sent it`.
+- [x] **Step 2–4:** implement; `go test ./event/... ./agent/...` — PASS.
+- [x] **Step 5:** commit `agent: a module's message records the run that sent it`.
 
 ### Task 5: The owner sees runs and chains
 
