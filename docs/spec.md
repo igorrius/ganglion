@@ -957,12 +957,15 @@ human); module install — tests + reviewer + admin.
     never the tools that build, install, import or write a module
     (`module.build`, `module.install`, `module.import`, `module.write`;
     R-RUN-9, owner, 2026-11-10).
-- **R-POL-9.** A question stays open, whole, until it is answered. Once answered
-  or expired it **folds**, so the chat keeps the record of what was decided and
+- **R-POL-9.** A question stays open, whole, until it is answered, expires or is
+  replaced: a newer question of the same tool, for the same person in the same
+  conversation, asked in a later turn, replaces one that still waits; the old call
+  never runs ([ADR-0088](adr/0088-a-newer-question-replaces-an-older-one-of-the-same-tool.md)).
+  Once answered, expired or replaced it **folds**, so the chat keeps the record of what was decided and
   stops being in the way:
   - one short line in place of its buttons, with the decision and its time in the
     node's time zone: "Approved, 21:09", "Approved, but it failed, 21:09",
-    "Declined, 21:09", "Expired, 21:09"; while the call runs, "⏳ Approved,
+    "Declined, 21:09", "Expired, 21:09", "Replaced by a newer question, 21:09"; while the call runs, "⏳ Approved,
     running…";
   - the question's text under the line in a collapsed quote, so nothing in it can
     pass for the line;
@@ -1212,9 +1215,12 @@ The scheduler moves up from M4 to M3b; M4 reuses it for module triggers.
   - a **task**: an instruction run as a full agent turn with tools.
 
   Both are created and listed in words; a list comes with buttons
-  (Details, Delete, and Run now for tasks). Creating a recurring task asks
-  for confirmation, because it runs unattended and spends tokens, and
-  fixes its grant (R-POL-8). Each task has its own session, so its
+  (Details, Delete, and Run now for tasks). Creating a task asks for
+  confirmation, because it runs unattended and spends tokens, and fixes
+  its grant (R-POL-8). A reminder, one-time or recurring, is set without
+  a press in a session that is not tainted, and asks in a tainted one
+  (R-POL-6); the reminder it sets is shown as its own message with
+  Delete ([ADR-0089](adr/0089-set-a-reminder-without-a-press-in-a-clean-session.md)). Each task has its own session, so its
   earlier runs are its history. Scheduled turns count towards the daily
   limit (R-AGT-4).
 
