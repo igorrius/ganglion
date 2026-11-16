@@ -67,7 +67,16 @@ func (b *configButtons) AddButtons(_ context.Context, bs ...pending.Button) erro
 	return nil
 }
 
+// askNote records the restart requests.
+type askNote struct{ asked []string }
+
+func (n *askNote) Ask(principal, transport, conv string) error {
+	n.asked = append(n.asked, principal+" "+transport+" "+conv)
+	return nil
+}
+
 type configEnv struct {
+	note     *askNote
 	g        builtin.Configuring
 	h        *fakeHistory
 	b        *configButtons
@@ -80,8 +89,8 @@ func newConfig(t *testing.T, content string) *configEnv {
 	if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	e := &configEnv{h: &fakeHistory{versions: map[string][2]string{}}, b: &configButtons{}}
-	e.g = builtin.Configuring{File: file, History: e.h, Buttons: e.b, Restart: func() { e.restarts++ },
+	e := &configEnv{h: &fakeHistory{versions: map[string][2]string{}}, b: &configButtons{}, note: &askNote{}}
+	e.g = builtin.Configuring{File: file, History: e.h, Buttons: e.b, Restart: func() { e.restarts++ }, Note: e.note,
 		Now: func() time.Time { return time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC) }}
 	return e
 }
@@ -283,9 +292,14 @@ func TestHistoryListsChanges(t *testing.T) {
 
 func TestRestartButtonRestarts(t *testing.T) {
 	e := newConfig(t, "")
-	edit, err := e.g.QuickActions()[builtin.ActionConfigRestart](context.Background(), pending.QuickPress{Speak: texts.Speaker{}})
+	press := pending.QuickPress{Speak: texts.Speaker{}, Transport: "telegram",
+		Button: pending.Button{Principal: "telegram:user:42", Conv: "telegram:42"}}
+	edit, err := e.g.QuickActions()[builtin.ActionConfigRestart](context.Background(), press)
 	if err != nil || e.restarts != 1 || !strings.Contains(edit.Text, "Restarting") {
 		t.Fatalf("edit = %+v, %v, restarts %d", edit, err, e.restarts)
+	}
+	if len(e.note.asked) != 1 || e.note.asked[0] != "telegram:user:42 telegram telegram:42" {
+		t.Fatalf("the press was not recorded: %v", e.note.asked)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/queue"
+	"github.com/igorrius/ganglion/restart"
 	"github.com/igorrius/ganglion/router"
 	"github.com/igorrius/ganglion/schedule"
 	"github.com/igorrius/ganglion/skills"
@@ -143,6 +144,9 @@ type Deps struct {
 	// Restart ends the node so its supervisor starts it again, for
 	// /restart (R-CFG-6); a no-op when unset.
 	Restart RestartFunc
+	// RestartNote records a restart asked from the chat, so the node
+	// says it is back once started (#238); restart.NoAsker when unset.
+	RestartNote restart.Asker
 	// Modules updates and rolls back the node's modules for /modules
 	// (R-RUN-8); NoModules when unset.
 	Modules Modules
@@ -293,6 +297,17 @@ func withOwnModules(d Deps) Deps {
 	return d
 }
 
+// withRestart fills the restart's defaults: no restart, no record.
+func withRestart(d Deps) Deps {
+	if d.Restart == nil {
+		d.Restart = func() {}
+	}
+	if d.RestartNote == nil {
+		d.RestartNote = restart.NoAsker{}
+	}
+	return d
+}
+
 // New returns an agent.
 func New(cfg Config, d Deps) *Agent {
 	if d.Now == nil {
@@ -311,9 +326,7 @@ func New(cfg Config, d Deps) *Agent {
 	if d.Texts == nil {
 		d.Texts = texts.Shipped()
 	}
-	if d.Restart == nil {
-		d.Restart = func() {}
-	}
+	d = withRestart(d)
 	d = withOwnModules(d)
 	if d.Inbox == nil {
 		d.Inbox = NoInbox{}

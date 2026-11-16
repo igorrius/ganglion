@@ -30,8 +30,9 @@ through `gitrepo`. No new dependency.
 [ADR-0059](../adr/0059-node-config-file.md); the [design note](p1-m6-config-design.md). Read
 them with this plan.
 
-**Status (2026-11-16):** tasks 1–7 built on the branch `feat/m6-config-design`; task 8 (the
-pull request and the live check) is open. Where the code differs from the text below:
+**Status (2026-11-16):** done. Merged in #237, released in `v0.5.0`, installed on the owner's
+node and checked live by the owner the same day. The live check found the node silent after a
+restart: #238. Where the code differs from the text below:
 `confighist.New` takes a logger as its third argument; the provider is `config.FileHistory`
 (the linter refused `ConfigHistory`), and a node with no agent keeps no history, so an echo
 node does not create a workspace; the question's texts are `ask.config_propose`,
@@ -817,11 +818,11 @@ chat id, never by title, since a title is written by the group's members.
 
 ### Task 8: the pull request and the live check
 
-- [ ] **Step 1:** `make check` and the three scenarios once more; open the pull request with
+- [x] **Step 1:** `make check` and the three scenarios once more; open the pull request with
   `Fixes #236` only after the live check passed, else `Refs #236`.
-- [ ] **Step 2: Live check on Railway** (owner's node, after a release and `/update`; nothing
+- [x] **Step 2: Live check on Railway** (owner's node, after a release and `/update`; nothing
   about the node goes into the repository): ask for a change of `agent.limits.daily_turns`;
   Apply; "Restart now"; `/status` or the next turn shows the new limit; "what changed in the
   settings?" lists it; roll it back; restart; the old value holds. Record what was done and
   seen in the PR, without the node's address.
-- [ ] **Step 3:** close #236 when the live check passed; check it reached Done on the board.
+- [x] **Step 3:** close #236 when the live check passed; check it reached Done on the board.

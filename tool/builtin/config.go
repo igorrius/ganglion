@@ -15,6 +15,7 @@ import (
 
 	"github.com/igorrius/ganglion/confighist"
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/restart"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
@@ -65,6 +66,8 @@ type Configuring struct {
 	Buttons ButtonStore
 	// Restart ends the node for its supervisor.
 	Restart RestartFunc
+	// Note records who pressed Restart now, so the node says it is back.
+	Note restart.Asker
 	// Now is the clock.
 	Now func() time.Time
 }
@@ -110,8 +113,12 @@ func (g Configuring) QuickActions() map[string]pending.QuickAction {
 	return map[string]pending.QuickAction{ActionConfigRestart: g.restartByButton}
 }
 
-// restartByButton ends the node, as /restart does.
+// restartByButton ends the node, as /restart does, and records who
+// pressed so the node says it is back.
 func (g Configuring) restartByButton(_ context.Context, p pending.QuickPress) (pending.QuickEdit, error) {
+	if err := g.Note.Ask(p.Button.Principal, p.Transport, p.Button.Conv); err != nil {
+		return pending.QuickEdit{}, err
+	}
 	g.Restart()
 	return pending.QuickEdit{Text: p.Speak.Text(texts.ReplyRestarting, nil), Reviewed: true}, nil
 }

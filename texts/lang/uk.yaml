@@ -37,6 +37,8 @@ reply.commands_usage: Напишіть /commands on або /commands off.
 reply.command_late: Команда {command} завершилася, коли розмова вже пішла далі.
 reply.build_late: Збірка {module} завершилася, коли розмова вже пішла далі.
 reply.restarting: "Перезапускаюсь. Повернуся за кілька секунд."
+reply.back: "Я знову тут, перезапуск тривав {seconds} с."
+reply.back_applied: "Тепер діють налаштування з чату:\n{changes}"
 
 button.details: "Докладніше"
 button.delete: "Видалити"

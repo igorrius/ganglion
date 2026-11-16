@@ -23,6 +23,9 @@ func (a *Agent) restart(ctx context.Context, t *turn, _ string) error {
 	}
 	t.reply(a.say(ctx, t, texts.ReplyRestarting, nil))
 	a.log.Info("agent: restart requested", "by", t.msg.From)
+	if err := a.d.RestartNote.Ask(t.msg.From, t.transport, t.replyConv); err != nil {
+		a.log.Warn("agent: the restart was not recorded; the node will not say it is back", "err", err)
+	}
 	a.d.Restart()
 	return nil
 }

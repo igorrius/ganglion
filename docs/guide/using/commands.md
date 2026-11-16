@@ -22,7 +22,7 @@ There are no `/start` and `/help` commands. Telegram's command menu is set by th
 | `/metrics` | Sends metrics as a picture. Optional filter: `all`, `ganglion`, `runtime`, `process` or a word. | Admin | Admin chat |
 | `/commands` | Shows the host-command switch. `/commands on` or `/commands off` flips it. | Admin | Admin chat |
 | `/update` | Shows the running version and the newest release. `/update install vX.Y.Z` installs a signed release and restarts into it; `/update rollback` goes back to the previous version. The reply, and the notice of a new release, have Install and Roll back buttons that do the same. See [Updating](../running/operations.md#updating). | Admin | Admin chat |
-| `/restart` | Stops the node cleanly so a supervisor starts it again. Settings outside modules apply then. | Admin | Admin chat |
+| `/restart` | Stops the node cleanly so a supervisor starts it again. Settings outside modules apply then. Once it is up again it says so in the same chat, with how long it took. | Admin | Admin chat |
 
 `/reset` is an unlisted alias of `/new`.
 

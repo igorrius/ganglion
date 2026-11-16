@@ -11,6 +11,7 @@ import (
 
 	"github.com/igorrius/ganglion/confighist"
 	"github.com/igorrius/ganglion/gitrepo"
+	"github.com/igorrius/ganglion/restart"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/samber/do/v2"
 )
@@ -61,6 +62,7 @@ func Configuring() do.Provider[builtin.Configuring] {
 			History: do.MustInvoke[confighist.History](i),
 			Buttons: do.MustInvoke[*pending.Store](i),
 			Restart: func() { do.MustInvoke[agent.RestartFunc](i)() },
+			Note:    do.MustInvoke[restart.Asker](i),
 			Now:     time.Now,
 		}, nil
 	}

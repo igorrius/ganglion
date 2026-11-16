@@ -86,8 +86,13 @@ Start here when coming back to the project.
 - **The node's file through the agent (2026-11-16, M6 tasks 6.1–6.3,
   [plan](plans/p1-m6-config.md),
   [ADR-0093](adr/0093-config-changes-through-the-agent-with-history-in-the-workspace.md),
-  [#236](https://github.com/igorrius/ganglion/issues/236)):** built, the
-  live check is open. Every change of `ganglion.yaml`, by any writer, is a
+  [#236](https://github.com/igorrius/ganglion/issues/236)):** done:
+  released in `v0.5.0`, installed on the owner's node with `ganglion update
+  install` and checked live by the owner the same day (a change, Restart
+  now, the history, a rollback; the start recorded the file as a host
+  edit). The live check showed the node silent after a restart; it now
+  says it is back
+  ([#238](https://github.com/igorrius/ganglion/issues/238)). Every change of `ganglion.yaml`, by any writer, is a
   commit of its copy in the workspace with a reason and a source, and an
   edit on the host is recorded at the next start; `config.propose` changes
   an allowlist of routine fields after the owner's press, then offers
