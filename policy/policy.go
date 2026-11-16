@@ -39,6 +39,7 @@ const (
 	toolHostExec     = "host.exec"
 	toolPlanShow     = "plan.show"
 	toolSchedCreate  = "schedule.create"
+	toolSchedDelete  = "schedule.delete"
 )
 
 const (
@@ -321,7 +322,9 @@ func (p *Policy) outOfGrantText(job string, c tool.Call) string {
 //     schedule.create of a reminder with no grant likewise: it only writes to
 //     the owner's own chat and the owner sees it with Delete (ADR-0089); a
 //     task, or a reminder with a grant or arguments that do not parse, falls
-//     through to the side-effect rule;
+//     through to the side-effect rule; schedule.delete likewise: it removes only
+//     the caller's own job, and the store refuses system and module jobs
+//     (ADR-0091);
 //  8. a host command by its class: read is auto, even in a tainted
 //     session; one the conversation's approved plan lists is planned; any
 //     other confirms (R-CMD-2, R-CMD-7);
@@ -352,7 +355,7 @@ type rule func(cfg Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decis
 
 // rules are the rules of Decide, in order.
 var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleCommandForbidden, ruleGrant,
-	ruleMemoryWrite, ruleReminder, ruleModuleWrite, ruleLanguageSet, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
+	ruleMemoryWrite, ruleReminder, ruleJobDelete, ruleModuleWrite, ruleLanguageSet, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -635,6 +638,21 @@ func ruleReminder(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Deci
 		return "", "", false
 	}
 	if g := strings.TrimSpace(string(args.Grant)); g != "" && g != "null" {
+		return "", "", false
+	}
+	if c.Tainted {
+		return confirm()
+	}
+	return tool.PolicyAuto, journal.DecisionAllowed, true
+}
+
+// ruleJobDelete deletes the owner's reminder or task at once in a session that
+// holds no outside content, and asks in one that does, where a page may have
+// asked to stop it (ADR-0091). Whose job it is and whether it may be deleted
+// at all is the store's to refuse: someone else's job is not found, a system
+// or module job is never deleted.
+func ruleJobDelete(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if s.Name != toolSchedDelete {
 		return "", "", false
 	}
 	if c.Tainted {

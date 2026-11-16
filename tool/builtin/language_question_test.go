@@ -55,7 +55,7 @@ func TestEnglishQuestionsAreUnchanged(t *testing.T) {
 func TestButtonsThatActCarrySymbols(t *testing.T) {
 	e := newSchedEnv(t)
 	e.add(t, rates("j1"))
-	c := call("schedule.list", `{}`)
+	c := call("schedule.list", `{"show":true}`)
 	c.Speak = texts.Speaker{Lang: "uk"}
 	res, err := builtin.NewScheduleList(e.sc).Run(context.Background(), c)
 	if err != nil {
@@ -64,6 +64,12 @@ func TestButtonsThatActCarrySymbols(t *testing.T) {
 	b := res.Out[0].Buttons
 	if b[0].Label != "Докладніше" || b[1].Label != "🗑 Видалити" || b[2].Label != "▶️ Запустити" {
 		t.Fatalf("%+v", b)
+	}
+	hourly := rates("r1")
+	hourly.Kind, hourly.Grant = schedule.KindReminder, tool.Grant{}
+	done, err := e.sc.ReminderButtons(context.Background(), texts.Speaker{Lang: "uk"}, hourly)
+	if err != nil || len(done) != 1 || done[0].Label != "✅ Виконано" {
+		t.Fatalf("%+v, %v", done, err)
 	}
 }
 
@@ -84,7 +90,7 @@ func TestSystemJobTextIsShownInTheLanguage(t *testing.T) {
 	audit := remind(builtin.AuditJobID)
 	audit.Kind, audit.System, audit.Text = schedule.KindSystem, true, "stored English text"
 	e.add(t, audit)
-	c := call("schedule.list", `{}`)
+	c := call("schedule.list", `{"show":true}`)
 	c.Speak = texts.Speaker{Lang: "uk"}
 	res, err := builtin.NewScheduleList(e.sc).Run(context.Background(), c)
 	if err != nil {

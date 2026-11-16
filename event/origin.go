@@ -18,12 +18,14 @@ const (
 // whether outside content had entered that session when it was stored (R-DLV-14,
 // ADR-0055). A message stored with none counts as tainted. A module's message
 // names the module that wrote it, so a reply can say which one without
-// showing its text (R-DLV-15, ADR-0073).
+// showing its text (R-DLV-15, ADR-0073). A reminder's message names its job,
+// so a reply to it tells the agent which job to stop (R-SCH-2, ADR-0091).
 type Origin struct {
 	Kind    OriginKind `json:"kind"`
 	Session string     `json:"session,omitempty"`
 	Tainted bool       `json:"tainted,omitempty"`
 	Module  string     `json:"module,omitempty"` // full name, for OriginModule only
+	Job     string     `json:"job,omitempty"`    // the job's id, for OriginReminder only
 }
 
 type originKey struct{}

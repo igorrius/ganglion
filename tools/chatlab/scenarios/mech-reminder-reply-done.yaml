@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mech-reminder-reply-done
+why: >-
+  Issue 226, ADR-0091. A reply "ordered" to a recurring reminder named no job, so the
+  model listed every job as a card and then asked to confirm the delete. The reply's
+  note now names the job ($JOB is filled from it, so a note without it fails the
+  delete), and in a clean session the delete runs at once: one short line, no cards,
+  no question.
+covers:
+  - agent/reply.go
+  - agent/scheduled.go
+  - agent/turn.go
+  - event/origin.go
+  - policy/policy.go
+  - "tool/builtin/schedule*.go"
+model: scripted
+script:
+  - {tool: schedule.create, args: '{"kind":"reminder","cron":"0 * * * *","text":"Order a flashlight."}'}
+  - {say: It is set.}
+  - {tool: schedule.delete, args: '{"id":"$JOB"}'}
+  - {say: "🗑 Off: Order a flashlight."}
+steps:
+  - say: "Remind me every hour to order a flashlight until I tell you it is done."
+  - advance: {scheduler: 1h}
+  - reply: {to: "Order a flashlight.", say: "ordered"}
+  - facts:
+      jobs: {kind: reminder, count: 0}
+      questions: 0
+      replies: 1
+      reply: {contains: "🗑 Off"}
+      journal:
+        - {tool: schedule.delete, decision: allowed, result_contains: "🗑 Off: Order a flashlight."}
+      no_journal:
+        - {tool: schedule.list}

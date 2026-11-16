@@ -30,6 +30,9 @@ const (
 	ActionDetails = "schedule.details"
 	ActionDelete  = "schedule.delete"
 	ActionRunNow  = "schedule.run_now"
+	// ActionDone is the Done button of a recurring reminder's message: a
+	// quick action only, never a tool (ADR-0091).
+	ActionDone = "schedule.done"
 )
 
 // Limits of what schedule.create takes.
@@ -373,8 +376,10 @@ func (*ScheduleCreate) Spec() tool.Spec {
 			"conversation, so its earlier runs are its history. A task's final answer is delivered automatically as a message " +
 			"to the grant's reply target, so write the text as what to produce, e.g. \"Get … and write a short message " +
 			"with …\", not \"send X a message\". Write a task's text in the language the person is using, and say in it " +
-			"which language the answer is to be in: a run has only this text to go by. A reminder is set at once in a clean session " +
-			"and shown to the owner with a Delete button; the owner confirms a task with its grant.",
+			"which language the answer is to be in: a run has only this text to go by. Write a reminder's text as what the owner is to " +
+			"read at its time, e.g. \"Order a flashlight.\", and never start it with \"Reminder\" in any language: the node's messages " +
+			"already say it is one. A reminder is set at once in a clean session and shown to the owner with a Delete button; a " +
+			"recurring one is sent with a Done button that stops it. The owner confirms a task with its grant.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"kind":{"type":"string","enum":["reminder","task"]},` +
 			`"cron":{"type":"string","description":"five fields: minute hour day-of-month month day-of-week (0 = Sunday); numbers, ranges a-b, lists a,b, steps */n; no names"},` +
@@ -430,29 +435,43 @@ func (t *ScheduleCreate) Run(ctx context.Context, c tool.Call) (tool.Result, err
 	return res, nil
 }
 
+// listArgs are the arguments of schedule.list.
+type listArgs struct {
+	Show bool `json:"show"`
+}
+
 // ScheduleList is the schedule.list tool.
 type ScheduleList struct{ s Scheduling }
 
 // NewScheduleList returns schedule.list.
 func NewScheduleList(s Scheduling) *ScheduleList { return &ScheduleList{s: s} }
 
-// Spec describes schedule.list: a read.
+// Spec describes schedule.list: a read. It sends the owner the jobs' cards
+// only when asked to show them (ADR-0091).
 func (*ScheduleList) Spec() tool.Spec {
 	return tool.Spec{
 		Name: toolList,
-		Description: "List the owner's reminders and scheduled tasks. Each is also shown to the owner as its own message " +
-			"with buttons (Details, Delete, Run now), so do not repeat the list; a short remark is enough.",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
-		Class:       tool.ClassRead,
-		Policy:      tool.PolicyAuto,
-		AdminOnly:   true,
-		LocalSafe:   true,
+		Description: "List the owner's reminders and scheduled tasks, with their ids. Set show to true only when the owner asked " +
+			"to see the list: each job then also goes to the owner as its own message with buttons (Details, Delete, Run now), so " +
+			"do not repeat the list, a short remark is enough. Without show nothing is sent to the owner; use it to look a job up. " +
+			"A reply to a reminder already names its job, so do not list the jobs to find it.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"show":{"type":"boolean",` +
+			`"description":"true only when the owner asked to see the list: every job goes to the chat as its own message with buttons"}},` +
+			`"additionalProperties":false}`),
+		Class:     tool.ClassRead,
+		Policy:    tool.PolicyAuto,
+		AdminOnly: true,
+		LocalSafe: true,
 	}
 }
 
-// Run lists the caller's jobs: a line each for the model, and a message
-// each, with its buttons, for the owner.
+// Run lists the caller's jobs: a line each for the model and, with show, a
+// message each, with its buttons, for the owner.
 func (t *ScheduleList) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
+	var a listArgs
+	if err := strictJSON(orEmpty(c.Args), &a); err != nil {
+		return tool.Result{}, fmt.Errorf("schedule.list: arguments: %w", err)
+	}
 	jobs, err := t.s.Jobs.List(ctx, c.Principal)
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("schedule.list: %w", err)
@@ -461,17 +480,31 @@ func (t *ScheduleList) Run(ctx context.Context, c tool.Call) (tool.Result, error
 		return tool.Result{Text: "no scheduled jobs"}, nil
 	}
 	lines := make([]string, 0, len(jobs))
+	for _, j := range jobs {
+		lines = append(lines, "- "+j.ID+" ("+t.s.title(texts.Speaker{}, j)+", "+t.s.timing(texts.Speaker{}, j)+"): "+j.Text)
+	}
+	list := strings.Join(lines, "\n")
+	if !a.Show {
+		return tool.Result{Text: strconv.Itoa(len(jobs)) + " jobs, not shown to the owner:\n" + list}, nil
+	}
 	out := make([]event.Outgoing, 0, len(jobs))
 	for _, j := range jobs {
 		buttons, err := t.s.buttons(ctx, c.Speak, j, c.Principal, c.Conv, ActionDetails, ActionDelete, ActionRunNow)
 		if err != nil {
 			return tool.Result{}, fmt.Errorf("schedule.list: %w", err)
 		}
-		lines = append(lines, "- "+j.ID+" ("+t.s.title(texts.Speaker{}, j)+", "+t.s.timing(texts.Speaker{}, j)+"): "+j.Text)
 		out = append(out, event.Outgoing{IdemKey: c.Key() + ":list:" + j.ID, Transport: c.Transport, Conv: c.Conv,
 			Text: t.s.entry(c.Speak, j), Buttons: buttons})
 	}
-	return tool.Result{Text: strconv.Itoa(len(jobs)) + " jobs, shown to the owner with buttons:\n" + strings.Join(lines, "\n"), Out: out}, nil
+	return tool.Result{Text: strconv.Itoa(len(jobs)) + " jobs, shown to the owner with buttons:\n" + list, Out: out}, nil
+}
+
+// orEmpty is args, or an empty object when the model sent none.
+func orEmpty(args json.RawMessage) json.RawMessage {
+	if len(bytes.TrimSpace(args)) == 0 {
+		return json.RawMessage(`{}`)
+	}
+	return args
 }
 
 // ScheduleDelete is the schedule.delete tool.
@@ -480,11 +513,15 @@ type ScheduleDelete struct{ s Scheduling }
 // NewScheduleDelete returns schedule.delete.
 func NewScheduleDelete(s Scheduling) *ScheduleDelete { return &ScheduleDelete{s: s} }
 
-// Spec describes schedule.delete: a side effect, so the owner confirms.
+// Spec describes schedule.delete: a side effect, which runs at once in a clean
+// session and asks in a tainted one (ADR-0091).
 func (*ScheduleDelete) Spec() tool.Spec {
 	return tool.Spec{
-		Name:        ActionDelete,
-		Description: "Delete one of the owner's reminders or scheduled tasks by its id (from schedule.list). The owner confirms. A system job cannot be deleted.",
+		Name: ActionDelete,
+		Description: "Delete one of the owner's reminders or scheduled tasks by its id: the job a reply to a reminder names, " +
+			"or one from schedule.list. Use it when the owner says a reminder is done or no longer needed, or asks to stop a job. " +
+			"It runs at once unless outside content entered the session, where the owner confirms. System and module jobs " +
+			"cannot be deleted. Answer with the one line the result gives and nothing else.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}`),
 		Class:       tool.ClassSideEffect,
 		Policy:      tool.PolicyConfirm,
@@ -505,7 +542,13 @@ func (t *ScheduleDelete) Question(ctx context.Context, c tool.Call) (string, err
 	return whole("schedule.delete", c.Speak.Text(key, texts.Vars{varSummary: t.s.summary(ctx, c.Speak, j, c.Conv)}))
 }
 
-// Run deletes the job; schedule.ErrSystem for a system job.
+// deletedLine is what the model reads once a job is deleted: the line it
+// answers the owner with, so the chat gets one short message (ADR-0091).
+const deletedLine = "deleted %s %s. Answer the owner with exactly this line and nothing else: %s"
+
+// Run deletes the job; schedule.ErrSystem for a system or module job,
+// schedule.ErrNotFound for someone else's. Deleting a deleted job of the
+// caller's again (a rerun of the turn) gives the same answer.
 func (t *ScheduleDelete) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	var a idArgs
 	if err := strictJSON(c.Args, &a); err != nil {
@@ -514,7 +557,12 @@ func (t *ScheduleDelete) Run(ctx context.Context, c tool.Call) (tool.Result, err
 	if err := t.s.Jobs.Delete(ctx, a.ID, c.Principal, c.Key()); err != nil {
 		return tool.Result{}, fmt.Errorf("%s: %w", ActionDelete, err)
 	}
-	return tool.Result{Text: "deleted " + a.ID}, nil
+	j, err := t.s.Jobs.Get(ctx, a.ID)
+	if err != nil {
+		return tool.Result{}, fmt.Errorf("%s: %w", ActionDelete, err)
+	}
+	off := c.Speak.Text(texts.SchedOff, texts.Vars{varText: head(shownText(c.Speak, j))})
+	return tool.Result{Text: fmt.Sprintf(deletedLine, j.Kind, j.ID, off)}, nil
 }
 
 // ScheduleRunNow is the schedule.run_now tool.

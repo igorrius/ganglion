@@ -330,7 +330,7 @@ Guarantee: **at-least-once + idempotency.**
   ([design](plans/p1-reply-context-design.md),
   [ADR-0055](adr/0055-a-reply-carries-the-replied-messages-origin.md)).
 - **R-DLV-14.** Every message the node sends records its origin: the session that made it and whether
-  that session was tainted. The origin of a reply to the node's message is read from its own outbox by any part's ref, never
+  that session was tainted; a reminder's also records its job (R-SCH-2). The origin of a reply to the node's message is read from its own outbox by any part's ref, never
   from the channel's copy. A failed lookup never fails or delays the turn: the channel's copy is then
   outside content. Messages stored outside a turn (alerts, notifiers, the give-up reply) record none
   and count as tainted.
@@ -1232,7 +1232,15 @@ The scheduler moves up from M4 to M3b; M4 reuses it for module triggers.
   its grant (R-POL-8). A reminder, one-time or recurring, is set without
   a press in a session that is not tainted, and asks in a tainted one
   (R-POL-6); the reminder it sets is shown as its own message with
-  Delete ([ADR-0089](adr/0089-set-a-reminder-without-a-press-in-a-clean-session.md)). Each task has its own session, so its
+  Delete ([ADR-0089](adr/0089-set-a-reminder-without-a-press-in-a-clean-session.md)). Deleting the owner's own reminder or task
+  likewise needs no press in a session that is not tainted and asks in a
+  tainted one; the answer is one short "🗑 Off" line, and system and module
+  jobs cannot be deleted at all. A recurring reminder's message carries
+  Done, whose press deletes the job and says so in the message with no
+  model turn. A reminder's message records its job (R-DLV-14), so a reply
+  to it names the job to the agent. The list goes to the chat as cards
+  only when the owner asked to see it; otherwise only the agent reads it
+  ([ADR-0091](adr/0091-delete-the-owners-job-without-a-press-in-a-clean-session.md)). Each task has its own session, so its
   earlier runs are its history. Scheduled turns count towards the daily
   limit (R-AGT-4).
 
