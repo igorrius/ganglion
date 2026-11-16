@@ -18,11 +18,11 @@ import (
 // FileHistory provides the record of the node's file (R-CFG-13,
 // ADR-0093): a copy in the workspace repository, committed by every
 // writer. Building it commits a file that changed on the host; the module
-// host builds it at start. A node without git, or without a workspace (one
-// with no agent), keeps no history.
+// host builds it at start. A node without git, or without an agent (whose
+// workspace holds the copy), keeps no history.
 func FileHistory() do.Provider[confighist.History] {
 	return func(i do.Injector) (confighist.History, error) {
-		if do.MustInvoke[Bootstrap](i).Agent.Workspace == "" {
+		if b := do.MustInvoke[Bootstrap](i); !agentOn(b) || b.Agent.Workspace == "" {
 			return confighist.NoHistory{}, nil
 		}
 		ws, err := do.Invoke[*gitrepo.Repo](i)
