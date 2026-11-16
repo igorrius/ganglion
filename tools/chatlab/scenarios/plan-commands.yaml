@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: plan-commands
+why: >-
+  #38, the live check of 2026-11-09: a request that runs several commands needing a press got
+  a question per command until the owner asked for a plan, and the plan's steps were not ticked.
+  Work of several such commands is one plan, unasked: one press. The node ticks a step when its
+  command ends, so lines of work that ran never read ⏭ when the model leaves out plan.step.
+repeat: 2
+covers:
+  - plan/**
+  - tool/builtin/plan.go
+  - tool/builtin/host.go
+steps:
+  - say: >-
+      Make a folder /var/tmp/ganglion-lab-tidy, put an empty file notes.txt in it, then remove
+      the folder again.
+  - facts:
+      questions: 1
+      journal:
+        - {tool: plan.show}
+      no_journal:
+        - {tool: host.exec}
+  - press: Approve
+  - facts:
+      questions: 0
+      journal:
+        - {tool: host.exec, decision: planned}
+      message_replaced: "✅"

@@ -376,6 +376,32 @@ func (s *Store) Step(ctx context.Context, conv string, n int, st Status, note, o
 	return s.changed(ctx, r, now)
 }
 
+// Ran ticks the first open step whose command is cmd, argv exact and in the
+// same folder, "" read as home: done when ok, failed otherwise; it then
+// closes the steps before it as Step does (#38). The node knows the command
+// ended, so the line does not wait for the model's plan.step, which it often
+// leaves out. A command no open step lists, or a conversation with no active
+// plan, is nothing to do.
+func (s *Store) Ran(ctx context.Context, conv string, cmd tool.Command, ok bool) error {
+	now := s.now()
+	r, found, err := s.load(ctx, conv, now)
+	if err != nil || !found {
+		return err
+	}
+	i := slices.IndexFunc(r.plan.Steps, func(st Step) bool {
+		return (st.Status == Waiting || st.Status == Running) && st.Command != nil && st.Command.SameAs(cmd, s.home)
+	})
+	if i < 0 {
+		return nil
+	}
+	r.plan.Steps[i].Status = Failed
+	if ok {
+		r.plan.Steps[i].Status = Done
+	}
+	r.plan.closeUpTo(i + 1)
+	return s.changed(ctx, r, now)
+}
+
 // Finish ends the turn's part in the plan. kept leaves its lines as they are,
 // for a press to go on (a parked call); otherwise lines not finished become ⏭
 // and the plan closes. Either way what changed goes out now, past the throttle.

@@ -19,7 +19,7 @@ The agent can run commands as the node's user, with no shell, inside a sandbox. 
 | Needs a press | `cat`, `grep`, `rm`, `kill`, `docker rm`, any unknown program, `bash -c` | A card shows what it will do in plain words, with the agent's reason marked as the agent's own words. You press Approve or Deny. |
 | Forbidden | `sudo`, `su`, `docker run`, `docker exec`, `crontab`, `systemctl --user start` | Never runs. |
 
-For several steps, the agent posts a plan, and one **Run** button approves exactly the listed commands. Long commands continue in the background with a live card.
+For several steps, the agent posts a plan, and one **Run** button approves exactly the listed commands. Each step with a command gets ✅ when the command succeeds and ❌ when it fails. Long commands continue in the background with a live card.
 
 The sandbox keeps the command away from the node's own data, secret files, `.env` files and a list of common secret stores. Add more with `sandbox.deny`. It cannot stop `kill` from reaching your other processes.
 

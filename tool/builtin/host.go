@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -81,15 +82,42 @@ var errCommandsOff = errors.New("host.exec: commands are off on this node")
 // outside content. The policy decides by the class table; the tool checks
 // again, so no path around the policy runs what it would not.
 type HostExec struct {
-	run  Commander
-	ig   Ignorer
-	gate Gate
-	home string
+	run   Commander
+	ig    Ignorer
+	gate  Gate
+	home  string
+	ticks PlanTicks
+	log   *slog.Logger
+}
+
+// PlanTicks ticks the step of the conversation's plan that lists a command
+// that ended (plan.Store).
+type PlanTicks interface {
+	Ran(ctx context.Context, conv string, cmd tool.Command, ok bool) error
+}
+
+// NoPlanTicks is PlanTicks for a node with no plans: it ticks nothing.
+type NoPlanTicks struct{}
+
+// Ran implements PlanTicks.
+func (NoPlanTicks) Ran(context.Context, string, tool.Command, bool) error { return nil }
+
+// HostExecOption configures host.exec.
+type HostExecOption func(*HostExec)
+
+// WithPlanTicks ticks a plan's step when its command ends here (#38); a
+// failed tick is logged to log, and the command's answer stands.
+func WithPlanTicks(p PlanTicks, log *slog.Logger) HostExecOption {
+	return func(h *HostExec) { h.ticks, h.log = p, log }
 }
 
 // NewHostExec returns host.exec. home is the folder a call without dir runs in.
-func NewHostExec(run Commander, ig Ignorer, gate Gate, home string) *HostExec {
-	return &HostExec{run: run, ig: ig, gate: gate, home: home}
+func NewHostExec(run Commander, ig Ignorer, gate Gate, home string, opts ...HostExecOption) *HostExec {
+	h := &HostExec{run: run, ig: ig, gate: gate, home: home, ticks: NoPlanTicks{}, log: slog.New(slog.DiscardHandler)}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
 }
 
 // Spec implements tool.Handler.
@@ -135,6 +163,9 @@ func (h *HostExec) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	}
 	if !a.Done {
 		return tool.Result{Text: backgroundText, External: true, Job: a.Job.Key}, nil
+	}
+	if err := h.ticks.Ran(ctx, c.Conv, x.Command, a.Job.OK()); err != nil {
+		h.log.Warn("host.exec: the plan's step was not ticked", "conv", c.Conv, "err", err)
 	}
 	return tool.Result{Text: a.Job.Text, External: true}, nil
 }

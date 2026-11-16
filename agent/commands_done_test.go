@@ -93,6 +93,27 @@ func TestACommandThatEndsResumesItsConversation(t *testing.T) {
 	}
 }
 
+// #38: a command that ended in the background ticks its plan's step when its
+// end comes, by its exit, before the model goes on.
+func TestACommandThatEndsTicksItsPlanStep(t *testing.T) {
+	for _, c := range []struct {
+		text string
+		want string
+	}{{"exit 0 after 41s\n", "ok=true"}, {"exit 2 after 41s\n", "ok=false"}} {
+		e := newEnv(t, Config{}, registry(t, newClock()))
+		f := &planFinish{}
+		e.deps.Plans = f
+		e.withCommands(&fakeCommands{jobs: map[string]host.Job{"e1:1": {Key: "e1:1", Conv: "telegram:42", Principal: owner,
+			Argv: []string{"du", "-sh", "/srv"}, Dir: "/home/o", State: host.JobDone, Background: true, Text: c.text}}})
+		e.setState("telegram:42", State{Session: "s", Started: t0, Last: t0, Commands: []string{"e1:1"}})
+		e.smart.push(say("done"))
+		e.turn(t, commandDoneEvent("telegram:42", "e1:1"))
+		if want := []string{"telegram:42 du -sh /srv in /home/o " + c.want}; !slices.Equal(f.ran, want) {
+			t.Errorf("ticks %q, want %q", f.ran, want)
+		}
+	}
+}
+
 // The resumed turn's calls run one level deeper than the call that started
 // the command (R-AGT-4).
 func TestACommandTurnRunsOneDeeper(t *testing.T) {

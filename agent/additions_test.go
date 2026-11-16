@@ -1223,7 +1223,13 @@ func TestPlanCallReportsNoToolStage(t *testing.T) {
 type planFinish struct {
 	conv string
 	kept []bool
+	ran  []string
 	err  error
+}
+
+func (p *planFinish) Ran(_ context.Context, conv string, cmd tool.Command, ok bool) error {
+	p.ran = append(p.ran, fmt.Sprintf("%s %s in %s ok=%v", conv, strings.Join(cmd.Argv, " "), cmd.Dir, ok))
+	return p.err
 }
 
 func (p *planFinish) Finish(_ context.Context, conv string, kept bool) error {

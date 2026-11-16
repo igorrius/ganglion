@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +121,42 @@ func TestHostExecInTheBackgroundSaysItRuns(t *testing.T) {
 		tool.Call{TurnID: "e1", N: 2, Args: json.RawMessage(`{"argv":["du","-sh","/h"],"reason":"r"}`)})
 	if err != nil || res.Job != "e1:2" || !strings.Contains(res.Text, "background") || !res.External {
 		t.Fatalf("result = %+v, %v", res, err)
+	}
+}
+
+// ticks records the plan ticks host.exec sends.
+type ticks struct {
+	got []string
+	err error
+}
+
+func (k *ticks) Ran(_ context.Context, conv string, cmd tool.Command, ok bool) error {
+	k.got = append(k.got, fmt.Sprintf("%s %s in %q ok=%v", conv, strings.Join(cmd.Argv, " "), cmd.Dir, ok))
+	return k.err
+}
+
+// #38: a command that ends here ticks its plan's step, done or failed by its
+// exit, with argv and folder as called; one gone to the background does not
+// tick yet, and a failed tick leaves the answer as it is.
+func TestHostExecTicksThePlanWhenTheCommandEnds(t *testing.T) {
+	for _, c := range []struct {
+		answer host.Answer
+		want   []string
+	}{
+		{host.Answer{Done: true, Job: host.Job{State: host.JobDone, Text: "exit 0 after 1ms\n"}}, []string{`telegram:1 rm -r /var/tmp/x in "/srv" ok=true`}},
+		{host.Answer{Done: true, Job: host.Job{State: host.JobDone, Text: "exit 1 after 1ms\n"}}, []string{`telegram:1 rm -r /var/tmp/x in "/srv" ok=false`}},
+		{host.Answer{Job: host.Job{Key: "e1:2", State: host.JobRunning}}, nil},
+	} {
+		k := &ticks{err: errors.New("db gone")}
+		h := NewHostExec(&commands{answer: c.answer}, noIgnored{}, open(true), "/h", WithPlanTicks(k, slog.New(slog.DiscardHandler)))
+		res, err := h.Run(context.Background(), tool.Call{TurnID: "e1", N: 2, Conv: "telegram:1", Approved: true,
+			Args: json.RawMessage(`{"argv":["rm","-r","/var/tmp/x"],"dir":"/srv","reason":"r"}`)})
+		if err != nil || res.Text == "" {
+			t.Fatalf("result = %+v, %v; a failed tick must not change the answer", res, err)
+		}
+		if !slices.Equal(k.got, c.want) {
+			t.Errorf("ticks %q, want %q", k.got, c.want)
+		}
 	}
 }
 

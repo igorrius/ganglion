@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -110,6 +111,16 @@ type Job struct {
 	Text                            string // the outcome as the model reads it, redacted; "" while running
 	Started, Ended                  time.Time
 }
+
+// OK reports whether the command ended with exit 0: not still running,
+// interrupted, stopped past its limit, never started or failed. render
+// writes that first line, so it is the job's own word, not the output's.
+func (j Job) OK() bool {
+	return j.State == JobDone && strings.HasPrefix(j.Text, okHead)
+}
+
+// okHead opens the text of a command that ended with exit 0.
+const okHead = "exit 0 after "
 
 // Answer is what a call gets: the job, and whether its end is told here.
 // A job whose end is not told here ends as a command.done event, so each
@@ -442,7 +453,7 @@ func (r *Runner) render(ctx context.Context, cmd *exec.Cmd, err error, limit, to
 	case ctx.Err() != nil: // the node is stopping
 		return interruptedText, outcomeInterrupted
 	case code == 0:
-		head, how = fmt.Sprintf("exit 0 after %s", took.Round(time.Millisecond)), outcomeOK
+		head, how = okHead+took.Round(time.Millisecond).String(), outcomeOK
 	default:
 		head, how = fmt.Sprintf("exit %d after %s", code, took.Round(time.Millisecond)), outcomeFailed
 	}
