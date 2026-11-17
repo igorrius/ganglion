@@ -1,7 +1,7 @@
 # Telegram webhook on Railway: what the spike measured
 
 - **Date:** 2026-11-13
-- **Task:** P1 · M6 6.6 ([design note](../plans/telegram-webhook-design.md),
+- **Task:** P1 · M6 6.6 ([design note](../design/telegram-webhook-design.md),
   [ADR-0078](../adr/0078-telegram-updates-by-polling-or-webhook.md))
 - **Question:** how fast does Telegram redeliver after the node was away, does the node reach its own
   public address from inside Railway, which port and variables does Railway give a service, and how

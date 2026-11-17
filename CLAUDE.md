@@ -13,8 +13,7 @@ the ADRs.
 - [docs/research/](docs/research/) — dated research notes that ADRs cite.
 - [docs/conventions.md](docs/conventions.md) — how Go code is written here:
   read it before writing or changing code.
-- [docs/plans/](docs/plans/) — the phase plan and per-milestone
-  implementation plans; tick tasks off as they are done.
+- [docs/design/](docs/design/) — design notes cited by ADRs and the spec.
 
 ## Rules
 
@@ -33,8 +32,6 @@ the ADRs.
   adding, moving or implementing a package updates
   `docs/architecture/05-code-map.md`; changing how components connect updates
   the diagram on the matching level page.
-- When a spec task or phase closes, update "Where we are" in
-  `docs/README.md`.
 - **Nothing real about a running node goes into the repository** (owner,
   2026-11-14): not in code, tests, docs, plans, ADRs, commit messages or
   pull requests. That covers the address or domain of a live node, a bot's
@@ -52,7 +49,9 @@ the ADRs.
   issue (English; labels: type `bug`/`enhancement`/`chore`/`decision`,
   priority `P0`–`P3`, `area/<package>`; the milestone of the phase). A PR
   that closes one says `Fixes #N`. Decisions still go to the spec and ADRs;
-  `docs/plans/` keeps the step-by-step plans. Hierarchy stays light:
+  a plan lives in the issue (a task list) or its parent, a design that
+  needs reasoning goes to `docs/design/` or an ADR, and nothing in the
+  repository repeats the status ([ADR-0094](docs/adr/0094-the-github-project-holds-the-plan-and-the-repository-holds-decisions.md)). Hierarchy stays light:
   milestones group the work; a phase-plan task that spans several PRs or
   gathers bugs found along the way gets a parent issue (link to the plan
   and its "done when") with sub-issues; an issue that cannot start before

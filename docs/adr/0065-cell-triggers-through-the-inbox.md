@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-11, R-RUN-12, R-RUN-15), [7.1](../spec.md#71-guaranteed-delivery), [9.6](../spec.md#96-flow-engine-p3); [M4c design](../plans/p1-m4c-reflexes-design.md) section 4; builds on [ADR-0014](0014-state-cells.md), [ADR-0062](0062-cells-owned-by-modules.md)
+- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-11, R-RUN-12, R-RUN-15), [7.1](../spec.md#71-guaranteed-delivery), [9.6](../spec.md#96-flow-engine-p3); [M4c design](../design/p1-m4c-reflexes-design.md) section 4; builds on [ADR-0014](0014-state-cells.md), [ADR-0062](0062-cells-owned-by-modules.md)
 
 ## Context
 

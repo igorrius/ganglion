@@ -4,7 +4,7 @@
 - **Date:** 2026-11-16
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-15), [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-12, R-RUN-15, R-RUN-16, R-RUN-20), [7.9](../spec.md#79-observability) (R-OBS-8, R-OBS-10)
-- **Issue:** [#169](https://github.com/igorrius/ganglion/issues/169); plan: [module-run-journal.md](../plans/module-run-journal.md)
+- **Issue:** [#169](https://github.com/igorrius/ganglion/issues/169); plan: [module-run-journal.md](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/module-run-journal.md)
 
 ## Context
 

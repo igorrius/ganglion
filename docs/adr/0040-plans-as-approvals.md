@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-11-09)
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-6, 7), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-2, 4, 6, 8); [M3d design](../plans/p1-m3d-host-commands-design.md) section 7; [ADR-0032](0032-buttons-and-resume.md) (buttons and resume), [ADR-0038](0038-host-commands-as-argv-with-classes-in-code.md)
+- **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-6, 7), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-2, 4, 6, 8); [M3d design](../design/p1-m3d-host-commands-design.md) section 7; [ADR-0032](0032-buttons-and-resume.md) (buttons and resume), [ADR-0038](0038-host-commands-as-argv-with-classes-in-code.md)
 
 ## Context
 
@@ -98,7 +98,7 @@ of what was done.
 
 ## Refined by the build (2026-11-08)
 
-The plan for tasks 3.21–3.27 ([p1-m3d-commands.md](../plans/p1-m3d-commands.md))
+The plan for tasks 3.21–3.27 ([p1-m3d-commands.md](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m3d-commands.md))
 settled these:
 
 - **The approved plan's question becomes the plan's message.** It is not

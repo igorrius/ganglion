@@ -5,7 +5,7 @@
 - **Deciders:** Igor Artasevych
 - **Spec:** [R-DLV-13, R-DLV-14](../spec.md#71-guaranteed-delivery),
   [R-POL-6](../spec.md#76-action-policies-and-risk-classes); design:
-  [p1-reply-context-design.md](../plans/p1-reply-context-design.md)
+  [p1-reply-context-design.md](../design/p1-reply-context-design.md)
 
 ## Context
 

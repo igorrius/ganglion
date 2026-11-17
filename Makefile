@@ -23,7 +23,7 @@ lint:
 
 check: lint test build
 
-# The M2 echo bot on the owner's test bot (docs/README.md, owner setup).
+# The M2 echo bot on the owner's test bot (docs/development.md, owner setup).
 # .env holds TELEGRAM_TEST_BOT_TOKEN and the provider keys; settings live in
 # LIVE_CONFIG. Fill in telegram.admin in examples/ganglion.echo.yaml (or point
 # LIVE_ECHO_CONFIG at a copy). Stop any other process polling that bot first,
@@ -33,7 +33,7 @@ LIVE_DB ?= bin/live.db
 LIVE_ECHO_CONFIG ?= examples/ganglion.echo.yaml
 
 live-echo: build
-	@test -f .env || { echo "live-echo: no .env (see docs/README.md, owner setup)"; exit 1; }
+	@test -f .env || { echo "live-echo: no .env (see docs/development.md, owner setup)"; exit 1; }
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-echo: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \
 	TELEGRAM_BOT_TOKEN=$$TELEGRAM_TEST_BOT_TOKEN TELEGRAM_BOT_TOKEN_FILE= \
@@ -47,7 +47,7 @@ live-echo: build
 LIVE_CONFIG ?= ganglion.local.yaml
 
 live-agent: build
-	@test -f .env || { echo "live-agent: no .env (see docs/README.md, owner setup)"; exit 1; }
+	@test -f .env || { echo "live-agent: no .env (see docs/development.md, owner setup)"; exit 1; }
 	@test -f $(LIVE_CONFIG) || { echo "live-agent: no $(LIVE_CONFIG); copy ganglion.example.yaml and set telegram.admin"; exit 1; }
 	@set -a; . ./.env; set +a; \
 	test -n "$$TELEGRAM_TEST_BOT_TOKEN" || { echo "live-agent: TELEGRAM_TEST_BOT_TOKEN is not set in .env"; exit 1; }; \

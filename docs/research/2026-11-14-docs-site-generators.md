@@ -16,7 +16,7 @@
 
 | Property of docs/ | Count or example |
 |---|---|
-| Markdown files | 148 in `docs/`, `adr/`, `architecture/`, `plans/`, `research/` |
+| Markdown files | 148 in `docs/`, `adr/`, `architecture/`, `plans/` (since moved to `design/`), `research/` |
 | Files with Mermaid | 16 (`flowchart`, `sequenceDiagram`, `stateDiagram-v2`, [ADR-0002](../adr/0002-docs-as-markdown-and-mermaid.md)) |
 | Links to a heading | about 250, written as GitHub makes the anchor: "10.1. P0 · Recon — tasks and acceptance" is `#101-p0--recon--tasks-and-acceptance` (punctuation dropped, each space a hyphen, no collapsing) |
 | Front matter | none; the title is the first heading |
@@ -81,7 +81,7 @@ there):
 - **4,995 links to headings, none broken**, except links into a folder's
   `README.md`: mdBook writes `README.md` as `index.html` but leaves links to
   `README.md` pointing at `README.html`, so the 13 such links in `docs/`
-  (the "Where we are" section among them) lead nowhere.
+  (the old status section among them) lead nowhere.
 - 27 warnings for placeholders such as `<name>` and `<title>` written
   outside backticks; see below.
 - Links to files outside `docs/` lead nowhere, as with Zensical.

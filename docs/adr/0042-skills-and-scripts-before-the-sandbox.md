@@ -3,7 +3,7 @@
 - **Status:** Accepted; the rule that a read script always runs by itself, and the "not stopped" on a local-only session's tool calls, superseded by [ADR-0049](0049-three-gaps-where-outside-text-and-private-data-cross.md)
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.3](../spec.md#73-model-router) (R-RTR-4, R-RTR-5), [9.8](../spec.md#98-self-modification-levels) (levels 1 and 2), decision D-5; design section 6.2 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md)); [ADR-0031](0031-agent-security-baseline.md), [ADR-0039](0039-command-sandbox.md); plan task 8 ([M3c plan](../plans/p1-m3c-modules-skills-diagnostics.md))
+- **Spec:** [7.3](../spec.md#73-model-router) (R-RTR-4, R-RTR-5), [9.8](../spec.md#98-self-modification-levels) (levels 1 and 2), decision D-5; design section 6.2 ([M3b and M3c design](../design/p1-m3b-m3c-design.md)); [ADR-0031](0031-agent-security-baseline.md), [ADR-0039](0039-command-sandbox.md); plan task 8 ([M3c plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m3c-modules-skills-diagnostics.md))
 
 ## Context
 

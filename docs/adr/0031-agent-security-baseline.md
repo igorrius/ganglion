@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-02
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-1–8), [7.7](../spec.md#77-memory) (R-MEM-5), [7.8](../spec.md#78-security-and-operations-mvp), [7.9](../spec.md#79-observability) (R-OBS-5), [7.10](../spec.md#710-scheduler-and-reminders), [7.11](../spec.md#711-reading-the-web) (R-WEB-2); design section 4 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md#4-security-baseline-both-milestones)); [research note](../research/2026-11-02-agent-security-baseline.md)
+- **Spec:** [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-1–8), [7.7](../spec.md#77-memory) (R-MEM-5), [7.8](../spec.md#78-security-and-operations-mvp), [7.9](../spec.md#79-observability) (R-OBS-5), [7.10](../spec.md#710-scheduler-and-reminders), [7.11](../spec.md#711-reading-the-web) (R-WEB-2); design section 4 ([M3b and M3c design](../design/p1-m3b-m3c-design.md#4-security-baseline-both-milestones)); [research note](../research/2026-11-02-agent-security-baseline.md)
 
 ## Context
 

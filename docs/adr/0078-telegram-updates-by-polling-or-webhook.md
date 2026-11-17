@@ -17,7 +17,7 @@ the owner asked for a webhook as a second mode of the transport: a setting
 chooses between them, the agent can change it, and on Railway the node
 registers the webhook on its public domain (board card G-152). The details
 and the checked facts are in the
-[design note](../plans/telegram-webhook-design.md).
+[design note](../design/telegram-webhook-design.md).
 
 What bounds the decision:
 

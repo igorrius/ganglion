@@ -34,6 +34,22 @@ For a node on another machine, run it over SSH (`ssh host ganglion mcp --db /dat
 
 Whoever can run it can read all conversation history, and the logs quote web pages. Do not connect it to a client session that approves commands automatically.
 
+## Installing a skill
+
+A skill is a procedure the agent reads before it follows it. Only you install one; the agent may propose the text.
+
+1. Make `workspace/skills/<name>/SKILL.md`: a frontmatter with `name` (the directory's), `description`, optionally `model` and `script`, then the steps in Markdown.
+2. A script sits beside it, executable, named by `script.run`, with `effects: read` (runs by itself) or `effects: change` (asks with a button). In a session that has read outside content, such as a web page, a read script given input asks too, since it may reach the network. It gets only `PATH`, `HOME`, `LANG`, `TZ` and the names in `script.env`; the node's secrets never.
+3. Restart the node; the log names a skill that was not loaded and why.
+
+A script runs in the same sandbox as host commands. If the sandbox is off, the script is not offered and `/status` says why.
+
+## Correcting the bot's texts
+
+What the bot writes without a model follows each person's language: the one they asked for in the chat (for now only an admin can ask), then their Telegram's, then English. English, Russian and Ukrainian ship in the binary; any other language is translated once by the cheap model, and each person is told so once.
+
+To correct a text, put `<code>.yaml` in the `languages/` directory beside the database (`agent.languages` moves it, but never into the workspace), with the keys you want from [`texts/lang/en.yaml`](https://github.com/igorrius/ganglion/blob/master/texts/lang/en.yaml), and restart. A text keeps its `{placeholders}` and adds no links, mentions or Markdown; one that does not is logged and left out. Your file comes before a shipped file and a translation, key by key.
+
 ## Backups
 
 **ganglion has no built-in backup.** You copy the files yourself. Back up the whole data directory, which means:

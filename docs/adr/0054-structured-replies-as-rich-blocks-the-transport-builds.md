@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-06
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-5, R-DLV-10, R-DLV-11, R-DLV-12), [ADR-0025](0025-markdown-rendered-to-telegram-entities.md), [design](../plans/p1-rich-messages-design.md)
+- **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-5, R-DLV-10, R-DLV-11, R-DLV-12), [ADR-0025](0025-markdown-rendered-to-telegram-entities.md), [design](../design/p1-rich-messages-design.md)
 
 ## Context
 
@@ -82,7 +82,7 @@ filtered. A table or two headings because the owner wants the format used only w
 - **A rich message that arrives is read,** as outside content (owner on reading).
 - **A symbol tree** keeps its levels as ordinary text, with its links, with the setting on or off.
 
-The rest is in the [design](../plans/p1-rich-messages-design.md). ADR-0025 still holds for every other
+The rest is in the [design](../design/p1-rich-messages-design.md). ADR-0025 still holds for every other
 message; its mapping of tables and headings no longer holds for a message that goes rich.
 
 ## Security

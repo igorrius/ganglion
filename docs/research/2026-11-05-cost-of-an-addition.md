@@ -3,7 +3,7 @@
 - **Date:** 2026-11-05
 - **Question:** when a person adds to a request while the agent works, the core can end
   the `claude -p` run and start a new one with the whole history
-  ([live turns design](../plans/p1-live-turns-design.md), 3.3). Does that stay within the
+  ([live turns design](../design/p1-live-turns-design.md), 3.3). Does that stay within the
   owner's bar of at most twice what two separate turns cost together? Does the prompt
   cache hold across runs? What does writing into a running CLI's stdin do instead?
 - **Status:** measured, before anything is built.

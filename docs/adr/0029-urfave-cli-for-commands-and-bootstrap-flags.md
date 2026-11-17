@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-02
 - **Deciders:** Igor Artasevych
-- **Spec:** [2, principles 7 and 8](../spec.md#2-principles), [5.1](../spec.md#51-roles-not-machines); decision D-3 in the [P1 plan](../plans/p1-all-in-one.md#decisions-to-take-during-p1); [ADR-0028](0028-samber-do-composition-root-in-config.md)
+- **Spec:** [2, principles 7 and 8](../spec.md#2-principles), [5.1](../spec.md#51-roles-not-machines); decision D-3 in the [P1 plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md#decisions-to-take-during-p1); [ADR-0028](0028-samber-do-composition-root-in-config.md)
 
 ## Context
 

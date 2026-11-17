@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-11-08)
 - **Date:** 2026-11-08
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-3); refines [ADR-0039](0039-command-sandbox.md), which is accepted and not rewritten: this ADR records the change; task 11a of the [M3d commands plan](../plans/p1-m3d-commands.md)
+- **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-3); refines [ADR-0039](0039-command-sandbox.md), which is accepted and not rewritten: this ADR records the change; task 11a of the [M3d commands plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m3d-commands.md)
 
 ## Context
 

@@ -212,7 +212,7 @@ to testers **(call)**.
 - `TestLabStaysOutOfTheBinary` and `make memory` as usual. No new dependency.
 
 **Lab:** only the scenarios the change touches, through `make lab`. No full run
-([owner's rule](../README.md#where-we-are)) unless the owner decides.
+(owner's rule) unless the owner decides.
 
 **Live, by the owner on the test bot:** a table on the phone, including whether a wide one fits and
 whether `is_compact` helps; headings and lists; their own tree; a reply to a rich message; a report
@@ -242,7 +242,7 @@ be fetched by Telegram. It goes to the spec's "Not now" as its own topic **(call
   entries on tables, trees and Rich Messages replaced by the item of section 9.
 - **ADR-0054**, Proposed, comparing `blocks` with `markdown` and `html`, and a trigger by structure with
   every message, and the threshold of a table or two headings. It changes ADR-0025's table mapping, and links it; ADR-0025 is not rewritten.
-- `docs/architecture/05-code-map.md` and "Where we are" in `docs/README.md`.
+- `docs/architecture/05-code-map.md`.
 
 ## 11. A rich message sent to the bot
 

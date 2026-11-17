@@ -4,7 +4,7 @@
 - **Date:** 2026-11-16
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-9, R-RUN-12, R-RUN-13, R-RUN-16, R-RUN-17, R-RUN-19)
-- **Issue:** [#167](https://github.com/igorrius/ganglion/issues/167); design: [module-trial-run-design.md](../plans/module-trial-run-design.md)
+- **Issue:** [#167](https://github.com/igorrius/ganglion/issues/167); design: [module-trial-run-design.md](../design/module-trial-run-design.md)
 
 ## Context
 

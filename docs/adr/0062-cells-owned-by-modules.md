@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-1, R-RUN-7, R-RUN-11, R-RUN-13), [9.4](../spec.md#94-skill-compilation-p3), [9.6](../spec.md#96-flow-engine-p3); [M4 design](../plans/p1-m4-reflexes-design.md) section 7; extends [ADR-0014](0014-state-cells.md); [ADR-0041](0041-module-install-update-and-trust-boundary.md), [ADR-0049](0049-three-gaps-where-outside-text-and-private-data-cross.md), [ADR-0058](0058-load-shedding-leaves-p1.md), [ADR-0061](0061-local-modules-built-from-source.md)
+- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-1, R-RUN-7, R-RUN-11, R-RUN-13), [9.4](../spec.md#94-skill-compilation-p3), [9.6](../spec.md#96-flow-engine-p3); [M4 design](../design/p1-m4-reflexes-design.md) section 7; extends [ADR-0014](0014-state-cells.md); [ADR-0041](0041-module-install-update-and-trust-boundary.md), [ADR-0049](0049-three-gaps-where-outside-text-and-private-data-cross.md), [ADR-0058](0058-load-shedding-leaves-p1.md), [ADR-0061](0061-local-modules-built-from-source.md)
 
 ## Context
 

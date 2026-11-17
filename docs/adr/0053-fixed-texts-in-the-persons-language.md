@@ -4,7 +4,7 @@
 - **Date:** 2026-11-06
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.13](../spec.md#713-the-language-of-fixed-texts), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-9), [7.9](../spec.md#79-observability) (R-OBS-8)
-- **Design:** [p1-fixed-texts-language-design.md](../plans/p1-fixed-texts-language-design.md)
+- **Design:** [p1-fixed-texts-language-design.md](../design/p1-fixed-texts-language-design.md)
 
 ## Context
 

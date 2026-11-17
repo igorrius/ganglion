@@ -387,8 +387,7 @@ A pass from the attacker's side (spec principle 9):
   - additions at boundaries, with the CLI route (3.3) and the queue contract (3.6);
   - status reactions outside the outbox (4.3);
   - the plan's mid-turn delivery (5).
-- `docs/architecture/05-code-map.md` and the matching level page, `docs/README.md` "Where
-  we are", in the same commits.
+- `docs/architecture/05-code-map.md` and the matching level page, in the same commits.
 
 ## 9. Left to the builder
 

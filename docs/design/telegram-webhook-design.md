@@ -4,7 +4,7 @@ Notes from a conversation with the owner on 2026-11-13 (board card G-152).
 Nothing here is built. The owner accepted the decision on 2026-11-13
 ([ADR-0078](../adr/0078-telegram-updates-by-polling-or-webhook.md)); the
 requirements are R-DLV-18, R-DLV-19 and R-CFG-11 in the spec and the work is
-task 6.6 of the [phase plan](p1-all-in-one.md). The spike of section 12
+task 6.6 of the [phase plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md). The spike of section 12
 comes before the code.
 
 Marks: **owner** means the owner said it; **call** means the author's
@@ -307,7 +307,7 @@ Outside these two cases the node never changes mode by itself.
 The agent gets no tool of its own for this (call). The mode is a field of
 `ganglion.yaml`, and the agent changes the file by M6's way: `config.propose`
 with a diff the owner approves, then a restart
-([phase plan](p1-all-in-one.md), tasks 6.1–6.3). Until M6 the owner edits
+([phase plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md), tasks 6.1–6.3). Until M6 the owner edits
 the file.
 
 What the webhook adds to M6:

@@ -1,7 +1,7 @@
 # Deploying on Railway
 
 A runbook for running the node on Railway next to the current bot (R-LS-4,
-task 4.7 of the [M4b plan](plans/p1-m4b-modules.md)). The image is built from
+task 4.7 of the [M4b plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m4b-modules.md)). The image is built from
 the [`Dockerfile`](https://github.com/igorrius/ganglion/blob/master/Dockerfile) in the repository root.
 
 ## The image
@@ -293,7 +293,7 @@ setpriv --reuid=10001 --regid=10001 --clear-groups ganglion mcp --db /data/gangl
 `ganglion mcp` is how you read logs, turns and settings: point a local MCP
 client at `railway ssh -- setpriv --reuid=10001 --regid=10001 --clear-groups
 ganglion mcp --db /data/ganglion.db` (see
-[diagnostics](README.md#diagnosing-the-node-from-outside)).
+[diagnostics](guide/running/operations.md#diagnostics-with-ganglion-mcp)).
 
 Then, in the bot: ask for a module. The agent imports one of the templates
 the binary ships, writes the module, builds it and offers the install

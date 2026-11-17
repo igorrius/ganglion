@@ -17,7 +17,7 @@ the catalogue and unmeasured. Three things changed:
 - The owner decided that base mechanisms are developed on the main model only.
   OpenRouter fallbacks are a separate topic for later.
 - A silent switch between models hides which model behaved how, and chatlab
-  ([design](../plans/p1-m3c-chatlab-design.md)) is about to measure behaviour.
+  ([design](../design/p1-m3c-chatlab-design.md)) is about to measure behaviour.
 
 [The comparison](../research/2026-11-04-sonnet-or-haiku.md) ran the same 20
 turns as ADR-0022 through Haiku and Sonnet. Both answered 20 of 20, and the
