@@ -102,7 +102,7 @@ with no new dependency.
 - **Upload:** one `PutObject` over HTTPS, signed with AWS Signature
   Version 4 by a small client of our own, with `Content-MD5` so a bucket
   with Object Lock accepts it. The object is named
-  `<prefix>/<node>-<UTC time>.tar.gz.enc`. The node never lists, reads or
+  `<prefix>/ganglion-<UTC time>.tar.gz.enc`. The node never lists, reads or
   deletes objects: retention is the bucket's lifecycle rule and lock,
   which the operator sets at the provider. The guide recommends a key
   that cannot delete (B2 without `deleteFiles`, S3 with `PutObject`
@@ -121,8 +121,9 @@ with no new dependency.
   region, bucket, prefix, the access key's id, the secret key as
   `env:NAME` or `store:NAME`, the time). Without the section backups are
   off and `/status` says so. The section is not on `config.propose`'s
-  allowlist (R-CFG-14) and the agent has no tool that reads or changes
-  it or starts a backup.
+  allowlist (R-CFG-14) and the agent has no tool that changes it or
+  starts a backup; `config.history` may show its fields, which hold no
+  secret value.
 - **The master key:** a backup is worth nothing without the key. The
   guide and the Railway runbook tell the operator to keep `master.key`
   (or `GANGLION_MASTER_KEY`) off the node, in a password manager, before

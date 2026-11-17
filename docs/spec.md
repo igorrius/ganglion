@@ -1141,13 +1141,13 @@ Backups (M7, owner, 2026-11-17,
   extended archive does not open. The header names the format's version.
 - **R-BAK-3.** The node puts the archive into an S3-compatible bucket with
   one signed `PutObject` over HTTPS, with `Content-MD5`, as
-  `<prefix>/<node>-<UTC time>.tar.gz.enc`. It never lists, reads or
+  `<prefix>/ganglion-<UTC time>.tar.gz.enc`. It never lists, reads or
   deletes an object; retention is the bucket's rule.
 - **R-BAK-4.** The `backup:` section of `ganglion.yaml` holds the endpoint
   (HTTPS), region, bucket, prefix, the access key's id, the secret key as
   `env:NAME` or `store:NAME`, and `at`. Without it backups are off. It is
-  outside R-CFG-14's allowlist, and no agent tool reads it, changes it or
-  starts a backup.
+  outside R-CFG-14's allowlist, and no agent tool changes it or starts a
+  backup.
 - **R-BAK-5.** A failed backup alerts the admins once, and its recovery
   once. `/status` shows the last backup's time, size and outcome, says
   when backups are off, and warns when the last success is older than 36
