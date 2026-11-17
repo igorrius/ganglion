@@ -1122,7 +1122,43 @@ undone with `git revert`.
 | Self-modification broke something | Regression scenarios (question → expected tool call) after every change | P3 |
 | A release that is not the project's becomes the node | A release is installed and started only with the project's signature, from GitHub's hosts, never older than the running version, and only at an admin's command; the agent has no tool for it (R-UPD-2–4, [ADR-0081](adr/0081-update-the-node-from-signed-releases-at-the-owners-command.md)) | P1 (M6) |
 | An image that is not the project's is run as a node | The image is pushed only by the release workflow on a tag of a commit on `master`, with every action in its pushing jobs pinned by commit SHA; its index carries a provenance attestation a user checks with `gh attestation verify` (R-UPD-8, [ADR-0086](adr/0086-publish-the-nodes-image-to-ghcr-on-a-core-tag.md)) | P1 |
-| Lost volume or corrupted DB | Daily backup of SQLite (`VACUUM INTO`) and the memory git repo to S3 or a private remote | P1 |
+| Lost volume or corrupted DB | A daily archive of the database, the workspace, the modules and the settings, encrypted with a key from the master key and put in an S3-compatible bucket the node cannot delete from; restore on the host (R-BAK-1 – R-BAK-6) | P1 (M7) |
+
+Backups (M7, owner, 2026-11-17,
+[ADR-0095](adr/0095-daily-encrypted-backups-to-an-s3-compatible-bucket.md)):
+
+- **R-BAK-1.** Once a day at `backup.at` (node time, `03:00` by default)
+  and on `ganglion backup now`, the node makes one archive: a copy of the
+  database made with `VACUUM INTO` that passes `PRAGMA integrity_check`,
+  the whole `workspace/` with its `.git`, `modules/` without
+  `modules/templates`, `ganglion.yaml`, and a manifest (the node's
+  version, the time, the schema version, each file's SHA-256). Never the
+  master key, `releases/`, `logs/` or the claude work folder.
+- **R-BAK-2.** The archive is encrypted before it leaves the node: AES-256-GCM
+  in 64 KiB chunks under a key derived from the master key (HKDF-SHA256,
+  info `ganglion-backup-v1`, a random salt per archive); a chunk's nonce
+  carries its counter and a last-chunk flag, so a reordered, cut or
+  extended archive does not open. The header names the format's version.
+- **R-BAK-3.** The node puts the archive into an S3-compatible bucket with
+  one signed `PutObject` over HTTPS, with `Content-MD5`, as
+  `<prefix>/<node>-<UTC time>.tar.gz.enc`. It never lists, reads or
+  deletes an object; retention is the bucket's rule.
+- **R-BAK-4.** The `backup:` section of `ganglion.yaml` holds the endpoint
+  (HTTPS), region, bucket, prefix, the access key's id, the secret key as
+  `env:NAME` or `store:NAME`, and `at`. Without it backups are off. It is
+  outside R-CFG-14's allowlist, and no agent tool reads it, changes it or
+  starts a backup.
+- **R-BAK-5.** A failed backup alerts the admins once, and its recovery
+  once. `/status` shows the last backup's time, size and outcome, says
+  when backups are off, and warns when the last success is older than 36
+  hours; a metric records the last success.
+- **R-BAK-6.** `ganglion backup restore <archive>`, with the master key of
+  R-CFG-10, restores into an empty data directory: it opens every chunk
+  and checks the manifest's hashes and the database's integrity before it
+  writes a file, refuses absolute paths, `..`, links and devices, and
+  writes nothing on a failure. A lab scenario backs a node up to a local
+  S3-compatible server, restores into a new directory, starts a node on
+  it and finds its memory, modules and cells.
 
 ### 7.9. Observability
 
