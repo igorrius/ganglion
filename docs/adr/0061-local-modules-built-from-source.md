@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-1, R-RUN-8, R-RUN-9, R-RUN-10), [7.12](../spec.md#712-host-commands-and-plans), [9.4](../spec.md#94-skill-compilation-p3), [10.2](../spec.md#102-p1--all-in-one--scope-and-acceptance); [M4 design](../plans/p1-m4-reflexes-design.md) section 6; extends [ADR-0041](0041-module-install-update-and-trust-boundary.md); [ADR-0033](0033-memory-in-the-workspace-git-with-the-git-binary.md), [ADR-0039](0039-command-sandbox.md), [ADR-0056](0056-small-hosts-as-a-soft-target.md)
+- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-1, R-RUN-8, R-RUN-9, R-RUN-10), [7.12](../spec.md#712-host-commands-and-plans), [9.4](../spec.md#94-skill-compilation-p3), [10.2](../spec.md#102-p1--all-in-one--scope-and-acceptance); [M4 design](../design/p1-m4-reflexes-design.md) section 6; extends [ADR-0041](0041-module-install-update-and-trust-boundary.md); [ADR-0033](0033-memory-in-the-workspace-git-with-the-git-binary.md), [ADR-0039](0039-command-sandbox.md), [ADR-0056](0056-small-hosts-as-a-soft-target.md)
 
 ## Context
 

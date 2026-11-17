@@ -70,8 +70,8 @@ wait for an answer. The public release is planned for a later phase
 ([ADR-0082](docs/adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)).
 
 One node has been running the author's family bot since November 2026.
-[Where we are](docs/README.md#where-we-are) is kept
-up to date.
+The [ganglion project](https://github.com/users/igorrius/projects/13)
+shows the current state and plan.
 
 ## What works today
 
@@ -169,7 +169,7 @@ configure, commands, modules, operations, troubleshooting.
 | Fix something | [Troubleshooting](https://igorrius.github.io/ganglion/troubleshooting/) |
 
 The engineering record lives in the repository, beside the code:
-[where we are](docs/README.md), the [specification](docs/spec.md),
+[docs index](docs/README.md), the [specification](docs/spec.md),
 [architecture](docs/architecture/README.md),
 [decision records](docs/adr/README.md) and
 [conventions](docs/conventions.md).

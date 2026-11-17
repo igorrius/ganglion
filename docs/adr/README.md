@@ -99,6 +99,7 @@ considered, how they compare, the decision and its consequences. See
 | [0091](0091-delete-the-owners-job-without-a-press-in-a-clean-session.md) | Delete the owner's reminder or task without a press in a clean session | Accepted | 2026-11-16 |
 | [0092](0092-a-bounded-run-journal-per-module-with-the-chain-copied-in.md) | Keep a bounded journal of each module's runs, with the chain that started a run copied into it | Accepted | 2026-11-16 |
 | [0093](0093-config-changes-through-the-agent-with-history-in-the-workspace.md) | Change the node's file through the agent on an allowlist, with its history in the workspace repository | Accepted | 2026-11-16 |
+| [0094](0094-the-github-project-holds-the-plan-and-the-repository-holds-decisions.md) | Keep the plan and the status in the GitHub Project, and decisions in the repository | Accepted | 2026-11-17 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

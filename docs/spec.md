@@ -327,7 +327,7 @@ Guarantee: **at-least-once + idempotency.**
   a message of the node's older than 90 days or one the node cannot find comes as outside content. In a
   forum topic, the topic's root, which Telegram names as the replied message of every message that is no
   explicit reply, is not a reply
-  ([design](plans/p1-reply-context-design.md),
+  ([design](design/p1-reply-context-design.md),
   [ADR-0055](adr/0055-a-reply-carries-the-replied-messages-origin.md)).
 - **R-DLV-14.** Every message the node sends records its origin: the session that made it and whether
   that session was tainted; a reminder's also records its job (R-SCH-2). The origin of a reply to the node's message is read from its own outbox by any part's ref, never
@@ -403,7 +403,7 @@ Guarantee: **at-least-once + idempotency.**
   conversation that writes the persona comes with the agent's tools (M3b)
   ([ADR-0024](adr/0024-persona-as-workspace-files.md)).
 
-Live turns ([design](plans/p1-live-turns-design.md);
+Live turns ([design](design/p1-live-turns-design.md);
 [ADR-0050](adr/0050-additions-join-a-running-turn.md),
 [ADR-0051](adr/0051-status-reactions-outside-the-outbox.md),
 [ADR-0052](adr/0052-a-plan-is-delivered-during-its-turn.md)):
@@ -1063,7 +1063,7 @@ undone with `git revert`.
   - "What do you remember about me?" lists it.
 - **R-MEM-6.** Facts are kept by **topic** (M5, owner, 2026-11-11,
   [ADR-0071](adr/0071-memory-topics-whole-in-the-prompt.md),
-  [design](plans/p1-m5-memory-topics-design.md)). A topic is one file,
+  [design](design/p1-m5-memory-topics-design.md)). A topic is one file,
   `memory/<slug>.md`: a title and a one-line summary in the frontmatter,
   then a list of short facts. Each fact has an id that is stable inside
   its topic and records its date, its turn and whether its session was
@@ -1228,7 +1228,7 @@ undone with `git revert`.
   (R-OBS-7) is for those. A scheduled task runs in a conversation of its own, so `/last`
   in the chat does not show its runs.
 - **R-OBS-11.** `/status` shows an admin how the node is doing now, on one screen and with
-  no model (owner, 2026-11-08, [design](plans/p1-status-design.md)): a verdict first, then
+  no model (owner, 2026-11-08, [design](design/p1-status-design.md)): a verdict first, then
   the node (the full version of ganglion, uptime, memory, the database and log sizes), the
   models (the ones the current session uses, each model's last answer and failure, the day
   against the daily limits and its spend), delivery (Telegram's polling, the queues) and
@@ -1288,7 +1288,7 @@ The scheduler moves up from M4 to M3b; M4 reuses it for module triggers.
 
 ### 7.12. Host commands and plans
 
-M3d, after M3c. Design: [M3d design](plans/p1-m3d-host-commands-design.md);
+M3d, after M3c. Design: [M3d design](design/p1-m3d-host-commands-design.md);
 decisions: [ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md),
 [ADR-0039](adr/0039-command-sandbox.md),
 [ADR-0057](adr/0057-commands-may-list-split-folders.md),
@@ -1951,7 +1951,7 @@ with a gate; the next phase does not start until the gate is passed.
 | Phase | What we do | Exit gate |
 |---|---|---|
 | **P0 · Recon** | Repository skeleton; Deye monitor hand-written in WASM with `http.fetch`; evaluate Extism, MCP transports and A2A; compare module languages (TinyGo, Go, Rust); measure runner RAM | The module runs in wazero; resources measured; ABI decided (done: own ABI, ADR-0011) |
-| **P1 · All-in-one** | Core + runner in one process: state cells, inbox/outbox and Telegram, then the agent (history, rule-based router, one API provider, memory, skills, policies); the Deye module as its first reflex, built and installed by the agent; one config file; the agent changes the system's configuration with the owner's approval; migrate the family bot ([plan](plans/p1-all-in-one.md)) | Deye runs on cron without the model, its versions journaled; the bot replaces the current one and costs less |
+| **P1 · All-in-one** | Core + runner in one process: state cells, inbox/outbox and Telegram, then the agent (history, rule-based router, one API provider, memory, skills, policies); the Deye module as its first reflex, built and installed by the agent; one config file; the agent changes the system's configuration with the owner's approval; migrate the family bot ([milestones](https://github.com/igorrius/ganglion/milestones)) | Deye runs on cron without the model, its versions journaled; the bot replaces the current one and costs less |
 | **P2 · Network** | claude CLI worker; runner on a separate Pi; protocol v0 over NATS (leaf + JetStream, JWT/NKeys); desired state; watchdog; MQTT devices; policies on the runner; embedding memory; router classifier | Link loss without data loss; module update on an edge and rollback with one command |
 | **P3 · Skill compilation** | The model writes contract, code and tests; build on a worker; signed one-click install; repair on `module.crashloop`; agent-written MCP modules; Home Assistant | The model compiled and updated a module on its own; public release 0.1, with an announcement (the repository itself is open since P1, [ADR-0082](adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)) |
 
@@ -1970,30 +1970,28 @@ with a gate; the next phase does not start until the gate is passed.
 ### 10.2. P1 · All-in-one — scope and acceptance
 
 Scope: sections 7 and 8 in full; load shedding left P1 in M4
-([ADR-0058](adr/0058-load-shedding-leaves-p1.md)). Milestones, tasks, decisions and the
-cut list are in the [P1 phase plan](plans/p1-all-in-one.md). The agent
-milestone is split into M3a (talks), M3b (works with the world: tools,
-policies, memory, the scheduler, web reading, the MCP bridge) and M3c
-(module updates, skills, attachments, logs on disk, `ganglion mcp`), as
-the [M3b and M3c design](plans/p1-m3b-m3c-design.md) sets out; the
-scheduler moves from M4 to M3b. Between M3c and M3d came live turns
-(R-LIVE) and smaller additions the owner asked for after using the bot: a
-closed question that folds (R-POL-9), `/last` (R-OBS-10), fixed texts in
-the person's language (7.13), Telegram rich messages (R-DLV-11, 12),
-knowing which message a reply answers (R-DLV-13, 14) and `/status`. M3d
-(host commands and plans, 7.12) follows them
-([M3d design](plans/p1-m3d-host-commands-design.md),
-[ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md)).
-M4 brings one config file, models by purpose, modules the agent builds
-from source, and cells owned by modules
-([M4 design](plans/p1-m4-reflexes-design.md)); M4a and M4b closed
-2026-11-10, ADRs 0059–0063 Accepted. M4c, reflex modules, follows: a
+([ADR-0058](adr/0058-load-shedding-leaves-p1.md)). Milestones, tasks and
+their order are in the GitHub project and its
+[milestones](https://github.com/igorrius/ganglion/milestones)
+([ADR-0094](adr/0094-the-github-project-holds-the-plan-and-the-repository-holds-decisions.md)).
+The agent is built in steps: it talks (M3a); it works with the world, with
+tools, policies, memory, the scheduler, web reading and the MCP bridge (M3b);
+it gets module updates, skills, attachments, logs on disk and `ganglion mcp`
+(M3c), as the [M3b and M3c design](design/p1-m3b-m3c-design.md) sets out.
+Live turns (R-LIVE) and smaller additions the owner asked for follow: a
+closed question that folds (R-POL-9), `/last` (R-OBS-10), fixed texts in the
+person's language (7.13), Telegram rich messages (R-DLV-11, 12), knowing
+which message a reply answers (R-DLV-13, 14) and `/status`. Host commands
+and plans (7.12) come next
+([M3d design](design/p1-m3d-host-commands-design.md),
+[ADR-0038](adr/0038-host-commands-as-argv-with-classes-in-code.md)). M4
+brings one config file, models by purpose, modules the agent builds from
+source, and cells owned by modules
+([M4 design](design/p1-m4-reflexes-design.md)), then reflex modules: a
 `notify` capability for modules and the agent writing module source in the
 workspace, first `deye-alerts`, so routine reactions run without a model
-(owner, 2026-11-10; [M4c design](plans/p1-m4c-reflexes-design.md),
-ADRs 0065–0070, R-RUN-15–17, R-LIVE-9). M4c closed 2026-11-10: the agent
-wrote, built in the background and installed `battery-alerts`, and its alert
-reached the owner with no model call.
+([M4c design](design/p1-m4c-reflexes-design.md), ADRs 0065–0070,
+R-RUN-15–17, R-LIVE-9).
 
 Acceptance:
 
@@ -2013,8 +2011,9 @@ Acceptance:
   setup.
 
 Testing uses a separate bot: two processes with the same token cannot
-coexist. The family bot migrates at the end of P1; the current bot stays as a
-fallback until the gate is passed.
+coexist. The cutover happened on 2026-11-13 (owner): the production token
+moved to ganglion and the old bot was removed, so there is no fallback bot.
+Backups are never cut from P1.
 
 ## 11. Open decisions
 
@@ -2033,9 +2032,9 @@ fallback until the gate is passed.
 | How long ended sessions (episodes) are kept | Forever, searched by `memory.recall` (today: the newest 500 per chat) · a retention: sessions older than N days are dropped after consolidation has read them | A retention after consolidation (owner, 2026-11-03): nothing is dropped that consolidation has not read, so a fact the owner never confirmed is still turned into one or kept; what was said by chance fades | M7 task 7.2, with the nightly consolidation; N is chosen there |
 | Telemetry of edge nodes | Each edge to an OpenTelemetry collector over OTLP · Prometheus scrapes each edge · snapshots over the NATS bus, collected by the core | Decided by the owner (2026-11-03): over the bus, collected by the core, without JetStream for metrics (R-OBS-9). A collector needs one more link and one more service for every edge; the bus is already there. An outside collector can later be fed by the core | ADR at the start of P2, with the protocol |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
-| Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | The encrypted store and the command on the host are decided and in M6 ([ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), R-CFG-9, R-CFG-10). Still open: the page served by the node with the ciphertext returned through Telegram first (owner's brainstorm, 2026-11-12, [design note](plans/secrets-intake-design.md)); its phase follows the spike | A spike on Telegram's `sendData`, then an ADR |
-| Logging the claude CLI provider in | A variable set by hand from `claude setup-token` · a `/login` command of the core that drives the bundled CLI and takes the one-time code from the chat · the same command with the node doing the OAuth exchange itself | The `/login` command driving the CLI; the token goes to the encrypted store and never to the chat (owner's request, 2026-11-13, [design note](plans/model-login-from-chat-design.md)). The phase is open; the store itself is in M6 | A spike on driving `setup-token` without a terminal, then an ADR |
-| How Telegram updates reach the node | Long polling only · a webhook only · both, chosen in `ganglion.yaml` · both, chosen by the node | Decided (owner, 2026-11-13, [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)): both, chosen in the file, polling by default (R-DLV-18, R-DLV-19, R-CFG-11; [design note](plans/telegram-webhook-design.md)) | — |
+| Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | The encrypted store and the command on the host are decided and in M6 ([ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), R-CFG-9, R-CFG-10). Still open: the page served by the node with the ciphertext returned through Telegram first (owner's brainstorm, 2026-11-12, [design note](design/secrets-intake-design.md)); its phase follows the spike | A spike on Telegram's `sendData`, then an ADR |
+| Logging the claude CLI provider in | A variable set by hand from `claude setup-token` · a `/login` command of the core that drives the bundled CLI and takes the one-time code from the chat · the same command with the node doing the OAuth exchange itself | The `/login` command driving the CLI; the token goes to the encrypted store and never to the chat (owner's request, 2026-11-13, [design note](design/model-login-from-chat-design.md)). The phase is open; the store itself is in M6 | A spike on driving `setup-token` without a terminal, then an ADR |
+| How Telegram updates reach the node | Long polling only · a webhook only · both, chosen in `ganglion.yaml` · both, chosen by the node | Decided (owner, 2026-11-13, [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)): both, chosen in the file, polling by default (R-DLV-18, R-DLV-19, R-CFG-11; [design note](design/telegram-webhook-design.md)) | — |
 | When the repository opens | Private until the public release in P3 · open now with no announcement, the announced release in P3 · a fresh repository without the history | Decided (owner, 2026-11-14, [ADR-0082](adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)): open now, 0.x with no guarantees, bug reports in GitHub Issues, vulnerabilities reported privately; the announced release stays in the P3 gate | — |
 
 Each question becomes an ADR (status Proposed) when work on it starts and is
@@ -2156,13 +2155,13 @@ Reviewed at each gate.
   agent nor the chat's history; a build never gets a secret; a device gets
   its Wi-Fi credentials when it is provisioned, not in its firmware
   (owner's brainstorm, 2026-11-12,
-  [design note](plans/secrets-intake-design.md); section 11).
+  [design note](design/secrets-intake-design.md); section 11).
 - Logging the model provider in from the chat: the owner sends `/login`,
   the node answers it without a model, sends the sign-in link and takes the
   one-time code before the inbox; the token goes to the secret store. With
   a Railway template the install then needs no shell in the container
   (owner's request, 2026-11-13,
-  [design note](plans/model-login-from-chat-design.md); section 11).
+  [design note](design/model-login-from-chat-design.md); section 11).
 - Telegram, beyond formatting, typing and replies (ADR-0025). Each item
   is to be checked against the Bot API docs of the day:
   - a reaction in groups, useful when someone addresses the agent directly;

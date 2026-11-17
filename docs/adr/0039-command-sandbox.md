@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-11-08)
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-3), [11](../spec.md#11-open-decisions) ("Sandbox for scripts and MCP modules"), [7.8](../spec.md#78-security-and-operations-mvp); [M3d design](../plans/p1-m3d-host-commands-design.md) section 5; [ADR-0038](0038-host-commands-as-argv-with-classes-in-code.md), [ADR-0031](0031-agent-security-baseline.md); decision D-5 in the [phase plan](../plans/p1-all-in-one.md#decisions-to-take-during-p1)
+- **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-3), [11](../spec.md#11-open-decisions) ("Sandbox for scripts and MCP modules"), [7.8](../spec.md#78-security-and-operations-mvp); [M3d design](../design/p1-m3d-host-commands-design.md) section 5; [ADR-0038](0038-host-commands-as-argv-with-classes-in-code.md), [ADR-0031](0031-agent-security-baseline.md); decision D-5 in the [phase plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md#decisions-to-take-during-p1)
 
 ## Context
 

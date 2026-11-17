@@ -47,7 +47,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// The scripted acceptance of M3b (docs/plans/p1-m3b-agent-world.md, Task
+// The scripted acceptance of M3b (https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m3b-agent-world.md, Task
 // 12, steps 1–4; design section 5.9): the real core container with real
 // models and the real web, and the fake Bot API playing the owner, who
 // writes and presses buttons. It runs once per model route: the main model

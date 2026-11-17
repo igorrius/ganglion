@@ -59,7 +59,7 @@ Non-goals, all staying in "Not now":
 - The node already writes its own file on the admin's press: a module's
   line under `modules:` (`settings.SetModule`).
 - The topic path was never checked against a live forum
-  ([M2 plan](p1-m2-delivery-telegram.md)).
+  ([M2 plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m2-delivery-telegram.md)).
 
 ## 4. Access: a group carries a role
 

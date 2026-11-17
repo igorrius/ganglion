@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-13
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.14](../spec.md#714-node-configuration) (R-CFG-2, R-CFG-9, R-CFG-10), [7.5](../spec.md#75-runner-and-wasm-modules) (`secret.get`, R-RUN-9), [7.8](../spec.md#78-security-and-operations-mvp), [11](../spec.md#11-open-decisions); task 6.5 of the [P1 phase plan](../plans/p1-all-in-one.md); [design note](../plans/secrets-intake-design.md) (board card G-149); [ADR-0059](0059-node-config-file.md), [ADR-0031](0031-agent-security-baseline.md), [ADR-0016](0016-sqlite-migrations.md), [ADR-0039](0039-command-sandbox.md)
+- **Spec:** [7.14](../spec.md#714-node-configuration) (R-CFG-2, R-CFG-9, R-CFG-10), [7.5](../spec.md#75-runner-and-wasm-modules) (`secret.get`, R-RUN-9), [7.8](../spec.md#78-security-and-operations-mvp), [11](../spec.md#11-open-decisions); task 6.5 of the [P1 phase plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md); [design note](../design/secrets-intake-design.md) (board card G-149); [ADR-0059](0059-node-config-file.md), [ADR-0031](0031-agent-security-baseline.md), [ADR-0016](0016-sqlite-migrations.md), [ADR-0039](0039-command-sandbox.md)
 
 ## Context
 

@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-01
 - **Deciders:** Igor Artasevych
-- **Spec:** [1](../spec.md#1-what-we-are-building), [9.8](../spec.md#98-self-modification-levels), [10](../spec.md#10-plan-phases-and-gates), [P1 plan](../plans/p1-all-in-one.md)
+- **Spec:** [1](../spec.md#1-what-we-are-building), [9.8](../spec.md#98-self-modification-levels), [10](../spec.md#10-plan-phases-and-gates), [P1 plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md)
 
 ## Context
 

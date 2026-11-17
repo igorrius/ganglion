@@ -8,7 +8,7 @@ The agent can write small modules in Rust. The node builds each to WebAssembly i
 
 ## The engineering record
 
-- [Where we are](https://github.com/igorrius/ganglion/blob/master/docs/README.md): the project's current state.
+- [The ganglion project](https://github.com/users/igorrius/projects/13) and its [issues](https://github.com/igorrius/ganglion/issues): the project's current state and plan.
 - [Specification](https://github.com/igorrius/ganglion/blob/master/docs/spec.md): what is built, in what order.
 - [Architecture views](https://github.com/igorrius/ganglion/blob/master/docs/architecture/README.md): from context down to the code map.
 - [Decision records](https://github.com/igorrius/ganglion/blob/master/docs/adr/README.md): why things are the way they are.

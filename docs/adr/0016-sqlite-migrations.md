@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-01
 - **Deciders:** Igor Artasevych
-- **Spec:** principle 8; [P1 plan](../plans/p1-all-in-one.md) decision D-1
+- **Spec:** principle 8; [P1 plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md) decision D-1
 
 ## Context
 

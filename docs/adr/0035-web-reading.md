@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.11](../spec.md#711-reading-the-web) (R-WEB-1–3), [7.5](../spec.md#75-runner-and-wasm-modules) (modules), design section 5.5 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md#55-reading-the-web)); [ADR-0031](0031-agent-security-baseline.md) (the baseline, the URL rule), [ADR-0011](0011-module-abi.md) (the module ABI), [research note](../research/2026-11-02-agent-security-baseline.md)
+- **Spec:** [7.11](../spec.md#711-reading-the-web) (R-WEB-1–3), [7.5](../spec.md#75-runner-and-wasm-modules) (modules), design section 5.5 ([M3b and M3c design](../design/p1-m3b-m3c-design.md#55-reading-the-web)); [ADR-0031](0031-agent-security-baseline.md) (the baseline, the URL rule), [ADR-0011](0011-module-abi.md) (the module ABI), [research note](../research/2026-11-02-agent-security-baseline.md)
 
 ## Context
 

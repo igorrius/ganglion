@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.2](../spec.md#72-conversations-history-and-the-agent-loop) (R-LIVE-9), [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-4), [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-9, R-RUN-17), [7.9](../spec.md#79-observability) (R-OBS-11); [M4c design](../plans/p1-m4c-reflexes-design.md) section 10; [ADR-0051](0051-status-reactions-outside-the-outbox.md), [ADR-0052](0052-a-plan-is-delivered-during-its-turn.md)
+- **Spec:** [7.2](../spec.md#72-conversations-history-and-the-agent-loop) (R-LIVE-9), [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-4), [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-9, R-RUN-17), [7.9](../spec.md#79-observability) (R-OBS-11); [M4c design](../design/p1-m4c-reflexes-design.md) section 10; [ADR-0051](0051-status-reactions-outside-the-outbox.md), [ADR-0052](0052-a-plan-is-delivered-during-its-turn.md)
 
 ## Context
 

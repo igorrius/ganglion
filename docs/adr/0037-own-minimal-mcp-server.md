@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.4](../spec.md#74-providers-and-model-access) (R-PRV-6), R-OBS-7 (`ganglion mcp`, M3c), design sections 5.7 and 6.5 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md)); [ADR-0036](0036-mcp-bridge-over-a-per-run-unix-socket.md) (the bridge), [ADR-0013](0013-protocol-envelope-around-stateless-mcp.md) (MCP inside our envelope later)
+- **Spec:** [7.4](../spec.md#74-providers-and-model-access) (R-PRV-6), R-OBS-7 (`ganglion mcp`, M3c), design sections 5.7 and 6.5 ([M3b and M3c design](../design/p1-m3b-m3c-design.md)); [ADR-0036](0036-mcp-bridge-over-a-per-run-unix-socket.md) (the bridge), [ADR-0013](0013-protocol-envelope-around-stateless-mcp.md) (MCP inside our envelope later)
 
 ## Context
 

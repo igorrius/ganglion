@@ -3,7 +3,7 @@
 - **Status:** Accepted (owner, 2026-11-09)
 - **Date:** 2026-11-09
 - **Deciders:** Igor Artasevych
-- **Spec:** [8](../spec.md#8-first-reflex-deye-p1) (R-DEYE-2, R-LS-4), [9.6](../spec.md#96-flow-engine-p3) (R-LS-1…3), [10](../spec.md#10-plan-phases-and-gates), [10.2](../spec.md#102-p1--all-in-one--scope-and-acceptance); [M4 design](../plans/p1-m4-reflexes-design.md) sections 1 and 9; [P1 phase plan](../plans/p1-all-in-one.md) (M4, M5, D-4); [ADR-0014](0014-state-cells.md)
+- **Spec:** [8](../spec.md#8-first-reflex-deye-p1) (R-DEYE-2, R-LS-4), [9.6](../spec.md#96-flow-engine-p3) (R-LS-1…3), [10](../spec.md#10-plan-phases-and-gates), [10.2](../spec.md#102-p1--all-in-one--scope-and-acceptance); [M4 design](../design/p1-m4-reflexes-design.md) sections 1 and 9; [P1 phase plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md) (M4, M5, D-4); [ADR-0014](0014-state-cells.md)
 
 ## Context
 
@@ -91,7 +91,7 @@ engine.
   modules are not built in P1; `cell.set` waits for the first module that
   needs it.
 - M4 is rewritten around the node config, modules built by the agent and
-  cells as registers ([M4 design](../plans/p1-m4-reflexes-design.md),
+  cells as registers ([M4 design](../design/p1-m4-reflexes-design.md),
   section 12); M5 is removed from the phase plan and the board.
 - The P1 row of spec section 10 and the 10.2 acceptance change: no shadow
   week and no "enabled" flow.

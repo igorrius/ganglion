@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-6, R-POL-7), [7.7](../spec.md#77-memory) (R-MEM-5); design section 4, rule 3 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md#4-security-baseline-both-milestones)); [ADR-0031](0031-agent-security-baseline.md) (the baseline), [ADR-0033](0033-memory-in-the-workspace-git-with-the-git-binary.md) (where memory lives)
+- **Spec:** [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-6, R-POL-7), [7.7](../spec.md#77-memory) (R-MEM-5); design section 4, rule 3 ([M3b and M3c design](../design/p1-m3b-m3c-design.md#4-security-baseline-both-milestones)); [ADR-0031](0031-agent-security-baseline.md) (the baseline), [ADR-0033](0033-memory-in-the-workspace-git-with-the-git-binary.md) (where memory lives)
 
 ## Context
 

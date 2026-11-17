@@ -3,7 +3,7 @@
 - **Status:** Superseded by [ADR-0087](0087-distribute-to-any-machine-and-drop-small-hosts-as-a-target.md) (the small-host aim and the device measurements; the `GOMEMLIMIT` rule stays)
 - **Date:** 2026-11-08
 - **Deciders:** Igor Artasevych
-- **Spec:** [2](../spec.md#2-principles) (principle 8), [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-6, target hosts), [10.2](../spec.md#102-p1--all-in-one--scope-and-acceptance); the global constraints of the [P1 phase plan](../plans/p1-all-in-one.md#global-constraints)
+- **Spec:** [2](../spec.md#2-principles) (principle 8), [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-6, target hosts), [10.2](../spec.md#102-p1--all-in-one--scope-and-acceptance); the global constraints of the [P1 phase plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md#global-constraints)
 - **Supersedes:** the reading of principle 8 as a 128 MB budget that a node must stay under, used as a line in [ADR-0026](0026-opentelemetry-prometheus-and-promtop.md), [ADR-0033](0033-memory-in-the-workspace-git-with-the-git-binary.md), [ADR-0035](0035-web-reading.md) and the memory tests
 
 ## Context

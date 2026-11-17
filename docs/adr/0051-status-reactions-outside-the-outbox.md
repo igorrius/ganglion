@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-05
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-4, R-DLV-5), [7.2](../spec.md#72-conversations-history-and-the-agent-loop) (R-LIVE-7); [live turns design](../plans/p1-live-turns-design.md), section 4
+- **Spec:** [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-4, R-DLV-5), [7.2](../spec.md#72-conversations-history-and-the-agent-loop) (R-LIVE-7); [live turns design](../design/p1-live-turns-design.md), section 4
 
 ## Context
 

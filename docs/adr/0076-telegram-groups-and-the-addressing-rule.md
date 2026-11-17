@@ -7,7 +7,7 @@
   [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-10),
   [7.8](../spec.md#78-security-and-operations-mvp),
   [14 Not now](../spec.md#14-not-now);
-  [design](../plans/telegram-groups-design.md), [plan](../plans/telegram-groups.md)
+  [design](../design/telegram-groups-design.md), [plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/telegram-groups.md)
 
 ## Context
 

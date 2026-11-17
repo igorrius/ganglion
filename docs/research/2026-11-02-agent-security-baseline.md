@@ -1,8 +1,8 @@
 # Agent security baseline: what the sources say
 
 - **Date:** 2026-11-02
-- **Task:** M3b task 1 ([plan](../plans/p1-m3b-agent-world.md)); design
-  section 4 ([design](../plans/p1-m3b-m3c-design.md#4-security-baseline-both-milestones))
+- **Task:** M3b task 1 ([plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m3b-agent-world.md)); design
+  section 4 ([design](../design/p1-m3b-m3c-design.md#4-security-baseline-both-milestones))
 - **Question:** what do the known analyses of attacks on tool-using
   agents say, and what do they ask of ganglion's baseline, now that M3b
   gives the agent tools, memory, a scheduler and the web?

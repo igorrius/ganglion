@@ -227,7 +227,7 @@ Before writing a helper, look for it. These exist and are the only copies:
 | A count of rows in one state as a gauge | `sqlitedb.ObserveCount` |
 | Asking a model whether a text is a fact or a hidden instruction | `guard` |
 
-(The table describes the state after the [refactoring plan](plans/p1-refactor.md).)
+(The table describes the state after the [refactoring plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-refactor.md).)
 
 ## 9. Tests
 

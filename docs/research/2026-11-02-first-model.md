@@ -1,7 +1,7 @@
 # First model for conversation turns (D-6)
 
 - **Date:** 2026-11-02
-- **Task:** M3a task 10 ([plan](../plans/p1-m3a-talking-agent.md)), decision D-6
+- **Task:** M3a task 10 ([plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m3a-talking-agent.md)), decision D-6
 - **Question:** which model should answer the agent's conversation turns
   first, and which should take over when it fails?
 - **Status:** measured on 20 turns per model. The owner picks; the choice

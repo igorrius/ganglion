@@ -6,8 +6,8 @@
 - **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-16, R-RUN-18),
   [7.14](../spec.md#714-node-configuration) (R-CFG-12),
   [14 Not now](../spec.md#14-not-now);
-  [design](../plans/telegram-groups-design.md),
-  [plan](../plans/telegram-destinations.md); changes the target decided in
+  [design](../design/telegram-groups-design.md),
+  [plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/telegram-destinations.md); changes the target decided in
   [ADR-0066](0066-notify-capability.md); board card G-153
 
 ## Context

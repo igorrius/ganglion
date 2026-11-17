@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-13, R-RUN-17); refines [ADR-0067](0067-agent-writes-module-source.md); [M4c design](../plans/p1-m4c-reflexes-design.md) section 6; [ADR-0049](0049-three-gaps-where-outside-text-and-private-data-cross.md)
+- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-13, R-RUN-17); refines [ADR-0067](0067-agent-writes-module-source.md); [M4c design](../design/p1-m4c-reflexes-design.md) section 6; [ADR-0049](0049-three-gaps-where-outside-text-and-private-data-cross.md)
 
 ## Context
 

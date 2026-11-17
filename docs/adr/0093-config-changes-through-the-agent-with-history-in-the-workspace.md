@@ -5,13 +5,13 @@
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.14 Node configuration](../spec.md#714-node-configuration)
   (R-CFG-13 – R-CFG-16), [10.2 P1](../spec.md#102-p1--all-in-one--scope-and-acceptance)
-  (M6 tasks 6.1–6.3); [design note](../plans/p1-m6-config-design.md)
+  (M6 tasks 6.1–6.3); [design note](../design/p1-m6-config-design.md)
 
 ## Context
 
 M6's acceptance says the agent applies a configuration change the owner
 approved, refuses one that fails the config's checks, and rolls back on
-request (tasks 6.1–6.3 of the [phase plan](../plans/p1-all-in-one.md)).
+request (tasks 6.1–6.3 of the [phase plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md)).
 
 What exists on 2026-11-16:
 

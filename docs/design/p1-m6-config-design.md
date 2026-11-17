@@ -5,7 +5,7 @@ built. The decision is
 [ADR-0093](../adr/0093-config-changes-through-the-agent-with-history-in-the-workspace.md);
 the requirements are R-CFG-13 – R-CFG-16 in the
 [spec](../spec.md#714-node-configuration); the work is tasks 6.1–6.3 of the
-[phase plan](p1-all-in-one.md).
+[phase plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md).
 
 Marks: **owner** means the owner said it; **call** means the author's
 default, open to the owner's correction.

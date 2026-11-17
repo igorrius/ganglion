@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.14](../spec.md#714-node-configuration) (R-CFG-1…7), [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-6, R-RUN-8), [7.9](../spec.md#79-observability) (R-OBS-2, R-OBS-3); [M4 design](../plans/p1-m4-reflexes-design.md) section 4; decision D-3 of the [P1 phase plan](../plans/p1-all-in-one.md); [ADR-0012](0012-yaml-manifests.md), [ADR-0023](0023-json-schemas-for-yaml-files.md), [ADR-0029](0029-urfave-cli-for-commands-and-bootstrap-flags.md), [ADR-0056](0056-small-hosts-as-a-soft-target.md)
+- **Spec:** [7.14](../spec.md#714-node-configuration) (R-CFG-1…7), [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-6, R-RUN-8), [7.9](../spec.md#79-observability) (R-OBS-2, R-OBS-3); [M4 design](../design/p1-m4-reflexes-design.md) section 4; decision D-3 of the [P1 phase plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md); [ADR-0012](0012-yaml-manifests.md), [ADR-0023](0023-json-schemas-for-yaml-files.md), [ADR-0029](0029-urfave-cli-for-commands-and-bootstrap-flags.md), [ADR-0056](0056-small-hosts-as-a-soft-target.md)
 
 ## Context
 

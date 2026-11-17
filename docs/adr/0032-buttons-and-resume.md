@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-2, R-POL-3, R-POL-4), [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-1, R-DLV-6); design section 5.2 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md#52-confirmations-and-quick-actions-on-buttons)); [ADR-0014](0014-state-cells.md), [ADR-0017](0017-extension-points.md), [ADR-0020](0020-neutral-history-as-conversation-state.md), [ADR-0031](0031-agent-security-baseline.md)
+- **Spec:** [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-2, R-POL-3, R-POL-4), [7.1](../spec.md#71-guaranteed-delivery) (R-DLV-1, R-DLV-6); design section 5.2 ([M3b and M3c design](../design/p1-m3b-m3c-design.md#52-confirmations-and-quick-actions-on-buttons)); [ADR-0014](0014-state-cells.md), [ADR-0017](0017-extension-points.md), [ADR-0020](0020-neutral-history-as-conversation-state.md), [ADR-0031](0031-agent-security-baseline.md)
 
 ## Context
 

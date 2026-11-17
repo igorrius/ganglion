@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-17), [7.2](../spec.md#72-conversations-history-and-the-agent-loop) (R-LIVE-9), [7.6](../spec.md#76-action-policies-and-risk-classes); [M4c design](../plans/p1-m4c-reflexes-design.md) section 10; refines [ADR-0069](0069-background-jobs-with-a-live-card.md)
+- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-17), [7.2](../spec.md#72-conversations-history-and-the-agent-loop) (R-LIVE-9), [7.6](../spec.md#76-action-policies-and-risk-classes); [M4c design](../design/p1-m4c-reflexes-design.md) section 10; refines [ADR-0069](0069-background-jobs-with-a-live-card.md)
 
 ## Context
 

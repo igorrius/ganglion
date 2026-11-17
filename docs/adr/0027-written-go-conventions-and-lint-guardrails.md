@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-02
 - **Deciders:** Igor Artasevych
-- **Spec:** [2, principles 5 and 6](../spec.md#2-principles); [plan P1](../plans/p1-all-in-one.md)
+- **Spec:** [2, principles 5 and 6](../spec.md#2-principles); [plan P1](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md)
 
 ## Context
 
@@ -72,7 +72,7 @@ That is today's state, and it produced the code above.
 **A.** The page is short enough to read every session. The linters fail CI
 on the patterns that grew `Handle`.
 
-The new linters are switched on by the [refactoring plan](../plans/p1-refactor.md)
+The new linters are switched on by the [refactoring plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-refactor.md)
 once the code passes them, not before: CI stays green on every commit.
 
 ## Consequences
@@ -80,7 +80,7 @@ once the code passes them, not before: CI stays green on every commit.
 - `docs/conventions.md` exists; `CLAUDE.md` and `docs/README.md` point to
   it.
 - A refactoring before M3b brings the code in line
-  ([plan](../plans/p1-refactor.md)). Behaviour, metrics, log lines and the
+  ([plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-refactor.md)). Behaviour, metrics, log lines and the
   database schema do not change.
 - A rule that turns out wrong is changed on the page in the same commit as
   the code.

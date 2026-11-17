@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-11-09)
 - **Date:** 2026-11-09
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-9), [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-3); refines [ADR-0039](0039-command-sandbox.md) for builds only, which is accepted and not rewritten; [ADR-0061](0061-local-modules-built-from-source.md), [ADR-0057](0057-commands-may-list-split-folders.md); task 5b of the [M4b plan](../plans/p1-m4b-modules.md)
+- **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-9), [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-3); refines [ADR-0039](0039-command-sandbox.md) for builds only, which is accepted and not rewritten; [ADR-0061](0061-local-modules-built-from-source.md), [ADR-0057](0057-commands-may-list-split-folders.md); task 5b of the [M4b plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m4b-modules.md)
 
 ## Context
 

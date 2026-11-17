@@ -180,5 +180,4 @@ Telegram counts polls, not messages: a quiet chat is normal.
 - Spec: R-OBS-11 for `/status`; "Not now": `ganglion doctor`, choosing the model in the chat.
 - Phase plan: task 3.38 points here and to the plan.
 - Code map: the `status` package and the sources in their packages' rows.
-- `docs/README.md`: "Where we are" when it closes.
 - No ADR: no dependency, format, runtime or boundary is added **(call)**.

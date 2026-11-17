@@ -3,7 +3,7 @@
 - **Status:** Accepted; the file layout (one fact per file) superseded by [ADR-0071](0071-memory-topics-whole-in-the-prompt.md)
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.7](../spec.md#77-memory) (R-MEM-3–5), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-7), principle 8 (a node fits in 128 MB); decision D-7 of the [phase plan](../plans/p1-all-in-one.md); design section 5.4 ([M3b and M3c design](../plans/p1-m3b-m3c-design.md#54-memory-spec-task-35)); follows the M3b note of [ADR-0024](0024-persona-as-workspace-files.md)
+- **Spec:** [7.7](../spec.md#77-memory) (R-MEM-3–5), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-7), principle 8 (a node fits in 128 MB); decision D-7 of the [phase plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-all-in-one.md); design section 5.4 ([M3b and M3c design](../design/p1-m3b-m3c-design.md#54-memory-spec-task-35)); follows the M3b note of [ADR-0024](0024-persona-as-workspace-files.md)
 
 ## Context
 

@@ -1,7 +1,7 @@
 # Command sandbox: what the hosts offer
 
 - **Date:** 2026-11-08
-- **Task:** P1 · M3d 3.20 ([plan](../plans/p1-m3d-sandbox.md), [ADR-0039](../adr/0039-command-sandbox.md))
+- **Task:** P1 · M3d 3.20 ([plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m3d-sandbox.md), [ADR-0039](../adr/0039-command-sandbox.md))
 - **Question:** does option A of ADR-0039 (`no_new_privs`, a clean environment, Landlock, the node not
   dumpable; no PID namespace, owner 2026-11-08) hold on the owner's machine, in a container, on Railway
   and on a Pi; and what does finding `.env` files cost?

@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-11-09)
 - **Date:** 2026-11-03
 - **Deciders:** Igor Artasevych
-- **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-1, 2, 4–6, 8), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-4, 6, 8), [10.2](../spec.md#102-p1--all-in-one--scope-and-acceptance); [M3d design](../plans/p1-m3d-host-commands-design.md); [ADR-0031](0031-agent-security-baseline.md) (the baseline), [ADR-0039](0039-command-sandbox.md) (the sandbox), [ADR-0040](0040-plans-as-approvals.md) (plans)
+- **Spec:** [7.12](../spec.md#712-host-commands-and-plans) (R-CMD-1, 2, 4–6, 8), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-4, 6, 8), [10.2](../spec.md#102-p1--all-in-one--scope-and-acceptance); [M3d design](../design/p1-m3d-host-commands-design.md); [ADR-0031](0031-agent-security-baseline.md) (the baseline), [ADR-0039](0039-command-sandbox.md) (the sandbox), [ADR-0040](0040-plans-as-approvals.md) (plans)
 
 ## Context
 
@@ -99,7 +99,7 @@ in force.
 
 ## Refined by the build (2026-11-08)
 
-The plan for tasks 3.21–3.27 ([p1-m3d-commands.md](../plans/p1-m3d-commands.md))
+The plan for tasks 3.21–3.27 ([p1-m3d-commands.md](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m3d-commands.md))
 settled what the design left to the builder:
 
 - **Scripts are inline only.** `bash -c`, `sh -c`, `python3 -c`,

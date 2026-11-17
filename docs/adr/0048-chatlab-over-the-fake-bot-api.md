@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-04
 - **Deciders:** Igor Artasevych
-- **Spec:** [2](../spec.md#2-principles) (principle 9), [9.8](../spec.md#98-self-modification-levels); [chatlab design](../plans/p1-m3c-chatlab-design.md); [plan](../plans/p1-m3c-chatlab.md)
+- **Spec:** [2](../spec.md#2-principles) (principle 9), [9.8](../spec.md#98-self-modification-levels); [chatlab design](../design/p1-m3c-chatlab-design.md); [plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-m3c-chatlab.md)
 
 ## Context
 
