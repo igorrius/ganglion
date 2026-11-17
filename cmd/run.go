@@ -209,6 +209,11 @@ func fromFile(f settings.File, db string, limit memlimit.Limit, src settings.Sou
 	if b.BotToken, err = f.Telegram.Token.Resolve(src); err != nil {
 		return config.Bootstrap{}, err
 	}
+	if f.Backup != nil {
+		if b.BackupSecret, err = f.Backup.Secret(src); err != nil {
+			return config.Bootstrap{}, err
+		}
+	}
 	b.Agent, err = agentSettings(f, src)
 	return b, err
 }

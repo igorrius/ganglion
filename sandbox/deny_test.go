@@ -54,6 +54,27 @@ func TestDenyListKeepsADatabaseBesideOtherWork(t *testing.T) {
 	}
 }
 
+// TestDenyListDeniesTheBackupFilesBesideOtherWork: the backup's work folder
+// holds a plain copy of the database, and its result file names the last
+// object; both are denied on their own when the data folder is not.
+func TestDenyListDeniesTheBackupFilesBesideOtherWork(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := NodeFiles{DB: filepath.Join(dir, "ganglion.db"), BackupWork: filepath.Join(dir, "backup-tmp"),
+		BackupResult: filepath.Join(dir, "backup.json")}
+	got := DenyList("", dir, node, nil, nil)
+	for _, want := range []string{"backup-tmp", "backup.json"} {
+		if !slices.Contains(got, filepath.Join(dir, want)) {
+			t.Errorf("%s is not denied; got %v", want, got)
+		}
+	}
+	if slices.Contains(got, dir) {
+		t.Fatalf("the working folder is denied: %v", got)
+	}
+}
+
 // TestDenyListHoldsTheSettingsAndTheLockInTheImagesLayout: the container
 // image runs in /data, where the database and ganglion.yaml are. A command
 // that rewrote ganglion.yaml would choose the admins and the providers'

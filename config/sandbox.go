@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/igorrius/ganglion/backup"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/update"
 	"github.com/samber/do/v2"
@@ -35,7 +36,7 @@ func Sandbox() do.Provider[*sandbox.Sandbox] {
 		}
 		home, _ := os.UserHomeDir() // none: no home secrets to deny, and HOME=/
 		releases, _ := update.DirFor(b.DB)
-		node := sandbox.NodeFiles{Binary: binary, DB: b.DB, Settings: settingsFile(b), LogDir: b.LogDir, ModulesDir: b.ModulesDir, ClaudeDir: b.ClaudeDir,
+		node := sandbox.NodeFiles{BackupWork: backupWork(b.DB), BackupResult: backupResult(b.DB), Binary: binary, DB: b.DB, Settings: settingsFile(b), LogDir: b.LogDir, ModulesDir: b.ModulesDir, ClaudeDir: b.ClaudeDir,
 			Workspace: b.Agent.Workspace, Languages: b.Languages, MasterKey: b.MasterKey, Releases: releases}
 		environ := os.Environ()
 		p := sandbox.Policy{
@@ -57,6 +58,22 @@ func Sandbox() do.Provider[*sandbox.Sandbox] {
 		}
 		return s, nil
 	}
+}
+
+// backupWork and backupResult are the backup's work folder and result file
+// beside the database at db; "" for a database that is not a file.
+func backupWork(db string) string {
+	if db == "" || db == memoryDB {
+		return ""
+	}
+	return backup.WorkPath(filepath.Dir(db))
+}
+
+func backupResult(db string) string {
+	if db == "" || db == memoryDB {
+		return ""
+	}
+	return backup.ResultPath(filepath.Dir(db))
 }
 
 // commandEnv is the whole environment a command gets (M3d design, section 5).

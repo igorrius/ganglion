@@ -128,7 +128,7 @@ with no new dependency.
   guide and the Railway runbook tell the operator to keep `master.key`
   (or `GANGLION_MASTER_KEY`) off the node, in a password manager, before
   turning backups on.
-- **Proof:** a lab scenario backs up a node to a local S3-compatible
+- **Proof:** an acceptance test backs up a node to a fake S3-compatible
   server, restores the archive into a new data directory, starts a node
   on it and finds its memory, modules and cells. Once, the owner restores
   a backup of the live node on a fresh node by the runbook.

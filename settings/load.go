@@ -17,6 +17,9 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+// schemeHTTPS is the URL scheme the public and the backup addresses need.
+const schemeHTTPS = "https"
+
 // FileName is how errors name the file, whatever its path.
 const FileName = "ganglion.yaml"
 
@@ -65,6 +68,9 @@ func Parse(src []byte) (File, error) {
 		if err := walk(root.Content[0], "", reflect.ValueOf(&f).Elem()); err != nil {
 			return File{}, err
 		}
+	}
+	if f.Backup != nil && f.Backup.At == "" {
+		f.Backup.At = DefaultBackupAt
 	}
 	return f, f.check()
 }
@@ -277,10 +283,65 @@ func (f File) check() error {
 	if err := checkDestinations(f.Destinations, f.Modules); err != nil {
 		return err
 	}
+	if f.Backup != nil {
+		if err := f.Backup.check(); err != nil {
+			return err
+		}
+	}
 	if f.Models != nil {
 		return f.Models.check("models")
 	}
 	return nil
+}
+
+// check refuses a backup section that cannot run. An error names the key
+// and never repeats a value.
+func (b Backup) check() error {
+	for _, c := range []struct {
+		key, reason string
+		ok          bool
+	}{
+		{"endpoint", "must be an https address with a host and no path, query or credentials, such as https://s3.example.com", validBackupEndpoint(b.Endpoint)},
+		{"region", "must name the bucket's signing region", b.Region != ""},
+		{"bucket", "must be the bucket's name", b.Bucket != "" && !strings.ContainsAny(b.Bucket, "/?# ")},
+		{"prefix", "must not start with a slash or hold \"..\"", !strings.HasPrefix(b.Prefix, "/") && !slices.Contains(strings.Split(b.Prefix, "/"), "..")},
+		{"access_key_id", "must be the access key's id", b.AccessKeyID != ""},
+		{"secret_access_key", "must be env:NAME or store:NAME: the secret key is never written in the file", b.SecretAccessKey != ""},
+		{"at", "must be a time of day as HH:MM, such as 03:00", validClock(b.At)},
+	} {
+		if !c.ok {
+			return pathError("backup."+c.key, c.reason)
+		}
+	}
+	return nil
+}
+
+// Secret reads the secret key the section names through src. A key that is
+// not set is an error that says how to set it, so a node never starts
+// believing its backups run.
+func (b Backup) Secret(src Sources) (string, error) {
+	v, err := b.SecretAccessKey.Resolve(src)
+	if err != nil {
+		return "", err
+	}
+	if v == "" {
+		return "", fmt.Errorf("%s: backup.secret_access_key: %s is not set; %s", FileName, b.SecretAccessKey, b.SecretAccessKey.HowToSet())
+	}
+	return v, nil
+}
+
+// validBackupEndpoint accepts a bare https address: a host, an optional
+// port and nothing else.
+func validBackupEndpoint(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && u.Scheme == schemeHTTPS && u.Hostname() != "" && u.User == nil && u.RawQuery == "" &&
+		u.Fragment == "" && (u.Path == "" || u.Path == "/")
+}
+
+// validClock accepts HH:MM, 00:00 to 23:59.
+func validClock(s string) bool {
+	_, err := time.Parse("15:04", s)
+	return err == nil && len(s) == len("15:04")
 }
 
 // checkGroups refuses a bad line of telegram.groups and a chat listed twice.
@@ -314,7 +375,7 @@ func validAddr(a string) bool {
 
 func validURL(s string) bool {
 	u, err := url.Parse(s)
-	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+	return err == nil && (u.Scheme == "http" || u.Scheme == schemeHTTPS) && u.Host != ""
 }
 
 // validPublicURL accepts "" or an address Telegram can call a webhook at:
@@ -325,7 +386,7 @@ func validPublicURL(s string) bool {
 		return true
 	}
 	u, err := url.Parse(s)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || u.Scheme != schemeHTTPS || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return false
 	}
 	return (u.Path == "" || u.Path == "/") && slices.Contains([]string{"", "443", "80", "88", "8443"}, u.Port())

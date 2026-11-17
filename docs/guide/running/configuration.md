@@ -129,3 +129,28 @@ modules:
 | Key | Default | Meaning |
 |---|---|---|
 | `check` | `true` | Ask once a day for a newer release and tell the admins once per version, with the version, its date and a link. It never installs one: you do, with `/update install`. Set `off` to stop the asking. Without a release version (a build from source) and with the database in memory, the node asks nothing. |
+
+## backup
+
+The daily encrypted backup to an S3-compatible bucket. Without this section there are no backups. Only a host edit changes it: the agent cannot. When the section is there, the first five keys are required. See [Backups](operations.md#backups).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `endpoint` | none | The bucket's S3 endpoint, an HTTPS address with a host and no path, such as `https://s3.example.com`. A plain `http` address is refused. |
+| `region` | none | The signing region the provider names (`auto` at Cloudflare R2). |
+| `bucket` | none | The bucket's name. |
+| `access_key_id` | none | The id of the access key. Give the key the right to write into this bucket and no right to delete. |
+| `secret_access_key` | none | The access key's secret, as `env:NAME` or `store:NAME`. The node does not start while it is not set. |
+| `prefix` | empty | The folder in the bucket the copies go to. Empty puts them at the top. |
+| `at` | `03:00` | The time of day, `HH:MM` in `node.tz`, the backup runs at. |
+
+```yaml
+backup:
+  endpoint: https://s3.example.com
+  region: us-east-1
+  bucket: my-node-backups
+  prefix: node
+  access_key_id: EXAMPLEKEYID
+  secret_access_key: env:BACKUP_SECRET_ACCESS_KEY
+```
+

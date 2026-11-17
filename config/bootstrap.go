@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/igorrius/ganglion/builder"
@@ -92,6 +93,12 @@ type Bootstrap struct {
 	// memory (a test node). The operator's GANGLION_MASTER_KEY, read
 	// through Secrets, comes first (ADR-0077).
 	MasterKey string
+	// BackupSecret is the value backup.secret_access_key names, already
+	// read; "" when the file has no backup section.
+	BackupSecret string
+	// BackupHTTP is the HTTP client the backup talks to the bucket with; nil
+	// takes the default. Only a test sets it, to trust a local server.
+	BackupHTTP *http.Client
 	// Metrics draws the node's own metrics for metrics.show and /metrics
 	// (ADR-0045); the command line sets it from telemetry, nil leaves the
 	// tool out.
@@ -101,7 +108,7 @@ type Bootstrap struct {
 // SecretValues are the secret values the node read, which logs and command
 // output hide exactly (redact.Values).
 func (b Bootstrap) SecretValues() []string {
-	out := []string{b.BotToken, b.Agent.BraveKey}
+	out := []string{b.BotToken, b.Agent.BraveKey, b.BackupSecret}
 	for _, k := range b.Agent.Keys {
 		out = append(out, k)
 	}

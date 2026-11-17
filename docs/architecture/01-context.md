@@ -25,7 +25,7 @@ flowchart TB
     g -- "HTTPS" --> clouds
     g -- "chat completions" --> llm
     g -- "standalone tasks" --> claude
-    g -- "push, daily backup" --> backup
+    g -- "push; daily encrypted backup<br/>(one signed PutObject, HTTPS)" --> backup
     g -- "HTTPS: web.fetch, web.search" --> webs
     g -.-> ha
 
@@ -41,7 +41,7 @@ flowchart TB
 | Vendor clouds | DeyeCloud for battery data, Tuya OpenAPI for plugs | Home internet outlasts the inverter during outages (task 0.7) |
 | Model APIs | Routine turns on a cheap model; local models for `privacy: local-only` | [ADR-0007](../adr/0007-openai-compatible-first-provider.md) |
 | Claude Code CLI | Heavy standalone tasks on the owner's subscription | Unmodified binary, the project never touches tokens; [ADR-0009](../adr/0009-claude-subscription-only-via-cli-worker.md) |
-| Git remote and S3 | Memory history and backups | Memory is Markdown in git; rollback with `git revert` |
+| Git remote and S3 | Memory history and backups | Memory is Markdown in git; rollback with `git revert`. The daily backup is sealed on the node under a key from the master key and put into an S3-compatible bucket the node's key cannot delete from or read; [ADR-0095](../adr/0095-daily-encrypted-backups-to-an-s3-compatible-bucket.md) |
 | The web | Pages and JSON APIs the owner asks about or a task's grant names; search | Untrusted content; [ADR-0035](../adr/0035-web-reading.md) |
 | Home Assistant | Planned second automation backend | P3 |
 
