@@ -151,3 +151,18 @@ update:
   # Once a day, ask for a newer release and tell the admins once per version.
   # It never installs one; /update install does. off stops the asking.
   check: true
+
+# A daily encrypted backup to an S3-compatible bucket (Backblaze B2,
+# Cloudflare R2, ...). Without this section backups are off. Keep the
+# master key (master.key or GANGLION_MASTER_KEY) somewhere other than the
+# node before turning this on: a backup cannot be opened without it.
+# backup:
+#   endpoint: https://s3.example.com
+#   region: us-east-1
+#   bucket: my-node-backups
+#   prefix: node
+#   access_key_id: EXAMPLEKEYID
+#   # The secret key is never written here: env:NAME or store:NAME.
+#   secret_access_key: env:BACKUP_SECRET_ACCESS_KEY
+#   # The time of day, in node.tz, the backup runs at.
+#   at: "03:00"

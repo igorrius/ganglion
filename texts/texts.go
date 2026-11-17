@@ -470,6 +470,22 @@ const (
 	UpdateRefusedNoPrevious Key = "update.refused_no_previous"
 	UpdateRefusedState      Key = "update.refused_state"
 	UpdateRefusedOther      Key = "update.refused_other"
+
+	BackupAlertFailed       Key = "backup.alert_failed"     // vars: reason, last: the daily backup failed
+	BackupAlertRecovered    Key = "backup.alert_recovered"  // vars: size, time: the backup works again
+	BackupLastNone          Key = "backup.last_none"        // inside an alert: there is no good copy
+	BackupReasonRefused     Key = "backup.reason_refused"   // vars: detail: the bucket answered with an error
+	BackupReasonNetwork     Key = "backup.reason_network"   // the bucket could not be reached
+	BackupReasonChanged     Key = "backup.reason_changed"   // a file changed while it was copied
+	BackupReasonIntegrity   Key = "backup.reason_integrity" // the database copy is damaged
+	BackupReasonOther       Key = "backup.reason_other"     // any other reason
+	StatusBackupOff         Key = "status.backup_off"
+	StatusBackupOK          Key = "status.backup_ok" // vars: time, size
+	StatusBackupWaiting     Key = "status.backup_waiting"
+	StatusBackupStale       Key = "status.backup_stale" // vars: time, size: no new copy for long
+	StatusBackupNone        Key = "status.backup_none"
+	StatusReasonBackupStale Key = "status.reason_backup_stale" // span: for
+	StatusBackupFailed      Key = "status.backup_failed"
 )
 
 var allKeys = []Key{
@@ -489,6 +505,7 @@ var allKeys = []Key{
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
 	UpdateAlertFailed, UpdateAlertUnverified, UpdateAlertNoExec, UpdateAlertExec, UpdateDBRestored, UpdateDBKept, UpdateImageVersion, UpdateConfirmed, UpdateStarted, UpdateAvailable,
 	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateButtonInstall, UpdateButtonRollback, UpdateButtonRollbackImg, UpdateButtonStale, UpdateAlreadyInstalled, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
+	BackupAlertFailed, BackupAlertRecovered, BackupLastNone, BackupReasonRefused, BackupReasonNetwork, BackupReasonChanged, BackupReasonIntegrity, BackupReasonOther, StatusBackupOff, StatusBackupOK, StatusBackupWaiting, StatusBackupStale, StatusBackupNone, StatusReasonBackupStale, StatusBackupFailed,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.

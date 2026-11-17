@@ -193,6 +193,74 @@ setpriv --reuid=10001 --regid=10001 --clear-groups \
   `--module`, and named in the file as `store:NAME` instead of `env:NAME`.
   The node reads those at its start, so changing one needs `/restart`.
 
+## Backups
+
+A node backs itself up every day to an S3-compatible bucket (ADR-0095). The
+steps below use placeholders; the real endpoint, bucket, key and service
+names stay in the environment and in the owner's notes, never in this
+repository.
+
+1. **Keep the master key off the node.** Copy `/data/master.key` out over
+   `railway ssh` (`base64 < /data/master.key`) into a password manager, or
+   set `GANGLION_MASTER_KEY` as a sealed variable (see the key notes under
+   [Module secrets](#module-secrets)). A backup opens only with this key.
+2. **Make the bucket and its key.** Backblaze B2: an application key
+   limited to the bucket, without `deleteFiles`. Cloudflare R2: a bucket
+   lock rule and a token limited to the bucket. Add a lifecycle rule for
+   how long copies are kept; the node never deletes.
+3. **Set the secret key** as a sealed variable
+   (`railway variable set BACKUP_SECRET_ACCESS_KEY=<key> -s <service>`), or
+   store it with `ganglion secret set BACKUP_SECRET_ACCESS_KEY` as in the
+   section above and name it `store:BACKUP_SECRET_ACCESS_KEY`.
+4. **Add the section** to `/data/ganglion.yaml` as the node's user (see
+   [`ganglion.yaml` in the volume](#ganglionyaml-in-the-volume)):
+
+   ```yaml
+   backup:
+     endpoint: https://s3.example.com
+     region: us-east-1
+     bucket: <bucket>
+     prefix: node
+     access_key_id: <key id>
+     secret_access_key: env:BACKUP_SECRET_ACCESS_KEY
+     at: "03:00"
+   ```
+
+   Then `railway redeploy -s <service> --yes`. A node whose secret key is
+   not set does not start: the log says so.
+5. **Make the first backup by hand** and look for the object in the
+   bucket:
+
+   ```sh
+   setpriv --reuid=10001 --regid=10001 --clear-groups ganglion backup now --db /data/ganglion.db
+   ```
+
+   `/status` then shows the last copy's time and size.
+
+**The restore drill, on a fresh service.** Do it once before you need it:
+
+1. Make a second service from the same image with an empty volume; do not
+   start the node yet, or let it make its own `master.key` and then remove
+   it.
+2. Download the newest `.tar.gz.enc` object from the bucket with the
+   provider's tool.
+3. Over `railway ssh` into the fresh service, as uid 10001, put the master
+   key from the password manager at `/restore/master.key` (or set
+   `GANGLION_MASTER_KEY`) and restore into an empty directory on the
+   volume:
+
+   ```sh
+   setpriv --reuid=10001 --regid=10001 --clear-groups \
+     ganglion backup restore --data /data/restored --key-file /restore/master.key <archive>
+   ```
+
+4. Move the restored files to `/data`, put the key at `/data/master.key`
+   (mode `0600`, owner 10001) and start the node there. Check `/status`,
+   that `/memory` lists the topics, `/modules` the modules and the cells
+   are there. The restored `ganglion.yaml` names the same bucket: leave the
+   fresh service's backups off until the old node is gone, so two nodes do
+   not write into one folder.
+
 ## Telegram by webhook
 
 The owner's node runs this way since 2026-11-13. Polling needs none of

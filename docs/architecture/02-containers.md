@@ -86,6 +86,7 @@ flowchart TB
     cc["Claude Code or another MCP client"]
     net["The web"]
     gh["GitHub Releases<br/>module tags, html2md/v*"]
+    s3["S3-compatible bucket<br/>daily encrypted backup"]
     c --- e
     c --- w
     c --- db
@@ -93,6 +94,7 @@ flowchart TB
     c -- "history on stdin;<br/>tools over MCP on a per-run Unix socket" --- cl
     c -- "web.fetch, web.search" --> net
     c -- "/modules update: sum, ceiling, self-test" --> gh
+    c -- "daily at backup.at: the sealed archive,<br/>one signed PutObject over HTTPS (ADR-0095)" --> s3
     c -. "task queue" .- pc
     c --> logs
     diag -- "read-only" --> db

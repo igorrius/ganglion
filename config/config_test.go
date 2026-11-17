@@ -323,10 +323,10 @@ func TestScheduleSpecsLookupAfterTheBuild(t *testing.T) {
 
 // The logger and the runner hide the same secrets: one list.
 func TestSecretValuesListsEverySecretTheNodeRead(t *testing.T) {
-	b := Bootstrap{BotToken: "tok", Agent: AgentSettings{BraveKey: "brave", Keys: map[string]string{"a": "k1", "b": "k2"}}}
+	b := Bootstrap{BotToken: "tok", BackupSecret: "bak", Agent: AgentSettings{BraveKey: "brave", Keys: map[string]string{"a": "k1", "b": "k2"}}}
 	got := b.SecretValues()
 	slices.Sort(got)
-	if want := []string{"brave", "k1", "k2", "tok"}; !slices.Equal(got, want) {
+	if want := []string{"bak", "brave", "k1", "k2", "tok"}; !slices.Equal(got, want) {
 		t.Fatalf("SecretValues = %q, want %q", got, want)
 	}
 }

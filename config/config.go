@@ -27,8 +27,8 @@ type ProcessStart time.Time
 
 // Core is the core role: storage, delivery, the turn loop and the agent.
 var Core = do.Package(
-	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Languages()), do.Lazy(Texts()), do.Lazy(Admins()), do.Lazy(GroupStore()), do.Lazy(Vault()), do.Lazy(GroupsFile()), do.Lazy(AccessGroups()), do.Lazy(GroupActions()), do.Lazy(GroupTopics()), do.Lazy(Destinations()), do.Lazy(Routing()),
-	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Workspace()), do.Lazy(FileHistory()), do.Lazy(Configuring()), do.Lazy(RestartNote()), do.Lazy(RestartBack()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(ReviewDue()), do.Lazy(ReviewTimer()), do.Lazy(ModuleTools()), do.Lazy(Modules()), do.Lazy(ModuleAdmin()), do.Lazy(ModuleHost()), do.Lazy(HTML2MD()), do.Lazy(Fetcher()), do.Lazy(Read()), do.Lazy(Diagnostics()), do.Lazy(Skills()), do.Lazy(Plans()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Sandbox()), do.Lazy(Builder()), do.Lazy(Places()), do.Lazy(Janitor()), do.Lazy(Stats()), do.Lazy(BackgroundJobs()), do.Lazy(Builds()), do.Lazy(Runner()), do.Lazy(Switch()), do.Lazy(HostExec()), do.Lazy(StatusSources()), do.Lazy(Agent()),
+	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Languages()), do.Lazy(Texts()), do.Lazy(Admins()), do.Lazy(GroupStore()), do.Lazy(NodeKey()), do.Lazy(Vault()), do.Lazy(GroupsFile()), do.Lazy(AccessGroups()), do.Lazy(GroupActions()), do.Lazy(GroupTopics()), do.Lazy(Destinations()), do.Lazy(Routing()),
+	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Workspace()), do.Lazy(FileHistory()), do.Lazy(Configuring()), do.Lazy(RestartNote()), do.Lazy(RestartBack()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(ReviewDue()), do.Lazy(ReviewTimer()), do.Lazy(ModuleTools()), do.Lazy(Modules()), do.Lazy(ModuleAdmin()), do.Lazy(ModuleHost()), do.Lazy(HTML2MD()), do.Lazy(Fetcher()), do.Lazy(Read()), do.Lazy(Diagnostics()), do.Lazy(Skills()), do.Lazy(Plans()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Sandbox()), do.Lazy(Builder()), do.Lazy(Places()), do.Lazy(Janitor()), do.Lazy(Stats()), do.Lazy(BackgroundJobs()), do.Lazy(Builds()), do.Lazy(Runner()), do.Lazy(Switch()), do.Lazy(HostExec()), do.Lazy(BackupStatus()), do.Lazy(StatusSources()), do.Lazy(Agent()),
 	do.Lazy(Translator()), do.Lazy(Telegram()), do.Lazy(TelegramHealth()), do.Lazy(WebhookRecord()), do.Lazy(PublicListener()), do.Lazy(Reactor()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(ReleaseStore()), do.Lazy(CoreComponents()),
 	// Extension points: the interface, then each implementation under its name.
 	do.Lazy(Handler()), do.LazyNamed(handlerAgent, AgentHandler()), do.EagerNamed(handlerEcho, core.Handler(core.EchoHandler)),
@@ -45,6 +45,7 @@ var Core = do.Package(
 	do.Lazy(TransportWatch()), do.LazyNamed(watchTelegram, TelegramWatch()), do.EagerNamed(watchNone, Watched(nil)),
 	do.Lazy(UpdateComponents()), do.LazyNamed(updateWatch, UpdateWatch()), do.EagerNamed(updateNone, Updates(nil)),
 	do.Lazy(UpdateCheckComponents()), do.LazyNamed(updateCheck, UpdateCheck()), do.EagerNamed(updateCheckNone, UpdateChecks(nil)),
+	do.Lazy(BackupComponents()), do.LazyNamed(backupDaily, BackupDaily()), do.EagerNamed(backupNone, Backups(nil)),
 	do.Lazy(Updater()), do.LazyNamed(updaterReleases, UpdaterReleases()), do.EagerNamed(updaterNone, agent.Updater(agent.NoUpdater{})),
 	// The search backends; Read picks one, or none.
 	do.LazyNamed(searchBrave, BraveSearch()), do.LazyNamed(searchDuckDuckGo, DuckDuckGoSearch()),
@@ -115,6 +116,8 @@ const (
 	updateNone         = "update.none"         // a node that never updated
 	updateCheck        = "update.check"        // the daily check for a newer release
 	updateCheckNone    = "update.check.none"   // update.check is off, or the node keeps nothing on disk
+	backupDaily        = "backup.daily"        // the daily backup to the bucket
+	backupNone         = "backup.none"         // no backup section, or a node that keeps nothing on disk
 	updaterReleases    = "updater.releases"    // /update over GitHub's releases
 	updaterNone        = "updater.none"        // a node with no releases folder
 )

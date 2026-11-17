@@ -1156,9 +1156,9 @@ Backups (M7, owner, 2026-11-17,
   R-CFG-10, restores into an empty data directory: it opens every chunk
   and checks the manifest's hashes and the database's integrity before it
   writes a file, refuses absolute paths, `..`, links and devices, and
-  writes nothing on a failure. A lab scenario backs a node up to a local
-  S3-compatible server, restores into a new directory, starts a node on
-  it and finds its memory, modules and cells.
+  writes nothing on a failure. An acceptance test backs a node up to a
+  fake S3-compatible server, restores into a new directory, starts a node
+  on it and finds its memory, modules and cells.
 
 ### 7.9. Observability
 

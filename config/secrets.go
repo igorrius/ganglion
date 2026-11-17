@@ -19,15 +19,15 @@ import (
 func Vault() do.Provider[*vault.Vault] {
 	return func(i do.Injector) (*vault.Vault, error) {
 		b := do.MustInvoke[Bootstrap](i)
-		key, created, err := vault.LoadKey(moduleSecrets(b), b.MasterKey)
+		mk, err := do.Invoke[MasterKey](i)
 		if err != nil {
 			return nil, err
 		}
-		v, err := vault.Open(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, key, time.Now)
+		v, err := vault.Open(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, mk.Key, time.Now)
 		if err != nil {
 			return nil, err
 		}
-		vault.Announce(do.MustInvoke[*slog.Logger](i), b.MasterKey, created, v.Locked())
+		vault.Announce(do.MustInvoke[*slog.Logger](i), b.MasterKey, mk.Created, v.Locked())
 		return v, nil
 	}
 }

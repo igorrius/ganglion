@@ -38,6 +38,33 @@ type File struct {
 	Memory Memory `yaml:"memory"`
 	// Update is how the node follows the core releases (R-UPD-6).
 	Update Update `yaml:"update"`
+	// Backup is the daily encrypted backup to an S3-compatible bucket
+	// (R-BAK-4); nil means backups are off.
+	Backup *Backup `yaml:"backup"`
+}
+
+// DefaultBackupAt is the time of day a backup runs when at is not set.
+const DefaultBackupAt = "03:00"
+
+// Backup is the settings of the daily backup (R-BAK-4). The section is
+// host-only: it is not on config.propose's allowlist (R-CFG-14).
+type Backup struct {
+	// Endpoint is the bucket's S3 endpoint, an https address with no path,
+	// such as https://s3.example.com.
+	Endpoint string `yaml:"endpoint"`
+	// Region is the signing region the provider names.
+	Region string `yaml:"region"`
+	// Bucket is the bucket's name.
+	Bucket string `yaml:"bucket"`
+	// Prefix is the folder in the bucket the archives go to; may be empty.
+	Prefix string `yaml:"prefix"`
+	// AccessKeyID is the id of the access key; it names the key, it is not
+	// the secret.
+	AccessKeyID string `yaml:"access_key_id"`
+	// SecretAccessKey is the access key's secret, as env:NAME or store:NAME.
+	SecretAccessKey SecretRef `yaml:"secret_access_key"`
+	// At is the time of day, HH:MM in node.tz, the backup runs at.
+	At string `yaml:"at"`
 }
 
 // Update is the settings of the node's own updates.
@@ -331,6 +358,9 @@ func (f File) StoreNames() []string { return f.refNames(SchemeStore) }
 // refNames are the names of the file's references of one scheme.
 func (f File) refNames(scheme Scheme) []string {
 	refs := []SecretRef{f.Telegram.Token, f.Agent.Search.BraveKey}
+	if f.Backup != nil {
+		refs = append(refs, f.Backup.SecretAccessKey)
+	}
 	if f.Models != nil {
 		refs = append(refs, f.Models.keyRefs()...)
 	}

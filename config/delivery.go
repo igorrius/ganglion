@@ -304,6 +304,7 @@ func CoreComponents() do.Provider[[]node.Component] {
 		comps = append(comps, do.MustInvoke[Updates](i)...)
 		comps = append(comps, do.MustInvoke[Restarts](i)...)
 		comps = append(comps, do.MustInvoke[UpdateChecks](i)...)
+		comps = append(comps, do.MustInvoke[Backups](i)...)
 		return append(comps, do.MustInvoke[Inbound](i)...), nil
 	}
 }

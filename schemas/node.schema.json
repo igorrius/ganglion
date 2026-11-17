@@ -25,9 +25,50 @@
       "items": { "$ref": "#/$defs/module" }
     },
     "memory": { "description": "The agent's long-term memory by topic (M5, R-MEM-6–9).", "$ref": "#/$defs/memory" },
-    "update": { "description": "How the node follows the core releases (R-UPD-6).", "$ref": "#/$defs/update" }
+    "update": { "description": "How the node follows the core releases (R-UPD-6).", "$ref": "#/$defs/update" },
+    "backup": { "description": "The daily encrypted backup to an S3-compatible bucket (R-BAK-4). Missing means backups are off. Only the host edits this section: the agent cannot change it.", "$ref": "#/$defs/backup" }
   },
   "$defs": {
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "region", "bucket", "access_key_id", "secret_access_key"],
+      "properties": {
+        "endpoint": {
+          "description": "The bucket's S3 endpoint: an https address with a host and no path, such as https://s3.example.com.",
+          "type": "string",
+          "pattern": "^https://[^/?#@]+/?$"
+        },
+        "region": {
+          "description": "The signing region the provider names (R2 takes auto).",
+          "type": "string",
+          "minLength": 1
+        },
+        "bucket": {
+          "description": "The bucket's name. The bucket is addressed path-style, as endpoint/bucket/key.",
+          "type": "string",
+          "minLength": 1
+        },
+        "prefix": {
+          "description": "The folder in the bucket the archives go to. Empty puts them at the top of the bucket.",
+          "type": "string"
+        },
+        "access_key_id": {
+          "description": "The id of the access key. Give the key the right to write into this bucket and nothing else: no right to delete.",
+          "type": "string",
+          "minLength": 1
+        },
+        "secret_access_key": {
+          "description": "The access key's secret, as env:NAME or store:NAME. It is never written in the file.",
+          "$ref": "#/$defs/secretRef"
+        },
+        "at": {
+          "description": "The time of day, in node.tz, the backup runs at: HH:MM. Without it, 03:00.",
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        }
+      }
+    },
     "update": {
       "type": "object",
       "additionalProperties": false,

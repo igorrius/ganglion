@@ -145,6 +145,9 @@ sandbox/harden.go
 sandbox/*_linux.go
 sandbox/*_other.go
 update/**
+backup/**
+config/backup.go
+cmd/backup.go
 internal/ghfetch/**
 config/update.go
 cmd/launch*.go

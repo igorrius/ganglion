@@ -43,6 +43,13 @@ type NodeFiles struct {
 	// MasterKey is the secret store's key file (ADR-0077); "" when the
 	// node keeps none.
 	MasterKey string
+	// BackupWork is the backup's work folder (backup-tmp beside the
+	// database), which holds a plain copy of the database and the archive
+	// while a backup runs, and BackupResult is the file of the last backup's
+	// result (R-BAK-1). Each is denied on its own, so a command cannot read
+	// them when the data folder is not denied as a whole; "" when the node
+	// keeps none.
+	BackupWork, BackupResult string
 }
 
 // HomeSecrets is the default list under home: the secret stores and the
@@ -65,8 +72,9 @@ func HomeSecrets(home string) []string {
 // its settings file wherever it lies (a command that rewrote it would set
 // the admins, the providers' commands and the deny list at the next
 // restart), logs, modules,
-// workspace and language files, the secret store's key file (it lies beside
-// the database, which is not always in a denied folder), each <NAME>_FILE secret in environ, the
+// workspace and language files, the secret store's key file and the backup's
+// work folder and result file (they lie beside the database, which is not
+// always in a denied folder), each <NAME>_FILE secret in environ, the
 // owner's secret stores and autorun files under home, and extra. A path that
 // does not exist yet is kept: it is denied when it appears. Each is made
 // absolute with the symlinks of its existing part resolved, since Landlock
@@ -74,7 +82,8 @@ func HomeSecrets(home string) []string {
 // became a symlink is followed.
 func DenyList(home, cwd string, node NodeFiles, environ, extra []string) []string {
 	raw := slices.Concat([]string{node.Binary, node.Settings}, dataFiles(node.DB, cwd, home),
-		[]string{node.LogDir, node.ModulesDir, node.ClaudeDir, node.Workspace, node.Languages, node.MasterKey, node.Releases})
+		[]string{node.LogDir, node.ModulesDir, node.ClaudeDir, node.Workspace, node.Languages, node.MasterKey, node.Releases,
+			node.BackupWork, node.BackupResult})
 	for _, kv := range environ {
 		if name, v, ok := strings.Cut(kv, "="); ok && strings.HasSuffix(name, "_FILE") && v != "" {
 			raw = append(raw, v)

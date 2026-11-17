@@ -40,6 +40,10 @@ const (
 // the copy is not the file that was hashed: the backup fails (R-BAK-1).
 var ErrChanged = errors.New("backup: a file changed while it was archived")
 
+// ErrIntegrity means the copy of the database does not pass PRAGMA
+// integrity_check, so nothing is uploaded.
+var ErrIntegrity = errors.New("backup: integrity check failed")
+
 // FileInfo is what the manifest records about one archived file.
 type FileInfo struct {
 	SHA256 string `json:"sha256"`
@@ -124,7 +128,7 @@ func integrityCheck(ctx context.Context, path string) (err error) {
 		return fmt.Errorf("backup: integrity check: %w", err)
 	}
 	if len(answers) != 1 || answers[0] != "ok" {
-		return fmt.Errorf("backup: integrity check failed: %s", strings.Join(answers, "; "))
+		return fmt.Errorf("%w: %s", ErrIntegrity, strings.Join(answers, "; "))
 	}
 	return nil
 }

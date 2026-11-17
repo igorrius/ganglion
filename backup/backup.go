@@ -19,12 +19,23 @@ const (
 	// ResultFile is the name, in the data directory, of the file that holds
 	// the last backup's Result.
 	ResultFile = "backup.json"
+	lockName   = "backup.lock"
 	keyTime    = "20060102T150405Z"
 	keySuffix  = ".tar.gz.enc"
 )
 
+// WorkPath is the work folder of a node whose data directory is dataDir.
+func WorkPath(dataDir string) string { return filepath.Join(dataDir, workDirName) }
+
+// ResultPath is the file of the last backup's Result in dataDir.
+func ResultPath(dataDir string) string { return filepath.Join(dataDir, ResultFile) }
+
 // ErrNoResult means no backup has been recorded yet.
 var ErrNoResult = errors.New("backup: no backup has been recorded")
+
+// ErrBusy is a backup refused because another one is running on the same
+// data directory; nothing is recorded for it.
+var ErrBusy = errors.New("backup: another backup of this node is running")
 
 // Uploader puts an object into the bucket. *Client is one; tests use a fake.
 type Uploader interface {
@@ -42,6 +53,11 @@ type Result struct {
 	// LastOK is the time of the last successful backup, carried through
 	// later failures so "no success for 36 hours" can be told from the file.
 	LastOK time.Time `json:"last_ok"`
+	// Kind says in a closed set why a failed backup failed; Detail is a
+	// short fixed-form addition (an HTTP status and the S3 error code). Both
+	// are safe to show: neither holds an address, a path or a secret.
+	Kind   Failure `json:"kind,omitempty"`
+	Detail string  `json:"detail,omitempty"`
 }
 
 // Config says what a Backup archives and where it puts the object.
@@ -101,11 +117,17 @@ func New(db *sql.DB, up Uploader, masterKey []byte, cfg Config, opts ...Option) 
 // the outcome, and records the outcome in <DataDir>/backup.json. It returns
 // the error of the failed step; a failure to record it is not hidden.
 func (b *Backup) Run(ctx context.Context) (Result, error) {
+	release, err := lockRun(b.cfg.DataDir)
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
 	at := b.now().UTC().Truncate(time.Second)
 	res := Result{Time: at, Key: b.objectKey(at)}
 	size, err := b.make(ctx, res.Key, at)
 	if err != nil {
 		res.Key, res.Reason = "", err.Error()
+		res.Kind, res.Detail = classify(err)
 	} else {
 		res.OK, res.Size, res.LastOK = true, size, at
 	}

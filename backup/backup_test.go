@@ -177,3 +177,23 @@ func TestRunEndToEndThroughTheS3Client(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A backup refused because another holds the lock records nothing.
+func TestRunRefusedWhileAnotherRuns(t *testing.T) {
+	dir := t.TempDir()
+	release, err := lockRun(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	b := New(nil, nil, make([]byte, KeySize), DefaultConfig(dir))
+	if _, err := b.Run(t.Context()); !errors.Is(err, ErrBusy) {
+		t.Fatalf("Run = %v, want ErrBusy", err)
+	}
+	if _, err := Last(dir); !errors.Is(err, ErrNoResult) {
+		t.Fatalf("Last = %v, want ErrNoResult", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, workDirName)); !os.IsNotExist(err) {
+		t.Fatalf("work folder: %v, want none", err)
+	}
+}

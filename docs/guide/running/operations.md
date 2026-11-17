@@ -52,7 +52,67 @@ To correct a text, put `<code>.yaml` in the `languages/` directory beside the da
 
 ## Backups
 
-**ganglion has no built-in backup.** You copy the files yourself. Back up the whole data directory, which means:
+A node can back itself up every day to a bucket at any S3-compatible provider. Each copy is encrypted on the node before it leaves, so the provider sees only sealed bytes. Without a `backup:` section there are no backups and `/status` says so; the [manual copy](#backing-up-by-hand) below then is your only protection.
+
+**What a backup holds:** a consistent copy of the database, the whole `workspace/` (persona, memory, module sources, with its git history), `modules/` without `modules/templates`, and `ganglion.yaml`. It never holds `master.key`, `releases/`, `logs/` or the `claude` work folder.
+
+### Turning backups on
+
+1. **Keep the master key off the node first.** A backup opens only with the node's master key (`master.key` in the data directory, or the value of `GANGLION_MASTER_KEY`). Without the key a copy is useless, and a key that lives only on the node is lost with it. Save it in a password manager now: for a key file, `base64 < /data/master.key`; for the variable, its value.
+2. **Make a bucket** at a provider, and a key for it:
+   - *Backblaze B2:* make a private bucket, then an application key limited to that bucket, with read and write rights but **without `deleteFiles`**. Note its key ID and the key itself, and the bucket's S3 endpoint and region from the bucket's page.
+   - *Cloudflare R2:* make a bucket and add a bucket lock rule, so objects cannot be deleted or overwritten for a number of days. Make an API token limited to that bucket, with object write rights, and take its S3 endpoint; the region is `auto`.
+3. **Decide how long copies are kept.** The node never lists or deletes anything in the bucket, so the bucket does it: set a lifecycle rule that removes copies after, say, 30 days.
+4. **Give the node the secret key.** Put it in an environment variable (`env:NAME`), or store it with `ganglion secret set BACKUP_SECRET_ACCESS_KEY` and refer to it as `store:BACKUP_SECRET_ACCESS_KEY`. It is never written in the file.
+5. **Add the section to `ganglion.yaml`** and restart:
+
+```yaml
+backup:
+  endpoint: https://s3.example.com
+  region: us-east-1
+  bucket: my-node-backups
+  prefix: node
+  access_key_id: EXAMPLEKEYID
+  secret_access_key: env:BACKUP_SECRET_ACCESS_KEY
+  at: "03:00"
+```
+
+The node refuses to start if the secret key is not set. See the [reference](configuration.md#backup) for each key. Only you can change this section, on the host: the agent cannot change it or start a backup.
+
+The node makes one backup a day at `at`, in its own time zone (`node.tz`). It makes none at start. To make one now, for a first check or before an update, run as the node's user:
+
+```sh
+ganglion backup now
+```
+
+It prints the object's name and size, or says why it failed and exits with an error. Check that the object appears in the bucket.
+
+### What you see
+
+- `/status` shows a line for backups. It says **off** with no section, the time and size of the last copy when all is well, a **warning** when there has been no good copy for 36 hours (a node that has never made one is given 36 hours after its start), and a **failure** with the reason when the last run failed.
+- When a backup fails, the admins get one message in their private chat with the reason in plain words (the bucket refused the upload and with what status, could not be reached, or an error the log describes). It is sent once, however many days the failure lasts; when a backup works again, one more message tells you the size and the time.
+- The node's metrics count backups by outcome and show the time and size of the last good one.
+
+### Restoring
+
+Restore on any machine that has the `ganglion` binary, into a directory that does not exist or is empty. It never writes over a node's data.
+
+1. **Get the archive.** Download the `.tar.gz.enc` object you want with the provider's own tool or web page; the node's key cannot read the bucket.
+2. **Have the master key** from your password manager, as a file of the 32 raw bytes (what `master.key` is) or as the variable `GANGLION_MASTER_KEY` (base64).
+3. **Restore:**
+
+```sh
+ganglion backup restore --data /restore/node --key-file /safe/master.key ganglion-20260101T030000Z.tar.gz.enc
+```
+
+   Without `--key-file` the key is read from `GANGLION_MASTER_KEY` or `GANGLION_MASTER_KEY_FILE`. The command makes no key. It opens the whole archive and checks every file and the database before it writes anything, and it leaves nothing behind when it fails. A wrong key, a damaged archive or a directory that is not empty is refused.
+4. **Put the key back.** Copy the master key into the restored directory as `master.key`, or set `GANGLION_MASTER_KEY`, then start the node on it: `ganglion run --db /restore/node/ganglion.db`. The restored `ganglion.yaml` is the one the old node had; check the paths and secrets it names (a secret in an environment variable must be set on the new machine).
+
+Restore once before you need it, on a spare machine, so the first time is not during a loss.
+
+### Backing up by hand
+
+Without a bucket you copy the files yourself. Back up the whole data directory, which means:
 
 - `ganglion.db` (the database),
 - `master.key` (or the value of `GANGLION_MASTER_KEY`, saved separately),
