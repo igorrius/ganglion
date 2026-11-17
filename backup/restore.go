@@ -242,6 +242,12 @@ func (x *extractor) entry(hdr *tar.Header, r io.Reader) error {
 	}
 	x.seen[name] = true
 	target := filepath.Join(x.root, filepath.FromSlash(name))
+	// cleanName already refuses a name that leaves root; this second check
+	// on the joined path keeps that true if cleanName ever changes.
+	rel, err := filepath.Rel(x.root, target)
+	if err != nil || strings.HasPrefix(rel, "..") || !filepath.IsLocal(rel) {
+		return fmt.Errorf("%w: %q leaves the data directory", ErrUnsafe, hdr.Name)
+	}
 	if hdr.Typeflag == tar.TypeDir {
 		if _, listed := x.m.Files[name]; listed {
 			return fmt.Errorf("%w: %q is a folder but the manifest lists a file", ErrManifest, name)
