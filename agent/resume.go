@@ -303,7 +303,7 @@ func (a *Agent) runApproved(ctx context.Context, t *turn, it pending.Item) pendi
 	// unapproved reads it (ADR-0040). The approved plan is asked too, so a
 	// pressed plan keeps what it still lists.
 	c.Speak, c.Approved, c.Planned = a.speaker(ctx, t), true, a.planned(ctx, it.Conv)
-	c.KnownURL, c.On = knownURLs(t.state.Messages).has, t.state.Tools
+	c.KnownURL, c.On, c.TurnedOn = knownURLs(t.state.Messages).has, t.state.Tools, t.state.Tools
 	if o, refused := a.refuseBadArgs(ctx, c); refused {
 		return o
 	}

@@ -131,11 +131,19 @@ func (s *serverConn) settle(ctx context.Context, t Tool, c tool.Call, err error)
 	case errors.As(err, &rpc):
 		// The server's words are outside content, not the node's error.
 		return tool.Result{Text: fmt.Sprintf("%s%d %s", refusedPrefix, rpc.Code, rpc.Message), External: true}, outcomeToolError, nil
-	case errors.Is(err, ErrTooLarge):
-		return tool.Result{}, outcomeTooLarge, &nodeError{text: tooLargeText(t, c.Name), kind: ErrTooLarge}
 	case errors.Is(err, ErrUnauthorized):
 		s.callFailed(StateUnauthorized)
 		return tool.Result{}, outcomeRefused, &nodeError{text: s.cfg.Name + " needs a new sign-in", kind: ErrUnauthorized}
+	case NotSent(err):
+		// The session could not be started or nothing connected: the call
+		// never left, whatever the reason (R-MCP-8).
+		return s.noAnswer(ctx, t, c, err)
+	case errors.Is(err, ErrRedirect):
+		// The server answered with a redirect the client refused: it did
+		// not run the call.
+		return tool.Result{}, outcomeRefused, &nodeError{text: c.Name + ": " + s.cfg.Name + " redirected the call elsewhere; it was not run", kind: ErrRedirect}
+	case errors.Is(err, ErrTooLarge):
+		return tool.Result{}, outcomeTooLarge, &nodeError{text: tooLargeText(t, c.Name), kind: ErrTooLarge}
 	case errors.Is(err, ErrBadArguments):
 		return tool.Result{}, outcomeRefused, &nodeError{text: c.Name + ": the arguments must be a JSON object", kind: ErrBadArguments}
 	case errors.As(err, &status) && status.Code < 500, errors.Is(err, ErrForbidden):

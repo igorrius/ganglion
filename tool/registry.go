@@ -156,6 +156,19 @@ func (r *Registry) SessionSpecs(admin bool, on []string) []Spec {
 	return out
 }
 
+// OnDemandSpecs are the on-demand tools named in on that are on offer to
+// the caller, in name order: what SessionSpecs adds to Specs. The agent
+// takes them at every step, the rest once a turn (R-MCP-4a).
+func (r *Registry) OnDemandSpecs(admin bool, on []string) []Spec {
+	var out []Spec
+	for _, h := range slices.Concat(r.fixedTools(), r.dynamicTools()) {
+		if s, ok := offered(h, admin); ok && s.OnDemand && slices.Contains(on, s.Name) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // fixedTools are the fixed tools in name order.
 func (r *Registry) fixedTools() []Handler {
 	out := make([]Handler, len(r.names))
@@ -228,7 +241,7 @@ func (r *Registry) Run(ctx context.Context, c Call) (Result, error) {
 		return Result{}, fmt.Errorf("tool: %s: admin only: %w", c.Name, ErrForbidden)
 	}
 	if spec.OnDemand && !slices.Contains(c.On, c.Name) {
-		return Result{}, fmt.Errorf("tool: %s: not turned on in this session; mcp.use turns it on: %w", c.Name, ErrUnknown)
+		return Result{}, fmt.Errorf("tool: %s: not on in this step; mcp.use turns it on from the next step: %w", c.Name, ErrUnknown)
 	}
 	if where := r.where.Where(c.Name); where != PlacementLocal {
 		return Result{}, fmt.Errorf("tool: %s runs at %q: %w", c.Name, where, ErrNotLocal)

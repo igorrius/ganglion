@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -684,5 +687,90 @@ func TestHubNeverLeaksTheCredential(t *testing.T) {
 	}
 	if err == nil {
 		t.Error("a call answered with status 500 returned no error")
+	}
+}
+
+// A call that needs a new session whose start fails was never sent: a tool
+// that is not read-only is "unreachable", not "outcome unknown" nor "over
+// 4 MB" (R-MCP-8).
+func TestHubCallWhoseSessionCannotStartWasNotSent(t *testing.T) {
+	raws := []json.RawMessage{mcpclienttest.Tool("buy", "Buy.", "", false)}
+	srv := mcpclienttest.New(t, mcpclienttest.Options{Tools: raws, SessionID: "s"})
+	r := newRig(t)
+	r.hub.Set([]mcpclient.Server{config("shop", srv, raws, approve(tool.PolicyConfirm, "buy"))})
+	r.await(t, "shop", mcpclient.StateConnected)
+	srv.ExpireSessions()
+	srv.Update(func(o *mcpclienttest.Options) {
+		o.Intercept = func(w http.ResponseWriter, _ *http.Request, req mcpclienttest.Request) bool {
+			if req.Method != "initialize" {
+				return false
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(bytes.Repeat([]byte(" "), mcpclient.MaxInitBytes+1))
+			return true
+		}
+	})
+	_, err := call(handler(t, r.hub, "shop.buy"), `{}`)
+	if err == nil || err.Error() != "shop is unreachable; try again later" ||
+		errors.Is(err, mcpclient.ErrOutcomeUnknown) || errors.Is(err, mcpclient.ErrTooLarge) {
+		t.Fatalf("err = %v", err)
+	}
+	// The one the server turned away with 404 for the dropped session; the
+	// repeat was never sent.
+	if n := srv.Count("tools/call"); n != 1 {
+		t.Fatalf("the call reached the server %d times, want the one refused with 404", n)
+	}
+}
+
+// A 401 on the server's own stream means the credential no longer works:
+// the server needs a new sign-in (R-MCP-6), not a plain retry.
+func TestHubListen401NeedsASignIn(t *testing.T) {
+	raws := []json.RawMessage{mcpclienttest.Tool("search", "Search.", "", true)}
+	backend := mcpclienttest.New(t, mcpclienttest.Options{Tools: raws})
+	u, _ := url.Parse(backend.URL)
+	proxy := httputil.NewSingleHostReverseProxy(u)
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(front.Close)
+	r := newRig(t)
+	cfg := config("shop", backend, raws, approve(tool.PolicyAuto, "search"))
+	cfg.URL = front.URL
+	r.hub.Set([]mcpclient.Server{cfg})
+	r.await(t, "shop", mcpclient.StateUnauthorized)
+}
+
+// The 48 KB of a session's definitions count a tool on from a server whose
+// list changed since: its approved copy is still the one the session holds
+// (R-MCP-4a).
+func TestHubLimitCountsToolsOfAServerThatIsNotConnected(t *testing.T) {
+	big := `{"type":"object","properties":{"a":{"description":"` + strings.Repeat("x", 30<<10) + `"}}}`
+	shopRaws := []json.RawMessage{mcpclienttest.Tool("a", "A.", big, true)}
+	shop := mcpclienttest.New(t, mcpclienttest.Options{Tools: shopRaws, ListenStream: true})
+	otherRaws := []json.RawMessage{mcpclienttest.Tool("c", "C.", big, true)}
+	other := mcpclienttest.New(t, mcpclienttest.Options{Tools: otherRaws})
+	r := newRig(t)
+	shopCfg := config("shop", shop, shopRaws, approve(tool.PolicyAuto, "a"))
+	r.hub.Set([]mcpclient.Server{shopCfg})
+	r.await(t, "shop", mcpclient.StateConnected)
+	r.hub.Set([]mcpclient.Server{shopCfg, config("other", other, otherRaws, approve(tool.PolicyAuto, "c"))})
+	r.await(t, "other", mcpclient.StateConnected)
+	<-shop.Opened()
+	shop.Update(func(o *mcpclienttest.Options) {
+		o.Tools = []json.RawMessage{mcpclienttest.Tool("a", "A, changed.", big, true)}
+	})
+	shop.NotifyListChanged()
+	r.await(t, "shop", mcpclient.StateToolsChanged)
+
+	use := r.hub.Tools()[1]
+	on := []string{"shop.a"}
+	res, err := use.Run(context.Background(), tool.Call{Name: mcpclient.UseTool, Admin: true, On: on, TurnedOn: on,
+		Args: json.RawMessage(`{"server":"other","tools":["c"]}`)})
+	if err == nil || !strings.Contains(err.Error(), "bytes of tool definitions") || len(res.On) != 0 {
+		t.Fatalf("mcp.use = %+v, %v; want the limit, counting shop.a", res, err)
 	}
 }

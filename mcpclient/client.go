@@ -274,7 +274,7 @@ type answer struct {
 // call (R-MCP-1).
 func (c *Client) call(ctx context.Context, method string, params any, limit int64) (json.RawMessage, error) {
 	if err := c.ensure(ctx); err != nil {
-		return nil, err
+		return nil, &setupError{cause: err}
 	}
 	stale := c.session()
 	a, err := c.exchange(ctx, method, params, limit)
@@ -282,7 +282,7 @@ func (c *Client) call(ctx context.Context, method string, params any, limit int6
 		return a.result, err
 	}
 	if err := c.renew(ctx, stale); err != nil {
-		return nil, err
+		return nil, &setupError{cause: err}
 	}
 	a, err = c.exchange(ctx, method, params, limit)
 	return a.result, err
@@ -708,8 +708,10 @@ func originOf(u *url.URL) origin {
 }
 
 // checkRedirect is the client's redirect policy (R-MCP-5): at most
-// maxRedirects, never from https to http, and the credential and the
-// session id go only to the server's origin.
+// maxRedirects, never from https to http, and the credential, the session
+// id and the Referer go only to the server's origin. A message (a POST)
+// never follows a redirect to another origin: a 307 or 308 would carry its
+// body, a tools/call with the model's arguments, there.
 func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) > maxRedirects {
 		return ErrRedirect
@@ -718,6 +720,10 @@ func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
 		return ErrRedirect
 	}
 	if originOf(req.URL) != c.origin {
+		if via[0].Method == http.MethodPost {
+			return ErrRedirect
+		}
+		req.Header.Del("Referer")
 		req.Header.Del(headerSession)
 		if name, ok := req.Context().Value(authHeaderKey{}).(string); ok {
 			req.Header.Del(name)

@@ -112,3 +112,35 @@ func TestStateRoundTripsTools(t *testing.T) {
 		t.Fatalf("an empty list is written: %s", raw)
 	}
 }
+
+// Abuse: a tool mcp.use turns on is not callable later in the same step,
+// in the same answer of an API model (R-MCP-4a: from the next step).
+func TestOnDemandToolNotCallableInTheSameStep(t *testing.T) {
+	search := &onDemandTool{fakeTool{name: "shop.search", result: tool.Result{Text: "found"}}}
+	e := newEnv(t, Config{}, registry(t, newUse(), search))
+	e.smart.push(callTools("mcp.use", "shop.search"), say("ok"))
+	e.turn(t, message("telegram:user:42", "Igor", "go"))
+	if len(search.calls) != 0 {
+		t.Fatalf("a tool turned on in this step ran in it: %+v", search.calls)
+	}
+	if st := e.state(t); !slices.Equal(st.Tools, []string{"shop.search"}) {
+		t.Fatalf("state tools = %v", st.Tools)
+	}
+}
+
+// Abuse: a CLI provider runs its whole tool loop in one step; a name it was
+// not offered at the start of the run reaches the agent all the same, and
+// a tool mcp.use turned on during the run stays refused until the next.
+func TestOnDemandToolNotCallableInTheSameCLIRun(t *testing.T) {
+	search := &onDemandTool{fakeTool{name: "shop.search", result: tool.Result{Text: "found"}}}
+	use := newUse()
+	e := newEnv(t, Config{}, registry(t, use, search))
+	e.smart.push(viaMCP("mcp_use", "shop.search"))
+	e.turn(t, message("telegram:user:42", "Igor", "go"))
+	if len(use.calls) != 1 {
+		t.Fatalf("mcp.use ran %d times over the bridge, want 1", len(use.calls))
+	}
+	if len(search.calls) != 0 {
+		t.Fatalf("a tool turned on in this CLI run ran in it: %+v", search.calls)
+	}
+}

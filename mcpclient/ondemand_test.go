@@ -37,7 +37,7 @@ func meta(t *testing.T, hub *mcpclient.Hub, name string) tool.Handler {
 }
 
 func run(h tool.Handler, on []string, args string) (tool.Result, error) {
-	return h.Run(context.Background(), tool.Call{Name: h.Spec().Name, Admin: true, On: on, Args: json.RawMessage(args)})
+	return h.Run(context.Background(), tool.Call{Name: h.Spec().Name, Admin: true, On: on, TurnedOn: on, Args: json.RawMessage(args)})
 }
 
 func TestMetaToolsAreLocalSafeAndGated(t *testing.T) {
@@ -80,9 +80,9 @@ func TestMcpToolsListsTheServersAndTheirTools(t *testing.T) {
 		t.Fatalf("tools = %+v, %v", res, err)
 	}
 	lines := strings.Split(res.Text, "\n")
-	if len(lines) != 3 || lines[0] != "shop.search [auto]: Search the shop." ||
-		!strings.HasPrefix(lines[1], "shop.secret [forbidden]") || strings.Contains(lines[1], "Hidden") ||
-		!strings.HasPrefix(lines[2], "shop.buy [confirm]: long long") || len([]rune(lines[2])) > 260 {
+	if len(lines) != 3 || lines[1] != "shop.search [auto]: Search the shop." ||
+		!strings.HasPrefix(lines[2], "shop.secret [forbidden]") || strings.Contains(lines[2], "Hidden") ||
+		!strings.HasPrefix(lines[0], "shop.buy [confirm]: long long") || len([]rune(lines[0])) > 260 {
 		t.Fatalf("lines = %q", lines)
 	}
 	if _, err := run(h, nil, `{"server":"nope"}`); err == nil || !strings.Contains(err.Error(), "shop") {

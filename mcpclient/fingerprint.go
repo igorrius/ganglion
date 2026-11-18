@@ -11,16 +11,12 @@ import (
 	"github.com/igorrius/ganglion/tool"
 )
 
-// fingerprinted are the fields of a listed tool the fingerprint covers: all
-// the text the model reads and the schema it calls by (R-MCP-7).
-var fingerprinted = []string{"name", "title", "description", "inputSchema", "annotations"}
-
 // Fingerprint is the pin of a tool list: SHA-256 over every listed tool,
-// the skipped ones too, each reduced to its name, title, description,
-// input schema and annotations, in canonical JSON and sorted by name. The
-// order of the tools and of the keys does not change it; any change of a
-// field's text does (R-MCP-7). An entry that is not a JSON object counts as
-// its own bytes.
+// the skipped ones too, each reduced to the members Parse reads (covered)
+// in canonical JSON, sorted by name. The order of the tools and of the
+// keys does not change it, and neither does Parse's result; any change of
+// a member's text does (R-MCP-7). An entry that is not a JSON object counts
+// as its own bytes.
 func Fingerprint(raw []json.RawMessage) string {
 	type entry struct{ name, canonical string }
 	entries := make([]entry, len(raw))
@@ -42,19 +38,14 @@ func Fingerprint(raw []json.RawMessage) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// reduce is a tool entry's name and canonical JSON of the covered fields.
+// reduce is a tool entry's name and canonical JSON of its covered members,
+// the same members, by the same exact names, that Parse reads.
 func reduce(r json.RawMessage) (name, canonical string) {
-	var m map[string]json.RawMessage
-	if json.Unmarshal(r, &m) != nil || m == nil {
+	kept, ok := members(r)
+	if !ok {
 		return "", string(bytes.TrimSpace(r))
 	}
-	kept := make(map[string]json.RawMessage, len(fingerprinted))
-	for _, k := range fingerprinted {
-		if v, ok := m[k]; ok {
-			kept[k] = v
-		}
-	}
-	_ = json.Unmarshal(kept["name"], &name)
+	_ = json.Unmarshal(kept[memberName], &name)
 	b, err := json.Marshal(kept)
 	if err != nil {
 		return name, string(bytes.TrimSpace(r))

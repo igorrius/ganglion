@@ -2,7 +2,9 @@ package mcpclient
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -34,13 +36,14 @@ type SkipReason string
 
 // Reasons.
 const (
-	SkipTooMany     SkipReason = "too_many"    // past the 128th
+	SkipTooMany     SkipReason = "too_many"    // past the 128th by name
 	SkipDescription SkipReason = "description" // over MaxDescription
 	SkipSchema      SkipReason = "schema"      // over MaxSchema
 	SkipName        SkipReason = "name"        // the full name is over MaxName
-	SkipCollision   SkipReason = "collision"   // the name is an earlier tool's
+	SkipCollision   SkipReason = "collision"   // another listed tool has the same name
 	SkipEmpty       SkipReason = "empty"       // no usable name
 	SkipBadSchema   SkipReason = "bad_schema"  // the input schema is not a JSON object
+	SkipMalformed   SkipReason = "malformed"   // not an object, or a member of the wrong type
 )
 
 // Skip is a listed tool that was not taken.
@@ -83,68 +86,148 @@ func ToolName(server, own string) string {
 	}, strings.ToLower(short))
 }
 
-// wireTool is a tool as the server's list has it.
+// covered are the members of a listed tool the node reads and the
+// fingerprint covers, by their exact names. A tool is decoded only from
+// these members, so a member that differs in case ("DESCRIPTION") is read
+// by neither: encoding/json would match it case-insensitively, and the
+// model would read text the fingerprint never saw (R-MCP-7).
+var covered = []string{memberName, memberTitle, memberDescription, memberSchema, memberAnnotations}
+
+// Members of a listed tool, by their exact names.
+const (
+	memberName        = "name"
+	memberTitle       = "title"
+	memberDescription = "description"
+	memberSchema      = "inputSchema"
+	memberAnnotations = "annotations"
+)
+
+// members is a listed tool's covered members, by their exact names; false
+// when the entry is not a JSON object. A member written twice is its last
+// value, here and in the fingerprint alike.
+func members(r json.RawMessage) (map[string]json.RawMessage, bool) {
+	var all map[string]json.RawMessage
+	if json.Unmarshal(r, &all) != nil || all == nil {
+		return nil, false
+	}
+	out := make(map[string]json.RawMessage, len(covered))
+	for _, k := range covered {
+		if v, ok := all[k]; ok {
+			out[k] = v
+		}
+	}
+	return out, true
+}
+
+// wireTool is a tool as the server's list has it, read from its covered
+// members only.
 type wireTool struct {
-	Name        string          `json:"name"`
-	Title       string          `json:"title"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema"`
-	Annotations struct {
-		ReadOnly    bool `json:"readOnlyHint"`
-		Destructive bool `json:"destructiveHint"`
-	} `json:"annotations"`
+	Name, Title, Description string
+	InputSchema              json.RawMessage
+	ReadOnly, Destructive    bool
+}
+
+// decodeTool reads a tool from its covered members; false when a member
+// has the wrong type. Annotations are read by their exact names too.
+func decodeTool(m map[string]json.RawMessage) (wireTool, bool) {
+	w := wireTool{InputSchema: m[memberSchema]}
+	for k, dst := range map[string]*string{memberName: &w.Name, memberTitle: &w.Title, memberDescription: &w.Description} {
+		if !decodeOptional(m[k], dst) {
+			return w, false
+		}
+	}
+	if raw, ok := m[memberAnnotations]; ok && string(bytes.TrimSpace(raw)) != jsonNull {
+		var a map[string]json.RawMessage
+		if json.Unmarshal(raw, &a) != nil {
+			return w, false
+		}
+		if !decodeOptional(a["readOnlyHint"], &w.ReadOnly) || !decodeOptional(a["destructiveHint"], &w.Destructive) {
+			return w, false
+		}
+	}
+	return w, true
+}
+
+// decodeOptional decodes raw into dst when it is present and not null.
+func decodeOptional[T any](raw json.RawMessage, dst *T) bool {
+	if len(raw) == 0 || string(bytes.TrimSpace(raw)) == jsonNull {
+		return true
+	}
+	return json.Unmarshal(raw, dst) == nil
 }
 
 // emptySchema is the schema of a tool that lists none.
 var emptySchema = json.RawMessage(`{"type":"object","properties":{}}`)
 
-// Parse takes the tools of server from the raw entries of its list, in
-// order, within the limits above (R-MCP-4). The skipped ones are named; a
-// name that collides with an earlier tool's is the later one skipped.
+// Parse takes the tools of server from the raw entries of its list within
+// the limits above (R-MCP-4). The result does not depend on the order of
+// the entries, as the fingerprint does not (R-MCP-7): every tool of a group
+// whose names collide is skipped, not the later ones, and the cap of
+// MaxTools keeps the first by name. Tools and skips come sorted by name.
 func Parse(server string, raw []json.RawMessage) Listed {
 	var out Listed
-	seen := map[string]bool{}
-	for i, r := range raw {
-		var w wireTool
-		if json.Unmarshal(r, &w) != nil {
-			out.Skipped = append(out.Skipped, Skip{Reason: SkipEmpty})
-			continue
-		}
-		t, why := takeTool(server, w, i, seen)
+	byName := map[string][]Tool{}
+	for _, r := range raw {
+		t, own, why := takeTool(server, r)
 		if why != "" {
-			out.Skipped = append(out.Skipped, Skip{Name: cut64(w.Name), Reason: why})
+			out.Skipped = append(out.Skipped, Skip{Name: cut64(own), Reason: why})
 			continue
 		}
-		seen[t.Name] = true
+		byName[t.Name] = append(byName[t.Name], t)
+	}
+	var taken []Tool
+	for _, group := range byName {
+		if len(group) > 1 {
+			for _, t := range group {
+				out.Skipped = append(out.Skipped, Skip{Name: cut64(t.Own), Reason: SkipCollision})
+			}
+			continue
+		}
+		taken = append(taken, group[0])
+	}
+	slices.SortFunc(taken, func(a, b Tool) int { return strings.Compare(a.Name, b.Name) })
+	for i, t := range taken {
+		if i >= MaxTools {
+			out.Skipped = append(out.Skipped, Skip{Name: cut64(t.Own), Reason: SkipTooMany})
+			continue
+		}
 		out.Tools = append(out.Tools, t)
 	}
+	slices.SortFunc(out.Skipped, func(a, b Skip) int {
+		return cmp.Or(strings.Compare(a.Name, b.Name), strings.Compare(string(a.Reason), string(b.Reason)))
+	})
 	return out
 }
 
-// takeTool checks w against the limits; why is "" when it is taken.
-func takeTool(server string, w wireTool, index int, seen map[string]bool) (t Tool, why SkipReason) {
+// takeTool checks one entry against the limits; why is "" when it is
+// taken, and own is the server's name for it either way.
+func takeTool(server string, r json.RawMessage) (t Tool, own string, why SkipReason) {
+	m, ok := members(r)
+	if !ok {
+		return t, "", SkipMalformed
+	}
+	w, ok := decodeTool(m)
+	if !ok {
+		return t, w.Name, SkipMalformed
+	}
 	short := ToolName(server, w.Name)
 	full := server + "." + short
 	switch {
-	case index >= MaxTools:
-		return t, SkipTooMany
 	case short == "":
-		return t, SkipEmpty
+		return t, w.Name, SkipEmpty
 	case utf8.RuneCountInString(full) > MaxName:
-		return t, SkipName
+		return t, w.Name, SkipName
 	case utf8.RuneCountInString(w.Description) > MaxDescription:
-		return t, SkipDescription
+		return t, w.Name, SkipDescription
 	case len(w.InputSchema) > MaxSchema:
-		return t, SkipSchema
-	case seen[full]:
-		return t, SkipCollision
+		return t, w.Name, SkipSchema
 	}
 	schema, ok := normalSchema(w.InputSchema)
 	if !ok {
-		return t, SkipBadSchema
+		return t, w.Name, SkipBadSchema
 	}
 	return Tool{Own: w.Name, Short: short, Name: full, Title: w.Title, Description: w.Description, InputSchema: schema,
-		ReadOnly: w.Annotations.ReadOnly, Destructive: w.Annotations.Destructive}, ""
+		ReadOnly: w.ReadOnly, Destructive: w.Destructive}, w.Name, ""
 }
 
 // normalSchema is the schema as a JSON object that declares "properties",

@@ -150,10 +150,14 @@ type Call struct {
 	// Speak writes what the person reads in their language (R-LANG-2); a
 	// tool's result and errors stay in English, since a model reads them.
 	Speak texts.Speaker
-	// On are the on-demand tools the session turned on (R-MCP-4a).
-	On   []string
-	Name string
-	Args json.RawMessage
+	// On are the on-demand tools this call may run: those the session had
+	// on at the start of the step (R-MCP-4a).
+	On []string
+	// TurnedOn are all the on-demand tools the session turned on so far,
+	// this step's included; mcp.use counts its limits on them (R-MCP-4a).
+	TurnedOn []string
+	Name     string
+	Args     json.RawMessage
 }
 
 // Key identifies the call across reruns of its turn: the idempotency key

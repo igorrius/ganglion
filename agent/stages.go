@@ -224,10 +224,13 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 // (shutdown) is an error, so the event is offered again.
 func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Message) (added []provider.Message, text string, end turns.Outcome, err error) {
 	task := router.TaskReq{Purpose: router.PurposeChat, Turn: true, Privacy: t.state.privacy()}
+	base := a.toolSpecs(t)
 	for t.record.Steps < a.cfg.MaxSteps {
-		// The list is taken at every step: a tool mcp.use turned on joins
-		// the next step's (R-MCP-4a).
-		tools := a.toolSpecs(t)
+		// The on-demand part of the list is taken at every step, the rest
+		// once a turn: a tool mcp.use turned on joins the next step's, and
+		// is callable only from then (R-MCP-4a).
+		t.on = slices.Clone(t.state.Tools)
+		tools := slices.Concat(base, a.onDemandSpecs(t))
 		task.Tools = len(tools) > 0
 		var exec provider.Exec // a CLI provider runs the calls itself; no tools, nothing to run
 		if len(tools) > 0 {

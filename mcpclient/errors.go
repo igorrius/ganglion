@@ -65,12 +65,24 @@ func (e *transportError) Is(target error) bool {
 }
 
 // NotSent reports whether err is a request that provably never reached the
-// server: no connection was made for it (R-MCP-8). Anything else that has
-// no answer may have been processed.
+// server: no connection was made for it, or starting the session it needed
+// failed, so it was never sent (R-MCP-8). Anything else that has no answer
+// may have been processed.
 func NotSent(err error) bool {
 	var te *transportError
-	return errors.As(err, &te) && te.notSent
+	var se *setupError
+	return errors.As(err, &se) || errors.As(err, &te) && te.notSent
 }
+
+// setupError is a request that was never sent because starting the session
+// it needed failed. It unwraps to that failure, so ErrUnauthorized still
+// tells a caller the server needs a new sign-in.
+type setupError struct{ cause error }
+
+func (e *setupError) Error() string {
+	return "mcpclient: the session could not be started; the request was not sent: " + e.cause.Error()
+}
+func (e *setupError) Unwrap() error { return e.cause }
 
 // credentialError is an Auth that gave no credential. Its text never holds
 // the Auth's own error; Unwrap still lets a caller test for it.

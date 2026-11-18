@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -53,7 +55,7 @@ func TestClientHandshakeListAndCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(l.Tools) != 2 || l.Tools[1].Name != "shop.buy" || l.Fingerprint == "" {
+	if len(l.Tools) != 2 || l.Tools[0].Name != "shop.buy" || l.Fingerprint == "" {
 		t.Fatalf("listed %+v", l)
 	}
 	res, err := c.CallTool(ctx, "search", json.RawMessage(`{"q":"x"}`))
@@ -394,11 +396,19 @@ func TestClientRPCErrorIsTyped(t *testing.T) {
 	}
 }
 
-// Redirects: the same origin keeps the credential, another origin never
-// gets it nor the session id, https to http is refused, and more than three
+// Redirects: the same origin keeps the credential; a message (a POST)
+// never follows a redirect to another origin, which would carry the
+// call's body there; a GET that does gets neither the credential, the
+// session id nor the Referer; https to http is refused, and more than three
 // is refused.
 func TestClientRedirects(t *testing.T) {
 	other := mcpclienttest.New(t, mcpclienttest.Options{Tools: tools("a")})
+	var otherGET http.Header
+	otherStream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		otherGET = r.Header.Clone()
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}))
+	t.Cleanup(otherStream.Close)
 	to := func(target string) *mcpclienttest.Server {
 		return mcpclienttest.New(t, mcpclienttest.Options{Intercept: func(w http.ResponseWriter, r *http.Request, _ mcpclienttest.Request) bool {
 			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
@@ -409,14 +419,35 @@ func TestClientRedirects(t *testing.T) {
 
 	away := to(other.URL)
 	c := mcpclient.NewClient("shop", away.URL, auth, testTimeout)
-	if _, err := c.ListTools(context.Background()); err != nil {
-		t.Fatalf("a redirect to another origin: %v", err)
+	if _, err := c.ListTools(context.Background()); !errors.Is(err, mcpclient.ErrRedirect) {
+		t.Fatalf("a POST redirected to another origin: %v, want ErrRedirect", err)
 	}
-	if got := lastOf(other, "initialize"); got.Header.Get("X-Api-Key") != "" {
-		t.Errorf("the other origin got the credential: %v", got.Header)
+	if n := len(other.Requests()); n != 0 {
+		t.Errorf("the other origin got %d messages", n)
 	}
 	if got := lastOf(away, "initialize"); got.Header.Get("X-Api-Key") != "sekret-value" {
 		t.Errorf("the server's own origin did not get it: %v", got.Header)
+	}
+
+	// The server's own origin answers the messages and sends its GET stream
+	// elsewhere.
+	backend := mcpclienttest.New(t, mcpclienttest.Options{SessionID: "s", Tools: tools("a")})
+	backendURL, _ := url.Parse(backend.URL)
+	proxy := httputil.NewSingleHostReverseProxy(backendURL)
+	stream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			http.Redirect(w, r, otherStream.URL, http.StatusTemporaryRedirect)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(stream.Close)
+	err := mcpclient.NewClient("shop", stream.URL, auth, testTimeout).Listen(context.Background())
+	if !errors.Is(err, mcpclient.ErrNoStream) || otherGET == nil {
+		t.Fatalf("a GET redirected to another origin: %v, reached it: %v", err, otherGET != nil)
+	}
+	if otherGET.Get("X-Api-Key") != "" || otherGET.Get("Mcp-Session-Id") != "" || otherGET.Get("Referer") != "" {
+		t.Errorf("the other origin got the credential, the session or the Referer: %v", otherGET)
 	}
 
 	same := mcpclienttest.New(t, mcpclienttest.Options{Tools: tools("a")})
@@ -447,7 +478,7 @@ func TestClientRedirects(t *testing.T) {
 			return true
 		}
 	})
-	err := mcpclient.NewClient("shop", loop.URL, auth, testTimeout).Initialize(context.Background())
+	err = mcpclient.NewClient("shop", loop.URL, auth, testTimeout).Initialize(context.Background())
 	if !errors.Is(err, mcpclient.ErrRedirect) || strings.Contains(err.Error(), "sekret-value") || strings.Contains(err.Error(), loop.URL) {
 		t.Errorf("a redirect loop: %v", err)
 	}

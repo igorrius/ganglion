@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -170,10 +171,10 @@ func (t useTool) Run(_ context.Context, c tool.Call) (tool.Result, error) {
 	if err != nil {
 		return tool.Result{}, err
 	}
-	if err := t.hub.withinLimits(c.On, picked); err != nil {
+	if err := t.hub.withinLimits(c.TurnedOn, picked); err != nil {
 		return tool.Result{}, err
 	}
-	return tool.Result{Text: onText(c.On, picked), On: names(picked)}, nil
+	return tool.Result{Text: onText(c.TurnedOn, picked), On: names(picked)}, nil
 }
 
 // pick resolves the names the model gave, short, full or the server's own,
@@ -219,13 +220,21 @@ func (h *Hub) withinLimits(on []string, picked []Tool) error {
 	return nil
 }
 
-// definitionBytes is the size of the definitions of the named tools as the
-// hub offers them now; a tool it no longer offers is not counted.
+// definitionBytes is the size of the definitions of the named tools in the
+// approved copies the hub holds, whether the server is connected now or
+// not: a tool on from a server that is unreachable or whose list changed
+// still counts. A tool no server has any longer is not counted.
 func (h *Hub) definitionBytes(names []string) int {
+	h.mu.RLock()
+	conns := slices.Collect(maps.Values(h.servers))
+	h.mu.RUnlock()
 	n := 0
-	for _, hd := range h.Handlers() {
-		if s := hd.Spec(); slices.Contains(names, s.Name) {
-			n += len(s.Name) + len(s.Description) + len(s.InputSchema)
+	for _, s := range conns {
+		_, tools := s.snapshot()
+		for _, t := range tools {
+			if slices.Contains(names, t.Name) {
+				n += len(t.Name) + len(describe(s.cfg.Name, t)) + len(t.InputSchema)
+			}
 		}
 	}
 	return n

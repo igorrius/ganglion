@@ -174,6 +174,12 @@ func (s *serverConn) listen(ctx context.Context) {
 		if errors.Is(err, ErrNoStream) || ctx.Err() != nil {
 			return
 		}
+		if errors.Is(err, ErrUnauthorized) {
+			// The credential no longer works: the watch ends and the
+			// server waits for a new sign-in (R-MCP-6).
+			s.callFailed(StateUnauthorized)
+			return
+		}
 		if err == nil {
 			bo.Reset()
 		}
@@ -185,10 +191,13 @@ func (s *serverConn) listen(ctx context.Context) {
 
 // apply takes a listed tool list: it is approved when its fingerprint is
 // the admin's, and then its tools are on offer; otherwise none is
-// (R-MCP-7). It returns the state and whether it is a change; the caller
+// (R-MCP-7), and the approved copy stays as it was, offered to nobody, so
+// the tools a session has on still count against its limits. It returns the state and whether it is a change; the caller
 // announces it, after it has counted what happened.
 func (s *serverConn) apply(l ToolList) (st State, changed bool) {
-	st, tools, offered := StateToolsChanged, []Tool(nil), []tool.Handler(nil)
+	s.mu.RLock()
+	st, tools, offered := StateToolsChanged, s.tools, []tool.Handler(nil)
+	s.mu.RUnlock()
 	if l.Fingerprint == s.cfg.Fingerprint {
 		st = StateConnected
 		tools = s.approved(l.Tools)

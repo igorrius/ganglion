@@ -64,7 +64,23 @@ func (a *Agent) toolSpecs(t *turn) []provider.Tool {
 	if t.noTools {
 		return nil
 	}
-	specs := a.d.Tools.SessionSpecs(t.admin, t.state.Tools)
+	return a.offer(t, a.d.Tools.Specs(t.admin))
+}
+
+// onDemandSpecs are the on-demand tools the session has on at the start of
+// this step, in the provider's shape, under the same rules as toolSpecs
+// (R-MCP-4a). Only this part of the list changes from step to step.
+func (a *Agent) onDemandSpecs(t *turn) []provider.Tool {
+	if t.noTools {
+		return nil
+	}
+	return a.offer(t, a.d.Tools.OnDemandSpecs(t.admin, t.on))
+}
+
+// offer is specs in the provider's shape, without what the turn must not
+// be offered: the persona tool outside the introduction, and in a
+// scheduled task anything outside its grant.
+func (a *Agent) offer(t *turn, specs []tool.Spec) []provider.Tool {
 	out := make([]provider.Tool, 0, len(specs))
 	for _, s := range specs {
 		if s.Name == proposeTool && !a.introducing(t) {
@@ -292,7 +308,7 @@ func (a *Agent) toolCall(ctx context.Context, t *turn, call provider.ToolCall) t
 	return tool.Call{
 		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Transport: t.transport, Principal: t.msg.From,
 		Admin: t.admin, Tainted: t.state.Tainted, LocalOnly: t.state.LocalOnly, Grant: t.grant, KnownURL: t.known.has, Depth: t.depth,
-		Speak: a.speaker(ctx, t), On: t.state.Tools, Name: call.Name, Args: call.Args, Planned: a.planned(ctx, t.event.Conv),
+		Speak: a.speaker(ctx, t), On: t.on, TurnedOn: t.state.Tools, Name: call.Name, Args: call.Args, Planned: a.planned(ctx, t.event.Conv),
 	}
 }
 
