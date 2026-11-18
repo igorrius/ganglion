@@ -41,6 +41,7 @@
 | The redirect | `?code=…&state=…&iss=https://<server>`: the server sends `iss` (RFC 9207) |
 | The code | Opaque, about 85 characters, **with `:` in it**: the spike page's check allowed only `[A-Za-z0-9._~-]` and refused it. A line must carry the code encoded |
 | Token | `200`; `bearer`; `expires_in` 30 days; a refresh token; the response repeats `resource`; `scope` empty |
+| Revocation | The metadata names the token endpoint itself as `revocation_endpoint`; RFC 7009 requests there (`token`, `token_type_hint`, `client_id`) answered `200` for the refresh and the access token, and the access token then got `401`. The spike's tokens were revoked this way |
 
 ### The server
 
