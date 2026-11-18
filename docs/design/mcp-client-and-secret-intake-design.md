@@ -357,7 +357,13 @@ Spec principle 9: every link is hostile, every input untrusted.
   the text changes.
 - *A sign-in server that is not the server's.* The card names the sign-in
   host; the token is bound to the server with `resource` (RFC 8707); every
-  metadata address passes the public `https` check.
+  metadata address passes the public `https` check. The resource's own
+  metadata is read only from the server's origin (a challenge that names
+  another host is refused, though RFC 9728 allows it), and its `resource`
+  must be the server's address or a path above it; the authorization
+  server may be another host, as identity providers are, and its metadata
+  must name the issuer that was asked for (RFC 8414, 3.3). No sign-in
+  request follows a redirect.
 - *Asking the node for more than tools.* The client declares no
   capability; a request for sampling, elicitation or roots gets an error.
 

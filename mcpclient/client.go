@@ -31,6 +31,12 @@ import (
 // answer with another revision of mcp.ProtocolVersions is accepted.
 const ProtocolVersion = "2025-11-25"
 
+// devVersion is the version clientInfo reports until one is set.
+const devVersion = "dev"
+
+// schemeHTTPS is the scheme of a secure address.
+const schemeHTTPS = "https"
+
 // DefaultTimeout is how long one request to a server may take (R-MCP-2).
 const DefaultTimeout = 30 * time.Second
 
@@ -104,7 +110,7 @@ func WithListChanged(f ListChangedFunc) ClientOption { return func(c *Client) { 
 // sends auth's header with each request and gives up on a request after
 // timeout. name only labels errors.
 func NewClient(name, rawURL string, auth Auth, timeout time.Duration, opts ...ClientOption) *Client {
-	c := &Client{name: name, rawURL: rawURL, auth: auth, timeout: timeout, version: "dev",
+	c := &Client{name: name, rawURL: rawURL, auth: auth, timeout: timeout, version: devVersion,
 		hc: &http.Client{}, onChange: func() {}}
 	for _, o := range opts {
 		o(c)
@@ -628,7 +634,7 @@ func (c *Client) send(ctx context.Context, req *http.Request) (*http.Response, e
 	if proto != "" {
 		req.Header.Set(headerProtocol, proto)
 	}
-	req, err := c.authorize(ctx, req)
+	req, sent, err := c.authorize(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -638,20 +644,24 @@ func (c *Client) send(ctx context.Context, req *http.Request) (*http.Response, e
 	if err != nil {
 		return nil, c.failure(ctx, err, !connected.Load())
 	}
-	return checkStatus(resp, sid != "")
+	resp, err = checkStatus(resp, sid != "")
+	if sent != "" && errors.Is(err, ErrUnauthorized) {
+		c.auth.Rejected(ctx, sent)
+	}
+	return resp, err
 }
 
-// authorize adds the credential header.
-func (c *Client) authorize(ctx context.Context, req *http.Request) (*http.Request, error) {
+// authorize adds the credential header; sent is its value, "" for none.
+func (c *Client) authorize(ctx context.Context, req *http.Request) (*http.Request, string, error) {
 	name, value, err := c.auth.Header(ctx)
 	if err != nil {
-		return nil, &credentialError{server: c.name, cause: err}
+		return nil, "", &credentialError{server: c.name, cause: err}
 	}
 	if name == "" {
-		return req, nil
+		return req, "", nil
 	}
 	req.Header.Set(name, value)
-	return req.WithContext(context.WithValue(req.Context(), authHeaderKey{}, name)), nil
+	return req.WithContext(context.WithValue(req.Context(), authHeaderKey{}, name)), value, nil
 }
 
 // checkStatus passes a success and turns the other statuses into errors;
@@ -702,7 +712,7 @@ type origin struct{ scheme, host, port string }
 func originOf(u *url.URL) origin {
 	o := origin{scheme: strings.ToLower(u.Scheme), host: strings.ToLower(u.Hostname()), port: u.Port()}
 	if o.port == "" {
-		o.port = map[string]string{"http": "80", "https": "443"}[o.scheme]
+		o.port = map[string]string{"http": "80", schemeHTTPS: "443"}[o.scheme]
 	}
 	return o
 }
@@ -716,7 +726,7 @@ func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) > maxRedirects {
 		return ErrRedirect
 	}
-	if req.URL.Scheme == "http" && via[len(via)-1].URL.Scheme == "https" {
+	if req.URL.Scheme == "http" && via[len(via)-1].URL.Scheme == schemeHTTPS {
 		return ErrRedirect
 	}
 	if originOf(req.URL) != c.origin {

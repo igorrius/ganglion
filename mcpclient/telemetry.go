@@ -2,6 +2,7 @@ package mcpclient
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/igorrius/ganglion/internal/buckets"
@@ -67,4 +68,65 @@ func (in instruments) call(ctx context.Context, server string, o callOutcome, to
 // connect counts one connect.
 func (in instruments) connect(ctx context.Context, server string, o connectOutcome) {
 	in.connects.Add(ctx, 1, metric.WithAttributes(attribute.String("server", server), attribute.String("outcome", string(o))))
+}
+
+// oauthStep is a step of the sign-in, for the metrics: a closed set.
+type oauthStep string
+
+// Sign-in steps.
+const (
+	stepDiscover oauthStep = "discover"
+	stepRegister oauthStep = "register"
+	stepExchange oauthStep = "exchange"
+	stepRefresh  oauthStep = "refresh"
+	stepRevoke   oauthStep = "revoke"
+)
+
+// oauthOutcome is how a step ended.
+type oauthOutcome string
+
+// Sign-in outcomes.
+const (
+	oauthOK          oauthOutcome = "ok"
+	oauthRefused     oauthOutcome = "refused"     // the servers answered and the node or they refused
+	oauthUnreachable oauthOutcome = "unreachable" // no answer in time
+	oauthFailed      oauthOutcome = "failed"      // anything else: the store, a status
+)
+
+// oauthOutcomeOf is the outcome of a step that returned err.
+func oauthOutcomeOf(err error) oauthOutcome {
+	switch {
+	case err == nil:
+		return oauthOK
+	case errors.Is(err, ErrUnreachable):
+		return oauthUnreachable
+	case errors.Is(err, ErrNoSignIn), errors.Is(err, ErrMetadata), errors.Is(err, ErrRegistration),
+		errors.Is(err, ErrIssuer), errors.Is(err, ErrExchange), errors.Is(err, ErrNeedsSignIn):
+		return oauthRefused
+	}
+	return oauthFailed
+}
+
+// oauthInstruments are the sign-in's metrics (R-OBS-8): steps by outcome,
+// never a server's address or a value.
+type oauthInstruments struct {
+	steps metric.Int64Counter
+}
+
+func newOAuthInstruments(m metric.Meter) oauthInstruments {
+	var in oauthInstruments
+	in.steps, _ = m.Int64Counter("ganglion.mcpclient.oauth",
+		metric.WithDescription("Steps of remote MCP servers' OAuth sign-in, by step (discover, register, exchange, refresh, revoke) and outcome (ok, refused, unreachable, failed)."))
+	return in
+}
+
+// defaultOAuthInstruments are made from the global meter provider.
+func defaultOAuthInstruments() oauthInstruments {
+	return newOAuthInstruments(otel.Meter("ganglion/mcpclient"))
+}
+
+// step counts one step that returned err.
+func (in oauthInstruments) step(ctx context.Context, s oauthStep, err error) {
+	in.steps.Add(ctx, 1, metric.WithAttributes(attribute.String("step", string(s)),
+		attribute.String("outcome", string(oauthOutcomeOf(err)))))
 }

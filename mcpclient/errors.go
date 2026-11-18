@@ -94,8 +94,14 @@ type credentialError struct {
 func (e *credentialError) Error() string {
 	return "mcpclient: " + e.server + ": no credential to send"
 }
-func (e *credentialError) Unwrap() error        { return e.cause }
-func (e *credentialError) Is(target error) bool { return target == ErrUnauthorized }
+func (e *credentialError) Unwrap() error { return e.cause }
+
+// Is makes a missing credential ErrUnauthorized, unless the Auth could not
+// reach where it renews the credential: that is ErrUnreachable, through
+// Unwrap, and the server is unreachable, not signed out.
+func (e *credentialError) Is(target error) bool {
+	return target == ErrUnauthorized && !errors.Is(e.cause, ErrUnreachable)
+}
 
 // RPCError is a JSON-RPC error answer. Message is the server's text, cut to
 // 512 runes: it is outside content and the caller never shows it as the
