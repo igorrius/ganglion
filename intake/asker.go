@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -53,8 +54,9 @@ type SecretAsk struct {
 	// Transport and Conv are the conversation whose session gets the node
 	// note when the request closes (R-INT-6).
 	Transport, Conv string
-	// Key makes the card idempotent: a second Ask with the same key (a rerun
-	// of the same tool call, tool.Call.Key) sends no second card. "" for none.
+	// Key makes Ask idempotent: a second Ask with the same key (a rerun of
+	// the same tool call, tool.Call.Key) while its request lives returns that
+	// request and sends no second card. "" for none.
 	Key string
 	// Tainted says the session that asked holds outside content; the card
 	// says so.
@@ -99,6 +101,12 @@ type Asker struct {
 	now  func() time.Time
 	loc  *time.Location
 	log  *slog.Logger
+
+	// mu serialises the Asks that carry a Key, so a replay finds the
+	// request its first run opened; byKey holds those requests until they
+	// expire, answered or not, in memory as the registry does.
+	mu    sync.Mutex
+	byKey map[string]Asked
 }
 
 // AskerOption configures an Asker.
@@ -123,7 +131,7 @@ func WithAskerLogger(l *slog.Logger) AskerOption { return func(a *Asker) { a.log
 func NewAsker(reg *Registry, store StoreFunc, enqueue EnqueueFunc, put PutFunc, lang LangFunc, private PrivateConvFunc,
 	cat *texts.Catalog, opts ...AskerOption) *Asker {
 	a := &Asker{reg: reg, store: store, enqueue: enqueue, put: put, lang: lang, private: private, texts: cat,
-		page: DefaultPage, now: time.Now, loc: time.UTC, log: slog.New(slog.DiscardHandler)}
+		page: DefaultPage, now: time.Now, loc: time.UTC, log: slog.New(slog.DiscardHandler), byKey: map[string]Asked{}}
 	for _, o := range opts {
 		o(a)
 	}
@@ -150,7 +158,35 @@ type asking struct {
 // nothing. A hosted page that fails its check refuses the request: the
 // admin is told that handing secrets over is stopped, and the error wraps
 // ErrPageChanged or ErrPageUnchecked (R-INT-3).
+//
+// A second Ask with the same Key (a rerun of the same tool call) while the
+// first request lives returns that request, answered or not, and sends
+// nothing: the card already holds its link. One whose request is gone (it
+// expired, or the node restarted) opens a new request with a new card.
 func (a *Asker) Ask(ctx context.Context, k SecretAsk, done SecretDoneFunc) (Asked, error) {
+	if k.Key == "" {
+		return a.open(ctx, k, done)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	now := a.now()
+	for key, x := range a.byKey {
+		if !now.Before(x.Expires) {
+			delete(a.byKey, key)
+		}
+	}
+	if x, ok := a.byKey[k.Key]; ok {
+		return x, nil
+	}
+	asked, err := a.open(ctx, k, done)
+	if err == nil {
+		a.byKey[k.Key] = asked
+	}
+	return asked, err
+}
+
+// open opens a new request for k and sends its card.
+func (a *Asker) open(ctx context.Context, k SecretAsk, done SecretDoneFunc) (Asked, error) {
 	st, err := a.prepare(ctx, k, done)
 	if err != nil {
 		return Asked{}, err
@@ -245,10 +281,7 @@ func (a *Asker) sendCard(ctx context.Context, st *asking, req SecretRequest) err
 	}
 	link := SecretLink(a.page, req, host)
 	st.card = a.cardText(st, req, link)
-	st.cardKey = "intake:" + req.ID + ":card"
-	if st.k.Key != "" {
-		st.cardKey = "intake:" + st.k.Key + ":card"
-	}
+	st.cardKey = "intake:" + req.ID + ":card" // per request: a new request after a restart gets its own card
 	return a.enqueue(ctx, event.Outgoing{IdemKey: st.cardKey, Transport: st.tr, Conv: st.conv, Text: st.card, NoPreview: true})
 }
 

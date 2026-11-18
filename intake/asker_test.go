@@ -122,7 +122,7 @@ func TestAskSendsOneCard(t *testing.T) {
 		t.Fatalf("sent %+v", out)
 	}
 	c := out[0]
-	if c.Transport != "telegram" || c.Conv != "telegram:1" || !c.NoPreview || c.IdemKey != "intake:turn1:1:card" {
+	if c.Transport != "telegram" || c.Conv != "telegram:1" || !c.NoPreview || c.IdemKey != "intake:"+asked.ID+":card" {
 		t.Fatalf("card %+v", c)
 	}
 	if !asked.Expires.Equal(ar.clock.now().Add(10 * time.Minute)) {
@@ -134,12 +134,74 @@ func TestAskSendsOneCard(t *testing.T) {
 			t.Errorf("the card lacks %q: %q", w, c.Text)
 		}
 	}
-	// The same key twice is the same card.
-	if _, err := ar.ask(k); err != nil {
+}
+
+// A rerun of the same call while its request lives returns that request
+// and sends nothing; the owner answers the one card, and when its lifetime
+// ends nothing folds it again or tells the agent "expired".
+func TestReplayReturnsTheLiveRequest(t *testing.T) {
+	ar := newAskRig(t)
+	k := shopAsk()
+	first, err := ar.ask(k)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if out := ar.outgoing(); len(out) != 2 || out[1].IdemKey != out[0].IdemKey {
-		t.Fatalf("keys %q, %q", out[0].IdemKey, out[len(out)-1].IdemKey)
+	again, err := ar.ask(k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != first || len(ar.outgoing()) != 1 {
+		t.Fatalf("replay %+v, first %+v, sent %d", again, first, len(ar.outgoing()))
+	}
+	card := ar.outgoing()[0]
+	if _, o := ar.take(seal(t, pubOf(t, card.Text), first.ID, k.Name, []byte(abuseValue))); o != intake.LineTaken {
+		t.Fatalf("outcome %s", o)
+	}
+	// A replay after the answer, within the request's lifetime: no new card.
+	if again, err = ar.ask(k); err != nil || again != first {
+		t.Fatalf("replay after the answer %+v, %v", again, err)
+	}
+	ar.clock.add(11 * time.Minute)
+	ar.reg.Take(context.Background(), intake.Pasted{From: admin, Private: true, Text: "gsec1.x.y"}) // sweeps
+	ar.reg.Wait()
+	var folds []event.Outgoing
+	for _, m := range ar.outgoing() {
+		if m.EditOf != "" {
+			folds = append(folds, m)
+		}
+	}
+	if len(folds) != 1 || len(ar.puts) != 1 || len(ar.dones) != 1 || ar.dones[0].Outcome != event.SecretSet {
+		t.Fatalf("folds %+v, notes %d, dones %+v", folds, len(ar.puts), ar.dones)
+	}
+	// Once the request's time is over, the same key asks anew with a card of its own.
+	next, err := ar.ask(k)
+	if err != nil || next.ID == first.ID {
+		t.Fatalf("after expiry %+v, %v", next, err)
+	}
+}
+
+// After a restart the first request is gone: the same key opens a new one,
+// and its card has a key of its own, so the outbox does not drop it as the
+// old card's duplicate and the owner gets the link that works.
+func TestReplayAfterARestartSendsANewCard(t *testing.T) {
+	before := newAskRig(t)
+	k := shopAsk()
+	first, err := before.ask(k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := newAskRig(t) // a new process: a new registry and Asker
+	second, err := after.ask(k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, card := before.outgoing()[0], after.outgoing()[0]
+	if second.ID == first.ID || card.IdemKey == old.IdemKey || card.IdemKey != "intake:"+second.ID+":card" {
+		t.Fatalf("first %s card %q, second %s card %q", first.ID, old.IdemKey, second.ID, card.IdemKey)
+	}
+	if _, o := after.take(seal(t, pubOf(t, card.Text), second.ID, k.Name, []byte(abuseValue))); o != intake.LineTaken ||
+		len(after.stores) != 1 {
+		t.Fatalf("outcome %s, stores %+v", o, after.stores)
 	}
 }
 
