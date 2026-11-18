@@ -230,6 +230,7 @@ Before writing a helper, look for it. These exist and are the only copies:
 | A count of rows in one state as a gauge | `sqlitedb.ObserveCount` |
 | Signing the node in to a remote MCP server with OAuth (discovery, registration, PKCE, exchange, refresh, revocation) and its credential | `mcpclient.OAuth` (`Begin`, `Complete`, `Auth`, `Disconnect`) |
 | Recognising a pasted intake line (`gauth1.`/`gsec1.`): held anywhere in a text, or read alone | `intake` (`Holds`, `Parse`) |
+| The intake page this release pins, the check of the hosted copy, and the link that opens a secret request on it | `intake` (`Page`, `PageChecker`, `SecretLink`) |
 | Asking a model whether a text is a fact or a hidden instruction | `guard` |
 
 (The table describes the state after the [refactoring plan](https://github.com/igorrius/ganglion/blob/e6b25054290c0a0e460edf0639b5e8dfa761f251/docs/plans/p1-refactor.md).)

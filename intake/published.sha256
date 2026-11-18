@@ -1,0 +1,6 @@
+# The intake page versions published on the project's site at intake/<version>/
+# (spec R-INT-3, ADR-0098). A published version never changes: a line here is
+# never edited or removed, and scripts/check-intake-pages.sh fails CI when
+# intake/page/<version>/index.html or docs/guide/intake/<version>/index.html
+# differs from its hash. A new format is a new version and a new line.
+837d4747a5db6022d2d2777c56928a97680f704dcdff61108db7918a07a6deda  v1

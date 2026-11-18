@@ -179,3 +179,11 @@ Module templates and built-in skills update with the program.
 `/restart` in your private chat stops the node cleanly with exit code 75. It only comes back if something starts it again, so run it under a supervisor with a restart-on-failure policy: Docker (`--restart on-failure`), systemd (`Restart=on-failure`) or your platform's setting. The image has no supervisor of its own: its entrypoint only starts the node. Without a supervisor the node just stops. Changes to any setting outside `modules` need a restart.
 
 Memory: give a container about 1 GB if you want module builds. Set `node.memory_limit` lower than that for the node itself.
+
+## The intake page
+
+When the node needs a sign-in code or a secret from you, its message links to the intake page on this site, `https://igorrius.github.io/ganglion/intake/v1/`. The page turns what you give it into one line, a `gauth1.` line for a sign-in or a `gsec1.` line with the secret already encrypted on your phone, and you paste that line into your private chat with the bot. The page sends nothing over the network.
+
+A published version of the page never changes, and every release carries its own copy. Before asking you for a secret, the node downloads the page and compares it with that copy. If they differ, or the node cannot reach the page, it does not ask, and tells you why; set the secret on the host with `ganglion secret set` instead. A sign-in still goes on, with a warning. So the node needs outgoing HTTPS to `igorrius.github.io`.
+
+Opening the page with no link shows whether your browser can encrypt there.
