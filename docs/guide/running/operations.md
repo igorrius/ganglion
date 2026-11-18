@@ -151,6 +151,8 @@ A release is refused, and the node keeps running as it was, when it is not signe
 
 The program that came with the image is never replaced. Releases are kept in the `releases/` folder beside the database, which host commands and modules cannot read or write; the node keeps the running version and the one before it.
 
+**Commands on the host after an update.** `ganglion <command>` (`backup`, `secret`, `update`, `mcp`, `version`) runs the version the node runs: the program from the image checks that release again and hands the command to it. Run the command as the node's user. Run as another user, root included, the command stays on the image's program and prints which version the node runs; it does the same when the release fails its check.
+
 **A build without a release version.** A node built from source, or any build whose version is not exactly a release (`dev`, or a version with a commit suffix), cannot be moved with `/update`. Move it once to the image `ghcr.io/igorrius/ganglion:<version>` (the version of the newest release, without the `v`), with the same volume and settings. After that `/update` works. `/update` says this and names the image.
 
 **What `/update` does not change.** It replaces the node's program only. The Rust toolchain used for module builds, the `claude` command line tool and the rest of the image are updated by pulling a newer image:

@@ -101,6 +101,8 @@ The log must say `sandbox: ready`. If it says `sandbox: commands are off`, the r
 
 Run every command that touches `/data` as uid 10001. A command run as root leaves root-owned files (the database's `-wal` and `-shm`) that the node cannot open at its next start.
 
+After `/update`, `ganglion <command>` run as uid 10001 runs the release the node runs, not the binary the image shipped. Run as root, it stays on the image's binary and prints a line saying which release the node runs.
+
 ## Deploying from a git worktree
 
 `railway up` uploads the main checkout, not a worktree. Name the folder: `railway up <path> --path-as-root -s <service>`.

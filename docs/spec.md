@@ -1633,6 +1633,12 @@ other install paths are in section 14.
   minimum configuration. The index carries a provenance attestation of
   the workflow
   ([ADR-0086](adr/0086-publish-the-nodes-image-to-ghcr-on-a-core-tag.md)).
+- **R-UPD-9.** A host command other than `run` runs as the node's active
+  release: the image's binary checks that release again and hands the
+  command to it, unless the release's binary belongs to another user
+  than the one running the command or fails the check; then it runs as
+  it is and says why on stderr
+  ([ADR-0096](adr/0096-host-commands-run-the-active-release.md)).
 
 <a id="8-first-reflex-deye-p1"></a>
 

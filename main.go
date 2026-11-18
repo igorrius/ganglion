@@ -24,6 +24,7 @@ const exitRestart = 75
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	cmd.Dispatch(os.Args, os.Stderr) // a host command runs as the node's active release (R-UPD-9)
 	if err := cmd.Execute(ctx, os.Args, os.Stdout, os.Stderr); err != nil {
 		if errors.Is(err, node.ErrRestart) {
 			os.Exit(exitRestart)

@@ -101,6 +101,7 @@ considered, how they compare, the decision and its consequences. See
 | [0093](0093-config-changes-through-the-agent-with-history-in-the-workspace.md) | Change the node's file through the agent on an allowlist, with its history in the workspace repository | Accepted | 2026-11-16 |
 | [0094](0094-the-github-project-holds-the-plan-and-the-repository-holds-decisions.md) | Keep the plan and the status in the GitHub Project, and decisions in the repository | Accepted | 2026-11-17 |
 | [0095](0095-daily-encrypted-backups-to-an-s3-compatible-bucket.md) | Back up the node daily, encrypted with a key from its master key, to an S3-compatible bucket | Accepted | 2026-11-17 |
+| [0096](0096-host-commands-run-the-active-release.md) | Run a host command as the node's active release | Accepted | 2026-11-18 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).
