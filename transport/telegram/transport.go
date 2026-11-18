@@ -379,7 +379,7 @@ func (t *Transport) incoming(botID int64, m *message, text string, fs []event.Fi
 		Files:         fs,
 	}
 	if m.Quote != nil {
-		msg.Quote = m.Quote.Text
+		msg.Quote = hideLine(m.Quote.Text)
 	}
 	if r := m.ReplyToMessage; r != nil && !topicRoot(m, r) {
 		msg.Reply = t.replied(botID, m.From.ID, r)
@@ -417,7 +417,7 @@ func (t *Transport) replied(botID, sender int64, r *message) *event.Replied {
 	if body == "" && present(r.RichMessage) {
 		body = readRich(r.RichMessage) // not counted: richText's metric is for messages to the bot
 	}
-	out.Text = txt.Truncate(body, event.MaxRepliedRunes)
+	out.Text = txt.Truncate(hideLine(body), event.MaxRepliedRunes)
 	return out
 }
 

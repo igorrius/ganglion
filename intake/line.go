@@ -20,17 +20,15 @@ const (
 
 // Limits of a line (R-INT-3, R-INT-4).
 const (
-	maxLine      = 4096 // bytes of one pasted line
-	maxCode      = 2048 // decoded bytes of an OAuth code
-	maxIssuer    = 512  // decoded bytes of an issuer
-	maxValue     = 2048 // bytes of a secret through the page
-	pointLen     = 65   // an uncompressed P-256 point: the HPKE encapsulated key
-	tagLen       = 16   // the AES-GCM tag
-	minSealed    = pointLen + 1 + tagLen
-	maxSealed    = pointLen + maxValue + tagLen
-	lineVersion  = "1"
-	prefixOAuth  = "gauth"
-	prefixSecret = "gsec"
+	maxLine     = 4096 // bytes of one pasted line
+	maxCode     = 2048 // decoded bytes of an OAuth code
+	maxIssuer   = 512  // decoded bytes of an issuer
+	maxValue    = 2048 // bytes of a secret through the page
+	pointLen    = 65   // an uncompressed P-256 point: the HPKE encapsulated key
+	tagLen      = 16   // the AES-GCM tag
+	minSealed   = pointLen + 1 + tagLen
+	maxSealed   = pointLen + maxValue + tagLen
+	lineVersion = "1"
 )
 
 // The ways a line is refused. None of them carries the line or a part of it.
@@ -44,9 +42,12 @@ var (
 )
 
 var (
-	prefixRE = regexp.MustCompile(`^g(auth|sec)([0-9]{1,3})\.`)
-	idRE     = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
-	b64      = base64.RawURLEncoding.Strict()
+	prefixRE = regexp.MustCompile(`(?i)^g(auth|sec)([0-9]{1,3})\.`)
+	// anywhereRE finds an intake prefix with something after it anywhere in
+	// a text, in any case.
+	anywhereRE = regexp.MustCompile(`(?i)g(?:auth|sec)[0-9]{1,3}\.[A-Za-z0-9_-]`)
+	idRE       = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
+	b64        = base64.RawURLEncoding.Strict()
 )
 
 // Line is a parsed intake line.
@@ -63,10 +64,14 @@ type Line struct {
 	Sealed []byte
 }
 
-// one returns text trimmed, and whether it is a single token: no
-// whitespace or control character inside.
+// invisible are the characters a phone or a copy may put into a line that
+// cannot be seen: they are dropped before a line is read.
+var invisible = strings.NewReplacer("\u200b", "", "\u200c", "", "\u200d", "", "\u2060", "", "\ufeff", "")
+
+// one returns text with invisible characters dropped and trimmed, and
+// whether it is a single token: no whitespace or control character inside.
 func one(text string) (string, bool) {
-	t := strings.TrimSpace(text)
+	t := strings.TrimSpace(invisible.Replace(text))
 	if t == "" || len(t) > maxLine {
 		return "", false
 	}
@@ -74,21 +79,22 @@ func one(text string) (string, bool) {
 	return t, !bad
 }
 
-// IsLine reports whether text, trimmed of surrounding whitespace, starts
-// like an intake line of any version: a gauthN. or gsecN. prefix with
-// something after it. The transport uses it to take a message out of the
-// inbox path (R-INT-5). It is wider than a valid line on purpose: a newer
-// page's line, a damaged one, one with words after it or one split over
-// two lines still carries a code or a ciphertext, so it is taken too and
-// refused by Parse, never handed to the inbox and the model.
-func IsLine(text string) bool {
-	t := strings.TrimSpace(text)
-	loc := prefixRE.FindStringIndex(t)
-	return loc != nil && loc[1] < len(t)
+// Holds reports whether text holds an intake line of any version anywhere:
+// a gauthN. or gsecN. prefix, in any case, with something after it, once
+// invisible characters are dropped. The transport uses it to take a message
+// out of the inbox path (R-INT-5) and to hide a line in a reply or a quote.
+// It is wider than a valid line on purpose: a newer page's line, a damaged
+// one, one with words around it or in a caption still carries a code or a
+// ciphertext, so it is taken too and refused by Parse, never handed to the
+// inbox and the model.
+func Holds(text string) bool {
+	return anywhereRE.MatchString(invisible.Replace(text))
 }
 
-// Parse reads an intake line. The errors are ErrNotALine, ErrVersion and
-// ErrMalformed; none holds any part of text.
+// Parse reads an intake line: the whole text, once invisible characters and
+// surrounding whitespace are dropped; the prefix may be in any case (a
+// phone may capitalise it). The errors are ErrNotALine (the text is not one
+// line alone), ErrVersion and ErrMalformed; none holds any part of text.
 func Parse(text string) (Line, error) {
 	t, ok := one(text)
 	if !ok {
@@ -102,7 +108,7 @@ func Parse(text string) (Line, error) {
 		return Line{}, ErrVersion
 	}
 	parts := strings.Split(t, ".")
-	if m[1] == "auth" {
+	if strings.EqualFold(m[1], "auth") {
 		return parseOAuth(parts)
 	}
 	return parseSecret(parts)

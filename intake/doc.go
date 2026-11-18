@@ -4,8 +4,9 @@
 //
 // The node opens a request (Registry.OpenOAuth, Registry.OpenSecret); the
 // admin's browser shows a line, and the admin pastes it into the chat. The
-// transport recognises such a message with IsLine, takes it before the
-// inbox and hands it to Registry.Take. A request is opened by the node
+// transport recognises such a message with Holds, takes it before the
+// inbox and hands it to Registry.Take, which hands the value to the
+// request's opener off the transport's receive path. A request is opened by the node
 // only, never by the model (R-INT-1): no tool exposes the registry.
 //
 // A line, a code and an opened value never reach a log line, an error

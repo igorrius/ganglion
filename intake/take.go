@@ -23,6 +23,7 @@ const (
 	LineUnknown    TakeOutcome = "unknown"     // no open request of that id and kind
 	LineExpired    TakeOutcome = "expired"     // the request ran out
 	LineFailed     TakeOutcome = "failed"      // taken, and not accepted: the request is closed
+	LineNotAlone   TakeOutcome = "not_alone"   // a line with other text, in a caption or forwarded
 	LineDropped    TakeOutcome = "dropped"     // no intake is configured
 )
 
@@ -33,13 +34,16 @@ var replyKeys = map[TakeOutcome]texts.Key{
 	LineUnknown:   texts.ReplyIntakeUnknown,
 	LineExpired:   texts.ReplyIntakeExpired,
 	LineFailed:    texts.ReplyIntakeFailed,
+	LineNotAlone:  texts.ReplyIntakeAlone,
 }
 
-// Pasted is a message that IsLine accepted, as the transport saw it.
+// Pasted is a message that Holds accepted, as the transport saw it.
 type Pasted struct {
-	From    string // the sender's principal
-	Private bool   // in the sender's private conversation
-	Text    string
+	From      string // the sender's principal
+	Private   bool   // in the sender's private conversation
+	Text      string // the message's text, or its caption
+	Caption   bool   // Text is a file's caption
+	Forwarded bool   // the message is forwarded: not the sender's own text
 }
 
 // infoPrefix is the format part of the cipher's info (R-INT-4).
@@ -58,8 +62,12 @@ func sealInfo(id, name string) []byte {
 // Take handles one pasted line and returns the id of the request it named
 // ("" when none could be read), for the transport's log. It never returns
 // or logs the line, a code or a value. The order is: private chat, admin,
-// parse, find the request, remove it (a line works once, whatever its
-// result), hand the value over, report.
+// the sender's own text message with the line alone, parse, find the
+// request, remove it (a line works once, whatever its result), open a
+// ciphertext. The opener's function then runs on its own goroutine, bounded
+// by Config.HandleTimeout, so a slow code exchange never holds the
+// transport's receive path; its outcome reaches ClosedFunc and, on failure,
+// the sender. LineTaken means handed over.
 func (r *Registry) Take(ctx context.Context, p Pasted) (string, TakeOutcome) {
 	id, o := r.take(ctx, p)
 	r.tel.line(ctx, o)
@@ -74,12 +82,8 @@ func (r *Registry) take(ctx context.Context, p Pasted) (string, TakeOutcome) {
 	if !r.admin(ctx, p.From) {
 		return "", LineNotAdmin
 	}
-	line, err := Parse(p.Text)
-	if err != nil {
-		o := LineMalformed
-		if errors.Is(err, ErrVersion) {
-			o = LineVersion
-		}
+	line, o := r.read(p)
+	if o != "" {
 		r.reply(ctx, p.From, "", o)
 		return "", o
 	}
@@ -93,16 +97,34 @@ func (r *Registry) take(ctx context.Context, p Pasted) (string, TakeOutcome) {
 		r.reply(ctx, p.From, line.ID, o)
 		return line.ID, o
 	}
-	o = LineTaken
-	out := OutcomeAnswered
-	if err := r.hand(ctx, line, q); err != nil {
-		o, out = LineFailed, OutcomeFailed
+	value, err := r.unseal(line, q)
+	if err != nil {
+		r.finish(ctx, Closed{ID: line.ID, Kind: q.kind, Outcome: OutcomeFailed, At: r.now()})
+		r.reply(ctx, p.From, line.ID, LineFailed)
+		return line.ID, LineFailed
 	}
-	r.finish(ctx, Closed{ID: line.ID, Kind: q.kind, Outcome: out, At: r.now()})
-	if o != LineTaken {
-		r.reply(ctx, p.From, line.ID, o)
+	r.work.Go(func() { r.deliver(context.WithoutCancel(ctx), p.From, line, q, value) })
+	return line.ID, LineTaken
+}
+
+// read parses p's text into a line, or returns why it is refused: a line
+// that is not the sender's own text message alone, a damaged one, or one
+// of a version this node does not know.
+func (r *Registry) read(p Pasted) (Line, TakeOutcome) {
+	if p.Caption || p.Forwarded {
+		return Line{}, LineNotAlone
 	}
-	return line.ID, o
+	line, err := Parse(p.Text)
+	switch {
+	case err == nil:
+		return line, ""
+	case errors.Is(err, ErrVersion):
+		return Line{}, LineVersion
+	case errors.Is(err, ErrNotALine):
+		return Line{}, LineNotAlone
+	default:
+		return Line{}, LineMalformed
+	}
 }
 
 // admin reports whether from is an admin. A failed check counts as no, and
@@ -135,19 +157,42 @@ func (r *Registry) claim(l Line) (*request, TakeOutcome) {
 	return q, ""
 }
 
-// hand gives the line's content to the request's function. The error says
-// only that it failed: the function's owner logs its own errors.
-func (r *Registry) hand(ctx context.Context, l Line, q *request) error {
+// unseal opens a secret line's ciphertext with the request's key, which is
+// destroyed either way; an OAuth line has nothing to open. The error says
+// only that it did not open.
+func (r *Registry) unseal(l Line, q *request) ([]byte, error) {
 	if q.kind == KindOAuth {
-		return q.oauth(ctx, OAuthAnswer{ID: l.ID, Code: l.Code, Issuer: l.Issuer})
+		return nil, nil
 	}
 	value, err := hpke.Open(q.key, hpke.HKDFSHA256(), hpke.AES128GCM(), sealInfo(l.ID, q.name), l.Sealed)
 	q.destroy()
 	if err != nil {
-		return errNotOpened
+		return nil, errNotOpened
 	}
+	return value, nil
+}
+
+// deliver hands the code or the opened value to the request's function,
+// clears the value, and reports the outcome. The function's owner logs its
+// own errors: only the outcome is kept here.
+func (r *Registry) deliver(ctx context.Context, from string, l Line, q *request, value []byte) {
 	defer clear(value)
-	return q.secret(ctx, l.ID, value)
+	hctx, cancel := context.WithTimeout(ctx, r.cfg.HandleTimeout)
+	defer cancel()
+	var err error
+	if q.kind == KindOAuth {
+		err = q.oauth(hctx, OAuthAnswer{ID: l.ID, Code: l.Code, Issuer: l.Issuer})
+	} else {
+		err = q.secret(hctx, l.ID, value)
+	}
+	out := OutcomeAnswered
+	if err != nil {
+		out = OutcomeFailed
+	}
+	r.finish(ctx, Closed{ID: l.ID, Kind: q.kind, Outcome: out, At: r.now()})
+	if err != nil {
+		r.reply(ctx, from, l.ID, LineFailed)
+	}
 }
 
 // reply tells the sender, in their private conversation and their

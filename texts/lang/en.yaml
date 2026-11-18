@@ -45,6 +45,7 @@ reply.intake_unknown: "No open request matches this line: it was used already, o
 reply.intake_version: "This line comes from a page version this node does not know. Ask again from the chat."
 reply.intake_malformed: "This line is damaged. Copy it again with the page's Copy button."
 reply.intake_failed: "The line was not accepted, and the request is closed. Ask again."
+reply.intake_alone: "The line was removed and not used. Paste it alone, as a message of its own: no other text, no file, not forwarded."
 
 button.details: "Details"
 button.delete: "Delete"

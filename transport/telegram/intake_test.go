@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -143,27 +144,91 @@ func TestALineIsTakenWithNoIntakeConfigured(t *testing.T) {
 	}
 }
 
-// A line in a caption is a file's text: it is not taken, and reaches the inbox as any caption does.
-func TestACaptionWithALineIsNotTaken(t *testing.T) {
-	fake := telegramtest.NewServer(t, testToken)
-	spy, logs, c := &intakeSpy{}, &safeBuf{}, &collector{}
-	run(t, intakeTransport(t, fake, spy, logs), c.sink)
-	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Caption: testLine,
-		Extra: map[string]any{"document": map[string]any{"file_name": "a.txt", "file_size": 3}}})
-	eventually(t, "the event", func() bool { return len(c.got()) == 1 })
-	if len(spy.got()) != 0 || len(fake.Deleted()) != 0 {
-		t.Errorf("the caption was taken: %v %v", spy.got(), fake.Deleted())
+// A line in a caption, after other words, in another case, behind a
+// zero-width character or forwarded is taken all the same: deleted, kept
+// from the sink, and handed to the intake func marked, which refuses it
+// with a fixed text (R-INT-5).
+func TestALineAnywhereIsTaken(t *testing.T) {
+	doc := map[string]any{"document": map[string]any{"file_name": "a.txt", "file_size": 3}}
+	fwd := map[string]any{"forward_origin": map[string]any{"type": "hidden_user", "date": 1, "sender_user_name": "x"}}
+	for name, tc := range map[string]struct {
+		in   telegramtest.Incoming
+		want func(intake.Pasted) bool
+	}{
+		"caption":     {telegramtest.Incoming{Caption: testLine, Extra: doc}, func(p intake.Pasted) bool { return p.Caption && p.Text == testLine }},
+		"words first": {telegramtest.Incoming{Text: "my token is " + testLine}, func(p intake.Pasted) bool { return !p.Caption && !p.Forwarded }},
+		"capitalised": {telegramtest.Incoming{Text: "G" + testLine[1:]}, func(p intake.Pasted) bool { return !p.Caption }},
+		"zero-width":  {telegramtest.Incoming{Text: "\u200b" + testLine}, func(p intake.Pasted) bool { return !p.Caption }},
+		"forwarded":   {telegramtest.Incoming{Text: testLine, Extra: fwd}, func(p intake.Pasted) bool { return p.Forwarded }},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fake := telegramtest.NewServer(t, testToken)
+			spy, logs, c := &intakeSpy{outcome: intake.LineNotAlone}, &safeBuf{}, &collector{}
+			run(t, intakeTransport(t, fake, spy, logs), c.sink)
+			tc.in.ChatID, tc.in.UserID = 42, 42
+			upd := fake.AddMessage(tc.in)
+			eventually(t, "confirmed", func() bool { return fake.Confirmed() >= upd })
+			if p := spy.got(); len(p) != 1 || !p[0].Private || !tc.want(p[0]) {
+				t.Fatalf("intake got %+v", p)
+			}
+			if len(fake.Deleted()) != 1 || len(c.got()) != 0 {
+				t.Fatalf("deleted %v, sink %v", fake.Deleted(), c.got())
+			}
+			if strings.Contains(logs.String(), testLine[10:40]) {
+				t.Errorf("the line is in the log:\n%s", logs.String())
+			}
+		})
 	}
 }
 
-// A message that merely mentions the prefix, or holds a line and words, stays an ordinary message.
+// The message is deleted before the intake func runs, so a slow one never
+// leaves the line in the chat.
+func TestTheLineIsDeletedBeforeTheIntakeRuns(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	var deletedFirst, ran atomic.Bool
+	take := func(context.Context, intake.Pasted) (string, intake.TakeOutcome) {
+		deletedFirst.Store(len(fake.Deleted()) == 1)
+		ran.Store(true)
+		return "", intake.LineTaken
+	}
+	tr, err := New(testToken, WithBaseURL(fake.URL()), WithPollTimeout(time.Second), WithIntake(take))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	run(t, tr, c.sink)
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: testLine})
+	eventually(t, "the intake ran", ran.Load)
+	if !deletedFirst.Load() {
+		t.Fatal("the intake ran before the message was deleted")
+	}
+}
+
+// Abuse: a line the bot could not delete never reaches the inbox through a
+// later reply to it or a quote of it.
+func TestAReplyOrQuoteOfALineHidesIt(t *testing.T) {
+	fake := telegramtest.NewServer(t, testToken)
+	c := &collector{}
+	run(t, intakeTransport(t, fake, &intakeSpy{}, &safeBuf{}), c.sink)
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "about that", Extra: map[string]any{
+		"reply_to_message": map[string]any{"message_id": 7, "date": 1, "chat": map[string]any{"id": 42, "type": "private"},
+			"from": map[string]any{"id": 42, "is_bot": false, "first_name": "A"}, "text": "see " + testLine},
+		"quote": map[string]any{"text": testLine, "position": 0},
+	}})
+	eventually(t, "the event", func() bool { return len(c.got()) == 1 })
+	m := payload(t, c.got()[0])
+	if strings.Contains(string(c.got()[0].Payload), "gsec1.") || m.Quote != removedLine || m.Reply == nil || m.Reply.Text != removedLine {
+		t.Fatalf("payload %s", c.got()[0].Payload)
+	}
+}
+
+// A message that only names the format stays an ordinary message.
 func TestOrdinaryTextIsNotTaken(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	spy, logs, c := &intakeSpy{}, &safeBuf{}, &collector{}
 	run(t, intakeTransport(t, fake, spy, logs), c.sink)
-	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "my token is " + testLine})
-	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "gsec1 is a format"})
-	eventually(t, "two events", func() bool { return len(c.got()) == 2 })
+	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "gsec1 is a format, gsec1.<id> its shape"})
+	eventually(t, "one event", func() bool { return len(c.got()) == 1 })
 	if len(spy.got()) != 0 || len(fake.Deleted()) != 0 {
 		t.Errorf("taken: %v %v", spy.got(), fake.Deleted())
 	}

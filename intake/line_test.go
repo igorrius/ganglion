@@ -11,7 +11,7 @@ func b64u(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
 const id22 = "AAECAwQFBgcICQoLDA0ODw"
 
-func TestIsLine(t *testing.T) {
+func TestHolds(t *testing.T) {
 	sealed := b64u(make([]byte, 90))
 	tests := []struct {
 		name string
@@ -23,20 +23,26 @@ func TestIsLine(t *testing.T) {
 		{"surrounding whitespace", "  gsec1." + id22 + "." + sealed + "\n", true},
 		{"a newer version", "gsec2." + id22 + "." + sealed, true},
 		{"padding still taken", "gsec1." + id22 + "." + sealed + "=", true},
-		{"prose", "hello there", false},
-		{"prefix only", "gsec1.", false},
-		{"no dot", "gsec1", false},
+		{"capitalised", "Gauth1." + id22 + ".abcd", true},
+		{"upper case", "GSEC1." + id22 + ".abcd", true},
+		{"a zero-width space first", "\u200bgsec1." + id22 + ".abcd", true},
+		{"a zero-width joiner inside the prefix", "gs\u200dec1." + id22 + ".abcd", true},
+		{"words before", "here it is: gsec1." + id22 + ".abcd", true},
 		{"a space inside", "gsec1." + id22 + ".ab cd", true},
 		{"two lines", "gsec1." + id22 + ".abcd\ngsec1." + id22 + ".abcd", true},
 		{"a line then words", "gsec1." + id22 + ".abcd please", true},
 		{"too long", "gsec1." + id22 + "." + strings.Repeat("a", 4100), true},
+		{"prose", "hello there", false},
+		{"prose about the format", "lines look like gsec1.<id>", false},
+		{"prefix only", "gsec1.", false},
+		{"no dot", "gsec1", false},
 		{"unknown kind", "gfoo1." + id22 + ".abcd", false},
 		{"empty", "", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := IsLine(tc.text); got != tc.want {
-				t.Errorf("IsLine = %v, want %v", got, tc.want)
+			if got := Holds(tc.text); got != tc.want {
+				t.Errorf("Holds = %v, want %v", got, tc.want)
 			}
 		})
 	}
@@ -75,6 +81,9 @@ func TestParse(t *testing.T) {
 		{"a newline inside", "gauth1." + id22 + ".ab\ncd", Line{}, ErrNotALine},
 		{"two lines", "gauth1." + id22 + ".abcd\ngauth1." + id22 + ".abcd", Line{}, ErrNotALine},
 		{"prose", "hello", Line{}, ErrNotALine},
+		{"words before", "here: gauth1." + id22 + ".abcd", Line{}, ErrNotALine},
+		{"capitalised by a phone", "Gauth1." + id22 + "." + b64u(code), Line{Kind: KindOAuth, ID: id22, Code: string(code)}, nil},
+		{"zero-width characters", "\ufeffgsec1." + id22 + "\u200b." + b64u(sealed), Line{Kind: KindSecret, ID: id22, Sealed: sealed}, nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

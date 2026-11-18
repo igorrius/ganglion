@@ -95,7 +95,9 @@ func (rg *rig) closedOf() []intake.Closed {
 }
 
 func (rg *rig) take(text string) (string, intake.TakeOutcome) {
-	return rg.reg.Take(context.Background(), intake.Pasted{From: admin, Private: true, Text: text})
+	id, o := rg.reg.Take(context.Background(), intake.Pasted{From: admin, Private: true, Text: text})
+	rg.reg.Wait()
+	return id, o
 }
 
 func (rg *rig) wantReply(key texts.Key) {
@@ -356,7 +358,8 @@ func TestAHandlerErrorFails(t *testing.T) {
 	rg := newRig(t)
 	v := valueSink{err: errors.New("store down")}
 	req, _ := rg.reg.OpenSecret(context.Background(), "k", v.fn)
-	if _, o := rg.take(seal(t, req.PublicKey, req.ID, "k", []byte("x"))); o != intake.LineFailed {
+	// The handler runs after Take returned: Take reports the line handed over.
+	if _, o := rg.take(seal(t, req.PublicKey, req.ID, "k", []byte("x"))); o != intake.LineTaken {
 		t.Fatalf("outcome %s", o)
 	}
 	rg.wantReply(texts.ReplyIntakeFailed)
@@ -515,5 +518,66 @@ func TestMetrics(t *testing.T) {
 		if got := rec.Value(t, tc.name, tc.want); got != tc.n {
 			t.Errorf("%s %v = %v, want %v", tc.name, tc.want, got, tc.n)
 		}
+	}
+}
+
+// A slow handler, such as an OAuth code exchange, runs off the caller's path:
+// Take returns at once, the request is already closed, and the handler gets a
+// context that the caller's end does not cancel.
+func TestASlowHandlerDoesNotHoldTake(t *testing.T) {
+	rg := newRig(t)
+	release := make(chan struct{})
+	got := make(chan error, 1)
+	req, _ := rg.reg.OpenOAuth(context.Background(), func(ctx context.Context, _ intake.OAuthAnswer) error {
+		<-release
+		got <- ctx.Err()
+		return nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	_, o := rg.reg.Take(ctx, intake.Pasted{From: admin, Private: true, Text: "gauth1." + req.ID + "." + b64u([]byte("c"))})
+	cancel()
+	if o != intake.LineTaken {
+		t.Fatalf("outcome %s", o)
+	}
+	repeat := intake.Pasted{From: admin, Private: true, Text: "gauth1." + req.ID + "." + b64u([]byte("c"))}
+	if _, o := rg.reg.Take(context.Background(), repeat); o != intake.LineUnknown {
+		t.Fatalf("a repeat while the handler runs: %s", o)
+	}
+	close(release)
+	rg.reg.Wait()
+	if err := <-got; err != nil {
+		t.Fatalf("the handler's context ended with the caller's: %v", err)
+	}
+	if c := rg.closedOf(); len(c) != 1 || c[0].Outcome != intake.OutcomeAnswered {
+		t.Fatalf("closed %+v", c)
+	}
+}
+
+// A line that is not the admin's own text message alone is refused with a
+// fixed text, and its request stays open.
+func TestALineNotAloneIsRefused(t *testing.T) {
+	ctx := context.Background()
+	for name, p := range map[string]intake.Pasted{
+		"caption":     {Caption: true},
+		"forwarded":   {Forwarded: true},
+		"words first": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rg := newRig(t)
+			v := valueSink{}
+			req, _ := rg.reg.OpenSecret(ctx, "k", v.fn)
+			line := seal(t, req.PublicKey, req.ID, "k", []byte("x"))
+			p.From, p.Private, p.Text = admin, true, line
+			if name == "words first" {
+				p.Text = "here: " + line
+			}
+			if _, o := rg.reg.Take(ctx, p); o != intake.LineNotAlone {
+				t.Fatalf("outcome %s", o)
+			}
+			rg.wantReply(texts.ReplyIntakeAlone)
+			if _, o := rg.take(line); o != intake.LineTaken || v.calls != 1 {
+				t.Fatalf("the request did not stay open: %s", o)
+			}
+		})
 	}
 }

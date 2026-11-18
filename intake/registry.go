@@ -81,10 +81,15 @@ func NoClosed(context.Context, Closed) {}
 type Config struct {
 	TTL     time.Duration // how long a request lives (R-INT-1)
 	MaxOpen int           // how many requests may be open at once
+	// HandleTimeout bounds an opener's function (an OAuth code exchange, a
+	// store write), which runs off the transport's receive path.
+	HandleTimeout time.Duration
 }
 
-// DefaultConfig is 10 minutes and 32 open requests.
-func DefaultConfig() Config { return Config{TTL: 10 * time.Minute, MaxOpen: 32} }
+// DefaultConfig is 10 minutes, 32 open requests and a minute per handler.
+func DefaultConfig() Config {
+	return Config{TTL: 10 * time.Minute, MaxOpen: 32, HandleTimeout: time.Minute}
+}
 
 // Errors of opening a request.
 var (
@@ -151,6 +156,7 @@ type Registry struct {
 
 	mu   sync.Mutex
 	reqs map[string]*request
+	work sync.WaitGroup // the openers' functions running, which Run waits for
 }
 
 // Option configures a Registry.
@@ -193,17 +199,23 @@ func New(isAdmin IsAdminFunc, enqueue EnqueueFunc, lang LangFunc, private Privat
 // Name implements node.Component.
 func (*Registry) Name() string { return "intake" }
 
-// Run closes expired requests every 30 seconds until ctx ends.
+// Run closes expired requests every 30 seconds until ctx ends, then waits
+// for the openers' functions still running.
 func (r *Registry) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			r.Wait()
 			return nil
 		case <-r.after(sweepEvery):
 			r.sweep(ctx)
 		}
 	}
 }
+
+// Wait blocks until the openers' functions handed a value by Take have
+// returned.
+func (r *Registry) Wait() { r.work.Wait() }
 
 // open is how many requests are open now.
 func (r *Registry) open() int {
