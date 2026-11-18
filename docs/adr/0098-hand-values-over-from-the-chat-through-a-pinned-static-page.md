@@ -96,9 +96,12 @@ risk B leaves. A leaves the value with the transport.
   AES-128-GCM; `info` is `ganglion-intake-v1`, the request id and the
   secret's name. A value through the page is at most 2 KB, so its line
   fits one Telegram message.
-- **The lines:** `gauth1.<state>.<code>` and `gsec1.<id>.<ciphertext>`
-  (base64url). The format's version is in the prefix; an unknown one is
-  refused.
+- **The lines:** `gauth1.<state>.<base64url(code)>[.<base64url(iss)>]`
+  and `gsec1.<id>.<base64url(enc || ciphertext)>`. A code is opaque and
+  may hold any character (the spike's server put `:` in it), so it is
+  encoded; `iss` is carried when the sign-in server sends it, and then the
+  node requires it and compares it with the issuer (RFC 9207). The
+  format's version is in the prefix; an unknown one is refused.
 - **The return channel:** pasting the line into the chat. The transport
   recognises a private text message that is one such line, takes it before
   the inbox, hands it to `intake`, and deletes the message. From someone
@@ -162,10 +165,12 @@ as usual because the card is the node's own text.
 - `/login` for the claude CLI
   ([#174](https://github.com/igorrius/ganglion/issues/174)) can use the
   same requests and lines.
-- A spike comes first: whether the owner's first server accepts the page
-  as a redirect address, and whether the page's WebCrypto works in
-  Telegram's in-app browsers on iOS and Android. A failure reopens this
-  ADR before it is accepted.
+- A spike came first
+  ([research](../research/2026-11-18-remote-mcp-and-intake-spike.md)):
+  the owner's first server accepted the page as its redirect address and
+  the sign-in worked end to end; the page's seal opened in Go from desktop
+  Chrome and from Telegram's browser on Android. Telegram on iOS is still
+  to be checked before this ADR is accepted.
 
 ## Revisit when
 

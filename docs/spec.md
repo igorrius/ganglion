@@ -1680,13 +1680,30 @@ started as processes are level 3 of 9.8 and stay in P3.
     the buttons Connect, Ask for all and Cancel. Connect confirms the
     file's change (R-CFG-13) and the tools are offered at once; Cancel
     deletes the registration and the tokens.
-- **R-MCP-4.** A server's tool is offered as `<server>.<tool>`, its own name
-  lower-cased with every character outside `[a-z0-9_]` turned into `_`;
-  admin-only; its result outside content (R-POL-4, R-POL-6); confirmed in
-  a tainted session when it has input; never offered in a `local-only`
-  session. At most 64 tools a server, a description of 1000 characters, a
-  schema of 16 KB; a tool past a limit or whose name collides is skipped
+- **R-MCP-4.** A server's tool is named `<server>.<tool>`: its own name
+  without a leading `<server>_`, lower-cased, every character outside
+  `[a-z0-9_]` turned into `_`. It is admin-only; its result is outside
+  content (R-POL-4, R-POL-6); it is confirmed in a tainted session when it
+  has input and never offered in a `local-only` session. At most 128
+  tools a server, a description of 8,000 characters, a schema of 32 KB, a
+  list of 512 KB; a tool past a limit or whose name collides is skipped
   and named on the card.
+- **R-MCP-4a.** A server's tools reach the model on demand (owner,
+  2026-11-18, [research](research/2026-11-18-remote-mcp-and-intake-spike.md)):
+  a real server's list was 115 KB, about 30,000 tokens a turn.
+  - The agent always has `mcp.tools([server])`, which lists the connected
+    servers and, for one, each tool's name, policy and the first line of
+    its description, from the approved list; and `mcp.use(server, tools)`,
+    which turns tools on for the session. Both send nothing off the node
+    and are `LocalSafe`.
+  - A tool turned on joins the session's tool list from the next step,
+    with its full definition, and stays until the session ends; at most
+    16 tools and 48 KB of definitions are on at once, and turning on more
+    is refused with the limit.
+  - The approved list is the admin's: a tool that is off by policy
+    (`forbidden`) is never turned on. The list's text is the approved,
+    fingerprinted copy, the same standing as a tool's definition; a
+    tool's result still taints the session.
 - **R-MCP-5.** A server's registration, its tokens and a key for `header`
   live in the secret store under the scope `mcp:<name>` (R-CFG-9); no tool
   returns them, and every value is redacted from the journal and the
@@ -1730,8 +1747,12 @@ with no shell, no public address, and no value in clear in the chat
   secret's name, the module or server that asks, the hosts the value may
   reach, and the agent's reason quoted as data. No tool reads a value.
 - **R-INT-3.** The intake page is one static file in two modes: it shows an
-  OAuth code as `gauth1.<state>.<code>`, or encrypts a secret in the
+  OAuth code as a `gauth1.` line, or encrypts a secret in the
   browser and shows `gsec1.<id>.<ciphertext>`, each with a Copy button.
+  The OAuth line carries the code and the issuer encoded, since a code may
+  hold any character: `gauth1.<state>.<base64url(code)>[.<base64url(iss)>]`.
+  When the sign-in server's metadata says it sends `iss`, the node
+  requires it and compares it with the issuer (RFC 9207).
   It sends nothing over the network. It is published on the project's site
   as `intake/v<n>/`, and a published version never changes (a CI check);
   `mcp.page` can point at another host with the same file. Before every
