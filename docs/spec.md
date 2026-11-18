@@ -1668,7 +1668,8 @@ started as processes are level 3 of 9.8 and stay in P3.
   checks the address as `web.fetch` does (R-WEB-2) and probes the server;
   in a tainted session it is confirmed first.
   - For `oauth` it discovers the sign-in server (RFC 9728, RFC 8414),
-    every address in the metadata checked the same way, registers the
+    every address in the metadata checked the same way, the resource's
+    metadata read only from the server's own origin, registers the
     node (RFC 7591) with the intake page as the only redirect address,
     and sends a card through an OAuth request (R-INT-1) that names the
     server's host and the sign-in host. The sign-in uses PKCE and binds

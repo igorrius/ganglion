@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -46,6 +47,15 @@ type Options struct {
 	// Intercept sees every POST before the server does; true means it
 	// answered, and the server does nothing more.
 	Intercept func(w http.ResponseWriter, r *http.Request, req Request) bool
+	// Bearer makes the server an OAuth protected resource: a request whose
+	// bearer token Bearer does not accept gets 401 with Challenge as its
+	// WWW-Authenticate header (none when Challenge is "").
+	Bearer    func(token string) bool
+	Challenge string
+	// Documents are JSON documents served to a GET of their path under
+	// /.well-known/, before any check: the resource's metadata (RFC 9728).
+	// Another path there is 404.
+	Documents map[string]string
 }
 
 // Request is a request the server received.
@@ -67,6 +77,7 @@ type Server struct {
 	opts      Options
 	reqs      []Request
 	issued    int
+	refused   int
 	valid     map[string]bool
 	listeners []chan string
 	opened    chan struct{}
@@ -75,8 +86,21 @@ type Server struct {
 // New starts a server that stops with the test.
 func New(t testing.TB, o Options) *Server {
 	t.Helper()
+	return start(t, o, httptest.NewServer)
+}
+
+// NewTLS starts a server over TLS that stops with the test. Every
+// httptest TLS server has the same certificate, so the Client of one
+// trusts all of them.
+func NewTLS(t testing.TB, o Options) *Server {
+	t.Helper()
+	return start(t, o, httptest.NewTLSServer)
+}
+
+func start(t testing.TB, o Options, newServer func(http.Handler) *httptest.Server) *Server {
+	t.Helper()
 	s := &Server{opts: o, done: make(chan struct{}), valid: map[string]bool{}, opened: make(chan struct{}, 64)}
-	s.Server = httptest.NewServer(http.HandlerFunc(s.serve))
+	s.Server = newServer(http.HandlerFunc(s.serve))
 	t.Cleanup(func() {
 		close(s.done)
 		s.CloseClientConnections()
@@ -163,7 +187,23 @@ func (s *Server) Listeners() int {
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	o := s.options()
-	if o.Header != "" && r.Header.Get(o.Header) != o.Value {
+	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/.well-known/") {
+		doc, ok := o.Documents[r.URL.Path]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, doc)
+		return
+	}
+	if o.Header != "" && r.Header.Get(o.Header) != o.Value || !bearerOK(r, o) {
+		s.mu.Lock()
+		s.refused++
+		s.mu.Unlock()
+		if o.Challenge != "" {
+			w.Header().Set("WWW-Authenticate", o.Challenge)
+		}
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -194,6 +234,23 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.dispatch(w, req, o)
+}
+
+// bearerOK reports whether the request carries a bearer token the server
+// accepts, when it wants one.
+func bearerOK(r *http.Request, o Options) bool {
+	if o.Bearer == nil {
+		return true
+	}
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return ok && o.Bearer(token)
+}
+
+// Refused is how many requests the server answered with 401.
+func (s *Server) Refused() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.refused
 }
 
 // sessionOK reports whether a request carries a session id the server still

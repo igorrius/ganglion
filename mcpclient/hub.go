@@ -116,7 +116,7 @@ func DefaultBackoff() backoff.Policy { return backoff.Policy{Min: time.Second, M
 // telemetry is installed.
 func NewHub(opts ...HubOption) *Hub {
 	h := &Hub{log: slog.New(slog.DiscardHandler), now: time.Now, after: time.After, hc: &http.Client{},
-		backoff: DefaultBackoff(), version: "dev", observe: func(string, State) {}, in: defaultInstruments(), servers: map[string]*serverConn{}}
+		backoff: DefaultBackoff(), version: devVersion, observe: func(string, State) {}, in: defaultInstruments(), servers: map[string]*serverConn{}}
 	for _, o := range opts {
 		o(h)
 	}
