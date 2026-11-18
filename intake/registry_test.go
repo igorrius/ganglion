@@ -162,12 +162,17 @@ type fixture struct {
 
 // readFixture reads a fixture the page's own script made under Node.js
 // (testdata/fixtures.mjs): from testdata, or from INTAKE_FIXTURES, where CI
-// writes a fresh one on every run.
+// writes a fresh one on every run. INTAKE_FIXTURES must be an absolute
+// path: go test runs a test in its package's directory, not where it was
+// started, so a relative one would name another directory.
 func readFixture(t *testing.T, file string, v any) {
 	t.Helper()
 	dir := os.Getenv("INTAKE_FIXTURES")
-	if dir == "" {
+	switch {
+	case dir == "":
 		dir = "testdata"
+	case !filepath.IsAbs(dir):
+		t.Fatalf("INTAKE_FIXTURES must be an absolute path, got %q", dir)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, file))
 	if err != nil {

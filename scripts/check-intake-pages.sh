@@ -39,7 +39,13 @@ for d in docs/guide/intake/*/ intake/page/*/; do
 	[ -f "$d/index.html" ] || err "$d holds no index.html"
 done
 
-if [ -n "${1:-}" ] && git cat-file -e "$1:$list" 2>/dev/null; then
+if [ -z "${1:-}" ]; then
+	echo "::warning::no base commit given (a run by hand, or a push without one): the check that no published line of $list was edited or removed was skipped"
+elif ! git cat-file -e "$1^{commit}" 2>/dev/null; then
+	echo "::warning::the base '$1' is not a commit here (a new branch's push has none): the check that no published line of $list was edited or removed was skipped"
+elif ! git cat-file -e "$1:$list" 2>/dev/null; then
+	echo "the base '$1' has no $list: nothing was published before it"
+else
 	while read -r line; do
 		entries "$list" | grep -qxF -- "$line" || err "the published line '$line' was edited or removed from $list"
 	done < <(git show "$1:$list" | grep -vE '^(#|$)')

@@ -3,8 +3,8 @@
 // gauth1 line (oauth-v1.json). Run from the repository root:
 //   node intake/testdata/fixtures.mjs [out-dir]
 // The out-dir is intake/testdata by default; CI writes to a temporary one
-// and points the Go tests at it with INTAKE_FIXTURES, so every run seals
-// afresh. The recipient's private key is a fixed test scalar; nothing here
+// and points the Go tests at it with INTAKE_FIXTURES (an absolute path), so
+// every run seals afresh. The recipient's private key is a fixed test scalar; nothing here
 // is real.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
