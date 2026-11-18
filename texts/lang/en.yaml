@@ -40,6 +40,12 @@ reply.build_late: The build of {module} finished after this conversation moved o
 reply.restarting: "Restarting. Back in a few seconds."
 reply.back: "I'm back after the restart, which took {seconds} s."
 reply.back_applied: "Settings from the chat that now apply:\n{changes}"
+reply.intake_expired: "This request has expired. Ask again, and use the new link."
+reply.intake_unknown: "No open request matches this line: it was used already, or the node restarted. Ask again."
+reply.intake_version: "This line comes from a page version this node does not know. Ask again from the chat."
+reply.intake_malformed: "This line is damaged. Copy it again with the page's Copy button."
+reply.intake_failed: "The line was not accepted, and the request is closed. Ask again."
+reply.intake_alone: "The line was removed and not used. Paste it alone, as a message of its own: no other text, no file, not forwarded."
 
 button.details: "Details"
 button.delete: "Delete"
