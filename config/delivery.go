@@ -11,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/groups"
 	"github.com/igorrius/ganglion/host"
+	"github.com/igorrius/ganglion/intake"
 	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/node"
@@ -46,7 +47,7 @@ func Telegram() do.Provider[*telegram.Transport] {
 			telegram.WithReplyMode(telegram.ReplyMode(b.TelegramReply)), telegram.WithRichMessages(b.TelegramRich), telegram.WithCommands(do.MustInvoke[[]transport.Command](i)),
 			telegram.WithHealth(do.MustInvoke[*telegram.Health](i)), telegram.WithTopics(do.MustInvoke[groups.Topics](i).Seen),
 			telegram.WithWebhook(b.PublicURL, do.MustInvoke[*publichttp.Listener](i).Reaches),
-			telegram.WithWebhookRecord(do.MustInvoke[*hookrecord.Store](i)))
+			telegram.WithWebhookRecord(do.MustInvoke[*hookrecord.Store](i)), telegram.WithIntake(do.MustInvoke[*intake.Registry](i).Take))
 	}
 }
 
@@ -295,6 +296,7 @@ func CoreComponents() do.Provider[[]node.Component] {
 		comps := []node.Component{
 			node.Named("sender", do.MustInvoke[*outbox.Sender](i).Run),
 			node.Named("loop", do.MustInvoke[*core.Loop](i).Run),
+			do.MustInvoke[*intake.Registry](i),
 			sqlqueue.Pruner{Queue: q, Every: pruneEvery, Log: do.MustInvoke[*slog.Logger](i)},
 		}
 		comps = append(comps, do.MustInvoke[Housekeeping](i)...)

@@ -288,6 +288,15 @@ func (c *client) editMessageReplyMarkup(ctx context.Context, p markupParams) err
 	return c.call(ctx, "editMessageReplyMarkup", p, nil)
 }
 
+// deleteMessage deletes a message of a chat: the bot's own, or a person's
+// when the bot may (a private chat, or a group where it is an admin).
+func (c *client) deleteMessage(ctx context.Context, chatID, messageID int64) error {
+	return c.call(ctx, "deleteMessage", struct {
+		ChatID    int64 `json:"chat_id"`
+		MessageID int64 `json:"message_id"`
+	}{chatID, messageID}, nil)
+}
+
 // setMessageReaction sets the bot's reaction on a message, replacing the one it
 // had; "" takes it off.
 func (c *client) setMessageReaction(ctx context.Context, chat, msg int64, emoji string) error {

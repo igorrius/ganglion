@@ -17,6 +17,7 @@ const (
 	hookStored     hookOutcome = "stored"      // the update is in the inbox
 	hookSkipped    hookOutcome = "skipped"     // an update that becomes no event
 	hookDropped    hookOutcome = "dropped"     // the sink dropped it (a stranger's)
+	hookIntake     hookOutcome = "intake"      // a pasted intake line, taken before the inbox
 	hookUnparsed   hookOutcome = "unparsed"    // the body is not an update
 	hookSinkFailed hookOutcome = "sink_failed" // not stored: Telegram sends it again
 	hookNotReady   hookOutcome = "not_ready"   // before Serve takes requests
@@ -28,7 +29,7 @@ const (
 // hookStatus is the HTTP status of each outcome. Only a failed write and a
 // node that is not ready ask Telegram to send the update again.
 var hookStatus = map[hookOutcome]int{
-	hookStored: http.StatusOK, hookSkipped: http.StatusOK, hookDropped: http.StatusOK, hookUnparsed: http.StatusOK,
+	hookStored: http.StatusOK, hookSkipped: http.StatusOK, hookDropped: http.StatusOK, hookIntake: http.StatusOK, hookUnparsed: http.StatusOK,
 	hookSinkFailed: http.StatusInternalServerError, hookNotReady: http.StatusServiceUnavailable,
 	hookForbidden: http.StatusForbidden, hookBadMethod: http.StatusMethodNotAllowed,
 	hookTooLarge: http.StatusRequestEntityTooLarge,
@@ -38,7 +39,7 @@ type hookCounter struct{ c metric.Int64Counter }
 
 func newHookCounter() hookCounter {
 	c, _ := otel.Meter("ganglion/telegram").Int64Counter("ganglion.telegram.webhook.requests",
-		metric.WithDescription("Requests to the Telegram webhook, by outcome (stored, skipped, dropped, unparsed, sink_failed, not_ready, forbidden, bad_method, too_large)."))
+		metric.WithDescription("Requests to the Telegram webhook, by outcome (stored, skipped, dropped, intake, unparsed, sink_failed, not_ready, forbidden, bad_method, too_large)."))
 	return hookCounter{c: c}
 }
 

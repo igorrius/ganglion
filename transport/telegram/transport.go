@@ -57,6 +57,7 @@ type Transport struct {
 	commands    []transport.Command // listed in the command hints at start
 	files       fileCounter
 	groupMsgs   groupCounter
+	intake      IntakeFunc // takes a pasted intake line before the inbox (R-INT-5)
 
 	health *Health // what /status shows of receiving
 	hook   hook    // the webhook mode (R-DLV-18)
@@ -87,6 +88,7 @@ type config struct {
 	publicURL   string
 	reaches     ReachFunc
 	record      WebhookRecord
+	intake      IntakeFunc
 }
 
 // Option configures a Transport.
@@ -135,7 +137,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 		return nil, errors.New("telegram: token is not <bot_id>:<secret> (digits, a colon, then letters, digits, _ or -)")
 	}
 	cfg := config{now: time.Now, pollTimeout: pollTimeout, log: slog.New(slog.DiscardHandler), replyMode: ReplyAuto, topics: noTopics,
-		reaches: neverReaches, record: noRecord{}}
+		reaches: neverReaches, record: noRecord{}, intake: dropIntake}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -150,6 +152,7 @@ func New(token string, opts ...Option) (*Transport, error) {
 		log:         cfg.log,
 		files:       newFileCounter(),
 		groupMsgs:   newGroupCounter(),
+		intake:      cfg.intake,
 		now:         cfg.now,
 		pollTimeout: cfg.pollTimeout,
 		retry:       backoff.Policy{Min: time.Second, Max: time.Minute},
@@ -238,6 +241,10 @@ func (t *Transport) hand(ctx context.Context, sink transport.Sink, me user, ups 
 	for _, u := range ups {
 		t.seen(u)
 		t.noteTopic(ctx, u)
+		if t.intercept(ctx, u) {
+			offset = u.UpdateID + 1
+			continue
+		}
 		e, ok := t.toEvent(me, u)
 		if !ok {
 			t.answerCallback(ctx, u)
@@ -372,7 +379,7 @@ func (t *Transport) incoming(botID int64, m *message, text string, fs []event.Fi
 		Files:         fs,
 	}
 	if m.Quote != nil {
-		msg.Quote = m.Quote.Text
+		msg.Quote = hideLine(m.Quote.Text)
 	}
 	if r := m.ReplyToMessage; r != nil && !topicRoot(m, r) {
 		msg.Reply = t.replied(botID, m.From.ID, r)
@@ -410,7 +417,7 @@ func (t *Transport) replied(botID, sender int64, r *message) *event.Replied {
 	if body == "" && present(r.RichMessage) {
 		body = readRich(r.RichMessage) // not counted: richText's metric is for messages to the bot
 	}
-	out.Text = txt.Truncate(body, event.MaxRepliedRunes)
+	out.Text = txt.Truncate(hideLine(body), event.MaxRepliedRunes)
 	return out
 }
 
