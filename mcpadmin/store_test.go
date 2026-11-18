@@ -77,13 +77,10 @@ func TestStoreKeysAuth(t *testing.T) {
 	if _, _, err := auth.Header(ctx); !errors.Is(err, mcpclient.ErrUnauthorized) {
 		t.Fatalf("no key: %v", err)
 	}
-	if err := store.Set(ctx, "other", "key", "k-123"); err != nil {
+	if err := store.Set(ctx, "other", "X-API-Key", "k-123"); err != nil {
 		t.Fatal(err)
 	}
 	if name, value, err := auth.Header(ctx); err != nil || name != "X-API-Key" || value != "k-123" {
 		t.Fatalf("Header = %q %q %v", name, value, err)
-	}
-	if err := (mcpadmin.StoreKeys{}).Request(ctx, mcpadmin.KeyRequest{}); !errors.Is(err, mcpadmin.ErrNoKeys) {
-		t.Fatalf("Request = %v", err)
 	}
 }

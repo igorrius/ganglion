@@ -78,9 +78,11 @@ const reasonAboveZero = "must be above 0"
 // Patterns of the section's names.
 var (
 	// MCPNameRE is a server's name (R-MCP-2).
-	MCPNameRE   = regexp.MustCompile(`^[a-z0-9_]{1,24}$`)
-	mcpToolRE   = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
-	headerRE    = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,64}$")
+	MCPNameRE = regexp.MustCompile(`^[a-z0-9_]{1,24}$`)
+	mcpToolRE = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
+	// headerRE is a header token that is also a secret's name
+	// (secrets.ValidName): the key is stored under the header's name.
+	headerRE    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]{0,63}$`)
 	fingerRE    = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	headersDeny = []string{"authorization", "content-type", "content-length", "host", "cookie", "accept",
 		"mcp-session-id", "mcp-protocol-version", "transfer-encoding", "connection"}

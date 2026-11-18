@@ -58,7 +58,7 @@ type SignIns interface {
 // Requests opens the intake request a sign-in's answer comes back on
 // (intake.Registry).
 type Requests interface {
-	OpenOAuth(ctx context.Context, handle intake.OAuthFunc) (intake.OAuthRequest, error)
+	OpenOAuth(ctx context.Context, handle intake.OAuthFunc, opts ...intake.OpenOption) (intake.OAuthRequest, error)
 }
 
 // ButtonStore keeps the cards' buttons (pending.Store).

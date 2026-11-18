@@ -34,7 +34,17 @@ The node lists the tools and sends the tools card at once.
 
 ### A server that wants a key in a header
 
-Not available from the chat yet: entering a key in the chat waits for the node's secret entry. The assistant tells you the server wants a key.
+Some servers offer no sign-in and want a key (an API key) in a header instead. When the server refuses the node and offers no sign-in, the assistant reads the server's documentation for the header's name and asks again with it, for example:
+
+```text
+Connect https://mcp.example.com/mcp as shop; it takes the key in the header X-API-Key.
+```
+
+1. You get a **key card**: the server, the header, and the one host the key will go to, with an **Enter the value** link.
+2. Open the link, type the key, copy the line the page shows and paste it here as a message of its own. The key is encrypted on your phone; the assistant never sees it, and the message is deleted at once. See [Entering a secret](secrets.md).
+3. Once the key is stored, the node lists the server's tools with it and sends the **tools card**.
+
+Never type the key into the chat itself, or give it to the assistant: it would be in the conversation. The header's name is letters, digits, `_`, `.` and `-`, starting with a letter; `Authorization` and the headers the node sets itself cannot be used.
 
 ## The tools card
 
@@ -98,7 +108,7 @@ Only these tools and cards change the section: `config.propose` refuses it. If y
 
 ## Where things are kept
 
-The sign-in and its tokens live in the node's secret store, under the server's own scope. The assistant never sees them, and neither does the chat: the line you paste is deleted and works once. `/secrets` lists names and dates, never values.
+The sign-in and its tokens, or a server's key, live in the node's secret store, under the server's own scope (a key under the header's name). Disconnect removes them. The assistant never sees them, and neither does the chat: the line you paste is deleted and works once. `/secrets` lists names and dates, never values.
 
 ## When something goes wrong
 

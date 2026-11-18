@@ -34,6 +34,7 @@ const (
 	toolMessageSend  = "message.send"
 	toolLanguageSet  = "language.set"
 	toolMCPConnect   = "mcp.connect"
+	toolSecretAsk    = "secret.request"
 	toolMemoryWrite  = "memory.write"
 	toolModuleWrite  = "module.write"
 	toolMemoryForget = "memory.forget"
@@ -356,7 +357,7 @@ type rule func(cfg Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decis
 
 // rules are the rules of Decide, in order.
 var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleCommandForbidden, ruleGrant,
-	ruleMemoryWrite, ruleReminder, ruleJobDelete, ruleModuleWrite, ruleLanguageSet, ruleMCPConnect, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
+	ruleMemoryWrite, ruleReminder, ruleJobDelete, ruleModuleWrite, ruleLanguageSet, ruleMCPConnect, ruleSecretRequest, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -694,6 +695,18 @@ func ruleMCPConnect(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.De
 	}
 	if c.Tainted {
 		return confirm()
+	}
+	return tool.PolicyAuto, journal.DecisionAllowed, true
+}
+
+// ruleSecretRequest opens a secret request at once, in a tainted session
+// too: its card is the node's own text, which names the secret, who asks
+// and where the value may go and says when the session holds outside
+// content, and the owner's typing the value is the decision. A press before
+// the card would ask twice (ADR-0098, R-INT-2).
+func ruleSecretRequest(_ Config, s tool.Spec, _ tool.Call) (tool.Policy, journal.Decision, bool) {
+	if s.Name != toolSecretAsk {
+		return "", "", false
 	}
 	return tool.PolicyAuto, journal.DecisionAllowed, true
 }

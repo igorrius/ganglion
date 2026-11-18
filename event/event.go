@@ -56,6 +56,12 @@ const (
 	// group that is not connected may talk to the bot; its payload is a
 	// GroupRequest and its source is SourceGroups (R-DLV-17).
 	KindGroupRequest Kind = "group.request"
+	// KindSecretClosed is the end of a secret request handed over from the
+	// chat (R-INT-6): set, failed or expired. Its payload is a
+	// SecretClosed and its source is SourceIntake; it holds no value. The
+	// agent writes it as a node note into the session of the conversation
+	// that asked, with no model.
+	KindSecretClosed Kind = "secret.closed"
 )
 
 // SourceModule is the Source of the events the node puts for the owner's
@@ -65,6 +71,10 @@ const SourceModule = "module"
 // SourceGroups is the Source of the node's own events about group chats:
 // only those make a request to an admin.
 const SourceGroups = "groups"
+
+// SourceIntake is the Source of the node's own events about a request
+// handed over from the chat: only those make a node note of a secret.
+const SourceIntake = "intake"
 
 // Event is the single input from any transport: a chat message, a sensor
 // reading, a cron tick or a module exception.

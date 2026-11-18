@@ -32,7 +32,7 @@ The [configuration reference](../running/configuration.md) describes each settin
 
 Everything else is changed by editing the file on the machine, and the agent says so if you ask:
 
-- **Secrets** (the bot token, model keys, the search key): the agent never handles them. Use `ganglion secret set` or the file.
+- **Secrets** (the bot token, model keys, the search key): the agent never handles them. Use `ganglion secret set`, the file, or let the node ask you for one from the chat ([Entering a secret](secrets.md)).
 - **The admin** (`telegram.admin`) and **where the bot talks to Telegram** (`telegram.api_url`): changing them from the chat would hand the node over.
 - **Model providers and model definitions**: they name the addresses keys are sent to and the commands the node runs.
 - **The sandbox, the public address, the metrics address, the log folder and the workspace**: they widen what the node exposes or move its data.

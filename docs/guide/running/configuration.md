@@ -125,7 +125,7 @@ The remote MCP servers the node uses. The section changes only through the assis
 | `page` | the project's intake page | The address of the page a sign-in ends on. |
 | `servers.<name>.url` | | The server's `https` address. |
 | `servers.<name>.auth` | | `none`, `oauth` or `header`. |
-| `servers.<name>.header` | | The header that carries the key, for `auth: header`. |
+| `servers.<name>.header` | | The header that carries the key, for `auth: header`. The key itself is in the secret store, never in the file. |
 | `servers.<name>.timeout` | `30s` | How long one request may take. |
 | `servers.<name>.tools` | | Each approved tool's rule: `auto`, `confirm` or `forbidden`. |
 | `servers.<name>.fingerprint` | | Pins the approved tool list. |

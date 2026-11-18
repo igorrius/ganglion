@@ -179,6 +179,28 @@ type ModuleBuilt struct {
 	Module string `json:"module"` // the module's short name
 }
 
+// SecretOutcome is how a secret request ended.
+type SecretOutcome string
+
+// Outcomes of a secret request.
+const (
+	SecretSet     SecretOutcome = "set"     // the value is in the store
+	SecretFailed  SecretOutcome = "failed"  // the line did not open, or the store refused the value
+	SecretExpired SecretOutcome = "expired" // nobody answered in time
+)
+
+// SecretClosed is the payload of an event of kind "secret.closed": a secret
+// request that closed, by its name and scope, never its value (R-INT-6).
+type SecretClosed struct {
+	Request   string        `json:"request"` // the request's id
+	Name      string        `json:"name"`    // the secret's name
+	Scope     string        `json:"scope"`   // the store's scope: node, module:local/<name>, mcp:<server>
+	Outcome   SecretOutcome `json:"outcome"`
+	Principal string        `json:"principal"` // the admin the card went to
+	Transport string        `json:"transport"` // the transport of the conversation that asked
+	At        time.Time     `json:"at"`
+}
+
 // CommandDone is the payload of an event of kind "command.done": the call
 // key of the command, whose outcome the runner stored.
 type CommandDone struct {

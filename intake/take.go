@@ -93,13 +93,13 @@ func (r *Registry) take(ctx context.Context, p Pasted) (string, TakeOutcome) {
 		return line.ID, o
 	}
 	if o == LineExpired {
-		r.finish(ctx, Closed{ID: line.ID, Kind: q.kind, Outcome: OutcomeExpired, At: r.now()})
+		r.finish(ctx, q, Closed{ID: line.ID, Kind: q.kind, Outcome: OutcomeExpired, At: r.now()})
 		r.reply(ctx, p.From, line.ID, o)
 		return line.ID, o
 	}
 	value, err := r.unseal(line, q)
 	if err != nil {
-		r.finish(ctx, Closed{ID: line.ID, Kind: q.kind, Outcome: OutcomeFailed, At: r.now()})
+		r.finish(ctx, q, Closed{ID: line.ID, Kind: q.kind, Outcome: OutcomeFailed, At: r.now()})
 		r.reply(ctx, p.From, line.ID, LineFailed)
 		return line.ID, LineFailed
 	}
@@ -189,7 +189,7 @@ func (r *Registry) deliver(ctx context.Context, from string, l Line, q *request,
 	if err != nil {
 		out = OutcomeFailed
 	}
-	r.finish(ctx, Closed{ID: l.ID, Kind: q.kind, Outcome: out, At: r.now()})
+	r.finish(ctx, q, Closed{ID: l.ID, Kind: q.kind, Outcome: out, At: r.now()})
 	if err != nil {
 		r.reply(ctx, from, l.ID, LineFailed)
 	}

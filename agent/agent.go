@@ -457,6 +457,14 @@ var payloads = map[event.Kind]func(t *turn) bool{
 		t.msg = event.Message{From: t.review.Principal}
 		return true
 	},
+	event.KindSecretClosed: func(t *turn) bool {
+		s := &t.secret
+		if json.Unmarshal(t.event.Payload, s) != nil || s.Request == "" || s.Name == "" || s.Principal == "" {
+			return false
+		}
+		t.msg = event.Message{From: s.Principal}
+		return true
+	},
 	event.KindModuleBuilt: func(t *turn) bool {
 		return json.Unmarshal(t.event.Payload, &t.built) == nil && t.built.Key != ""
 	},

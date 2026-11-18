@@ -176,7 +176,7 @@ func (a *Admin) connect(ctx context.Context, c tool.Call, t target) (tool.Result
 		return tool.Result{}, errMoved
 	}
 	if t.header != "" {
-		return a.requestKey(ctx, w, t)
+		return a.requestKey(ctx, c, w, t)
 	}
 	probe := a.client(t, mcpclient.NoAuth{})
 	err := probe.Initialize(ctx)
@@ -197,20 +197,27 @@ func (a *Admin) connect(ctx context.Context, c tool.Call, t target) (tool.Result
 	return tool.Result{}, fmt.Errorf("the server %s %s", t.name, failureWords(err))
 }
 
-// requestKey asks the admin for the key of a server with auth: header.
-func (a *Admin) requestKey(ctx context.Context, w who, t target) (tool.Result, error) {
+// requestKey asks the admin for the key of a server with auth: header
+// through a secret request (R-MCP-3, R-INT-2): the card names the server,
+// the header and the one host the key goes to; once the key is stored the
+// node lists the tools with it and sends the tools card. The key never
+// passes through the model.
+func (a *Admin) requestKey(ctx context.Context, c tool.Call, w who, t target) (tool.Result, error) {
 	err := a.d.Keys.Request(ctx, KeyRequest{Server: t.name, Header: t.header, Host: t.host(),
-		Principal: w.principal, Transport: w.transport, Conv: w.conv,
-		Done: func(ctx context.Context) error {
-			return a.listAfterSignIn(ctx, w, t, settings.MCPAuthHeader, "mcp:card:key:"+t.name)
+		Principal: w.principal, Transport: w.transport, Conv: w.conv, Key: c.Key(), Tainted: c.Tainted,
+		Done: func(ctx context.Context) {
+			if err := a.listAfterSignIn(ctx, w, t, settings.MCPAuthHeader, c.Key()+":mcp.card"); err != nil {
+				a.log.Warn("mcpadmin: the tools card was not sent", "server", t.name, "kind", "outbox")
+			}
 		}})
 	if err != nil {
-		a.in.connect(ctx, outcomeRefused)
-		return tool.Result{}, err
+		a.in.connect(ctx, outcomeFailed)
+		return tool.Result{}, fmt.Errorf("the key of %s was not asked for: %s", t.name, keyWords(err))
 	}
 	a.in.connect(ctx, outcomeSignIn)
-	return tool.Result{Text: fmt.Sprintf("The owner got a card to enter the key of %s; it never passes through you. "+
-		"Once it is stored, the node lists the tools and sends a card to approve them.", t.name)}, nil
+	return tool.Result{Text: fmt.Sprintf("The owner got a card to enter the key of %s for the header %s; it never passes through you. "+
+		"Once it is stored, the node lists the tools and sends a card to approve them; you get a note when the key is in.",
+		t.name, t.header)}, nil
 }
 
 // signIn begins the OAuth sign-in and makes its card (R-MCP-3).

@@ -12,7 +12,7 @@ func (r *Registry) AddSecret(id, name string, priv *ecdh.PrivateKey, h SecretFun
 	if err != nil {
 		panic(err)
 	}
-	q := &request{kind: KindSecret, name: name, secret: h, key: key}
+	q := &request{kind: KindSecret, name: name, secret: h, key: key, closed: NoClosed}
 	q.expires = r.now().Add(r.cfg.TTL)
 	r.mu.Lock()
 	r.reqs[id] = q

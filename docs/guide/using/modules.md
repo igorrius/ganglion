@@ -38,7 +38,7 @@ A failed trial blocks the install: the build is refused, no window opens, and th
 
 Modules cannot be installed from a ready-made file, a link or a chat message. They are built from source on your node.
 
-If a module needs a secret (for example an API key), set it on the host with `ganglion secret set --module <name> <NAME>`. Do not paste it in chat. See [Configure](../getting-started/configure.md#secrets).
+If a module needs a secret (for example an API key), the agent asks for it and the node sends you a card to enter it from your phone: see [Entering a secret](secrets.md). Or set it on the host with `ganglion secret set --module <name> <NAME>`. Never paste the value itself into the chat.
 
 ## Versions and rollback
 

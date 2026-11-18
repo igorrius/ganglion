@@ -68,6 +68,8 @@ func (a *Agent) resume(ctx context.Context, t *turn) (bool, error) {
 	case event.KindModuleTrigger: // never here: Handle runs a trigger before begin
 	case event.KindGroupRequest:
 		return true, a.groupRequest(ctx, t)
+	case event.KindSecretClosed:
+		return true, a.secretClosed(ctx, t)
 	case event.KindGroupJoined: // never here: the access filter takes it
 	}
 	return false, nil

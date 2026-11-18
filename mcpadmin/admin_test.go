@@ -2,8 +2,13 @@ package mcpadmin_test
 
 import (
 	"context"
+	"crypto/ecdh"
+	"crypto/hpke"
+	"encoding/base64"
 	"encoding/json"
-	"errors"
+	"log/slog"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,6 +23,7 @@ import (
 	"github.com/igorrius/ganglion/mcpadmin"
 	"github.com/igorrius/ganglion/mcpclient"
 	"github.com/igorrius/ganglion/mcpclient/mcpclienttest"
+	"github.com/igorrius/ganglion/secrets"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/telemetry/telemetrytest"
@@ -44,7 +50,7 @@ type requests struct {
 	page   error
 }
 
-func (r *requests) OpenOAuth(_ context.Context, h intake.OAuthFunc) (intake.OAuthRequest, error) {
+func (r *requests) OpenOAuth(_ context.Context, h intake.OAuthFunc, _ ...intake.OpenOption) (intake.OAuthRequest, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.handle = h
@@ -122,6 +128,27 @@ type rig struct {
 	out     *outbox
 	locked  bool
 	a       *mcpadmin.Admin
+	reg     *intake.Registry // the real secret requests a header's key rides on
+	notes   *outbox          // the inbox events of closed secret requests, as text
+	logs    *syncBuf
+}
+
+// syncBuf is a log sink safe for the hub's goroutines.
+type syncBuf struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (b *syncBuf) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+
+func (b *syncBuf) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
 }
 
 // tools of the fake server: one that reads, one that writes, one whose
@@ -138,7 +165,8 @@ func serverTools() []json.RawMessage {
 func newRig(t *testing.T, oauth bool) *rig {
 	t.Helper()
 	r := &rig{store: mcpclienttest.NewMemStore(), states: make(chan string, 64), reqs: &requests{},
-		buttons: &buttons{m: map[string]pending.Button{}}, out: &outbox{}}
+		buttons: &buttons{m: map[string]pending.Button{}}, out: &outbox{}, notes: &outbox{}, logs: &syncBuf{}}
+	log := slog.New(slog.NewTextHandler(r.logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	r.mcp = mcpclienttest.NewTLS(t, mcpclienttest.Options{Tools: serverTools(), ListenStream: true})
 	r.url = r.mcp.URL + "/mcp"
 	if oauth {
@@ -155,22 +183,32 @@ func newRig(t *testing.T, oauth bool) *rig {
 		t.Fatal(err)
 	}
 	r.oauth = mcpclient.NewOAuth(r.mcp.Client(), r.store, page)
-	r.hub = mcpclient.NewHub(mcpclient.WithHubHTTPClient(r.mcp.Client()),
+	r.hub = mcpclient.NewHub(mcpclient.WithHubHTTPClient(r.mcp.Client()), mcpclient.WithHubLogger(log),
 		mcpclient.WithHubObserver(func(server string, st mcpclient.State) { r.states <- server + " " + string(st) }))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { _ = r.hub.Run(ctx); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
+	lang := func(context.Context, string) (texts.Lang, error) { return texts.English, nil }
+	isAdmin := func(_ context.Context, p string) (bool, error) { return p == admin, nil }
+	private := func(p string) (string, string, bool) { return "telegram", conv, p == admin }
+	r.reg = intake.New(isAdmin, r.out.enqueue, lang, private, texts.Shipped(), func(context.Context) error { return nil },
+		intake.WithLogger(log))
+	storeKey := func(ctx context.Context, scope secrets.Scope, name, value, _ string) error {
+		return r.store.Set(ctx, strings.TrimPrefix(string(scope), "mcp:"), name, value)
+	}
+	put := func(ctx context.Context, e event.Event) error {
+		return r.notes.enqueue(ctx, event.Outgoing{IdemKey: e.IdemKey, Text: string(e.Payload)})
+	}
+	asker := intake.NewAsker(r.reg, storeKey, r.out.enqueue, put, lang, private, texts.Shipped(), intake.WithAskerLogger(log))
 	r.a = mcpadmin.New(mcpadmin.Deps{
 		File: confighist.MCPFile{File: settings.MCPFile{Path: r.file}, History: confighist.NoHistory{}},
-		Hub:  r.hub, SignIns: r.oauth, Keys: mcpadmin.StoreKeys{Store: r.store}, Requests: r.reqs, Buttons: r.buttons,
-		Enqueue: r.out.enqueue, Texts: texts.Shipped(),
-		Lang:     func(context.Context, string) (texts.Lang, error) { return texts.English, nil },
-		IsAdmin:  func(_ context.Context, p string) (bool, error) { return p == admin, nil },
+		Hub:  r.hub, SignIns: r.oauth, Keys: mcpadmin.StoreKeys{Store: r.store, Asker: asker}, Requests: r.reqs, Buttons: r.buttons,
+		Enqueue: r.out.enqueue, Texts: texts.Shipped(), Lang: lang, IsAdmin: isAdmin,
 		Reserved: func() []string { return []string{"web", "battery"} },
 		Locked:   func() bool { return r.locked },
 		HTTP:     r.mcp.Client(),
-	})
+	}, mcpadmin.WithLogger(log))
 	if err := r.a.Apply(); err != nil {
 		t.Fatal(err)
 	}
@@ -416,10 +454,6 @@ func TestConnectRefusals(t *testing.T) {
 			t.Errorf("%s: the error repeats the address: %v", name, err)
 		}
 	}
-	_, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), call(mcpadmin.ToolConnect, map[string]any{"name": "shop", "url": r.url, "header": "X-API-Key"}))
-	if !errors.Is(err, mcpadmin.ErrNoKeys) {
-		t.Fatalf("header = %v", err)
-	}
 	c := call(mcpadmin.ToolConnect, map[string]any{"name": "shop", "url": r.url})
 	c.Grant = &tool.Grant{Tools: []string{mcpadmin.ToolConnect}}
 	if _, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), c); err == nil {
@@ -627,5 +661,143 @@ func TestOldCardChangesNothing(t *testing.T) {
 	}
 	if _, ok := r.line(t); ok {
 		t.Fatal("an old card brought a disconnected server back")
+	}
+}
+
+// apiKey is the key the fake server wants; it must reach nothing but the
+// server's header and the store.
+const apiKey = "k-31337-never-shown"
+
+// sealKey seals value for the secret request whose card is card, as the
+// intake page does (R-INT-4), and returns the gsec1 line.
+func sealKey(t *testing.T, card, id, name, value string) string {
+	t.Helper()
+	i := strings.Index(card, "("+intake.DefaultPage+"#")
+	if i < 0 {
+		t.Fatalf("no link in the card %q", card)
+	}
+	raw := card[i+1+len(intake.DefaultPage)+1:]
+	q, err := url.ParseQuery(raw[:strings.Index(raw, ")")])
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, err := base64.RawURLEncoding.DecodeString(q.Get("pk"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk, err := ecdh.P256().NewPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hk, err := hpke.NewDHKEMPublicKey(pk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := hpke.Seal(hk, hpke.HKDFSHA256(), hpke.AES128GCM(), []byte("ganglion-intake-v1\x00"+id+"\x00"+name), []byte(value))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return "gsec1." + id + "." + base64.RawURLEncoding.EncodeToString(ct)
+}
+
+// A server that takes a key in a header, end to end: mcp.connect opens a
+// secret request whose card names the server, the header and its host; the
+// admin's sealed line stores the key in the server's scope; the node lists
+// the tools with it and sends the tools card; Connect writes the line and
+// the hub connects with the key. The key is in no card, result, note, log
+// or file; Disconnect removes it (R-MCP-3, R-MCP-5, R-INT-2).
+func TestConnectWithAKeyInAHeader(t *testing.T) {
+	r := newRig(t, false)
+	r.mcp.Update(func(o *mcpclienttest.Options) {
+		o.Intercept = func(w http.ResponseWriter, req *http.Request, _ mcpclienttest.Request) bool {
+			if req.Header.Get("X-API-Key") != apiKey {
+				w.WriteHeader(http.StatusUnauthorized)
+				return true
+			}
+			return false
+		}
+	})
+	c := call(mcpadmin.ToolConnect, map[string]any{"name": "shop", "url": r.url, "header": "X-API-Key"})
+	res, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Out) != 0 || !strings.Contains(res.Text, "X-API-Key") {
+		t.Fatalf("result = %+v", res)
+	}
+	card := r.out.last(t)
+	host := strings.TrimPrefix(strings.Split(r.mcp.URL, ":")[1], "//")
+	if card.Conv != conv || !strings.Contains(card.Text, "shop") || !strings.Contains(card.Text, "header X-API-Key") ||
+		!strings.Contains(card.Text, host) {
+		t.Fatalf("key card = %q", card.Text)
+	}
+	if r.mcp.Count("initialize") != 0 {
+		t.Fatal("the server was asked before the key was in")
+	}
+	// A rerun of the same call sends no second card.
+	if _, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), c); err != nil || len(r.out.msgs) != 1 {
+		t.Fatalf("a rerun: %v, %d messages", err, len(r.out.msgs))
+	}
+
+	id := card.IdemKey[len("intake:") : len(card.IdemKey)-len(":card")]
+	line := sealKey(t, card.Text, id, "X-API-Key", apiKey)
+	if _, o := r.reg.Take(context.Background(), intake.Pasted{From: admin, Private: true, Text: line}); o != intake.LineTaken {
+		t.Fatalf("the line was %s", o)
+	}
+	r.reg.Wait()
+	if v := r.store.Values("shop"); v["X-API-Key"] != apiKey {
+		t.Fatalf("store = %v", v)
+	}
+	tools := r.out.last(t)
+	if len(tools.Buttons) != 3 || !strings.Contains(tools.Text, "`search_products`") {
+		t.Fatalf("tools card = %+v", tools)
+	}
+	r.press(t, tools, "Connect")
+	s, _ := r.line(t)
+	if s.Auth != settings.MCPAuthHeader || s.Header != "X-API-Key" {
+		t.Fatalf("line = %+v", s)
+	}
+	r.waitState(t, "shop connected")
+	if len(r.hub.Handlers()) != 3 {
+		t.Fatalf("handlers = %d", len(r.hub.Handlers()))
+	}
+
+	file, err := os.ReadFile(r.file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen []string
+	for _, m := range append(r.out.msgs, r.notes.msgs...) {
+		seen = append(seen, m.Text, m.Folded)
+	}
+	seen = append(seen, res.Text, string(file), r.logs.String())
+	for _, text := range seen {
+		if strings.Contains(text, apiKey) {
+			t.Fatalf("the key leaked into %q", text)
+		}
+	}
+
+	_, list, err := r.a.Card(context.Background(), texts.Speaker{}, admin, conv, time.UTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.press(t, event.Outgoing{Buttons: list}, "Disconnect")
+	if v := r.store.Values("shop"); len(v) != 0 {
+		t.Fatalf("Disconnect left %v", v)
+	}
+}
+
+// A header that cannot be a secret's name, or one the client sets itself,
+// is refused before any card.
+func TestConnectRefusesABadHeader(t *testing.T) {
+	r := newRig(t, false)
+	for _, h := range []string{"Authorization", "X Key", "1-Key", "X!Key"} {
+		if _, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(),
+			call(mcpadmin.ToolConnect, map[string]any{"name": "shop", "url": r.url, "header": h})); err == nil {
+			t.Errorf("%q: accepted", h)
+		}
+	}
+	if len(r.out.msgs) != 0 {
+		t.Fatalf("a card was sent: %+v", r.out.msgs)
 	}
 }

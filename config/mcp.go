@@ -81,7 +81,7 @@ func MCPAdmin() do.Provider[*mcpadmin.Admin] {
 			File:     mcpFile(i),
 			Hub:      do.MustInvoke[*mcpclient.Hub](i),
 			SignIns:  do.MustInvoke[*mcpclient.OAuth](i),
-			Keys:     mcpadmin.StoreKeys{Store: mcpadmin.VaultStore{V: store}},
+			Keys:     mcpadmin.StoreKeys{Store: mcpadmin.VaultStore{V: store}, Asker: do.MustInvoke[*intake.Asker](i)},
 			Requests: do.MustInvoke[*intake.Registry](i),
 			Buttons:  do.MustInvoke[*pending.Store](i),
 			Enqueue:  do.MustInvoke[*sqlqueue.Queue](i).Enqueue,

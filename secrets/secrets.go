@@ -71,6 +71,14 @@ const modulePrefix = "module:"
 // ("local/demo-reader" → "module:local/demo-reader").
 func ModuleScope(module string) Scope { return Scope(modulePrefix + module) }
 
+// serverPrefix starts the scope of a remote MCP server.
+const serverPrefix = "mcp:"
+
+// ServerScope is the scope of the remote MCP server with this name
+// ("shop" → "mcp:shop"): its sign-in and the key of its header
+// (docs/design/mcp-client-and-secret-intake-design.md, section 6).
+func ServerScope(server string) Scope { return Scope(serverPrefix + server) }
+
 // maxName is the longest name of a stored secret.
 const maxName = 128
 
