@@ -61,7 +61,8 @@
 | Served by the site | `200`, byte for byte the file in the repository: the site's build copies an HTML file under `docs/guide/` as it is, so the node's hash check is possible |
 | Desktop Chrome 157 (Linux) | WebCrypto in a secure context; ECDH P-256 and X25519; HMAC; AES-GCM; an HPKE seal of 86 bytes for 5; the clipboard |
 | Interop | The page's seal opened by `crypto/hpke` (DHKEM P-256, HKDF-SHA256, AES-128-GCM), in Node.js and from the desktop browser; a changed line fails authentication |
-| Telegram's in-app browser on iOS and Android | **Not checked yet** |
+| Telegram's in-app browser on Android (Android 10, Chrome 157) | Every check passed: WebCrypto in a secure context, ECDH P-256 and X25519, HMAC, AES-GCM, an HPKE seal of 86 bytes, the clipboard |
+| Telegram's in-app browser on iOS | **Not checked yet** |
 
 ## What changes in the decisions
 
