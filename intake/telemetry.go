@@ -41,3 +41,19 @@ func (t telemetry) line(ctx context.Context, o TakeOutcome) {
 func (t telemetry) closed(ctx context.Context, k Kind, o Outcome) {
 	t.requests.Add(ctx, 1, metric.WithAttributes(attribute.String("kind", string(k)), attribute.String("outcome", string(o))))
 }
+
+// pageTelemetry is the page check's instrument (R-OBS-8).
+type pageTelemetry struct {
+	checks metric.Int64Counter
+}
+
+func newPageTelemetry() pageTelemetry {
+	var t pageTelemetry
+	t.checks, _ = otel.Meter("ganglion/intake").Int64Counter("ganglion.intake.page_checks",
+		metric.WithDescription("Checks of the hosted intake page against the release's copy, by outcome (same, changed, unchecked)."))
+	return t
+}
+
+func (t pageTelemetry) checked(ctx context.Context, o PageOutcome) {
+	t.checks.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", string(o))))
+}

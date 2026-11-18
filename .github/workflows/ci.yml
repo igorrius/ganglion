@@ -86,6 +86,15 @@ jobs:
         run: |
           go test -race ./...
           go test -race -timeout 20m -tags lab ./internal/chatlab/... ./tools/chatlab/...
+      # The intake page's own script seals a value and makes an OAuth line
+      # under Node.js's WebCrypto, afresh on every run; Go opens and parses
+      # them (R-INT-4). The committed fixtures cover go test ./... above; the
+      # runner's own Node.js is enough.
+      - name: The intake page seals, Go opens
+        run: |
+          dir=$(mktemp -d)
+          node intake/testdata/fixtures.mjs "$dir"
+          INTAKE_FIXTURES="$dir" go test -count=1 -run 'FromThePage' ./intake/
       # The tests that fetch crates from crates.io (the Rust example, a build
       # with a dependency): out of go test ./... and never cached.
       - name: Network tests
@@ -192,11 +201,26 @@ jobs:
             exit 1
           }
 
+  # A published intake page never changes (R-INT-3): its two copies keep the
+  # hash in intake/published.sha256, and a listed version is never edited or
+  # removed. It runs on every change, documentation included, since the
+  # site's copy lives under docs/.
+  intake-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Published versions are unchanged
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: scripts/check-intake-pages.sh "$BASE"
+
   # The one check master requires. It passes when every job above passed or
   # was skipped, so a documentation-only pull request can merge.
   ci:
     if: always()
-    needs: [changes, test, lint, reader-template, reflex-template, html2md]
+    needs: [changes, test, lint, reader-template, reflex-template, html2md, intake-pages]
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed or was skipped

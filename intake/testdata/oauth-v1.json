@@ -1,0 +1,7 @@
+{
+  "state": "AQIDBAUGBwgJCgsMDQ4PEA",
+  "code": "c0de:with/odd+chars=~.%",
+  "iss": "https://auth.example.com",
+  "line": "gauth1.AQIDBAUGBwgJCgsMDQ4PEA.YzBkZTp3aXRoL29kZCtjaGFycz1-LiU.aHR0cHM6Ly9hdXRoLmV4YW1wbGUuY29t",
+  "line_no_iss": "gauth1.AQIDBAUGBwgJCgsMDQ4PEA.YzBkZTp3aXRoL29kZCtjaGFycz1-LiU"
+}
