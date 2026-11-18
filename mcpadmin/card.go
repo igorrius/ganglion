@@ -54,6 +54,10 @@ type approval struct {
 	Timeout     time.Duration                 `json:"timeout"`
 	Tools       map[string]settings.MCPPolicy `json:"tools"`
 	Fingerprint string                        `json:"fingerprint"`
+	// Was pins the server's line when the card was made (digest); a press
+	// changes nothing once the line is another, so an old card never
+	// brings back a disconnected server or older rules.
+	Was string `json:"was"`
 }
 
 // toolsCard lists the server's tools and makes the card that approves
@@ -69,12 +73,12 @@ func (a *Admin) toolsCard(ctx context.Context, sp texts.Speaker, w who, t target
 	if err != nil {
 		return event.Outgoing{}, 0, err
 	}
-	old, _, err := a.line(t.name)
+	old, existed, err := a.line(t.name)
 	if err != nil {
 		return event.Outgoing{}, 0, err
 	}
 	ap := approval{Server: t.name, URL: t.url, Auth: auth, Header: t.header, Timeout: time.Duration(old.Timeout),
-		Tools: proposed(l.Tools, old.Tools), Fingerprint: l.Fingerprint}
+		Tools: proposed(l.Tools, old.Tools), Fingerprint: l.Fingerprint, Was: digest(old, existed)}
 	if ap.Timeout == 0 {
 		ap.Timeout = settings.DefaultMCPTimeout
 	}
@@ -210,8 +214,9 @@ func (a *Admin) QuickActions() map[string]pending.QuickAction {
 }
 
 // connectByButton writes the server's line as the card proposed it and
-// applies it: the tools are offered at once (R-MCP-3, R-CFG-13). A rerun
-// writes the same line.
+// applies it: the tools are offered at once (R-MCP-3, R-CFG-13). A press
+// on a card made before the line last changed changes nothing; a rerun of
+// the press finds its own line and answers the same.
 func (a *Admin) connectByButton(ctx context.Context, p pending.QuickPress) (pending.QuickEdit, error) {
 	return a.approve(ctx, p, false)
 }
@@ -234,18 +239,25 @@ func (a *Admin) approve(ctx context.Context, p pending.QuickPress, askAll bool) 
 			}
 		}
 	}
-	_, existed, err := a.line(ap.Server)
+	line := settings.MCPServer{URL: ap.URL, Auth: ap.Auth, Header: ap.Header, Timeout: settings.Duration(ap.Timeout),
+		Tools: ap.Tools, Fingerprint: ap.Fingerprint}
+	a.changeMu.Lock()
+	defer a.changeMu.Unlock()
+	written, err := a.current(ap.Server, digest(line, true))
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}
-	why := "connected"
-	if existed {
-		why = "approved again"
-	}
-	line := settings.MCPServer{URL: ap.URL, Auth: ap.Auth, Header: ap.Header, Timeout: settings.Duration(ap.Timeout),
-		Tools: ap.Tools, Fingerprint: ap.Fingerprint}
-	if err := a.d.File.SetServer(ap.Server, line, why); err != nil {
-		return pending.QuickEdit{}, fmt.Errorf("mcpadmin: connect %s: %w", ap.Server, err)
+	if !written { // a rerun of this press finds its own line and answers the same
+		if ok, err := a.current(ap.Server, ap.Was); err != nil || !ok {
+			return stale(p), err
+		}
+		why := "connected"
+		if ap.Was != "" {
+			why = "approved again"
+		}
+		if err := a.d.File.SetServer(ap.Server, line, why); err != nil {
+			return pending.QuickEdit{}, fmt.Errorf("mcpadmin: connect %s: %w", ap.Server, err)
+		}
 	}
 	if err := a.Apply(); err != nil {
 		return pending.QuickEdit{}, err
@@ -282,11 +294,12 @@ func (a *Admin) cancelByButton(ctx context.Context, p pending.QuickPress) (pendi
 	if err != nil {
 		return pending.QuickEdit{}, err
 	}
-	_, existed, err := a.line(ap.Server)
-	if err != nil {
-		return pending.QuickEdit{}, err
+	a.changeMu.Lock()
+	defer a.changeMu.Unlock()
+	if ok, err := a.current(ap.Server, ap.Was); err != nil || !ok {
+		return stale(p), err
 	}
-	if !existed {
+	if ap.Was == "" {
 		if err := a.d.SignIns.Disconnect(ctx, ap.Server); err != nil {
 			return pending.QuickEdit{}, fmt.Errorf("mcpadmin: cancel %s: %w", ap.Server, err)
 		}

@@ -499,3 +499,4 @@ status.mcp_tools_changed: "MCP-сервер {server}: інструменти з�
 status.mcp_unauthorized: "MCP-сервер {server}: потрібен новий вхід"
 status.mcp_locked: "MCP-сервер {server}: сховище секретів заблоковано"
 ask.mcp_signin_link: "Увійти"
+mcp.card_stale: "Ця картка застаріла: сервер змінився відтоді, як вона прийшла, тож нічого не змінено. Надішліть /mcp або попросіть асистента підключити сервер знову."

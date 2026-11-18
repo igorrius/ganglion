@@ -516,6 +516,7 @@ const (
 	ButtonMCPDisconnect   Key = "button.mcp_disconnect" // vars: server
 	MCPConnected          Key = "mcp.connected"         // vars: server, n, auto, ask
 	MCPCancelled          Key = "mcp.cancelled"         // vars: server
+	MCPCardStale          Key = "mcp.card_stale"        // a press on a card made before the server\'s line changed
 	MCPDisconnected       Key = "mcp.disconnected"      // vars: server
 	MCPListFailed         Key = "mcp.list_failed"       // vars: server, kind
 	MCPListNone           Key = "mcp.list_none"
@@ -554,7 +555,7 @@ var allKeys = []Key{
 	UpdateAlertFailed, UpdateAlertUnverified, UpdateAlertNoExec, UpdateAlertExec, UpdateDBRestored, UpdateDBKept, UpdateImageVersion, UpdateConfirmed, UpdateStarted, UpdateAvailable,
 	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateButtonInstall, UpdateButtonRollback, UpdateButtonRollbackImg, UpdateButtonStale, UpdateAlreadyInstalled, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
 	BackupAlertFailed, BackupAlertRecovered, BackupLastNone, BackupReasonRefused, BackupReasonNetwork, BackupReasonChanged, BackupReasonIntegrity, BackupReasonOther, StatusBackupOff, StatusBackupOK, StatusBackupWaiting, StatusBackupStale, StatusBackupNone, StatusReasonBackupStale, StatusBackupFailed,
-	AskMCPConnect, AskMCPSignIn, AskMCPSignInLink, AskMCPPageWarning, AskMCPToolsCard, AskMCPToolsNone, AskMCPToolsAuto, AskMCPToolsConfirm, AskMCPToolsForbidden, AskMCPToolsSkipped, AskMCPToolsMore, AskMCPRule, AskMCPPolicyAuto, AskMCPPolicyConfirm, AskMCPPolicyForbidden, ButtonMCPConnect, ButtonMCPAskAll, ButtonMCPCancel, ButtonMCPDisconnect, MCPConnected, MCPCancelled, MCPDisconnected, MCPListFailed, MCPListNone, MCPListHead, MCPListRow, MCPListSignedIn, MCPPrivateOnly, MCPStateConnecting, MCPStateConnected, MCPStateUnreachable, MCPStateToolsChanged, MCPStateUnauthorized, MCPStateLocked, StatusMCPConnecting, StatusMCPUnreachable, StatusMCPToolsChanged, StatusMCPUnauthorized, StatusMCPLocked,
+	AskMCPConnect, AskMCPSignIn, AskMCPSignInLink, AskMCPPageWarning, AskMCPToolsCard, AskMCPToolsNone, AskMCPToolsAuto, AskMCPToolsConfirm, AskMCPToolsForbidden, AskMCPToolsSkipped, AskMCPToolsMore, AskMCPRule, AskMCPPolicyAuto, AskMCPPolicyConfirm, AskMCPPolicyForbidden, ButtonMCPConnect, ButtonMCPAskAll, ButtonMCPCancel, ButtonMCPDisconnect, MCPConnected, MCPCancelled, MCPCardStale, MCPDisconnected, MCPListFailed, MCPListNone, MCPListHead, MCPListRow, MCPListSignedIn, MCPPrivateOnly, MCPStateConnecting, MCPStateConnected, MCPStateUnreachable, MCPStateToolsChanged, MCPStateUnauthorized, MCPStateLocked, StatusMCPConnecting, StatusMCPUnreachable, StatusMCPToolsChanged, StatusMCPUnauthorized, StatusMCPLocked,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.

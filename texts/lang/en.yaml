@@ -502,3 +502,4 @@ status.mcp_tools_changed: "MCP server {server}: its tools changed and are off un
 status.mcp_unauthorized: "MCP server {server}: needs a new sign-in"
 status.mcp_locked: "MCP server {server}: the secret store is locked"
 ask.mcp_signin_link: "Sign in"
+mcp.card_stale: "This card is out of date: the server changed since it was sent, so nothing was changed. Send /mcp, or ask the assistant to connect the server again."

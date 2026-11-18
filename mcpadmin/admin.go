@@ -9,12 +9,16 @@ package mcpadmin
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/igorrius/ganglion/event"
@@ -106,6 +110,13 @@ type Admin struct {
 	log     *slog.Logger
 	version string
 	in      instruments
+
+	// applyMu makes reading the section and handing it to the hub one
+	// step, so a later change is never overtaken by an earlier read.
+	applyMu sync.Mutex
+	// changeMu makes a press's check of the line and its write one step,
+	// so two presses cannot both pass the check.
+	changeMu sync.Mutex
 }
 
 // Option configures an Admin.
@@ -135,6 +146,8 @@ func New(d Deps, opts ...Option) *Admin {
 // adds, removes and restarts them at once (R-CFG-6). The node calls it at
 // start and after every change its tools make.
 func (a *Admin) Apply() error {
+	a.applyMu.Lock()
+	defer a.applyMu.Unlock()
 	m, err := a.d.File.MCP()
 	if err != nil {
 		return fmt.Errorf("mcpadmin: read the mcp section: %w", err)
@@ -177,6 +190,34 @@ func (a *Admin) line(name string) (settings.MCPServer, bool, error) {
 	}
 	s, ok := m.Servers[name]
 	return s, ok, nil
+}
+
+// digest pins a server's line as a card saw it: "" for no line. A press
+// whose card saw another line than the file holds now is out of date.
+func digest(s settings.MCPServer, ok bool) string {
+	if !ok {
+		return ""
+	}
+	b, err := json.Marshal(s) // maps are written sorted
+	if err != nil {
+		return "unreadable"
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// current reports whether the server's line is still the one a card saw.
+func (a *Admin) current(server, was string) (bool, error) {
+	line, ok, err := a.line(server)
+	if err != nil {
+		return false, err
+	}
+	return digest(line, ok) == was, nil
+}
+
+// stale is the edit of a press on an out-of-date card: nothing changes.
+func stale(p pending.QuickPress) pending.QuickEdit {
+	return pending.QuickEdit{Text: p.Speak.Text(texts.MCPCardStale, nil)}
 }
 
 // speaker writes in principal's language; English when it is unknown.

@@ -514,7 +514,9 @@ func TestStatusLines(t *testing.T) {
 	}
 	// The server's list changes; at its next connect the hub finds a list
 	// that does not match what Connect approved.
-	r.mcp.Update(func(o *mcpclienttest.Options) { o.Tools = append(serverTools(), mcpclienttest.Tool("refund", "Refund.", "", false)) })
+	r.mcp.Update(func(o *mcpclienttest.Options) {
+		o.Tools = append(serverTools(), mcpclienttest.Tool("refund", "Refund.", "", false))
+	})
 	line, _ := r.line(t)
 	line.Timeout = settings.Duration(time.Minute) // a changed line restarts the server
 	if err := (settings.MCPFile{Path: r.file}).SetServer("shop", line); err != nil {
@@ -539,5 +541,91 @@ func TestCardWithNoServer(t *testing.T) {
 	text, bs, err := r.a.Card(context.Background(), texts.Speaker{}, admin, conv, time.UTC)
 	if err != nil || len(bs) != 0 || !strings.HasPrefix(text, "No MCP server") {
 		t.Fatalf("/mcp = %q, %v, %v", text, bs, err)
+	}
+}
+
+// A name keeps one address: connecting a connected name at another address
+// is refused before the network, so no sign-in at that address can hand
+// the running server another server's token (review of #271).
+func TestConnectRefusesAnotherAddressForAConnectedName(t *testing.T) {
+	r := newRig(t, false)
+	connected(t, r)
+	before := r.mcp.Count("initialize")
+	_, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(),
+		call(mcpadmin.ToolConnect, map[string]any{"name": "shop", "url": r.mcp.URL + "/other"}))
+	if err == nil || !strings.Contains(err.Error(), "disconnects it with /mcp first") {
+		t.Fatalf("err = %v", err)
+	}
+	if r.mcp.Count("initialize") != before {
+		t.Fatal("the other address was probed")
+	}
+	if s, _ := r.line(t); s.URL != r.url {
+		t.Fatalf("line = %+v", s)
+	}
+	// The same address is a connect again, as before.
+	if _, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), call(mcpadmin.ToolConnect, map[string]any{"name": "shop", "url": r.url})); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A card made before the server's line changed changes nothing: an older
+// card does not bring back older rules after a newer approval, a Connect
+// does not bring back a server disconnected since, and an old /mcp card
+// does not disconnect a server approved again since. A rerun of a press
+// answers the same (review of #271).
+func TestOldCardChangesNothing(t *testing.T) {
+	r := newRig(t, false)
+	run := func() event.Outgoing {
+		t.Helper()
+		res, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), call(mcpadmin.ToolConnect, map[string]any{"name": "shop", "url": r.url}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.Out[0]
+	}
+	first, second := run(), run()
+	r.press(t, second, "Ask for all")
+	if again := r.press(t, second, "Ask for all"); !strings.Contains(again.Text, "connected") {
+		t.Fatalf("a rerun answered %q", again.Text)
+	}
+	if e := r.press(t, first, "Connect"); !strings.Contains(e.Text, "out of date") || e.Note != "" {
+		t.Fatalf("an older card: %+v", e)
+	}
+	if s, _ := r.line(t); s.Tools["search_products"] != settings.MCPPolicyConfirm {
+		t.Fatalf("an older card restored older rules: %+v", s)
+	}
+	if e := r.press(t, first, "Cancel"); !strings.Contains(e.Text, "out of date") {
+		t.Fatalf("an older Cancel: %+v", e)
+	}
+
+	_, oldList, err := r.a.Card(context.Background(), texts.Speaker{}, admin, conv, time.UTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := call(mcpadmin.ToolRule, map[string]any{"server": "shop", "tool": "search_products", "policy": "auto"})
+	if _, err := r.tool(mcpadmin.ToolRule).Run(context.Background(), rule); err != nil {
+		t.Fatal(err)
+	}
+	if e := r.press(t, event.Outgoing{Buttons: oldList}, "Disconnect"); !strings.Contains(e.Text, "out of date") {
+		t.Fatalf("an old /mcp Disconnect: %+v", e)
+	}
+	if _, ok := r.line(t); !ok {
+		t.Fatal("an old /mcp card disconnected the server")
+	}
+
+	third := run()
+	_, list, err := r.a.Card(context.Background(), texts.Speaker{}, admin, conv, time.UTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.press(t, event.Outgoing{Buttons: list}, "Disconnect")
+	if again := r.press(t, event.Outgoing{Buttons: list}, "Disconnect"); !strings.Contains(again.Text, "disconnected") {
+		t.Fatalf("a rerun of Disconnect answered %q", again.Text)
+	}
+	if e := r.press(t, third, "Connect"); !strings.Contains(e.Text, "out of date") {
+		t.Fatalf("a Connect after Disconnect: %+v", e)
+	}
+	if _, ok := r.line(t); ok {
+		t.Fatal("an old card brought a disconnected server back")
 	}
 }

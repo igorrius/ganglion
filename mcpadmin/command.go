@@ -29,6 +29,7 @@ type view struct {
 	state    mcpclient.State
 	tools    int
 	signedIn time.Time
+	was      string // the line's digest, for Disconnect
 }
 
 // views are the servers of the file, by name, with the hub's states.
@@ -45,7 +46,7 @@ func (a *Admin) views(ctx context.Context) ([]view, error) {
 	out := make([]view, 0, len(m.Servers))
 	for _, name := range slices.Sorted(maps.Keys(m.Servers)) {
 		line := m.Servers[name]
-		v := view{name: name, state: mcpclient.StateConnecting}
+		v := view{name: name, state: mcpclient.StateConnecting, was: digest(line, true)}
 		if st, ok := states[name]; ok {
 			v.state, v.tools = st.State, st.Tools
 		}
@@ -92,7 +93,7 @@ func (a *Admin) Card(ctx context.Context, sp texts.Speaker, principal, conv stri
 			row += sp.Text(texts.MCPListSignedIn, texts.Vars{varTime: timeIn(v.signedIn, loc)})
 		}
 		lines = append(lines, "- "+row)
-		args, err := json.Marshal(approval{Server: v.name})
+		args, err := json.Marshal(approval{Server: v.name, Was: v.was})
 		if err != nil {
 			return "", nil, fmt.Errorf("mcpadmin: /mcp: %w", err)
 		}
@@ -111,12 +112,22 @@ func (a *Admin) Card(ctx context.Context, sp texts.Speaker, principal, conv stri
 }
 
 // disconnectByButton removes the server's line, its registration, tokens
-// and key, and stops it (R-MCP-5, R-MCP-10). A rerun finds nothing to
-// remove and says the same.
+// and key, and stops it (R-MCP-5, R-MCP-10). A Disconnect on a card older
+// than the line's last change changes nothing; one whose server is gone
+// already (a rerun) removes what is left and answers the same.
 func (a *Admin) disconnectByButton(ctx context.Context, p pending.QuickPress) (pending.QuickEdit, error) {
 	ap, err := a.pressed(ctx, p)
 	if err != nil {
 		return pending.QuickEdit{}, err
+	}
+	a.changeMu.Lock()
+	defer a.changeMu.Unlock()
+	gone, err := a.current(ap.Server, "")
+	if err != nil {
+		return pending.QuickEdit{}, err
+	}
+	if ok, err := a.current(ap.Server, ap.Was); err != nil || !ok && !gone {
+		return stale(p), err
 	}
 	if err := a.d.File.RemoveServer(ap.Server); err != nil {
 		return pending.QuickEdit{}, fmt.Errorf("mcpadmin: disconnect %s: %w", ap.Server, err)

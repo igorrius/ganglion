@@ -89,6 +89,8 @@ var (
 	errHeader  = errors.New("header must be the name of a header, such as X-API-Key, and not one the client sets itself")
 	errGrant   = errors.New("a scheduled run does not connect servers")
 	errPrivate = errors.New("servers are connected only in the admin's private chat")
+	errMoved   = errors.New("a server by that name is connected at another address: the owner disconnects it with /mcp first, " +
+		"or choose another name")
 )
 
 // connectTool is mcp.connect (R-MCP-3).
@@ -165,6 +167,14 @@ func (a *Admin) target(c tool.Call) (target, error) {
 // it answers 401, the key's request when a header was named.
 func (a *Admin) connect(ctx context.Context, c tool.Call, t target) (tool.Result, error) {
 	w := who{principal: c.Principal, transport: c.Transport, conv: c.Conv}
+	// A name keeps one sign-in: a sign-in at another address would hand
+	// the running server another server's token.
+	if line, ok, err := a.line(t.name); err != nil {
+		return tool.Result{}, err
+	} else if ok && line.URL != t.url {
+		a.in.connect(ctx, outcomeRefused)
+		return tool.Result{}, errMoved
+	}
 	if t.header != "" {
 		return a.requestKey(ctx, w, t)
 	}

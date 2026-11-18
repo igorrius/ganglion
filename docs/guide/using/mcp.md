@@ -47,7 +47,9 @@ The card lists the server's tools in groups, in the server's own words:
 
 Press **Connect** to turn the tools on with these rules, **Ask for all** to make every tool ask you first (it then connects), or **Cancel** to drop the server: for one not connected yet, the sign-in and registration are removed.
 
-A server you approved before and connect again keeps the rules you set.
+A server you approved before and connect again keeps the rules you set. A name keeps one address: to move a server to another address, disconnect it with `/mcp` first, or connect the new one under another name.
+
+A card's buttons work only while the server's entry is as it was when the card came. After a newer card is approved, a rule changes or the server is disconnected, an older card says it is out of date and changes nothing.
 
 ## Change a rule
 
