@@ -16,6 +16,7 @@ agent/background.go
 agent/cells.go
 agent/commands.go
 agent/group_request.go
+agent/secret_closed.go
 agent/config.go
 agent/limits.go
 agent/model.go
@@ -109,6 +110,7 @@ tool/tool.go
 tool/builtin/destinations.go
 tool/builtin/diag.go
 tool/builtin/message.go
+tool/builtin/secret_request.go
 tool/builtin/module_read.go
 tool/builtin/module_status.go
 tool/builtin/persona.go

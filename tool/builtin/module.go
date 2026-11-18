@@ -463,3 +463,21 @@ func keyHash(c tool.Call) string {
 	sum := sha256.Sum256([]byte(c.Key()))
 	return hex.EncodeToString(sum[:8])
 }
+
+// SourceManifest parses the manifest of module's source in the workspace
+// (modules/<name>/manifest.yaml), read as module.read reads a file: what
+// secret.request checks a module's secret against, before any build.
+func (m Modules) SourceManifest(module string) (runner.Manifest, error) {
+	if err := moduleName(SecretRequestTool, module); err != nil {
+		return runner.Manifest{}, err
+	}
+	dir, err := m.sourceDir(SecretRequestTool, module)
+	if err != nil {
+		return runner.Manifest{}, err
+	}
+	src, err := readSource(dir, "manifest.yaml")
+	if err != nil {
+		return runner.Manifest{}, err
+	}
+	return runner.ParseManifest([]byte(src))
+}
