@@ -159,4 +159,8 @@ cmd/update.go
 restart/**
 config/restart.go
 mcpclient/**
+# The admin side of remote MCP servers: the lab has no fake MCP server yet (a scenario
+# that connects one is a follow-up); mcpadmin's tests run the flow over fakes.
+mcpadmin/**
+agent/mcp_cmd.go
 config/intake.go

@@ -2,7 +2,9 @@ package confighist_test
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/igorrius/ganglion/confighist"
 	"github.com/igorrius/ganglion/settings"
@@ -15,6 +17,9 @@ func TestWrappersRecordTheirSource(t *testing.T) {
 	mods := confighist.ModulesFile{File: settings.ModulesFile{Path: file}, History: h}
 	dests := confighist.DestinationsFile{File: settings.DestinationsFile{Path: file}, History: h}
 	tg := confighist.TelegramFile{File: settings.TelegramFile{Path: file}, History: h}
+	mcp := confighist.MCPFile{File: settings.MCPFile{Path: file}, History: h}
+	shop := settings.MCPServer{URL: "https://mcp.example.com/mcp", Auth: settings.MCPAuthNone, Timeout: settings.Duration(time.Minute),
+		Tools: map[string]settings.MCPPolicy{"search": settings.MCPPolicyAuto}, Fingerprint: "sha256:" + strings.Repeat("0", 64)}
 
 	steps := []struct {
 		do     func() error
@@ -33,6 +38,9 @@ func TestWrappersRecordTheirSource(t *testing.T) {
 		{func() error { return tg.SetGroup(settings.Group{Chat: -1001234567890, Name: "family", Role: "family"}) }, confighist.SourceGroup, "group -1001234567890: connected"},
 		{func() error { return tg.RemoveGroup(-1001234567890) }, confighist.SourceGroup, "group -1001234567890: disconnected"},
 		{func() error { return mods.RemoveModule("local/demo-reader") }, confighist.SourceModule, "module local/demo-reader: removed"},
+		{func() error { return mcp.SetServer("shop", shop, "connected") }, confighist.SourceMCP, "mcp server shop: connected"},
+		{func() error { return mcp.SetPolicy("shop", "search", settings.MCPPolicyConfirm) }, confighist.SourceMCP, "mcp server shop: search confirm"},
+		{func() error { return mcp.RemoveServer("shop") }, confighist.SourceMCP, "mcp server shop: disconnected"},
 	}
 	for i, s := range steps {
 		if err := s.do(); err != nil {

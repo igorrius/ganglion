@@ -18,6 +18,7 @@ There are no `/start` and `/help` commands. Telegram's command menu is set by th
 | `/modules` | Lists modules. See [Modules](modules.md) for the verbs. | Admin | Admin chat |
 | `/why` | Reply to a module's message with `/why` to see how it came about: the runs that led to it, each with when it ran, what started it, how long it took, how it ended, what it called and the names of the values it wrote. Never shows the module's own text. | Admin | Admin chat |
 | `/cells` | Shows sensors and switches (cells) with their values. | Admin | Admin chat |
+| `/mcp` | Lists the connected MCP servers with their state, last sign-in and number of tools, each with a Disconnect button. See [Connecting an MCP server](mcp.md). | Admin | Admin chat |
 | `/secrets` | Lists secret names, dates and which modules use them. Never shows a value. `/secrets rm <module or node> <NAME>` removes one; `/secrets reset` drops all after a key mismatch. | Admin | Admin chat |
 | `/metrics` | Sends metrics as a picture. Optional filter: `all`, `ganglion`, `runtime`, `process` or a word. | Admin | Admin chat |
 | `/commands` | Shows the host-command switch. `/commands on` or `/commands off` flips it. | Admin | Admin chat |

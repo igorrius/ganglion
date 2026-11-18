@@ -72,6 +72,7 @@ func Parse(src []byte) (File, error) {
 	if f.Backup != nil && f.Backup.At == "" {
 		f.Backup.At = DefaultBackupAt
 	}
+	f.MCP.fill()
 	return f, f.check()
 }
 
@@ -266,8 +267,8 @@ func (f File) check() error {
 		{pathTelegramReply, "must be auto, always or off", slices.Contains([]string{auto, "always", off}, f.Telegram.Reply)},
 		{pathSearchMode, "must be auto or off", slices.Contains([]string{auto, off}, f.Agent.Search.Mode)},
 		{"agent.workspace", "must not be empty", f.Agent.Workspace != ""},
-		{keyCallTimeout, "must be above 0", f.Agent.CallTimeout > 0},
-		{keyTurnTimeout, "must be above 0", f.Agent.TurnTimeout > 0},
+		{keyCallTimeout, reasonAboveZero, f.Agent.CallTimeout > 0},
+		{keyTurnTimeout, reasonAboveZero, f.Agent.TurnTimeout > 0},
 		{keyCallTimeout, "must not be longer than " + keyTurnTimeout, f.Agent.CallTimeout <= f.Agent.TurnTimeout},
 		{"memory.review.quiet", "must be above 0 while the review is enabled", !f.Memory.Review.Enabled || f.Memory.Review.Quiet > 0},
 		{keyTurnTimeout, "plus " + HandlerSlack.String() + " for the node's handler must stay below the queue's lease of " +
@@ -281,6 +282,9 @@ func (f File) check() error {
 		return err
 	}
 	if err := checkDestinations(f.Destinations, f.Modules); err != nil {
+		return err
+	}
+	if err := f.MCP.check(f.Modules); err != nil {
 		return err
 	}
 	if f.Backup != nil {

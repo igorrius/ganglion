@@ -135,6 +135,8 @@ type Deps struct {
 	// Secrets is what /secrets reads and changes (R-CFG-9); NoSecrets when
 	// unset.
 	Secrets SecretsAdmin
+	// MCP is what /mcp shows (R-MCP-10); NoMCP when unset.
+	MCP MCPAdmin
 	// Private finds a person's private chat, where /memory answers
 	// (telegram.PrivateConv); none when unset.
 	Private alert.PrivateConvFunc
@@ -536,6 +538,9 @@ func withMemory(d Deps) Deps {
 	}
 	if d.Secrets == nil {
 		d.Secrets = NoSecrets{}
+	}
+	if d.MCP == nil {
+		d.MCP = NoMCP{}
 	}
 	if d.Updater == nil {
 		d.Updater = NoUpdater{}

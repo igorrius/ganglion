@@ -7,6 +7,7 @@ import (
 	"github.com/igorrius/ganglion/backup"
 	"github.com/igorrius/ganglion/host"
 	bgjobs "github.com/igorrius/ganglion/jobs"
+	"github.com/igorrius/ganglion/mcpadmin"
 	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
@@ -35,6 +36,7 @@ func StatusSources() do.Provider[[]status.Source] {
 			do.MustInvoke[*modstore.Store](i),
 			do.MustInvoke[*modhost.Host](i),
 			do.MustInvoke[*vault.Vault](i),
+			do.MustInvoke[*mcpadmin.Admin](i),
 			do.MustInvoke[*backup.Status](i),
 			do.MustInvoke[*schedule.Scheduler](i),
 			do.MustInvoke[*sandbox.Sandbox](i),

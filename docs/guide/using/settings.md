@@ -37,7 +37,7 @@ Everything else is changed by editing the file on the machine, and the agent say
 - **Model providers and model definitions**: they name the addresses keys are sent to and the commands the node runs.
 - **The sandbox, the public address, the metrics address, the log folder and the workspace**: they widen what the node exposes or move its data.
 
-Some settings have their own tools and cards instead: modules ([Modules](modules.md)), where messages go and connected groups (the agent's routing tools), and polling or webhook ([Telegram: polling or webhook](../running/telegram-updates.md)).
+Some settings have their own tools and cards instead: modules ([Modules](modules.md)), remote MCP servers ([Connecting an MCP server](mcp.md)), where messages go and connected groups (the agent's routing tools), and polling or webhook ([Telegram: polling or webhook](../running/telegram-updates.md)).
 
 ## History and rollback
 

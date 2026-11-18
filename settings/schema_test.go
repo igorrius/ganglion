@@ -46,6 +46,8 @@ func TestSchemaMatchesTheLoader(t *testing.T) {
 		"/$defs/review":      settings.Review{},
 		"/$defs/update":      settings.Update{},
 		"/$defs/backup":      settings.Backup{},
+		"/$defs/mcp":         settings.MCP{},
+		"/$defs/mcpServer":   settings.MCPServer{},
 	} {
 		o, err := schemas.At(schema, pointer)
 		if err != nil {
@@ -87,6 +89,8 @@ func TestSchemaEnumsMatchTheLoader(t *testing.T) {
 		pointer, key, doc string
 		want              []string
 	}{
+		{"/$defs/mcpServer", "auth", "mcp: {servers: {s: {url: 'https://example.com/mcp', auth: %s, header: X-Key, fingerprint: 'sha256:0000000000000000000000000000000000000000000000000000000000000000'}}}\n",
+			[]string{"none", "oauth", "header"}},
 		{"/$defs/log", "level", "log: {level: %s}\n", []string{"debug", "info", "warn", "error"}},
 		{"/$defs/telegram", "reply", "telegram: {reply: %s}\n", []string{"auto", "always", "off"}},
 		{"/$defs/search", "mode", "agent: {search: {mode: %s}}\n", []string{"auto", "off"}},

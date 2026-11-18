@@ -1550,7 +1550,7 @@ phase plan).
   [ADR-0093](adr/0093-config-changes-through-the-agent-with-history-in-the-workspace.md)):
   each writer also copies the file to `config/ganglion.yaml` in the
   workspace repository and commits it with a reason and its source
-  (`propose`, `rollback`, `module`, `destination`, `group`, `host`). At
+  (`propose`, `rollback`, `module`, `destination`, `group`, `mcp`, `host`). At
   start a live file that differs from the last copy is committed with the
   source `host`. The live file stays at its path (R-CFG-1) and is the
   truth; tools that write the workspace refuse `config/`. A node without

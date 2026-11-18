@@ -29,6 +29,7 @@ const (
 	pathTelegramReply = "telegram.reply"
 	pathSearchMode    = "agent.search.mode"
 	keyModules        = "modules"
+	keyMCP            = "mcp"
 )
 
 // Place is where a field of the node's file is changed.
@@ -46,7 +47,7 @@ const (
 )
 
 // ownTool are the fields, and the sections, that have a tool of their own.
-var ownTool = []string{"destinations", "http", keyModules, "telegram.groups", "telegram.updates"}
+var ownTool = []string{"destinations", "http", keyMCP, keyModules, "telegram.groups", "telegram.updates"}
 
 // Allowed reports whether config.propose changes the field at path.
 func Allowed(path string) bool {

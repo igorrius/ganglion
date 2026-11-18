@@ -118,7 +118,7 @@ func TestCoreContainerBuildsWithTools(t *testing.T) {
 	want := []string{"cells.get", "cells.list", "cells.set", "host.exec", "host.stats", "message.send", "plan.show", "plan.step", "schedule.create", "schedule.delete",
 		"schedule.list", "schedule.run_now", "web.fetch", "web.search", "logs.search", "journal.search", "turns.failed", "skill.read", "language.set",
 		"destination.list", "destination.set", "destination.remove", "module.notify_to", "group.disconnect",
-		"config.propose", "config.history", "config.rollback"}
+		"config.propose", "config.history", "config.rollback", "mcp.connect", "mcp.rule"}
 	if _, err := exec.LookPath("git"); err == nil {
 		// The module tools need the workspace's git too; module.import is
 		// among them on every node, since the binary ships the templates.

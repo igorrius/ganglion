@@ -24,6 +24,7 @@
       "type": "array",
       "items": { "$ref": "#/$defs/module" }
     },
+    "mcp": { "description": "The remote MCP servers the admin connected from the chat, and the intake page's address (R-MCP-2). It applies at once; mcp.connect, mcp.rule and /mcp write it, config.propose never does.", "$ref": "#/$defs/mcp" },
     "memory": { "description": "The agent's long-term memory by topic (M5, R-MEM-6–9).", "$ref": "#/$defs/memory" },
     "update": { "description": "How the node follows the core releases (R-UPD-6).", "$ref": "#/$defs/update" },
     "backup": { "description": "The daily encrypted backup to an S3-compatible bucket (R-BAK-4). Missing means backups are off. Only the host edits this section: the agent cannot change it.", "$ref": "#/$defs/backup" }
@@ -445,6 +446,36 @@
         "chat": { "description": "Telegram's id of the group, a negative number.", "type": "integer", "exclusiveMaximum": 0 },
         "name": { "description": "For people: the group's title when it was connected.", "type": "string" },
         "role": { "description": "What the group's members may do: family, which is conversation with no tools.", "type": "string", "enum": ["family"] }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "page": { "description": "The address of the intake page, where a sign-in comes back and a secret is typed; the node checks it against its own copy before every request (R-INT-3).", "type": "string", "pattern": "^https://", "default": "https://igorrius.github.io/ganglion/intake/v1/" },
+        "servers": {
+          "description": "The connected servers by name: 1 to 24 of a-z, 0-9 and _, not a module's short name.",
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z0-9_]{1,24}$" },
+          "additionalProperties": { "$ref": "#/$defs/mcpServer" }
+        }
+      }
+    },
+    "mcpServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "auth", "fingerprint"],
+      "properties": {
+        "url": { "description": "The server's Streamable HTTP address: https, a public host, no user info.", "type": "string", "pattern": "^https://" },
+        "auth": { "description": "How the node signs in: none, oauth (a sign-in in the browser) or header (a key in a header).", "type": "string", "enum": ["none", "oauth", "header"] },
+        "header": { "description": "For auth: header, the header that carries the key; the key is in the secret store, scope mcp:<name>.", "type": "string" },
+        "timeout": { "description": "How long one request may take, such as 30s.", "type": "string", "default": "30s" },
+        "tools": {
+          "description": "The policy of each approved tool, by its name without the server's prefix: auto runs by itself, confirm asks first, forbidden is never offered.",
+          "type": "object",
+          "additionalProperties": { "type": "string", "enum": ["auto", "confirm", "forbidden"] }
+        },
+        "fingerprint": { "description": "The pin of the approved tool list: when the server's list changes, its tools are off until the admin approves again (R-MCP-7).", "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     },
     "module": {
