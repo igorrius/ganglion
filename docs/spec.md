@@ -1509,6 +1509,8 @@ phase plan).
   - `ganglion secret set [--module <name>] NAME` takes the value on
     standard input, `secret rm` and `secret list` complete it, and a
     running node sees the change at the next read, with no restart.
+    From the chat, `secret.request` sets one through the intake page
+    (7.17, R-INT-2).
   - Nothing shows a value again. `/secrets` (admin, private chat, no
     model) lists names, dates and the modules that name each, and removes
     one. A value the store hands out is redacted from the journal and the
@@ -1747,6 +1749,13 @@ with no shell, no public address, and no value in clear in the chat
   for the node's scope or a module's. Its card is the node's text: the
   secret's name, the module or server that asks, the hosts the value may
   reach, and the agent's reason quoted as data. No tool reads a value.
+  The call runs with no press of its own, in a tainted session too (the
+  card says so there): the card is the ask, and typing the value is the
+  owner's decision. A module's secret must be named in its source's
+  manifest under `secret.get` and not be one of the node's own; the card
+  names the manifest's `http.fetch` hosts. A scheduled run never asks. A
+  server's header key (`mcp.connect`) is asked for the same way, in the
+  scope `mcp:<server>`, with the server's host on the card.
 - **R-INT-3.** The intake page is one static file in two modes: it shows an
   OAuth code as a `gauth1.` line, or encrypts a secret in the
   browser and shows `gsec1.<id>.<ciphertext>`, each with a Copy button.

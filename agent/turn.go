@@ -56,6 +56,7 @@ type turn struct {
 	groupReq   event.GroupRequest // the request of a KindGroupRequest event
 	built      event.ModuleBuilt  // the build of a KindModuleBuilt event
 	review     event.MemoryReview // the conversation of a KindMemoryReview event
+	secret     event.SecretClosed // the closed request of a KindSecretClosed event
 	// transport and replyConv are where the answer goes: the event's
 	// source and conversation, or for a scheduled job its owner's
 	// transport and the job's reply target.

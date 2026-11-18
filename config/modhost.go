@@ -81,6 +81,9 @@ func settingsFile(b Bootstrap) string {
 // them when the workspace has no git.
 type Moduling struct {
 	Tools []tool.Handler
+	// Manifest reads a module source's manifest for secret.request;
+	// builtin.NoModuleSources on a host without git.
+	Manifest builtin.ManifestFunc
 }
 
 // ModuleTools provides the tools that bring the owner's modules in: the
@@ -91,7 +94,7 @@ func ModuleTools() do.Provider[Moduling] {
 	return func(i do.Injector) (Moduling, error) {
 		ws, err := do.Invoke[*gitrepo.Repo](i)
 		if errors.Is(err, gitrepo.ErrNoGit) {
-			return Moduling{}, nil
+			return Moduling{Manifest: builtin.NoModuleSources}, nil
 		}
 		if err != nil {
 			return Moduling{}, err
@@ -101,7 +104,7 @@ func ModuleTools() do.Provider[Moduling] {
 		if err != nil {
 			return Moduling{}, err
 		}
-		return Moduling{Tools: builtin.NewModuleTools(builtin.Modules{
+		m := builtin.Modules{
 			Workspace:   ws,
 			Builder:     do.MustInvoke[builder.Builder](i),
 			Store:       do.MustInvoke[*modstore.Store](i),
@@ -115,7 +118,8 @@ func ModuleTools() do.Provider[Moduling] {
 			Provenance:  provenanceDir(b),
 			Now:         time.Now,
 			Queue:       do.MustInvoke[*builtin.BuildQueue](i),
-		})}, nil
+		}
+		return Moduling{Tools: builtin.NewModuleTools(m), Manifest: m.SourceManifest}, nil
 	}
 }
 

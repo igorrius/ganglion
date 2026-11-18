@@ -70,12 +70,28 @@ const (
 	ReplyBack          Key = "reply.back"         // vars: seconds
 	ReplyBackApplied   Key = "reply.back_applied" // vars: changes
 
-	ReplyIntakeExpired   Key = "reply.intake_expired"   // a pasted line of a request that ran out (R-INT-5)
-	ReplyIntakeUnknown   Key = "reply.intake_unknown"   // no open request of that id
-	ReplyIntakeVersion   Key = "reply.intake_version"   // a line of a page version the node does not know
-	ReplyIntakeMalformed Key = "reply.intake_malformed" // a line that does not parse
-	ReplyIntakeFailed    Key = "reply.intake_failed"    // a line that was taken and not accepted
-	ReplyIntakeAlone     Key = "reply.intake_alone"     // a line with other text, in a caption or forwarded
+	ReplyIntakeExpired      Key = "reply.intake_expired"        // a pasted line of a request that ran out (R-INT-5)
+	ReplyIntakeUnknown      Key = "reply.intake_unknown"        // no open request of that id
+	ReplyIntakeVersion      Key = "reply.intake_version"        // a line of a page version the node does not know
+	ReplyIntakeMalformed    Key = "reply.intake_malformed"      // a line that does not parse
+	ReplyIntakeFailed       Key = "reply.intake_failed"         // a line that was taken and not accepted
+	ReplyIntakeAlone        Key = "reply.intake_alone"          // a line with other text, in a caption or forwarded
+	SecretCardNode          Key = "secret.card_node"            // the card's head for the node's own secret; vars: name
+	SecretCardModule        Key = "secret.card_module"          // the card's head for a module; vars: who, name, hosts
+	SecretCardModuleNoHosts Key = "secret.card_module_no_hosts" // the card's head for a module that reaches no host; vars: who, name
+	SecretCardServer        Key = "secret.card_server"          // the card's head for an MCP server's header key; vars: who, name, hosts
+	SecretCardWhy           Key = "secret.card_why"             // the agent's reason, quoted as data; vars: why
+	SecretCardTainted       Key = "secret.card_tainted"         // the card's note for a session that read outside content
+	SecretCardBody          Key = "secret.card_body"            // the card's instructions; vars: link, time
+	SecretEnter             Key = "secret.enter"                // the link's text on the card
+	SecretStopped           Key = "secret.stopped"              // the intake page failed its check (R-INT-3); vars: name
+	SecretLineSet           Key = "secret.line_set"             // a folded card: the secret is set; vars: name, whose, time
+	SecretLineFailed        Key = "secret.line_failed"          // a folded card: the line was not accepted; vars: name, whose, time
+	SecretLineLocked        Key = "secret.line_locked"          // a folded card: the store is locked; vars: name, whose, time
+	SecretLineExpired       Key = "secret.line_expired"         // a folded card: nobody answered in time; vars: name, whose, time
+	SecretWhoseNode         Key = "secret.whose_node"           // inside a folded card: the node's own
+	SecretWhoseModule       Key = "secret.whose_module"         // inside a folded card: a module's; vars: who
+	SecretWhoseServer       Key = "secret.whose_server"         // inside a folded card: a server's; vars: who
 
 	ButtonDetails        Key = "button.details"
 	ButtonDelete         Key = "button.delete"
@@ -500,7 +516,7 @@ var allKeys = []Key{
 	ToastApproved, ToastDeclined, ToastAccepted, ToastNotYours, ToastNoButton, ToastUsed, ToastExpired, ToastNotAllowed, ToastReplaced,
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired, LineReplaced,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
-	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, ReplyBuildLate, ReplyRestarting, ReplyBack, ReplyBackApplied, ReplyIntakeExpired, ReplyIntakeUnknown, ReplyIntakeVersion, ReplyIntakeMalformed, ReplyIntakeFailed, ReplyIntakeAlone, StatusCommandsOff,
+	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, ReplyBuildLate, ReplyRestarting, ReplyBack, ReplyBackApplied, ReplyIntakeExpired, ReplyIntakeUnknown, ReplyIntakeVersion, ReplyIntakeMalformed, ReplyIntakeFailed, ReplyIntakeAlone, SecretCardNode, SecretCardModule, SecretCardModuleNoHosts, SecretCardServer, SecretCardWhy, SecretCardTainted, SecretCardBody, SecretEnter, SecretStopped, SecretLineSet, SecretLineFailed, SecretLineLocked, SecretLineExpired, SecretWhoseNode, SecretWhoseModule, SecretWhoseServer, StatusCommandsOff,
 	AskDestinationSet, AskConfigPropose, AskConfigTainted, AskConfigKept, AskConfigDefault, ReplyConfigWritten, ButtonConfigRestart, AskDestinationRemove, AskModuleNotifyTo, AskGroupDisconnect, PlacePrivate, PlaceGroup, PlaceTopic, PlaceTopicNumber, PlaceTopicGiven, PlaceGeneral,
 	ButtonAllow, ButtonRefuse, GroupRequestCard, GroupNotConnected, GroupAllowed, GroupRefused,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskModuleWrite, AskForgetFact, AskForgetSlug, AskForgetTopic, AskPersona, AskSkillScript, AskHostExec, AskPlan, AskModuleImport, AskModuleInstall, AskModuleNetwork, AskModuleSecrets, AskModuleCreates, AskModuleTakes, AskModuleReads, AskModuleReacts, AskModuleNotify, AskModuleRuns, AskModuleTool, AskModuleAbout, AskModuleLimits, AskModuleNew, AskModuleNewNetwork, AskModuleNewSecrets, AskModuleNewCells, AskModuleNewReads, AskModuleNewReacts, AskModuleNewNotify, AskModuleNewRuns, AskModuleNewMemory, AskModuleNewTimeout, AskModuleTrial, AskModuleTrialNone, AskModuleTrialExample, AskModuleTrialMessage, AskModuleTrialCell, AskModuleTrialNothing, AskModuleTrialNow, AskModuleTrialMore, AskModuleTrialNotRun, AskModuleTrialFailed, AskModuleTrialError, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted, SchedReminderSet, SchedReminderOff, SchedOff, ButtonDone,

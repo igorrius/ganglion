@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/igorrius/ganglion/intake"
 	"log/slog"
 	"maps"
 	"slices"
@@ -200,6 +201,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 		builtin.NewScheduleDelete(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewScheduleRunNow(do.MustInvoke[builtin.Scheduling](i)),
 		builtin.NewLanguageSet(do.MustInvoke[*language.Store](i)),
+		builtin.NewSecretRequest(do.MustInvoke[*intake.Asker](i), do.MustInvoke[Moduling](i).Manifest, nodeSecrets(do.MustInvoke[Bootstrap](i))),
 		builtin.NewHostStats(do.MustInvoke[*host.Stats](i)),
 		do.MustInvoke[*builtin.HostExec](i),
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,

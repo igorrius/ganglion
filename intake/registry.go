@@ -115,6 +115,7 @@ type request struct {
 	oauth   OAuthFunc
 	secret  SecretFunc
 	key     hpke.PrivateKey
+	closed  ClosedFunc // the opener's own hook; NoClosed when it set none
 }
 
 // destroy drops the private key. Go cannot zero an ecdh.PrivateKey; the
@@ -236,9 +237,12 @@ func (r *Registry) open() int {
 // state the caller puts in the sign-in link; handle gets the code when an
 // admin pastes it. A hosted page that fails its check does not stop it:
 // PageErr says so, for the card's warning.
-func (r *Registry) OpenOAuth(ctx context.Context, handle OAuthFunc) (OAuthRequest, error) {
+func (r *Registry) OpenOAuth(ctx context.Context, handle OAuthFunc, opts ...OpenOption) (OAuthRequest, error) {
 	pageErr := r.page(ctx)
-	q := &request{kind: KindOAuth, oauth: handle}
+	q := &request{kind: KindOAuth, oauth: handle, closed: NoClosed}
+	for _, o := range opts {
+		o(q)
+	}
 	id, err := r.add(ctx, q)
 	if err != nil {
 		return OAuthRequest{}, fmt.Errorf("intake: open oauth: %w", err)
@@ -249,12 +253,20 @@ func (r *Registry) OpenOAuth(ctx context.Context, handle OAuthFunc) (OAuthReques
 	return OAuthRequest{ID: id, Expires: q.expires, PageErr: pageErr}, nil
 }
 
+// OpenOption configures one request.
+type OpenOption func(*request)
+
+// OnClosed sets a hook told when this request closes, after the registry's
+// own (WithClosed): the opener folds its card there (R-INT-6). It runs
+// with no lock held, once.
+func OnClosed(f ClosedFunc) OpenOption { return func(q *request) { q.closed = f } }
+
 // OpenSecret opens a request for the secret called name. The page seals the
 // value to the returned public key (R-INT-4); handle gets it opened. It
 // first checks the hosted page: an error wrapping ErrPageChanged or
 // ErrPageUnchecked refuses the request, and the caller tells the admin
 // that handing secrets over is stopped (R-INT-3).
-func (r *Registry) OpenSecret(ctx context.Context, name string, handle SecretFunc) (SecretRequest, error) {
+func (r *Registry) OpenSecret(ctx context.Context, name string, handle SecretFunc, opts ...OpenOption) (SecretRequest, error) {
 	if err := checkName(name); err != nil {
 		return SecretRequest{}, fmt.Errorf("intake: open secret: %w", err)
 	}
@@ -269,7 +281,10 @@ func (r *Registry) OpenSecret(ctx context.Context, name string, handle SecretFun
 	if err != nil {
 		return SecretRequest{}, fmt.Errorf("intake: open secret: key: %w", err)
 	}
-	q := &request{kind: KindSecret, name: name, secret: handle, key: key}
+	q := &request{kind: KindSecret, name: name, secret: handle, key: key, closed: NoClosed}
+	for _, o := range opts {
+		o(q)
+	}
 	id, err := r.add(ctx, q)
 	if err != nil {
 		return SecretRequest{}, fmt.Errorf("intake: open secret: %w", err)
@@ -327,25 +342,31 @@ func (r *Registry) add(ctx context.Context, q *request) (string, error) {
 // sweep removes the requests past their time and tells ClosedFunc, with
 // no lock held.
 func (r *Registry) sweep(ctx context.Context) {
-	var gone []Closed
+	type gone struct {
+		c Closed
+		q *request
+	}
+	var all []gone
 	r.mu.Lock()
 	now := r.now()
 	for id, q := range r.reqs {
 		if !now.Before(q.expires) {
 			q.destroy()
 			delete(r.reqs, id)
-			gone = append(gone, Closed{ID: id, Kind: q.kind, Outcome: OutcomeExpired, At: now})
+			all = append(all, gone{c: Closed{ID: id, Kind: q.kind, Outcome: OutcomeExpired, At: now}, q: q})
 		}
 	}
 	r.mu.Unlock()
-	for _, c := range gone {
-		r.finish(ctx, c)
+	for _, g := range all {
+		r.finish(ctx, g.q, g.c)
 	}
 }
 
-// finish counts and reports a closed request.
-func (r *Registry) finish(ctx context.Context, c Closed) {
+// finish counts and reports a closed request: to the registry's hook, then
+// to the request's own.
+func (r *Registry) finish(ctx context.Context, q *request, c Closed) {
 	r.tel.closed(ctx, c.Kind, c.Outcome)
 	r.log.Info("intake: request closed", "request", c.ID, "kind", c.Kind, "outcome", c.Outcome)
 	r.closed(ctx, c)
+	q.closed(ctx, c)
 }

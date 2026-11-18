@@ -64,7 +64,7 @@ ganglion secret rm --db ganglion.db TELEGRAM_BOT_TOKEN
 
 Then point the file at it with `token: store:TELEGRAM_BOT_TOKEN`. `list` shows names, dates and owners, never values. A module's own secrets use `--module <name>`. Values from `store:` are read at start, so restart the node after changing one.
 
-Never paste a secret into the Telegram chat. There is no safe chat-based way to hand one over yet.
+Never paste a secret into the Telegram chat as plain text. To hand one over from your phone, let the node ask for it: see [Entering a secret](../using/secrets.md).
 
 ## The master key
 
