@@ -299,6 +299,13 @@ type MemStore struct {
 // NewMemStore makes an empty store.
 func NewMemStore() *MemStore { return &MemStore{m: map[string]map[string]string{}} }
 
+// SetFail makes every later call return err; nil restores the store.
+func (s *MemStore) SetFail(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Fail = err
+}
+
 // Get implements mcpclient.Store.
 func (s *MemStore) Get(_ context.Context, server, name string) (string, error) {
 	s.mu.Lock()

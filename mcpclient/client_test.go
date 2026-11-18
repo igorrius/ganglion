@@ -645,13 +645,13 @@ type keyAuth struct{ name, value string }
 
 func (k keyAuth) Header(context.Context) (string, string, error) { return k.name, k.value, nil }
 
-func (keyAuth) Rejected(context.Context) {}
+func (keyAuth) Rejected(context.Context, string) {}
 
 type failingAuth struct{ err error }
 
 func (f failingAuth) Header(context.Context) (string, string, error) { return "", "", f.err }
 
-func (failingAuth) Rejected(context.Context) {}
+func (failingAuth) Rejected(context.Context, string) {}
 
 // No error and no log line holds the credential or the address's query,
 // whatever failed.

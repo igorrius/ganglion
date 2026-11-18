@@ -145,6 +145,7 @@ type pending struct {
 	server   string
 	reg      registration
 	verifier string
+	epoch    uint64 // the server's epoch when the sign-in began
 	expires  time.Time
 }
 
@@ -161,6 +162,7 @@ func (o *OAuth) Begin(ctx context.Context, server, serverURL, state string) (Sig
 	if state == "" || len(state) > maxState || !validSessionID(state) {
 		return SignIn{}, fmt.Errorf("mcpclient: begin the sign-in of %s: a bad state", server)
 	}
+	epoch := o.auth(server).currentEpoch()
 	ctx, cancel := context.WithTimeout(ctx, o.cfg.Timeout)
 	defer cancel()
 	md, err := o.discover(ctx, serverURL)
@@ -173,7 +175,7 @@ func (o *OAuth) Begin(ctx context.Context, server, serverURL, state string) (Sig
 		return SignIn{}, fmt.Errorf("mcpclient: register with the sign-in of %s: %w", server, err)
 	}
 	verifier := oauth2.GenerateVerifier()
-	p := &pending{server: server, reg: reg, verifier: verifier, expires: o.now().Add(o.cfg.PendingTTL)}
+	p := &pending{server: server, reg: reg, verifier: verifier, epoch: epoch, expires: o.now().Add(o.cfg.PendingTTL)}
 	if err := o.hold(state, p); err != nil {
 		return SignIn{}, fmt.Errorf("mcpclient: begin the sign-in of %s: %w", server, err)
 	}
@@ -238,15 +240,30 @@ func (o *OAuth) Complete(ctx context.Context, a intake.OAuthAnswer) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, o.cfg.Timeout)
 	defer cancel()
-	tok, err := p.reg.config(o.redirect).Exchange(o.tokenContext(ctx, p.reg), a.Code, oauth2.VerifierOption(p.verifier))
-	if err != nil {
-		err = o.tokenFailure(ctx, err, ErrExchange)
-	} else {
-		err = o.auth(p.server).signedIn(ctx, p.reg, tok)
-	}
+	err := o.exchange(ctx, p, a.Code)
 	o.in.step(ctx, stepExchange, err)
 	if err != nil {
 		return fmt.Errorf("mcpclient: complete the sign-in of %s: %w", p.server, err)
+	}
+	return nil
+}
+
+// exchange turns the code into tokens and keeps them. Tokens that cannot
+// be kept (the server was disconnected meanwhile, the store failed) are
+// revoked, so none is left live that the node does not hold.
+func (o *OAuth) exchange(ctx context.Context, p *pending, code string) error {
+	tok, err := p.reg.config(o.redirect).Exchange(o.tokenContext(ctx, p.reg), code, oauth2.VerifierOption(p.verifier))
+	if err != nil {
+		return o.tokenFailure(ctx, err, ErrExchange)
+	}
+	st, err := o.tokenOf(tok)
+	if err != nil {
+		o.revokeAll(ctx, p.server, p.reg, storedToken{Access: tok.AccessToken, Refresh: tok.RefreshToken})
+		return err
+	}
+	if err := o.auth(p.server).signedIn(ctx, p.epoch, p.reg, st); err != nil {
+		o.revokeAll(ctx, p.server, p.reg, st)
+		return err
 	}
 	return nil
 }
@@ -280,21 +297,19 @@ func (o *OAuth) auth(server string) *tokenAuth {
 	return a
 }
 
-// Disconnect ends the server's sign-in: it revokes the refresh and the
-// access token where the issuer names a revocation endpoint (RFC 7009),
-// forgets any sign-in waiting for it, and removes everything stored for
-// it. A failed revocation is logged and does not stop the removal; the
-// error is the store's.
+// Disconnect ends the server's sign-in: it forgets any sign-in waiting for
+// it, removes everything stored for it, and revokes the refresh and the
+// access token where the issuer names a revocation endpoint (RFC 7009). A
+// sign-in begun before and completed after keeps nothing and revokes its
+// own tokens. A failed revocation is logged and does not stop the
+// removal; the error is the store's.
 func (o *OAuth) Disconnect(ctx context.Context, server string) error {
 	o.forget(server)
-	a := o.auth(server)
-	reg, tok, err := a.drop(ctx)
-	if err == nil {
-		o.revokeAll(ctx, server, reg, tok)
+	reg, tok, err := o.auth(server).drop(ctx)
+	if err != nil {
+		return err
 	}
-	if err := o.store.Remove(ctx, server); err != nil {
-		return fmt.Errorf("mcpclient: remove the sign-in of %s: %w", server, err)
-	}
+	o.revokeAll(ctx, server, reg, tok)
 	return nil
 }
 

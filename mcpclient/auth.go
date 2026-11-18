@@ -10,10 +10,10 @@ import "context"
 type Auth interface {
 	Header(ctx context.Context) (name, value string, err error)
 	// Rejected tells the Auth that the server answered 401 to a request
-	// that carried its header: the credential no longer works. An OAuth
-	// Auth refreshes the token once before the next request; a key has
-	// nothing to do.
-	Rejected(ctx context.Context)
+	// that carried value in its header: that credential no longer works.
+	// An OAuth Auth refreshes the token once before the next request,
+	// unless it holds another token by now; a key has nothing to do.
+	Rejected(ctx context.Context, value string)
 }
 
 // NoAuth sends no header.
@@ -23,4 +23,4 @@ type NoAuth struct{}
 func (NoAuth) Header(context.Context) (name, value string, err error) { return "", "", nil }
 
 // Rejected implements Auth: there is nothing to renew.
-func (NoAuth) Rejected(context.Context) {}
+func (NoAuth) Rejected(context.Context, string) {}

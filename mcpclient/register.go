@@ -20,7 +20,7 @@ const (
 )
 
 // registration is the node's client at one authorization server, as the
-// store keeps it under nameClient: what dynamic registration gave and the
+// store keeps it in the sign-in's record: what dynamic registration gave and the
 // endpoints discovery found, so a refresh after a restart needs no
 // discovery.
 type registration struct {
@@ -61,8 +61,11 @@ func (r registration) withEndpoints(md Metadata) registration {
 	return r
 }
 
-// registration is the server's registration for this sign-in: the stored
-// one when it fits, else a new one (RFC 7591). It is stored either way.
+// registration is the server's registration for this sign-in: the one of
+// the stored sign-in when it fits, else a new one (RFC 7591). Nothing is
+// stored here: a registration is stored with the tokens it gets, when the
+// sign-in completes, so an abandoned sign-in leaves the stored one as it
+// was.
 func (o *OAuth) registration(ctx context.Context, server string, md Metadata) (registration, error) {
 	reg, err := o.storedRegistration(ctx, server)
 	if err != nil {
@@ -75,21 +78,17 @@ func (o *OAuth) registration(ctx context.Context, server string, md Metadata) (r
 			return registration{}, err
 		}
 	}
-	reg = reg.withEndpoints(md)
-	if err := o.saveJSON(ctx, server, nameClient, reg); err != nil {
-		return registration{}, err
-	}
-	return reg, nil
+	return reg.withEndpoints(md), nil
 }
 
-// storedRegistration is the registration the store holds; zero for none
-// or for one that does not parse.
+// storedRegistration is the registration of the stored sign-in; zero for
+// none or for one that does not parse.
 func (o *OAuth) storedRegistration(ctx context.Context, server string) (registration, error) {
-	var reg registration
-	if _, err := o.loadJSON(ctx, server, nameClient, &reg); err != nil {
+	var rec signInRecord
+	if _, err := o.loadJSON(ctx, server, nameSignIn, &rec); err != nil {
 		return registration{}, err
 	}
-	return reg, nil
+	return rec.Client, nil
 }
 
 // registerRequest is the client metadata the node registers (RFC 7591,

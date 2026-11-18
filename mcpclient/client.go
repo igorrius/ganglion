@@ -645,23 +645,23 @@ func (c *Client) send(ctx context.Context, req *http.Request) (*http.Response, e
 		return nil, c.failure(ctx, err, !connected.Load())
 	}
 	resp, err = checkStatus(resp, sid != "")
-	if sent && errors.Is(err, ErrUnauthorized) {
-		c.auth.Rejected(ctx)
+	if sent != "" && errors.Is(err, ErrUnauthorized) {
+		c.auth.Rejected(ctx, sent)
 	}
 	return resp, err
 }
 
-// authorize adds the credential header; sent says there was one.
-func (c *Client) authorize(ctx context.Context, req *http.Request) (*http.Request, bool, error) {
+// authorize adds the credential header; sent is its value, "" for none.
+func (c *Client) authorize(ctx context.Context, req *http.Request) (*http.Request, string, error) {
 	name, value, err := c.auth.Header(ctx)
 	if err != nil {
-		return nil, false, &credentialError{server: c.name, cause: err}
+		return nil, "", &credentialError{server: c.name, cause: err}
 	}
 	if name == "" {
-		return req, false, nil
+		return req, "", nil
 	}
 	req.Header.Set(name, value)
-	return req.WithContext(context.WithValue(req.Context(), authHeaderKey{}, name)), true, nil
+	return req.WithContext(context.WithValue(req.Context(), authHeaderKey{}, name)), value, nil
 }
 
 // checkStatus passes a success and turns the other statuses into errors;

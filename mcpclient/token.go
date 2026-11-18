@@ -15,11 +15,16 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Names in the Store (R-MCP-5).
-const (
-	nameClient = "oauth_client" // the registration and the endpoints
-	nameToken  = "oauth_token"  // the access token, its expiry and the refresh token
-)
+// nameSignIn is the one name a server's sign-in has in the Store (R-MCP-5):
+// the registration and the tokens it issued, as one record, so a token is
+// never paired with another client or issuer than its own.
+const nameSignIn = "oauth"
+
+// signInRecord is what the store keeps under nameSignIn.
+type signInRecord struct {
+	Client registration `json:"client"`
+	Token  storedToken  `json:"token"`
+}
 
 // Limits and margins of the tokens.
 const (
@@ -31,7 +36,7 @@ const (
 	maxForm = 64 << 10
 )
 
-// storedToken is what the store keeps under nameToken.
+// storedToken is the tokens of a sign-in.
 type storedToken struct {
 	Access  string    `json:"access_token"`
 	Refresh string    `json:"refresh_token,omitempty"`
@@ -50,9 +55,10 @@ type tokenAuth struct {
 	loaded    bool
 	reg       registration
 	tok       storedToken
-	force     bool // the server refused the token: refresh before the next request
-	forced    bool // the token in hand came from such a refresh
-	signedOut bool // no usable token until a new sign-in
+	force     bool   // the server refused the token: refresh before the next request
+	forced    bool   // the token in hand came from such a refresh
+	signedOut bool   // no usable token until a new sign-in
+	epoch     uint64 // counts Disconnects: a sign-in begun before one does not land after it
 }
 
 // Header implements Auth: a bearer token, refreshed first when needed.
@@ -70,15 +76,22 @@ func (a *tokenAuth) Header(ctx context.Context) (name, value string, err error) 
 			return "", "", err
 		}
 	}
-	return "Authorization", "Bearer " + a.tok.Access, nil
+	return "Authorization", bearer(a.tok.Access), nil
 }
+
+// bearer is the header value that carries token.
+func bearer(token string) string { return "Bearer " + token }
 
 // Rejected implements Auth. A token the server refused is refreshed once;
 // one that came from such a refresh, or that cannot be refreshed, means a
-// new sign-in.
-func (a *tokenAuth) Rejected(context.Context) {
+// new sign-in. A refusal of a token this Auth no longer holds is late (a
+// request in flight while another refreshed) and changes nothing.
+func (a *tokenAuth) Rejected(_ context.Context, value string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.signedOut || value != bearer(a.tok.Access) {
+		return
+	}
 	if a.forced || a.tok.Refresh == "" {
 		a.signedOut = true
 		a.o.log.Warn("mcpclient: the server refused its token; it needs a new sign-in", "server", a.server)
@@ -99,18 +112,13 @@ func (a *tokenAuth) load(ctx context.Context) error {
 	if a.loaded {
 		return nil
 	}
-	var reg registration
-	var tok storedToken
-	okReg, err := a.o.loadJSON(ctx, a.server, nameClient, &reg)
+	var rec signInRecord
+	ok, err := a.o.loadJSON(ctx, a.server, nameSignIn, &rec)
 	if err != nil {
 		return err
 	}
-	okTok, err := a.o.loadJSON(ctx, a.server, nameToken, &tok)
-	if err != nil {
-		return err
-	}
-	a.loaded, a.reg, a.tok = true, reg, tok
-	a.signedOut = !okReg || !okTok || reg.ClientID == ""
+	a.loaded, a.reg, a.tok = true, rec.Client, rec.Token
+	a.signedOut = !ok || rec.Client.ClientID == ""
 	return nil
 }
 
@@ -125,10 +133,11 @@ func (a *tokenAuth) renew(ctx context.Context) error {
 	defer cancel()
 	src := a.reg.config(a.o.redirect).TokenSource(a.o.tokenContext(ctx, a.reg), &oauth2.Token{RefreshToken: a.tok.Refresh})
 	tok, err := src.Token()
+	var st storedToken
 	if err != nil {
 		err = a.o.tokenFailure(ctx, err, ErrNeedsSignIn)
 	} else {
-		err = a.keep(ctx, tok)
+		st, err = a.o.tokenOf(tok)
 	}
 	a.o.in.step(ctx, stepRefresh, err)
 	switch {
@@ -139,54 +148,82 @@ func (a *tokenAuth) renew(ctx context.Context) error {
 	case err != nil:
 		return err
 	}
+	// The server rotated the refresh token: the new one is held even when
+	// it cannot be stored, or the next refresh would send a dead one.
+	a.tok = st
 	a.forced, a.force = a.force, false
+	if err := a.o.saveJSON(ctx, a.server, nameSignIn, signInRecord{Client: a.reg, Token: st}); err != nil {
+		a.o.log.Warn("mcpclient: a refreshed token was not stored; it is held in memory until a restart",
+			"server", a.server, "kind", "store")
+	}
 	return nil
 }
 
-// signedIn takes the tokens of a completed sign-in.
-func (a *tokenAuth) signedIn(ctx context.Context, reg registration, tok *oauth2.Token) error {
+// currentEpoch is the epoch a sign-in begins in.
+func (a *tokenAuth) currentEpoch() uint64 {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.reg, a.tok = reg, storedToken{}
-	if err := a.keep(ctx, tok); err != nil {
-		a.loaded, a.signedOut = true, true
+	return a.epoch
+}
+
+// errDisconnected is a sign-in that ended after the server was
+// disconnected since it began: its tokens are not kept.
+var errDisconnected = fmt.Errorf("%w: the server was disconnected", ErrUnknownSignIn)
+
+// signedIn takes the tokens of a sign-in begun in epoch and stores them
+// with the registration that got them, as one record. A sign-in that a
+// Disconnect overtook, or whose record cannot be stored, keeps nothing;
+// the caller revokes what it was given.
+func (a *tokenAuth) signedIn(ctx context.Context, epoch uint64, reg registration, st storedToken) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.epoch != epoch {
+		return errDisconnected
+	}
+	if err := a.o.saveJSON(ctx, a.server, nameSignIn, signInRecord{Client: reg, Token: st}); err != nil {
 		return err
 	}
+	a.reg, a.tok = reg, st
 	a.loaded, a.signedOut, a.force, a.forced = true, false, false, false
 	return nil
 }
 
-// keep checks a token the server issued and stores it. A refresh that
-// gives no new refresh token keeps the old one (x/oauth2 does).
-func (a *tokenAuth) keep(ctx context.Context, tok *oauth2.Token) error {
+// tokenOf checks a token the server issued. A refresh that gives no new
+// refresh token keeps the old one (x/oauth2 does).
+func (o *OAuth) tokenOf(tok *oauth2.Token) (storedToken, error) {
 	if tok.AccessToken == "" || len(tok.AccessToken) > 8<<10 {
-		return fmt.Errorf("%w: no usable access token", ErrExchange)
+		return storedToken{}, fmt.Errorf("%w: no usable access token", ErrExchange)
 	}
 	if t := tok.TokenType; t != "" && !strings.EqualFold(t, "bearer") {
-		return fmt.Errorf("%w: a token that is not a bearer token", ErrExchange)
+		return storedToken{}, fmt.Errorf("%w: a token that is not a bearer token", ErrExchange)
 	}
 	st := storedToken{Access: tok.AccessToken, Refresh: tok.RefreshToken}
 	if tok.ExpiresIn > 0 {
 		life := time.Duration(tok.ExpiresIn) * time.Second
-		st.Expiry = a.o.now().Add(life - min(expirySkew, life/2))
+		st.Expiry = o.now().Add(life - min(expirySkew, life/2))
 	}
-	if err := a.o.saveJSON(ctx, a.server, nameToken, st); err != nil {
-		return err
-	}
-	a.tok = st
-	return nil
+	return st, nil
 }
 
-// drop forgets the credential for Disconnect and returns what was stored,
-// for the revocation.
+// drop ends the credential for Disconnect: a new epoch, so no sign-in
+// begun before lands after it, and the store's record removed under the
+// same lock. It returns what was stored, for the revocation, and the
+// store's error.
 func (a *tokenAuth) drop(ctx context.Context) (registration, storedToken, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	err := a.load(ctx)
+	loadErr := a.load(ctx)
 	reg, tok := a.reg, a.tok
+	a.epoch++
 	a.loaded, a.signedOut, a.force, a.forced = true, true, false, false
 	a.reg, a.tok = registration{}, storedToken{}
-	return reg, tok, err
+	if err := a.o.store.Remove(ctx, a.server); err != nil {
+		return registration{}, storedToken{}, fmt.Errorf("mcpclient: remove the sign-in of %s: %w", a.server, err)
+	}
+	if loadErr != nil {
+		return registration{}, storedToken{}, nil
+	}
+	return reg, tok, nil
 }
 
 // tokenFailure turns a failed token request into the client's own error:

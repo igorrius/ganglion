@@ -152,7 +152,7 @@ func TestOAuthSignInFlow(t *testing.T) {
 	if l, err := c.ListTools(context.Background()); err != nil || len(l.Tools) != 1 {
 		t.Fatalf("ListTools = %+v, %v", l, err)
 	}
-	if v := r.store.Values("shop"); v["oauth_client"] == "" || !strings.Contains(v["oauth_token"], "access-") {
+	if v := r.store.Values("shop"); len(v) != 1 || !strings.Contains(v["oauth"], "client-") || !strings.Contains(v["oauth"], "access-") {
 		t.Fatalf("store = %v", v)
 	}
 	// A line works once.
@@ -367,7 +367,7 @@ func TestOAuthSignInExpires(t *testing.T) {
 func TestOAuthRefreshesAnExpiredToken(t *testing.T) {
 	r := newOAuthRig(t, mcpclienttest.AuthOptions{ExpiresIn: 3600})
 	r.signIn(t, "state-1")
-	before := r.store.Values("shop")["oauth_token"]
+	before := r.store.Values("shop")["oauth"]
 	r.clock.advance(time.Hour)
 	r.as.ExpireAccess()
 	if err := r.client().Initialize(context.Background()); err != nil {
@@ -378,7 +378,7 @@ func TestOAuthRefreshesAnExpiredToken(t *testing.T) {
 	if len(reqs) != 2 || last.Get("grant_type") != "refresh_token" || last.Get("resource") != r.url {
 		t.Fatalf("token requests = %+v", reqs)
 	}
-	if after := r.store.Values("shop")["oauth_token"]; after == before || !strings.Contains(after, "refresh-") {
+	if after := r.store.Values("shop")["oauth"]; after == before || !strings.Contains(after, "refresh-") {
 		t.Fatalf("store not updated: %s", after)
 	}
 }
@@ -574,3 +574,127 @@ func TestOAuthTokenStaysOnTheServersOrigin(t *testing.T) {
 }
 
 func slogTo(w *safeBuf) *slog.Logger { return slog.New(slog.NewTextHandler(w, nil)) }
+
+// An abandoned sign-in at another issuer leaves the stored sign-in as it
+// was: after a restart, the stored refresh token still goes only to the
+// issuer and the client it came from.
+func TestOAuthAbandonedSignInKeepsTheStoredIssuer(t *testing.T) {
+	r := newOAuthRig(t, mcpclienttest.AuthOptions{ExpiresIn: 3600})
+	r.signIn(t, "state-1")
+	stored := r.store.Values("shop")["oauth"]
+	other := mcpclienttest.NewAuthServer(t, mcpclienttest.AuthOptions{})
+	r.mcp.Update(func(o *mcpclienttest.Options) {
+		o.Documents = map[string]string{"/.well-known/oauth-protected-resource/mcp": r.resourceDoc(r.url, other.URL)}
+	})
+	if _, err := r.oauth.Begin(context.Background(), "shop", r.url, "state-2"); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.store.Values("shop")["oauth"]; got != stored {
+		t.Fatalf("a sign-in that did not complete changed the stored one")
+	}
+	r.oauth = r.newOAuth() // a restart
+	r.clock.advance(2 * time.Hour)
+	if _, _, err := r.oauth.Auth("shop").Header(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(other.Requests("/token")); n != 0 {
+		t.Fatalf("the other issuer got %d token requests", n)
+	}
+	reqs := r.as.Requests("/token")
+	if last := reqs[len(reqs)-1].Form; last.Get("grant_type") != "refresh_token" {
+		t.Fatalf("the refresh did not go to its own issuer: %v", last)
+	}
+}
+
+// A late 401 for a token already replaced changes nothing: the request
+// was in flight while another refreshed.
+func TestOAuthLateRejectionOfAnOldToken(t *testing.T) {
+	r := newOAuthRig(t, mcpclienttest.AuthOptions{})
+	r.signIn(t, "state-1")
+	auth := r.oauth.Auth("shop")
+	_, t1, err := auth.Header(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth.Rejected(context.Background(), t1) // R1's 401
+	_, t2, err := auth.Header(context.Background())
+	if err != nil || t2 == t1 {
+		t.Fatalf("after the refresh: %q, %v", t2, err)
+	}
+	auth.Rejected(context.Background(), t1) // R2's late 401
+	_, t3, err := auth.Header(context.Background())
+	if err != nil || t3 != t2 {
+		t.Fatalf("a late refusal of the old token changed the new one: %q, %v", t3, err)
+	}
+	if n := len(r.as.Requests("/token")); n != 2 {
+		t.Fatalf("token requests = %d, want the exchange and one refresh", n)
+	}
+}
+
+// A refreshed token that cannot be stored is still held, so the rotated
+// refresh token is used for the next refresh.
+func TestOAuthRotatedTokenHeldWhenTheStoreFails(t *testing.T) {
+	r := newOAuthRig(t, mcpclienttest.AuthOptions{ExpiresIn: 3600})
+	r.signIn(t, "state-1")
+	auth := r.oauth.Auth("shop")
+	r.store.SetFail(errors.New("store locked"))
+	for i := range 2 {
+		r.clock.advance(2 * time.Hour)
+		_, v, err := auth.Header(context.Background())
+		if err != nil {
+			t.Fatalf("refresh %d: %v", i+1, err)
+		}
+		if !r.as.Valid(strings.TrimPrefix(v, "Bearer ")) {
+			t.Fatalf("refresh %d: a dead token", i+1)
+		}
+	}
+	if !strings.Contains(r.logs.String(), "not stored") {
+		t.Fatalf("logs = %s", r.logs.String())
+	}
+}
+
+// A Disconnect while the code is being exchanged wins: the sign-in keeps
+// nothing, revokes the tokens it got, and the server stays signed out.
+func TestOAuthDisconnectDuringExchange(t *testing.T) {
+	r := newOAuthRig(t, mcpclienttest.AuthOptions{})
+	si, err := r.oauth.Begin(context.Background(), "shop", r.url, "state-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.as.SignIn(si.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	arrived, release := make(chan struct{}), make(chan struct{})
+	r.as.Update(func(o *mcpclienttest.AuthOptions) {
+		o.Intercept = func(_ http.ResponseWriter, req *http.Request) bool {
+			if req.URL.Path == "/token" {
+				close(arrived)
+				<-release
+			}
+			return false
+		}
+	})
+	done := make(chan error, 1)
+	go func() {
+		done <- r.oauth.Complete(context.Background(), intake.OAuthAnswer{ID: res.State, Code: res.Code, Issuer: res.Issuer})
+	}()
+	<-arrived
+	if err := r.oauth.Disconnect(context.Background(), "shop"); err != nil {
+		t.Fatal(err)
+	}
+	r.as.Update(func(o *mcpclienttest.AuthOptions) { o.Intercept = nil })
+	close(release)
+	if err := <-done; !errors.Is(err, mcpclient.ErrUnknownSignIn) {
+		t.Fatalf("Complete = %v", err)
+	}
+	if v := r.store.Values("shop"); len(v) != 0 {
+		t.Fatalf("store = %v", v)
+	}
+	if _, _, err := r.oauth.Auth("shop").Header(context.Background()); !errors.Is(err, mcpclient.ErrNeedsSignIn) {
+		t.Fatalf("Header = %v", err)
+	}
+	if revs := r.as.Requests("/revoke"); len(revs) != 2 || r.as.Valid(revs[1].Form.Get("token")) {
+		t.Fatalf("revocations = %+v", revs)
+	}
+}
