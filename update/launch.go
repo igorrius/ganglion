@@ -135,16 +135,7 @@ func (l Launcher) Launch(ctx context.Context) error {
 }
 
 // isActive reports whether this process is the binary of version.
-func (l Launcher) isActive(version string) bool {
-	if version == "" {
-		return false
-	}
-	bin := l.Store.BinaryPath(version)
-	if resolved, err := filepath.EvalSymlinks(bin); err == nil {
-		bin = resolved
-	}
-	return bin == l.Self
-}
+func (l Launcher) isActive(version string) bool { return isBinaryOf(l.Store, version, l.Self) }
 
 // start counts the attempt of a pending version, then executes the active
 // binary. It returns only when the exec failed, with the state after the

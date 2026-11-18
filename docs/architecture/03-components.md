@@ -29,6 +29,24 @@ A stop for a restart the node was asked to make (`node.ErrRestart`) takes one
 attempt back before exit 75, so only starts that end some other way count
 ([ADR-0046](../adr/0046-a-restart-is-not-a-failed-attempt.md)).
 
+### A host command after an update
+
+Every command but `run` (and the node's own `mcp-relay` and `sandbox`)
+first goes through the dispatch, so the host runs the version the node runs
+([ADR-0096](../adr/0096-host-commands-run-the-active-release.md)). It only
+reads the state.
+
+```mermaid
+flowchart TB
+    cmd(["ganglion backup / secret / update / mcp / version"]) --> st{"state.json beside the database,<br/>an active release?"}
+    st -- "none, or this process is it" --> own["the command runs here"]
+    st -- "yes" --> owner{"the binary's owner<br/>is the user running this?"}
+    owner -- "no (root)" --> warn["a line on stderr;<br/>the command runs here"]
+    owner -- "yes" --> verify{"Store.Verify"}
+    verify -- "fails" --> warn
+    verify -- "passes" --> exec["exec the active binary,<br/>same arguments"]
+```
+
 ### `/update` and `ganglion update`
 
 The agent's `/update` and the host's `ganglion update` use the same
