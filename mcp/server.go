@@ -24,6 +24,10 @@ import (
 // for another gets the newest, as the lifecycle rules say.
 var protocolVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
 
+// ProtocolVersions are the MCP revisions the server speaks, newest first;
+// the node's client accepts the same ones (R-MCP-1).
+func ProtocolVersions() []string { return slices.Clone(protocolVersions) }
+
 // JSON-RPC error codes.
 const (
 	codeParse          = -32700
@@ -109,9 +113,9 @@ func (s *Server) Serve(ctx context.Context, rw io.ReadWriter) error {
 	defer cancel()
 	w := &replies{w: rw}
 	slots := make(chan struct{}, maxInFlight)
-	lines := newLineReader(rw, MaxLine)
+	lines := NewLineReader(rw, MaxLine)
 	for {
-		line, err := lines.next()
+		line, err := lines.Next()
 		if errors.Is(err, io.EOF) {
 			return w.failed()
 		}

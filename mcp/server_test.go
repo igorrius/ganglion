@@ -322,20 +322,20 @@ func TestServerLineTooLong(t *testing.T) {
 }
 
 func TestLineReader(t *testing.T) {
-	l := newLineReader(strings.NewReader("one\r\ntwo\n"+strings.Repeat("x", 20)+"\nlast"), 16)
+	l := NewLineReader(strings.NewReader("one\r\ntwo\n"+strings.Repeat("x", 20)+"\nlast"), 16)
 	for _, want := range []string{"one", "two"} {
-		if got, err := l.next(); err != nil || string(got) != want {
+		if got, err := l.Next(); err != nil || string(got) != want {
 			t.Fatalf("next = %q, %v; want %q", got, err, want)
 		}
 	}
-	if _, err := l.next(); !errors.Is(err, ErrLineTooLong) {
+	if _, err := l.Next(); !errors.Is(err, ErrLineTooLong) {
 		t.Fatalf("long line: %v", err)
 	}
-	l = newLineReader(strings.NewReader("last"), 16)
-	if got, err := l.next(); err != nil || string(got) != "last" {
+	l = NewLineReader(strings.NewReader("last"), 16)
+	if got, err := l.Next(); err != nil || string(got) != "last" {
 		t.Fatalf("last line = %q, %v", got, err)
 	}
-	if _, err := l.next(); !errors.Is(err, io.EOF) {
+	if _, err := l.Next(); !errors.Is(err, io.EOF) {
 		t.Fatalf("after the last line: %v", err)
 	}
 }

@@ -16,21 +16,25 @@ const MaxLine = 8 << 20
 // cannot be resynchronised after it, so whoever reads it stops.
 var ErrLineTooLong = errors.New("mcp: line too long")
 
-// lineReader reads newline-terminated lines of at most max bytes.
-type lineReader struct {
+// LineReader reads newline-terminated lines of at most max bytes. The MCP
+// server and relay read with it, and so does the client's event-stream
+// reader (ADR-0037).
+type LineReader struct {
 	r   *bufio.Reader
 	max int
 }
 
-func newLineReader(r io.Reader, limit int) *lineReader {
-	return &lineReader{r: bufio.NewReaderSize(r, min(limit, 64<<10)), max: limit}
+// NewLineReader reads lines of at most limit bytes, line ending included,
+// from r.
+func NewLineReader(r io.Reader, limit int) *LineReader {
+	return &LineReader{r: bufio.NewReaderSize(r, min(limit, 64<<10)), max: limit}
 }
 
-// next returns the next line without its line ending. A last line
+// Next returns the next line without its line ending. A last line
 // without a newline is returned with a nil error; io.EOF comes after
 // it. A line longer than max is ErrLineTooLong, read no further than
 // max bytes.
-func (l *lineReader) next() ([]byte, error) {
+func (l *LineReader) Next() ([]byte, error) {
 	var line []byte
 	for {
 		chunk, err := l.r.ReadSlice('\n')

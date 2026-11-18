@@ -64,7 +64,7 @@ func (a *Agent) toolSpecs(t *turn) []provider.Tool {
 	if t.noTools {
 		return nil
 	}
-	specs := a.d.Tools.Specs(t.admin)
+	specs := a.d.Tools.SessionSpecs(t.admin, t.state.Tools)
 	out := make([]provider.Tool, 0, len(specs))
 	for _, s := range specs {
 		if s.Name == proposeTool && !a.introducing(t) {
@@ -252,7 +252,18 @@ func (a *Agent) applyTool(ctx context.Context, t *turn, call provider.ToolCall) 
 	if result.Job != "" && !slices.Contains(t.state.Commands, result.Job) {
 		t.state.Commands = append(t.state.Commands, result.Job)
 	}
+	t.state.Tools = addNew(t.state.Tools, result.On)
 	return text, nil
+}
+
+// addNew is list with the names of add that it does not hold yet.
+func addNew(list, add []string) []string {
+	for _, name := range add {
+		if !slices.Contains(list, name) {
+			list = append(slices.Clone(list), name)
+		}
+	}
+	return list
 }
 
 // textReplaced is added to what the model reads when a new question
@@ -281,7 +292,7 @@ func (a *Agent) toolCall(ctx context.Context, t *turn, call provider.ToolCall) t
 	return tool.Call{
 		TurnID: t.event.ID, N: t.calls, Conv: t.event.Conv, Transport: t.transport, Principal: t.msg.From,
 		Admin: t.admin, Tainted: t.state.Tainted, LocalOnly: t.state.LocalOnly, Grant: t.grant, KnownURL: t.known.has, Depth: t.depth,
-		Speak: a.speaker(ctx, t), Name: call.Name, Args: call.Args, Planned: a.planned(ctx, t.event.Conv),
+		Speak: a.speaker(ctx, t), On: t.state.Tools, Name: call.Name, Args: call.Args, Planned: a.planned(ctx, t.event.Conv),
 	}
 }
 

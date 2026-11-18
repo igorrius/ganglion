@@ -110,6 +110,8 @@ flowchart TB
     planapp["Plan approval<br/>one press approves exactly<br/>the commands the plan lists"]
     modhost["Module host<br/>the owner's modules: cells, cron jobs,<br/>tools, contract, supervisor"]
     runner["Runner<br/>wazero, manifest grants,<br/>answers checked"]
+    mcpclientc["MCP client<br/>remote servers over Streamable HTTP,<br/>pinned tool lists, tools on demand"]
+    mcpsrv(["Remote MCP server<br/>an outside service"])
     vault[("Secret store<br/>encrypted rows by scope,<br/>the node's master key")]
     builderc["Module builder<br/>Rust from the workspace's source,<br/>confined in the sandbox"]
     buildq["Build queue<br/>module builds in the background,<br/>one at a time, a record each"]
@@ -160,6 +162,8 @@ flowchart TB
     web --> html2md
     loop -- "module job: ModuleCron; module.trigger: ModuleTrigger, no turn" --> modhost
     tools -- "module tools, dynamic" --> modhost
+    tools -- "servers' tools, dynamic, on demand" --> mcpclientc
+    mcpclientc -- "Streamable HTTP,<br/>public addresses only" --> mcpsrv
     modhost --> runner
     tools -- "module.build: queued, answered at once" --> buildq
     buildq -- "one build at a time" --> builderc
@@ -206,6 +210,7 @@ flowchart TB
 | html2md module | Turns a page into Markdown in the WASM sandbox, granted nothing; replaced without a core release | R-WEB-1 |
 | Module host (`modhost`) | Runs the owner's local modules in the node: loads the active versions, defines the cells they own under their prefix, keeps a `module` cron job each (owned by the installing admin), offers their tools to the registry as they come and go, checks every answer against the manifest's contract, counts runs and failures, turns a module off after five failures within an hour, and puts one escalation of a kind per episode (until a successful run) of a run nobody watched (cron, `init`) as a turn in the admin's private chat; a failed tool call is the calling turn's to tell, in the node's words with a hint per kind; a run that wrote cells puts one `module.trigger` event per running listener into the inbox, and runs the listener when the agent hands the event back, with no model (chains stop past depth 4) | R-RUN-11…15 |
 | Module builder and the module tools | `module.import` copies an example the node ships into the workspace and commits it after a press; `module.write` writes one file of `modules/<name>` from a clean session and `module.read` reads it back, and the node keeps a per-file provenance record of what its own tools left (it decides whether a build answer taints); `module.build` queues a build of `modules/<name>` and answers at once; the build queue runs one build at a time in the sandbox in the background, with a card, keeps the build as a file with the rights its manifest asks for and puts `module.built`, which resumes the conversation with the answer (a module being built cannot be built or written meanwhile); `module.install` shows the owner those rights (the install window) and, after the press, installs exactly the build the window showed, re-planned at the press, then writes its settings line and reloads it in the module host | R-RUN-9, R-RUN-17, R-LIVE-9 |
+| MCP client (`mcpclient`) | Connects to the remote MCP servers the admin approved over Streamable HTTP; reads every answer within a limit and declares no client capability, refusing a server's requests; pins each server's tool list by a fingerprint and offers no tool of a list that changed; offers the approved tools as `<server>.<tool>` only to a session that turned them on with `mcp.use` (`mcp.tools` lists them, both local); never repeats a call that is not read-only and got no answer, reporting its outcome as unknown; a result is outside content | R-MCP-1, R-MCP-4, R-MCP-4a, R-MCP-7, R-MCP-8 |
 | Secret store (`secrets/vault`) | Keeps secrets as rows of the node's database, each sealed under the master key and bound to its scope and name; a module reads its own scope and no other; a key that does not fit locks the store instead of replacing it; no tool and no command reads a value back | R-CFG-9, R-CFG-10 |
 | turns | Trace and cost of every turn | R-AGT-5 |
 

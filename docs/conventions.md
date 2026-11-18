@@ -218,6 +218,9 @@ Before writing a helper, look for it. These exist and are the only copies:
 | Comparing web addresses (lower-case host, an internationalised host in punycode, no fragment, no default port); finding them in text (`Find`, the one URL pattern), defanging text (`Defang`) | `internal/urlnorm` |
 | Checking a call's arguments against the tool's declared parameters | `tool.CheckArgs` |
 | Whether two calls' arguments are the same (canonical JSON) | `tool.CanonicalArgs` |
+| Offering a tool only to the sessions that turned it on | `tool.Spec.OnDemand`, `Registry.SessionSpecs` |
+| Several dynamic tool sources as one | `tool.Dynamics` |
+| A bounded line reader | `mcp.NewLineReader` |
 | Marking outside content as data for the model, and dropping it from a text (`StripExternal`) | `tool.WrapExternal` |
 | Removing secrets before anything is journalled or logged | `redact.String` (`internal/redact`) |
 | An id nobody can guess (button ids) | `event.RandomID` |
