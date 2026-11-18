@@ -1,6 +1,6 @@
 # ADR-0097: Connect remote MCP servers from the chat with an own client and `x/oauth2`, in P1
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-18
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.16](../spec.md#716-remote-mcp-servers) (R-MCP-1…10), [7.14](../spec.md#714-node-configuration) (R-CFG-6, R-CFG-14), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-4, R-POL-6), [9.8](../spec.md#98-self-modification-levels), [14](../spec.md#14-not-now); [design note](../design/mcp-client-and-secret-intake-design.md); [ADR-0017](0017-extension-points.md), [ADR-0037](0037-own-minimal-mcp-server.md), [ADR-0093](0093-config-changes-through-the-agent-with-history-in-the-workspace.md), [ADR-0098](0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md)
@@ -90,11 +90,21 @@ has had years of use.
   server's hint: `auto`; the rest: `confirm`). **Connect** is the
   confirmation of the file's change (ADR-0093); the tools join the
   registry with no restart.
-- **Tools.** Offered as `<server>.<tool>`, admin-only by default, their
-  results outside content, `AskTaintedInput` set, never `LocalSafe`. The
-  policy is the file's. At most 64 tools a server, a description of 1000
-  characters, a schema of 16 KB; a tool past a limit or with a colliding
-  name is skipped and named on the card.
+- **Tools.** Named `<server>.<tool>` (a leading `<server>_` dropped),
+  admin-only, their results outside content, `AskTaintedInput` set, never
+  `LocalSafe`. The policy is the file's. At most 128 tools a server, a
+  description of 8,000 characters, a schema of 32 KB, a list of 512 KB; a
+  tool past a limit or with a colliding name is skipped and named on the
+  card.
+- **On demand** (owner, 2026-11-18, after the spike: the first real
+  server listed 42 tools in 115 KB, about 30,000 tokens a turn). The agent
+  always has `mcp.tools([server])`, an index of the servers and of a
+  server's tools (name, policy, first line), and `mcp.use(server, tools)`,
+  which turns tools on for the session; their full definitions join from
+  the next step. At most 16 tools and 48 KB on at once. Sending every
+  approved tool on every turn, and fixing a subset on the card, were the
+  other two options: the first fills the context, the second leaves the
+  agent without the rest.
 - **Credentials.** The registration and the tokens live in the secret
   store under the scope `mcp:<name>`; a key for `auth: header` too.
   Removing a server removes the scope.
@@ -146,12 +156,16 @@ has had years of use.
   servers, the platform's MCP server) wait only for their own work; both
   still need a server that runs over HTTP.
 - To build: `mcpclient` (client, OAuth, registry source), the `mcp:`
-  section and its schema, `mcp.connect` and `mcp.rule`, the cards,
+  section and its schema, `mcp.connect`, `mcp.rule`, `mcp.tools` and
+  `mcp.use`, the cards,
   `/mcp` and the `/status` line, a chatlab scenario and a live check.
 - ADR-0037 is not rewritten: its server stays as it is; this ADR is the
   revisit it foresaw, for the client side.
 
 ## Revisit when
+
+- Models handle tool lists of this size without cost (a provider-side
+  tool search), so on-demand loading stops paying for itself.
 
 - A server the owner needs runs only as a local process: level 3 comes
   forward.

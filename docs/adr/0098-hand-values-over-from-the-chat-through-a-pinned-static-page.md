@@ -1,6 +1,6 @@
 # ADR-0098: Hand a code or a secret over from the chat through a pinned static page and a pasted line
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-18
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.17](../spec.md#717-handing-values-over-from-the-chat) (R-INT-1…8), [7.14](../spec.md#714-node-configuration) (R-CFG-9, R-CFG-11), [7.8](../spec.md#78-security-and-operations-mvp), [11](../spec.md#11-open-decisions), [14](../spec.md#14-not-now); [design note](../design/mcp-client-and-secret-intake-design.md), [earlier design note](../design/secrets-intake-design.md); [ADR-0077](0077-encrypted-secret-store-on-the-nodes-key.md), [ADR-0081](0081-update-the-node-from-signed-releases-at-the-owners-command.md), [ADR-0097](0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md)
@@ -96,9 +96,12 @@ risk B leaves. A leaves the value with the transport.
   AES-128-GCM; `info` is `ganglion-intake-v1`, the request id and the
   secret's name. A value through the page is at most 2 KB, so its line
   fits one Telegram message.
-- **The lines:** `gauth1.<state>.<code>` and `gsec1.<id>.<ciphertext>`
-  (base64url). The format's version is in the prefix; an unknown one is
-  refused.
+- **The lines:** `gauth1.<state>.<base64url(code)>[.<base64url(iss)>]`
+  and `gsec1.<id>.<base64url(enc || ciphertext)>`. A code is opaque and
+  may hold any character (the spike's server put `:` in it), so it is
+  encoded; `iss` is carried when the sign-in server sends it, and then the
+  node requires it and compares it with the issuer (RFC 9207). The
+  format's version is in the prefix; an unknown one is refused.
 - **The return channel:** pasting the line into the chat. The transport
   recognises a private text message that is one such line, takes it before
   the inbox, hands it to `intake`, and deletes the message. From someone
@@ -162,10 +165,14 @@ as usual because the card is the node's own text.
 - `/login` for the claude CLI
   ([#174](https://github.com/igorrius/ganglion/issues/174)) can use the
   same requests and lines.
-- A spike comes first: whether the owner's first server accepts the page
-  as a redirect address, and whether the page's WebCrypto works in
-  Telegram's in-app browsers on iOS and Android. A failure reopens this
-  ADR before it is accepted.
+- A spike came first
+  ([research](../research/2026-11-18-remote-mcp-and-intake-spike.md)):
+  the owner's first server accepted the page as its redirect address and
+  the sign-in worked end to end; the page's seal opened in Go from desktop
+  Chrome and from Telegram's browser on Android. Telegram on iOS was not
+  checked: no iPhone was at hand, and the owner accepted the ADR without it
+  (2026-11-18). The page checks WebCrypto before it asks for a value and
+  says so when it is missing; `ganglion secret set` stays the way round.
 
 ## Revisit when
 

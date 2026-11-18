@@ -120,7 +120,8 @@ Everything is planned, so everything is dashed.
 5. **The page.** One static HTML file with inline script, two modes,
    versioned and pinned (section 8).
 6. **The file and the tools.** `mcp:` in `ganglion.yaml`; `mcp.connect`,
-   `mcp.rule` and `secret.request` for the agent; `/mcp` for the admin.
+   `mcp.rule`, `mcp.tools`, `mcp.use` and `secret.request` for the agent;
+   `/mcp` for the admin.
 
 ## 5. Connecting a server with OAuth
 
@@ -140,7 +141,7 @@ sequenceDiagram
     N-->>T: card: sign in at the sign-in host [Sign in]
     A-->>L: signs in on the phone
     L-->>P: redirect with code and state
-    P-->>A: gauth1.<state>.<code> [Copy]
+    P-->>A: gauth1.<state>.<code>.<iss> [Copy]
     A-->>T: pastes the line
     T-->>N: taken before the inbox; message deleted
     N-->>L: code + PKCE verifier → tokens
@@ -165,7 +166,8 @@ sequenceDiagram
    `resource` and `state`, which is the request's id; the verifier stays in
    the node's memory. The request lives 10 minutes.
 6. The admin signs in on the phone. The sign-in server sends the browser
-   to the page, which shows `gauth1.<state>.<code>` and a Copy button. The
+   to the page, which shows `gauth1.<state>.<code>[.<iss>]` (code and
+   issuer base64url-encoded) and a Copy button. The
    admin pastes it into the chat; the transport takes it before the inbox
    and deletes it; the node exchanges the code and stores the tokens.
 7. The node lists the tools and sends the second card:
@@ -216,11 +218,28 @@ own tools, never by `config.propose` (R-CFG-14).
 
 A server's name is `[a-z0-9_]{1,24}` and may not be the short name of a
 module or a prefix the core uses (`memory`, `web`, `cells`, …). A tool is
-offered as `<server>.<tool>`; the tool's own name is lower-cased and every
-character outside `[a-z0-9_]` becomes `_`. A name that then collides, or
-is longer than 64 characters, is skipped and named on the card. At most 64
-tools per server; a description over 1000 characters or a schema over 16
-KB skips that tool too.
+named `<server>.<tool>`; the tool's own name loses a leading `<server>_`,
+is lower-cased, and every character outside `[a-z0-9_]` becomes `_`. A
+name that then collides, or is longer than 64 characters, is skipped and
+named on the card. At most 128 tools per server, a description of 8,000
+characters, a schema of 32 KB, a list of 512 KB.
+
+### Tools on demand
+
+The spike's server listed 42 tools in 115 KB, about 30,000 tokens on every
+turn ([research](../research/2026-11-18-remote-mcp-and-intake-spike.md)).
+So a server's tools reach the model on demand (owner, 2026-11-18):
+
+- The agent always has `mcp.tools([server])`: without a server, the
+  connected servers and their states; with one, each approved tool's name,
+  policy and the first line of its description.
+- `mcp.use(server, tools)` turns tools on for the session. From the next
+  step their full definitions are in the session's tool list, until the
+  session ends. At most 16 tools and 48 KB of definitions at once.
+- Both read only the node's approved copy and send nothing off the node.
+  A `forbidden` tool is never turned on. The text they show is the
+  approved, fingerprinted list, the same standing as a tool definition; a
+  tool's result taints the session as before.
 
 ## 6. A key, and a module's secret
 
@@ -264,8 +283,9 @@ The agent never sees a value, then or later; no tool reads one back.
 ### 8.1 Two modes
 
 - **OAuth return.** The sign-in server's redirect brings `code` and
-  `state` in the query. The page shows `gauth1.<state>.<code>` and a Copy
-  button. It needs no script beyond reading the address and copying.
+  `state` (and `iss`) in the query. The page shows
+  `gauth1.<state>.<base64url(code)>[.<base64url(iss)>]` and a Copy button;
+  the node requires `iss` when the metadata says the server sends it. It needs no script beyond reading the address and copying.
 - **A secret.** The node's link carries, after `#` (which a browser never
   sends to the server): the format version, the request id, the secret's
   name, the host it goes to, and the request's public key. The page shows
@@ -378,7 +398,8 @@ Spec principle 9: every link is hostile, every input untrusted.
 
 ## 11. How it is checked
 
-**A spike first**, before the ADRs leave Proposed:
+**A spike first** (done on 2026-11-18, [research](../research/2026-11-18-remote-mcp-and-intake-spike.md);
+Telegram on iOS not checked, the ADRs accepted without it):
 
 1. Does the owner's first server accept a redirect address on the
    project's site at registration?
