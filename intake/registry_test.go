@@ -11,6 +11,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -47,7 +48,16 @@ type rig struct {
 	closed []intake.Closed
 	admins map[string]bool
 	after  chan time.Time
+	page   error // what the page check returns
 }
+
+func (rg *rig) checkPage(context.Context) error {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	return rg.page
+}
+
+func pageSame(context.Context) error { return nil }
 
 func newRig(t *testing.T, opts ...intake.Option) *rig {
 	t.Helper()
@@ -74,7 +84,7 @@ func newRig(t *testing.T, opts ...intake.Option) *rig {
 			rg.mu.Unlock()
 		}),
 	}, opts...)
-	rg.reg = intake.New(isAdmin, enqueue, lang, private, texts.Shipped(), all...)
+	rg.reg = intake.New(isAdmin, enqueue, lang, private, texts.Shipped(), rg.checkPage, all...)
 	return rg
 }
 
@@ -150,16 +160,28 @@ type fixture struct {
 	Line       string `json:"line"`
 }
 
-// A gsec1 line sealed by the page's own script under Node.js opens to its value.
-func TestTheFixtureFromThePageOpens(t *testing.T) {
-	raw, err := os.ReadFile("testdata/seal-v1.json")
+// readFixture reads a fixture the page's own script made under Node.js
+// (testdata/fixtures.mjs): from testdata, or from INTAKE_FIXTURES, where CI
+// writes a fresh one on every run.
+func readFixture(t *testing.T, file string, v any) {
+	t.Helper()
+	dir := os.Getenv("INTAKE_FIXTURES")
+	if dir == "" {
+		dir = "testdata"
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, file))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var fx fixture
-	if err := json.Unmarshal(raw, &fx); err != nil {
+	if err := json.Unmarshal(raw, v); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// A gsec1 line sealed by the page's own script under Node.js opens to its value.
+func TestTheSecretLineFromThePageOpens(t *testing.T) {
+	var fx fixture
+	readFixture(t, "seal-v1.json", &fx)
 	scalar, err := hex.DecodeString(fx.PrivateKey)
 	if err != nil {
 		t.Fatal(err)
@@ -286,7 +308,7 @@ func TestAnAdminCheckThatFailsIsNoAdmin(t *testing.T) {
 	reg := intake.New(func(context.Context, string) (bool, error) { return false, errors.New("db down") },
 		func(context.Context, ...event.Outgoing) error { return nil },
 		func(context.Context, string) (texts.Lang, error) { return texts.English, nil },
-		func(string) (string, string, bool) { return "", "", false }, texts.Shipped())
+		func(string) (string, string, bool) { return "", "", false }, texts.Shipped(), pageSame)
 	_, o := reg.Take(context.Background(), intake.Pasted{From: admin, Private: true, Text: "gsec1." + id22 + ".abcd"})
 	if o != intake.LineNotAdmin {
 		t.Fatalf("outcome %s", o)

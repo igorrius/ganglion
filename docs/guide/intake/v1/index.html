@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-8J7EolPgVQ04yBC+RbYkRDJL5IBU76RGckw4KBcASwk='; style-src 'sha256-+vV/pQfaOcz2fFa4y0jF9mI+Lr9lHNJyKm7Jrk7E3bo='; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>ganglion intake</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1b1b1f; --bg: #ffffff; --muted: #5f6368; --box: #f1f3f4; --ok: #137333; --bad: #c5221f; --btn: #1a73e8; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8eaed; --bg: #1b1b1f; --muted: #9aa0a6; --box: #2d2e31; --ok: #81c995; --bad: #f28b82; --btn: #8ab4f8; } }
+  body { margin: 0; padding: 16px; font: 16px/1.45 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  p { margin: 8px 0; }
+  code { font-family: ui-monospace, monospace; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .line { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; background: var(--box); padding: 10px; border-radius: 8px; margin: 10px 0; user-select: all; -webkit-user-select: all; }
+  button { font: inherit; padding: 10px 16px; border-radius: 8px; border: 0; background: var(--btn); color: var(--bg); }
+  input[type=password], input[type=text] { font: inherit; width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid var(--muted); background: var(--bg); color: var(--fg); margin: 8px 0; }
+  label { display: block; margin: 4px 0 12px; font-size: 14px; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+</style>
+</head>
+<body>
+<main id="app"><h1>ganglion</h1><p class="muted">This page needs JavaScript.</p></main>
+<script>
+"use strict";
+// The intake page, version 1 (spec R-INT-3, R-INT-4; ADR-0098).
+// A published version never changes: intake/published.sha256 holds its hash
+// and a ganglion node compares the hosted page with the copy in its release.
+//
+// OAuth mode: the sign-in server's redirect brings code, state (and iss) in
+// the query; the page shows gauth1.<state>.<b64u(code)>[.<b64u(iss)>].
+// Secret mode: the node's link carries the request after "#"; the page seals
+// the value with HPKE (RFC 9180, base mode, DHKEM(P-256, HKDF-SHA256),
+// HKDF-SHA256, AES-128-GCM) and shows gsec1.<id>.<b64u(enc || ciphertext)>.
+// The page sends nothing over the network (connect-src 'none').
+
+// --- pure: begin (intake/testdata/fixtures.mjs runs this part under Node.js)
+const te = new TextEncoder();
+const subtle = (self.crypto && self.crypto.subtle) || null;
+const ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
+const MAX_CODE = 2048, MAX_ISSUER = 512, MAX_VALUE = 2048, MAX_NAME = 128; // bytes, as the node counts them
+
+function b64u(bytes) {
+  let s = ""; for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function unb64u(s) {
+  if (!/^[A-Za-z0-9_-]*$/.test(s)) throw new Error("not base64url");
+  s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "=";
+  const bin = atob(s); const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function cat(...parts) {
+  const n = parts.reduce((a, p) => a + p.length, 0); const out = new Uint8Array(n); let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+}
+function i2osp(v, n) { const out = new Uint8Array(n); for (let i = n - 1; i >= 0; i--) { out[i] = v & 0xff; v >>= 8; } return out; }
+// hasControl: a C0 or C1 control character, which the node refuses in a name.
+function hasControl(s) { return /[\u0000-\u001f\u007f-\u009f]/.test(s); }
+
+// oauthLine returns the gauth1 line for a redirect's state, code and iss
+// ("" when the server sent none), or null when they cannot make one.
+function oauthLine(state, code, iss) {
+  const c = te.encode(code || ""), i = te.encode(iss || "");
+  if (!ID_RE.test(state || "") || c.length < 1 || c.length > MAX_CODE || i.length > MAX_ISSUER) return null;
+  return "gauth1." + state + "." + b64u(c) + (i.length ? "." + b64u(i) : "");
+}
+
+// secretRequest reads the fragment of the node's link, or returns null.
+function secretRequest(f) {
+  const id = f.get("id") || "", name = f.get("name") || "", host = f.get("host") || "";
+  let pk;
+  try { pk = unb64u(f.get("pk") || ""); } catch (e) { return null; }
+  const n = te.encode(name).length;
+  if (f.get("v") !== "1" || !ID_RE.test(id) || n < 1 || n > MAX_NAME || hasControl(name) || hasControl(host) ||
+      host.length > 512 || pk.length !== 65 || pk[0] !== 4) return null;
+  return { id, name, host, pk };
+}
+
+// info binds a ciphertext to its request: format, id and name, 0-separated.
+function info(id, name) {
+  return cat(te.encode("ganglion-intake-v1"), new Uint8Array([0]), te.encode(id), new Uint8Array([0]), te.encode(name));
+}
+
+// HKDF-SHA256 from HMAC, so Extract and Expand can be called apart (RFC 5869).
+async function hmac(key, data) {
+  const k = await subtle.importKey("raw", key.length ? key : new Uint8Array(32), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await subtle.sign("HMAC", k, data));
+}
+const extract = (salt, ikm) => hmac(salt, ikm);
+async function expand(prk, inf, len) {
+  if (len > 32) throw new Error("expand: one block only");
+  return (await hmac(prk, cat(inf, new Uint8Array([1])))).slice(0, len);
+}
+const V1 = te.encode("HPKE-v1");
+const labeledExtract = (sid, salt, label, ikm) => extract(salt, cat(V1, sid, te.encode(label), ikm));
+const labeledExpand = (sid, prk, label, inf, len) => expand(prk, cat(i2osp(len, 2), V1, sid, te.encode(label), inf), len);
+
+const KEM = 0x0010, KDF = 0x0001, AEAD = 0x0001; // DHKEM(P-256, HKDF-SHA256), HKDF-SHA256, AES-128-GCM
+const SID_KEM = cat(te.encode("KEM"), i2osp(KEM, 2));
+const SID = cat(te.encode("HPKE"), i2osp(KEM, 2), i2osp(KDF, 2), i2osp(AEAD, 2));
+
+// hpkeSeal returns enc || ciphertext, as Go's crypto/hpke.Seal does.
+async function hpkeSeal(pkR, inf, plaintext) {
+  const pubR = await subtle.importKey("raw", pkR, { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const eph = await subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const dh = new Uint8Array(await subtle.deriveBits({ name: "ECDH", public: pubR }, eph.privateKey, 256));
+  const enc = new Uint8Array(await subtle.exportKey("raw", eph.publicKey));
+  const eaePrk = await labeledExtract(SID_KEM, new Uint8Array(0), "eae_prk", dh);
+  const shared = await labeledExpand(SID_KEM, eaePrk, "shared_secret", cat(enc, pkR), 32);
+  const pskIdHash = await labeledExtract(SID, new Uint8Array(0), "psk_id_hash", new Uint8Array(0));
+  const infoHash = await labeledExtract(SID, new Uint8Array(0), "info_hash", inf);
+  const ksc = cat(new Uint8Array([0]), pskIdHash, infoHash);
+  const secret = await labeledExtract(SID, shared, "secret", new Uint8Array(0));
+  const key = await labeledExpand(SID, secret, "key", ksc, 16);
+  const nonce = await labeledExpand(SID, secret, "base_nonce", ksc, 12);
+  const k = await subtle.importKey("raw", key, { name: "AES-GCM" }, false, ["encrypt"]);
+  const ct = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv: nonce }, k, plaintext));
+  return cat(enc, ct);
+}
+
+// secretLine seals value (a string) for the request r and returns the gsec1
+// line; it throws when the value is empty or over 2 KB in UTF-8.
+async function secretLine(r, value) {
+  const v = te.encode(value);
+  if (v.length < 1 || v.length > MAX_VALUE) throw new RangeError("value size");
+  return "gsec1." + r.id + "." + b64u(await hpkeSeal(r.pk, info(r.id, r.name), v));
+}
+
+// canSeal reports whether this browser has the WebCrypto the page needs.
+async function canSeal() {
+  if (!subtle) return false;
+  try {
+    const r = await subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+    const pk = new Uint8Array(await subtle.exportKey("raw", r.publicKey));
+    return (await hpkeSeal(pk, info("check", "check"), te.encode("x"))).length === 65 + 1 + 16;
+  } catch (e) { return false; }
+}
+// --- pure: end
+
+const app = document.getElementById("app");
+
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+  }
+  for (const c of kids) n.append(c);
+  return n;
+}
+function show(...kids) { app.replaceChildren(...kids); }
+function incomplete(again) {
+  show(el("h1", {}, "This link is not complete"), el("p", { class: "muted" }, again));
+}
+
+async function copyLine(text, note) {
+  try { await navigator.clipboard.writeText(text); note.textContent = "Copied. Paste it into the private chat with the bot."; note.className = "ok"; }
+  catch (e) { note.textContent = "Copying is not allowed here: press and hold the line to select it, then copy it."; note.className = "bad"; }
+}
+function showLine(title, line, hint) {
+  const note = el("p", { class: "muted" }, hint);
+  show(el("h1", {}, title), el("div", { class: "line" }, line), el("button", { onclick: () => copyLine(line, note) }, "Copy"), note);
+}
+
+function oauthMode(q) {
+  // The code is one-time and useless without the node's PKCE verifier; it
+  // still leaves the browser's history.
+  history.replaceState(null, "", location.pathname);
+  if (q.has("error")) {
+    show(el("h1", {}, "Sign-in failed"), el("p", {}, "The sign-in server said: " + (q.get("error") || "").slice(0, 100)),
+      el("p", { class: "muted" }, "Go back to the chat and press Sign in again."));
+    return;
+  }
+  const line = oauthLine(q.get("state"), q.get("code"), q.get("iss"));
+  if (!line) { incomplete("Go back to the chat and press Sign in again."); return; }
+  showLine("Signed in", line, "Copy this line and paste it into the private chat with the bot. It works once, for 10 minutes.");
+}
+
+async function secretMode(f) {
+  const r = secretRequest(f);
+  if (!r) { incomplete("Go back to the chat and ask the bot again."); return; }
+  if (!(await canSeal())) {
+    show(el("h1", {}, "This browser cannot encrypt here"),
+      el("p", {}, "Open the link in another browser, or set the secret on the host: ", el("code", {}, "ganglion secret set")));
+    return;
+  }
+  const input = el("input", { type: "password", autocomplete: "off", autocapitalize: "off", autocorrect: "off", spellcheck: "false", "aria-label": "Value" });
+  const reveal = el("input", { type: "checkbox", onchange: () => { input.type = reveal.checked ? "text" : "password"; } });
+  const note = el("p", { class: "muted" }, "");
+  const seal = async () => {
+    const size = te.encode(input.value).length;
+    if (size < 1) { note.textContent = "The value is empty."; note.className = "bad"; return; }
+    if (size > MAX_VALUE) { note.textContent = "The value is over 2 KB: set it on the host with ganglion secret set."; note.className = "bad"; return; }
+    try {
+      const line = await secretLine(r, input.value);
+      input.value = "";
+      showLine("Encrypted", line, "Copy this line and paste it into the private chat with the bot. Only the node that asked can open it, once, for 10 minutes.");
+    } catch (e) { note.textContent = "This browser could not encrypt the value."; note.className = "bad"; }
+  };
+  show(
+    el("h1", {}, "Secret " + r.name),
+    r.host ? el("p", {}, "The value is for " + r.host + ".") : el("p", {}, "The value is for the node's own use."),
+    el("p", { class: "muted" }, "It is encrypted on this device; the page sends nothing anywhere."),
+    input, el("label", {}, reveal, " Show the value"),
+    el("button", { onclick: seal }, "Encrypt"), note,
+  );
+}
+
+async function aboutMode() {
+  const ok = await canSeal();
+  show(el("h1", {}, "ganglion intake"),
+    el("p", {}, "A ganglion node sends a link to this page when it asks for a sign-in or a secret. Open the page from that link."),
+    el("p", { class: ok ? "ok" : "bad" }, ok ? "This browser can encrypt a secret here." : "This browser cannot encrypt a secret here."));
+}
+
+const q = new URLSearchParams(location.search);
+const f = new URLSearchParams(location.hash.slice(1));
+if (q.has("code") || q.has("error")) oauthMode(q);
+else if (f.get("mode") === "secret") secretMode(f);
+else aboutMode();
+</script>
+</body>
+</html>

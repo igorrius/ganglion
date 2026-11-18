@@ -9,6 +9,11 @@
 // request's opener off the transport's receive path. A request is opened by the node
 // only, never by the model (R-INT-1): no tool exposes the registry.
 //
+// The page the admin's browser runs is embedded (Page): the same bytes the
+// project's site publishes, a version that never changes. Before every
+// request the node fetches the hosted page and compares it with its copy
+// (PageChecker); a mismatch stops secret requests (R-INT-3).
+//
 // A line, a code and an opened value never reach a log line, an error
 // text, a reply or the transport's sink. What the package logs and counts
 // is the request id and an outcome from a closed set.

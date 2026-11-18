@@ -126,6 +126,11 @@ func (q *request) destroy() { q.key = nil }
 type OAuthRequest struct {
 	ID      string // the state the caller puts in the sign-in link
 	Expires time.Time
+	// PageErr is nil when the hosted page matched this release's copy;
+	// otherwise ErrPageChanged or ErrPageUnchecked, and the card carries a
+	// warning. A code is useless without the PKCE verifier the node keeps,
+	// so the sign-in goes on (R-INT-3).
+	PageErr error
 }
 
 // SecretRequest is an open secret request.
@@ -145,6 +150,7 @@ type Registry struct {
 	lang    LangFunc
 	private PrivateConvFunc
 	texts   *texts.Catalog
+	page    PageCheckFunc
 
 	cfg    Config
 	now    func() time.Time
@@ -184,9 +190,11 @@ func WithLogger(l *slog.Logger) Option { return func(r *Registry) { r.log = l } 
 func WithClosed(f ClosedFunc) Option { return func(r *Registry) { r.closed = f } }
 
 // New returns a registry that answers admins in their private conversations
-// through enqueue, with the texts of cat in each person's language.
-func New(isAdmin IsAdminFunc, enqueue EnqueueFunc, lang LangFunc, private PrivateConvFunc, cat *texts.Catalog, opts ...Option) *Registry {
-	r := &Registry{isAdmin: isAdmin, enqueue: enqueue, lang: lang, private: private, texts: cat,
+// through enqueue, with the texts of cat in each person's language. page
+// checks the hosted intake page before every request (R-INT-3).
+func New(isAdmin IsAdminFunc, enqueue EnqueueFunc, lang LangFunc, private PrivateConvFunc, cat *texts.Catalog,
+	page PageCheckFunc, opts ...Option) *Registry {
+	r := &Registry{isAdmin: isAdmin, enqueue: enqueue, lang: lang, private: private, texts: cat, page: page,
 		cfg: DefaultConfig(), now: time.Now, after: time.After, random: rand.Reader,
 		log: slog.New(slog.DiscardHandler), closed: NoClosed, reqs: map[string]*request{}}
 	for _, o := range opts {
@@ -226,20 +234,31 @@ func (r *Registry) open() int {
 
 // OpenOAuth opens a request for the code of an OAuth sign-in. Its ID is the
 // state the caller puts in the sign-in link; handle gets the code when an
-// admin pastes it.
+// admin pastes it. A hosted page that fails its check does not stop it:
+// PageErr says so, for the card's warning.
 func (r *Registry) OpenOAuth(ctx context.Context, handle OAuthFunc) (OAuthRequest, error) {
+	pageErr := r.page(ctx)
 	q := &request{kind: KindOAuth, oauth: handle}
 	id, err := r.add(ctx, q)
 	if err != nil {
 		return OAuthRequest{}, fmt.Errorf("intake: open oauth: %w", err)
 	}
-	return OAuthRequest{ID: id, Expires: q.expires}, nil
+	if pageErr != nil {
+		r.log.Warn("intake: the intake page failed its check; the sign-in goes on", "request", id, "error", pageErr)
+	}
+	return OAuthRequest{ID: id, Expires: q.expires, PageErr: pageErr}, nil
 }
 
 // OpenSecret opens a request for the secret called name. The page seals the
-// value to the returned public key (R-INT-4); handle gets it opened.
+// value to the returned public key (R-INT-4); handle gets it opened. It
+// first checks the hosted page: an error wrapping ErrPageChanged or
+// ErrPageUnchecked refuses the request, and the caller tells the admin
+// that handing secrets over is stopped (R-INT-3).
 func (r *Registry) OpenSecret(ctx context.Context, name string, handle SecretFunc) (SecretRequest, error) {
 	if err := checkName(name); err != nil {
+		return SecretRequest{}, fmt.Errorf("intake: open secret: %w", err)
+	}
+	if err := r.page(ctx); err != nil {
 		return SecretRequest{}, fmt.Errorf("intake: open secret: %w", err)
 	}
 	priv, err := ecdh.P256().GenerateKey(r.random)
