@@ -30,6 +30,19 @@ var ErrNotLocal = errors.New("tool: not placed on this node")
 // it must be quick and must not block.
 type DynamicFunc func() []Handler
 
+// Dynamics is the dynamic source that lists what every one of fs lists, in
+// order: a registry takes one source, and the node has several (the owner's
+// modules, the remote servers' tools).
+func Dynamics(fs ...DynamicFunc) DynamicFunc {
+	return func() []Handler {
+		var out []Handler
+		for _, f := range fs {
+			out = append(out, f()...)
+		}
+		return out
+	}
+}
+
 // noDynamic is the dynamic source of a registry with fixed tools only.
 func noDynamic() []Handler { return nil }
 
@@ -124,12 +137,32 @@ func (r *Registry) skipped(name string) {
 }
 
 // Specs lists the tools on offer by name, the fixed ones first; admin-only
-// tools only for an admin, and a Gated tool only while it is offered.
-func (r *Registry) Specs(admin bool) []Spec {
+// tools only for an admin, and a Gated tool only while it is offered. An
+// on-demand tool is left out: a session turns it on (SessionSpecs).
+func (r *Registry) Specs(admin bool) []Spec { return r.SessionSpecs(admin, nil) }
+
+// SessionSpecs is Specs for a session that turned the on-demand tools named
+// in on on (R-MCP-4a): they are listed too, still subject to AdminOnly and
+// Gated. A name in on that no tool has is ignored.
+func (r *Registry) SessionSpecs(admin bool, on []string) []Spec {
 	dyn := r.dynamicTools()
 	out := make([]Spec, 0, len(r.names)+len(dyn))
 	for _, h := range slices.Concat(r.fixedTools(), dyn) {
-		if s, ok := offered(h, admin); ok {
+		s, ok := offered(h, admin)
+		if ok && (!s.OnDemand || slices.Contains(on, s.Name)) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// OnDemandSpecs are the on-demand tools named in on that are on offer to
+// the caller, in name order: what SessionSpecs adds to Specs. The agent
+// takes them at every step, the rest once a turn (R-MCP-4a).
+func (r *Registry) OnDemandSpecs(admin bool, on []string) []Spec {
+	var out []Spec
+	for _, h := range slices.Concat(r.fixedTools(), r.dynamicTools()) {
+		if s, ok := offered(h, admin); ok && s.OnDemand && slices.Contains(on, s.Name) {
 			out = append(out, s)
 		}
 	}
@@ -146,14 +179,15 @@ func (r *Registry) fixedTools() []Handler {
 }
 
 // Offered reports whether the tool called name is on offer to the
-// caller, as Specs lists it.
+// caller, as Specs lists it: an on-demand tool is not, whatever a session
+// turned on (SessionSpecs).
 func (r *Registry) Offered(name string, admin bool) bool {
 	h, ok := r.Lookup(name)
 	if !ok {
 		return false
 	}
-	_, ok = offered(h, admin)
-	return ok
+	s, ok := offered(h, admin)
+	return ok && !s.OnDemand
 }
 
 // offered returns h's spec and whether h is on offer.
@@ -202,8 +236,12 @@ func (r *Registry) Run(ctx context.Context, c Call) (Result, error) {
 	if !ok {
 		return Result{}, fmt.Errorf("tool: %s: %w", c.Name, ErrUnknown)
 	}
-	if h.Spec().AdminOnly && !c.Admin {
+	spec := h.Spec()
+	if spec.AdminOnly && !c.Admin {
 		return Result{}, fmt.Errorf("tool: %s: admin only: %w", c.Name, ErrForbidden)
+	}
+	if spec.OnDemand && !slices.Contains(c.On, c.Name) {
+		return Result{}, fmt.Errorf("tool: %s: not on in this step; mcp.use turns it on from the next step: %w", c.Name, ErrUnknown)
 	}
 	if where := r.where.Where(c.Name); where != PlacementLocal {
 		return Result{}, fmt.Errorf("tool: %s runs at %q: %w", c.Name, where, ErrNotLocal)

@@ -17,6 +17,7 @@ import (
 	"github.com/igorrius/ganglion/host"
 	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
+	"github.com/igorrius/ganglion/mcpclient"
 	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/plan"
 	"github.com/igorrius/ganglion/policy"
@@ -175,11 +176,12 @@ func Translator() do.Provider[*language.Translator] {
 }
 
 // Tools provides the tool registry. Each tool joins by one line in
-// toolHandlers; the tools of the owner's modules come and go with them.
+// toolHandlers; the tools of the owner's modules and of the remote MCP
+// servers come and go with them.
 func Tools() do.Provider[*tool.Registry] {
 	return func(i do.Injector) (*tool.Registry, error) {
 		return tool.NewRegistryWith(router.Local{}, []tool.RegistryOption{
-			tool.WithDynamic(do.MustInvoke[*modhost.Host](i).Handlers),
+			tool.WithDynamic(tool.Dynamics(do.MustInvoke[*modhost.Host](i).Handlers, do.MustInvoke[*mcpclient.Hub](i).Handlers)),
 			tool.WithRegistryLogger(do.MustInvoke[*slog.Logger](i)),
 		}, toolHandlers(i)...)
 	}
@@ -203,7 +205,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
 		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i), do.MustInvoke[*builtin.HostExec](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
-		do.MustInvoke[Moduling](i).Tools, do.MustInvoke[builtin.Routing](i).Tools(), do.MustInvoke[builtin.Configuring](i).Tools(), metricsTools(do.MustInvoke[Bootstrap](i)))...)
+		do.MustInvoke[Moduling](i).Tools, do.MustInvoke[*mcpclient.Hub](i).Tools(), do.MustInvoke[builtin.Routing](i).Tools(), do.MustInvoke[builtin.Configuring](i).Tools(), metricsTools(do.MustInvoke[Bootstrap](i)))...)
 }
 
 // metricsTools is metrics.show when the command line gave a renderer.

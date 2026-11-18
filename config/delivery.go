@@ -14,6 +14,7 @@ import (
 	"github.com/igorrius/ganglion/intake"
 	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
+	"github.com/igorrius/ganglion/mcpclient"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/outbox"
 	"github.com/igorrius/ganglion/publichttp"
@@ -248,7 +249,8 @@ func Housekeepers() do.Provider[Housekeeping] {
 
 // AgentHousekeepers provides the daily prune of the tool-call journal, the
 // expiry of unanswered confirmations, the janitor, the translator, the
-// runner of host commands, which lives where the agent does, the
+// runner of host commands, which lives where the agent does, the client of
+// remote MCP servers (R-MCP-1), the
 // reconcile of the cells at start and every five minutes, and the memory
 // review's timer while the review runs.
 func AgentHousekeepers() do.Provider[Housekeeping] {
@@ -262,6 +264,7 @@ func AgentHousekeepers() do.Provider[Housekeeping] {
 			do.MustInvoke[*bgjobs.Registry](i),
 			do.MustInvoke[*builtin.BuildQueue](i),
 			node.Named("translator", do.MustInvoke[*language.Translator](i).Run),
+			node.Named("mcpclient", do.MustInvoke[*mcpclient.Hub](i).Run),
 			cells.Reconciler{Service: do.MustInvoke[*cells.Service](i), Every: cells.ReconcileEvery, Log: logger, After: time.After},
 		}
 		if reviewOn(i) {

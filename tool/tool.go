@@ -69,6 +69,10 @@ type Spec struct {
 	// own message, edited in place (a plan, R-CMD-7): the agent does not fold it
 	// (R-POL-9).
 	KeepsQuestion bool
+	// OnDemand says the tool is offered only in a session that turned it on
+	// with mcp.use (R-MCP-4a); the registry leaves it out of Specs and refuses
+	// its calls elsewhere.
+	OnDemand bool
 }
 
 // Command is a host command as approved: its argv and the folder it runs in
@@ -146,8 +150,14 @@ type Call struct {
 	// Speak writes what the person reads in their language (R-LANG-2); a
 	// tool's result and errors stay in English, since a model reads them.
 	Speak texts.Speaker
-	Name  string
-	Args  json.RawMessage
+	// On are the on-demand tools this call may run: those the session had
+	// on at the start of the step (R-MCP-4a).
+	On []string
+	// TurnedOn are all the on-demand tools the session turned on so far,
+	// this step's included; mcp.use counts its limits on them (R-MCP-4a).
+	TurnedOn []string
+	Name     string
+	Args     json.RawMessage
 }
 
 // Key identifies the call across reruns of its turn: the idempotency key
@@ -162,6 +172,9 @@ type Result struct {
 	// Job is a host command still running in the background; its end
 	// resumes the conversation (R-CMD-4). Text says so.
 	Job string
+	// On are on-demand tools this call turned on for the session; the agent
+	// adds them to the session's list (R-MCP-4a).
+	On []string
 	// Out are the messages the tool produces; the agent sends them with the
 	// turn's replies. They are delivered even when the call returns an
 	// error, so a tool must not return both unless it means to: the

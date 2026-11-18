@@ -39,6 +39,10 @@ type turn struct {
 	// in the API path's form (logExec).
 	execLog []provider.Message
 	known   urlSet // addresses the sender gave or a search returned
+	// on are the on-demand tools on at the start of the current step: a
+	// tool mcp.use turns on is offered and callable from the next step,
+	// not later in the same one (R-MCP-4a).
+	on []string
 	// decision is the press of a KindDecision event; toolResult the
 	// pending call of a KindToolResult event; schedule the job of a
 	// KindSchedule event; command the host command of a KindCommandDone

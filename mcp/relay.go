@@ -65,9 +65,9 @@ func Relay(ctx context.Context, socket, token string, in io.Reader, out io.Write
 // copyLines copies src to dst a line at a time, each line at most
 // MaxLine long. The end of src is nil.
 func copyLines(dst io.Writer, src io.Reader) error {
-	lines := newLineReader(src, MaxLine)
+	lines := NewLineReader(src, MaxLine)
 	for {
-		line, err := lines.next()
+		line, err := lines.Next()
 		if errors.Is(err, io.EOF) {
 			return nil
 		}

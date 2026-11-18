@@ -45,6 +45,7 @@ config/config.go
 config/delivery.go
 config/groups.go
 config/host.go
+config/mcp.go
 config/memory.go
 config/storage.go
 config/web.go
@@ -157,4 +158,5 @@ cmd/launch*.go
 cmd/update.go
 restart/**
 config/restart.go
+mcpclient/**
 config/intake.go
