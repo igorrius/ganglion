@@ -52,6 +52,12 @@ func destinationsFile(i do.Injector) confighist.DestinationsFile {
 		History: do.MustInvoke[confighist.History](i)}
 }
 
+// mcpFile is the mcp: section of the node's file, every change recorded.
+func mcpFile(i do.Injector) confighist.MCPFile {
+	return confighist.MCPFile{File: settings.MCPFile{Path: settingsFile(do.MustInvoke[Bootstrap](i))},
+		History: do.MustInvoke[confighist.History](i)}
+}
+
 // Configuring provides the config tools (R-CFG-14 – R-CFG-16): the node's
 // file, its history, the Restart now button and the restart itself, read
 // at the press so Run's override is the one used.

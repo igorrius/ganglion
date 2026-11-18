@@ -462,7 +462,13 @@ func TestOAuthFailedRefreshNeedsSignIn(t *testing.T) {
 // removes the stored sign-in; the server then needs a new one.
 func TestOAuthDisconnectRevokes(t *testing.T) {
 	r := newOAuthRig(t, mcpclienttest.AuthOptions{})
+	if at, err := r.oauth.SignedIn(context.Background(), "shop"); err != nil || !at.IsZero() {
+		t.Fatalf("SignedIn before = %v, %v", at, err)
+	}
 	r.signIn(t, "state-1")
+	if at, err := r.oauth.SignedIn(context.Background(), "shop"); err != nil || !at.Equal(r.clock.now()) {
+		t.Fatalf("SignedIn = %v, %v", at, err)
+	}
 	if _, _, err := r.oauth.Auth("shop").Header(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -476,6 +482,9 @@ func TestOAuthDisconnectRevokes(t *testing.T) {
 	}
 	if v := r.store.Values("shop"); len(v) != 0 {
 		t.Fatalf("store = %v", v)
+	}
+	if at, _ := r.oauth.SignedIn(context.Background(), "shop"); !at.IsZero() {
+		t.Fatalf("SignedIn after Disconnect = %v", at)
 	}
 	if _, _, err := r.oauth.Auth("shop").Header(context.Background()); !errors.Is(err, mcpclient.ErrNeedsSignIn) {
 		t.Fatalf("Header = %v", err)

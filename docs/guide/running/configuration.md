@@ -2,7 +2,7 @@
 
 All settings are in `ganglion.yaml`. Every key is optional and the values below are the defaults. The file is checked strictly: an unknown key stops the node at start and the error names it. For an editor with completion, the example file starts with a line that points to the JSON schema `schemas/node.schema.json`.
 
-Only the module list changes while the node runs. Every other section applies at the next start: send `/restart` or restart the process.
+Only the module list and the `mcp` section change while the node runs. Every other section applies at the next start: send `/restart` or restart the process.
 
 A field that takes a secret holds `env:NAME` or `store:NAME`. See [Configure](../getting-started/configure.md#secrets). Where a value is a duration, write it like `8s`, `10m` or `6h`. `off` turns a feature off where noted.
 
@@ -114,6 +114,30 @@ The modules the node runs and their settings. Installing a module writes to this
 modules:
   - name: local/price-watch
     notify_to: [family-kitchen, owner]
+```
+
+## mcp
+
+The remote MCP servers the node uses. The section changes only through the assistant's tools: `config.propose` refuses it, and an edit on the host applies at the next start. See [Connecting an MCP server](../using/mcp.md).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `page` | the project's intake page | The address of the page a sign-in ends on. |
+| `servers.<name>.url` | | The server's `https` address. |
+| `servers.<name>.auth` | | `none`, `oauth` or `header`. |
+| `servers.<name>.header` | | The header that carries the key, for `auth: header`. The key itself is in the secret store, never in the file. |
+| `servers.<name>.timeout` | `30s` | How long one request may take. |
+| `servers.<name>.tools` | | Each approved tool's rule: `auto`, `confirm` or `forbidden`. |
+| `servers.<name>.fingerprint` | | Pins the approved tool list. |
+
+```yaml
+mcp:
+  servers:
+    shop:
+      url: https://mcp.example.com/mcp
+      auth: oauth
+      tools:
+        search_products: auto
 ```
 
 ## memory

@@ -135,6 +135,19 @@ models:
 #     notify_to: [family-k7, owner]
 modules: []
 
+# Remote MCP servers. Ask the assistant in your private chat to connect one;
+# it writes the lines below after you press Connect. page is where a sign-in
+# ends (the project's page by default).
+# mcp:
+#   page: https://igorrius.github.io/ganglion/intake/v1/
+#   servers:
+#     shop:
+#       url: https://mcp.example.com/mcp
+#       auth: oauth
+#       tools:
+#         search_products: auto
+#         place_order: confirm
+
 # The agent's long-term memory, kept by topic in the workspace (M5).
 memory:
   # The size in characters of the known-facts block of the system prompt;

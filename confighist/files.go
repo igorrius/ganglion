@@ -110,3 +110,32 @@ func (f TelegramFile) record(reason string, write func() error) error {
 // chatOf names a group in a reason by its chat id. Its title is written by
 // its members, and config.history shows reasons to the model.
 func chatOf(chat int64) string { return strconv.FormatInt(chat, 10) }
+
+// MCPFile is settings.MCPFile with every change recorded.
+type MCPFile struct {
+	File    settings.MCPFile
+	History History
+}
+
+// MCP reads the mcp: section.
+func (f MCPFile) MCP() (settings.MCP, error) { return f.File.MCP() }
+
+// SetServer writes a server's line; why says what changed ("connected",
+// "approved again").
+func (f MCPFile) SetServer(name string, s settings.MCPServer, why string) error {
+	return f.record("mcp server "+name+": "+why, func() error { return f.File.SetServer(name, s) })
+}
+
+// SetPolicy writes one tool's policy.
+func (f MCPFile) SetPolicy(server, tool string, p settings.MCPPolicy) error {
+	return f.record("mcp server "+server+": "+tool+" "+string(p), func() error { return f.File.SetPolicy(server, tool, p) })
+}
+
+// RemoveServer removes a server's line.
+func (f MCPFile) RemoveServer(name string) error {
+	return f.record("mcp server "+name+": disconnected", func() error { return f.File.RemoveServer(name) })
+}
+
+func (f MCPFile) record(reason string, write func() error) error {
+	return f.History.Record(context.Background(), SourceMCP, reason, write)
+}

@@ -33,6 +33,7 @@ const (
 	toolWebFetch     = "web.fetch"
 	toolMessageSend  = "message.send"
 	toolLanguageSet  = "language.set"
+	toolMCPConnect   = "mcp.connect"
 	toolSecretAsk    = "secret.request"
 	toolMemoryWrite  = "memory.write"
 	toolModuleWrite  = "module.write"
@@ -356,7 +357,7 @@ type rule func(cfg Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decis
 
 // rules are the rules of Decide, in order.
 var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleCommandForbidden, ruleGrant,
-	ruleMemoryWrite, ruleReminder, ruleJobDelete, ruleModuleWrite, ruleLanguageSet, ruleSecretRequest, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
+	ruleMemoryWrite, ruleReminder, ruleJobDelete, ruleModuleWrite, ruleLanguageSet, ruleMCPConnect, ruleSecretRequest, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -676,6 +677,20 @@ func ruleModuleWrite(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.D
 // outside content, where a page may have asked for it to make approvals unreadable (R-LANG-3).
 func ruleLanguageSet(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
 	if s.Name != toolLanguageSet {
+		return "", "", false
+	}
+	if c.Tainted {
+		return confirm()
+	}
+	return tool.PolicyAuto, journal.DecisionAllowed, true
+}
+
+// ruleMCPConnect probes a server at once in a session that holds no outside
+// content, and asks in one that does: its address could carry the
+// session's data out (R-MCP-3). Nothing is connected before the admin's
+// Connect either way.
+func ruleMCPConnect(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
+	if s.Name != toolMCPConnect {
 		return "", "", false
 	}
 	if c.Tainted {

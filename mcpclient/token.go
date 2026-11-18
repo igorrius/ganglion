@@ -24,6 +24,7 @@ const nameSignIn = "oauth"
 type signInRecord struct {
 	Client registration `json:"client"`
 	Token  storedToken  `json:"token"`
+	At     time.Time    `json:"signed_in,omitzero"` // when the admin last signed in, for /mcp
 }
 
 // Limits and margins of the tokens.
@@ -55,10 +56,11 @@ type tokenAuth struct {
 	loaded    bool
 	reg       registration
 	tok       storedToken
-	force     bool   // the server refused the token: refresh before the next request
-	forced    bool   // the token in hand came from such a refresh
-	signedOut bool   // no usable token until a new sign-in
-	epoch     uint64 // counts Disconnects: a sign-in begun before one does not land after it
+	force     bool      // the server refused the token: refresh before the next request
+	forced    bool      // the token in hand came from such a refresh
+	signedOut bool      // no usable token until a new sign-in
+	at        time.Time // when the stored sign-in was made
+	epoch     uint64    // counts Disconnects: a sign-in begun before one does not land after it
 }
 
 // Header implements Auth: a bearer token, refreshed first when needed.
@@ -117,7 +119,7 @@ func (a *tokenAuth) load(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	a.loaded, a.reg, a.tok = true, rec.Client, rec.Token
+	a.loaded, a.reg, a.tok, a.at = true, rec.Client, rec.Token, rec.At
 	a.signedOut = !ok || rec.Client.ClientID == ""
 	return nil
 }
@@ -152,7 +154,7 @@ func (a *tokenAuth) renew(ctx context.Context) error {
 	// it cannot be stored, or the next refresh would send a dead one.
 	a.tok = st
 	a.forced, a.force = a.force, false
-	if err := a.o.saveJSON(ctx, a.server, nameSignIn, signInRecord{Client: a.reg, Token: st}); err != nil {
+	if err := a.o.saveJSON(ctx, a.server, nameSignIn, signInRecord{Client: a.reg, Token: st, At: a.at}); err != nil {
 		a.o.log.Warn("mcpclient: a refreshed token was not stored; it is held in memory until a restart",
 			"server", a.server, "kind", "store")
 	}
@@ -180,10 +182,11 @@ func (a *tokenAuth) signedIn(ctx context.Context, epoch uint64, reg registration
 	if a.epoch != epoch {
 		return errDisconnected
 	}
-	if err := a.o.saveJSON(ctx, a.server, nameSignIn, signInRecord{Client: reg, Token: st}); err != nil {
+	at := a.o.now()
+	if err := a.o.saveJSON(ctx, a.server, nameSignIn, signInRecord{Client: reg, Token: st, At: at}); err != nil {
 		return err
 	}
-	a.reg, a.tok = reg, st
+	a.reg, a.tok, a.at = reg, st, at
 	a.loaded, a.signedOut, a.force, a.forced = true, false, false, false
 	return nil
 }
@@ -216,7 +219,7 @@ func (a *tokenAuth) drop(ctx context.Context) (registration, storedToken, error)
 	reg, tok := a.reg, a.tok
 	a.epoch++
 	a.loaded, a.signedOut, a.force, a.forced = true, true, false, false
-	a.reg, a.tok = registration{}, storedToken{}
+	a.reg, a.tok, a.at = registration{}, storedToken{}, time.Time{}
 	if err := a.o.store.Remove(ctx, a.server); err != nil {
 		return registration{}, storedToken{}, fmt.Errorf("mcpclient: remove the sign-in of %s: %w", a.server, err)
 	}
@@ -335,6 +338,17 @@ func (o *OAuth) revoke(ctx context.Context, reg registration, token, hint string
 		return &StatusError{Code: resp.StatusCode}
 	}
 	return nil
+}
+
+// SignedIn is when the admin last signed the node in to server; zero when
+// it holds no sign-in (R-MCP-10). It reads the store, so it is current.
+func (o *OAuth) SignedIn(ctx context.Context, server string) (time.Time, error) {
+	var rec signInRecord
+	ok, err := o.loadJSON(ctx, server, nameSignIn, &rec)
+	if err != nil || !ok || rec.Client.ClientID == "" {
+		return time.Time{}, err
+	}
+	return rec.At, nil
 }
 
 // loadJSON reads a stored value into into; found is false for none, or for

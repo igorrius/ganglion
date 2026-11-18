@@ -34,6 +34,8 @@ type File struct {
 	Destinations []Destination `yaml:"destinations"`
 	// Modules lists the modules the node runs and their configuration (M4b).
 	Modules []Module `yaml:"modules"`
+	// MCP is the remote MCP servers the admin connected (R-MCP-2).
+	MCP MCP `yaml:"mcp"`
 	// Memory is the agent's long-term memory (M5, R-CFG-8).
 	Memory Memory `yaml:"memory"`
 	// Update is how the node follows the core releases (R-UPD-6).
@@ -329,6 +331,7 @@ func Default() File {
 			Search:      Search{Mode: auto, BraveKey: "env:BRAVE_API_KEY"},
 		},
 		Update: Update{Check: true},
+		MCP:    MCP{Page: DefaultIntakePage},
 		Memory: Memory{PromptBudget: 24000, Review: Review{Enabled: true, Quiet: Duration(10 * time.Minute)}},
 	}
 }

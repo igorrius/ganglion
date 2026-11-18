@@ -72,6 +72,8 @@ func TestWhere(t *testing.T) {
 		"telegram.updates":         settings.PlaceOwnTool,
 		"telegram.groups":          settings.PlaceOwnTool,
 		"telegram.groups[0].role":  settings.PlaceOwnTool,
+		"mcp.servers":              settings.PlaceOwnTool,
+		"mcp.page":                 settings.PlaceOwnTool,
 		"destinations":             settings.PlaceOwnTool,
 		"modules":                  settings.PlaceOwnTool,
 		"agent.limits":             settings.PlaceHost,

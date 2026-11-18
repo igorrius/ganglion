@@ -109,6 +109,8 @@ func TestDecide(t *testing.T) {
 		{"memory write, clean, is auto", memory, base(), tool.PolicyAuto, journal.DecisionAllowed},
 		{"language, clean, is auto", spec("language.set", tool.ClassSideEffect, tool.PolicyAuto), base(), tool.PolicyAuto, journal.DecisionAllowed},
 		{"language, tainted, confirms", spec("language.set", tool.ClassSideEffect, tool.PolicyAuto), with(base(), func(c *tool.Call) { c.Tainted = true }), tool.PolicyConfirm, journal.DecisionConfirm},
+		{"mcp.connect, clean, is auto", spec("mcp.connect", tool.ClassSideEffect, tool.PolicyAuto), base(), tool.PolicyAuto, journal.DecisionAllowed},
+		{"mcp.connect, tainted, confirms", spec("mcp.connect", tool.ClassSideEffect, tool.PolicyAuto), with(base(), func(c *tool.Call) { c.Tainted = true }), tool.PolicyConfirm, journal.DecisionConfirm},
 		{"secret request, clean, is auto", spec("secret.request", tool.ClassSideEffect, tool.PolicyAuto), base(), tool.PolicyAuto, journal.DecisionAllowed},
 		{"secret request, tainted, is auto: the card is the ask", spec("secret.request", tool.ClassSideEffect, tool.PolicyAuto), with(base(), func(c *tool.Call) { c.Tainted = true }), tool.PolicyAuto, journal.DecisionAllowed},
 		{"module write, clean, is auto", spec("module.write", tool.ClassRead, tool.PolicyAuto), base(), tool.PolicyAuto, journal.DecisionAllowed},

@@ -162,7 +162,9 @@ sequenceDiagram
    like the server's. The node registers itself with the page as its only
    redirect address and keeps the `client_id` in `mcp:<name>`.
 5. The card, written by the node: the server's host, the sign-in host, a
-   **Sign in** link button. The link carries the PKCE challenge, the
+   **Sign in** link in its text (plain Telegram buttons in this release
+   cannot open a page; a link button belongs with #216's widgets). The link
+   carries the PKCE challenge, the
    `resource` and `state`, which is the request's id; the verifier stays in
    the node's memory. The request lives 10 minutes.
 6. The admin signs in on the phone. The sign-in server sends the browser

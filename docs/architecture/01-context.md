@@ -35,7 +35,7 @@ flowchart TB
     g -. "checks it against<br/>its own copy" .-> page
 
     classDef planned stroke-dasharray: 5 5
-    class ha,mcps,page planned
+    class ha planned
 ```
 
 | Actor or system | Relationship | Notes |
@@ -49,8 +49,8 @@ flowchart TB
 | Git remote and S3 | Memory history and backups | Memory is Markdown in git; rollback with `git revert`. The daily backup is sealed on the node under a key from the master key and put into an S3-compatible bucket the node's key cannot delete from or read; [ADR-0095](../adr/0095-daily-encrypted-backups-to-an-s3-compatible-bucket.md) |
 | The web | Pages and JSON APIs the owner asks about or a task's grant names; search | Untrusted content; [ADR-0035](../adr/0035-web-reading.md) |
 | Home Assistant | Planned second automation backend | P3 |
-| Remote MCP servers | Tools the admin connects in the chat; their results are outside content | Planned (P1); [ADR-0097](../adr/0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md) |
-| Intake page | Returns an OAuth code, or encrypts a secret in the browser, as a line the admin pastes into the chat | Planned (P1); the node checks it against the copy in its release; [ADR-0098](../adr/0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md) |
+| Remote MCP servers | Tools the admin connects in the chat; their results are outside content | Connected from the chat with the node's own client (the sign-in and the rules are `mcpadmin`'s); [ADR-0097](../adr/0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md) |
+| Intake page | Returns an OAuth code, or encrypts a secret in the browser, as a line the admin pastes into the chat | The node checks it against the copy in its release; [ADR-0098](../adr/0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md) |
 
 Trust boundaries at this level:
 

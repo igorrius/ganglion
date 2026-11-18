@@ -27,6 +27,7 @@ nav:
       - Modules and reflexes: using/modules.md
       - Entering a secret: using/secrets.md
       - Tools and safety: using/tools-and-safety.md
+      - Connecting an MCP server: using/mcp.md
   - Running a node:
       - Configuration reference: running/configuration.md
       - Models and providers: running/models.md
