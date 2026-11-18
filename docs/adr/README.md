@@ -102,6 +102,8 @@ considered, how they compare, the decision and its consequences. See
 | [0094](0094-the-github-project-holds-the-plan-and-the-repository-holds-decisions.md) | Keep the plan and the status in the GitHub Project, and decisions in the repository | Accepted | 2026-11-17 |
 | [0095](0095-daily-encrypted-backups-to-an-s3-compatible-bucket.md) | Back up the node daily, encrypted with a key from its master key, to an S3-compatible bucket | Accepted | 2026-11-17 |
 | [0096](0096-host-commands-run-the-active-release.md) | Run a host command as the node's active release | Accepted | 2026-11-18 |
+| [0097](0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md) | Connect remote MCP servers from the chat with an own client and `x/oauth2`, in P1 | Proposed | 2026-11-18 |
+| [0098](0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md) | Hand a code or a secret over from the chat through a pinned static page and a pasted line | Proposed | 2026-11-18 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

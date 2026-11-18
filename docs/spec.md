@@ -209,7 +209,7 @@ core process.
 | Router | core | Choice of model and tool execution location, fallback chain | rules from `SKILL.md` + node registry | P1 (rules) |
 | Model providers | core or worker | OpenAI-compatible (incl. Ollama), later Anthropic Messages; translating MCP tools to the API's format | net/http | P1 (one API) |
 | claude CLI worker | worker | Tasks on the owner's subscription: write a module, analyse logs | unmodified `claude -p` | P2 (ADR-0015) |
-| Tools and MCP | core, edge | `memory.*`, `schedule.*`, `message.send`, `cells.*`, `web.*` in the core; `device.*` on the edge; the same tools served to CLI providers over an MCP bridge (R-PRV-6) | MCP stdio / HTTP | P1 |
+| Tools and MCP | core, edge | `memory.*`, `schedule.*`, `message.send`, `cells.*`, `web.*` in the core; `device.*` on the edge; the same tools served to CLI providers over an MCP bridge (R-PRV-6); remote MCP servers' tools through the node's own client (7.16) | MCP stdio / HTTP | P1 |
 | Web reading | core | `web.fetch` and `web.search` (7.11); HTML turned into Markdown by the `html2md` WASM module | net/http + a WASM module | P1 (M3b) |
 | WASM runtime | edge | Running modules with host functions from the manifest; install, update and rollback (R-RUN-8) | wazero, own ABI (ADR-0011) | P0 (spike), P1 |
 | Action policies | core defines, edge enforces | Autonomous / confirm / forbid, limits, `ttl`, audit; tainted sessions, clean-context checks, grants (R-POL-6–8) | declarative config | P1 (base), P2 |
@@ -1114,6 +1114,8 @@ undone with `git revert`.
 | Secret leakage | The model never sees secrets; modules get them via `secret.get` per manifest, from the encrypted store or the environment (R-CFG-9); secrets are redacted before the journal and logs, and the Bot API token is never logged | P1 |
 | A stranger messages the bot | `allowed` table with roles: the admin installs modules, others only ask; in M3b a `family` member gets conversation with no tools and no memory, and the family bot migration (M7) decides family access | P1 |
 | A group chat reaches the bot | Only a group listed under `telegram.groups`, connected by the admin's press, and only a message that addresses the bot (R-DLV-16, R-DLV-17); its members get the role `family`; nobody has the admin role in a group (R-POL-10); [ADR-0076](adr/0076-telegram-groups-and-the-addressing-rule.md) | P1 |
+| A remote MCP server steers the agent or takes the admin's access | Its results are outside content and taint the session; its tool list is approved by the admin and pinned by a fingerprint; every tool not marked read-only asks; credentials stay in the store, sent only to the server's origin (R-MCP-4–8, [ADR-0097](adr/0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md)) | P1 |
+| A replaced intake page takes a secret | The page is versioned and frozen; the node checks the hosted page against the copy in its release before every secret request and stops on a mismatch (R-INT-3, [ADR-0098](adr/0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md)) | P1 |
 | Diagnostics expose the node | `ganglion mcp` opens no port: it runs over stdio and relies on the platform's authentication; read access to the data directory is read access to all history | P1 |
 | A host command reads secrets or gains root | Commands run in a sandbox: no privilege gain, a clean environment, the node's environment, memory and secret files unreadable; root and anything that starts a process outside the sandbox are forbidden; the tool is off where the sandbox cannot be set up (R-CMD-1–3, [ADR-0039](adr/0039-command-sandbox.md)) | P1 (M3d) |
 | The node's own files fill the disk | Everything the node creates is accounted for (what, size, age) and cleaned by age or size (R-CMD-8) | P1 (M3d) |
@@ -1480,7 +1482,8 @@ phase plan).
   `OTEL_EXPORTER_OTLP_ENDPOINT`, OpenTelemetry's own setting, is still
   read.
 - **R-CFG-6.** Modules apply at once: install, update, rollback, config,
-  off, on and remove. Every other section applies at the next start;
+  off, on and remove; so do remote MCP servers (`mcp`, R-MCP-2). Every
+  other section applies at the next start;
   `/restart` (admin) ends the node cleanly for its supervisor to start
   again. After a restart asked from the chat (`/restart`, or Restart now
   under a change of R-CFG-15) the started node tells the person who asked,
@@ -1510,8 +1513,8 @@ phase plan).
     model) lists names, dates and the modules that name each, and removes
     one. A value the store hands out is redacted from the journal and the
     logs like one read at the start.
-  - How the owner hands a value over from the chat is a separate decision
-    (section 11).
+  - The owner hands a value over from the chat through a request and the
+    intake page (7.17).
 - **R-CFG-10.** The store's master key is `GANGLION_MASTER_KEY` or
   `GANGLION_MASTER_KEY_FILE` when set; otherwise the file `master.key` in
   the data directory, which the node creates at its first start. A key
@@ -1563,7 +1566,7 @@ phase plan).
   `telegram.api_url`, `telegram.admin`, `models.providers`,
   `models.models`, `sandbox`, `http`, `metrics`, `log.dir`,
   `agent.workspace`) or its own tool (modules, destinations, groups,
-  `telegram.updates`). A test keeps the list in step with the schema.
+  `telegram.updates`, `mcp`). A test keeps the list in step with the schema.
 - **R-CFG-15.** A proposal is checked before its card and again on the
   press: strict parsing, the schema and the modules' checks. One that
   fails is refused with the path and the reason, and the file is not
@@ -1639,6 +1642,119 @@ other install paths are in section 14.
   than the one running the command or fails the check; then it runs as
   it is and says why on stderr
   ([ADR-0096](adr/0096-host-commands-run-the-active-release.md)).
+
+### 7.16. Remote MCP servers
+
+The admin connects a remote MCP server in the chat, and the agent uses its
+tools with any provider (owner, 2026-11-18,
+[ADR-0097](adr/0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md),
+[design note](design/mcp-client-and-secret-intake-design.md)). Local servers
+started as processes are level 3 of 9.8 and stay in P3.
+
+- **R-MCP-1.** The node is an MCP client of remote servers over Streamable
+  HTTP: `initialize`, `tools/list`, `tools/call` and
+  `notifications/tools/list_changed`, the session header, an answer as
+  JSON or as an event stream, every read bounded. It declares no client
+  capability and refuses a server's requests for sampling, elicitation
+  and roots.
+- **R-MCP-2.** `mcp.servers.<name>` in `ganglion.yaml` holds a server: `url`,
+  `auth` (`none`, `oauth`, or `header` with `header:` naming it), `timeout`
+  (30 s by default), a policy for each tool (`auto`, `confirm`,
+  `forbidden`) and the `fingerprint` of the approved tool list;
+  `mcp.page` is the intake page's address (R-INT-3). A name is
+  `[a-z0-9_]{1,24}` and not a module's short name or a prefix of the
+  core's tools. Only the tools of R-MCP-3 and R-MCP-9 change the section.
+- **R-MCP-3.** `mcp.connect(name, url[, header])` (admin, private chat)
+  checks the address as `web.fetch` does (R-WEB-2) and probes the server;
+  in a tainted session it is confirmed first.
+  - For `oauth` it discovers the sign-in server (RFC 9728, RFC 8414),
+    every address in the metadata checked the same way, registers the
+    node (RFC 7591) with the intake page as the only redirect address,
+    and sends a card through an OAuth request (R-INT-1) that names the
+    server's host and the sign-in host. The sign-in uses PKCE and binds
+    the token to the server with `resource` (RFC 8707).
+  - For `header` it opens a secret request (R-INT-1) for the key.
+  - It then lists the tools and sends a card: each tool's name and the
+    first line of its description as data, and a proposed policy:
+    `auto` for a tool the server marks read-only, `confirm` for the rest;
+    the buttons Connect, Ask for all and Cancel. Connect confirms the
+    file's change (R-CFG-13) and the tools are offered at once; Cancel
+    deletes the registration and the tokens.
+- **R-MCP-4.** A server's tool is offered as `<server>.<tool>`, its own name
+  lower-cased with every character outside `[a-z0-9_]` turned into `_`;
+  admin-only; its result outside content (R-POL-4, R-POL-6); confirmed in
+  a tainted session when it has input; never offered in a `local-only`
+  session. At most 64 tools a server, a description of 1000 characters, a
+  schema of 16 KB; a tool past a limit or whose name collides is skipped
+  and named on the card.
+- **R-MCP-5.** A server's registration, its tokens and a key for `header`
+  live in the secret store under the scope `mcp:<name>` (R-CFG-9); no tool
+  returns them, and every value is redacted from the journal and the
+  logs. The client sends the credential only to the server's origin and
+  drops it on a redirect to another origin. Removing a server removes its
+  scope.
+- **R-MCP-6.** The client refreshes an expired token by itself. When the
+  refresh fails, the server is "needs sign-in": its tools answer the agent
+  so, and the admin gets one card with a sign-in link until they sign in
+  or disconnect.
+- **R-MCP-7.** A tool list that no longer matches the fingerprint (on
+  `list_changed` or on a connect) turns the server's tools off until the
+  admin presses Connect on a card that shows what changed.
+- **R-MCP-8.** A call that is not read-only and gets no answer is never
+  repeated by the node; the journal records the outcome as unknown and the
+  agent is told. A server that does not answer within `timeout` is
+  "unreachable", and the next calls back off. A result over 1 MB is cut,
+  with a note.
+- **R-MCP-9.** `mcp.rule(server, tool, policy)` changes one tool's policy
+  after a card of its own; only the admin's press lowers a policy.
+- **R-MCP-10.** `/mcp` (admin, private chat, no model) lists each server with
+  its state (connected, needs sign-in, tools changed, unreachable, store
+  locked), the time of its last sign-in and its number of tools, and
+  disconnects one. `/status` has a line for each server that is not
+  connected.
+
+### 7.17. Handing values over from the chat
+
+A one-time OAuth code and a secret reach the node from the admin's phone
+with no shell, no public address, and no value in clear in the chat
+(owner, 2026-11-18,
+[ADR-0098](adr/0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md)).
+
+- **R-INT-1.** A request is opened by the node, never by the model, for an
+  OAuth code or for a secret. It lives 10 minutes, may be answered only
+  by an admin, and is kept in memory only: a restart closes it. A secret
+  request holds a one-time P-256 key pair whose private key is destroyed
+  once the request is answered or expires.
+- **R-INT-2.** `secret.request(name, why[, module])` opens a secret request
+  for the node's scope or a module's. Its card is the node's text: the
+  secret's name, the module or server that asks, the hosts the value may
+  reach, and the agent's reason quoted as data. No tool reads a value.
+- **R-INT-3.** The intake page is one static file in two modes: it shows an
+  OAuth code as `gauth1.<state>.<code>`, or encrypts a secret in the
+  browser and shows `gsec1.<id>.<ciphertext>`, each with a Copy button.
+  It sends nothing over the network. It is published on the project's site
+  as `intake/v<n>/`, and a published version never changes (a CI check);
+  `mcp.page` can point at another host with the same file. Before every
+  secret request the node fetches the configured page and compares it
+  with the copy embedded in its binary: a mismatch refuses the request
+  and tells the admin; for an OAuth sign-in it adds a warning to the card.
+- **R-INT-4.** A secret is sealed with HPKE: DHKEM(P-256, HKDF-SHA256),
+  HKDF-SHA256, AES-128-GCM, `info` holding the format, the request id and
+  the secret's name. A value through the page is at most 2 KB.
+- **R-INT-5.** The transport takes a private text message from an admin that
+  is one `gauth1.` or `gsec1.` line before the inbox, hands it to its
+  request and deletes the message. Each line works once; an unknown or
+  expired request is answered with a fixed text. The same line from
+  anyone else, or in a group, is deleted when the bot can and goes
+  nowhere. The transport logs the request id only.
+- **R-INT-6.** An answered request folds its card to one line (a server
+  connected, a secret set, with the time), as an answered question does
+  (R-POL-9), and the agent gets a node note with the same text.
+- **R-INT-7.** After a run with a secret and one with OAuth, the value, the
+  code and the tokens are absent from the model's context, the inbox, the
+  history, the journal and the logs (an abuse test).
+- **R-INT-8.** `ganglion secret set` on the host stays (R-CFG-9) and is the
+  way for a value over 2 KB.
 
 <a id="8-first-reflex-deye-p1"></a>
 
@@ -1972,7 +2088,7 @@ replay on history → approval → shadow → rollout.
 | 0. Configuration | Changes to bindings, thresholds, observers, cell backends — proposed, approved by the owner, validated, committed to git | no | validation + approval; rollback | Yes, P1 (ADR-0015) |
 | 1. Skills | Markdown instructions | no | not needed | Yes, P1 |
 | 2. Scripts | Python/sh next to a skill | no | environment allowlist and timeout (M3c, R-RTR-5); the filesystem and network sandbox of ADR-0039 (M3d) | Yes, P1 |
-| 3. MCP modules | A separate process + manifest with permissions | no | process, limits, granted secrets | Yes, the main path, P3 |
+| 3. MCP modules | A separate process + manifest with permissions | no | process, limits, granted secrets | Yes, the main path, P3; a remote server is connected in P1 as configuration, not a module (7.16) |
 | 4. WASM | `.wasm` in wazero | no | capability list | Yes, P1 by hand, P3 by the model |
 | 5. Core rebuild | `go build`, binary swap | yes | none | **Never** |
 
@@ -2033,7 +2149,11 @@ source, and cells owned by modules
 `notify` capability for modules and the agent writing module source in the
 workspace, first `deye-alerts`, so routine reactions run without a model
 ([M4c design](design/p1-m4c-reflexes-design.md), ADRs 0065–0070,
-R-RUN-15–17, R-LIVE-9).
+R-RUN-15–17, R-LIVE-9). Remote MCP servers connected from the chat and
+values handed over from the chat (7.16, 7.17) are a milestone of their
+own, taken in on 2026-11-18 (owner,
+[ADR-0097](adr/0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md),
+[ADR-0098](adr/0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md)).
 
 Acceptance:
 
@@ -2074,7 +2194,7 @@ Backups are never cut from P1.
 | How long ended sessions (episodes) are kept | Forever, searched by `memory.recall` (today: the newest 500 per chat) · a retention: sessions older than N days are dropped after consolidation has read them | A retention after consolidation (owner, 2026-11-03): nothing is dropped that consolidation has not read, so a fact the owner never confirmed is still turned into one or kept; what was said by chance fades | M7 task 7.2, with the nightly consolidation; N is chosen there |
 | Telemetry of edge nodes | Each edge to an OpenTelemetry collector over OTLP · Prometheus scrapes each edge · snapshots over the NATS bus, collected by the core | Decided by the owner (2026-11-03): over the bus, collected by the core, without JetStream for metrics (R-OBS-9). A collector needs one more link and one more service for every edge; the bus is already there. An outside collector can later be fed by the core | ADR at the start of P2, with the protocol |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
-| Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | The encrypted store and the command on the host are decided and in M6 ([ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), R-CFG-9, R-CFG-10). Still open: the page served by the node with the ciphertext returned through Telegram first (owner's brainstorm, 2026-11-12, [design note](design/secrets-intake-design.md)); its phase follows the spike | A spike on Telegram's `sendData`, then an ADR |
+| Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | The encrypted store and the command on the host are decided and in M6 ([ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), R-CFG-9, R-CFG-10). Decided (owner, 2026-11-18, [ADR-0098](adr/0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md), R-INT-1…8): a static page on the project's site, versioned and checked by the node against its own copy, encrypts in the browser; the admin pastes the line and the transport takes it before the inbox. The node serving the page itself waits in "Not now" | A spike: the first server's redirect address and WebCrypto in Telegram's browsers |
 | Logging the claude CLI provider in | A variable set by hand from `claude setup-token` · a `/login` command of the core that drives the bundled CLI and takes the one-time code from the chat · the same command with the node doing the OAuth exchange itself | The `/login` command driving the CLI; the token goes to the encrypted store and never to the chat (owner's request, 2026-11-13, [design note](design/model-login-from-chat-design.md)). The phase is open; the store itself is in M6 | A spike on driving `setup-token` without a terminal, then an ADR |
 | How Telegram updates reach the node | Long polling only · a webhook only · both, chosen in `ganglion.yaml` · both, chosen by the node | Decided (owner, 2026-11-13, [ADR-0078](adr/0078-telegram-updates-by-polling-or-webhook.md)): both, chosen in the file, polling by default (R-DLV-18, R-DLV-19, R-CFG-11; [design note](design/telegram-webhook-design.md)) | — |
 | When the repository opens | Private until the public release in P3 · open now with no announcement, the announced release in P3 · a fresh repository without the history | Decided (owner, 2026-11-14, [ADR-0082](adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)): open now, 0.x with no guarantees, bug reports in GitHub Issues, vulnerabilities reported privately; the announced release stays in the P3 gate | — |
@@ -2191,13 +2311,16 @@ Reviewed at each gate.
 - First-run onboarding without hand-written ids: the node prints a one-time
   pairing code, and the first person to send it to the bot becomes the
   admin (the same idea as node enrolment with a one-time token, 9.3).
-- Handing a secret to the node from the chat (the store itself is in M6,
-  [ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md)): a
-  page that encrypts the value in the browser, so it passes neither the
-  agent nor the chat's history; a build never gets a secret; a device gets
+- The node serving the intake page from its public listener, so a node
+  with `http.public_url` needs no third party for a secret (owner,
+  2026-11-18,
+  [ADR-0098](adr/0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md)
+  option D): a new route on a public entry. Handing a secret over from the
+  chat itself is 7.17; a build still never gets a secret, and a device gets
   its Wi-Fi credentials when it is provisioned, not in its firmware
-  (owner's brainstorm, 2026-11-12,
-  [design note](design/secrets-intake-design.md); section 11).
+  ([design note](design/secrets-intake-design.md)).
+- Telegram widgets for the cards of 7.16 (a switch per tool), with
+  [#216](https://github.com/igorrius/ganglion/issues/216).
 - Logging the model provider in from the chat: the owner sends `/login`,
   the node answers it without a model, sends the sign-in link and takes the
   one-time code before the inbox; the token goes to the secret store. With
@@ -2314,7 +2437,8 @@ Reviewed at each gate.
   skills and settings turned into ganglion's workspace files, so their
   users can move over (R-MEM-3, ADR-0024). The OpenClaw importer must also
   bring its MCP servers: the owner's daily Jira report runs on one (owner,
-  2026-11-06). This needs ganglion as an MCP client, which it is not yet, and
+  2026-11-06). The client for remote servers is R-MCP; a server that runs as a
+  local process waits for level 3 (P3), and
   a server's secrets are not copied silently.
 - Audiences and several agents: a "family mode" with its own agent or
   settings for a group of people, per-topic setups in Telegram forums,
@@ -2399,8 +2523,9 @@ Reviewed at each gate.
     turn again. It needs its own ADR: the kept messages hold outside content,
     and a tool that ran may have changed the world since.
 - Managing the cloud a node runs in (Railway services, volumes, deploys)
-  through that cloud's MCP server, with ganglion as an MCP client: P3 in
-  the M3b and M3c design; earlier if the owner asks (owner, 2026-11-03).
+  through that cloud's MCP server, with ganglion as an MCP client (owner,
+  2026-11-03); the client exists from 7.16, so what remains is connecting
+  that server and deciding which of its tools the agent may use.
 - `ganglion doctor`: a terminal command that checks a node's settings for
   likely mistakes and misconfigurations, beside `ganglion mcp`; not in the
   chat, where `/status` assumes the node runs (owner, 2026-11-08).

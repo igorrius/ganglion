@@ -94,6 +94,8 @@ interfaces only; **planned** — not in the repository yet.
 | Cell backends | `cells/virtual` (fault injection); suite `cells/cellstest` | done (P1 M1); `tuya` later | 8 | [0014](../adr/0014-state-cells.md) |
 | SQLite: open, `OpenReadOnly` (mode=ro, query_only; for diagnostics), the path escaped in the URI, per-component migrations, immediate transactions, a row count as a gauge (`ObserveCount`; a closed database observes nothing, without an error) | `sqlitedb` | done (P1 M1); `ObserveCount` (observability task 4) | 7.1 | [0016](../adr/0016-sqlite-migrations.md) |
 | Load-shedding flow | — | planned (P1) | 8 | [0014](../adr/0014-state-cells.md) |
+| Remote MCP client: Streamable HTTP (`initialize`, `tools/list`, `tools/call`, `list_changed`), OAuth discovery, registration, PKCE and refresh with `x/oauth2`, the servers' tools as a dynamic registry source named `<server>.<tool>`, credentials in the store's `mcp:<name>` scope; the tools `mcp.connect`, `mcp.rule` and `/mcp` | `mcpclient` | planned (P1) | 7.16 | [0097](../adr/0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md) |
+| Requests to hand a value over from the chat: OAuth codes and secrets, one-time P-256 keys, HPKE open, the `gauth1`/`gsec1` lines the transport takes before the inbox, the page's check against the embedded copy; `secret.request`; the page itself in `intake/v1/` | `intake` | planned (P1) | 7.17 | [0098](../adr/0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md) |
 | Core ↔ edge protocol, NATS | — | planned (P2) | 9.1 | [0006](../adr/0006-sqlite-inside-nats-between-nodes.md) |
 
 ## Dependency rules

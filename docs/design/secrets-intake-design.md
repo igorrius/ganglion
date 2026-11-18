@@ -12,6 +12,13 @@ and taken into M6 (task 6.5). The master key is a file the node makes, and a
 secret belongs to a module's scope. The request, the page and the return
 channel stay as notes here.
 
+**2026-11-18:** the request, the page and the return channel are decided in
+[ADR-0098](../adr/0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md),
+with the [MCP client design](mcp-client-and-secret-intake-design.md): the
+page is a pinned static file on the project's site rather than served by
+the node, the line is pasted rather than sent with `sendData`, and the
+curve is P-256. The sections below are the earlier reasoning.
+
 Marks: **owner** means the owner decided it in the brainstorm; **call**
 means the author's default, open to the owner's correction.
 
