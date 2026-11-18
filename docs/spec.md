@@ -1759,6 +1759,8 @@ with no shell, no public address, and no value in clear in the chat
   secret request the node fetches the configured page and compares it
   with the copy embedded in its binary: a mismatch refuses the request
   and tells the admin; for an OAuth sign-in it adds a warning to the card.
+  A browser without the WebCrypto the page needs gets a fixed text that
+  names `ganglion secret set` instead of a field.
 - **R-INT-4.** A secret is sealed with HPKE: DHKEM(P-256, HKDF-SHA256),
   HKDF-SHA256, AES-128-GCM, `info` holding the format, the request id and
   the secret's name. A value through the page is at most 2 KB.

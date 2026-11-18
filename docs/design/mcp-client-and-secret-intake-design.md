@@ -398,8 +398,8 @@ Spec principle 9: every link is hostile, every input untrusted.
 
 ## 11. How it is checked
 
-**A spike first**, before the ADRs leave Proposed (done on 2026-11-18 but
-for Telegram on iOS, [research](../research/2026-11-18-remote-mcp-and-intake-spike.md)):
+**A spike first** (done on 2026-11-18, [research](../research/2026-11-18-remote-mcp-and-intake-spike.md);
+Telegram on iOS not checked, the ADRs accepted without it):
 
 1. Does the owner's first server accept a redirect address on the
    project's site at registration?

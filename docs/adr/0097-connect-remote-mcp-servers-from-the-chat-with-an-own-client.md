@@ -1,6 +1,6 @@
 # ADR-0097: Connect remote MCP servers from the chat with an own client and `x/oauth2`, in P1
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-18
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.16](../spec.md#716-remote-mcp-servers) (R-MCP-1…10), [7.14](../spec.md#714-node-configuration) (R-CFG-6, R-CFG-14), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-4, R-POL-6), [9.8](../spec.md#98-self-modification-levels), [14](../spec.md#14-not-now); [design note](../design/mcp-client-and-secret-intake-design.md); [ADR-0017](0017-extension-points.md), [ADR-0037](0037-own-minimal-mcp-server.md), [ADR-0093](0093-config-changes-through-the-agent-with-history-in-the-workspace.md), [ADR-0098](0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md)
