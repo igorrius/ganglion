@@ -116,11 +116,13 @@ flowchart TB
     cellsc[("Cells<br/>each owned by one module")]
     outbox[("Outbox")]
     sender["Outbox sender<br/>retries, 429 retry_after"]
+    intakec["Intake requests<br/>an OAuth code or a secret, 10 minutes,<br/>memory only; HPKE open, one use"]
     updwatch["Update watch<br/>tells the admins about a fall back;<br/>confirms a new version after 2 minutes"]
     turns[("turns<br/>trace, cost")]
 
     pub -- "POST with Telegram's<br/>secret header" --> tgt
     tgt -- "in a group: only what<br/>addresses the bot" --> acl
+    tgt -- "a gauth1/gsec1 line,<br/>before the inbox" --> intakec
     acl --> inbox
     acl -- "is it connected?<br/>not connected: report" --> grp
     grp -- "group.request" --> inbox
@@ -183,6 +185,7 @@ flowchart TB
 |---|---|---|
 | Transports | Turn channel input into `Event`s; send `Outgoing` | R-DLV-2, R-DLV-8 |
 | Inbox / outbox | Durable at-least-once delivery, deduplication by `idemKey`, transactional replies | R-DLV-1…7 |
+| Intake requests (`intake`) | Requests opened by the node for an OAuth code or a secret, kept in memory for 10 minutes; the Telegram transport takes a private `gauth1.`/`gsec1.` line from an admin before the inbox, deletes the message and hands the line to its request, which opens it (HPKE, a one-time P-256 key) or hands the code over; each line works once, anything else is answered with a fixed text or dropped; a closed request tells a hook for its card and the agent's note. The page, the page's check and `secret.request` are planned | R-INT-1, R-INT-4, R-INT-5, R-INT-6 |
 | Conversation actors | One turn at a time per conversation, leases, timeouts | R-AGT-1, R-DLV-3 |
 | Plan | The steps of the work as one message edited in place, shown during the turn; approves nothing | R-LIVE-8 |
 | Status reactions | Work that takes long shows on the person's message; a hint, outside the outbox | R-LIVE-7 |

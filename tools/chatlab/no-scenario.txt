@@ -28,6 +28,7 @@ agent/update_buttons.go
 agent/state.go
 agent/telemetry.go
 alert/**
+intake/**
 groups/**
 cmd/dispatch.go
 cmd/mcp.go
@@ -117,6 +118,7 @@ transport/transport.go
 transport/telegram/addressed.go
 transport/telegram/client.go
 transport/telegram/hookcount.go
+transport/telegram/intake.go
 transport/telegram/hookrecord/**
 transport/telegram/webhook.go
 transport/telegram/commands.go
@@ -155,3 +157,4 @@ cmd/launch*.go
 cmd/update.go
 restart/**
 config/restart.go
+config/intake.go

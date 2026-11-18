@@ -146,6 +146,7 @@ type Server struct {
 	calls      map[string]int
 	actions    []ChatAction
 	reactions  []Reaction
+	deleted    []Deleted
 	allowed    []string                  // allowed_updates of the last getUpdates that gave them
 	messages   map[int64]map[int64]shown // chat → message id → what the bot's message shows
 	edits      []Edit
@@ -488,6 +489,17 @@ func (s *Server) Reactions() []Reaction {
 	return slices.Clone(s.reactions)
 }
 
+// Deleted is a message the bot deleted.
+type Deleted struct{ ChatID, MessageID int64 }
+
+// Deleted returns the deleteMessage calls received that went through,
+// oldest first. A call set to fail with FailNext is not among them.
+func (s *Server) Deleted() []Deleted {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.deleted)
+}
+
 // ChatActions returns the sendChatAction calls received.
 func (s *Server) ChatActions() []ChatAction {
 	s.mu.Lock()
@@ -650,6 +662,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		s.mu.Lock()
 		s.reactions = append(s.reactions, r)
+		s.mu.Unlock()
+		writeOK(w, true)
+	case "deleteMessage":
+		var p struct {
+			ChatID    int64 `json:"chat_id"`
+			MessageID int64 `json:"message_id"`
+		}
+		raw, _ := json.Marshal(params)
+		_ = json.Unmarshal(raw, &p)
+		s.mu.Lock()
+		s.deleted = append(s.deleted, Deleted{ChatID: p.ChatID, MessageID: p.MessageID})
 		s.mu.Unlock()
 		writeOK(w, true)
 	case "sendChatAction":

@@ -7,6 +7,7 @@ import (
 
 // Bot API values read by the addressing rule.
 const (
+	chatPrivate    = "private"
 	chatGroup      = "group"
 	chatSupergroup = "supergroup"
 

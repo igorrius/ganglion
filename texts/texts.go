@@ -70,6 +70,12 @@ const (
 	ReplyBack          Key = "reply.back"         // vars: seconds
 	ReplyBackApplied   Key = "reply.back_applied" // vars: changes
 
+	ReplyIntakeExpired   Key = "reply.intake_expired"   // a pasted line of a request that ran out (R-INT-5)
+	ReplyIntakeUnknown   Key = "reply.intake_unknown"   // no open request of that id
+	ReplyIntakeVersion   Key = "reply.intake_version"   // a line of a page version the node does not know
+	ReplyIntakeMalformed Key = "reply.intake_malformed" // a line that does not parse
+	ReplyIntakeFailed    Key = "reply.intake_failed"    // a line that was taken and not accepted
+
 	ButtonDetails        Key = "button.details"
 	ButtonDelete         Key = "button.delete"
 	ButtonRunNow         Key = "button.run_now"
@@ -493,7 +499,7 @@ var allKeys = []Key{
 	ToastApproved, ToastDeclined, ToastAccepted, ToastNotYours, ToastNoButton, ToastUsed, ToastExpired, ToastNotAllowed, ToastReplaced,
 	LineRunning, LineApproved, LineApprovedFailed, LineDeclined, LineUsed, LineExpired, LineReplaced,
 	ReplyNoModel, ReplyStepLimit, ReplyExpired, ReplyDailyLimit, ReplyGiveUp, ReplyNewSession, ReplyNoSessions,
-	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, ReplyBuildLate, ReplyRestarting, ReplyBack, ReplyBackApplied, StatusCommandsOff,
+	ReplyNoSuchResume, ReplyResumed, ReplySessionRow, ReplyNoTasks, ReplyNotAvailable, ReplyCommandsOn, ReplyCommandsOff, ReplyCommandsUsage, ReplyCommandLate, ReplyBuildLate, ReplyRestarting, ReplyBack, ReplyBackApplied, ReplyIntakeExpired, ReplyIntakeUnknown, ReplyIntakeVersion, ReplyIntakeMalformed, ReplyIntakeFailed, StatusCommandsOff,
 	AskDestinationSet, AskConfigPropose, AskConfigTainted, AskConfigKept, AskConfigDefault, ReplyConfigWritten, ButtonConfigRestart, AskDestinationRemove, AskModuleNotifyTo, AskGroupDisconnect, PlacePrivate, PlaceGroup, PlaceTopic, PlaceTopicNumber, PlaceTopicGiven, PlaceGeneral,
 	ButtonAllow, ButtonRefuse, GroupRequestCard, GroupNotConnected, GroupAllowed, GroupRefused,
 	ButtonDetails, ButtonDelete, ButtonRunNow, AskLanguage, AskLanguageNoFile, AskRunTool, AskSendMessage, AskCreateReminder, AskCreateTask, AskDeleteReminder, AskDeleteTask, AskRunNow, AskOpenPage, AskSwitchCell, AskRemember, AskModuleWrite, AskForgetFact, AskForgetSlug, AskForgetTopic, AskPersona, AskSkillScript, AskHostExec, AskPlan, AskModuleImport, AskModuleInstall, AskModuleNetwork, AskModuleSecrets, AskModuleCreates, AskModuleTakes, AskModuleReads, AskModuleReacts, AskModuleNotify, AskModuleRuns, AskModuleTool, AskModuleAbout, AskModuleLimits, AskModuleNew, AskModuleNewNetwork, AskModuleNewSecrets, AskModuleNewCells, AskModuleNewReads, AskModuleNewReacts, AskModuleNewNotify, AskModuleNewRuns, AskModuleNewMemory, AskModuleNewTimeout, AskModuleTrial, AskModuleTrialNone, AskModuleTrialExample, AskModuleTrialMessage, AskModuleTrialCell, AskModuleTrialNothing, AskModuleTrialNow, AskModuleTrialMore, AskModuleTrialNotRun, AskModuleTrialFailed, AskModuleTrialError, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands, SchedEntry, SchedDetails, SchedOnce, SchedEvery, SchedEveryNext, SchedKindReminder, SchedKindTask, SchedSystem, SchedKindSystem, SchedKindModule, SchedAuditText, NoticeMachine, ReportAuditClean, ReportAuditFlagged, SchedGone, SchedDeleted, SchedNoDelete, SchedNotTask, SchedThisChat, SchedNone, SchedStarted, SchedReminderSet, SchedReminderOff, SchedOff, ButtonDone,

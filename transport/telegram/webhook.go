@@ -343,6 +343,9 @@ func (t *Transport) take(ctx context.Context, sink transport.Sink, me user, u up
 	t.seen(u)
 	t.noteTopic(ctx, u)
 	t.health.receivedNow()
+	if t.intercept(ctx, u) {
+		return hookIntake
+	}
 	e, ok := t.toEvent(me, u)
 	if !ok {
 		t.answerCallback(ctx, u)
