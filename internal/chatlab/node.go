@@ -67,6 +67,7 @@ type Node struct {
 	db       *sql.DB
 	lab      *config.LabNode
 	scripted *providertest.Server // the fake model of a scripted scenario
+	mcp      *mcpLab              // the scenario's fake MCP server; nil for none
 	cancel   context.CancelFunc
 	done     chan error
 	closers  *program
@@ -146,7 +147,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	if err != nil {
 		return fmt.Errorf("chatlab: %w", err)
 	}
-	pages, err := servePages(n.closers, o.Scenario)
+	pages, mcpHTTP, err := n.serveFakes(o.Scenario)
 	if err != nil {
 		return err
 	}
@@ -185,7 +186,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	if err != nil {
 		return err
 	}
-	n.lab, err = config.NewLab(runCtx, b, logger, config.LabOptions{Models: models, Keys: keys, Relay: o.Relay, Resolver: pages, Connect: pages.connect, Modules: mods,
+	n.lab, err = config.NewLab(runCtx, b, logger, config.LabOptions{Models: models, Keys: keys, Relay: o.Relay, Resolver: pages, Connect: pages.connect, Modules: mods, MCPHTTP: mcpHTTP,
 		PendingNow: func() time.Time { return time.Now().Add(time.Duration(n.pending.Load())) },
 		SchedNow:   func() time.Time { return time.Now().Add(time.Duration(n.sched.Load())) },
 		Wrap:       o.Tokens.Wrap})
@@ -198,6 +199,18 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	n.db = n.lab.DB
 	n.peer = NewTelegram(fake, labChat, labOwner)
 	return nil
+}
+
+// serveFakes starts the scenario's web pages and its MCP server, and
+// returns the way to each.
+func (n *Node) serveFakes(s Scenario) (*pageNet, *http.Client, error) {
+	pages, err := servePages(n.closers, s)
+	if err != nil {
+		return nil, nil, err
+	}
+	var hc *http.Client
+	n.mcp, hc, err = serveMCP(n.closers, s.MCP)
+	return pages, hc, err
 }
 
 // labSecrets is the node's secret source: the reader template's secret is
@@ -533,7 +546,7 @@ func ReadView(ctx context.Context, n *Node, last []Message) (View, error) {
 		Exists: func(rel string) bool {
 			_, err := os.Lstat(filepath.Join(n.dir, rel))
 			return err == nil
-		}}
+		}, Deleted: n.deleted(), ModelSaw: n.modelSaw()}
 	if err := n.db.QueryRowContext(ctx, `SELECT count(*) FROM inbox WHERE taken_by IS NOT NULL`).Scan(&v.Taken); err != nil {
 		return View{}, fmt.Errorf("chatlab: inbox: %w", err)
 	}

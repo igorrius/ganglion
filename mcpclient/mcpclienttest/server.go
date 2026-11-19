@@ -15,8 +15,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"testing"
 )
+
+// T is what the fakes need from their owner: a test, or chatlab's
+// program, which cannot implement testing.TB (ADR-0048).
+type T interface {
+	Helper()
+	Cleanup(func())
+}
 
 // Options say how the server behaves; Update changes them while it runs.
 type Options struct {
@@ -79,12 +85,12 @@ type Server struct {
 	issued    int
 	refused   int
 	valid     map[string]bool
-	listeners []chan string
+	listeners map[*listener]bool
 	opened    chan struct{}
 }
 
 // New starts a server that stops with the test.
-func New(t testing.TB, o Options) *Server {
+func New(t T, o Options) *Server {
 	t.Helper()
 	return start(t, o, httptest.NewServer)
 }
@@ -92,14 +98,15 @@ func New(t testing.TB, o Options) *Server {
 // NewTLS starts a server over TLS that stops with the test. Every
 // httptest TLS server has the same certificate, so the Client of one
 // trusts all of them.
-func NewTLS(t testing.TB, o Options) *Server {
+func NewTLS(t T, o Options) *Server {
 	t.Helper()
 	return start(t, o, httptest.NewTLSServer)
 }
 
-func start(t testing.TB, o Options, newServer func(http.Handler) *httptest.Server) *Server {
+func start(t T, o Options, newServer func(http.Handler) *httptest.Server) *Server {
 	t.Helper()
-	s := &Server{opts: o, done: make(chan struct{}), valid: map[string]bool{}, opened: make(chan struct{}, 64)}
+	s := &Server{opts: o, done: make(chan struct{}), valid: map[string]bool{},
+		listeners: map[*listener]bool{}, opened: make(chan struct{}, 64)}
 	s.Server = newServer(http.HandlerFunc(s.serve))
 	t.Cleanup(func() {
 		close(s.done)
@@ -161,21 +168,39 @@ func (s *Server) ExpireSessions() {
 	s.valid = map[string]bool{}
 }
 
-// NotifyListChanged sends notifications/tools/list_changed on every open
-// GET stream.
-func (s *Server) NotifyListChanged() {
+// listener is one open GET stream: msgs are written to it until gone is
+// closed, when the stream has ended.
+type listener struct {
+	msgs chan string
+	gone chan struct{}
+}
+
+// NotifyListChanged sends notifications/tools/list_changed on every GET
+// stream open at the time of the call, and returns how many it reached. A
+// stream that ends meanwhile is skipped; none is dropped for a full buffer.
+func (s *Server) NotifyListChanged() int {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, l := range s.listeners {
+	open := make([]*listener, 0, len(s.listeners))
+	for l := range s.listeners {
+		open = append(open, l)
+	}
+	s.mu.Unlock()
+	n := 0
+	for _, l := range open {
 		select {
-		case l <- `{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}`:
-		default:
+		case l.msgs <- `{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}`:
+			n++
+		case <-l.gone:
+		case <-s.done:
 		}
 	}
+	return n
 }
 
 // Opened gets a value each time a GET stream is opened, so a test waits for
-// the listener instead of sleeping.
+// the listener instead of sleeping. The values queue up: a test that lets a
+// stream open unread (a restart) reads that one first, and a notice sent
+// then may reach a stream that is already closing.
 func (s *Server) Opened() <-chan struct{} { return s.opened }
 
 // Listeners is how many GET streams are open.
@@ -344,10 +369,16 @@ func (s *Server) serveGet(w http.ResponseWriter, r *http.Request, o Options) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	ch := make(chan string, 8)
+	l := &listener{msgs: make(chan string), gone: make(chan struct{})}
 	s.mu.Lock()
-	s.listeners = append(s.listeners, ch)
+	s.listeners[l] = true
 	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.listeners, l)
+		s.mu.Unlock()
+		close(l.gone)
+	}()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.WriteHeader(http.StatusOK)
 	w.(http.Flusher).Flush()
@@ -357,7 +388,7 @@ func (s *Server) serveGet(w http.ResponseWriter, r *http.Request, o Options) {
 	}
 	for {
 		select {
-		case msg := <-ch:
+		case msg := <-l.msgs:
 			_, _ = fmt.Fprintf(w, "data: %s\n\n", msg)
 			w.(http.Flusher).Flush()
 		case <-r.Context().Done():

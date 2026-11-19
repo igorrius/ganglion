@@ -8,12 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/host"
+	"github.com/igorrius/ganglion/intake"
+	"github.com/igorrius/ganglion/mcpclient"
 	"github.com/igorrius/ganglion/modhost"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/node"
@@ -47,6 +50,9 @@ type LabOptions struct {
 	// a module a scenario needs without building it (a build is slow and
 	// needs a toolchain).
 	Modules []LabModule
+	// MCPHTTP is the client of the remote MCP servers and their sign-ins:
+	// one that reaches the lab's fakes; nil leaves the node's.
+	MCPHTTP *http.Client
 }
 
 // LabModule is a built module a lab node has installed from the start.
@@ -114,7 +120,8 @@ func installLabModules(ctx context.Context, i do.Injector, admin string, mods []
 
 // applyLabHousekeeping gives the lab its housekeepers: the journal's prune,
 // an expirer that looks every 250 ms, the runner of host commands, which
-// waits labCommandWait and announces every labPass, and the build queue. The janitor stays out,
+// waits labCommandWait and announces every labPass, the build queue and the
+// client of remote MCP servers. The janitor stays out,
 // since it would clean the developer's own temporary folders, and so does the
 // translator, as before.
 func applyLabHousekeeping(i do.Injector) {
@@ -131,6 +138,7 @@ func applyLabHousekeeping(i do.Injector) {
 			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger, pending.WithAfter(fast)),
 			do.MustInvoke[*host.Runner](i),
 			do.MustInvoke[*builtin.BuildQueue](i),
+			node.Named("mcpclient", do.MustInvoke[*mcpclient.Hub](i).Run),
 		}, nil
 	})
 }
@@ -185,6 +193,7 @@ func applyLab(i do.Injector, o LabOptions) {
 		return pending.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[*cells.Service](i), o.PendingNow, pending.DefaultTTL)
 	})
 	applyLabHousekeeping(i)
+	applyLabMCP(i, o)
 	// The model reads the time the scheduler goes by, or a reminder looks as
 	// if it fired early.
 	do.Override(i, func(i do.Injector) (*agent.Agent, error) {
@@ -202,5 +211,17 @@ func applyLab(i do.Injector, o LabOptions) {
 		never := func(time.Duration) <-chan time.Time { return nil }
 		return schedule.New(do.MustInvoke[*schedule.Store](i), do.MustInvoke[*sqlqueue.Queue](i), do.MustInvoke[Bootstrap](i).Agent.TZ,
 			o.SchedNow, schedule.WithAfter(never), schedule.WithLogger(do.MustInvoke[*slog.Logger](i))), nil
+	})
+}
+
+// applyLabMCP gives the node the lab's way to its fake MCP servers, and an
+// intake page that needs no network: the hosted page is this release's
+// copy.
+func applyLabMCP(i do.Injector, o LabOptions) {
+	if o.MCPHTTP != nil {
+		do.Override(i, func(do.Injector) (MCPHTTPClient, error) { return MCPHTTPClient{o.MCPHTTP}, nil })
+	}
+	do.Override(i, func(do.Injector) (intake.PageCheckFunc, error) {
+		return func(context.Context) error { return nil }, nil
 	})
 }

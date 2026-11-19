@@ -19,6 +19,7 @@
     "pages": { "description": "Web pages the node reaches.", "type": "array", "items": { "$ref": "#/$defs/page" } },
     "modules": { "description": "Modules the node has installed from the start: the lab's probe module under the manifest's name, rights and defaults (its config keys op_cron and op_tool_<tool> pick what a run does).", "type": "array", "items": { "$ref": "#/$defs/module" } },
     "config": { "description": "The settings the owner wrote for modules before the node starts, by short name: a mapping of config keys to values.", "type": "object", "additionalProperties": { "type": "object" } },
+    "mcp": { "$ref": "#/$defs/mcp" },
     "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } }
   },
   "$defs": {
@@ -88,7 +89,31 @@
         "adds": { "$ref": "#/$defs/adds" },
         "advance": { "$ref": "#/$defs/advance" },
         "reach": { "$ref": "#/$defs/reach" },
-        "facts": { "$ref": "#/$defs/facts" }
+        "facts": { "$ref": "#/$defs/facts" },
+        "sign_in": { "description": "The owner signs in from the newest sign-in card at the fake authorization server and pastes the line the intake page shows. Needs mcp with oauth.", "const": true }
+      }
+    },
+    "mcp": {
+      "description": "A fake remote MCP server the node can connect at https://shop.example.com/mcp.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tools"],
+      "properties": {
+        "oauth": { "description": "The server is an OAuth protected resource with a fake authorization server of its own.", "type": "boolean" },
+        "tools": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "read_only": { "description": "The tool's readOnlyHint.", "type": "boolean" }
+            }
+          }
+        }
       }
     },
     "file": {
@@ -183,7 +208,10 @@
         "jobs": { "$ref": "#/$defs/jobFact" },
         "tainted": { "description": "The chat's session holds outside content.", "type": "boolean" },
         "model_calls": { "description": "Calls the node has made to a model since it started.", "type": "integer", "minimum": 0 },
-        "absent": { "description": "Paths under the node's folder (workspace/modules/x/target) that must not exist.", "type": "array", "items": { "type": "string" } }
+        "absent": { "description": "Paths under the node's folder (workspace/modules/x/target) that must not exist.", "type": "array", "items": { "type": "string" } },
+        "card": { "description": "The messages showing buttons now: their text.", "$ref": "#/$defs/text" },
+        "deleted": { "description": "The person's messages the bot deleted so far.", "type": "integer", "minimum": 0 },
+        "model_saw": { "description": "Everything a scripted model was sent so far. Needs model: scripted.", "$ref": "#/$defs/text" }
       }
     }
   }

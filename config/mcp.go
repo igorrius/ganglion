@@ -26,15 +26,25 @@ import (
 // connect to an address.
 const mcpDialTimeout = 10 * time.Second
 
-// mcpHTTP is the HTTP client of the remote MCP servers and their sign-ins:
-// it dials through web.PublicDial, so an address can never be a private
-// one at run time, whatever the name resolves to later (R-WEB-2).
-func mcpHTTP() *http.Client {
-	return &http.Client{Transport: &http.Transport{
-		Proxy: nil, DialContext: web.PublicDial(mcpDialTimeout), TLSHandshakeTimeout: mcpDialTimeout,
-		MaxResponseHeaderBytes: 64 << 10, // the server's own timeout bounds a request
-	}}
+// MCPHTTPClient is the HTTP client of the remote MCP servers and their
+// sign-ins: its own type, so the container holds it apart from any other
+// client.
+type MCPHTTPClient struct{ *http.Client }
+
+// MCPHTTP provides the client of the remote MCP servers and their
+// sign-ins: it dials through web.PublicDial, so an address can never be a
+// private one at run time, whatever the name resolves to later (R-WEB-2).
+func MCPHTTP() do.Provider[MCPHTTPClient] {
+	return func(do.Injector) (MCPHTTPClient, error) {
+		return MCPHTTPClient{&http.Client{Transport: &http.Transport{
+			Proxy: nil, DialContext: web.PublicDial(mcpDialTimeout), TLSHandshakeTimeout: mcpDialTimeout,
+			MaxResponseHeaderBytes: 64 << 10, // the server's own timeout bounds a request
+		}}}, nil
+	}
 }
+
+// mcpHTTP is the client of the remote MCP servers.
+func mcpHTTP(i do.Injector) *http.Client { return do.MustInvoke[MCPHTTPClient](i).Client }
 
 // intakePageOf is the intake page the node uses: mcp.page of its file
 // (R-INT-3); a bootstrap made without a file (a test node) has the
@@ -53,7 +63,7 @@ func MCPHub() do.Provider[*mcpclient.Hub] {
 		return mcpclient.NewHub(
 			mcpclient.WithHubLogger(do.MustInvoke[*slog.Logger](i)),
 			mcpclient.WithHubClock(time.Now),
-			mcpclient.WithHubHTTPClient(mcpHTTP()),
+			mcpclient.WithHubHTTPClient(mcpHTTP(i)),
 			mcpclient.WithHubVersion(buildinfo.Read().Version),
 		), nil
 	}
@@ -64,7 +74,7 @@ func MCPHub() do.Provider[*mcpclient.Hub] {
 // intake page as the only redirect address.
 func MCPSignIns() do.Provider[*mcpclient.OAuth] {
 	return func(i do.Injector) (*mcpclient.OAuth, error) {
-		return mcpclient.NewOAuth(mcpHTTP(), mcpadmin.VaultStore{V: do.MustInvoke[*vault.Vault](i)},
+		return mcpclient.NewOAuth(mcpHTTP(i), mcpadmin.VaultStore{V: do.MustInvoke[*vault.Vault](i)},
 			intakePageOf(do.MustInvoke[Bootstrap](i)),
 			mcpclient.WithOAuthLogger(do.MustInvoke[*slog.Logger](i)),
 			mcpclient.WithOAuthVersion(buildinfo.Read().Version)), nil
@@ -90,7 +100,7 @@ func MCPAdmin() do.Provider[*mcpadmin.Admin] {
 			IsAdmin:  do.MustInvoke[*access.List](i).IsAdmin,
 			Reserved: reservedNames(i),
 			Locked:   store.Locked,
-			HTTP:     mcpHTTP(),
+			HTTP:     mcpHTTP(i),
 		}, mcpadmin.WithLogger(do.MustInvoke[*slog.Logger](i)), mcpadmin.WithVersion(buildinfo.Read().Version))
 		return a, a.Apply()
 	}
@@ -98,15 +108,19 @@ func MCPAdmin() do.Provider[*mcpadmin.Admin] {
 
 // reservedNames lists, at the call, the areas of the registry's tools and
 // the short names of the installed modules: a server's name takes none.
-// Both are read when a connect asks: the registry is built by then.
+// Both are read when a connect asks: the registry is built by then. They
+// are read from the root scope: the scope a provider gets carries the
+// invoker chain of its build, which a later lookup of the registry would
+// read as a circular dependency.
 func reservedNames(i do.Injector) mcpadmin.ReservedFunc {
+	root := i.RootScope()
 	return func() []string {
 		var out []string
-		for _, s := range do.MustInvoke[*tool.Registry](i).Specs(true) {
+		for _, s := range do.MustInvoke[*tool.Registry](root).Specs(true) {
 			area, _, _ := strings.Cut(s.Name, ".")
 			out = append(out, area)
 		}
-		if mods, err := modulesFile(i).Modules(); err == nil {
+		if mods, err := modulesFile(root).Modules(); err == nil {
 			for _, m := range mods {
 				out = append(out, modstore.ShortName(m.Name))
 			}

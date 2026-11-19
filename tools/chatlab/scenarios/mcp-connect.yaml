@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: mcp-connect
+why: >-
+  R-MCP-3, R-MCP-5, R-INT-5, R-INT-7: connecting a remote MCP server from the
+  chat with OAuth. The model calls mcp.connect; the sign-in card links the
+  authorization server; the owner pastes the line the intake page shows, which
+  the node takes, deletes from the chat and never shows the model; the tools
+  card's Connect starts the server; a read-only tool then runs by itself and a
+  tool with an effect asks first; /mcp lists the server as connected.
+covers:
+  - mcpadmin/**
+  - mcpclient/**
+  - intake/**
+  - agent/mcp_cmd.go
+  - config/mcp.go
+  - config/intake.go
+  - transport/telegram/intake.go
+model: scripted
+mcp:
+  oauth: true
+  tools:
+    - {name: search_products, description: Search the shop's products., read_only: true}
+    - {name: add_to_cart, description: Put a product in the cart.}
+script:
+  - {tool: mcp.connect, args: '{"name":"shop","url":"https://shop.example.com/mcp"}'}
+  - {say: I sent you a card to sign in to the shop.}
+  - {tool: mcp.use, args: '{"server":"shop","tools":["search_products","add_to_cart"]}'}
+  - {tool: shop.search_products, args: '{}'}
+  - {tool: shop.add_to_cart, args: '{}'}
+  - {say: It waits for your answer.}
+steps:
+  - say: "Connect the shop's MCP server at https://shop.example.com/mcp"
+  - facts:
+      reply: {contains: "Sign in to the MCP server shop"}
+  - sign_in: true
+  - facts:
+      deleted: 1
+      history: {not_contains: "gauth1"}
+      model_saw: {not_contains: "gauth1"}
+  - press: "Connect"
+  - say: "Find a battery and put it in the cart."
+  - facts:
+      journal:
+        - {tool: shop.search_products, decision: allowed}
+        - {tool: shop.add_to_cart, decision: confirm}
+      questions: 1
+      history: {not_contains: "gauth1"}
+      model_saw: {not_contains: "gauth1"}
+  - say: "/mcp"
+  - facts:
+      card: {contains: "shop: connected, tools: 2"}

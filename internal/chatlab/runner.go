@@ -147,6 +147,12 @@ func (r *repeatRun) step(ctx context.Context, st Step) error {
 			return err
 		}
 		return r.settle(ctx)
+	case st.SignIn:
+		fmt.Fprintf(&r.log, "\n**owner signs in** at the card's link and pastes the line the page shows\n")
+		if err := r.n.SignIn(ctx); err != nil {
+			return err
+		}
+		return r.settle(ctx)
 	case st.Reach != nil:
 		return r.reach(ctx, *st.Reach)
 	case st.Facts != nil:

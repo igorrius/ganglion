@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"sync"
-	"testing"
 )
 
 // AuthOptions say how the fake authorization server behaves.
@@ -64,10 +63,11 @@ type AuthServer struct {
 	refresh map[string]string // refresh token → client id
 	n       int
 	reqs    []AuthRequest
+	issued  []string // every access and refresh token, in order
 }
 
 // NewAuthServer starts the fake over TLS; it stops with the test.
-func NewAuthServer(t testing.TB, o AuthOptions) *AuthServer {
+func NewAuthServer(t T, o AuthOptions) *AuthServer {
 	t.Helper()
 	a := &AuthServer{opts: o, clients: map[string]string{}, codes: map[string]grant{},
 		access: map[string]bool{}, refresh: map[string]string{}}
@@ -103,6 +103,14 @@ func (a *AuthServer) Requests(path string) []AuthRequest {
 		}
 	}
 	return out
+}
+
+// Issued is every access and refresh token issued so far, live or not:
+// what a leak test looks for.
+func (a *AuthServer) Issued() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]string(nil), a.issued...)
 }
 
 // Valid reports whether token is a live access token: the fake MCP
@@ -262,6 +270,7 @@ func (a *AuthServer) token(w http.ResponseWriter, f url.Values, o AuthOptions) {
 	a.n++
 	access := fmt.Sprintf("access-%d", a.n)
 	a.access[access] = true
+	a.issued = append(a.issued, access)
 	doc := map[string]any{"access_token": access, "token_type": "bearer", "resource": f.Get("resource")}
 	if o.ExpiresIn > 0 {
 		doc["expires_in"] = o.ExpiresIn
@@ -269,6 +278,7 @@ func (a *AuthServer) token(w http.ResponseWriter, f url.Values, o AuthOptions) {
 	if !o.NoRefresh {
 		refresh := fmt.Sprintf("refresh-%d", a.n)
 		a.refresh[refresh] = clientID
+		a.issued = append(a.issued, refresh)
 		doc["refresh_token"] = refresh
 	}
 	writeJSON(w, http.StatusOK, doc)
