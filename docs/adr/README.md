@@ -106,6 +106,7 @@ considered, how they compare, the decision and its consequences. See
 | [0098](0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md) | Hand a code or a secret over from the chat through a pinned static page and a pasted line | Accepted | 2026-11-18 |
 | [0099](0099-the-cli-bridge-announces-tools-turned-on-during-a-run.md) | The CLI bridge announces tools turned on during a run | Accepted | 2026-11-19 |
 | [0100](0100-on-demand-bookkeeping-spends-no-turn-budget-and-the-budget-is-20.md) | On-demand bookkeeping spends no turn budget, and the budget is 20 (amends the number in ADR-0036) | Accepted | 2026-11-19 |
+| [0101](0101-a-servers-instructions-reach-the-model-as-data-and-its-notes-live-in-memory.md) | A server's instructions reach the model as data, and notes about it live in a memory topic | Accepted | 2026-11-19 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).
