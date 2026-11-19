@@ -15,8 +15,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"testing"
 )
+
+// T is what the fakes need from their owner: a test, or chatlab's
+// program, which cannot implement testing.TB (ADR-0048).
+type T interface {
+	Helper()
+	Cleanup(func())
+}
 
 // Options say how the server behaves; Update changes them while it runs.
 type Options struct {
@@ -84,7 +90,7 @@ type Server struct {
 }
 
 // New starts a server that stops with the test.
-func New(t testing.TB, o Options) *Server {
+func New(t T, o Options) *Server {
 	t.Helper()
 	return start(t, o, httptest.NewServer)
 }
@@ -92,12 +98,12 @@ func New(t testing.TB, o Options) *Server {
 // NewTLS starts a server over TLS that stops with the test. Every
 // httptest TLS server has the same certificate, so the Client of one
 // trusts all of them.
-func NewTLS(t testing.TB, o Options) *Server {
+func NewTLS(t T, o Options) *Server {
 	t.Helper()
 	return start(t, o, httptest.NewTLSServer)
 }
 
-func start(t testing.TB, o Options, newServer func(http.Handler) *httptest.Server) *Server {
+func start(t T, o Options, newServer func(http.Handler) *httptest.Server) *Server {
 	t.Helper()
 	s := &Server{opts: o, done: make(chan struct{}), valid: map[string]bool{},
 		listeners: map[*listener]bool{}, opened: make(chan struct{}, 64)}

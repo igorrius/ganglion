@@ -14,16 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/intake"
-	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/mcpclient"
 	"github.com/igorrius/ganglion/mcpclient/mcpclienttest"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/provider/providertest"
-	"github.com/igorrius/ganglion/queue/sqlqueue"
-	"github.com/igorrius/ganglion/texts"
-	"github.com/igorrius/ganglion/transport/telegram"
 	"github.com/igorrius/ganglion/transport/telegram/telegramtest"
 	"github.com/samber/do/v2"
 )
@@ -73,10 +68,8 @@ func startMCPLeakRig(t *testing.T) *mcpLeakRig {
 	// trusts their certificate here, and nothing else changes.
 	do.Override(r.i, func(do.Injector) (MCPHTTPClient, error) { return MCPHTTPClient{r.mcp.Client()}, nil })
 	// The hosted page is this release's copy: no network in a test.
-	do.Override(r.i, func(i do.Injector) (*intake.Registry, error) {
-		return intake.New(do.MustInvoke[*access.List](i).IsAdmin, do.MustInvoke[*sqlqueue.Queue](i).Enqueue,
-			do.MustInvoke[*language.Store](i).Resolve, telegram.PrivateConv, do.MustInvoke[*texts.Catalog](i),
-			func(context.Context) error { return nil }, intake.WithLogger(logger)), nil
+	do.Override(r.i, func(do.Injector) (intake.PageCheckFunc, error) {
+		return func(context.Context) error { return nil }, nil
 	})
 	done := make(chan error, 1)
 	go func() {

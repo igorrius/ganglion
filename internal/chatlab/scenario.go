@@ -43,8 +43,11 @@ type Scenario struct {
 	// Config is the settings the owner wrote for modules, by short name, in the
 	// node's ganglion.yaml before it starts.
 	Config map[string]map[string]any `yaml:"config"`
-	Steps  []Step                    `yaml:"steps"`
-	Dir    string                    `yaml:"-"` // where the scenario's file is
+	// MCP is a remote MCP server the node can connect, at MCPURL; nil for
+	// none.
+	MCP   *MCPServer `yaml:"mcp"`
+	Steps []Step     `yaml:"steps"`
+	Dir   string     `yaml:"-"` // where the scenario's file is
 }
 
 // ScriptStep is one answer of the scripted model: words or a tool call.
@@ -84,6 +87,25 @@ type Module struct {
 	Manifest string `yaml:"manifest"` // under the scenario's directory
 }
 
+// MCPURL is where a scenario's MCP server answers: the lab routes its host
+// to a fake on loopback whose certificate the node trusts.
+const MCPURL = "https://shop.example.com/mcp"
+
+// MCPServer is a fake remote MCP server (mcpclienttest): its tools, and
+// whether it is an OAuth protected resource with a fake authorization
+// server of its own.
+type MCPServer struct {
+	Tools []MCPTool `yaml:"tools"`
+	OAuth bool      `yaml:"oauth"`
+}
+
+// MCPTool is one tool the server lists.
+type MCPTool struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	ReadOnly    bool   `yaml:"read_only"`
+}
+
 // Page is a web page the node reaches at URL, served from File.
 type Page struct {
 	URL  string `yaml:"url"`
@@ -104,6 +126,10 @@ type Step struct {
 	Advance  *Advance `yaml:"advance"`
 	Reach    *Reach   `yaml:"reach"`
 	Facts    *Facts   `yaml:"facts"`
+	// SignIn is the owner signing in from the newest sign-in card: the
+	// fake authorization server takes the link, and the owner pastes the
+	// line the intake page would show.
+	SignIn bool `yaml:"sign_in"`
 }
 
 // Reply is the person replying to the newest bot message whose text holds
@@ -164,6 +190,9 @@ type Facts struct {
 	Tainted         *bool         `yaml:"tainted"`     // the chat's session holds outside content
 	ModelCalls      *int          `yaml:"model_calls"` // calls the node made to a model since it started
 	Absent          []string      `yaml:"absent"`      // paths under the node's folder (workspace/…) that must not exist
+	Deleted         *int          `yaml:"deleted"`     // the person's messages the bot deleted so far
+	ModelSaw        *Text         `yaml:"model_saw"`   // everything a scripted model was sent so far
+	Card            *Text         `yaml:"card"`        // the messages showing buttons now
 }
 
 var nameRE = regexp.MustCompile(`^[a-z0-9-]+$`)
@@ -232,7 +261,31 @@ func (s Scenario) check(base string) error {
 	case s.Repeat < 1:
 		return fmt.Errorf("repeat %d", s.Repeat)
 	}
-	return errors.Join(s.checkModel(), s.checkPaths(), s.checkSteps())
+	return errors.Join(s.checkModel(), s.checkPaths(), s.checkSteps(), s.checkMCP())
+}
+
+// checkMCP needs a server with tools for an MCP scenario, OAuth for a
+// sign-in, and a scripted model for model_saw.
+func (s Scenario) checkMCP() error {
+	if s.MCP != nil {
+		if len(s.MCP.Tools) == 0 {
+			return errors.New("mcp needs tools")
+		}
+		for _, t := range s.MCP.Tools {
+			if t.Name == "" {
+				return errors.New("an mcp tool needs a name")
+			}
+		}
+	}
+	for i, st := range s.Steps {
+		if st.SignIn && (s.MCP == nil || !s.MCP.OAuth) {
+			return fmt.Errorf("step %d: sign_in needs mcp with oauth", i+1)
+		}
+		if st.Facts != nil && st.Facts.ModelSaw != nil && s.Model != ModelScripted {
+			return fmt.Errorf("step %d: model_saw reads a scripted model", i+1)
+		}
+	}
+	return nil
 }
 
 func (s Scenario) checkModel() error {
@@ -342,7 +395,7 @@ func (s Scenario) checkSteps() error {
 func (st Step) check() error {
 	set := 0
 	for _, on := range []bool{st.Say != "", st.Press != "", st.Judge != "", st.Language != "", st.Send != nil, st.Reply != nil, st.Adds != nil, st.Advance != nil, st.Reach != nil,
-		st.Facts != nil && !st.Facts.empty()} {
+		st.Facts != nil && !st.Facts.empty(), st.SignIn} {
 		if on {
 			set++
 		}
@@ -370,5 +423,5 @@ func (st Step) check() error {
 func (f *Facts) empty() bool {
 	return len(f.Journal) == 0 && len(f.NoJournal) == 0 && f.Questions == nil && f.MessageReplaced == "" && f.Question == nil &&
 		f.Reply == nil && f.History == nil && f.Memory == nil && f.Files == nil && f.Jobs == nil && f.Taken == nil && f.Replies == nil &&
-		f.Tainted == nil && f.ModelCalls == nil && len(f.Absent) == 0
+		f.Tainted == nil && f.ModelCalls == nil && len(f.Absent) == 0 && f.Deleted == nil && f.ModelSaw == nil && f.Card == nil
 }

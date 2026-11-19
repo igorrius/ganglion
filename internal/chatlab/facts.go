@@ -23,6 +23,8 @@ type View struct {
 	ModelCalls int                   // calls the node made to a model since it started
 	Tainted    bool                  // the chat's session holds outside content
 	Exists     func(rel string) bool // whether a path under the node's folder exists; nil: none does
+	Deleted    int                   // the person's messages the bot deleted
+	ModelSaw   string                // everything a scripted model was sent
 }
 
 // Check returns one line per failed check, saying what was wanted and what
@@ -53,6 +55,8 @@ func Check(f Facts, v View) []string {
 		memory = append(memory, body)
 	}
 	out = append(out, checkText("memory", f.Memory, strings.Join(memory, "\n"))...)
+	out = append(out, checkText("model_saw", f.ModelSaw, v.ModelSaw)...)
+	out = append(out, checkText("card", f.Card, words(cards(v.Messages)))...)
 	out = append(out, checkCounts(f, v)...)
 	out = append(out, checkAbsent(f.Absent, v.Exists)...)
 	if f.Jobs != nil && v.Jobs[f.Jobs.Kind] != f.Jobs.Count {
@@ -76,6 +80,9 @@ func checkCounts(f Facts, v View) []string {
 	if f.ModelCalls != nil && v.ModelCalls != *f.ModelCalls {
 		out = append(out, fmt.Sprintf("model_calls: wanted %d, found %d", *f.ModelCalls, v.ModelCalls))
 	}
+	if f.Deleted != nil && v.Deleted != *f.Deleted {
+		out = append(out, fmt.Sprintf("deleted: wanted %d of the person's messages deleted, found %d", *f.Deleted, v.Deleted))
+	}
 	if f.Tainted != nil && v.Tainted != *f.Tainted {
 		out = append(out, fmt.Sprintf("tainted: wanted %t, found %t", *f.Tainted, v.Tainted))
 	}
@@ -88,6 +95,17 @@ func checkAbsent(paths []string, exists func(string) bool) []string {
 	for _, rel := range paths {
 		if exists != nil && exists(rel) {
 			out = append(out, fmt.Sprintf("absent: %s exists", rel))
+		}
+	}
+	return out
+}
+
+// cards are the messages showing buttons now.
+func cards(ms []Message) []Message {
+	var out []Message
+	for _, m := range ms {
+		if len(m.Buttons) > 0 {
+			out = append(out, m)
 		}
 	}
 	return out

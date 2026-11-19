@@ -35,6 +35,14 @@ func intakePage(page string) *intake.PageChecker {
 	return intake.NewPageChecker(hc, cfg)
 }
 
+// IntakePage provides the check of the hosted intake page the registry
+// runs before it sends a card (R-INT-3).
+func IntakePage() do.Provider[intake.PageCheckFunc] {
+	return func(i do.Injector) (intake.PageCheckFunc, error) {
+		return intakePage(intakePageOf(do.MustInvoke[Bootstrap](i))).Check, nil
+	}
+}
+
 // Intake provides the registry of requests for a code or a secret handed
 // over from the chat (R-INT-1). It answers admins in their Telegram private
 // chats, as the other node components do.
@@ -42,7 +50,7 @@ func Intake() do.Provider[*intake.Registry] {
 	return func(i do.Injector) (*intake.Registry, error) {
 		return intake.New(do.MustInvoke[*access.List](i).IsAdmin, do.MustInvoke[*sqlqueue.Queue](i).Enqueue,
 			do.MustInvoke[*language.Store](i).Resolve, telegram.PrivateConv, do.MustInvoke[*texts.Catalog](i),
-			intakePage(intakePageOf(do.MustInvoke[Bootstrap](i))).Check, intake.WithLogger(do.MustInvoke[*slog.Logger](i))), nil
+			do.MustInvoke[intake.PageCheckFunc](i), intake.WithLogger(do.MustInvoke[*slog.Logger](i))), nil
 	}
 }
 

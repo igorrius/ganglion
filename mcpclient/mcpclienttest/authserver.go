@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"sync"
-	"testing"
 )
 
 // AuthOptions say how the fake authorization server behaves.
@@ -68,7 +67,7 @@ type AuthServer struct {
 }
 
 // NewAuthServer starts the fake over TLS; it stops with the test.
-func NewAuthServer(t testing.TB, o AuthOptions) *AuthServer {
+func NewAuthServer(t T, o AuthOptions) *AuthServer {
 	t.Helper()
 	a := &AuthServer{opts: o, clients: map[string]string{}, codes: map[string]grant{},
 		access: map[string]bool{}, refresh: map[string]string{}}

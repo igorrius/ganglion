@@ -21,10 +21,12 @@ func TestCheck(t *testing.T) {
 			{Text: "the picture", Files: []Attachment{{Kind: KindPhoto}}},
 			{Text: "Details", Buttons: []string{"Delete"}, Replaced: true},
 		},
-		Last:    []Message{{Text: "It waits for your answer."}, {Text: "Second line."}},
-		History: "user: hi\ntool: [reminder] sent",
-		Memory:  map[string]string{"memory/boiler.md": "The boiler holds 80 litres."},
-		Jobs:    map[string]int{"reminder": 1},
+		Last:     []Message{{Text: "It waits for your answer."}, {Text: "Second line."}},
+		History:  "user: hi\ntool: [reminder] sent",
+		Memory:   map[string]string{"memory/boiler.md": "The boiler holds 80 litres."},
+		Jobs:     map[string]int{"reminder": 1},
+		Deleted:  1,
+		ModelSaw: "[{Messages:[user: connect]}]",
 	}
 	for _, tc := range []struct {
 		name string
@@ -61,6 +63,12 @@ func TestCheck(t *testing.T) {
 		{"jobs", Facts{Jobs: &JobFact{Kind: "reminder", Count: 1}}, ""},
 		{"no jobs of a kind", Facts{Jobs: &JobFact{Kind: "task", Count: 0}}, ""},
 		{"wrong jobs", Facts{Jobs: &JobFact{Kind: "reminder", Count: 0}}, "reminder"},
+		{"deleted", Facts{Deleted: new(1)}, ""},
+		{"wrong deleted", Facts{Deleted: new(0)}, "deleted"},
+		{"what the model saw", Facts{ModelSaw: &Text{NotContains: "gauth1"}}, ""},
+		{"the model saw it", Facts{ModelSaw: &Text{NotContains: "connect"}}, "model_saw"},
+		{"a card", Facts{Card: &Text{Contains: "Details"}}, ""},
+		{"a card is not a reply", Facts{Card: &Text{Contains: "the picture"}}, "card"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := Check(tc.f, view)
