@@ -718,3 +718,34 @@ func TestClientNeverLeaksTheCredential(t *testing.T) {
 		t.Error("the log holds the credential")
 	}
 }
+
+// initialize keeps the server's instructions for the session, cut to the
+// limit; none, or a value that is not a string, is none (R-MCP-11).
+func TestInitializeKeepsInstructions(t *testing.T) {
+	long := strings.Repeat("я", mcpclient.MaxInstructionsRunes+50)
+	tests := []struct {
+		name string
+		in   any
+		want string
+	}{
+		{"given", "Filter by month.", "Filter by month."},
+		{"too long", long, strings.Repeat("я", mcpclient.MaxInstructionsRunes)},
+		{"absent", nil, ""},
+		{"a number", 7, ""},
+		{"an object", map[string]any{"a": "b"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newClient(t, mcpclienttest.New(t, mcpclienttest.Options{Instructions: tt.in}))
+			if got := c.Instructions(); got != "" {
+				t.Fatalf("before initialize: %q", got)
+			}
+			if err := c.Initialize(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if got := c.Instructions(); got != tt.want {
+				t.Errorf("Instructions = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

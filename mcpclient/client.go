@@ -56,6 +56,9 @@ const (
 	maxReplies = 16
 	// maxSessionID is the longest session id taken.
 	maxSessionID = 256
+	// MaxInstructionsRunes is the most runes of a server's instructions the
+	// client keeps (R-MCP-11).
+	MaxInstructionsRunes = 2000
 )
 
 // Headers of the protocol.
@@ -90,6 +93,9 @@ type Client struct {
 	ready  bool
 	sid    string
 	proto  string // the revision initialize agreed on; "" before it
+	// instr is the server's instructions from initialize, cut to
+	// MaxInstructionsRunes; "" for none (R-MCP-11).
+	instr string
 }
 
 // ClientOption configures a Client.
@@ -155,7 +161,7 @@ func (c *Client) Initialize(ctx context.Context) error {
 func (c *Client) reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.ready, c.sid, c.proto = false, "", ""
+	c.ready, c.sid, c.proto, c.instr = false, "", "", ""
 }
 
 // session is the session id held, "" for none.
@@ -163,6 +169,16 @@ func (c *Client) session() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.sid
+}
+
+// Instructions are the instructions the server gave in the current
+// session's initialize, cut to MaxInstructionsRunes; "" for none, for a
+// server that gave none or one whose value is not a string, and before a
+// session starts. They are the server's text, not pinned (R-MCP-11).
+func (c *Client) Instructions() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.instr
 }
 
 // agreed is the session id and the protocol revision every request after
@@ -214,7 +230,8 @@ func (c *Client) initialize(ctx context.Context) error {
 		return err
 	}
 	var res struct {
-		ProtocolVersion string `json:"protocolVersion"`
+		ProtocolVersion string          `json:"protocolVersion"`
+		Instructions    json.RawMessage `json:"instructions"`
 	}
 	if json.Unmarshal(a.result, &res) != nil || !versionKnown(res.ProtocolVersion) {
 		return fmt.Errorf("%w: unsupported protocol revision", ErrProtocol)
@@ -225,6 +242,7 @@ func (c *Client) initialize(ctx context.Context) error {
 	}
 	c.mu.Lock()
 	c.sid, c.proto = sid, res.ProtocolVersion
+	c.instr = instructionsOf(res.Instructions)
 	c.mu.Unlock()
 	if err := c.notify(ctx, "notifications/initialized"); err != nil {
 		return err
@@ -233,6 +251,20 @@ func (c *Client) initialize(ctx context.Context) error {
 	c.ready = true
 	c.mu.Unlock()
 	return nil
+}
+
+// instructionsOf reads the optional instructions of initialize: a string
+// cut to MaxInstructionsRunes, anything else none.
+func instructionsOf(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) != nil {
+		return ""
+	}
+	s = strings.TrimSpace(s)
+	if r := []rune(s); len(r) > MaxInstructionsRunes {
+		s = string(r[:MaxInstructionsRunes])
+	}
+	return s
 }
 
 // versionKnown reports whether v is a revision the node speaks.

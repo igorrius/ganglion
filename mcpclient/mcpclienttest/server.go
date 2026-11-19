@@ -44,6 +44,9 @@ type Options struct {
 	// ListenStream serves the GET as an event stream; without it the GET
 	// is 405.
 	ListenStream bool
+	// Instructions is the value of the `instructions` field of the initialize
+	// answer, of any JSON type; nil leaves the field out.
+	Instructions any
 	// ProtocolVersion is the revision initialize answers; the default is
 	// the newest.
 	ProtocolVersion string
@@ -338,8 +341,12 @@ func (s *Server) initialize(w http.ResponseWriter, req Request, o Options) {
 		s.mu.Unlock()
 		w.Header().Set("Mcp-Session-Id", id)
 	}
-	Answer(w, o, req.ID, map[string]any{"protocolVersion": v, "capabilities": map[string]any{"tools": map[string]any{"listChanged": true}},
-		"serverInfo": map[string]any{"name": "fake", "version": "1"}})
+	res := map[string]any{"protocolVersion": v, "capabilities": map[string]any{"tools": map[string]any{"listChanged": true}},
+		"serverInfo": map[string]any{"name": "fake", "version": "1"}}
+	if o.Instructions != nil {
+		res["instructions"] = o.Instructions
+	}
+	Answer(w, o, req.ID, res)
 }
 
 func (s *Server) list(w http.ResponseWriter, req Request, o Options) {
