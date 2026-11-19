@@ -1792,10 +1792,14 @@ started as processes are level 3 of 9.8 and stay in P3.
     turns on a tool of that server gives them to the model as outside
     content: the session is tainted and the text is wrapped as data.
   - **Notes.** The same `mcp.use` names the memory topic titled
-    `mcp <server>` (slug `mcp-<server>`) and says what belongs there:
-    what a field of the server's data means, a quirk, a filter that must
-    be set; never a secret or a person's data. The core rules say so
-    too. The model writes a note with `memory.write`; because the
+    `mcp <server>` (slug `mcp-<server>`) and asks for one
+    `memory.write` in the same turn, before the answer, when there is
+    something the next turn would otherwise find out again: a call
+    refused for its arguments and what it needed, a field whose meaning
+    had to be worked out or guessed, a filter that must be set; never a
+    secret or a person's data, nothing the topic already says. The core
+    rules say so too (the first live check had a refused call and no
+    note). The model writes a note with `memory.write`; because the
     session is tainted, the owner confirms it (R-POL-6). The
     clean-context check takes such a note as a fact about a service the
     owner connected, and still rejects an imperative one (R-POL-7). The

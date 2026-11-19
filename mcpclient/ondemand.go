@@ -201,7 +201,7 @@ func (s *serverConn) firstUseText() string {
 	if in := s.client.Instructions(); in != "" {
 		fmt.Fprintf(&b, "\n\nInstructions from the server %s itself (its own text, not the node's):\n%s", s.cfg.Name, in)
 	}
-	fmt.Fprintf(&b, "\n\nNotes about %s's data go to the memory topic %q with memory.write: what a field means, a quirk, a filter that must be set; never a secret or a person's data.",
+	fmt.Fprintf(&b, "\n\nKeep notes about %[1]s in the memory topic %[2]q (open it with a one-line summary when it is not in the known facts). Before you answer, in this turn, call memory.write once with what the next turn would otherwise have to find out again: a call of %[1]s that was refused for its arguments and what it needed, a field whose meaning you had to work out or guess, a filter that must be set. Skip what the topic already says. Never a secret or a person's data.",
 		s.cfg.Name, NotesTopic(s.cfg.Name))
 	return b.String()
 }
