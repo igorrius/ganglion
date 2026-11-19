@@ -3,7 +3,9 @@ package mcpadmin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -62,10 +64,8 @@ type approval struct {
 
 // toolsCard lists the server's tools and makes the card that approves
 // them (R-MCP-3): each tool's name and the first line of its description
-// as data, a proposed policy, and Connect, Ask for all and Cancel. A tool
-// the server marks read-only is proposed as auto, any other as confirm; a
-// server connected before keeps the policies the admin chose. n is the
-// number of tools taken.
+// as data, a proposed policy (proposed), and Connect, Ask for all and
+// Cancel. n is the number of tools taken.
 func (a *Admin) toolsCard(ctx context.Context, sp texts.Speaker, w who, t target, auth settings.MCPAuth,
 	c *mcpclient.Client, key string,
 ) (out event.Outgoing, n int, err error) {
@@ -77,70 +77,152 @@ func (a *Admin) toolsCard(ctx context.Context, sp texts.Speaker, w who, t target
 	if err != nil {
 		return event.Outgoing{}, 0, err
 	}
+	policies, err := proposed(t, l.Tools, old.Tools)
+	if err != nil {
+		return event.Outgoing{}, 0, err
+	}
 	ap := approval{Server: t.name, URL: t.url, Auth: auth, Header: t.header, Timeout: time.Duration(old.Timeout),
-		Tools: proposed(l.Tools, old.Tools), Fingerprint: l.Fingerprint, Was: digest(old, existed)}
+		Tools: policies, Fingerprint: l.Fingerprint, Was: digest(old, existed)}
 	if ap.Timeout == 0 {
 		ap.Timeout = settings.DefaultMCPTimeout
+	}
+	body, err := cardText(sp, t, l, ap.Tools)
+	if err != nil {
+		return event.Outgoing{}, 0, err
 	}
 	buttons, err := a.cardButtons(ctx, sp, w, ap)
 	if err != nil {
 		return event.Outgoing{}, 0, err
 	}
-	return event.Outgoing{IdemKey: key, Transport: w.transport, Conv: w.conv, Text: cardText(sp, t, l, ap.Tools),
-		Buttons: buttons}, len(l.Tools), nil
+	return event.Outgoing{IdemKey: key, Transport: w.transport, Conv: w.conv, Text: body, Buttons: buttons}, len(l.Tools), nil
 }
 
-// proposed is each tool's policy on the card: the admin's earlier choice
-// for a tool they approved before, else auto for a read-only tool and
-// confirm for the rest.
-func proposed(tools []mcpclient.Tool, before map[string]settings.MCPPolicy) map[string]settings.MCPPolicy {
-	out := make(map[string]settings.MCPPolicy, len(tools))
-	for _, t := range tools {
-		switch p, ok := before[t.Short]; {
-		case ok:
-			out[t.Short] = p
-		case t.ReadOnly:
-			out[t.Short] = settings.MCPPolicyAuto
-		default:
-			out[t.Short] = settings.MCPPolicyConfirm
+// unknownToolsError refuses a proposal that names tools the server's list
+// does not have (R-MCP-3). Its text is for the model: the names are its own
+// arguments, cut to a few.
+type unknownToolsError struct{ names []string }
+
+func (e *unknownToolsError) Error() string {
+	shown := e.names
+	if len(shown) > maxNamedUnknown {
+		shown = shown[:maxNamedUnknown]
+	}
+	for i, n := range shown {
+		shown[i] = text.Truncate(n, 64)
+	}
+	more := ""
+	if len(e.names) > len(shown) {
+		more = fmt.Sprintf(" and %d more", len(e.names)-len(shown))
+	}
+	return "the server has no tool named " + strings.Join(shown, ", ") + more + "; no card was sent. " +
+		"mcp.tools lists a connected server's tools; call mcp.connect again with the names as the server lists them"
+}
+
+// maxNamedUnknown is how many unknown names an error names.
+const maxNamedUnknown = 5
+
+// errCardTooLong is a proposal whose tools that run by themselves, and are
+// not marked read-only, do not fit one message even by name: the card would
+// have to hide some, so none is made.
+var errCardTooLong = errors.New("too many tools would run by themselves without being read-only to show them on one card; " +
+	"narrow the proposal (make more tools confirm or forbidden) and call mcp.connect again")
+
+// proposed is each tool's policy on the card, the first that applies: the
+// owner's rules, the owner's others, the admin's earlier choice for a tool
+// they approved before, else auto for a read-only tool and confirm for the
+// rest. A name in rules that no tool has is an error naming it.
+func proposed(t target, tools []mcpclient.Tool, before map[string]settings.MCPPolicy) (map[string]settings.MCPPolicy, error) {
+	byName := make(map[string]string, 3*len(tools))
+	for _, tl := range tools {
+		for _, n := range []string{tl.Short, tl.Own, tl.Name} {
+			byName[n] = tl.Short
 		}
 	}
-	return out
+	rules := make(map[string]settings.MCPPolicy, len(t.rules))
+	var unknown []string
+	for name, p := range t.rules {
+		short, ok := byName[name]
+		if !ok {
+			unknown = append(unknown, name)
+			continue
+		}
+		rules[short] = p
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return nil, &unknownToolsError{names: unknown}
+	}
+	out := make(map[string]settings.MCPPolicy, len(tools))
+	for _, tl := range tools {
+		switch p, ok := before[tl.Short]; {
+		case rules[tl.Short] != "":
+			out[tl.Short] = rules[tl.Short]
+		case t.others != "":
+			out[tl.Short] = t.others
+		case ok:
+			out[tl.Short] = p
+		case tl.ReadOnly:
+			out[tl.Short] = settings.MCPPolicyAuto
+		default:
+			out[tl.Short] = settings.MCPPolicyConfirm
+		}
+	}
+	return out, nil
 }
 
-// cardText is the tools card: the head, the tools by policy, the skipped
-// ones, cut to maxCardRunes. Names and descriptions are the server's text,
-// shown as data.
-func cardText(sp texts.Speaker, t target, l mcpclient.ToolList, policies map[string]settings.MCPPolicy) string {
+// cardText is the tools card: the head, then the tools by policy, the
+// skipped ones, cut to maxCardRunes. The tools that run by themselves
+// without the server marking them read-only come first and are never cut:
+// when their lines with descriptions do not fit they are written by name
+// alone, and when the names do not fit either there is no card
+// (errCardTooLong). Names and descriptions are the server's text, shown as
+// data.
+func cardText(sp texts.Speaker, t target, l mcpclient.ToolList, policies map[string]settings.MCPPolicy) (string, error) {
 	w := &cardWriter{sp: sp, left: len(l.Tools) + len(l.Skipped)}
 	w.b.WriteString(sp.Text(texts.AskMCPToolsCard, texts.Vars{varServer: text.CodeSpan(t.name), varHost: texts.Escape(t.host()),
 		varN: fmt.Sprint(len(l.Tools))}))
 	if len(l.Tools) == 0 {
 		w.b.WriteString("\n\n" + sp.Text(texts.AskMCPToolsNone, nil))
 	}
-	for _, group := range []struct {
-		policy settings.MCPPolicy
-		head   texts.Key
-	}{
-		{settings.MCPPolicyAuto, texts.AskMCPToolsAuto},
-		{settings.MCPPolicyConfirm, texts.AskMCPToolsConfirm},
-		{settings.MCPPolicyForbidden, texts.AskMCPToolsForbidden},
-	} {
-		var lines []string
+	by := func(policy settings.MCPPolicy, readOnly *bool) []mcpclient.Tool {
+		var out []mcpclient.Tool
 		for _, tl := range l.Tools {
-			if policies[tl.Short] == group.policy {
-				lines = append(lines, toolLine(tl))
+			if policies[tl.Short] == policy && (readOnly == nil || tl.ReadOnly == *readOnly) {
+				out = append(out, tl)
 			}
 		}
-		w.section(sp.Text(group.head, nil), lines)
+		return out
 	}
+	yes, no := true, false
+	if err := w.mandatory(sp.Text(texts.AskMCPToolsAutoWrite, nil), by(settings.MCPPolicyAuto, &no)); err != nil {
+		return "", err
+	}
+	w.section(sp.Text(texts.AskMCPToolsAuto, nil), toolLines(by(settings.MCPPolicyAuto, &yes)))
+	w.section(sp.Text(texts.AskMCPToolsConfirm, nil), toolLines(by(settings.MCPPolicyConfirm, nil)))
+	w.forbidden(by(settings.MCPPolicyForbidden, nil))
 	skipped := make([]string, len(l.Skipped))
 	for i, s := range l.Skipped {
 		skipped[i] = "- " + text.CodeSpan(s.Name) + " (" + string(s.Reason) + ")"
 	}
 	w.section(sp.Text(texts.AskMCPToolsSkipped, nil), skipped)
-	return w.b.String()
+	return w.b.String(), nil
 }
+
+// toolLines is a tool's line each.
+func toolLines(tools []mcpclient.Tool) []string {
+	out := make([]string, len(tools))
+	for i, tl := range tools {
+		out[i] = toolLine(tl)
+	}
+	return out
+}
+
+// namesLine is a tool on the card by its name alone.
+func namesLine(t mcpclient.Tool) string { return "- " + text.CodeSpan(t.Short) }
+
+// maxForbiddenNamed is how many forbidden tools the card names; with more it
+// gives the count.
+const maxForbiddenNamed = 5
 
 // toolLine is one tool on the card: its name and the first line of its
 // description, both escaped.
@@ -180,6 +262,49 @@ func (w *cardWriter) section(head string, lines []string) {
 		}
 		w.b.WriteString("\n" + l)
 		w.left--
+	}
+}
+
+// mandatory writes the lines that must not be hidden: with descriptions
+// when they fit, by name when they do not, else errCardTooLong.
+func (w *cardWriter) mandatory(head string, tools []mcpclient.Tool) error {
+	if len(tools) == 0 {
+		return nil
+	}
+	used := utf8.RuneCountInString(w.b.String()) + utf8.RuneCountInString(head) + 2
+	build := func(line func(mcpclient.Tool) string) (string, int) {
+		var b strings.Builder
+		for _, tl := range tools {
+			b.WriteString("\n" + line(tl))
+		}
+		return b.String(), utf8.RuneCountInString(b.String())
+	}
+	body, n := build(toolLine)
+	if used+n > maxCardRunes {
+		body, n = build(namesLine)
+	}
+	if used+n > maxCardRunes {
+		return errCardTooLong
+	}
+	w.b.WriteString("\n\n" + head + body)
+	w.left -= len(tools)
+	return nil
+}
+
+// forbidden writes the forbidden tools: their names when few, else a count.
+// It is short and is written even when the card has run out of room.
+func (w *cardWriter) forbidden(tools []mcpclient.Tool) {
+	if len(tools) == 0 {
+		return
+	}
+	w.left -= len(tools)
+	if len(tools) > maxForbiddenNamed {
+		w.b.WriteString("\n\n" + w.sp.Text(texts.AskMCPToolsForbiddenCount, texts.Vars{varN: fmt.Sprint(len(tools))}))
+		return
+	}
+	w.b.WriteString("\n\n" + w.sp.Text(texts.AskMCPToolsForbidden, nil))
+	for _, tl := range tools {
+		w.b.WriteString("\n" + namesLine(tl))
 	}
 }
 

@@ -39,7 +39,9 @@ func TestWrappersRecordTheirSource(t *testing.T) {
 		{func() error { return tg.RemoveGroup(-1001234567890) }, confighist.SourceGroup, "group -1001234567890: disconnected"},
 		{func() error { return mods.RemoveModule("local/demo-reader") }, confighist.SourceModule, "module local/demo-reader: removed"},
 		{func() error { return mcp.SetServer("shop", shop, "connected") }, confighist.SourceMCP, "mcp server shop: connected"},
-		{func() error { return mcp.SetPolicy("shop", "search", settings.MCPPolicyConfirm) }, confighist.SourceMCP, "mcp server shop: search confirm"},
+		{func() error {
+			return mcp.SetPolicies("shop", map[string]settings.MCPPolicy{"search": settings.MCPPolicyConfirm})
+		}, confighist.SourceMCP, "mcp server shop: rules of 1 tools"},
 		{func() error { return mcp.RemoveServer("shop") }, confighist.SourceMCP, "mcp server shop: disconnected"},
 	}
 	for i, s := range steps {

@@ -35,7 +35,7 @@ import (
 type File interface {
 	MCP() (settings.MCP, error)
 	SetServer(name string, s settings.MCPServer, why string) error
-	SetPolicy(server, tool string, p settings.MCPPolicy) error
+	SetPolicies(server string, policies map[string]settings.MCPPolicy) error
 	RemoveServer(name string) error
 }
 

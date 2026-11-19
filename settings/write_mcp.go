@@ -56,9 +56,9 @@ func (f MCPFile) SetServer(name string, s MCPServer) error {
 	})
 }
 
-// SetPolicy writes the policy of one tool of server; the server must have
-// a line.
-func (f MCPFile) SetPolicy(server, tool string, p MCPPolicy) error {
+// SetPolicies writes the policies of several tools of server in one edit,
+// all or none; the server must have a line.
+func (f MCPFile) SetPolicies(server string, policies map[string]MCPPolicy) error {
 	return editDoc(f.Path, func(doc *yaml.Node) error {
 		servers, err := mcpServersNode(doc)
 		if err != nil {
@@ -73,7 +73,9 @@ func (f MCPFile) SetPolicy(server, tool string, p MCPPolicy) error {
 			return err
 		}
 		tools.Style &^= yaml.FlowStyle
-		setScalar(tools, tool, string(p), tagStr)
+		for _, tool := range slices.Sorted(maps.Keys(policies)) {
+			setScalar(tools, tool, string(policies[tool]), tagStr)
+		}
 		return nil
 	})
 }

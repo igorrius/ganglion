@@ -30,13 +30,13 @@ func TestMCPFileSetsChangesAndRemovesAServer(t *testing.T) {
 	if !strings.Contains(read(t, p), "tz: Europe/Kyiv # home") {
 		t.Fatalf("a comment was lost:\n%s", read(t, p))
 	}
-	if err := f.SetPolicy("shop", "order", settings.MCPPolicyAuto); err != nil {
+	if err := f.SetPolicies("shop", map[string]settings.MCPPolicy{"order": settings.MCPPolicyAuto}); err != nil {
 		t.Fatal(err)
 	}
 	if loaded(t, p).MCP.Servers["shop"].Tools["order"] != settings.MCPPolicyAuto {
 		t.Fatalf("the policy was not written:\n%s", read(t, p))
 	}
-	if err := f.SetPolicy("other", "x", settings.MCPPolicyAuto); err == nil {
+	if err := f.SetPolicies("other", map[string]settings.MCPPolicy{"x": settings.MCPPolicyAuto}); err == nil {
 		t.Fatal("a policy of a server with no line was written")
 	}
 	if err := f.RemoveServer("shop"); err != nil {

@@ -511,46 +511,51 @@ const (
 	StatusBackupFailed      Key = "status.backup_failed"
 
 	// The remote MCP servers' cards, /mcp and /status (R-MCP-3, R-MCP-9, R-MCP-10).
-	AskMCPConnect         Key = "ask.mcp_connect"     // vars: server, url
-	AskMCPSignIn          Key = "ask.mcp_signin"      // vars: server, host, signin_host, link
-	AskMCPSignInLink      Key = "ask.mcp_signin_link" // the sign-in link's text
-	AskMCPPageWarning     Key = "ask.mcp_page_warning"
-	AskMCPToolsCard       Key = "ask.mcp_tools_card" // vars: server, host, n
-	AskMCPToolsNone       Key = "ask.mcp_tools_none"
-	AskMCPToolsAuto       Key = "ask.mcp_tools_auto"
-	AskMCPToolsConfirm    Key = "ask.mcp_tools_confirm"
-	AskMCPToolsForbidden  Key = "ask.mcp_tools_forbidden"
-	AskMCPToolsSkipped    Key = "ask.mcp_tools_skipped"
-	AskMCPToolsMore       Key = "ask.mcp_tools_more" // vars: n
-	AskMCPRule            Key = "ask.mcp_rule"       // vars: tool, from, to
-	AskMCPPolicyAuto      Key = "ask.mcp_policy_auto"
-	AskMCPPolicyConfirm   Key = "ask.mcp_policy_confirm"
-	AskMCPPolicyForbidden Key = "ask.mcp_policy_forbidden"
-	ButtonMCPConnect      Key = "button.mcp_connect"
-	ButtonMCPAskAll       Key = "button.mcp_ask_all"
-	ButtonMCPCancel       Key = "button.mcp_cancel"
-	ButtonMCPDisconnect   Key = "button.mcp_disconnect" // vars: server
-	MCPConnected          Key = "mcp.connected"         // vars: server, n, auto, ask
-	MCPCancelled          Key = "mcp.cancelled"         // vars: server
-	MCPCardStale          Key = "mcp.card_stale"        // a press on a card made before the server\'s line changed
-	MCPDisconnected       Key = "mcp.disconnected"      // vars: server
-	MCPListFailed         Key = "mcp.list_failed"       // vars: server, kind
-	MCPListNone           Key = "mcp.list_none"
-	MCPListHead           Key = "mcp.list_head"
-	MCPListRow            Key = "mcp.list_row"       // vars: server, state, n
-	MCPListSignedIn       Key = "mcp.list_signed_in" // vars: time
-	MCPPrivateOnly        Key = "mcp.private_only"
-	MCPStateConnecting    Key = "mcp.state_connecting"
-	MCPStateConnected     Key = "mcp.state_connected"
-	MCPStateUnreachable   Key = "mcp.state_unreachable"
-	MCPStateToolsChanged  Key = "mcp.state_tools_changed"
-	MCPStateUnauthorized  Key = "mcp.state_unauthorized"
-	MCPStateLocked        Key = "mcp.state_locked"
-	StatusMCPConnecting   Key = "status.mcp_connecting"    // vars: server
-	StatusMCPUnreachable  Key = "status.mcp_unreachable"   // vars: server
-	StatusMCPToolsChanged Key = "status.mcp_tools_changed" // vars: server
-	StatusMCPUnauthorized Key = "status.mcp_unauthorized"  // vars: server
-	StatusMCPLocked       Key = "status.mcp_locked"        // vars: server
+	AskMCPConnect             Key = "ask.mcp_connect"     // vars: server, url
+	AskMCPSignIn              Key = "ask.mcp_signin"      // vars: server, host, signin_host, link
+	AskMCPSignInLink          Key = "ask.mcp_signin_link" // the sign-in link's text
+	AskMCPPageWarning         Key = "ask.mcp_page_warning"
+	AskMCPToolsCard           Key = "ask.mcp_tools_card" // vars: server, host, n
+	AskMCPToolsNone           Key = "ask.mcp_tools_none"
+	AskMCPToolsAuto           Key = "ask.mcp_tools_auto"
+	AskMCPToolsConfirm        Key = "ask.mcp_tools_confirm"
+	AskMCPToolsForbidden      Key = "ask.mcp_tools_forbidden"
+	AskMCPToolsAutoWrite      Key = "ask.mcp_tools_auto_write"
+	AskMCPToolsForbiddenCount Key = "ask.mcp_tools_forbidden_count" // vars: n
+	AskMCPToolsSkipped        Key = "ask.mcp_tools_skipped"
+	AskMCPToolsMore           Key = "ask.mcp_tools_more" // vars: n
+	AskMCPRule                Key = "ask.mcp_rule"       // vars: tool, from, to
+	AskMCPRules               Key = "ask.mcp_rules"      // vars: server, n
+	AskMCPRuleLine            Key = "ask.mcp_rule_line"  // vars: tool, from, to
+	AskMCPRuleGroup           Key = "ask.mcp_rule_group" // vars: n, from, to
+	AskMCPPolicyAuto          Key = "ask.mcp_policy_auto"
+	AskMCPPolicyConfirm       Key = "ask.mcp_policy_confirm"
+	AskMCPPolicyForbidden     Key = "ask.mcp_policy_forbidden"
+	ButtonMCPConnect          Key = "button.mcp_connect"
+	ButtonMCPAskAll           Key = "button.mcp_ask_all"
+	ButtonMCPCancel           Key = "button.mcp_cancel"
+	ButtonMCPDisconnect       Key = "button.mcp_disconnect" // vars: server
+	MCPConnected              Key = "mcp.connected"         // vars: server, n, auto, ask
+	MCPCancelled              Key = "mcp.cancelled"         // vars: server
+	MCPCardStale              Key = "mcp.card_stale"        // a press on a card made before the server\'s line changed
+	MCPDisconnected           Key = "mcp.disconnected"      // vars: server
+	MCPListFailed             Key = "mcp.list_failed"       // vars: server, kind
+	MCPListNone               Key = "mcp.list_none"
+	MCPListHead               Key = "mcp.list_head"
+	MCPListRow                Key = "mcp.list_row"       // vars: server, state, n
+	MCPListSignedIn           Key = "mcp.list_signed_in" // vars: time
+	MCPPrivateOnly            Key = "mcp.private_only"
+	MCPStateConnecting        Key = "mcp.state_connecting"
+	MCPStateConnected         Key = "mcp.state_connected"
+	MCPStateUnreachable       Key = "mcp.state_unreachable"
+	MCPStateToolsChanged      Key = "mcp.state_tools_changed"
+	MCPStateUnauthorized      Key = "mcp.state_unauthorized"
+	MCPStateLocked            Key = "mcp.state_locked"
+	StatusMCPConnecting       Key = "status.mcp_connecting"    // vars: server
+	StatusMCPUnreachable      Key = "status.mcp_unreachable"   // vars: server
+	StatusMCPToolsChanged     Key = "status.mcp_tools_changed" // vars: server
+	StatusMCPUnauthorized     Key = "status.mcp_unauthorized"  // vars: server
+	StatusMCPLocked           Key = "status.mcp_locked"        // vars: server
 )
 
 var allKeys = []Key{
@@ -571,7 +576,7 @@ var allKeys = []Key{
 	UpdateAlertFailed, UpdateAlertUnverified, UpdateAlertNoExec, UpdateAlertExec, UpdateDBRestored, UpdateDBKept, UpdateImageVersion, UpdateConfirmed, UpdateStarted, UpdateAvailable,
 	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateButtonInstall, UpdateButtonRollback, UpdateButtonRollbackImg, UpdateButtonStale, UpdateAlreadyInstalled, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
 	BackupAlertFailed, BackupAlertRecovered, BackupLastNone, BackupReasonRefused, BackupReasonNetwork, BackupReasonChanged, BackupReasonIntegrity, BackupReasonOther, StatusBackupOff, StatusBackupOK, StatusBackupWaiting, StatusBackupStale, StatusBackupNone, StatusReasonBackupStale, StatusBackupFailed,
-	AskMCPConnect, AskMCPSignIn, AskMCPSignInLink, AskMCPPageWarning, AskMCPToolsCard, AskMCPToolsNone, AskMCPToolsAuto, AskMCPToolsConfirm, AskMCPToolsForbidden, AskMCPToolsSkipped, AskMCPToolsMore, AskMCPRule, AskMCPPolicyAuto, AskMCPPolicyConfirm, AskMCPPolicyForbidden, ButtonMCPConnect, ButtonMCPAskAll, ButtonMCPCancel, ButtonMCPDisconnect, MCPConnected, MCPCancelled, MCPCardStale, MCPDisconnected, MCPListFailed, MCPListNone, MCPListHead, MCPListRow, MCPListSignedIn, MCPPrivateOnly, MCPStateConnecting, MCPStateConnected, MCPStateUnreachable, MCPStateToolsChanged, MCPStateUnauthorized, MCPStateLocked, StatusMCPConnecting, StatusMCPUnreachable, StatusMCPToolsChanged, StatusMCPUnauthorized, StatusMCPLocked,
+	AskMCPConnect, AskMCPSignIn, AskMCPSignInLink, AskMCPPageWarning, AskMCPToolsCard, AskMCPToolsNone, AskMCPToolsAuto, AskMCPToolsConfirm, AskMCPToolsForbidden, AskMCPToolsSkipped, AskMCPToolsMore, AskMCPToolsAutoWrite, AskMCPToolsForbiddenCount, AskMCPRule, AskMCPRules, AskMCPRuleLine, AskMCPRuleGroup, AskMCPPolicyAuto, AskMCPPolicyConfirm, AskMCPPolicyForbidden, ButtonMCPConnect, ButtonMCPAskAll, ButtonMCPCancel, ButtonMCPDisconnect, MCPConnected, MCPCancelled, MCPCardStale, MCPDisconnected, MCPListFailed, MCPListNone, MCPListHead, MCPListRow, MCPListSignedIn, MCPPrivateOnly, MCPStateConnecting, MCPStateConnected, MCPStateUnreachable, MCPStateToolsChanged, MCPStateUnauthorized, MCPStateLocked, StatusMCPConnecting, StatusMCPUnreachable, StatusMCPToolsChanged, StatusMCPUnauthorized, StatusMCPLocked,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.

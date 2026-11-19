@@ -50,9 +50,10 @@ Never type the key into the chat itself, or give it to the assistant: it would b
 
 The card lists the server's tools in groups, in the server's own words:
 
-- **Run by themselves**: tools that only read.
+- **Run by themselves, although the server does not mark them read-only**: tools that will act without asking and that the server does not call read-only. This group comes first and always names every tool in it.
+- **Run by themselves (the server marks them read-only)**: tools that only read.
 - **Ask you first**: tools that change something. Each call shows a question with Approve and Deny.
-- **Never offered**: tools the node will not give the agent.
+- **Never offered**: tools the node will not give the agent: a count, with the names when there are few.
 - **Not taken**: tools past a limit, or with a name that clashes.
 
 Press **Connect** to turn the tools on with these rules, **Ask for all** to make every tool ask you first (it then connects), or **Cancel** to drop the server: for one not connected yet, the sign-in and registration are removed.
@@ -61,9 +62,15 @@ A server you approved before and connect again keeps the rules you set. A name k
 
 A card's buttons work only while the server's entry is as it was when the card came. After a newer card is approved, a rule changes or the server is disconnected, an older card says it is out of date and changes nothing.
 
+## Say which tools you need
+
+You do not have to go through a long list. Say it when you ask to connect: "Connect the shop, I only need the purchase history and current prices". The assistant passes that along, and the tools card already shows it: the tools you named as you said, the rest never offered. One press of **Connect** applies the whole card. If the assistant names a tool the server does not have, the node refuses it before any card and says which name.
+
+A tool the server adds later is proposed in the usual way on the next card (read-only by themselves, the rest asking), not as "the rest".
+
 ## Change a rule
 
-Ask in words: "let `shop.search_products` run by itself", "make `shop.add_to_cart` ask me first", "never offer `shop.place_order`". The assistant asks you to confirm, with the old and the new rule: "Change the rule of `shop.x` from «asks you first» to «runs by itself»?".
+Ask in words: "let `shop.search_products` run by itself", "make `shop.add_to_cart` ask me first", "never offer `shop.place_order`". Several changes at once ("only these two, nothing else") are one question and one press: the assistant asks you to confirm once, listing what changes, for example "Change the rules of 2 tools of `shop`?" followed by each tool with the old and the new rule. When many tools change, the question names those that will run by themselves and counts the rest.
 
 ## `/mcp`
 

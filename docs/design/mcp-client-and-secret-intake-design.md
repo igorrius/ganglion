@@ -180,8 +180,16 @@ sequenceDiagram
    > [Connect] [Ask for all] [Cancel]
 
    A tool the server marks `readOnlyHint` is proposed as `auto`, every
-   other one as `confirm`. Each tool shows its name and the first line of
-   its description, as data.
+   other one as `confirm`, unless the owner's words said otherwise: the
+   model passes the scope the owner stated ("I only need X and Y") as
+   `rules` (tool → policy) and `others` on `mcp.connect`, and the card
+   shows that proposal, so a sentence ends in one card and one press.
+   Each tool shows its name and the first line of its description, as
+   data. The card never hides what matters: tools that run by themselves
+   and are not marked read-only come first, always by name; tools that
+   ask are listed (folded when the message runs out); forbidden tools are
+   a count, with names when there are few. A name in `rules` that the
+   server does not have is refused before any card.
 8. **Connect** is the confirmation of the file's change: the server's entry
    with its rules and the fingerprint of the tool list is written and
    recorded in the history (R-CFG-13). The tools join the registry at once,
@@ -189,7 +197,8 @@ sequenceDiagram
    tools". **Cancel** deletes the registration and the tokens.
 
 Later the admin changes a rule in words ("let it read the cart without
-asking"): the agent calls `mcp.rule`, which asks with a card of its own.
+asking"): the agent calls `mcp.rule` once with the list of changes, which asks with
+one card of its own.
 
 ### The file
 
