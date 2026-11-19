@@ -205,8 +205,12 @@ func TestTurnTimeoutsFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (config.Timeouts{Call: 2 * time.Minute, Turn: 4 * time.Minute, Handler: 5 * time.Minute}); b.Timeouts != want {
+	if want := (config.Timeouts{Call: 2 * time.Minute, Turn: 4 * time.Minute, Steps: 20, Handler: 5 * time.Minute}); b.Timeouts != want {
 		t.Fatalf("timeouts %+v, want %+v", b.Timeouts, want)
+	}
+	mustWrite(t, path, "agent: {max_steps: 30}\n")
+	if b, err = bootstrap(context.Background(), flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile); err != nil || b.Timeouts.Steps != 30 {
+		t.Fatalf("steps %d, err %v", b.Timeouts.Steps, err)
 	}
 	mustWrite(t, path, "agent: {turn_timeout: 9m}\n")
 	_, err = bootstrap(context.Background(), flags.Run{Config: path, DB: filepath.Join(dir, "g.db")}, fakeEnv{}, fakeEnv{}.get, os.ReadFile)

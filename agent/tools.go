@@ -10,6 +10,7 @@ import (
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/urlnorm"
+	"github.com/igorrius/ganglion/mcpclient"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
@@ -30,6 +31,15 @@ const maxPlanCalls = 32
 // errPlanLimit refuses a plan call past maxPlanCalls. The real work may have
 // budget left, so it does not tell the model to stop, as errCallLimit does.
 var errPlanLimit = errors.New("no more plan updates in this turn; go on with the work")
+
+// maxOnDemandCalls is the ceiling of mcp.tools and mcp.use calls in a turn:
+// they spend neither MaxSteps nor an API step (ADR-0100), but they are not
+// free. It is as high as the tools a session may have on (mcpclient.MaxOn).
+const maxOnDemandCalls = 16
+
+// errOnDemandLimit refuses an mcp.tools or mcp.use call past maxOnDemandCalls.
+// The work itself has its budget, so it tells the model to go on with it.
+var errOnDemandLimit = errors.New("no more tool listing or turning on in this turn; go on with the work using the tools you have")
 
 // errCallLimit refuses a CLI provider's tool call once the turn's
 // budget, MaxSteps calls, is spent (ADR-0036); the model reads it.
@@ -226,9 +236,15 @@ func (a *Agent) useTool(ctx context.Context, t *turn, call provider.ToolCall, ca
 
 // spend counts the call against the turn's budget, or refuses it: a plan call
 // against its own ceiling, on both routes (errPlanLimit); a CLI provider's other
-// calls against MaxSteps (errCallLimit). The caller holds t.mu.
+// calls against MaxSteps (errCallLimit). An on-demand call (mcp.tools,
+// mcp.use) has its own ceiling too and spends no step (errOnDemandLimit). The caller holds t.mu.
 func (t *turn) spend(call provider.ToolCall, capped bool, maxSteps int) error {
 	switch {
+	case isOnDemandCall(call):
+		if t.onDemandCalls >= maxOnDemandCalls {
+			return errOnDemandLimit
+		}
+		t.onDemandCalls++
 	case isPlanCall(call):
 		if t.planCalls >= maxPlanCalls {
 			return errPlanLimit
@@ -241,6 +257,11 @@ func (t *turn) spend(call provider.ToolCall, capped bool, maxSteps int) error {
 		t.execCalls++
 	}
 	return nil
+}
+
+// isOnDemandCall is the bookkeeping of on-demand tools: mcp.tools and mcp.use.
+func isOnDemandCall(call provider.ToolCall) bool {
+	return call.Name == mcpclient.ToolsTool || call.Name == mcpclient.UseTool
 }
 
 func isPlanCall(call provider.ToolCall) bool {
@@ -401,4 +422,16 @@ func isNote(content string) bool {
 		}
 	}
 	return false
+}
+
+// allOnDemand reports whether every call is an on-demand one.
+func allOnDemand(calls []provider.ToolCall) bool {
+	return slices.IndexFunc(calls, func(c provider.ToolCall) bool { return !isOnDemandCall(c) }) < 0
+}
+
+// onDemand is the number of on-demand calls the turn has made.
+func (t *turn) onDemand() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.onDemandCalls
 }

@@ -281,6 +281,11 @@
           "$ref": "#/$defs/duration",
           "default": "5m"
         },
+        "max_steps": {
+          "description": "How many model calls one turn may make. Tool listing and turning on (mcp.tools, mcp.use) do not spend it.",
+          "type": "integer", "minimum": 1, "maximum": 100,
+          "default": 20
+        },
         "limits": {
           "description": "What one day of conversation may use. The word off turns every limit off; a missing key keeps the default of that limit, and 0 or off in a limit turns that one off.",
           "oneOf": [ { "const": "off" }, { "$ref": "#/$defs/limits" } ]

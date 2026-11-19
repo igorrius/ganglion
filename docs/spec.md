@@ -384,7 +384,10 @@ Guarantee: **at-least-once + idempotency.**
   provider's format; long context is compacted into a summary by a cheap
   model.
 - **R-AGT-3.** Agent loop: model call → tool calls → next step; a per-turn
-  step limit.
+  step limit, 20 by default and the setting `agent.max_steps` (1 to 100;
+  [ADR-0100](adr/0100-on-demand-bookkeeping-spends-no-turn-budget-and-the-budget-is-20.md),
+  which amends the 8 of ADR-0036). Plan calls and the on-demand calls of
+  R-MCP-4a do not spend it.
 - **R-AGT-4.** A depth limit on "the agent called itself" chains, a daily
   limit on turns and tokens; exceeding it alerts the administrator.
 - **R-AGT-5.** Every turn is written to the `turns` table: input, route, tool
@@ -1735,6 +1738,12 @@ started as processes are level 3 of 9.8 and stay in P3.
     (`forbidden`) is never turned on. The list's text is the approved,
     fingerprinted copy, the same standing as a tool's definition; a
     tool's result still taints the session.
+  - `mcp.tools` and `mcp.use` spend none of the turn's step budget, on the
+    API path a step whose every call is one of them, on the CLI path
+    such a call; a ceiling of 16 such calls a turn is their own, and a
+    call past it is refused with a message that tells the model to go on
+    with the work (#286,
+    [ADR-0100](adr/0100-on-demand-bookkeeping-spends-no-turn-budget-and-the-budget-is-20.md)).
 - **R-MCP-5.** A server's registration, its tokens and a key for `header`
   live in the secret store under the scope `mcp:<name>` (R-CFG-9); no tool
   returns them, and every value is redacted from the journal and the

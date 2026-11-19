@@ -105,6 +105,7 @@ considered, how they compare, the decision and its consequences. See
 | [0097](0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md) | Connect remote MCP servers from the chat with an own client and `x/oauth2`, in P1 | Accepted | 2026-11-18 |
 | [0098](0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md) | Hand a code or a secret over from the chat through a pinned static page and a pasted line | Accepted | 2026-11-18 |
 | [0099](0099-the-cli-bridge-announces-tools-turned-on-during-a-run.md) | The CLI bridge announces tools turned on during a run | Accepted | 2026-11-19 |
+| [0100](0100-on-demand-bookkeeping-spends-no-turn-budget-and-the-budget-is-20.md) | On-demand bookkeeping spends no turn budget, and the budget is 20 (amends the number in ADR-0036) | Accepted | 2026-11-19 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

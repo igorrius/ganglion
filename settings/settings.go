@@ -193,6 +193,9 @@ type Agent struct {
 	// TurnTimeout bounds a whole turn; the node's handler gets HandlerSlack
 	// more, which must stay below QueueLease.
 	TurnTimeout Duration `yaml:"turn_timeout"`
+	// MaxSteps is the model calls a turn may make; mcp.tools and mcp.use
+	// calls do not spend it (ADR-0100).
+	MaxSteps int `yaml:"max_steps"`
 	// Limits caps what one day of conversation may use.
 	Limits Limits `yaml:"limits"`
 	// Search is the web search the agent may use.
@@ -327,6 +330,7 @@ func Default() File {
 			SessionIdle: Duration(6 * time.Hour),
 			CallTimeout: Duration(3 * time.Minute),
 			TurnTimeout: Duration(5 * time.Minute),
+			MaxSteps:    20,
 			Limits:      Limits{DailyBudgetUSD: 1.0, DailyTurns: 300, DailyTokens: 1_000_000},
 			Search:      Search{Mode: auto, BraveKey: "env:BRAVE_API_KEY"},
 		},

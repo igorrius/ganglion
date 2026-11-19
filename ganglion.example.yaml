@@ -76,6 +76,9 @@ agent:
   # How long a whole turn may take. The node's handler gets a minute more,
   # which must stay below the queue's lease of 10m.
   turn_timeout: 5m
+  # How many model calls one turn may make (1 to 100). Listing and turning
+  # on a server's tools does not spend them.
+  max_steps: 20
   # What one day of conversation may use; 0 or off in a limit turns that one
   # off, and `limits: off` turns all of them off.
   limits:

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/mcpclient"
 	"github.com/igorrius/ganglion/provider"
 	"github.com/igorrius/ganglion/queue"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
@@ -1159,15 +1160,15 @@ func runAndAnswer(answer string, names ...string) func(context.Context, provider
 func TestPlanCallsDoNotSpendTheCap(t *testing.T) {
 	clock := newClock()
 	step := &fakeTool{name: "plan.step", result: tool.Result{Text: "marked"}}
-	e := newAddEnv(t, Config{}, clock, step)
+	e := newAddEnv(t, Config{MaxSteps: 8}, clock, step)
 	var names []string
-	for range DefaultConfig().MaxSteps {
+	for range 8 {
 		names = append(names, "plan.step", "clock", "plan.step")
 	}
 	e.smart.push(runAndAnswer("answer", names...))
 	e.put(t, from("first"))
 	e.next(t)
-	if len(clock.calls) != DefaultConfig().MaxSteps || len(step.calls) != 2*DefaultConfig().MaxSteps {
+	if len(clock.calls) != 8 || len(step.calls) != 2*8 {
 		t.Fatalf("clock %d, plan %d", len(clock.calls), len(step.calls))
 	}
 }
@@ -1293,5 +1294,83 @@ func TestPlanFinishFailureDoesNotFailTheTurn(t *testing.T) {
 	}
 	if !strings.Contains(e.logs.String(), "agent: plan not finished") {
 		t.Fatalf("logs %s", e.logs)
+	}
+}
+
+// ADR-0100: mcp.tools and mcp.use spend none of the turn's budget on the CLI route.
+func TestOnDemandCallsDoNotSpendTheCap(t *testing.T) {
+	clock := newClock()
+	list := &fakeTool{name: mcpclient.ToolsTool, result: tool.Result{Text: "listed"}}
+	use := &fakeTool{name: mcpclient.UseTool, result: tool.Result{Text: "on"}}
+	e := newAddEnv(t, Config{}, clock, list, use)
+	limit := DefaultConfig().MaxSteps
+	names := []string{mcpclient.ToolsTool, mcpclient.UseTool, mcpclient.ToolsTool}
+	for range limit {
+		names = append(names, "clock")
+	}
+	e.smart.push(runAndAnswer("answer", names...))
+	e.put(t, from("first"))
+	e.next(t)
+	if len(clock.calls) != limit || len(list.calls) != 2 || len(use.calls) != 1 {
+		t.Fatalf("clock %d, list %d, use %d", len(clock.calls), len(list.calls), len(use.calls))
+	}
+}
+
+func TestOnDemandCallsHaveTheirOwnCeiling(t *testing.T) {
+	list := &fakeTool{name: mcpclient.ToolsTool, result: tool.Result{Text: "listed"}}
+	e := newAddEnv(t, Config{}, list)
+	var last error
+	e.smart.push(func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
+		for range maxOnDemandCalls + 1 {
+			_, last = req.Exec(ctx, provider.ToolCall{Name: mcpclient.ToolsTool, Args: json.RawMessage(`{}`)})
+		}
+		return answerText("answer"), nil
+	})
+	e.put(t, from("first"))
+	e.next(t)
+	if !errors.Is(last, errOnDemandLimit) || len(list.calls) != maxOnDemandCalls {
+		t.Fatalf("last %v, %d ran", last, len(list.calls))
+	}
+	if !strings.Contains(errOnDemandLimit.Error(), "go on with the work") {
+		t.Fatalf("the refusal does not tell the model to go on: %v", errOnDemandLimit)
+	}
+}
+
+// On the API route a step is a model call: one whose every call is on-demand
+// does not count, one with other calls does.
+func TestOnDemandStepsAreFreeOnTheAPIRoute(t *testing.T) {
+	clock := newClock()
+	list := &fakeTool{name: mcpclient.ToolsTool, result: tool.Result{Text: "listed"}}
+	e := newAddEnv(t, Config{MaxSteps: 2}, clock, list)
+	e.smart.push(callTools(mcpclient.ToolsTool), callTools(mcpclient.ToolsTool), callTools("clock"), say("answer"))
+	e.put(t, from("first"))
+	e.next(t)
+	if len(clock.calls) != 1 || len(list.calls) != 2 {
+		t.Fatalf("clock %d, list %d", len(clock.calls), len(list.calls))
+	}
+	found := false
+	for _, m := range e.outbox(t) {
+		found = found || m.Text == "answer"
+	}
+	if !found {
+		t.Fatalf("no answer: %+v", e.outbox(t))
+	}
+}
+
+// A model that only lists, forever, is stopped by the ceiling: past it the
+// calls are refused and the steps count again, ending at the step limit.
+func TestOnDemandStepsEndAtTheCeilingOnTheAPIRoute(t *testing.T) {
+	list := &fakeTool{name: mcpclient.ToolsTool, result: tool.Result{Text: "listed"}}
+	e := newAddEnv(t, Config{MaxSteps: 2}, list)
+	for range maxOnDemandCalls + 5 {
+		e.smart.push(callTools(mcpclient.ToolsTool))
+	}
+	e.put(t, from("first"))
+	e.next(t)
+	if len(list.calls) != maxOnDemandCalls {
+		t.Fatalf("%d ran, want %d", len(list.calls), maxOnDemandCalls)
+	}
+	if n := len(e.smart.requests()); n != maxOnDemandCalls+2 {
+		t.Fatalf("%d model calls, want %d", n, maxOnDemandCalls+2)
 	}
 }

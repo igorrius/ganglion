@@ -244,6 +244,7 @@ const (
 	keyUpdates     = "telegram.updates"
 	keyCallTimeout = "agent.call_timeout"
 	keyTurnTimeout = "agent.turn_timeout"
+	keyMaxSteps    = "agent.max_steps"
 )
 
 // check is the validation that is not about the type of a value.
@@ -270,6 +271,7 @@ func (f File) check() error {
 		{keyCallTimeout, reasonAboveZero, f.Agent.CallTimeout > 0},
 		{keyTurnTimeout, reasonAboveZero, f.Agent.TurnTimeout > 0},
 		{keyCallTimeout, "must not be longer than " + keyTurnTimeout, f.Agent.CallTimeout <= f.Agent.TurnTimeout},
+		{keyMaxSteps, "must be between 1 and 100", f.Agent.MaxSteps >= 1 && f.Agent.MaxSteps <= 100},
 		{"memory.review.quiet", "must be above 0 while the review is enabled", !f.Memory.Review.Enabled || f.Memory.Review.Quiet > 0},
 		{keyTurnTimeout, "plus " + HandlerSlack.String() + " for the node's handler must stay below the queue's lease of " +
 			QueueLease.String(), f.Agent.HandlerTimeout() < QueueLease},

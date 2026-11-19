@@ -78,6 +78,9 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 	cfg := agent.DefaultConfig()
 	cfg.DailyTurns, cfg.DailyTokens, cfg.SessionIdle, cfg.Location = b.Agent.DailyTurns, b.Agent.DailyTokens, b.Agent.SessionIdle, b.Agent.TZ
 	cfg.CallTimeout, cfg.TurnTimeout = b.Timeouts.Call, b.Timeouts.Turn
+	if b.Timeouts.Steps > 0 {
+		cfg.MaxSteps = b.Timeouts.Steps
+	}
 	cfg.Home = commandHome()
 	cfg.Review, cfg.ReviewQuiet = reviewOn(i), b.Agent.Memory.Quiet
 	return cfg, agent.Deps{

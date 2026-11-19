@@ -5,7 +5,7 @@ import "time"
 // Config tunes the agent. Start from DefaultConfig and override fields;
 // a zero daily limit or SessionIdle turns that feature off.
 type Config struct {
-	MaxSteps      int           // model calls per turn
+	MaxSteps      int           // model calls per turn; on-demand calls do not spend it (ADR-0100)
 	TurnTimeout   time.Duration // the whole turn
 	CallTimeout   time.Duration // one model call
 	HistoryTokens int           // compact above this estimate
@@ -27,7 +27,7 @@ type Config struct {
 // DefaultConfig returns the agent's defaults.
 func DefaultConfig() Config {
 	return Config{
-		MaxSteps:      8,
+		MaxSteps:      20,
 		TurnTimeout:   5 * time.Minute,
 		CallTimeout:   3 * time.Minute,
 		HistoryTokens: 6000,

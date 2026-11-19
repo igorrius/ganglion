@@ -120,6 +120,7 @@ func (b Bootstrap) SecretValues() []string {
 type Timeouts struct {
 	Call    time.Duration // agent.call_timeout, default 3m: one model call
 	Turn    time.Duration // agent.turn_timeout, default 5m: a whole turn
+	Steps   int           // agent.max_steps, default 20: model calls a turn
 	Handler time.Duration // the turn's plus settings.HandlerSlack: the loop's limit on the node's handler
 }
 

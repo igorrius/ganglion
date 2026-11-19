@@ -68,6 +68,7 @@ telegram:
 | `session_idle` | `6h` | The silence after which a conversation starts afresh. `off` never does. |
 | `call_timeout` | `3m` | How long one model call may take. On the `claude` CLI route one call runs every tool call of its turn. Not longer than `turn_timeout`. |
 | `turn_timeout` | `5m` | How long a whole turn may take. |
+| `max_steps` | `20` | How many model calls one turn may make, from 1 to 100. Listing a connected server's tools and turning them on does not spend them. |
 | `limits.daily_budget_usd` | `1` | Spend per day. See [Models](models.md#limits). |
 | `limits.daily_turns` | `300` | Turns per person per day. |
 | `limits.daily_tokens` | `1000000` | Tokens per person per day. |

@@ -195,7 +195,7 @@ func fromFile(f settings.File, db string, limit memlimit.Limit, src settings.Sou
 		SandboxDeny: f.Sandbox.Deny, SandboxHideNames: f.Sandbox.HideNames, UpdateCheck: f.Update.Check,
 		ModulesDir:  filepath.Join(filepath.Dir(db), "modules"),
 		MemoryLimit: limit, Settings: f,
-		Timeouts: config.Timeouts{Call: time.Duration(f.Agent.CallTimeout), Turn: time.Duration(f.Agent.TurnTimeout),
+		Timeouts: config.Timeouts{Call: time.Duration(f.Agent.CallTimeout), Turn: time.Duration(f.Agent.TurnTimeout), Steps: f.Agent.MaxSteps,
 			Handler: f.Agent.HandlerTimeout()}}
 	// Absolute: the CLI runs inside it, and the sandbox, the janitor and
 	// host.stats must all name the same folder.

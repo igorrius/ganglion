@@ -125,6 +125,22 @@ func TestMoneyRefusesNaNAndInf(t *testing.T) {
 	}
 }
 
+// ADR-0100: the turn's step budget is a setting, 20 by default, 1 to 100.
+func TestMaxSteps(t *testing.T) {
+	if got := settings.Default().Agent.MaxSteps; got != 20 {
+		t.Fatalf("default %d", got)
+	}
+	f, err := settings.Parse([]byte("agent:\n  max_steps: 35\n"))
+	if err != nil || f.Agent.MaxSteps != 35 {
+		t.Fatalf("got %+v, %v", f.Agent, err)
+	}
+	for _, src := range []string{"agent:\n  max_steps: 0\n", "agent:\n  max_steps: 101\n", "agent:\n  max_steps: -3\n", "agent:\n  max_steps: many\n"} {
+		if _, err := settings.Parse([]byte(src)); err == nil || !strings.Contains(err.Error(), "agent.max_steps") {
+			t.Errorf("%q: err = %v", src, err)
+		}
+	}
+}
+
 // Ruling 17 of M4c: a model call gets 3 min and a turn 5 min by default;
 // the node's handler gets the turn's plus a minute, which must stay below
 // the queue's lease, or the node does not start.
