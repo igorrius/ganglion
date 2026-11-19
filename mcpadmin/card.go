@@ -178,7 +178,7 @@ func proposed(t target, tools []mcpclient.Tool, before map[string]settings.MCPPo
 // (errCardTooLong). Names and descriptions are the server's text, shown as
 // data.
 func cardText(sp texts.Speaker, t target, l mcpclient.ToolList, policies map[string]settings.MCPPolicy) (string, error) {
-	w := &cardWriter{sp: sp, left: len(l.Tools) + len(l.Skipped)}
+	w := &cardWriter{sp: sp}
 	w.b.WriteString(sp.Text(texts.AskMCPToolsCard, texts.Vars{varServer: text.CodeSpan(t.name), varHost: texts.Escape(t.host()),
 		varN: fmt.Sprint(len(l.Tools))}))
 	if len(l.Tools) == 0 {
@@ -243,7 +243,6 @@ func toolLine(t mcpclient.Tool) string {
 type cardWriter struct {
 	b    strings.Builder
 	sp   texts.Speaker
-	left int  // lines not written yet
 	full bool // the card ran out of room and says how many are left
 }
 
@@ -254,14 +253,13 @@ func (w *cardWriter) section(head string, lines []string) {
 		return
 	}
 	w.b.WriteString("\n\n" + head)
-	for _, l := range lines {
+	for i, l := range lines {
 		if utf8.RuneCountInString(w.b.String())+utf8.RuneCountInString(l) > maxCardRunes {
-			w.b.WriteString("\n" + w.sp.Text(texts.AskMCPToolsMore, texts.Vars{varN: fmt.Sprint(w.left)}))
+			w.b.WriteString("\n" + w.sp.Text(texts.AskMCPToolsMore, texts.Vars{varN: fmt.Sprint(len(lines) - i)}))
 			w.full = true
 			return
 		}
 		w.b.WriteString("\n" + l)
-		w.left--
 	}
 }
 
@@ -287,7 +285,6 @@ func (w *cardWriter) mandatory(head string, tools []mcpclient.Tool) error {
 		return errCardTooLong
 	}
 	w.b.WriteString("\n\n" + head + body)
-	w.left -= len(tools)
 	return nil
 }
 
@@ -297,7 +294,6 @@ func (w *cardWriter) forbidden(tools []mcpclient.Tool) {
 	if len(tools) == 0 {
 		return
 	}
-	w.left -= len(tools)
 	if len(tools) > maxForbiddenNamed {
 		w.b.WriteString("\n\n" + w.sp.Text(texts.AskMCPToolsForbiddenCount, texts.Vars{varN: fmt.Sprint(len(tools))}))
 		return

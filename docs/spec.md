@@ -1688,8 +1688,11 @@ started as processes are level 3 of 9.8 and stay in P3.
     `rules` maps a tool's name to `auto`, `confirm` or `forbidden`, and
     `others` is the policy of every tool not named. For each tool the
     first that applies wins: `rules`, `others`, the policy the admin set
-    before for a server approved earlier, the default. A tool the server
-    adds later gets the default on the next card, not `others`. A name
+    before for a server approved earlier, the default. `others` is not stored: it
+    applies only to the call that carries it, to every tool of the list
+    that call reads (the card names every tool that runs by itself and is
+    not read-only, so a tool added later is never turned on unseen); a
+    tool the server adds later gets the default on the next card. A name
     in `rules` that the server's list does not have is refused with an
     error that names it, before any card (for a sign-in, when the list
     is read, the admin is told that the list could not be used). One
@@ -1698,9 +1701,10 @@ started as processes are level 3 of 9.8 and stay in P3.
   - **The card hides nothing that matters.** A tool that will run by
     itself and that the server does not mark read-only is always listed
     by name, with its description, in a section of its own that comes
-    first, and is never folded into a count (when the names alone would
-    not fit one message, no card is made and the error tells the model
-    to narrow the proposal). Tools that ask are listed. Forbidden tools
+    first, and is never folded into a count (when the lines with
+    descriptions do not fit, the card lists these tools by name alone;
+    when the names alone would not fit one message, no card is made and
+    the error tells the model to narrow the proposal). Tools that ask are listed. Forbidden tools
     are a count, with their names when there are few. The card stays
     within Telegram's message limit.
 - **R-MCP-4.** A server's tool is named `<server>.<tool>`: its own name
@@ -1753,7 +1757,10 @@ started as processes are level 3 of 9.8 and stay in P3.
   a tool the server's approved list does not have, a tool named twice or
   an empty call is refused with an error that names it, and nothing is
   written. The card lists what changes; a change to `auto` is always
-  named. Only the admin's press lowers a policy. The model is told to
+  named, by name alone when the lines would pass the question's length
+  limit, and a call whose names do not fit is refused. A call with
+  `others` is applied only if the server's line is the one the question
+  was worded against. Only the admin's press lowers a policy. The model is told to
   put several changes in one call and never to call once per tool.
 - **R-MCP-10.** `/mcp` (admin, private chat, no model) lists each server with
   its state (connected, needs sign-in, tools changed, unreachable, store

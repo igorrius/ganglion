@@ -117,6 +117,10 @@ type Admin struct {
 	// changeMu makes a press's check of the line and its write one step,
 	// so two presses cannot both pass the check.
 	changeMu sync.Mutex
+	// askedMu guards questions: the digest of the line each mcp.rule call
+	// with others was worded against, by call key.
+	askedMu   sync.Mutex
+	questions map[string]string
 }
 
 // Option configures an Admin.
@@ -242,4 +246,29 @@ func (a *Admin) admin(ctx context.Context, principal string) error {
 		return errNotAdmin
 	}
 	return nil
+}
+
+// maxQuestions bounds the remembered questions; past it they are forgotten
+// and the calls asked about refuse, which is safe.
+const maxQuestions = 256
+
+// asked remembers the line a question with others was worded against, so
+// the press applies only what the owner read.
+func (a *Admin) asked(key, was string) {
+	a.askedMu.Lock()
+	defer a.askedMu.Unlock()
+	if a.questions == nil || len(a.questions) >= maxQuestions {
+		a.questions = map[string]string{}
+	}
+	a.questions[key] = was
+}
+
+// wasAsked reports whether the call was asked about the line as it is now,
+// and forgets it.
+func (a *Admin) wasAsked(key, now string) bool {
+	a.askedMu.Lock()
+	defer a.askedMu.Unlock()
+	was, ok := a.questions[key]
+	delete(a.questions, key)
+	return ok && was == now
 }

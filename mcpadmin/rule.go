@@ -9,6 +9,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/igorrius/ganglion/internal/text"
 	"github.com/igorrius/ganglion/settings"
@@ -49,6 +50,7 @@ type ruleChange struct {
 type rule struct {
 	server  string
 	changes []ruleChange
+	was     string // digest of the server's line the changes were worked out against
 }
 
 // errRuleArgs and the like refuse an mcp.rule call, in the node's words.
@@ -56,6 +58,8 @@ var (
 	errRuleArgs   = errors.New("arguments must be server and changes, a list of {tool, policy} with a policy of auto, confirm or forbidden, and optionally others")
 	errNoServer   = errors.New("no MCP server by that name is connected; mcp.tools lists them")
 	errSamePolicy = errors.New("every tool has that policy already")
+	errRuleStale  = errors.New("the server's tools changed after the owner was asked, or the question is not known any more: " +
+		"nothing was changed; call mcp.rule again")
 )
 
 // ruleToolError refuses a call that names a tool the server has not approved,
@@ -99,38 +103,72 @@ func (ruleTool) Spec() tool.Spec {
 
 // Question implements tool.Questioner: the changes in the owner's words.
 func (t ruleTool) Question(_ context.Context, c tool.Call) (string, error) {
-	r, err := t.a.ruleOf(c)
+	r, args, err := t.a.ruleOf(c)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", ToolRule, err)
 	}
-	return ruleQuestion(c.Speak, r), nil
+	q, err := ruleQuestion(c.Speak, r)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", ToolRule, err)
+	}
+	if args.Others != "" {
+		t.a.asked(c.Key(), r.was)
+	}
+	return q, nil
 }
 
+// errRuleTooLong refuses a call that turns on so many tools by themselves
+// that their names do not fit one question: the owner must see each of them.
+var errRuleTooLong = errors.New("too many tools would be turned on to run by themselves to name them all in one question; " +
+	"change them in several calls of fewer tools, or make fewer of them auto")
+
 // ruleQuestion is the question of a rule call. A change that turns a tool
-// on by itself is always named; the others are named while there are few and
-// grouped by what they change after that.
-func ruleQuestion(sp texts.Speaker, r rule) string {
+// on by itself is always named, so is every other change while there are few;
+// the rest are grouped by what they change. When the question would pass
+// what the policy shows, the auto lines lose their old and new words and
+// keep the names, and when even those do not fit the call is refused (the
+// same rule as the tools card): a cut question would approve tools unseen.
+func ruleQuestion(sp texts.Speaker, r rule) (string, error) {
 	if len(r.changes) == 1 {
 		ch := r.changes[0]
 		return sp.Text(texts.AskMCPRule, texts.Vars{varTool: text.CodeSpan(r.server + "." + ch.tool),
-			varFrom: policyWords(sp, ch.from), varTo: policyWords(sp, ch.to)})
+			varFrom: policyWords(sp, ch.from), varTo: policyWords(sp, ch.to)}), nil
 	}
+	for _, namesOnly := range []bool{false, true} {
+		if q := writeRuleQuestion(sp, r, namesOnly); utf8.RuneCountInString(q) <= maxQuestionRunes {
+			return q, nil
+		}
+	}
+	return "", errRuleTooLong
+}
+
+// maxQuestionRunes leaves the policy's cut (tool.MaxQuestionRunes) room for
+// what it removes from a question.
+const maxQuestionRunes = tool.MaxQuestionRunes - 100
+
+// writeRuleQuestion words the changes; namesOnly writes a change to auto by
+// the tool's name alone.
+func writeRuleQuestion(sp texts.Speaker, r rule, namesOnly bool) string {
 	var b strings.Builder
 	b.WriteString(sp.Text(texts.AskMCPRules, texts.Vars{varServer: text.CodeSpan(r.server), varN: fmt.Sprint(len(r.changes))}))
 	type pair struct{ from, to settings.MCPPolicy }
 	groups := map[pair]int{}
 	var order []pair
 	for _, ch := range r.changes {
-		if ch.to == settings.MCPPolicyAuto || len(r.changes) <= maxRuleLines {
-			b.WriteString("\n" + sp.Text(texts.AskMCPRuleLine, texts.Vars{varTool: text.CodeSpan(r.server + "." + ch.tool),
+		name := text.CodeSpan(r.server + "." + ch.tool)
+		switch {
+		case ch.to == settings.MCPPolicyAuto && namesOnly:
+			b.WriteString("\n- " + name)
+		case ch.to == settings.MCPPolicyAuto || len(r.changes) <= maxRuleLines:
+			b.WriteString("\n" + sp.Text(texts.AskMCPRuleLine, texts.Vars{varTool: name,
 				varFrom: policyWords(sp, ch.from), varTo: policyWords(sp, ch.to)}))
-			continue
+		default:
+			k := pair{ch.from, ch.to}
+			if groups[k] == 0 {
+				order = append(order, k)
+			}
+			groups[k]++
 		}
-		k := pair{ch.from, ch.to}
-		if groups[k] == 0 {
-			order = append(order, k)
-		}
-		groups[k]++
 	}
 	for _, k := range order {
 		b.WriteString("\n" + sp.Text(texts.AskMCPRuleGroup, texts.Vars{varN: fmt.Sprint(groups[k]),
@@ -144,12 +182,15 @@ func (t ruleTool) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	if c.Grant != nil {
 		return tool.Result{}, fmt.Errorf("%s: %w", ToolRule, errGrant)
 	}
-	r, err := t.a.ruleOf(c)
+	r, args, err := t.a.ruleOf(c)
 	if errors.Is(err, errSamePolicy) {
 		return tool.Result{Text: "The tools have those policies already; nothing changed."}, nil
 	}
 	if err != nil {
 		return tool.Result{}, fmt.Errorf("%s: %w", ToolRule, err)
+	}
+	if args.Others != "" && !t.a.wasAsked(c.Key(), r.was) {
+		return tool.Result{}, fmt.Errorf("%s: %w", ToolRule, errRuleStale)
 	}
 	policies := make(map[string]settings.MCPPolicy, len(r.changes))
 	for _, ch := range r.changes {
@@ -170,26 +211,26 @@ func (t ruleTool) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 
 // ruleOf reads and checks an mcp.rule call as a whole against the file: the
 // server, every tool and every policy, before anything is asked or written.
-func (a *Admin) ruleOf(c tool.Call) (rule, error) {
+func (a *Admin) ruleOf(c tool.Call) (rule, ruleArgs, error) {
 	var args ruleArgs
 	dec := json.NewDecoder(bytes.NewReader(c.Args))
 	dec.DisallowUnknownFields()
 	if dec.Decode(&args) != nil || len(args.Changes) == 0 && args.Others == "" ||
 		args.Others != "" && !validPolicy(args.Others) {
-		return rule{}, errRuleArgs
+		return rule{}, args, errRuleArgs
 	}
 	line, ok, err := a.line(args.Server)
 	if err != nil {
-		return rule{}, err
+		return rule{}, args, err
 	}
 	if !ok {
-		return rule{}, errNoServer
+		return rule{}, args, errNoServer
 	}
 	named, err := namedChanges(args, line.Tools)
 	if err != nil {
-		return rule{}, err
+		return rule{}, args, err
 	}
-	r := rule{server: args.Server}
+	r := rule{server: args.Server, was: digest(line, true)}
 	for _, name := range slices.Sorted(maps.Keys(line.Tools)) {
 		to, ok := named[name]
 		if !ok {
@@ -200,9 +241,9 @@ func (a *Admin) ruleOf(c tool.Call) (rule, error) {
 		}
 	}
 	if len(r.changes) == 0 {
-		return rule{}, errSamePolicy
+		return rule{}, args, errSamePolicy
 	}
-	return r, nil
+	return r, args, nil
 }
 
 // namedChanges maps the tools the call names to their new policy, refusing a

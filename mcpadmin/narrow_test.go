@@ -11,6 +11,7 @@ import (
 	"github.com/igorrius/ganglion/mcpadmin"
 	"github.com/igorrius/ganglion/mcpclient/mcpclienttest"
 	"github.com/igorrius/ganglion/settings"
+	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -203,5 +204,109 @@ func TestRuleQuestionGroupsManyChanges(t *testing.T) {
 	}
 	if !strings.Contains(q, "`shop.tool_03`") || !strings.Contains(q, "- 29 more tools") || strings.Contains(q, "tool_04") {
 		t.Fatalf("question:\n%s", q)
+	}
+}
+
+// A question that would pass the policy's cut shows every auto change by
+// name, or the call is refused: the owner never presses Yes on a cut list
+// (R-MCP-9). Checked in both a short language and a longer one.
+func TestRuleQuestionNeverHidesAnAutoChange(t *testing.T) {
+	for _, lang := range []texts.Lang{texts.English, texts.Lang("ru")} {
+		t.Run(string(lang), func(t *testing.T) {
+			r := newRig(t, false)
+			r.manyTools(45, func(i int) string { return fmt.Sprintf("tool_%02d", i) })
+			res, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), r.connectCall(nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.press(t, res.Out[0], "Connect")
+			r.waitState(t, "shop connected")
+			c := call(mcpadmin.ToolRule, map[string]any{"server": "shop", "others": "auto",
+				"changes": []map[string]any{{"tool": "tool_00", "policy": "forbidden"}}})
+			c.Speak = texts.Speaker{Lang: lang, Cat: texts.Shipped()}
+			q, err := r.tool(mcpadmin.ToolRule).(tool.Questioner).Question(context.Background(), c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n := len([]rune(q)); n > tool.MaxQuestionRunes {
+				t.Fatalf("the question is %d runes and would be cut", n)
+			}
+			for i := 1; i < 45; i++ {
+				if !strings.Contains(q, fmt.Sprintf("shop.tool_%02d", i)) {
+					t.Fatalf("tool_%02d is not named:\n%s", i, q)
+				}
+			}
+		})
+	}
+	// Names that do not fit either: refused.
+	r := newRig(t, false)
+	r.manyTools(128, func(i int) string { return fmt.Sprintf("a_very_long_tool_name_for_the_shop_number_%03d", i) })
+	res, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), r.connectCall(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.press(t, res.Out[0], "Connect")
+	r.waitState(t, "shop connected")
+	c := call(mcpadmin.ToolRule, map[string]any{"server": "shop", "others": "auto",
+		"changes": []map[string]any{{"tool": "a_very_long_tool_name_for_the_shop_number_000", "policy": "forbidden"}}})
+	if _, err := r.tool(mcpadmin.ToolRule).(tool.Questioner).Question(context.Background(), c); err == nil {
+		t.Fatal("a question that cannot name every auto tool was worded")
+	}
+}
+
+// A call with others applies only to the line its question was worded
+// against: a tool added by a later card is never turned on unseen.
+func TestRuleWithOthersRefusesAStaleQuestion(t *testing.T) {
+	r := newRig(t, false)
+	connected(t, r)
+	rt := r.tool(mcpadmin.ToolRule)
+	c := call(mcpadmin.ToolRule, map[string]any{"server": "shop", "others": "auto",
+		"changes": []map[string]any{{"tool": "place_order", "policy": "forbidden"}}})
+	if _, err := rt.(tool.Questioner).Question(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
+	// The line changes before the press.
+	r.manyTools(4, func(i int) string { return fmt.Sprintf("new_%d", i) })
+	res, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), r.connectCall(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.press(t, res.Out[0], "Connect")
+	if _, err := rt.Run(context.Background(), c); err == nil {
+		t.Fatal("a stale question was applied")
+	}
+	if s, _ := r.line(t); s.Tools["new_0"] != settings.MCPPolicyConfirm {
+		t.Fatalf("line = %+v", s.Tools)
+	}
+	// A press with no question asked refuses as well.
+	if _, err := rt.Run(context.Background(), c); err == nil {
+		t.Fatal("a call that was never asked was applied")
+	}
+}
+
+// "…and N more" counts only the lines of its own section.
+func TestMoreCountsOnlyTheSectionsOwnLines(t *testing.T) {
+	r := newRig(t, false)
+	r.manyTools(120, func(i int) string { return fmt.Sprintf("tool_%03d_with_a_name_that_is_a_bit_long", i) })
+	rules := map[string]any{}
+	for i := 100; i < 120; i++ {
+		rules[fmt.Sprintf("tool_%03d_with_a_name_that_is_a_bit_long", i)] = "forbidden"
+	}
+	res, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), r.connectCall(map[string]any{"rules": rules}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := res.Out[0].Text
+	i := strings.Index(card, "…and ")
+	if i < 0 {
+		t.Fatalf("the card does not fold:\n%s", card)
+	}
+	var n int
+	if _, err := fmt.Sscanf(card[i:], "…and %d more", &n); err != nil || n <= 0 || n > 100 {
+		t.Fatalf("the count is %d (%v), the section has at most 100 tools:\n%s", n, err, card)
+	}
+	listed := strings.Count(card, "- `tool_")
+	if listed+n != 100 {
+		t.Fatalf("listed %d and %d more: not the 100 that ask", listed, n)
 	}
 }
