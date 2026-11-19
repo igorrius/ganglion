@@ -66,7 +66,7 @@ is tainted) and a store of its own in `mcpclient`.
 |---|---|---|---|
 | The admin has to read prose on the card | yes, every connect and change | no | yes, at install |
 | A harmless edit by the server | turns the tools off | nothing | nothing |
-| An injected instruction | reaches the model with the standing of a definition | reaches it as data, after which every call with input in the session is confirmed | reaches it after the admin approved it |
+| An injected instruction | reaches the model with the standing of a definition | reaches it as data, after which every side effect in the session is confirmed | reaches it after the admin approved it |
 | Effort | card, fingerprint, migration of every pin | client field, one branch in `mcp.use` | skill drafting and install |
 | Carries what the model learns | no | no | yes, by hand |
 
@@ -85,8 +85,10 @@ is tainted) and a store of its own in `mcpclient`.
   for confirmation of a write from a tainted session. A store of its own
   would repeat all of that. This is a narrow exception to "the owner's
   words only" (R-MEM-8): facts about a connected server's data, into that
-  server's topic, each one confirmed by the owner. Disconnecting a server
-  drops its topic.
+  server's topic, each one confirmed by the owner. The clean-context
+  check (R-POL-7) accepts such a fact as one about a service the owner
+  connected, and still rejects an imperative one. Disconnecting a
+  server drops its topic.
 - C stays possible later; it is heavier than a note for a single server.
 
 ## Security
@@ -100,8 +102,7 @@ is tainted) and a store of its own in `mcpclient`.
 - **Abuse cases and what stops them:**
   - *Instructions that tell the model to act* ("call delete_cart"): the
     text is wrapped as data and taints the session (code: `External` on
-    the result), so a call with input is confirmed by the owner
-    (R-MCP-4, R-POL-6). A `forbidden` tool is never turned on.
+    the result), so any side effect is confirmed by the owner (R-POL-6). A `forbidden` tool is never turned on.
   - *A huge text to flood the context:* cut to 2,000 runes by the client,
     and `initialize`'s answer is already capped (`MaxInitBytes`).
   - *A changed text between sessions:* nothing pins it, and nothing
@@ -123,7 +124,7 @@ is tainted) and a store of its own in `mcpclient`.
 - To build: the client keeps the instructions; `mcp.use` adds them and
   names the notes' topic the first time a server's tool is turned on in
   a session; disconnect drops the topic; the core rules say what a note
-  is for.
+  is for; the clean-context check knows a note about a server.
 
 ## Revisit when
 

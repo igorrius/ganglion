@@ -1796,8 +1796,10 @@ started as processes are level 3 of 9.8 and stay in P3.
     what a field of the server's data means, a quirk, a filter that must
     be set; never a secret or a person's data. The core rules say so
     too. The model writes a note with `memory.write`; because the
-    session is tainted, the owner confirms it (R-POL-6). The topic is in
-    the prompt like any other (R-MEM-7).
+    session is tainted, the owner confirms it (R-POL-6). The
+    clean-context check takes such a note as a fact about a service the
+    owner connected, and still rejects an imperative one (R-POL-7). The
+    topic is in the prompt like any other (R-MEM-7).
   - Disconnecting a server drops its topic.
 
 ### 7.17. Handing values over from the chat
