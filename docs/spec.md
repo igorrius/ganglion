@@ -1101,7 +1101,9 @@ undone with `git revert`.
     review: the owner gets one message listing the facts, with Remember
     and Skip (R-POL-6).
   - What the agent found out itself, from a tool or a page, is not
-    stored here; it waits for consolidation (R-MEM-1).
+    stored here; it waits for consolidation (R-MEM-1). The one
+    exception is a note about a connected MCP server's data, in that
+    server's topic (R-MCP-11).
 - **R-MEM-9.** The owner sees every change. A write by the agent
   or a review that changed memory sends one note with the turn's
   messages, in the owner's language, listing what changed, with an Undo
@@ -1780,6 +1782,25 @@ started as processes are level 3 of 9.8 and stay in P3.
   locked), the time of its last sign-in and its number of tools, and
   disconnects one. `/status` has a line for each server that is not
   connected.
+
+- **R-MCP-11.** What the model knows about a server outlives the turn
+  (owner, 2026-11-19, #288,
+  [ADR-0101](adr/0101-a-servers-instructions-reach-the-model-as-data-and-its-notes-live-in-memory.md)).
+  - **The server's instructions.** The client keeps the `instructions`
+    of the server's `initialize` answer for the session, cut to 2,000
+    runes; they are not pinned. The first `mcp.use` in a session that
+    turns on a tool of that server gives them to the model as outside
+    content: the session is tainted and the text is wrapped as data.
+  - **Notes.** The same `mcp.use` names the memory topic titled
+    `mcp <server>` (slug `mcp-<server>`) and says what belongs there:
+    what a field of the server's data means, a quirk, a filter that must
+    be set; never a secret or a person's data. The core rules say so
+    too. The model writes a note with `memory.write`; because the
+    session is tainted, the owner confirms it (R-POL-6). The
+    clean-context check takes such a note as a fact about a service the
+    owner connected, and still rejects an imperative one (R-POL-7). The
+    topic is in the prompt like any other (R-MEM-7).
+  - Disconnecting a server drops its topic.
 
 ### 7.17. Handing values over from the chat
 

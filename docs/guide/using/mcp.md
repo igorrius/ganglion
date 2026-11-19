@@ -72,9 +72,15 @@ A tool the server adds later is proposed in the usual way on the next card (read
 
 Ask in words: "let `shop.search_products` run by itself", "make `shop.add_to_cart` ask me first", "never offer `shop.place_order`". Several changes at once ("only these two, nothing else") are one question and one press: the assistant asks you to confirm once, listing what changes, for example "Change the rules of 2 tools of `shop`?" followed by each tool with the old and the new rule. When many tools change, the question names those that will run by themselves and counts the rest.
 
+## What the assistant learns about a server
+
+Some servers explain how their tools should be used. The assistant reads that explanation when it first turns on one of the server's tools in a conversation. It treats the text as data, the same way as what the server's tools return, never as orders.
+
+When the assistant works out something about a server's data that will help next time, for example that a receipt's total is before discounts, it offers to remember it. Since the fact came from the server, you confirm it first. It is kept in memory under the topic `mcp-<server>`. `/memory mcp-<server>` shows it, and disconnecting the server forgets it.
+
 ## `/mcp`
 
-`/mcp` in your private chat lists each server with its state, the time of its last sign-in, its number of tools and a **Disconnect** button. Disconnect removes the server's entry, its sign-in and its tokens.
+`/mcp` in your private chat lists each server with its state, the time of its last sign-in, its number of tools and a **Disconnect** button. Disconnect removes the server's entry, its sign-in, its tokens and what the assistant remembered about it.
 
 | State | What it means | What to do |
 |---|---|---|

@@ -112,13 +112,13 @@ func TestMcpUseTurnsToolsOn(t *testing.T) {
 	use := meta(t, r.hub, "mcp.use")
 
 	res, err := run(use, nil, `{"server":"shop","tools":["search","shop.buy"]}`)
-	if err != nil || res.Text != "on from the next step: shop.search, shop.buy" || !slices.Equal(res.On, []string{"shop.search", "shop.buy"}) || res.External {
+	if err != nil || !strings.HasPrefix(res.Text, "on from the next step: shop.search, shop.buy\n\n") || !slices.Equal(res.On, []string{"shop.search", "shop.buy"}) || res.External {
 		t.Fatalf("use = %+v, %v", res, err)
 	}
 	// The server's own name and the full name are the same tool; one that is
 	// on already is not an error.
 	res, err = run(use, []string{"shop.search"}, `{"server":"shop","tools":["shop_buy","shop.search"]}`)
-	if err != nil || res.Text != "on from the next step: shop.buy; already on: shop.search" {
+	if err != nil || res.Text != "on from the next step: shop.buy; already on: shop.search" || res.External {
 		t.Fatalf("use again = %+v, %v", res, err)
 	}
 	for name, args := range map[string]string{
@@ -233,4 +233,53 @@ func specNames(ss []tool.Spec) []string {
 		out[i] = s.Name
 	}
 	return out
+}
+
+// The first mcp.use of a server in a session names the notes' topic and, when
+// the server sent instructions, gives them as outside content; a later one
+// adds neither (R-MCP-11).
+func TestMcpUseDeliversInstructionsAndNamesTheNotesOnce(t *testing.T) {
+	raws := []json.RawMessage{
+		mcpclienttest.Tool("search", "Search.", "", true),
+		mcpclienttest.Tool("buy", "Buy.", "", false),
+	}
+	policies := map[string]tool.Policy{"search": tool.PolicyAuto, "buy": tool.PolicyConfirm}
+	const topic = `memory topic "mcp shop" with memory.write`
+	tests := []struct {
+		name         string
+		instructions any
+		on           []string
+		wantInstr    bool
+		wantTopic    bool
+	}{
+		{"first use, instructions", "Filter by month.", nil, true, true},
+		{"first use, none", nil, nil, false, true},
+		{"first use, not a string", 42, nil, false, true},
+		{"later use, instructions", "Filter by month.", []string{"shop.search"}, false, false},
+		{"later use, none", nil, []string{"shop.search"}, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := mcpclienttest.New(t, mcpclienttest.Options{Tools: raws, Instructions: tt.instructions})
+			r := newRig(t)
+			r.hub.Set([]mcpclient.Server{config("shop", srv, raws, policies)})
+			r.await(t, "shop", mcpclient.StateConnected)
+			res, err := run(meta(t, r.hub, "mcp.use"), tt.on, `{"server":"shop","tools":["buy"]}`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Contains(res.Text, "Filter by month."); got != tt.wantInstr {
+				t.Errorf("instructions in text = %v, want %v: %q", got, tt.wantInstr, res.Text)
+			}
+			if res.External != tt.wantInstr {
+				t.Errorf("External = %v, want %v", res.External, tt.wantInstr)
+			}
+			if got := strings.Contains(res.Text, topic); got != tt.wantTopic {
+				t.Errorf("topic line = %v, want %v: %q", got, tt.wantTopic, res.Text)
+			}
+			if !strings.HasPrefix(res.Text, "on from the next step: shop.buy") {
+				t.Errorf("text does not start with what was turned on: %q", res.Text)
+			}
+		})
+	}
 }

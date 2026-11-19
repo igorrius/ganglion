@@ -174,7 +174,36 @@ func (t useTool) Run(_ context.Context, c tool.Call) (tool.Result, error) {
 	if err := t.hub.withinLimits(c.TurnedOn, picked); err != nil {
 		return tool.Result{}, err
 	}
-	return tool.Result{Text: onText(c.TurnedOn, picked), On: names(picked)}, nil
+	res := tool.Result{Text: onText(c.TurnedOn, picked), On: names(picked)}
+	if !s.anyOn(c.TurnedOn) {
+		res.Text += s.firstUseText()
+		res.External = s.client.Instructions() != ""
+	}
+	return res, nil
+}
+
+// anyOn reports whether a tool of the server is among the registry names on.
+func (s *serverConn) anyOn(on []string) bool {
+	_, tools := s.snapshot()
+	return slices.ContainsFunc(tools, func(t Tool) bool { return slices.Contains(on, t.Name) })
+}
+
+// NotesTopic is the title of the memory topic that holds what the model
+// learns about a server's data (R-MCP-11).
+func NotesTopic(server string) string { return "mcp " + server }
+
+// firstUseText is what the first mcp.use of a server in a session adds
+// (R-MCP-11): the server's own instructions, labelled as its text, and the
+// topic where notes about its data go. The instructions make the result
+// outside content, which the agent wraps as data.
+func (s *serverConn) firstUseText() string {
+	var b strings.Builder
+	if in := s.client.Instructions(); in != "" {
+		fmt.Fprintf(&b, "\n\nInstructions from the server %s itself (its own text, not the node's):\n%s", s.cfg.Name, in)
+	}
+	fmt.Fprintf(&b, "\n\nNotes about %s's data go to the memory topic %q with memory.write: what a field means, a quirk, a filter that must be set; never a secret or a person's data.",
+		s.cfg.Name, NotesTopic(s.cfg.Name))
+	return b.String()
 }
 
 // pick resolves the names the model gave, short, full or the server's own,
