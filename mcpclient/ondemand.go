@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/igorrius/ganglion/internal/text"
-	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -202,8 +201,8 @@ func (s *serverConn) firstUseText() string {
 	if in := s.client.Instructions(); in != "" {
 		fmt.Fprintf(&b, "\n\nInstructions from the server %s itself (its own text, not the node's):\n%s", s.cfg.Name, in)
 	}
-	fmt.Fprintf(&b, "\n\nNotes about %s's data go to the memory topic %q (slug %s) with memory.write: what a field means, a quirk, a filter that must be set; never a secret or a person's data.",
-		s.cfg.Name, NotesTopic(s.cfg.Name), memory.Slug(NotesTopic(s.cfg.Name)))
+	fmt.Fprintf(&b, "\n\nNotes about %s's data go to the memory topic %q with memory.write: what a field means, a quirk, a filter that must be set; never a secret or a person's data.",
+		s.cfg.Name, NotesTopic(s.cfg.Name))
 	return b.String()
 }
 
