@@ -244,7 +244,7 @@ func TestMcpUseDeliversInstructionsAndNamesTheNotesOnce(t *testing.T) {
 		mcpclienttest.Tool("buy", "Buy.", "", false),
 	}
 	policies := map[string]tool.Policy{"search": tool.PolicyAuto, "buy": tool.PolicyConfirm}
-	const topic = `memory topic "mcp shop" with memory.write`
+	const topic = `Keep notes about shop in the memory topic "mcp shop"`
 	tests := []struct {
 		name         string
 		instructions any
