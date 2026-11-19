@@ -104,6 +104,7 @@ considered, how they compare, the decision and its consequences. See
 | [0096](0096-host-commands-run-the-active-release.md) | Run a host command as the node's active release | Accepted | 2026-11-18 |
 | [0097](0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md) | Connect remote MCP servers from the chat with an own client and `x/oauth2`, in P1 | Accepted | 2026-11-18 |
 | [0098](0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md) | Hand a code or a secret over from the chat through a pinned static page and a pasted line | Accepted | 2026-11-18 |
+| [0099](0099-the-cli-bridge-announces-tools-turned-on-during-a-run.md) | The CLI bridge announces tools turned on during a run | Accepted | 2026-11-19 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

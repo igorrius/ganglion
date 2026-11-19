@@ -128,19 +128,53 @@ func TestOnDemandToolNotCallableInTheSameStep(t *testing.T) {
 	}
 }
 
-// Abuse: a CLI provider runs its whole tool loop in one step; a name it was
-// not offered at the start of the run reaches the agent all the same, and
-// a tool mcp.use turned on during the run stays refused until the next.
-func TestOnDemandToolNotCallableInTheSameCLIRun(t *testing.T) {
+// A CLI provider runs its whole tool loop in one step, and its model takes
+// a step after every call: a tool mcp.use turned on reaches the run's tool
+// list, and the CLI's next step calls it, in the same turn (R-MCP-4a,
+// #284). Before mcp.use the CLI does not have it.
+func TestOnDemandToolCallableInTheSameCLIRun(t *testing.T) {
 	search := &onDemandTool{fakeTool{name: "shop.search", result: tool.Result{Text: "found"}}}
 	use := newUse()
 	e := newEnv(t, Config{}, registry(t, use, search))
-	e.smart.push(viaMCP("mcp_use", "shop.search"))
+	e.smart.push(likeCLI("shop_search", "mcp_use", "shop_search"))
+	out := e.turn(t, message("telegram:user:42", "Igor", "go"))
+	if len(use.calls) != 1 || len(search.calls) != 1 {
+		t.Fatalf("mcp.use ran %d times and shop.search %d, want 1 and 1", len(use.calls), len(search.calls))
+	}
+	if !slices.Equal(search.calls[0].On, []string{"shop.search"}) {
+		t.Fatalf("shop.search ran with On = %v", search.calls[0].On)
+	}
+	got := results(t, reply(t, out))
+	if !got[0].IsError || got[2].IsError || got[2].Content[0].Text != "found" {
+		t.Fatalf("results %+v", got)
+	}
+	if n := len(e.smart.requests()); n != 1 {
+		t.Fatalf("%d model calls, want the one CLI run", n)
+	}
+	var ran []string
+	for _, m := range e.state(t).Messages {
+		for _, c := range m.ToolCalls {
+			ran = append(ran, c.Name)
+		}
+	}
+	if !slices.Equal(ran, []string{"mcp.use", "shop.search"}) {
+		t.Fatalf("the history holds the calls %v", ran)
+	}
+}
+
+// Abuse: a name the CLI run was not offered reaches the agent all the
+// same, and an on-demand tool no call turned on stays refused.
+func TestOnDemandToolNotOnRefusedInACLIRun(t *testing.T) {
+	search := &onDemandTool{fakeTool{name: "shop.search", result: tool.Result{Text: "found"}}}
+	other := &onDemandTool{fakeTool{name: "shop.buy", result: tool.Result{Text: "bought"}}}
+	use := newUse()
+	e := newEnv(t, Config{}, registry(t, use, search, other))
+	e.smart.push(viaMCP("shop_search", "mcp_use", "shop_buy"))
 	e.turn(t, message("telegram:user:42", "Igor", "go"))
 	if len(use.calls) != 1 {
 		t.Fatalf("mcp.use ran %d times over the bridge, want 1", len(use.calls))
 	}
-	if len(search.calls) != 0 {
-		t.Fatalf("a tool turned on in this CLI run ran in it: %+v", search.calls)
+	if len(search.calls) != 0 || len(other.calls) != 0 {
+		t.Fatalf("a tool that was not on ran: %+v %+v", search.calls, other.calls)
 	}
 }

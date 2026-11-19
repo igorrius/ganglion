@@ -30,42 +30,145 @@ type mcpResult struct {
 }
 
 // viaMCP is a model step that behaves like the claude CLI with the
-// bridge: it serves the request's tools with an mcp.Server and calls the
-// named tools (MCP names) one after another over JSON-RPC, then answers
-// with the results it read, one JSON line each.
+// bridge: it serves the request's tools with an mcp.Server, as
+// provider/claudecli does, and calls the named tools (MCP names) one after
+// another over JSON-RPC, offered or not, then answers with the results it
+// read, one JSON line each.
 func viaMCP(names ...string) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return bridged(func(c *mcpConn) ([]string, error) {
+		var lines []string
+		for _, n := range names {
+			r, err := c.call(n)
+			if err != nil {
+				return nil, err
+			}
+			lines = append(lines, r)
+		}
+		return lines, nil
+	})
+}
+
+// likeCLI is viaMCP as the real claude CLI behaves: it lists the tools,
+// calls only a name on its list (anything else is "No such tool
+// available", as the CLI answers its model) and lists them again on
+// notifications/tools/list_changed.
+func likeCLI(names ...string) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return bridged(func(c *mcpConn) ([]string, error) {
+		var lines []string
+		for _, n := range names {
+			if c.changed || c.listed == nil {
+				if err := c.list(); err != nil {
+					return nil, err
+				}
+			}
+			if !slices.Contains(c.listed, n) {
+				lines = append(lines, `{"content":[{"type":"text","text":"No such tool available: `+n+`"}],"isError":true}`)
+				continue
+			}
+			r, err := c.call(n)
+			if err != nil {
+				return nil, err
+			}
+			lines = append(lines, r)
+		}
+		return lines, nil
+	})
+}
+
+// bridged serves the request's tools over a pipe, as provider/claudecli
+// does, and answers with the lines script returns.
+func bridged(script func(c *mcpConn) ([]string, error)) func(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
 	return func(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
 		if req.Exec == nil {
 			return provider.ChatResponse{}, fmt.Errorf("tools without Exec")
+		}
+		var opts []mcp.Option
+		if req.ToolsNow != nil {
+			opts = append(opts, mcp.WithUpdates(req.ToolsNow))
 		}
 		inR, inW := io.Pipe()
 		outR, outW := io.Pipe()
 		done := make(chan error, 1)
 		go func() {
-			done <- mcp.NewServer("ganglion", "test", req.Tools, req.Exec).Serve(ctx, struct {
+			done <- mcp.NewServer("ganglion", "test", req.Tools, req.Exec, opts...).Serve(ctx, struct {
 				io.Reader
 				io.Writer
 			}{inR, outW})
 			_ = outW.Close()
 		}()
-		br := bufio.NewReader(outR)
-		var lines []string
-		for i, n := range names {
-			_, _ = fmt.Fprintf(inW, `{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":%q,"arguments":{}}}`+"\n", i, n)
-			line, err := br.ReadString('\n')
-			if err != nil {
-				return provider.ChatResponse{}, err
-			}
-			var r struct{ Result json.RawMessage }
-			_ = json.Unmarshal([]byte(line), &r)
-			lines = append(lines, string(r.Result))
-		}
+		c := &mcpConn{w: inW, r: bufio.NewReader(outR)}
+		lines, err := script(c)
 		_ = inW.Close()
-		if err := <-done; err != nil {
+		if derr := <-done; err == nil {
+			err = derr
+		}
+		if err != nil {
 			return provider.ChatResponse{}, err
 		}
 		return answerText(strings.Join(lines, "\n")), nil
 	}
+}
+
+// mcpConn is the client end of a test bridge: one request at a time.
+type mcpConn struct {
+	w       io.Writer
+	r       *bufio.Reader
+	id      int
+	listed  []string // the MCP names of the last tools/list
+	changed bool     // a list_changed came since that list
+}
+
+// request sends method and returns its result, noting the notifications
+// that come ahead of it.
+func (c *mcpConn) request(method, params string) (json.RawMessage, error) {
+	c.id++
+	if _, err := fmt.Fprintf(c.w, `{"jsonrpc":"2.0","id":%d,"method":%q,"params":%s}`+"\n", c.id, method, params); err != nil {
+		return nil, err
+	}
+	for {
+		line, err := c.r.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		var m struct {
+			ID     *int            `json:"id"`
+			Method string          `json:"method"`
+			Result json.RawMessage `json:"result"`
+		}
+		_ = json.Unmarshal([]byte(line), &m)
+		if m.ID == nil {
+			c.changed = c.changed || m.Method == "notifications/tools/list_changed"
+			continue
+		}
+		return m.Result, nil
+	}
+}
+
+// call calls the tool name and returns its result.
+func (c *mcpConn) call(name string) (string, error) {
+	r, err := c.request("tools/call", fmt.Sprintf(`{"name":%q,"arguments":{}}`, name))
+	return string(r), err
+}
+
+// list takes the tool list.
+func (c *mcpConn) list() error {
+	r, err := c.request("tools/list", "{}")
+	if err != nil {
+		return err
+	}
+	var l struct {
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(r, &l); err != nil {
+		return err
+	}
+	c.listed, c.changed = []string{}, false
+	for _, tl := range l.Tools {
+		c.listed = append(c.listed, tl.Name)
+	}
+	return nil
 }
 
 func results(t *testing.T, answer string) []mcpResult {
