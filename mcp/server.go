@@ -1,6 +1,7 @@
 // Package mcp is a minimal Model Context Protocol server: JSON-RPC 2.0,
 // one message per line, over any io.ReadWriter (ADR-0037). It serves a
-// fixed set of tools and runs their calls through a provider.Exec, so
+// set of tools, fixed or updated after each call (WithUpdates), and runs
+// their calls through a provider.Exec, so
 // the caller's policies, taint, journal and call keys apply (R-PRV-6).
 // The relay that carries it between a CLI's stdio and a Unix socket
 // lives here too (ADR-0036).
@@ -50,33 +51,77 @@ type Option func(*Server)
 // WithInstructions sets what the server tells its client in initialize.
 func WithInstructions(text string) Option { return func(s *Server) { s.instructions = text } }
 
+// WithUpdates makes the offered list follow list (R-MCP-4a): the server
+// declares listChanged, asks list again after every call and, when the
+// answer differs from what it offers, offers the new list and sends
+// notifications/tools/list_changed ahead of the call's answer, so the
+// client lists the tools again before its model's next step.
+func WithUpdates(list provider.ToolsFunc) Option {
+	return func(s *Server) {
+		s.listChanged = true
+		s.refresh = func() bool { return s.offer(list()) }
+	}
+}
+
 // Server serves tools over MCP.
 type Server struct {
 	name, version string
-	instructions  string            // "" sends none
-	tools         []provider.Tool   // in MCP names
-	byMCP         map[string]string // MCP name → the agent's name
+	instructions  string // "" sends none
 	exec          provider.Exec
+	listChanged   bool        // WithUpdates
+	refresh       func() bool // takes the list anew; true when it changed
+
+	mu    sync.Mutex        // guards tools and byMCP
+	tools []provider.Tool   // in MCP names
+	byMCP map[string]string // MCP name → the agent's name
 }
 
 // NewServer returns a server named name that offers tools and runs their
 // calls with exec. Tool names are offered with "." mapped to "_"; of two
 // tools whose MCP names collide, the first is offered.
 func NewServer(name, version string, tools []provider.Tool, exec provider.Exec, opts ...Option) *Server {
-	s := &Server{name: name, version: version, byMCP: make(map[string]string, len(tools)), exec: exec}
+	s := &Server{name: name, version: version, exec: exec, refresh: func() bool { return false }}
 	for _, o := range opts {
 		o(s)
 	}
+	s.offer(tools)
+	return s
+}
+
+// offer makes tools the offered list, in MCP names, and reports whether
+// it differs from the one before.
+func (s *Server) offer(tools []provider.Tool) bool {
+	byMCP := make(map[string]string, len(tools))
+	var named []provider.Tool
 	for _, t := range tools {
 		mcpName := ToolName(t.Name)
-		if _, dup := s.byMCP[mcpName]; dup {
+		if _, dup := byMCP[mcpName]; dup {
 			continue
 		}
-		s.byMCP[mcpName] = t.Name
+		byMCP[mcpName] = t.Name
 		t.Name = mcpName
-		s.tools = append(s.tools, t)
+		named = append(named, t)
 	}
-	return s
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.byMCP != nil && slices.EqualFunc(s.tools, named, sameTool) {
+		return false
+	}
+	s.tools, s.byMCP = named, byMCP
+	return true
+}
+
+// sameTool reports whether a and b are the same definition.
+func sameTool(a, b provider.Tool) bool {
+	return a.Name == b.Name && a.Description == b.Description && bytes.Equal(a.InputSchema, b.InputSchema)
+}
+
+// agentName is the agent's name of the offered tool mcpName.
+func (s *Server) agentName(mcpName string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	name, ok := s.byMCP[mcpName]
+	return name, ok
 }
 
 type request struct {
@@ -89,6 +134,20 @@ type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
+
+// notification is a message that wants no answer.
+type notification struct {
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+}
+
+// The JSON-RPC version, the method of a tool call, and the notification
+// that tells the client the tool list changed.
+const (
+	jsonrpcVersion    = "2.0"
+	methodCall        = "tools/call"
+	listChangedMethod = "notifications/tools/list_changed"
+)
 
 type response struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -130,7 +189,7 @@ func (s *Server) Serve(ctx context.Context, rw io.ReadWriter) error {
 		case perr != nil:
 			w.send(response{ID: req.ID, Error: perr})
 		case !ok: // a notification, or a response to nothing we asked
-		case req.Method == "tools/call":
+		case req.Method == methodCall:
 			slots <- struct{}{}
 			wg.Go(func() {
 				defer func() { <-slots }()
@@ -163,7 +222,8 @@ func parse(line []byte) (request, bool, *rpcError) {
 	return req, true, nil
 }
 
-// answer runs req's method and sends its response.
+// answer runs req's method and sends its response. After a call it
+// takes the tool list anew, and a changed list is announced first.
 func (s *Server) answer(ctx context.Context, w *replies, req request) {
 	m, ok := s.methods()[req.Method]
 	if !ok {
@@ -171,6 +231,9 @@ func (s *Server) answer(ctx context.Context, w *replies, req request) {
 		return
 	}
 	result, err := m(ctx, req.Params)
+	if req.Method == methodCall && s.refresh() {
+		w.notify(notification{Method: listChangedMethod})
+	}
 	w.send(response{ID: req.ID, Result: result, Error: err})
 }
 
@@ -179,7 +242,7 @@ func (s *Server) methods() map[string]method {
 		"initialize": s.initialize,
 		"ping":       func(context.Context, json.RawMessage) (any, *rpcError) { return struct{}{}, nil },
 		"tools/list": s.list,
-		"tools/call": s.call,
+		methodCall:   s.call,
 	}
 }
 
@@ -196,7 +259,7 @@ func (s *Server) initialize(_ context.Context, params json.RawMessage) (any, *rp
 	}
 	result := map[string]any{
 		"protocolVersion": version,
-		"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
+		"capabilities":    map[string]any{"tools": map[string]any{"listChanged": s.listChanged}},
 		"serverInfo":      map[string]string{"name": s.name, "version": s.version},
 	}
 	if s.instructions != "" {
@@ -206,7 +269,9 @@ func (s *Server) initialize(_ context.Context, params json.RawMessage) (any, *rp
 }
 
 func (s *Server) list(context.Context, json.RawMessage) (any, *rpcError) {
+	s.mu.Lock()
 	tools := s.tools
+	s.mu.Unlock()
 	if tools == nil {
 		tools = []provider.Tool{}
 	}
@@ -223,7 +288,7 @@ type callResult struct {
 	IsError bool      `json:"isError"`
 }
 
-// call runs a tool. A name that is not offered goes to exec as it came:
+// call runs a tool. A name that is not offered now goes to exec as it came:
 // the core's policy refuses it and journals it, and a scheduled task's
 // call outside its grant alerts the admins as on the API path. Only a
 // call without a name is a protocol error. The tool's own error, and
@@ -238,7 +303,7 @@ func (s *Server) call(ctx context.Context, params json.RawMessage) (any, *rpcErr
 	if err := json.Unmarshal(params, &p); err != nil || p.Name == "" {
 		return nil, &rpcError{Code: codeInvalidParams, Message: "invalid tools/call params"}
 	}
-	name, ok := s.byMCP[p.Name]
+	name, ok := s.agentName(p.Name)
 	if !ok {
 		name = p.Name
 	}
@@ -262,11 +327,23 @@ type replies struct {
 }
 
 func (r *replies) send(resp response) {
-	resp.JSONRPC = "2.0"
+	resp.JSONRPC = jsonrpcVersion
 	b, err := json.Marshal(resp)
 	if err != nil { // a result is built from strings and raw JSON that was valid
-		b, _ = json.Marshal(response{JSONRPC: "2.0", ID: resp.ID, Error: &rpcError{Code: codeInvalidRequest, Message: "unencodable result"}})
+		b, _ = json.Marshal(response{JSONRPC: jsonrpcVersion, ID: resp.ID, Error: &rpcError{Code: codeInvalidRequest, Message: "unencodable result"}})
 	}
+	r.line(b)
+}
+
+// notify sends a notification.
+func (r *replies) notify(n notification) {
+	n.JSONRPC = jsonrpcVersion
+	b, _ := json.Marshal(n) // strings only
+	r.line(b)
+}
+
+// line writes b and a line break, unless a write failed before.
+func (r *replies) line(b []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.err == nil {

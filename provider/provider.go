@@ -64,6 +64,11 @@ type Usage struct {
 // call, which the model reads too.
 type Exec func(ctx context.Context, call ToolCall) (string, error)
 
+// ToolsFunc is the tool list a turn offers now. A call can turn tools on
+// (R-MCP-4a), so a provider that runs its own tool loop asks again after
+// each call.
+type ToolsFunc func() []Tool
+
 // ChatRequest asks a model for the next step of a turn.
 type ChatRequest struct {
 	Model     string
@@ -76,6 +81,11 @@ type ChatRequest struct {
 	// same path as an API model's tool_calls, and is safe for concurrent
 	// use.
 	Exec Exec
+	// ToolsNow is Tools as it stands after the calls run so far, for a
+	// provider that runs its own tool loop: it starts as Tools and grows
+	// when a call turns tools on. The agent sets it with Exec; nil keeps
+	// Tools for the whole call. It is safe for concurrent use.
+	ToolsNow ToolsFunc
 }
 
 // ChatResponse is the model's reply: text, tool calls, or both.

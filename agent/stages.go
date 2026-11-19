@@ -232,13 +232,16 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 		t.on = slices.Clone(t.state.Tools)
 		tools := slices.Concat(base, a.onDemandSpecs(t))
 		task.Tools = len(tools) > 0
-		var exec provider.Exec // a CLI provider runs the calls itself; no tools, nothing to run
+		var ( // a CLI provider runs the calls itself; no tools, nothing to run
+			exec provider.Exec
+			now  provider.ToolsFunc
+		)
 		if len(tools) > 0 {
-			exec = a.exec(t)
+			exec, now = a.exec(t), a.toolsNow(t, base)
 		}
 		msgs, added = a.join(turnCtx, t, msgs, added, a.waiting(turnCtx, t))
 		t.record.Steps++
-		resp, got := a.runCall(turnCtx, t, task, provider.ChatRequest{Messages: a.annotate(turnCtx, t, msgs), Tools: tools, Exec: exec})
+		resp, got := a.runCall(turnCtx, t, task, provider.ChatRequest{Messages: a.annotate(turnCtx, t, msgs), Tools: tools, Exec: exec, ToolsNow: now})
 		if ctx.Err() != nil {
 			return nil, "", got, ctx.Err()
 		}

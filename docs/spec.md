@@ -1724,7 +1724,11 @@ started as processes are level 3 of 9.8 and stay in P3.
     which turns tools on for the session. Both send nothing off the node
     and are `LocalSafe`.
   - A tool turned on joins the session's tool list from the next step,
-    with its full definition, and stays until the session ends; at most
+    with its full definition, and stays until the session ends. With the
+    `claude` CLI, whose run takes a step after every call, the next step
+    is inside the same run: the bridge serves the new list and announces
+    it with `notifications/tools/list_changed` (#284,
+    [ADR-0099](adr/0099-the-cli-bridge-announces-tools-turned-on-during-a-run.md)). At most
     16 tools and 48 KB of definitions are on at once, and turning on more
     is refused with the limit.
   - The approved list is the admin's: a tool that is off by policy

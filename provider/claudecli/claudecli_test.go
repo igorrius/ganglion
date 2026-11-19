@@ -79,7 +79,7 @@ func fakeClaude(mode string) int {
 	case "child":
 		time.Sleep(30 * time.Second)
 		return 0
-	case "mcp", "mcp-crash", "mcp-hang":
+	case "mcp", "mcp-crash", "mcp-hang", "mcp-ondemand":
 		return fakeMCP(mode)
 	case "toolhold": // a run with tools holds its slot; one without answers at once
 		if slices.Contains(os.Args[1:], "--mcp-config") {
@@ -399,6 +399,52 @@ func TestLiveClaude(t *testing.T) {
 		t.Fatalf("live: %+v, %v", resp, err)
 	}
 	t.Logf("live answer %q, usage %+v", resp.Message.Content, resp.Usage)
+}
+
+// The real claude lists the tools again on list_changed and calls one a
+// call turned on, in the same run (#284). GANGLION_LIVE_RELAY names a
+// built ganglion binary, the relay.
+func TestLiveClaudeToolTurnedOn(t *testing.T) {
+	relay := os.Getenv("GANGLION_LIVE_RELAY")
+	if os.Getenv("GANGLION_LIVE_CLAUDE") == "" || relay == "" {
+		t.Skip("set GANGLION_LIVE_CLAUDE=1 and GANGLION_LIVE_RELAY=<ganglion binary> to call the real claude")
+	}
+	schema := json.RawMessage(`{"type":"object","properties":{}}`)
+	on := provider.Tool{Name: "tools.on", Description: "Turns on more tools, among them secret.word.", InputSchema: schema}
+	word := provider.Tool{Name: "secret.word", Description: "Returns the secret word.", InputSchema: schema}
+	var (
+		mu     sync.Mutex
+		turned bool
+		ran    []string
+	)
+	exec := func(_ context.Context, c provider.ToolCall) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		ran = append(ran, c.Name)
+		switch {
+		case c.Name == "tools.on":
+			turned = true
+			return "secret.word is on now", nil
+		case c.Name == "secret.word" && turned:
+			return "PELICAN-42", nil
+		}
+		return "", errors.New("no such tool")
+	}
+	now := func() []provider.Tool {
+		mu.Lock()
+		defer mu.Unlock()
+		if turned {
+			return []provider.Tool{on, word}
+		}
+		return []provider.Tool{on}
+	}
+	resp, err := New("claude", WithRelay(relay)).Chat(context.Background(), provider.ChatRequest{Model: "haiku",
+		Messages: []provider.Message{{Role: "system", Content: "Use the tools."}, {Role: "user", Content: "Turn the tools on, then tell me the secret word."}},
+		Tools:    []provider.Tool{on}, Exec: exec, ToolsNow: now})
+	if err != nil || !strings.Contains(resp.Message.Content, "PELICAN-42") {
+		t.Fatalf("live: %+v, %v (ran %v)", resp, err, ran)
+	}
+	t.Logf("live answer %q, ran %v", resp.Message.Content, ran)
 }
 
 func TestWorkDirIsMadePrivateWhenFirstUsed(t *testing.T) {

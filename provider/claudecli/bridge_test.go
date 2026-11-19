@@ -81,26 +81,18 @@ func fakeMCP(mode string) int {
 	r := bufio.NewReader(conn)
 	_, _ = fmt.Fprintf(conn, "%s\n", token)
 	tool := os.Getenv("FAKE_CLAUDE_TOOL")
-	for i, req := range []string{
+	reqs := []string{
 		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`,
 		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"` + tool + `","arguments":{"x":1}}}`,
-	} {
-		if _, err := io.WriteString(conn, req+"\n"); err != nil {
-			s.Closed = true
-			break
-		}
-		if i == 1 {
-			continue
-		}
-		line, err := r.ReadString('\n')
-		if err != nil {
-			s.Closed = true
-			break
-		}
-		s.Replies = append(s.Replies, strings.TrimSpace(line))
 	}
+	if mode == "mcp-ondemand" { // as the CLI does after list_changed: list again, call the new tool
+		reqs = append(reqs,
+			`{"jsonrpc":"2.0","id":4,"method":"tools/list"}`,
+			`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"shop_search","arguments":{}}}`)
+	}
+	s.Closed = !converse(conn, r, reqs, &s.Replies)
 	switch mode {
 	case "mcp-crash":
 		return 1
@@ -110,6 +102,35 @@ func fakeMCP(mode string) int {
 	}
 	fmt.Print(`{"type":"result","is_error":false,"result":"done with tools","usage":{"input_tokens":1,"output_tokens":1}}`)
 	return 0
+}
+
+// converse sends reqs one at a time and, for each with an id, keeps
+// every line up to its answer, notifications included. It reports false
+// when the socket closed early.
+func converse(conn net.Conn, r *bufio.Reader, reqs []string, replies *[]string) bool {
+	for _, req := range reqs {
+		if _, err := io.WriteString(conn, req+"\n"); err != nil {
+			return false
+		}
+		var m struct {
+			ID json.RawMessage `json:"id"`
+		}
+		_ = json.Unmarshal([]byte(req), &m)
+		for len(m.ID) > 0 {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return false
+			}
+			*replies = append(*replies, strings.TrimSpace(line))
+			var got struct {
+				ID json.RawMessage `json:"id"`
+			}
+			if json.Unmarshal([]byte(line), &got) == nil && string(got.ID) == string(m.ID) {
+				break
+			}
+		}
+	}
+	return true
 }
 
 func readSeen(t *testing.T, rec string) seen {
@@ -190,6 +211,47 @@ func TestToolsOverTheBridge(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Dir(s.Config)); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("run dir left behind: %v", err)
+	}
+}
+
+// A tool a call turns on reaches the run: the bridge declares listChanged,
+// sends list_changed ahead of the call's answer, lists the new tool and
+// runs it, as the real claude CLI does with them (R-MCP-4a, #284).
+func TestToolTurnedOnReachesTheRun(t *testing.T) {
+	c, rec := toolsFake(t, "mcp-ondemand", t.TempDir())
+	x := &execRecorder{}
+	search := provider.Tool{Name: "shop.search", Description: "Search.", InputSchema: json.RawMessage(`{"type":"object"}`)}
+	now := func() []provider.Tool {
+		x.mu.Lock()
+		defer x.mu.Unlock()
+		if len(x.calls) > 0 { // the first call turns shop.search on
+			return append(slices.Clone(tools), search)
+		}
+		return tools
+	}
+	resp, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history, Tools: tools, Exec: x.exec, ToolsNow: now})
+	if err != nil || resp.Message.Content != "done with tools" {
+		t.Fatalf("Chat: %+v, %v", resp, err)
+	}
+	r := readSeen(t, rec).Replies
+	if len(r) != 6 || !strings.Contains(r[0], `"listChanged":true`) || !strings.Contains(r[2], `"method":"notifications/tools/list_changed"`) ||
+		!strings.Contains(r[3], `"id":3`) || !strings.Contains(r[4], `"shop_search"`) || !strings.Contains(r[5], `"text":"2 jobs"`) {
+		t.Fatalf("replies %q", r)
+	}
+	if len(x.calls) != 2 || x.calls[0].Name != "schedule.list" || x.calls[1].Name != "shop.search" {
+		t.Fatalf("exec got %+v", x.calls)
+	}
+}
+
+// Without ToolsNow the run's list is fixed and says so.
+func TestFixedToolsDeclareNoListChanged(t *testing.T) {
+	c, rec := toolsFake(t, "mcp", t.TempDir())
+	x := &execRecorder{}
+	if _, err := c.Chat(context.Background(), provider.ChatRequest{Model: "haiku", Messages: history, Tools: tools, Exec: x.exec}); err != nil {
+		t.Fatal(err)
+	}
+	if r := readSeen(t, rec).Replies; len(r) != 3 || !strings.Contains(r[0], `"listChanged":false`) {
+		t.Fatalf("replies %q", r)
 	}
 }
 

@@ -168,7 +168,8 @@ type result struct {
 }
 
 // Chat implements provider.Provider. A request with tools serves them
-// to the run over the MCP bridge and runs each call through req.Exec;
+// to the run over the MCP bridge and runs each call through req.Exec,
+// following req.ToolsNow after each call (R-MCP-4a);
 // the run dir is removed whatever way the run ends.
 func (c *Client) Chat(ctx context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
 	if len(req.Tools) > 0 && req.Exec == nil {
@@ -289,7 +290,13 @@ func (c *Client) bridge(ctx context.Context, dir string, req provider.ChatReques
 		}
 		relay = exe
 	}
-	server := mcp.NewServer(serverName, buildinfo.Read().Version, req.Tools, req.Exec)
+	var opts []mcp.Option
+	if req.ToolsNow != nil { // a request without it keeps Tools for the run
+		// Tools a call turns on reach the CLI within the run: it lists
+		// them again on list_changed, and --allowedTools covers them.
+		opts = append(opts, mcp.WithUpdates(req.ToolsNow))
+	}
+	server := mcp.NewServer(serverName, buildinfo.Read().Version, req.Tools, req.Exec, opts...)
 	b, err := openBridge(ctx, dir, relay, authTimeout, server)
 	if err != nil {
 		return nil, c.fail(provider.KindUnavailable, "mcp bridge: "+err.Error())

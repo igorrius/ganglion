@@ -29,12 +29,12 @@ type session struct {
 	done chan error
 }
 
-func serve(t *testing.T, exec provider.Exec) *session {
+func serve(t *testing.T, exec provider.Exec, opts ...Option) *session {
 	t.Helper()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	s := &session{in: inW, out: bufio.NewReader(outR), done: make(chan error, 1)}
-	srv := NewServer("ganglion", "1.2.3", tools, exec)
+	srv := NewServer("ganglion", "1.2.3", tools, exec, opts...)
 	go func() {
 		err := srv.Serve(context.Background(), struct {
 			io.Reader
@@ -66,6 +66,7 @@ func (s *session) send(t *testing.T, line string) {
 type reply struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
+	Method  string          `json:"method"`
 	Result  json.RawMessage `json:"result"`
 	Error   *struct {
 		Code    int    `json:"code"`
@@ -367,5 +368,99 @@ func TestServerWithoutInstructions(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "instructions") {
 		t.Fatalf("initialize: %s", out.String())
+	}
+}
+
+// listChanged returns what initialize says about the tool list.
+func listChanged(t *testing.T, s *session) bool {
+	t.Helper()
+	s.send(t, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`)
+	var init struct {
+		Capabilities struct {
+			Tools struct {
+				ListChanged bool `json:"listChanged"`
+			} `json:"tools"`
+		} `json:"capabilities"`
+	}
+	if err := json.Unmarshal(s.recv(t).Result, &init); err != nil {
+		t.Fatal(err)
+	}
+	return init.Capabilities.Tools.ListChanged
+}
+
+// listed is the MCP names tools/list returns.
+func listed(t *testing.T, s *session) []string {
+	t.Helper()
+	s.send(t, `{"jsonrpc":"2.0","id":"l","method":"tools/list"}`)
+	var list struct {
+		Tools []provider.Tool `json:"tools"`
+	}
+	if err := json.Unmarshal(s.recv(t).Result, &list); err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, tl := range list.Tools {
+		out = append(out, tl.Name)
+	}
+	return out
+}
+
+// A fixed list says so in initialize.
+func TestServerFixedListDoesNotChange(t *testing.T) {
+	if listChanged(t, serve(t, noExec)) {
+		t.Fatal("a fixed list declares listChanged")
+	}
+}
+
+// With updates, a call that changes the list is answered after a
+// list_changed, the new list is served, and its new names map back to
+// the agent's; a call that changes nothing sends no notification
+// (R-MCP-4a, #284).
+func TestServerUpdatesTheListAfterACall(t *testing.T) {
+	var mu sync.Mutex
+	now := slices.Clone(tools)
+	extra := provider.Tool{Name: "shop.search", Description: "Search.", InputSchema: json.RawMessage(`{"type":"object"}`)}
+	var ran []string
+	exec := func(_ context.Context, c provider.ToolCall) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		ran = append(ran, c.Name)
+		if c.Name == "schedule.list" {
+			now = append(slices.Clone(tools), extra)
+		}
+		return "ok", nil
+	}
+	list := func() []provider.Tool {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(now)
+	}
+	s := serve(t, exec, WithUpdates(list))
+	if !listChanged(t, s) {
+		t.Fatal("a list with updates does not declare listChanged")
+	}
+
+	s.send(t, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"schedule_run_now"}}`)
+	if r := s.recv(t); string(r.ID) != "2" {
+		t.Fatalf("an unchanged list sent %+v ahead of the answer", r)
+	}
+	s.send(t, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"schedule_list"}}`)
+	if r := s.recv(t); r.Method != "notifications/tools/list_changed" || r.ID != nil {
+		t.Fatalf("first after the change: %+v, want list_changed", r)
+	}
+	if r := s.recv(t); string(r.ID) != "3" {
+		t.Fatalf("then %+v, want the call's answer", r)
+	}
+	if got := listed(t, s); !slices.Equal(got, []string{"schedule_list", "schedule_run_now", "shop_search"}) {
+		t.Fatalf("tools/list = %v", got)
+	}
+	s.send(t, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"shop_search"}}`)
+	if r := s.recv(t); string(r.ID) != "4" {
+		t.Fatalf("the same list again sent %+v ahead of the answer", r)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(ran, []string{"schedule.run_now", "schedule.list", "shop.search"}) {
+		t.Fatalf("exec got %v", ran)
 	}
 }

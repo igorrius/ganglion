@@ -143,6 +143,21 @@ func (a *Agent) exec(t *turn) provider.Exec {
 	}
 }
 
+// toolsNow is the turn's provider.ToolsFunc for a provider that runs its
+// own tool loop: base, and the on-demand tools the session has on now,
+// under onDemandSpecs' rules. Such a run is one step of the turn, but its
+// model takes a step after every call, so a tool mcp.use turned on is
+// callable from the CLI's next step (R-MCP-4a): handing the list out
+// moves t.on with it, and the registry runs exactly what is offered.
+func (a *Agent) toolsNow(t *turn, base []provider.Tool) provider.ToolsFunc {
+	return func() []provider.Tool {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.on = slices.Clone(t.state.Tools)
+		return slices.Concat(base, a.onDemandSpecs(t))
+	}
+}
+
 // logExec keeps a CLI provider's call and its result for the history, in
 // the API path's form: an assistant message with the call and the tool
 // message that answers it. The call has no id over MCP, so it gets one
