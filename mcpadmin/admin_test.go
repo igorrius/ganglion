@@ -570,6 +570,22 @@ func TestStatusLines(t *testing.T) {
 	}
 }
 
+// A list change announced on the server's own stream right after it opens
+// reaches the hub: the server is switched off until the admin approves the
+// new list (R-MCP-7).
+func TestAListChangeOnTheStreamSwitchesTheServerOff(t *testing.T) {
+	r := newRig(t, false)
+	connected(t, r)
+	<-r.mcp.Opened()
+	r.mcp.Update(func(o *mcpclienttest.Options) {
+		o.Tools = append(serverTools(), mcpclienttest.Tool("refund", "Refund.", "", false))
+	})
+	if n := r.mcp.NotifyListChanged(); n != 1 {
+		t.Fatalf("the notice reached %d streams", n)
+	}
+	r.waitState(t, "shop tools_changed")
+}
+
 func TestCardWithNoServer(t *testing.T) {
 	r := newRig(t, false)
 	text, bs, err := r.a.Card(context.Background(), texts.Speaker{}, admin, conv, time.UTC)
