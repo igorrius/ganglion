@@ -139,9 +139,17 @@ func (a *Admin) disconnectByButton(ctx context.Context, p pending.QuickPress) (p
 		return pending.QuickEdit{}, fmt.Errorf("mcpadmin: disconnect %s: %w", ap.Server, err)
 	}
 	a.in.change(ctx, changeDisconnect)
+	note := "the owner disconnected the MCP server " + ap.Server + " by button with /mcp; its tools are gone"
+	if err := a.d.Notes.Drop(ctx, ap.Server, "mcp-disconnect:"+p.Button.ID); err != nil {
+		// The server is gone already: the press succeeds, and the topic can
+		// be forgotten by hand.
+		a.log.Warn("mcpadmin: the notes of a disconnected server were not dropped", "server", ap.Server, "err", err)
+	} else {
+		note += "; its notes in memory are dropped"
+	}
 	return pending.QuickEdit{
 		Text: p.Speak.Text(texts.MCPDisconnected, texts.Vars{varServer: text.CodeSpan(ap.Server)}),
-		Note: "the owner disconnected the MCP server " + ap.Server + " by button with /mcp; its tools are gone",
+		Note: note,
 	}, nil
 }
 

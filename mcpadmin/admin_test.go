@@ -6,6 +6,7 @@ import (
 	"crypto/hpke"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -131,6 +132,22 @@ type rig struct {
 	reg     *intake.Registry // the real secret requests a header's key rides on
 	notes   *outbox          // the inbox events of closed secret requests, as text
 	logs    *syncBuf
+	notes2  *fakeNotes
+}
+
+// fakeNotes records the topics dropped; a topic that is not there is no
+// error, as with the memory.
+type fakeNotes struct {
+	mu      sync.Mutex
+	dropped []string // "server key"
+	err     error
+}
+
+func (n *fakeNotes) Drop(_ context.Context, server, key string) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.dropped = append(n.dropped, server+" "+key)
+	return n.err
 }
 
 // syncBuf is a log sink safe for the hub's goroutines.
@@ -165,7 +182,7 @@ func serverTools() []json.RawMessage {
 func newRig(t *testing.T, oauth bool) *rig {
 	t.Helper()
 	r := &rig{store: mcpclienttest.NewMemStore(), states: make(chan string, 64), reqs: &requests{},
-		buttons: &buttons{m: map[string]pending.Button{}}, out: &outbox{}, notes: &outbox{}, logs: &syncBuf{}}
+		buttons: &buttons{m: map[string]pending.Button{}}, out: &outbox{}, notes: &outbox{}, logs: &syncBuf{}, notes2: &fakeNotes{}}
 	log := slog.New(slog.NewTextHandler(r.logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	r.mcp = mcpclienttest.NewTLS(t, mcpclienttest.Options{Tools: serverTools(), ListenStream: true})
 	r.url = r.mcp.URL + "/mcp"
@@ -202,8 +219,9 @@ func newRig(t *testing.T, oauth bool) *rig {
 	}
 	asker := intake.NewAsker(r.reg, storeKey, r.out.enqueue, put, lang, private, texts.Shipped(), intake.WithAskerLogger(log))
 	r.a = mcpadmin.New(mcpadmin.Deps{
-		File: confighist.MCPFile{File: settings.MCPFile{Path: r.file}, History: confighist.NoHistory{}},
-		Hub:  r.hub, SignIns: r.oauth, Keys: mcpadmin.StoreKeys{Store: r.store, Asker: asker}, Requests: r.reqs, Buttons: r.buttons,
+		File:  confighist.MCPFile{File: settings.MCPFile{Path: r.file}, History: confighist.NoHistory{}},
+		Notes: r.notes2,
+		Hub:   r.hub, SignIns: r.oauth, Keys: mcpadmin.StoreKeys{Store: r.store, Asker: asker}, Requests: r.reqs, Buttons: r.buttons,
 		Enqueue: r.out.enqueue, Texts: texts.Shipped(), Lang: lang, IsAdmin: isAdmin,
 		Reserved: func() []string { return []string{"web", "battery"} },
 		Locked:   func() bool { return r.locked },
@@ -818,5 +836,54 @@ func TestConnectRefusesABadHeader(t *testing.T) {
 	}
 	if len(r.out.msgs) != 0 {
 		t.Fatalf("a card was sent: %+v", r.out.msgs)
+	}
+}
+
+// Disconnect drops the server's notes once per press; a failed drop does not
+// fail the press, because the server is gone already (R-MCP-11).
+func TestDisconnectDropsTheServersNotes(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		err      error
+		wantNote string
+		wantLog  bool
+	}{
+		{"dropped", nil, "its notes in memory are dropped", false},
+		{"the drop failed", errors.New("disk full"), "", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newRig(t, false)
+			r.notes2.err = tt.err
+			res, err := r.tool(mcpadmin.ToolConnect).Run(context.Background(), call(mcpadmin.ToolConnect, map[string]any{"name": "shop", "url": r.url}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.press(t, res.Out[0], "Connect")
+			_, list, err := r.a.Card(context.Background(), texts.Speaker{}, admin, conv, time.UTC)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e := r.press(t, event.Outgoing{Buttons: list}, "Disconnect")
+			if !strings.Contains(e.Text, "disconnected") {
+				t.Fatalf("the press answered %q", e.Text)
+			}
+			if _, ok := r.line(t); ok {
+				t.Fatal("the line was kept")
+			}
+			if len(r.notes2.dropped) != 1 || !strings.HasPrefix(r.notes2.dropped[0], "shop mcp-disconnect:") {
+				t.Fatalf("dropped = %v", r.notes2.dropped)
+			}
+			if got := strings.Contains(e.Note, "notes in memory are dropped"); got != (tt.wantNote != "") {
+				t.Errorf("note = %q", e.Note)
+			}
+			if got := strings.Contains(r.logs.String(), "were not dropped"); got != tt.wantLog {
+				t.Errorf("logged = %v", got)
+			}
+			// A rerun of the press tries again with the same key.
+			r.press(t, event.Outgoing{Buttons: list}, "Disconnect")
+			if len(r.notes2.dropped) != 2 || r.notes2.dropped[0] != r.notes2.dropped[1] {
+				t.Errorf("rerun dropped = %v", r.notes2.dropped)
+			}
+		})
 	}
 }

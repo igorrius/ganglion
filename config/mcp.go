@@ -1,17 +1,21 @@
 package config
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/igorrius/ganglion/access"
+	"github.com/igorrius/ganglion/gitrepo"
 	"github.com/igorrius/ganglion/intake"
 	"github.com/igorrius/ganglion/internal/buildinfo"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/mcpadmin"
 	"github.com/igorrius/ganglion/mcpclient"
+	"github.com/igorrius/ganglion/memory"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/secrets/vault"
@@ -87,10 +91,15 @@ func MCPSignIns() do.Provider[*mcpclient.OAuth] {
 func MCPAdmin() do.Provider[*mcpadmin.Admin] {
 	return func(i do.Injector) (*mcpadmin.Admin, error) {
 		store := do.MustInvoke[*vault.Vault](i)
+		notes, err := mcpNotes(i)
+		if err != nil {
+			return nil, err
+		}
 		a := mcpadmin.New(mcpadmin.Deps{
 			File:     mcpFile(i),
 			Hub:      do.MustInvoke[*mcpclient.Hub](i),
 			SignIns:  do.MustInvoke[*mcpclient.OAuth](i),
+			Notes:    notes,
 			Keys:     mcpadmin.StoreKeys{Store: mcpadmin.VaultStore{V: store}, Asker: do.MustInvoke[*intake.Asker](i)},
 			Requests: do.MustInvoke[*intake.Registry](i),
 			Buttons:  do.MustInvoke[*pending.Store](i),
@@ -104,6 +113,41 @@ func MCPAdmin() do.Provider[*mcpadmin.Admin] {
 		}, mcpadmin.WithLogger(do.MustInvoke[*slog.Logger](i)), mcpadmin.WithVersion(buildinfo.Read().Version))
 		return a, a.Apply()
 	}
+}
+
+// serverNotes keeps the notes about a server's data in the memory topic
+// titled `mcp <server>` (R-MCP-11).
+type serverNotes struct{ m *memory.Memory }
+
+// Drop implements mcpadmin.Notes: the topic is removed in one commit; a
+// topic that is not there is done.
+func (n serverNotes) Drop(ctx context.Context, server, key string) error {
+	_, err := n.m.Apply(ctx, []memory.Op{{Kind: memory.OpDrop, Topic: mcpclient.NotesTopic(server)}},
+		memory.Source{Turn: "mcp-disconnect", Key: key})
+	if errors.Is(err, memory.ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
+// noNotes is the notes of a node without memory (no git): there is nothing
+// to drop.
+type noNotes struct{}
+
+// Drop implements mcpadmin.Notes.
+func (noNotes) Drop(context.Context, string, string) error { return nil }
+
+// mcpNotes is the node's notes about servers: the memory, or none when the
+// host has no git (ADR-0033).
+func mcpNotes(i do.Injector) (mcpadmin.Notes, error) {
+	m, err := do.Invoke[*memory.Memory](i)
+	if errors.Is(err, gitrepo.ErrNoGit) {
+		return noNotes{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return serverNotes{m}, nil
 }
 
 // reservedNames lists, at the call, the areas of the registry's tools and

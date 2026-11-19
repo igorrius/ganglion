@@ -55,6 +55,14 @@ type SignIns interface {
 	SignedIn(ctx context.Context, server string) (time.Time, error)
 }
 
+// Notes are the notes the model keeps about a server's data, the memory
+// topic of that server (R-MCP-11).
+type Notes interface {
+	// Drop removes the server's topic; a topic that is not there is no
+	// error. A rerun with the same key changes nothing more.
+	Drop(ctx context.Context, server, key string) error
+}
+
 // Requests opens the intake request a sign-in's answer comes back on
 // (intake.Registry).
 type Requests interface {
@@ -90,6 +98,7 @@ type Deps struct {
 	Hub      Hub
 	SignIns  SignIns
 	Keys     Keys
+	Notes    Notes
 	Requests Requests
 	Buttons  ButtonStore
 	Enqueue  EnqueueFunc
