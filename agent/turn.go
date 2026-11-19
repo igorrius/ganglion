@@ -35,6 +35,12 @@ type turn struct {
 	execCalls int
 	// planCalls are the plan calls of the turn; they have their own ceiling.
 	planCalls int
+	// onDemandCalls are the mcp.tools and mcp.use calls of the turn; they have
+	// their own ceiling and spend no step (ADR-0100).
+	onDemandCalls int
+	// freeSteps are the API steps whose every call was an on-demand one; they
+	// do not count against MaxSteps (ADR-0100).
+	freeSteps int
 	// execLog are the CLI provider's calls and results for the history,
 	// in the API path's form (logExec).
 	execLog []provider.Message

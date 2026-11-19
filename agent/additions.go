@@ -107,7 +107,7 @@ func (a *Agent) behind(ctx context.Context, t *turn) []additionMsg {
 // addition (R-LIVE-6). The deadline is the context's, so it is read on the real
 // clock, as the context does.
 func (a *Agent) hasRoom(t *turn) bool {
-	return t.record.Steps < a.cfg.MaxSteps && time.Until(t.deadline) >= minAdditionTime
+	return t.record.Steps-t.freeSteps < a.cfg.MaxSteps && time.Until(t.deadline) >= minAdditionTime
 }
 
 // addition decodes e and reports whether it qualifies: a message of the same

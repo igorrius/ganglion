@@ -15,6 +15,9 @@ func TestDefaultsMatchTheAgent(t *testing.T) {
 	if int(d.Limits.DailyTurns) != a.DailyTurns || int(d.Limits.DailyTokens) != a.DailyTokens || time.Duration(d.SessionIdle) != a.SessionIdle {
 		t.Fatalf("settings defaults %+v differ from agent.DefaultConfig %+v", d, a)
 	}
+	if d.MaxSteps != a.MaxSteps {
+		t.Fatalf("settings max_steps %d differs from agent.DefaultConfig %d", d.MaxSteps, a.MaxSteps)
+	}
 	if time.Duration(d.CallTimeout) != a.CallTimeout || time.Duration(d.TurnTimeout) != a.TurnTimeout {
 		t.Fatalf("settings timeouts %v, %v differ from agent.DefaultConfig %v, %v", d.CallTimeout, d.TurnTimeout, a.CallTimeout, a.TurnTimeout)
 	}

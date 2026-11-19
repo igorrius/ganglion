@@ -216,7 +216,7 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 }
 
 // steps runs model calls and tools until the model answers without tool
-// calls or MaxSteps run out. Before each call it takes the messages waiting
+// calls or MaxSteps run out (a step of only on-demand calls is not counted). Before each call it takes the messages waiting
 // behind the turn (R-LIVE-2). It returns the messages the turn added after
 // the user's and the answer, "" at the step limit. end is the outcome of
 // a step no model answered (OutcomeNoModel, or OutcomeError after a CLI
@@ -225,7 +225,7 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Message) (added []provider.Message, text string, end turns.Outcome, err error) {
 	task := router.TaskReq{Purpose: router.PurposeChat, Turn: true, Privacy: t.state.privacy()}
 	base := a.toolSpecs(t)
-	for t.record.Steps < a.cfg.MaxSteps {
+	for t.record.Steps-t.freeSteps < a.cfg.MaxSteps {
 		// The on-demand part of the list is taken at every step, the rest
 		// once a turn: a tool mcp.use turned on joins the next step's, and
 		// is callable only from then (R-MCP-4a).
@@ -271,7 +271,7 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 			msgs, added = a.join(turnCtx, t, msgs, added, adds)
 			continue
 		}
-		results, run := a.runTools(turnCtx, t, msg.ToolCalls)
+		results, run := a.runStep(turnCtx, t, msg.ToolCalls)
 		if run < len(msg.ToolCalls) && strings.TrimSpace(msg.Content) != "" {
 			a.quote(turnCtx, t, msg.Content)
 		}
@@ -280,6 +280,18 @@ func (a *Agent) steps(ctx, turnCtx context.Context, t *turn, msgs []provider.Mes
 		msgs, added = append(msgs, results...), append(added, results...)
 	}
 	return added, "", turns.OutcomeOK, nil
+}
+
+// runStep runs the calls of one API step. A step whose every call was an
+// on-demand one that ran is bookkeeping, not work: it spends no step
+// (ADR-0100). A refused call did not run, so the ceiling ends such steps.
+func (a *Agent) runStep(ctx context.Context, t *turn, calls []provider.ToolCall) ([]provider.Message, int) {
+	before := t.onDemand()
+	results, run := a.runTools(ctx, t, calls)
+	if run == len(calls) && t.onDemand()-before == len(calls) && allOnDemand(calls) {
+		t.freeSteps++
+	}
+	return results, run
 }
 
 // lastText is the newest text the model wrote, for a turn cut by the step
