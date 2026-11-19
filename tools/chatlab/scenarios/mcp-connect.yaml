@@ -6,7 +6,11 @@ why: >-
   authorization server; the owner pastes the line the intake page shows, which
   the node takes, deletes from the chat and never shows the model; the tools
   card's Connect starts the server; a read-only tool then runs by itself and a
-  tool with an effect asks first; /mcp lists the server as connected.
+  tool with an effect asks first; /mcp lists the server as connected. The
+  owner's one sentence names the tools they need (#282): the model passes
+  them as rules and others, so the tools card already holds the narrowed
+  proposal, the tool they did not name is never offered, and one press of
+  Connect applies it all.
 covers:
   - mcpadmin/**
   - mcpclient/**
@@ -21,15 +25,16 @@ mcp:
   tools:
     - {name: search_products, description: Search the shop's products., read_only: true}
     - {name: add_to_cart, description: Put a product in the cart.}
+    - {name: delete_account, description: Delete the customer's account.}
 script:
-  - {tool: mcp.connect, args: '{"name":"shop","url":"https://shop.example.com/mcp"}'}
+  - {tool: mcp.connect, args: '{"name":"shop","url":"https://shop.example.com/mcp","rules":{"search_products":"auto","add_to_cart":"confirm"},"others":"forbidden"}'}
   - {say: I sent you a card to sign in to the shop.}
   - {tool: mcp.use, args: '{"server":"shop","tools":["search_products","add_to_cart"]}'}
   - {tool: shop.search_products, args: '{}'}
   - {tool: shop.add_to_cart, args: '{}'}
   - {say: It waits for your answer.}
 steps:
-  - say: "Connect the shop's MCP server at https://shop.example.com/mcp"
+  - say: "Connect the shop's MCP server at https://shop.example.com/mcp, I only need to search products and put them in the cart."
   - facts:
       reply: {contains: "Sign in to the MCP server shop"}
   - sign_in: true
@@ -37,6 +42,10 @@ steps:
       deleted: 1
       history: {not_contains: "gauth1"}
       model_saw: {not_contains: "gauth1"}
+  - facts:
+      card: {contains: "Never offered:\n\n• delete_account"}
+  - facts:
+      card: {contains: "Ask you first:\n\n• add_to_cart"}
   - press: "Connect"
   - say: "Find a battery and put it in the cart."
   - facts:
@@ -48,4 +57,4 @@ steps:
       model_saw: {not_contains: "gauth1"}
   - say: "/mcp"
   - facts:
-      card: {contains: "shop: connected, tools: 2"}
+      card: {contains: "shop: connected, tools: 3"}

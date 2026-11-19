@@ -126,9 +126,10 @@ func (f MCPFile) SetServer(name string, s settings.MCPServer, why string) error 
 	return f.record("mcp server "+name+": "+why, func() error { return f.File.SetServer(name, s) })
 }
 
-// SetPolicy writes one tool's policy.
-func (f MCPFile) SetPolicy(server, tool string, p settings.MCPPolicy) error {
-	return f.record("mcp server "+server+": "+tool+" "+string(p), func() error { return f.File.SetPolicy(server, tool, p) })
+// SetPolicies writes the policies of several tools in one change.
+func (f MCPFile) SetPolicies(server string, policies map[string]settings.MCPPolicy) error {
+	return f.record("mcp server "+server+": rules of "+strconv.Itoa(len(policies))+" tools",
+		func() error { return f.File.SetPolicies(server, policies) })
 }
 
 // RemoveServer removes a server's line.

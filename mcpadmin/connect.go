@@ -51,7 +51,9 @@ var coreAreas = []string{"mcp", "secret", "config", "tool", "node"}
 var connectSchema = json.RawMessage(`{"type":"object","properties":{` +
 	`"name":{"type":"string","description":"A short name for the server, 1 to 24 of a-z, 0-9 and _, such as shop. Its tools are named <name>.<tool>."},` +
 	`"url":{"type":"string","description":"The server's Streamable HTTP address, https, as its documentation gives it."},` +
-	`"header":{"type":"string","description":"Only for a server that takes a key in a header and offers no sign-in: the header's name from its documentation, such as X-API-Key. Never the key itself."}},` +
+	`"header":{"type":"string","description":"Only for a server that takes a key in a header and offers no sign-in: the header's name from its documentation, such as X-API-Key. Never the key itself."},` +
+	`"rules":{"type":"object","description":"The policy of each tool the owner named, by the tool's name as the server lists it: auto runs by itself, confirm asks the owner first, forbidden is never offered.","additionalProperties":{"type":"string","enum":["auto","confirm","forbidden"]}},` +
+	`"others":{"type":"string","enum":["auto","confirm","forbidden"],"description":"The policy of every tool not in rules, such as forbidden when the owner needs only the tools named."}},` +
 	`"required":["name","url"],"additionalProperties":false}`)
 
 // connectArgs are mcp.connect's arguments.
@@ -59,11 +61,18 @@ type connectArgs struct {
 	Name   string `json:"name"`
 	URL    string `json:"url"`
 	Header string `json:"header"`
+	// Rules and Others are the scope the owner stated, as the model took it
+	// from their words (R-MCP-3); they shape the card's proposal only.
+	Rules  map[string]settings.MCPPolicy `json:"rules"`
+	Others settings.MCPPolicy            `json:"others"`
 }
 
-// target is a checked connect: the server's name, address and header.
+// target is a checked connect: the server's name, address and header, and
+// the proposal the owner's words asked for.
 type target struct {
 	name, url, header string
+	rules             map[string]settings.MCPPolicy
+	others            settings.MCPPolicy // "" when the call gave none
 }
 
 // host is the target's host, for the cards.
@@ -73,6 +82,15 @@ func (t target) host() string {
 		return ""
 	}
 	return u.Hostname()
+}
+
+// proposalWords tells the model, after a card, that it holds the scope it
+// passed.
+func (t target) proposalWords() string {
+	if len(t.rules) == 0 && t.others == "" {
+		return ""
+	}
+	return " with the rules you passed"
 }
 
 // who is the admin a connect answers, in their private chat.
@@ -144,7 +162,11 @@ func (a *Admin) target(c tool.Call) (target, error) {
 	dec := json.NewDecoder(bytes.NewReader(c.Args))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&args); err != nil {
-		return target{}, errors.New("arguments must be name, url and an optional header")
+		return target{}, errors.New("arguments must be name, url and optionally header, rules and others")
+	}
+	rules, err := checkRules(args.Rules, args.Others)
+	if err != nil {
+		return target{}, err
 	}
 	if !settings.MCPNameRE.MatchString(args.Name) {
 		return target{}, errBadName
@@ -159,7 +181,35 @@ func (a *Admin) target(c tool.Call) (target, error) {
 	if args.Header != "" && !settings.ValidMCPHeader(args.Header) {
 		return target{}, errHeader
 	}
-	return target{name: args.Name, url: norm, header: args.Header}, nil
+	return target{name: args.Name, url: norm, header: args.Header, rules: rules, others: args.Others}, nil
+}
+
+// errBadRules refuses rules or others that are not policies of named tools.
+var errBadRules = errors.New("rules must map a tool's name to auto, confirm or forbidden, and others must be one of those")
+
+// checkRules checks the policies the call carries and keys them by the
+// tool's short name, as the server's list gives it.
+func checkRules(rules map[string]settings.MCPPolicy, others settings.MCPPolicy) (map[string]settings.MCPPolicy, error) {
+	if others != "" && !validPolicy(others) {
+		return nil, errBadRules
+	}
+	out := make(map[string]settings.MCPPolicy, len(rules))
+	for name, p := range rules {
+		if name == "" || !validPolicy(p) {
+			return nil, errBadRules
+		}
+		out[name] = p
+	}
+	return out, nil
+}
+
+// validPolicy reports whether p is one of the three policies.
+func validPolicy(p settings.MCPPolicy) bool {
+	switch p {
+	case settings.MCPPolicyAuto, settings.MCPPolicyConfirm, settings.MCPPolicyForbidden:
+		return true
+	}
+	return false
 }
 
 // connect probes the server without a credential and goes on by its
@@ -188,8 +238,8 @@ func (a *Admin) connect(ctx context.Context, c tool.Call, t target) (tool.Result
 			return tool.Result{}, err
 		}
 		a.in.connect(ctx, outcomeCard)
-		return tool.Result{Text: fmt.Sprintf("The server %s needs no sign-in. The owner got a card with its %d tools to approve; "+
-			"nothing is connected until they press Connect, and you get a note then.", t.name, n), Out: []event.Outgoing{out}}, nil
+		return tool.Result{Text: fmt.Sprintf("The server %s needs no sign-in. The owner got a card with its %d tools to approve%s; "+
+			"nothing is connected until they press Connect, and you get a note then.", t.name, n, t.proposalWords()), Out: []event.Outgoing{out}}, nil
 	case errors.Is(err, mcpclient.ErrUnauthorized):
 		return a.signIn(ctx, c, w, t)
 	}
@@ -312,6 +362,12 @@ func kindOf(err error) string {
 		if errors.Is(err, k.err) {
 			return k.kind
 		}
+	}
+	if errors.As(err, new(*unknownToolsError)) {
+		return "unknown_tool"
+	}
+	if errors.Is(err, errCardTooLong) {
+		return "too_many_tools"
 	}
 	if se, ok := errors.AsType[*mcpclient.StatusError](err); ok {
 		return "status_" + strconv.Itoa(se.Code)

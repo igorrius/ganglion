@@ -1666,7 +1666,7 @@ started as processes are level 3 of 9.8 and stay in P3.
   `mcp.page` is the intake page's address (R-INT-3). A name is
   `[a-z0-9_]{1,24}` and not a module's short name or a prefix of the
   core's tools. Only the tools of R-MCP-3 and R-MCP-9 change the section.
-- **R-MCP-3.** `mcp.connect(name, url[, header])` (admin, private chat)
+- **R-MCP-3.** `mcp.connect(name, url[, header][, rules][, others])` (admin, private chat)
   checks the address as `web.fetch` does (R-WEB-2) and probes the server;
   in a tainted session it is confirmed first.
   - For `oauth` it discovers the sign-in server (RFC 9728, RFC 8414),
@@ -1678,11 +1678,35 @@ started as processes are level 3 of 9.8 and stay in P3.
     the token to the server with `resource` (RFC 8707).
   - For `header` it opens a secret request (R-INT-1) for the key.
   - It then lists the tools and sends a card: each tool's name and the
-    first line of its description as data, and a proposed policy:
-    `auto` for a tool the server marks read-only, `confirm` for the rest;
+    first line of its description as data, and a proposed policy;
     the buttons Connect, Ask for all and Cancel. Connect confirms the
     file's change (R-CFG-13) and the tools are offered at once; Cancel
     deletes the registration and the tokens.
+  - **The proposal** (owner, 2026-11-19, #282). By default it is `auto`
+    for a tool the server marks read-only and `confirm` for the rest.
+    The model may pass the scope the owner stated in one sentence:
+    `rules` maps a tool's name to `auto`, `confirm` or `forbidden`, and
+    `others` is the policy of every tool not named. For each tool the
+    first that applies wins: `rules`, `others`, the policy the admin set
+    before for a server approved earlier, the default. `others` is not stored: it
+    applies only to the call that carries it, to every tool of the list
+    that call reads (the card names every tool that runs by itself and is
+    not read-only, so a tool added later is never turned on unseen); a
+    tool the server adds later gets the default on the next card. A name
+    in `rules` that the server's list does not have is refused with an
+    error that names it, before any card (for a sign-in, when the list
+    is read, the admin is told that the list could not be used). One
+    press of Connect applies the whole proposal; only the admin's press
+    lowers a policy, and the model's words reach no file.
+  - **The card hides nothing that matters.** A tool that will run by
+    itself and that the server does not mark read-only is always listed
+    by name, with its description, in a section of its own that comes
+    first, and is never folded into a count (when the lines with
+    descriptions do not fit, the card lists these tools by name alone;
+    when the names alone would not fit one message, no card is made and
+    the error tells the model to narrow the proposal). Tools that ask are listed. Forbidden tools
+    are a count, with their names when there are few. The card stays
+    within Telegram's message limit.
 - **R-MCP-4.** A server's tool is named `<server>.<tool>`: its own name
   without a leading `<server>_`, lower-cased, every character outside
   `[a-z0-9_]` turned into `_`. It is admin-only; its result is outside
@@ -1725,8 +1749,19 @@ started as processes are level 3 of 9.8 and stay in P3.
   agent is told. A server that does not answer within `timeout` is
   "unreachable", and the next calls back off. A result over 1 MB is cut,
   with a note.
-- **R-MCP-9.** `mcp.rule(server, tool, policy)` changes one tool's policy
-  after a card of its own; only the admin's press lowers a policy.
+- **R-MCP-9.** `mcp.rule(server, changes[, others])` changes the policies
+  of a connected server's tools after one card of its own and one press
+  (owner, 2026-11-19, #282). `changes` is a list of `{tool, policy}`,
+  a single change a list of one; `others` is the policy of every tool
+  the list does not name. The call is checked as a whole before the card:
+  a tool the server's approved list does not have, a tool named twice or
+  an empty call is refused with an error that names it, and nothing is
+  written. The card lists what changes; a change to `auto` is always
+  named, by name alone when the lines would pass the question's length
+  limit, and a call whose names do not fit is refused. A call with
+  `others` is applied only if the server's line is the one the question
+  was worded against. Only the admin's press lowers a policy. The model is told to
+  put several changes in one call and never to call once per tool.
 - **R-MCP-10.** `/mcp` (admin, private chat, no model) lists each server with
   its state (connected, needs sign-in, tools changed, unreachable, store
   locked), the time of its last sign-in and its number of tools, and
