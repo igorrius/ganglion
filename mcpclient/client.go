@@ -463,7 +463,9 @@ func (c *Client) listPages(ctx context.Context) ([]json.RawMessage, error) {
 	seen := map[string]bool{}
 	cursor, total := "", 0
 	for range MaxPages {
-		var params map[string]string
+		// No params at all on the first page: a nil map in an interface is
+		// not omitted, and "params": null is not a valid request.
+		var params any
 		if cursor != "" {
 			params = map[string]string{"cursor": cursor}
 		}

@@ -251,6 +251,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.reqs = append(s.reqs, req)
 	s.mu.Unlock()
+	if !paramsValid(m.Params) {
+		// As a real server does: JSON-RPC 2.0 params are an object or an
+		// array, or absent; "params": null is not a valid request.
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error: Invalid JSON-RPC message"},"id":null}`))
+		return
+	}
 	if o.Intercept != nil && o.Intercept(w, r, req) {
 		return
 	}
@@ -429,4 +437,11 @@ func write(w http.ResponseWriter, o Options, msg []byte) {
 		_, _ = fmt.Fprintf(w, "data: %s\n\n", p)
 	}
 	_, _ = fmt.Fprintf(w, "data: %s\n\n", msg)
+}
+
+// paramsValid reports whether a request's params are absent, an object or
+// an array (JSON-RPC 2.0).
+func paramsValid(p json.RawMessage) bool {
+	t := bytes.TrimSpace(p)
+	return len(t) == 0 || t[0] == '{' || t[0] == '['
 }
