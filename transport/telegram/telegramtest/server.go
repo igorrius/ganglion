@@ -201,6 +201,19 @@ func (s *Server) URL() string { return s.ts.URL }
 
 // AddMessage queues a message to the bot and returns its update_id.
 func (s *Server) AddMessage(m Incoming) int64 {
+	update, _ := s.addMessage(m)
+	return update
+}
+
+// AddMessageID queues a message to the bot and returns its message_id,
+// taken under the same lock: LastMessageID read after AddMessage may
+// already be the bot's answer to it.
+func (s *Server) AddMessageID(m Incoming) int64 {
+	_, msg := s.addMessage(m)
+	return msg
+}
+
+func (s *Server) addMessage(m Incoming) (updateID, messageID int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextUpdate++
@@ -242,7 +255,7 @@ func (s *Server) AddMessage(m Incoming) int64 {
 	s.updates = append(s.updates, map[string]any{"update_id": s.nextUpdate, "message": msg})
 	close(s.notify)
 	s.notify = make(chan struct{})
-	return s.nextUpdate
+	return s.nextUpdate, s.nextMsg
 }
 
 // ReplyTo is the Bot API reply_to_message object of the bot's message

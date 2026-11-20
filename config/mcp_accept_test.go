@@ -168,9 +168,8 @@ func TestAnOAuthSignInLeavesNoTrace(t *testing.T) {
 		t.Fatalf("sign in at %q: %v", link, err)
 	}
 	b64 := base64.RawURLEncoding.EncodeToString
-	r.fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Name: "Igor",
+	pasted := r.fake.AddMessageID(telegramtest.Incoming{ChatID: 42, UserID: 42, Name: "Igor",
 		Text: "gauth1." + signed.State + "." + b64([]byte(signed.Code)) + "." + b64([]byte(signed.Issuer))})
-	pasted := r.fake.LastMessageID()
 	tools := r.sent(t, "the tools card", func(m telegramtest.Outgoing) bool {
 		return strings.Contains(m.Keyboard, "Connect") && strings.Contains(m.Text, "search_products")
 	})

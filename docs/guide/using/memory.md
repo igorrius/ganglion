@@ -6,7 +6,7 @@ The agent keeps what it knows about you in plain Markdown files, one per topic, 
 
 Memory is written in the conversation, from your own words. After a quiet spell in your private chat (10 minutes by default) or when a session ends, the agent also reads the chat once for facts it missed. You can turn that off with `memory.review.enabled: false`.
 
-Every entry passes a check that rejects instructions disguised as facts. Suspicious entries are set aside and you are told.
+Every entry passes a check that rejects instructions disguised as facts. Suspicious entries are set aside and you are told. An idea you have for how ganglion itself should change is kept as your idea for its developers, not as a rule for the agent; the check lets it in unless it would let the agent skip a confirmation, gain a permission or send something to someone.
 
 `/memory` lists the topics. `/memory kitchen` shows one. It works in your private chat only.
 
