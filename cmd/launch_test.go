@@ -34,6 +34,7 @@ func TestRunWithoutAStateCreatesNoReleasesFolder(t *testing.T) {
 // starts as it is and the state records the fall back.
 func TestRunGivesUpAPlantedRelease(t *testing.T) {
 	clearEnv(t)
+	withImageVersion(t, "v0.2.1")
 	var out syncBuffer
 	args := nodeFiles(t, "metrics: {addr: \"127.0.0.1:0\"}\nlog: {dir: off}\n")
 	dir := filepath.Join(filepath.Dir(args[1]), "releases")
@@ -54,6 +55,42 @@ func TestRunGivesUpAPlantedRelease(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(dir, update.StateFile))
 	if !strings.Contains(string(b), `"reason": "unverified"`) || !strings.Contains(out.String(), "v9.9.9 is given up") {
 		t.Fatalf("state %s\nlog %s", b, out.String())
+	}
+}
+
+// withImageVersion makes this binary report version to the launcher.
+func withImageVersion(t *testing.T, version string) {
+	t.Helper()
+	was := imageVersion
+	imageVersion = func() string { return version }
+	t.Cleanup(func() { imageVersion = was })
+}
+
+// A newer image deployed over an installed release runs, and the stored
+// releases go (#279, ADR-0102).
+func TestRunOfANewerImageDropsTheReleases(t *testing.T) {
+	clearEnv(t)
+	withImageVersion(t, "dev")
+	var out syncBuffer
+	args := nodeFiles(t, "metrics: {addr: \"127.0.0.1:0\"}\nlog: {dir: off}\n")
+	dir := filepath.Join(filepath.Dir(args[1]), "releases")
+	if err := os.MkdirAll(filepath.Join(dir, "v0.6.0"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, update.StateFile), []byte(`{"active":"v0.6.0","previous":"","confirmed":"v0.6.0"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	started := false
+	start := func(context.Context, []node.Role, config.Bootstrap, *slog.Logger) error { started = true; return nil }
+	if err := newRoot(&out, &out, start).Run(context.Background(), append([]string{"ganglion", "run"}, args...)); err != nil || !started {
+		t.Fatalf("%v %v", err, started)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, update.StateFile))
+	if !strings.Contains(string(b), `"active": ""`) || !strings.Contains(out.String(), "not older than the release v0.6.0") {
+		t.Fatalf("state %s\nlog %s", b, out.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "v0.6.0")); err == nil {
+		t.Fatal("the release folder stays")
 	}
 }
 

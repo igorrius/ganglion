@@ -1,6 +1,6 @@
 # ADR-0096: Run a host command as the node's active release
 
-- **Status:** Accepted
+- **Status:** Accepted; an image's binary not older than the active release runs the command itself, per [ADR-0102](0102-the-images-binary-runs-when-it-is-not-older-than-the-active-release.md)
 - **Date:** 2026-11-18
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.15 Updating the node](../spec.md#715-updating-the-node) (R-UPD-4,

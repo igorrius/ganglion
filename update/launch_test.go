@@ -19,22 +19,33 @@ func TestDecide(t *testing.T) {
 		name   string
 		st     State
 		self   bool
+		image  string
 		verify func(string) error
 		want   Decision
 	}{
-		{"no state", State{}, false, bad, Decision{Action: ActionRun}},
-		{"the floor", State{Previous: "v0.2.1"}, false, bad, Decision{Action: ActionRun}},
-		{"self is active", State{Active: "v0.3.0", Pending: pend(5)}, true, bad, Decision{Action: ActionRun}},
-		{"confirmed active", State{Active: "v0.3.0"}, false, ok, Decision{Action: ActionExec}},
-		{"first attempt", State{Active: "v0.3.0", Pending: pend(0)}, false, ok, Decision{Action: ActionExec}},
-		{"second attempt", State{Active: "v0.3.0", Pending: pend(1)}, false, ok, Decision{Action: ActionExec}},
-		{"two attempts used", State{Active: "v0.3.0", Pending: pend(2)}, false, ok, Decision{Action: ActionFallBack, Reason: ReasonFailed}},
-		{"three attempts", State{Active: "v0.3.0", Pending: pend(3)}, false, bad, Decision{Action: ActionFallBack, Reason: ReasonFailed}},
-		{"does not verify", State{Active: "v0.3.0", Pending: pend(0)}, false, bad, Decision{Action: ActionFallBack, Reason: ReasonUnverified}},
-		{"confirmed does not verify", State{Active: "v0.3.0"}, false, bad, Decision{Action: ActionFallBack, Reason: ReasonUnverified}},
+		{"no state", State{}, false, "v0.2.1", bad, Decision{Action: ActionRun}},
+		{"the floor", State{Previous: "v0.2.1"}, false, "v0.2.1", bad, Decision{Action: ActionRun}},
+		{"self is active", State{Active: "v0.3.0", Pending: pend(5)}, true, "v0.2.1", bad, Decision{Action: ActionRun}},
+		{"confirmed active", State{Active: "v0.3.0"}, false, "v0.2.1", ok, Decision{Action: ActionExec}},
+		{"first attempt", State{Active: "v0.3.0", Pending: pend(0)}, false, "v0.2.1", ok, Decision{Action: ActionExec}},
+		{"second attempt", State{Active: "v0.3.0", Pending: pend(1)}, false, "v0.2.1", ok, Decision{Action: ActionExec}},
+		{"two attempts used", State{Active: "v0.3.0", Pending: pend(2)}, false, "v0.2.1", ok, Decision{Action: ActionFallBack, Reason: ReasonFailed}},
+		{"three attempts", State{Active: "v0.3.0", Pending: pend(3)}, false, "v0.2.1", bad, Decision{Action: ActionFallBack, Reason: ReasonFailed}},
+		{"does not verify", State{Active: "v0.3.0", Pending: pend(0)}, false, "v0.2.1", bad, Decision{Action: ActionFallBack, Reason: ReasonUnverified}},
+		{"confirmed does not verify", State{Active: "v0.3.0"}, false, "v0.2.1", bad, Decision{Action: ActionFallBack, Reason: ReasonUnverified}},
+		{"newer image", State{Active: "v0.3.0"}, false, "v0.4.0", ok, Decision{Action: ActionImage}},
+		{"image of the same version", State{Active: "v0.3.0"}, false, "v0.3.0", ok, Decision{Action: ActionImage}},
+		{"image without a release version", State{Active: "v0.3.0"}, false, "dev", ok, Decision{Action: ActionImage}},
+		{"image after the release's tag", State{Active: "v0.3.0"}, false, "v0.3.0-2-gabc1234", ok, Decision{Action: ActionImage}},
+		{"dirty image of the release's tag", State{Active: "v0.3.0"}, false, "v0.3.0-dirty", ok, Decision{Action: ActionImage}},
+		{"image after a newer tag", State{Active: "v0.3.0"}, false, "v0.3.1-1-gabc1234-dirty", ok, Decision{Action: ActionImage}},
+		{"image after an older tag", State{Active: "v0.3.0"}, false, "v0.2.1-5-gabc1234", ok, Decision{Action: ActionExec}},
+		{"pre-release image", State{Active: "v0.3.0"}, false, "v0.3.0-rc.1", ok, Decision{Action: ActionExec}},
+		{"newer image over a failed release", State{Active: "v0.3.0", Pending: pend(2)}, false, "v0.4.0", bad, Decision{Action: ActionImage}},
+		{"newer image, self is active", State{Active: "v0.3.0"}, true, "v0.4.0", ok, Decision{Action: ActionRun}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := Decide(tc.st, tc.self, tc.verify); got != tc.want {
+			if got := Decide(tc.st, tc.self, tc.image, tc.verify); got != tc.want {
 				t.Fatalf("%+v, want %+v", got, tc.want)
 			}
 		})
@@ -48,6 +59,7 @@ type launchKit struct {
 	execs []string
 	log   bytes.Buffer
 	self  string
+	image string // the floor's version
 	exec  func(string) error
 }
 
@@ -63,7 +75,7 @@ func fakeMigrations(_ context.Context, path string) ([]string, error) {
 
 func newLaunchKit(t *testing.T) *launchKit {
 	t.Helper()
-	k := &launchKit{self: "/floor/ganglion"}
+	k := &launchKit{self: "/floor/ganglion", image: "v0.2.1"}
 	k.kit = newKit(t, WithCopyDB(func(_ context.Context, dst string) error {
 		return os.WriteFile(dst, []byte("a"), 0o600) // before.db: one migration
 	}))
@@ -81,7 +93,7 @@ func (k *launchKit) write(path, content string) {
 }
 
 func (k *launchKit) launcher() Launcher {
-	return Launcher{Store: k.store, DB: k.db, Self: k.self, Migrations: fakeMigrations, Log: &k.log,
+	return Launcher{Store: k.store, DB: k.db, Self: k.self, Image: k.image, Migrations: fakeMigrations, Log: &k.log,
 		Exec: func(p string) error { k.execs = append(k.execs, p); return k.exec(p) }}
 }
 
@@ -121,6 +133,43 @@ func TestLaunchExecsTheActiveReleaseAndCountsAttempts(t *testing.T) {
 	}
 	if len(k.execs) != 2 || k.execs[0] != k.store.BinaryPath("v0.3.0") {
 		t.Fatalf("%v", k.execs)
+	}
+}
+
+func TestLaunchOfANewerImageDropsTheReleases(t *testing.T) {
+	k := newLaunchKit(t)
+	if _, err := k.install("v0.3.0", "v0.2.1"); err != nil {
+		t.Fatal(err)
+	}
+	confirmed := k.state().Confirmed
+	k.image = "v0.4.0"
+	if err := k.launch(); err != nil || len(k.execs) != 0 {
+		t.Fatalf("%v %v", err, k.execs)
+	}
+	if st := k.state(); st.Active != "" || st.Previous != "" || st.Pending != nil || st.Fallback != nil || st.Confirmed != confirmed {
+		t.Fatalf("%+v", st)
+	}
+	if _, err := os.Stat(filepath.Dir(k.store.BinaryPath("v0.3.0"))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the release folder stays: %v", err)
+	}
+	if log := k.log.String(); !strings.Contains(log, "v0.4.0") || !strings.Contains(log, "v0.3.0") {
+		t.Fatalf("log %q", log)
+	}
+	if err := k.launch(); err != nil || len(k.execs) != 0 {
+		t.Fatalf("the next start: %v %v", err, k.execs)
+	}
+}
+
+func TestLaunchOfAnOlderImageSaysItRunsTheRelease(t *testing.T) {
+	k := newLaunchKit(t)
+	if _, err := k.install("v0.3.0", "v0.2.1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := k.launch(); err != nil || len(k.execs) != 1 {
+		t.Fatalf("%v %v", err, k.execs)
+	}
+	if log := k.log.String(); !strings.Contains(log, "v0.2.1") || !strings.Contains(log, "older") {
+		t.Fatalf("log %q", log)
 	}
 }
 

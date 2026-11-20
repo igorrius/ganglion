@@ -155,6 +155,29 @@ func TestWatchTellsTheVersionAfterARollbackOnce(t *testing.T) {
 	}
 }
 
+func TestWatchTellsTheImagesVersionAfterTheReleasesWereDropped(t *testing.T) {
+	w := newWatchKit(t)
+	if err := w.store.writeState(State{Confirmed: "v0.3.0"}); err != nil { // as the launcher leaves it
+		t.Fatal(err)
+	}
+	if err := w.watch("v0.4.0").Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.sent) != 2 || !strings.Contains(w.sent[0].Text, "now runs v0.4.0") || w.state().Confirmed != "v0.4.0" {
+		t.Fatalf("%+v %+v", w.sent, w.state())
+	}
+}
+
+func TestWatchOfABuildWithoutAReleaseVersionTellsNothing(t *testing.T) {
+	w := newWatchKit(t)
+	if err := w.store.writeState(State{Confirmed: "v0.3.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.watch("dev").Run(context.Background()); err != nil || len(w.sent) != 0 || w.state().Confirmed != "v0.3.0" {
+		t.Fatalf("%v %+v %+v", err, w.sent, w.state())
+	}
+}
+
 func TestWatchLeavesAnotherVersionsPendingAlone(t *testing.T) {
 	w := newWatchKit(t)
 	w.pending("v0.3.0")
