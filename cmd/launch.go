@@ -23,6 +23,10 @@ func releasesDir(db string) (dir string, ok bool) {
 	return dir, ok && update.HasState(dir)
 }
 
+// imageVersion is this binary's version, which the launcher and the
+// dispatcher compare with the active release (ADR-0102); tests replace it.
+var imageVersion = func() string { return buildinfo.Read().Version }
+
 // launch is the first step of `run`: it moves the process onto the active
 // release, or back to the previous one (R-UPD-4, R-UPD-5). It returns when
 // this process is the one to run. Its own failure never stops the node:
@@ -49,7 +53,7 @@ func runLauncher(ctx context.Context, dir, db string, errOut io.Writer) error {
 	if resolved, err := filepath.EvalSymlinks(self); err == nil {
 		self = resolved
 	}
-	return update.Launcher{Store: store, DB: db, Self: self, Migrations: migrations, Exec: execBinary, Log: errOut}.Launch(ctx)
+	return update.Launcher{Store: store, DB: db, Self: self, Image: imageVersion(), Migrations: migrations, Exec: execBinary, Log: errOut}.Launch(ctx)
 }
 
 // cleanStop takes back the start attempt of the running version after a

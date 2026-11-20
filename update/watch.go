@@ -79,10 +79,17 @@ func (w *Watch) Run(ctx context.Context) error {
 	case st.Pending != nil && st.Pending.Version == w.running:
 		w.tellStarted(ctx, *st.Pending)
 		w.confirm(ctx, *st.Pending)
-	case st.Pending == nil && w.running != st.Confirmed && (st.Active == "" || st.Active == w.running):
-		w.tellRunning(ctx) // after a rollback: a version that needs no confirmation
+	case st.Pending == nil && w.running != st.Confirmed && (st.Active == "" || st.Active == w.running) && recordable(w.running):
+		w.tellRunning(ctx) // after a rollback or a newer image: a version that needs no confirmation
 	}
 	return nil
+}
+
+// recordable says whether the state can hold version: a build without a
+// release version ("dev") has nothing to record or tell.
+func recordable(version string) bool {
+	_, err := ParseVersion(version)
+	return err == nil
 }
 
 // tellStarted tells the admins at once that a new version has started and

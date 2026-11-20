@@ -38,6 +38,7 @@ const (
 	ActionRun      Action = "run"      // run this process: the floor, or already the active release
 	ActionExec     Action = "exec"     // replace this process with the active release
 	ActionFallBack Action = "fallback" // give up the active release
+	ActionImage    Action = "image"    // run the image's binary, not older than the release, and drop the releases
 )
 
 // Decision is the launcher's next step; Reason is set for a fall back.
@@ -50,18 +51,40 @@ type Decision struct {
 const maxAttempts = 2
 
 // Decide is the launcher's choice at start, pure. self says that this
-// process is the active release's own binary. verify checks a release's
+// process is the active release's own binary; image is this binary's
+// version, the image's when it is not self. verify checks a release's
 // files again (Store.Verify).
-func Decide(st State, self bool, verify func(version string) error) Decision {
+func Decide(st State, self bool, image string, verify func(version string) error) Decision {
 	switch {
 	case st.Active == "" || self:
 		return Decision{Action: ActionRun}
+	case ImageWins(image, st.Active):
+		return Decision{Action: ActionImage}
 	case st.Pending != nil && st.Pending.Attempts >= maxAttempts:
 		return Decision{Action: ActionFallBack, Reason: ReasonFailed}
 	case verify(st.Active) != nil:
 		return Decision{Action: ActionFallBack, Reason: ReasonUnverified}
 	}
 	return Decision{Action: ActionExec}
+}
+
+// ImageWins reports whether the image's binary, of version image, is not
+// older than the release active and runs instead of it (ADR-0102). A
+// `git describe` version is its tag plus commits: it wins over a release
+// at its tag or below. Any other version that is not a release, "dev"
+// included, wins: someone deployed it on purpose.
+func ImageWins(image, active string) bool {
+	rel, err := ParseVersion(active)
+	if err != nil {
+		return true // never in a valid state: the image is the safe side
+	}
+	if v, err := Running(image); err == nil {
+		return Compare(v, rel) >= 0
+	}
+	if tag, err := ParseVersion(describeTail.ReplaceAllString(image, "")); err == nil && describeTail.MatchString(image) {
+		return Compare(tag, rel) >= 0
+	}
+	return true
 }
 
 // MigrationsFunc lists the migrations a database has applied, as
@@ -80,6 +103,7 @@ type Launcher struct {
 	Store      *Store
 	DB         string // the live database file
 	Self       string // this process's executable, symlinks resolved
+	Image      string // this process's version (buildinfo)
 	Migrations MigrationsFunc
 	Exec       ExecFunc
 	Log        io.Writer // where a line goes that the owner of the host should see
@@ -114,11 +138,15 @@ func (l Launcher) Launch(ctx context.Context) error {
 		return err
 	}
 	for range maxSteps {
-		d := Decide(st, l.isActive(st.Active), l.Store.Verify)
+		d := Decide(st, l.isActive(st.Active), l.Image, l.Store.Verify)
 		switch d.Action {
 		case ActionRun:
 			return nil
+		case ActionImage:
+			return l.dropReleases(st)
 		case ActionExec:
+			_, _ = fmt.Fprintf(l.Log, "update: the image's binary %s is older than the release %s; running %s\n",
+				l.Image, st.Active, st.Active)
 			if st, err = l.start(ctx, st); err != nil {
 				if errors.Is(err, errExeced) {
 					return nil
@@ -161,6 +189,21 @@ func (l Launcher) start(ctx context.Context, st State) (State, error) {
 	}
 	_, _ = fmt.Fprintf(l.Log, "update: %s could not be started: %v\n", st.Active, err)
 	return l.fallBack(ctx, st, reason)
+}
+
+// dropReleases runs the image's binary in place of the active release: no
+// release is active or previous any more, a pending one and an untold fall
+// back go with them, and their folders are removed. The watch then tells
+// the admins which version runs (ADR-0102).
+func (l Launcher) dropReleases(st State) error {
+	next := State{Confirmed: st.Confirmed}
+	if err := l.Store.writeState(next); err != nil {
+		return err
+	}
+	l.Store.prune(next)
+	_, _ = fmt.Fprintf(l.Log, "update: the image's binary %s is not older than the release %s; running it and dropping the stored releases\n",
+		l.Image, st.Active)
+	return nil
 }
 
 // fallBack gives up the active release: the database is restored when

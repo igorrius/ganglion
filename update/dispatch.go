@@ -16,6 +16,7 @@ type OwnerFunc func(path string) (uid int, err error)
 type Dispatcher struct {
 	Store *Store
 	Self  string // this process's executable, symlinks resolved
+	Image string // this process's version (buildinfo)
 	UID   int    // the user running the command
 	Owner OwnerFunc
 	Exec  ExecFunc
@@ -31,8 +32,8 @@ func (d Dispatcher) Dispatch() {
 		_, _ = fmt.Fprintf(d.Log, "ganglion: the node's releases could not be read; running this binary: %v\n", err)
 		return
 	}
-	if st.Active == "" || isBinaryOf(d.Store, st.Active, d.Self) {
-		return
+	if st.Active == "" || isBinaryOf(d.Store, st.Active, d.Self) || ImageWins(d.Image, st.Active) {
+		return // a winning image: the next `run` drops the releases (ADR-0102)
 	}
 	bin := d.Store.BinaryPath(st.Active)
 	owner, err := d.Owner(bin)

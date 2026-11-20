@@ -87,7 +87,7 @@ considered, how they compare, the decision and its consequences. See
 | [0078](0078-telegram-updates-by-polling-or-webhook.md) | Receive Telegram updates by polling or by a webhook, chosen in the node's file | Accepted | 2026-11-13 |
 | [0079](0079-a-modules-messages-go-where-the-nodes-file-says.md) | Route a module's messages by the node's file, to named destinations | Accepted | 2026-11-13 |
 | [0080](0080-keep-the-own-telegram-client-and-name-the-library-to-move-to.md) | Keep the own Telegram client, and name the library to move to | Accepted | 2026-11-13 |
-| [0081](0081-update-the-node-from-signed-releases-at-the-owners-command.md) | Update the node from the project's signed releases, at the owner's command | Accepted | 2026-11-13 |
+| [0081](0081-update-the-node-from-signed-releases-at-the-owners-command.md) | Update the node from the project's signed releases, at the owner's command | Accepted; the rule that the launcher always runs the active release superseded by 0102 | 2026-11-13 |
 | [0082](0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md) | Open the repository now, and keep the announced release in P3 | Accepted | 2026-11-14 |
 | [0083](0083-the-repository-holds-the-core-and-no-users-module.md) | The repository holds the core and no user's module | Accepted | 2026-11-14 |
 | [0084](0084-publish-docs-with-zensical-on-github-pages.md) | Publish docs/ as a site with Zensical on GitHub Pages | Superseded by 0085 (scope) | 2026-11-14 |
@@ -101,12 +101,13 @@ considered, how they compare, the decision and its consequences. See
 | [0093](0093-config-changes-through-the-agent-with-history-in-the-workspace.md) | Change the node's file through the agent on an allowlist, with its history in the workspace repository | Accepted | 2026-11-16 |
 | [0094](0094-the-github-project-holds-the-plan-and-the-repository-holds-decisions.md) | Keep the plan and the status in the GitHub Project, and decisions in the repository | Accepted | 2026-11-17 |
 | [0095](0095-daily-encrypted-backups-to-an-s3-compatible-bucket.md) | Back up the node daily, encrypted with a key from its master key, to an S3-compatible bucket | Accepted | 2026-11-17 |
-| [0096](0096-host-commands-run-the-active-release.md) | Run a host command as the node's active release | Accepted | 2026-11-18 |
+| [0096](0096-host-commands-run-the-active-release.md) | Run a host command as the node's active release | Accepted; an image not older than the release runs the command, per 0102 | 2026-11-18 |
 | [0097](0097-connect-remote-mcp-servers-from-the-chat-with-an-own-client.md) | Connect remote MCP servers from the chat with an own client and `x/oauth2`, in P1 | Accepted | 2026-11-18 |
 | [0098](0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md) | Hand a code or a secret over from the chat through a pinned static page and a pasted line | Accepted | 2026-11-18 |
 | [0099](0099-the-cli-bridge-announces-tools-turned-on-during-a-run.md) | The CLI bridge announces tools turned on during a run | Accepted | 2026-11-19 |
 | [0100](0100-on-demand-bookkeeping-spends-no-turn-budget-and-the-budget-is-20.md) | On-demand bookkeeping spends no turn budget, and the budget is 20 (amends the number in ADR-0036) | Accepted | 2026-11-19 |
 | [0101](0101-a-servers-instructions-reach-the-model-as-data-and-its-notes-live-in-memory.md) | A server's instructions reach the model as data, and notes about it live in a memory topic | Accepted | 2026-11-19 |
+| [0102](0102-the-images-binary-runs-when-it-is-not-older-than-the-active-release.md) | Run the image's binary when it is not older than the active release | Accepted | 2026-11-20 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

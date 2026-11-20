@@ -15,6 +15,7 @@ type dispatchKit struct {
 	execs []string
 	log   bytes.Buffer
 	self  string
+	image string // the version of this binary, the image's
 	uid   int
 	owner int
 	exec  func(string) error
@@ -22,12 +23,12 @@ type dispatchKit struct {
 
 func newDispatchKit(t *testing.T) *dispatchKit {
 	t.Helper()
-	return &dispatchKit{kit: newKit(t), self: "/usr/local/bin/ganglion", uid: 10001, owner: 10001,
+	return &dispatchKit{kit: newKit(t), self: "/usr/local/bin/ganglion", image: "v0.2.1", uid: 10001, owner: 10001,
 		exec: func(string) error { return nil }}
 }
 
 func (k *dispatchKit) dispatch() {
-	Dispatcher{Store: k.store, Self: k.self, UID: k.uid, Log: &k.log,
+	Dispatcher{Store: k.store, Self: k.self, Image: k.image, UID: k.uid, Log: &k.log,
 		Owner: func(string) (int, error) { return k.owner, nil },
 		Exec:  func(p string) error { k.execs = append(k.execs, p); return k.exec(p) }}.Dispatch()
 }
@@ -52,6 +53,26 @@ func TestDispatchHandsTheCommandToTheActiveRelease(t *testing.T) {
 	}
 	if !bytes.Equal(before, k.stateBytes()) {
 		t.Fatal("a dispatch changed the state")
+	}
+}
+
+func TestDispatchOfANewerImageRunsOn(t *testing.T) {
+	for _, image := range []string{"v0.3.0", "v0.4.0", "dev"} {
+		t.Run(image, func(t *testing.T) {
+			k := newDispatchKit(t)
+			if _, err := k.install("v0.3.0", "v0.2.1"); err != nil {
+				t.Fatal(err)
+			}
+			before := k.stateBytes()
+			k.image = image
+			k.dispatch()
+			if len(k.execs) != 0 || k.log.Len() != 0 {
+				t.Fatalf("%v %q", k.execs, k.log.String())
+			}
+			if !bytes.Equal(before, k.stateBytes()) {
+				t.Fatal("a dispatch changed the state")
+			}
+		})
 	}
 }
 

@@ -1,6 +1,6 @@
 # ADR-0081: Update the node from the project's signed releases, at the owner's command
 
-- **Status:** Accepted
+- **Status:** Accepted; the rule that the launcher always moves onto the active release is superseded by [ADR-0102](0102-the-images-binary-runs-when-it-is-not-older-than-the-active-release.md)
 - **Date:** 2026-11-13
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.15](../spec.md#715-updating-the-node) (R-UPD-1…7), [7.8](../spec.md#78-security-and-operations-mvp), [7.14](../spec.md#714-node-configuration) (R-CFG-6), [9.8](../spec.md#98-self-modification-levels), [11](../spec.md#11-open-decisions); [ADR-0041](0041-module-install-update-and-trust-boundary.md), [ADR-0046](0046-a-restart-is-not-a-failed-attempt.md), [ADR-0039](0039-command-sandbox.md), [ADR-0016](0016-sqlite-migrations.md)

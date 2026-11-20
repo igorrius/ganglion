@@ -1638,7 +1638,13 @@ other install paths are in section 14.
   `<data>/releases`, which no host command and no module can write. The
   binary the image or the package ships is never replaced: `ganglion run`
   starts, verifies the active release again and continues as it. A file
-  that is not a signed release of the project is never run.
+  that is not a signed release of the project is never run. When the
+  image's binary is not older than the active release (a build without a
+  release version counts as newer, a `git describe` build as its tag plus
+  commits), it runs as it is, the stored releases are dropped and the
+  admins are told which version runs; an older image still moves onto
+  the release and the log says so
+  ([ADR-0102](adr/0102-the-images-binary-runs-when-it-is-not-older-than-the-active-release.md)).
 - **R-UPD-5.** A newly installed release gets two starts. A version whose
   components have run for two minutes is confirmed and the admins are
   told. One that is not confirmed after two starts gives way to the
@@ -1665,7 +1671,8 @@ other install paths are in section 14.
   release: the image's binary checks that release again and hands the
   command to it, unless the release's binary belongs to another user
   than the one running the command or fails the check; then it runs as
-  it is and says why on stderr
+  it is and says why on stderr; the image's binary that is not older than
+  the release runs the command itself (R-UPD-4)
   ([ADR-0096](adr/0096-host-commands-run-the-active-release.md)).
 
 ### 7.16. Remote MCP servers

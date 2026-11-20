@@ -36,7 +36,7 @@ func Dispatch(args []string, errOut io.Writer) {
 	if resolved, err := filepath.EvalSymlinks(self); err == nil {
 		self = resolved
 	}
-	update.Dispatcher{Store: store, Self: self, UID: os.Geteuid(), Owner: fileOwner, Exec: execBinary, Log: errOut}.Dispatch()
+	update.Dispatcher{Store: store, Self: self, Image: imageVersion(), UID: os.Geteuid(), Owner: fileOwner, Exec: execBinary, Log: errOut}.Dispatch()
 }
 
 // dbFromArgs is the database a command line names, the way its --db flag
