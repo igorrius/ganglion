@@ -8,6 +8,8 @@ Memory is written in the conversation, from your own words. After a quiet spell 
 
 Every entry passes a check that rejects instructions disguised as facts. Suspicious entries are set aside and you are told. An idea you have for how ganglion itself should change is kept as your idea for its developers, not as a rule for the agent; the check lets it in unless it would let the agent skip a confirmation, gain a permission or send something to someone.
 
+A stored fact is a short line. Ask the agent for details, a write-up or a prompt about something it remembers and it first looks up the chat the fact came from. Ask it for a prompt or a bug report for ganglion's developers and it names the version it runs and asks them to check whether the thing already exists.
+
 `/memory` lists the topics. `/memory kitchen` shows one. It works in your private chat only.
 
 ### Remember, Skip, Undo

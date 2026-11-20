@@ -1109,6 +1109,19 @@ undone with `git revert`.
     stored here; it waits for consolidation (R-MEM-1). The one
     exception is a note about a connected MCP server's data, in that
     server's topic (R-MCP-11).
+- **R-MEM-10.** A fact is a short summary; the conversation it came from
+  is in the archive (#275). When the owner asks for details, a write-up
+  or a prompt about something memory holds only as a short fact, the core
+  rules tell the agent to call `memory.recall` first and use what
+  happened there, not to fill the gaps itself. The same rules tell it to
+  ask one short question when a request can be read two ways that lead
+  to different work, and say what it runs on: the core rules name the
+  node's version and the project (ganglion, its public repository), so a
+  prompt or a bug report the owner asks for "the developers" names the
+  project and the version, describes the case as it happened and asks
+  them to check first whether it already exists. A live conversation
+  (2026-11-19) wrote such a prompt for the persona's name, with invented
+  scope, about a feature that had shipped three days before.
 - **R-MEM-9.** The owner sees every change. A write by the agent
   or a review that changed memory sends one note with the turn's
   messages, in the owner's language, listing what changed, with an Undo
@@ -2348,6 +2361,11 @@ Ideas that come up along the way and are outside the current phase go here.
 Reviewed at each gate.
 
 - Classifier and learning in the router (P2 / P3).
+- A status for an idea the owner keeps for the developers (open, shipped
+  in `<version>`), or handing such ideas to the issue tracker (#275,
+  2026-11-20): the agent cannot see what shipped, so a prompt it writes
+  asks the developers to check first (R-MEM-10). Taken up when ideas pile
+  up in memory.
 - Changing a field of the node's file without a restart (owner, 2026-11-16,
   [ADR-0093](adr/0093-config-changes-through-the-agent-with-history-in-the-workspace.md)):
   each field needs its own reload path; taken up one field at a time when a

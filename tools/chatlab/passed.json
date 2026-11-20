@@ -59,6 +59,7 @@
     "plan-commands": "0ddd9e52ad6f7b9c628aca570d864e46bdc90d9c020b0841707da6443b00221d",
     "plan-shown": "f0f6d531ec8de52327a5e9c0be59da3bcda1f46afd157f91b89f283d58f839b6",
     "question-no-plan": "20c9cd0ed46876dd78b223613c6a2472c4f0ace2cbdb42c46396a38f3f9815bd",
+    "r275-developer-prompt-recalls-the-case": "ad3d73ad1c6589e5ab26ab7658e35c28cdb8214f05309e176fcd913e5d8ff99f",
     "r38-identical-call-asks-once": "7fdc0180a9fc65836153d7d351488c4a078c914b587be15536624ceaa5fdc94b",
     "r48-waiting-call-is-not-done": "b029d2ddb62d4ac4b3ca8229dcc7a701fc1ee75f5458f58c868fa8ec5c2993a8",
     "r49-recall-labels-the-archive": "9060bdee581e833f07fc8a1781dbf507c0a9d711b9d813c19286235e19346837",

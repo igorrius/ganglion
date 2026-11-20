@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: r275-developer-prompt-recalls-the-case
+why: >-
+  Issue #275, R-MEM-10. Asked for a prompt for its developers about an idea
+  stored as one line, the model answered from that line: no recall of the case
+  behind it, the persona's name instead of the project, invented scope.
+covers:
+  - agent/prompt.go
+  - agent/stages.go
+  - tool/builtin/memory.go
+  - agent/recall.go
+steps:
+  - say: >-
+      Something odd happened: I asked you for a reminder to order a torch at 9,
+      then said "make it 10". You sent two confirmation questions, I approved
+      the 10 o'clock one, and the 9 o'clock question kept its buttons, so I
+      could still press Allow on it. Save an idea for the developers: the old
+      question's buttons should go inactive when a newer one replaces it.
+  - reach: {journal: {tool: memory.write}, nudge: "Please save that idea to your memory."}
+  - say: /new
+  - say: "Write me a prompt for the model that develops you, about my idea with the buttons."
+  - reach: {journal: {tool: memory.recall}, nudge: "Please look up the conversation where I told you about it first."}
+  - judge: >-
+      The reply holds a prompt for the developers of ganglion (it names ganglion,
+      not only a persona name), names the version the assistant runs on, describes
+      the case with the torch reminder (two confirmation questions, 9 and 10
+      o'clock, the old one's buttons still live), and asks the developers to check
+      first whether this already exists.
