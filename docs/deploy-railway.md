@@ -107,21 +107,40 @@ Move the service to the published image once, then update from the chat:
 
 1. In the service's settings change the source to the image
    `ghcr.io/igorrius/ganglion:<version>` (the version of a release, without the
-   `v`), keeping the volume at `/data`, the variables and the restart policy.
-   Redeploy. The data, the database and `ganglion.yaml` stay on the volume.
+   `v`), keeping the volume at `/data`, the variables and the restart policy,
+   or with the CLI:
+   `railway service source connect --image ghcr.io/igorrius/ganglion:<version> -s <service>`.
+   The change redeploys the service. The data, the database and
+   `ganglion.yaml` stay on the volume.
 2. After the start, `/update` in the admin's private chat shows the running
    version and the newest release.
 3. `/update install vX.Y.Z` installs the next release and the node restarts
    into it; `/update rollback` goes back. The release files live in
    `/data/releases`, on the volume, so a redeploy of the same image keeps the
    active release: the entrypoint starts the image's own binary, and the launcher
-   at the start of `ganglion run` moves on to the installed one. The image's
-   binary is the floor the node falls back to.
+   at the start of `ganglion run` moves on to the installed one, which is
+   newer. The image's binary is the floor the node falls back to.
 
 Pull a newer image (change the tag) only when a release needs one (`/update`
 says so) or to update the Rust toolchain and the `claude` CLI; `/update`
 replaces the node's program and nothing else. Take a copy of the volume first
-when a release changes the database. Check after an install: `/status` shows
+when a release changes the database.
+
+**An image not older than the installed release replaces it**
+([ADR-0102](adr/0102-the-images-binary-runs-when-it-is-not-older-than-the-active-release.md)).
+At the start after such a deploy the node runs the image's program, removes
+the releases in `/data/releases` and tells the admins which version runs; the
+deploy log has the line `update: the image's binary ... is not older than the
+release ...`. `/update rollback` then has nothing to go back to until the next
+install. An image older than the installed release does not run: the node
+keeps the release and the deploy log says at every start that the image is
+older. To run an older image anyway, remove `/data/releases/state.json` as the
+node's user before the deploy.
+
+A build from the repository (`railway up`) counts as newer than any release.
+Once the service runs a published image, a `railway up` to it takes over from
+the installed release, and `/update` refuses the build until the service is
+moved to a published image again (step 1). Check after an install: `/status` shows
 the version, and the admins are told when the new version is confirmed two
 minutes after its start, or that the node went back.
 
