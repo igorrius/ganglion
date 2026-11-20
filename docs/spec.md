@@ -969,7 +969,12 @@ human); module install — tests + reviewer + admin.
   "dual LLM" pattern; a first, narrow form of the reviewer model above).
   - **On write:** every memory entry is checked before it is committed: a
     fact about the owner, their home and devices (how they work, as the
-    owner describes it, included; M5), or a hidden instruction? Imperative entries
+    owner describes it, included; M5), or a hidden instruction? An idea
+    the owner keeps for the system's developers (how the software should
+    change) is a fact about the owner's plans, as long as it asks the
+    assistant to do nothing now and grants nothing: no permission, no
+    skipped confirmation, no recipient (the nightly audit once flagged such
+    an idea; #274). Imperative entries
     ("always do…", "ignore…") are rejected. Suspicious ones go to
     quarantine, and the owner gets a notice.
   - **On schedule:** a system job audits memory, persona and skills for

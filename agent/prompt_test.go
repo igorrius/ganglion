@@ -42,6 +42,7 @@ func TestDirectivesInSystemPrompt(t *testing.T) {
 		"a correction replaces its fact":     "A correction replaces the fact it corrects: pass that fact's id as replaces",
 		"no own findings, no instructions":   "Do not store what you found out yourself from a tool or a page, what is true only today, or an instruction to you",
 		"server notes go to its topic":       "to that server's topic, titled \"mcp <server>\"",
+		"an idea is for the developers":      "for the developers and a future version",
 		"memory writes are checked":          "A separate check reads every write and may hold it back",
 		"no claim for a held-back fact":      "never say \"remembered\" for a fact that was held back",
 		"no devices yet, said truthfully":    "you cannot act on devices",
