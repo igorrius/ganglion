@@ -16,6 +16,7 @@ import (
 	"github.com/igorrius/ganglion/diag"
 	"github.com/igorrius/ganglion/groups"
 	"github.com/igorrius/ganglion/host"
+	"github.com/igorrius/ganglion/internal/buildinfo"
 	bgjobs "github.com/igorrius/ganglion/jobs"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/mcpadmin"
@@ -110,6 +111,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Archive:         do.MustInvoke[agent.SessionStore](i),
 		Alerts:          do.MustInvoke[alert.Admins](i),
 		Persona:         agent.PersonaDir(b.Agent.Workspace),
+		Version:         buildinfo.Read().Short(),
 		Facts:           do.MustInvoke[Remembering](i).Facts,
 		Memory:          do.MustInvoke[Remembering](i).View,
 		Secrets:         do.MustInvoke[*vault.Vault](i),

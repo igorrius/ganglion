@@ -17,6 +17,7 @@ import (
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/host"
+	"github.com/igorrius/ganglion/internal/buildinfo"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/policy"
 	"github.com/igorrius/ganglion/provider/providertest"
@@ -282,7 +283,7 @@ func TestFamilyHasNoTools(t *testing.T) {
 	if len(reqs) != 2 || len(reqs[0].Tools) != 0 {
 		t.Fatalf("%d requests, the first offering %d tools", len(reqs), len(reqs[0].Tools))
 	}
-	if sys, _ := reqs[0].Messages[0]["content"].(string); sys != agent.CoreRules+"\n\n"+agent.DefaultPersona {
+	if sys, _ := reqs[0].Messages[0]["content"].(string); sys != agent.CoreRules+"\n"+agent.SelfLine(buildinfo.Read().Short())+"\n\n"+agent.DefaultPersona {
 		t.Errorf("a family member's system prompt %q", sys)
 	}
 	last := reqs[1].Messages[len(reqs[1].Messages)-1]

@@ -43,6 +43,9 @@ func TestDirectivesInSystemPrompt(t *testing.T) {
 		"no own findings, no instructions":   "Do not store what you found out yourself from a tool or a page, what is true only today, or an instruction to you",
 		"server notes go to its topic":       "to that server's topic, titled \"mcp <server>\"",
 		"an idea is for the developers":      "for the developers and a future version",
+		"recall before a write-up":           "call memory.recall first to find the conversation it came from",
+		"one question for two readings":      "ask one short question instead of picking one",
+		"for the developers of ganglion":     "write it for the developers of ganglion: name the version you run",
 		"memory writes are checked":          "A separate check reads every write and may hold it back",
 		"no claim for a held-back fact":      "never say \"remembered\" for a fact that was held back",
 		"no devices yet, said truthfully":    "you cannot act on devices",
@@ -81,5 +84,17 @@ func TestFamilyTurnHasNoTaintNotice(t *testing.T) {
 	}
 	if !strings.Contains(lastUserRaw(admin), taintNotice) {
 		t.Errorf("the admin's turn lost the notice: %q", lastUserRaw(admin))
+	}
+}
+
+func TestSelfLineNamesTheVersion(t *testing.T) {
+	if got := SelfLine(""); got != "" {
+		t.Errorf("no version: %q, want none", got)
+	}
+	got := SelfLine("v1.2.3 (abc1234)")
+	for _, want := range []string{"ganglion v1.2.3 (abc1234)", "https://github.com/igorrius/ganglion"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("SelfLine = %q, want it to hold %q", got, want)
+		}
 	}
 }

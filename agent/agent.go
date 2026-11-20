@@ -127,6 +127,9 @@ type Deps struct {
 	Archive SessionStore
 	Alerts  alert.Admins // who hears about a reached daily limit
 	Persona PersonaFunc
+	// Version is the node's release, named in the system prompt
+	// (R-MEM-10); "" leaves the line out.
+	Version string
 	// Facts is the memory's known-facts block, shown to admins only
 	// (design section 4, rule 8; R-MEM-7); NoFacts when unset.
 	Facts FactsFunc

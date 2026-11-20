@@ -397,7 +397,11 @@ func (a *Agent) systemPrompt(admin, introducing bool) string {
 	if persona = strings.TrimSpace(persona); persona == "" {
 		persona = DefaultPersona
 	}
-	prompt := CoreRules + "\n\n" + persona
+	prompt := CoreRules
+	if self := SelfLine(a.d.Version); self != "" {
+		prompt += "\n" + self
+	}
+	prompt += "\n\n" + persona
 	if !admin {
 		return prompt
 	}
