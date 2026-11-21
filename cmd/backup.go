@@ -14,6 +14,7 @@ import (
 	"github.com/igorrius/ganglion/backup"
 	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
+	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/secrets"
 	"github.com/igorrius/ganglion/secrets/vault"
 	"github.com/igorrius/ganglion/sqlitedb"
@@ -31,8 +32,9 @@ var errNoKey = errors.New("no master key: set " + vault.KeyEnv + " (or " + vault
 
 // backupCommand is `ganglion backup`: the host's way to make a backup at
 // once and to restore one (R-BAK-1, R-BAK-6). hc is the HTTP client to the
-// bucket; nil takes the default, so only a test gives one.
-func backupCommand(out io.Writer, hc *http.Client) *cli.Command {
+// bucket; nil takes the default, so only a test gives one. after is the wait
+// for a running node's answer (time.After).
+func backupCommand(out io.Writer, hc *http.Client, after backup.AfterFunc) *cli.Command {
 	return &cli.Command{
 		Name:  "backup",
 		Usage: "make a backup now, or restore one into an empty directory",
@@ -41,11 +43,11 @@ func backupCommand(out io.Writer, hc *http.Client) *cli.Command {
 			"Both use the node's master key: " + vault.KeyEnv + " (or its _FILE), else the file " + vault.KeyFile + "\n" +
 			"beside the database (for `now`) or the one named by --key-file (for `restore`).\n" +
 			"Neither makes a key: a backup under a new key could not be opened.",
-		Commands: []*cli.Command{backupNow(out, hc), backupRestore(out)},
+		Commands: []*cli.Command{backupNow(out, hc, after), backupRestore(out)},
 	}
 }
 
-func backupNow(out io.Writer, hc *http.Client) *cli.Command {
+func backupNow(out io.Writer, hc *http.Client, after backup.AfterFunc) *cli.Command {
 	var v flags.Run
 	return &cli.Command{
 		Name:  "now",
@@ -55,14 +57,17 @@ func backupNow(out io.Writer, hc *http.Client) *cli.Command {
 			if cmd.Args().Present() {
 				return fmt.Errorf("%w: ganglion backup now", errBackupUsage)
 			}
-			return runBackupNow(ctx, out, v, hc)
+			return runBackupNow(ctx, out, v, hc, after)
 		},
 	}
 }
 
-// runBackupNow makes one backup of the database at v.DB as the node would,
-// beside a node that may be running: it takes no lock, as `secret set` does.
-func runBackupNow(ctx context.Context, out io.Writer, v flags.Run, hc *http.Client) error {
+// runBackupNow makes one backup of the node whose database is at v.DB. A
+// running node holds the database lock and has the bus's store open, so the
+// command never opens either a second time: it asks the node, which makes
+// the backup as at its daily time (backup.Ask). With no node running it takes
+// the lock and makes the backup itself, opening the bus as the node would.
+func runBackupNow(ctx context.Context, out io.Writer, v flags.Run, hc *http.Client, after backup.AfterFunc) error {
 	if _, err := os.Stat(v.DB); errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("no database at %s; set GANGLION_DB or --db to the node's database", v.DB)
 	}
@@ -74,6 +79,15 @@ func runBackupNow(ctx context.Context, out io.Writer, v flags.Run, hc *http.Clie
 	if b.Settings.Backup == nil {
 		return errBackupOff
 	}
+	release, err := node.LockDB(v.DB)
+	if errors.Is(err, node.ErrLocked) {
+		res, aerr := askNode(ctx, filepath.Dir(v.DB), after)
+		return printBackup(out, res, aerr)
+	}
+	if err != nil {
+		return err
+	}
+	defer release()
 	key, err := existingKey(src, "", vault.KeyPath(v.DB))
 	if err != nil {
 		return err
@@ -83,11 +97,21 @@ func runBackupNow(ctx context.Context, out io.Writer, v flags.Run, hc *http.Clie
 		return err
 	}
 	defer func() { _ = conn.Close() }()
-	bk, err := config.BackupFor(b, conn, key, hc)
-	if err != nil {
-		return err
+	res, rerr := config.BackupOffline(ctx, b, conn, key, hc)
+	return printBackup(out, res, rerr)
+}
+
+// askNode has the running node of the data directory make the backup.
+func askNode(ctx context.Context, dir string, after backup.AfterFunc) (backup.Result, error) {
+	res, err := backup.Ask(ctx, dir, after)
+	if errors.Is(err, backup.ErrNoAnswer) {
+		err = fmt.Errorf("%w: is the node running with this backup: section?", err)
 	}
-	res, err := bk.Run(ctx)
+	return res, err
+}
+
+// printBackup says what a backup made, or why it failed.
+func printBackup(out io.Writer, res backup.Result, err error) error {
 	if err != nil {
 		return fmt.Errorf("the backup failed: %w", err)
 	}

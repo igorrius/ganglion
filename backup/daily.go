@@ -16,6 +16,9 @@ import (
 // Runner makes one backup; *Backup is one.
 type Runner interface {
 	Run(ctx context.Context) (Result, error)
+	// RunRequest is Run for a backup a command asked for; the id is
+	// recorded with the result.
+	RunRequest(ctx context.Context, request string) (Result, error)
 }
 
 // AfterFunc waits for d: its channel fires after d (time.After).
@@ -49,6 +52,7 @@ type Daily struct {
 	lang    LangFunc
 	texts   *texts.Catalog
 	after   AfterFunc
+	poll    AfterFunc
 	now     func() time.Time
 	loc     *time.Location
 	log     *slog.Logger
@@ -64,6 +68,10 @@ type DailyOption func(*Daily)
 // WithDailyAfter sets how the wait for the next run is made (tests).
 func WithDailyAfter(f AfterFunc) DailyOption { return func(d *Daily) { d.after = f } }
 
+// WithDailyPoll sets how the wait between two looks for a request file is
+// made (tests).
+func WithDailyPoll(f AfterFunc) DailyOption { return func(d *Daily) { d.poll = f } }
+
 // WithDailyClock sets the clock the next run is computed from (tests).
 func WithDailyClock(f func() time.Time) DailyOption { return func(d *Daily) { d.now = f } }
 
@@ -77,7 +85,7 @@ func WithDailyLocation(l *time.Location) DailyOption { return func(d *Daily) { d
 func NewDaily(run Runner, dir string, at time.Duration, admins alert.Admins, enqueue EnqueueFunc, lang LangFunc,
 	cat *texts.Catalog, log *slog.Logger, opts ...DailyOption) *Daily {
 	d := &Daily{run: run, dir: dir, at: at, admins: admins, enqueue: enqueue, lang: lang, texts: cat,
-		after: time.After, now: time.Now, loc: time.UTC, log: log, tel: newTelemetry()}
+		after: time.After, poll: time.After, now: time.Now, loc: time.UTC, log: log, tel: newTelemetry()}
 	for _, o := range opts {
 		o(d)
 	}
@@ -90,7 +98,8 @@ func (d *Daily) Name() string { return "backup" }
 // Run waits for each day's time and makes the backup until ctx ends. It
 // does not run at start: a restart loop must not upload a copy each time.
 // A failed backup is told and logged and waits for the next day; it never
-// stops the node.
+// stops the node. Meanwhile it looks every RequestPoll for the request file
+// of `ganglion backup now` and makes that backup as it would at its time.
 func (d *Daily) Run(ctx context.Context) error {
 	last, err := Last(d.dir)
 	switch {
@@ -101,12 +110,44 @@ func (d *Daily) Run(ctx context.Context) error {
 		d.log.Warn("backup: the last result is not readable", "err", err)
 	}
 	for {
+		if !d.waitForDay(ctx, d.after(d.untilNext())) {
+			return nil
+		}
+		d.once(ctx, "")
+	}
+}
+
+// waitForDay waits for the day's time to come, serving a backup request
+// that arrives meanwhile. It reports false when ctx ended first.
+func (d *Daily) waitForDay(ctx context.Context, day <-chan time.Time) bool {
+	for {
 		select {
 		case <-ctx.Done():
-			return nil
-		case <-d.after(d.untilNext()):
+			return false
+		case <-day:
+			return true
+		case <-d.poll(RequestPoll):
+			d.serve(ctx)
 		}
-		d.once(ctx)
+	}
+}
+
+// serve makes the backup a request file asks for, if there is one, and
+// removes the file once the result with its id is recorded. A request the
+// last result already answers (the node stopped before it removed the file)
+// is only removed; one the run did not finish (shutdown, another backup
+// running) stays for the next look.
+func (d *Daily) serve(ctx context.Context) {
+	id, ok := readRequest(d.dir)
+	if !ok {
+		return
+	}
+	if last, err := Last(d.dir); err == nil && last.Request == id {
+		dropRequest(d.dir, id)
+		return
+	}
+	if d.once(ctx, id) {
+		dropRequest(d.dir, id)
 	}
 }
 
@@ -130,20 +171,23 @@ func (d *Daily) nextAfter(t time.Time) time.Time {
 	return next
 }
 
-// once makes one backup and tells the admins when a failure begins or ends.
-func (d *Daily) once(ctx context.Context) {
-	res, err := d.run.Run(ctx)
+// once makes one backup, for the request with the id request or for the
+// day when it is "", and tells the admins when a failure begins or ends. It
+// reports whether the backup ran to an end, which a shutdown or another
+// backup in progress prevents.
+func (d *Daily) once(ctx context.Context, request string) (ran bool) {
+	res, err := d.run.RunRequest(ctx, request)
 	if ctx.Err() != nil {
-		return // stopped by shutdown: neither a failure nor a success
+		return false // stopped by shutdown: neither a failure nor a success
 	}
 	if errors.Is(err, ErrBusy) {
 		d.log.Info("backup: skipped, another backup of this node is running")
-		return
+		return false
 	}
 	d.tel.ran(ctx, res)
 	if err != nil && res.OK {
 		d.log.Warn("backup: the result was not recorded", "err", err)
-		return
+		return false
 	}
 	if err != nil {
 		d.log.Warn("backup: failed", "kind", res.Kind, "err", err)
@@ -156,6 +200,7 @@ func (d *Daily) once(ctx context.Context) {
 	case res.OK && d.failing:
 		d.failing = !d.tell(ctx, d.recoveredText(res), "backup:recovered:"+stamp(res.Time))
 	}
+	return true
 }
 
 // stamp is a time in an idempotency key: stable for the same instant.

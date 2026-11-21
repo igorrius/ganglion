@@ -50,6 +50,12 @@ type NodeFiles struct {
 	// them when the data folder is not denied as a whole; "" when the node
 	// keeps none.
 	BackupWork, BackupResult string
+	// BackupRequest is the file with which a command asks the node for a
+	// backup and BusImport the folder where a restore leaves the cells
+	// export the next start loads: a command that wrote either would start
+	// a backup, or plant cells, as the node (R-BAK-4); "" when the node
+	// keeps none.
+	BackupRequest, BusImport string
 	// BusStore is the embedded bus server's store folder: it holds every
 	// cell and every kept message in files the server writes, so a command
 	// must not read it. "" when the node keeps none.
@@ -87,7 +93,7 @@ func HomeSecrets(home string) []string {
 func DenyList(home, cwd string, node NodeFiles, environ, extra []string) []string {
 	raw := slices.Concat([]string{node.Binary, node.Settings}, dataFiles(node.DB, cwd, home),
 		[]string{node.LogDir, node.ModulesDir, node.ClaudeDir, node.Workspace, node.Languages, node.MasterKey, node.Releases,
-			node.BackupWork, node.BackupResult, node.BusStore})
+			node.BackupWork, node.BackupResult, node.BackupRequest, node.BusImport, node.BusStore})
 	for _, kv := range environ {
 		if name, v, ok := strings.Cut(kv, "="); ok && strings.HasSuffix(name, "_FILE") && v != "" {
 			raw = append(raw, v)

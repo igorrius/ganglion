@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/igorrius/ganglion/bus"
@@ -15,17 +16,22 @@ import (
 func Bus() do.Provider[*natsbus.Bus] {
 	return func(i do.Injector) (*natsbus.Bus, error) {
 		do.MustInvoke[Database](i)
-		ctx := do.MustInvoke[Startup](i)
-		b, err := natsbus.Open(ctx, busConfig(do.MustInvoke[Bootstrap](i)), do.MustInvoke[*slog.Logger](i))
-		if err != nil {
-			return nil, err
-		}
-		if err := b.Ensure(ctx); err != nil {
-			_ = b.Shutdown(ctx)
-			return nil, err
-		}
-		return b, nil
+		return openBus(do.MustInvoke[Startup](i), do.MustInvoke[Bootstrap](i), do.MustInvoke[*slog.Logger](i))
 	}
+}
+
+// openBus opens the bus of the node b and makes its bucket and streams. It is
+// the one place that does, for the node and for a backup made without one.
+func openBus(ctx context.Context, b Bootstrap, log *slog.Logger) (*natsbus.Bus, error) {
+	nb, err := natsbus.Open(ctx, busConfig(b), log)
+	if err != nil {
+		return nil, err
+	}
+	if err := nb.Ensure(ctx); err != nil {
+		_ = nb.Shutdown(ctx)
+		return nil, err
+	}
+	return nb, nil
 }
 
 // busConfig maps the bootstrap's bus settings to the bus's configuration. A

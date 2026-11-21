@@ -74,6 +74,7 @@ modstore/runs.go
 modstore/release/**
 modtrial/**
 modules/html2md/**
+node/lock.go
 node/lock_unix.go
 node/node.go
 node/poller.go

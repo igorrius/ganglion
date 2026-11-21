@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5" //nolint:gosec // the test checks the Content-MD5 header the bucket is sent
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,6 +18,8 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/backup"
+	"github.com/igorrius/ganglion/bus"
+	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/gitrepo"
 	"github.com/igorrius/ganglion/guard"
@@ -98,7 +101,7 @@ func backupNode(t *testing.T, dir string, endpoint string, hc *http.Client) Boot
 	t.Helper()
 	b := testConfig(t)
 	b.DB, b.ModulesDir, b.MasterKey = filepath.Join(dir, "ganglion.db"), filepath.Join(dir, "modules"), filepath.Join(dir, "master.key")
-	b.SettingsPath = filepath.Join(dir, "ganglion.yaml")
+	b.SettingsPath, b.BusDir = filepath.Join(dir, "ganglion.yaml"), bus.StorePath(dir)
 	b.Agent = AgentSettings{TZ: time.UTC, Workspace: filepath.Join(dir, "workspace")}
 	b.Settings = settings.Default()
 	b.Settings.Backup = &settings.Backup{Endpoint: endpoint, Region: "us-east-1", Bucket: "bucket", Prefix: "node",
@@ -137,8 +140,22 @@ func TestBackupAcceptance(t *testing.T) {
 		Language: "go", By: "telegram:user:42"}, modstore.Digest(wasm, manifest)); err != nil || o.Result != modstore.ResultInstalled {
 		t.Fatalf("install: %+v, %v", o, err)
 	}
-	if err := do.MustInvoke[*cells.Service](i).Define(ctx, cells.Def{ID: "lamp", Kind: cells.KindSensor}); err != nil {
+	svc := do.MustInvoke[*cells.Service](i)
+	if err := svc.Define(ctx, cells.Def{ID: "lamp", Kind: cells.KindSensor}); err != nil {
 		t.Fatal(err)
+	}
+	for _, v := range []string{"1", "2", "3"} {
+		if _, err := svc.Report(ctx, "lamp", json.RawMessage(v), cells.CauseExternal, "probe"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantCell, err := svc.Get(ctx, "lamp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHistory, err := svc.History(ctx, "lamp", 10)
+	if err != nil || len(wantHistory) != 4 {
+		t.Fatalf("the history before: %d changes, %v", len(wantHistory), err)
 	}
 
 	// The node has a daily component and a status source for the section.
@@ -148,7 +165,7 @@ func TestBackupAcceptance(t *testing.T) {
 
 	// `ganglion backup now`: the same Backup, on a second connection.
 	key := do.MustInvoke[MasterKey](i).Key
-	bk, err := BackupFor(b, do.MustInvoke[Database](i).DB, key, b.BackupHTTP)
+	bk, err := BackupFor(b, do.MustInvoke[Database](i).DB, key, b.BackupHTTP, cellsExport(do.MustInvoke[*natsbus.Bus](i)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,9 +206,26 @@ func TestBackupAcceptance(t *testing.T) {
 	b2 := backupNode(t, restored, srv.URL, srv.Client())
 	j := New(ctx, b2, slog.New(slog.DiscardHandler))
 	t.Cleanup(func() { _ = j.Shutdown() })
-	// The cell is not checked here: it lives in the bus's bucket now, which
-	// the archive does not carry until the backup exports the bucket (#308).
-	// That change brings the check back.
+	// The cell comes back with its history, loaded from the export at this
+	// start; the file that carried it is gone.
+	svc2 := do.MustInvoke[*cells.Service](j)
+	if c, err := svc2.Get(ctx, "lamp"); err != nil || c.Kind != cells.KindSensor || c.Version != wantCell.Version ||
+		string(c.Reported) != "3" || c.ReportedCause != cells.CauseExternal {
+		t.Fatalf("the cell: %+v, %v", c, err)
+	}
+	h, err := svc2.History(ctx, "lamp", 10)
+	if err != nil || len(h) != len(wantHistory) {
+		t.Fatalf("the history after: %d changes, %v", len(h), err)
+	}
+	for k := range h {
+		if h[k].Version != wantHistory[k].Version || h[k].Field != wantHistory[k].Field ||
+			string(h[k].Value) != string(wantHistory[k].Value) || h[k].Source != wantHistory[k].Source {
+			t.Fatalf("change %d: %+v, want %+v", k, h[k], wantHistory[k])
+		}
+	}
+	if _, err := os.Stat(backup.ImportDir(restored)); !os.IsNotExist(err) {
+		t.Fatalf("the import folder is left: %v", err)
+	}
 	act, err := do.MustInvoke[*modstore.Store](j).ActiveLocal(ctx)
 	if err != nil || len(act) != 1 || act[0].Module != "local/probe" || !bytes.Equal(act[0].Wasm, wasm) {
 		t.Fatalf("the module: %d active, %v", len(act), err)

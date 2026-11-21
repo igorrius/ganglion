@@ -34,7 +34,7 @@ var (
 )
 
 // topLevel are the archive's top-level names.
-var topLevel = map[string]bool{dbName: true, settingsName: true, workspaceName: true, modulesName: true}
+var topLevel = map[string]bool{dbName: true, settingsName: true, workspaceName: true, modulesName: true, busName: true}
 
 // Restore opens the sealed archive under the master key and writes its
 // contents into dst, which must not exist or be an empty directory
@@ -241,7 +241,10 @@ func (x *extractor) entry(hdr *tar.Header, r io.Reader) error {
 		return fmt.Errorf("%w: %q appears twice", ErrUnsafe, name)
 	}
 	x.seen[name] = true
-	target := filepath.Join(x.root, filepath.FromSlash(name))
+	if top, _, _ := strings.Cut(name, "/"); top == busName && name != busName && name != cellsName {
+		return fmt.Errorf("%w: %q is not a part of the archive", ErrUnsafe, hdr.Name)
+	}
+	target := filepath.Join(x.root, filepath.FromSlash(restoredName(name)))
 	// cleanName already refuses a name that leaves root; this second check
 	// on the joined path keeps that true if cleanName ever changes.
 	rel, err := filepath.Rel(x.root, target)
@@ -252,9 +255,22 @@ func (x *extractor) entry(hdr *tar.Header, r io.Reader) error {
 		if _, listed := x.m.Files[name]; listed {
 			return fmt.Errorf("%w: %q is a folder but the manifest lists a file", ErrManifest, name)
 		}
+		if name == busName {
+			return nil // its only file is written to the import folder
+		}
 		return os.MkdirAll(target, 0o700)
 	}
 	return x.file(name, target, hdr, r)
+}
+
+// restoredName is where an archive entry goes in the restored directory:
+// the same place, except the cells export, which goes to the import folder
+// the node's start reads (ImportPending) and not into the bus's store.
+func restoredName(name string) string {
+	if name == cellsName {
+		return importDirName + "/" + importFileName
+	}
+	return name
 }
 
 // file writes a regular file and checks it against the manifest.
