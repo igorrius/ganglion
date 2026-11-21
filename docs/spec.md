@@ -133,7 +133,10 @@ We build from scratch. Neighbours are a source of ideas, not a base.
 
 ## 3. Deliberately NOT in 0.x
 
-- a web UI or dashboard;
+- a web UI or dashboard of the node; a page a module serves on an edge's
+  loopback is a module's output and is allowed
+  ([ADR-0105](adr/0105-start-p2-with-the-bus-ports-edges-and-http-modules.md),
+  [ADR-0110](adr/0110-modules-answer-http-on-an-edges-loopback.md));
 - channels other than Telegram and MQTT;
 - more than three providers: one cloud provider with an OpenAI-compatible
   API, Ollama, claude CLI;
@@ -1165,7 +1168,10 @@ Backups (M7, owner, 2026-11-17,
   database made with `VACUUM INTO` that passes `PRAGMA integrity_check`,
   the whole `workspace/` with its `.git`, `modules/` without
   `modules/templates`, `ganglion.yaml`, and a manifest (the node's
-  version, the time, the schema version, each file's SHA-256). Never the
+  version, the time, the schema version, each file's SHA-256). Once cells
+  live in the bus (R-BUS-3), the archive also holds an export of the
+  `cells` bucket, values and history, which a restore loads before the
+  node starts; streams are delivery, not data, and are left out. Never the
   master key, `releases/`, `logs/` or the claude work folder.
 - **R-BAK-2.** The archive is encrypted before it leaves the node: AES-256-GCM
   in 64 KiB chunks under a key derived from the master key (HKDF-SHA256,
@@ -1267,7 +1273,7 @@ Backups (M7, owner, 2026-11-17,
   node over the bus (owner, 2026-11-03). An edge dials out and opens no
   port, so nothing can scrape its `/metrics`.
   - **Metrics.** Every N seconds a node publishes a snapshot of its
-    metrics to `a.<network>.<node>.telemetry` over plain NATS, without
+    metrics to `g.tel.<node>` (R-BUS-2) over plain NATS, without
     JetStream. Nothing is stored on the way, and the counters are
     cumulative, so a lost snapshot costs nothing. The core adds a `node`
     label and serves the whole network on its own `/metrics`, so one
@@ -1989,6 +1995,10 @@ Envelope:
 | `cmd` | core → edge | Restart, config, drain |
 | `telemetry` | edge → core | A periodic snapshot of the node's metrics (R-OBS-9) over plain NATS, not JetStream; spans and the error journal of R-OBS-9 travel beside it |
 
+The subject names, the headers that carry this envelope's fields and the first
+milestones of P2 are fixed in 9.9 (R-BUS-2): the account is the network, so the
+draft's network token is dropped.
+
 Rules: NATS as the transport (subjects `a.<network>.<node>.<type>`, queue
 groups for identical tools on several edges), MQTT and WebSocket adapters;
 JSON to start, CBOR for microcontrollers, one schema for both; an unknown
@@ -2007,7 +2017,9 @@ The decision, including how connectivity and trust come from NATS, is
 ### 9.2. Module updates: desired state (P2)
 
 Argo CD style: the core writes what should run on a node; the runner
-converges to it. NATS KV (history, watch) + Object Store.
+converges to it. NATS KV (history, watch) + Object Store. The key names
+used from M10 are in 9.9 (R-EDGE-6); the owner's signature on a module
+stays for later.
 
 1. `.wasm` goes to Object Store (bucket `modules`); KV `modules.<name>` holds
    version, sha256, signature and manifest.
@@ -2031,7 +2043,7 @@ offline; offline for long — alert a human).
 
 NATS covers transport: TLS/mTLS, decentralised auth (operator → account →
 user, JWT + NKey), publish/subscribe permissions (an edge sees only
-`a.<network>.<own node>.>`), isolation via accounts, JWT revocation. No
+its own subjects and what its links need, R-EDGE-2), isolation via accounts, JWT revocation. No
 separate VPN is needed.
 
 We add: credential issuance when adding a node (QR code or one-time token);
@@ -2240,16 +2252,133 @@ bot does not start, and the repairer is the bot itself; Go's `plugin` package
 is brittle (same toolchain, Linux only, no unloading). Zero-downtime
 replacement comes from blue/green modules instead.
 
+### 9.9. P2 first milestones: the bus, ports, edges and HTTP modules
+
+P2 starts with four milestones (owner, 2026-11-21,
+[ADR-0105](adr/0105-start-p2-with-the-bus-ports-edges-and-http-modules.md),
+[design](design/p2-bus-and-edge-design.md)): M8 the bus in the core, M9
+ports and links, M10 security and edges, M11 HTTP modules. The first
+scenario: the reader runs in the core, a page module on the owner's computer
+shows its readings, a day's chart and the latest notices.
+
+The bus ([ADR-0106](adr/0106-embed-nats-with-jetstream-as-the-bus-behind-narrow-interfaces.md),
+[ADR-0107](adr/0107-keep-cells-in-a-jetstream-kv-bucket.md),
+[ADR-0108](adr/0108-ports-in-the-manifest-links-in-the-nodes-file.md)):
+
+- **R-BUS-1.** The node reaches NATS only through the `nats.go` client,
+  behind narrow interfaces its consumers declare; only `bus/natsbus` imports
+  NATS. `bus.server: embedded` (default) starts `nats-server` in the process
+  with JetStream on disk in `/data/bus`; `external` connects to `bus.urls`,
+  one server or a cluster, with `bus.credentials` (`store:` or `env:`). Tests
+  run a real embedded server.
+- **R-BUS-2.** Names: KV bucket `cells` (key `<module>.<cell>`); stream
+  `NOTIFY` (`g.notify.<module>`); stream `EVENTS`
+  (`g.ev.<node>.<module>.<port>`); calls on `g.rpc.<node>.<module>.<port>`;
+  telemetry on `g.tel.<node>`. Streams keep 7 days and drop duplicates by
+  `Nats-Msg-Id` within 2 minutes. Headers carry the envelope's fields:
+  `Nats-Msg-Id`, `Ganglion-From`, `Ganglion-Depth`, `Ganglion-Run` and the
+  trace context.
+- **R-BUS-3.** Cells live in the KV bucket only: one JSON value per key
+  (`desired`, `reported`, `cause`, `owner`, `kind`, `type`, `about`, `at`),
+  the key's revision is the cell's version, history 64. Every write is a
+  compare-and-set; a lost race retries from a fresh read, at most 5 times.
+  `cells.Service` keeps its interface.
+- **R-BUS-4.** At the first start with an empty bucket and a non-empty SQLite
+  `cells` table, every cell is copied before modules start; the table stays
+  read-only for one release. The backup exports the bucket (R-BAK-1).
+- **R-BUS-5.** A module declares ports in its manifest: `emits`, `accepts`,
+  `serves`, `calls`, each with a shape (R-RUN-14); a module with `notify` has
+  an implicit output `<module>.notify`. `links:` in `ganglion.yaml` connects
+  `from` to `to`; a link is written only after the owner's press, when both
+  ends exist, kinds and shapes match, no cycle forms across links and cell
+  triggers, and no chain is deeper than 4. Moving a link rebuilds nothing.
+- **R-BUS-6.** `emit(port, payload)` publishes an event; each link has its
+  own durable consumer, and a delivered event starts the receiving module
+  (`Trigger: "event"`); a failed run is redelivered with back-off and counts
+  toward the crash loop. `call(port, payload)` sends a request to the linked
+  endpoint, registered with NATS `micro`, and waits at most the run's
+  remaining time; no responder is an error at once. Payloads and answers are
+  checked against their shapes on both sides. From M9 a cell change is an
+  event of its owner and cell triggers ride the bus, not the inbox; the
+  journal records `event` and `call` causes with their links (R-RUN-20).
+- **R-BUS-7.** A module's `notify` publishes to `NOTIFY`; a durable consumer
+  in the core delivers to `notify_to` as R-RUN-18 says. Metrics count
+  publishes and consumes by outcome, consumer lag, stream sizes and KV
+  retries; `/status` has a "Bus" line.
+
+Edges ([ADR-0109](adr/0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-time-code.md)):
+
+- **R-EDGE-1.** The trust chain is NATS's decentralized model: operator →
+  account `NET` (with a signing key) and the system account → users (the core
+  and each edge). Their seeds live in the secret store (R-CFG-9), so a
+  restore with the master key brings the chain back and edges keep working.
+  An external server runs `resolver: full`, and the node pushes account JWTs
+  to it.
+- **R-EDGE-2.** An edge's user JWT lets it publish only its own subjects, its
+  modules' cell keys and `actual.<edge>.>`, and subscribe only to what its
+  modules' links need, `desired.<edge>.>` and its assigned module objects.
+  The node derives the permissions from the links and re-issues the JWT when
+  they change. Only the core writes `desired.` keys and module objects.
+- **R-EDGE-3.** Join: the owner asks in the chat, approves a card with the
+  edge's name and permissions, and gets a one-time code (128 bits, stored
+  hashed, single use, 10 minutes, bound to the name, attempts rate limited).
+  `ganglion edge join <url> <code>` generates the edge's NKey, posts the code
+  and the public key over HTTPS, and gets the user JWT, the operator public
+  key and the bus URL. The seed never leaves the edge. The owner is told of
+  every join.
+- **R-EDGE-4.** The edge's leaf dials `wss://<public address>/bus`; the public
+  listener proxies the upgrade to the embedded server's WebSocket listener on
+  `127.0.0.1`. NATS refuses any connection without a valid JWT and nonce
+  signature.
+- **R-EDGE-5.** A Revoke button puts the edge's public key into the account
+  JWT's revocations; the server drops and refuses it.
+- **R-EDGE-6.** A module with `node: <edge>` in `modules:` is delivered by
+  desired state: the `.wasm` and manifest in the `modules` Object Store,
+  `desired.<edge>.<module>` with version and SHA-256, `actual.<edge>.<module>`
+  written back after `init` and `health`; a failed health keeps the old
+  version; rollback writes the previous version to `desired`.
+- **R-EDGE-7.** `--roles edge` runs a leaf with JetStream in its own domain,
+  the module host and the loopback HTTP listener; no Telegram, agent or
+  model. Without a link its modules keep running and its events are kept;
+  the core sources them when the link returns. Every N seconds it publishes
+  its metrics to `g.tel.<edge>` over plain NATS (R-OBS-9); `/status` has a
+  line per edge.
+
+HTTP modules ([ADR-0110](adr/0110-modules-answer-http-on-an-edges-loopback.md)):
+
+- **R-HTTP-1.** A manifest's `http` trigger declares routes and methods. The
+  edge's listener (`http.local_addr`, default `127.0.0.1:8090`) gives each
+  module the prefix `/<module>/` and lists the module pages at `/`.
+- **R-HTTP-2.** A request starts the module with `Trigger: "http"`: method,
+  path inside the prefix, query, a body up to 1 MiB and an allowlist of
+  headers; the answer is a status, an allowlist of headers (`content-type`,
+  `cache-control`, `etag`) and a body. At most 4 requests run at once per
+  module.
+- **R-HTTP-3.** The listener binds loopback only and refuses a `Host` other
+  than `127.0.0.1` or `localhost` with its port. The node sets
+  `Content-Security-Policy: default-src 'self'` and
+  `X-Content-Type-Options: nosniff`, and drops `Set-Cookie` and every header
+  outside the allowlist.
+- **R-HTTP-4.** A page module reads current values with `cell_get`, keeps its
+  own history in `state` from events it accepts, and gets notices through a
+  link from `<module>.notify`; it refreshes by polling.
+- **R-HTTP-5.** The `web` template (Rust, beside `reader` and `reflex`) holds
+  the routing, embedded assets, a ring buffer in `state`, escaping on output
+  and `examples.yaml`; the agent copies it for a request.
+
 ## 10. Plan: phases and gates
 
 Four phases, 8–13 weekends (an estimate, refined after P0). Each phase ends
-with a gate; the next phase does not start until the gate is passed.
+with a gate; the next phase does not start until the gate is passed. P2 is
+the one exception: it starts on 2026-11-21, when every condition of the P1
+gate held and only its two weeks were left; the P1 gate is still measured
+on or after 2026-11-27 ([ADR-0105](adr/0105-start-p2-with-the-bus-ports-edges-and-http-modules.md)).
 
 | Phase | What we do | Exit gate |
 |---|---|---|
 | **P0 · Recon** | Repository skeleton; Deye monitor hand-written in WASM with `http.fetch`; evaluate Extism, MCP transports and A2A; compare module languages (TinyGo, Go, Rust); measure runner RAM | The module runs in wazero; resources measured; ABI decided (done: own ABI, ADR-0011) |
 | **P1 · All-in-one** | Core + runner in one process: state cells, inbox/outbox and Telegram, then the agent (history, rule-based router, one API provider, memory, skills, policies); the Deye module as its first reflex, built and installed by the agent; one config file; the agent changes the system's configuration with the owner's approval; migrate the family bot ([milestones](https://github.com/igorrius/ganglion/milestones)) | Deye runs on cron without the model, its versions journaled; the bot replaces the current one and costs less |
-| **P2 · Network** | claude CLI worker; runner on a separate Pi; protocol v0 over NATS (leaf + JetStream, JWT/NKeys); desired state; watchdog; MQTT devices; policies on the runner; embedding memory; router classifier | Link loss without data loss; module update on an edge and rollback with one command |
+| **P2 · Network** | Starts with M8–M11 (owner, 2026-11-21, [ADR-0105](adr/0105-start-p2-with-the-bus-ports-edges-and-http-modules.md), 9.9): the bus on NATS in the core, cells in KV, ports and links, security and edges, HTTP modules on an edge's loopback. Then: claude CLI worker; watchdog; MQTT devices; policies on the runner; embedding memory; router classifier | Link loss without data loss; module update on an edge and rollback with one command |
 | **P3 · Skill compilation** | The model writes contract, code and tests; build on a worker; signed one-click install; repair on `module.crashloop`; agent-written MCP modules; Home Assistant | The model compiled and updated a module on its own; public release 0.1, with an announcement (the repository itself is open since P1, [ADR-0082](adr/0082-open-the-repository-now-and-keep-the-announced-release-in-p3.md)) |
 
 ### 10.1. P0 · Recon — tasks and acceptance
@@ -2375,6 +2504,17 @@ ADRs in [docs/adr](adr/README.md).
 Ideas that come up along the way and are outside the current phase go here.
 Reviewed at each gate.
 
+- From the P2 design (owner, 2026-11-21,
+  [design](design/p2-bus-and-edge-design.md) section 11):
+  - live push to module pages (SSE or WebSocket); pages poll until then;
+  - module pages reachable from the LAN or the internet, through the core's
+    public listener and calls over the bus, with sign-in;
+  - the module templates `transform` (an event in, an event out), `api` (a
+    JSON endpoint), `webhook` (outside HTTP in, an event out) and
+    `collector` (an edge's own disks, memory and CPU; needs new rights);
+  - a separate NATS service on the platform, and a one-click template with
+    the embedded server by default and an external one as an option;
+  - the visual graph of modules, cells and links, which edits `links:`.
 - A nightly model pass over memory (moved out of M7 by
   [ADR-0104](adr/0104-keep-ended-sessions-90-days-once-the-review-has-read-them.md),
   owner, 2026-11-21): merge duplicate facts, settle contradictions and
@@ -2429,7 +2569,8 @@ Reviewed at each gate.
   topic by keywords or embeddings (R-MEM-4).
 - A global kill switch for every tool.
 - Docker from commands below Landlock ABI 9.
-- Channels other than Telegram and MQTT; HTTP API; web UI.
+- Channels other than Telegram and MQTT; an HTTP API and a web UI of the
+  node (module pages on an edge's loopback are in P2, 9.9).
 - Compiling flows into Home Assistant automations.
 - CBOR and microcontroller adapters.
 - An A2A endpoint on the core for external agents (after P3, ADR-0013).
@@ -2553,6 +2694,8 @@ Reviewed at each gate.
   routes by), and the routing on an event bus, where `notify` is a publish
   and `notify_to` a subscription (owner, 2026-11-13,
   [ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
+  The routing on the bus is taken into M8 (R-BUS-7); a kind on the message
+  stays here.
 - A module asking a model, the cheapest one, to word a message or for a
   light analysis: the module would write a prompt and spend the owner's
   limits, so it is its own security boundary, designed when the first
@@ -2571,7 +2714,8 @@ Reviewed at each gate.
     it needs its own ADR.
   - **Pipelines** are chains of modules and tools, where one step's output
     is the next step's input. The flows we put off: "complex task flows"
-    (owner, 2026-11-03).
+    (owner, 2026-11-03). Links between module ports are taken into M9
+    (R-BUS-5, R-BUS-6); chains through the agent's tools stay here.
   - **A visual editor** connects the blocks on a canvas. It is a web UI,
     which 0.x excludes (above), so it comes after the public release.
   - Natural places: M4 for module triggers, P3 for flows the model writes.

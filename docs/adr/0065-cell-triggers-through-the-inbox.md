@@ -1,6 +1,6 @@
 # ADR-0065: Start a module when cells it listens to change, with the event carried by the node's inbox
 
-- **Status:** Accepted
+- **Status:** Accepted; the inbox as the trigger's transport is superseded from M9 by [ADR-0108](0108-ports-in-the-manifest-links-in-the-nodes-file.md), which keeps its rules
 - **Date:** 2026-11-10
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-11, R-RUN-12, R-RUN-15), [7.1](../spec.md#71-guaranteed-delivery), [9.6](../spec.md#96-flow-engine-p3); [M4c design](../design/p1-m4c-reflexes-design.md) section 4; builds on [ADR-0014](0014-state-cells.md), [ADR-0062](0062-cells-owned-by-modules.md)

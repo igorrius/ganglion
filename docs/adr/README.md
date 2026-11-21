@@ -71,7 +71,7 @@ considered, how they compare, the decision and its consequences. See
 | [0062](0062-cells-owned-by-modules.md) | Let modules own the cells they declare, and prefix cell and tool names with the module's name (extends 0014) | Accepted | 2026-11-10 |
 | [0063](0063-module-language.md) | Write modules in Rust by default, TinyGo when Go code already exists, standard Go only when neither fits | Accepted | 2026-11-10 |
 | [0064](0064-builds-write-only-their-temp-folder.md) | Let a module's build write only its own temporary folder, and kill what it leaves running (refines 0039) | Accepted | 2026-11-09 |
-| [0065](0065-cell-triggers-through-the-inbox.md) | Start a module when cells it listens to change, with the event carried by the node's inbox | Accepted | 2026-11-10 |
+| [0065](0065-cell-triggers-through-the-inbox.md) | Start a module when cells it listens to change, with the event carried by the node's inbox | Accepted; the inbox as the trigger's transport superseded by 0108 from M9 | 2026-11-10 |
 | [0066](0066-notify-capability.md) | Let a module write to the owner's private chat through a `notify` capability with a daily limit | Accepted | 2026-11-10 |
 | [0067](0067-agent-writes-module-source.md) | Let the agent write a module's source in the workspace without a press, from a clean session only (moves a part of 0061 from P3) | Accepted | 2026-11-10 |
 | [0068](0068-vouch-for-module-source-per-file-and-vetted-crates.md) | Vouch for module source per file and only with the examples' crates (refines 0067) | Accepted | 2026-11-10 |
@@ -110,6 +110,12 @@ considered, how they compare, the decision and its consequences. See
 | [0102](0102-the-images-binary-runs-when-it-is-not-older-than-the-active-release.md) | Run the image's binary when it is not older than the active release | Accepted | 2026-11-20 |
 | [0103](0103-a-commands-answer-records-its-command-and-is-quoted-only-when-it-holds-the-nodes-words.md) | A command's answer records its command, and a reply brings its text only when it holds the node's words | Accepted | 2026-11-21 |
 | [0104](0104-keep-ended-sessions-90-days-once-the-review-has-read-them.md) | Keep ended sessions 90 days once the memory review has read them, and leave the nightly model pass for later | Accepted | 2026-11-21 |
+| [0105](0105-start-p2-with-the-bus-ports-edges-and-http-modules.md) | Start P2 with the bus, ports, edges and HTTP modules, and allow module pages on an edge's loopback in 0.x | Accepted | 2026-11-21 |
+| [0106](0106-embed-nats-with-jetstream-as-the-bus-behind-narrow-interfaces.md) | Embed nats-server with JetStream as the bus, allow an external server or cluster, and reach it only through narrow interfaces | Accepted | 2026-11-21 |
+| [0107](0107-keep-cells-in-a-jetstream-kv-bucket.md) | Keep cells in a JetStream KV bucket, the only store of their values | Accepted | 2026-11-21 |
+| [0108](0108-ports-in-the-manifest-links-in-the-nodes-file.md) | Declare ports in the manifest, keep links in the node's file, and carry events on JetStream and calls on request/reply | Accepted | 2026-11-21 |
+| [0109](0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-time-code.md) | Keep the NATS trust chain in the secret store, give each edge its own permissions in one account, and join an edge by a one-time code with its key born on the edge | Accepted | 2026-11-21 |
+| [0110](0110-modules-answer-http-on-an-edges-loopback.md) | Let a module answer HTTP on an edge's loopback listener, with the node owning the listener and the headers | Accepted | 2026-11-21 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).
