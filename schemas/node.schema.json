@@ -90,7 +90,12 @@
           "$ref": "#/$defs/count",
           "default": 24000
         },
-        "review": { "description": "The pass that reads a quiet conversation once for facts the turn did not store (R-MEM-8).", "$ref": "#/$defs/review" }
+        "review": { "description": "The pass that reads a quiet conversation once for facts the turn did not store (R-MEM-8).", "$ref": "#/$defs/review" },
+        "archive_days": {
+          "description": "How many days an ended session stays in the archive, where /resume and memory.recall find it; a session the memory review still has to read stays until it is read. Facts in the topics are kept. off (0) keeps every session (R-MEM-1).",
+          "$ref": "#/$defs/count",
+          "default": 90
+        }
       }
     },
     "review": {

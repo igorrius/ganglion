@@ -148,6 +148,7 @@ mcp:
 | `prompt_budget` | `24000` | The size in characters of the known-facts block of the agent's instructions. Over it, the topics changed longest ago fold to one line. |
 | `review.enabled` | `true` | Read your quiet private chat once for facts the turn missed. |
 | `review.quiet` | `10m` | How long the chat is silent before it is reviewed. |
+| `archive_days` | `90` | How many days an ended conversation stays in the archive, where `/resume` and the agent's search of past chats find it. A conversation the agent has not reviewed yet stays until it is. Facts the agent remembers are kept. `off` keeps every conversation. |
 
 ## update
 

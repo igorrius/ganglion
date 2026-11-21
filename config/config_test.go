@@ -46,8 +46,8 @@ func TestCoreContainerBuildsAndShutsDown(t *testing.T) {
 	}{
 		"echo, no transport":  {components: 4},
 		"echo over Telegram":  {token: testToken, admin: "telegram:user:42", components: 5},
-		"agent over Telegram": {token: testToken, admin: "telegram:user:42", agent: true, components: 17},
-		"agent, no transport": {agent: true, components: 15},
+		"agent over Telegram": {token: testToken, admin: "telegram:user:42", agent: true, components: 18},
+		"agent, no transport": {agent: true, components: 16},
 	} {
 		t.Run(name, func(t *testing.T) {
 			b := testConfig(t)

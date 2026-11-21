@@ -98,9 +98,16 @@ func Turns() do.Provider[*turns.Log] {
 }
 
 // Archive provides the session archive.
-func Archive() do.Provider[agent.SessionStore] {
-	return func(i do.Injector) (agent.SessionStore, error) {
+func Archive() do.Provider[*agent.Archive] {
+	return func(i do.Injector) (*agent.Archive, error) {
 		return agent.NewArchive(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
+	}
+}
+
+// Sessions provides the session archive as the agent stores sessions in it.
+func Sessions() do.Provider[agent.SessionStore] {
+	return func(i do.Injector) (agent.SessionStore, error) {
+		return do.MustInvoke[*agent.Archive](i), nil
 	}
 }
 

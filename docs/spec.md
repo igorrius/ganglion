@@ -986,8 +986,8 @@ human); module install — tests + reviewer + admin.
   - **On schedule:** a system job audits memory, persona and skills for
     injections with the same check, in code and without a model turn,
     and reports to the owner. It is marked as a system job and cannot be
-    deleted. Contradictions and stale entries are left to nightly
-    consolidation (R-MEM-1), which has a model.
+    deleted. Contradictions and stale entries are left to a nightly
+    model pass, which waits in "Not now" (section 14, ADR-0104).
 - **R-POL-8.** A scheduled agent task carries a **grant**, fixed when the
   task is created.
   - The creation confirmation shows what the runs may do: the
@@ -1049,15 +1049,16 @@ undone with `git revert`.
 | Semantic | Facts about people, home, devices, preferences | Topic files `memory/*.md` (R-MEM-6); embeddings in P2 | Every topic whole in the system prompt within a budget (R-MEM-7); semantic search in P2 |
 | Procedural | How to do specific things | Skills: instruction + script + model requirements | Description in context, body on demand |
 
-- **R-MEM-1.** Nightly consolidation is a regular cron with its own prompt:
-  re-read the day's turns, extract facts into `memory/*.md`, fix
-  contradictions, delete stale entries, propose a skill for a recurring
-  procedure, commit and re-index embeddings. Archived sessions it has
-  read may then be dropped after a retention (section 11, M7).
-- **R-MEM-2.** A dislike or a correction in chat flags the turn;
-  consolidation handles flagged turns first. Since M5 a correction is
-  stored during the conversation (R-MEM-8); the flag for consolidation
-  stays in M7.
+- **R-MEM-1.** Ended sessions fade (owner, 2026-11-21,
+  [ADR-0104](adr/0104-keep-ended-sessions-90-days-once-the-review-has-read-them.md)).
+  A daily pass in code, with no model, deletes an archived session that
+  ended more than `memory.archive_days` ago (default 90, `off` keeps
+  them all), unless the memory review still has to read it (R-MEM-8).
+  Facts in the topics stay. The setting is outside R-CFG-14's allowlist.
+  A nightly model pass over memory waits in "Not now" (section 14).
+- **R-MEM-2.** A correction in chat is stored during the conversation
+  (R-MEM-8, since M5). A flag for a disliked turn waits in "Not now",
+  with the nightly pass.
 - **R-MEM-3.** Memory is Markdown files in the node's workspace, in git.
   ganglion's formats are its own. Moving in from another assistant goes
   through an importer that writes these files (spec 14).
@@ -1112,7 +1113,8 @@ undone with `git revert`.
     review: the owner gets one message listing the facts, with Remember
     and Skip (R-POL-6).
   - What the agent found out itself, from a tool or a page, is not
-    stored here; it waits for consolidation (R-MEM-1). The one
+    stored here; it waits for a nightly model pass, in "Not now"
+    (section 14, ADR-0104). The one
     exception is a note about a connected MCP server's data, in that
     server's topic (R-MCP-11).
 - **R-MEM-10.** A fact is a short summary; the conversation it came from
@@ -2328,7 +2330,7 @@ Backups are never cut from P1.
 | Where nodes live | Cloud hosting · Pi · home PC | Edge in the cloud or on a Pi, claude CLI worker on the owner's PC | The P1 monthly bill |
 | Sleep and wake-up | Always-on process · scale-to-zero | Always-on edge, workers may sleep | Same |
 | Sandbox for scripts and MCP modules | Separate uid + Landlock · bubblewrap/nsjail · WASM | Closed for host commands and skill scripts by [ADR-0039](adr/0039-command-sandbox.md) (accepted 2026-11-08): `no_new_privs`, a clean environment, Landlock, no Unix sockets below Landlock 9, the node not dumpable, fail closed | Railway and a Pi measured with `tools/sandboxprobe`; MCP modules in P3 |
-| How long ended sessions (episodes) are kept | Forever, searched by `memory.recall` (today: the newest 500 per chat) · a retention: sessions older than N days are dropped after consolidation has read them | A retention after consolidation (owner, 2026-11-03): nothing is dropped that consolidation has not read, so a fact the owner never confirmed is still turned into one or kept; what was said by chance fades | M7 task 7.2, with the nightly consolidation; N is chosen there |
+| How long ended sessions (episodes) are kept | Forever, searched by `memory.recall` (today: the newest 500 per chat) · a retention: sessions older than N days are dropped after consolidation has read them | Decided (owner, 2026-11-21, [ADR-0104](adr/0104-keep-ended-sessions-90-days-once-the-review-has-read-them.md)): 90 days, `memory.archive_days`; a session the memory review still has to read is kept (R-MEM-1) | — |
 | Telemetry of edge nodes | Each edge to an OpenTelemetry collector over OTLP · Prometheus scrapes each edge · snapshots over the NATS bus, collected by the core | Decided by the owner (2026-11-03): over the bus, collected by the core, without JetStream for metrics (R-OBS-9). A collector needs one more link and one more service for every edge; the bus is already there. An outside collector can later be fed by the core | ADR at the start of P2, with the protocol |
 | Home Assistant | WebSocket API · HA MCP server · MQTT discovery | Deferred to P3 | HA in Docker for testing |
 | Handing a secret from the owner to the node | Environment variables only · `ganglion secret set` on the host · a chat message the transport takes and deletes · a page that encrypts in the browser and returns the ciphertext through the chat · a form posted to the node | The encrypted store and the command on the host are decided and in M6 ([ADR-0077](adr/0077-encrypted-secret-store-on-the-nodes-key.md), R-CFG-9, R-CFG-10). Decided (owner, 2026-11-18, [ADR-0098](adr/0098-hand-values-over-from-the-chat-through-a-pinned-static-page.md), R-INT-1…8): a static page on the project's site, versioned and checked by the node against its own copy, encrypts in the browser; the admin pastes the line and the transport takes it before the inbox. The node serving the page itself waits in "Not now" | A spike: the first server's redirect address and WebCrypto in Telegram's browsers |
@@ -2372,6 +2374,15 @@ ADRs in [docs/adr](adr/README.md).
 
 Ideas that come up along the way and are outside the current phase go here.
 Reviewed at each gate.
+
+- A nightly model pass over memory (moved out of M7 by
+  [ADR-0104](adr/0104-keep-ended-sessions-90-days-once-the-review-has-read-them.md),
+  owner, 2026-11-21): merge duplicate facts, settle contradictions and
+  drop stale ones in the topics, each change shown with Undo (R-MEM-9);
+  offer facts the agent found itself from tools and pages, with Remember
+  and Skip; read first the turns the owner flagged as disliked; propose a
+  skill for a recurring procedure (#173); re-index embeddings (P2). Worth
+  it when the topics grow past what the owner keeps tidy by hand.
 
 - Classifier and learning in the router (P2 / P3).
 - A status for an idea the owner keeps for the developers (open, shipped

@@ -109,6 +109,7 @@ considered, how they compare, the decision and its consequences. See
 | [0101](0101-a-servers-instructions-reach-the-model-as-data-and-its-notes-live-in-memory.md) | A server's instructions reach the model as data, and notes about it live in a memory topic | Accepted | 2026-11-19 |
 | [0102](0102-the-images-binary-runs-when-it-is-not-older-than-the-active-release.md) | Run the image's binary when it is not older than the active release | Accepted | 2026-11-20 |
 | [0103](0103-a-commands-answer-records-its-command-and-is-quoted-only-when-it-holds-the-nodes-words.md) | A command's answer records its command, and a reply brings its text only when it holds the node's words | Accepted | 2026-11-21 |
+| [0104](0104-keep-ended-sessions-90-days-once-the-review-has-read-them.md) | Keep ended sessions 90 days once the memory review has read them, and leave the nightly model pass for later | Accepted | 2026-11-21 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

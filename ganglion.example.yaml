@@ -161,6 +161,10 @@ memory:
     enabled: true
     # How long the chat is silent before it is reviewed.
     quiet: 10m
+  # How many days an ended conversation stays in the archive (for /resume
+  # and the agent's search of past chats); off keeps them all. Facts in the
+  # topics are kept.
+  archive_days: 90
 
 # How the node follows its own releases.
 update:
