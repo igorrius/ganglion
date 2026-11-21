@@ -1,7 +1,9 @@
 package config
 
 import (
+	"context"
 	"database/sql"
+	"io"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -9,6 +11,9 @@ import (
 
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/backup"
+	"github.com/igorrius/ganglion/bus"
+	"github.com/igorrius/ganglion/bus/natsbus"
+	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/internal/buildinfo"
 	"github.com/igorrius/ganglion/language"
 	"github.com/igorrius/ganglion/node"
@@ -41,23 +46,51 @@ func NodeKey() do.Provider[MasterKey] {
 // BackupFor makes the Backup of the node b over the live database db,
 // sealed under key and put through the bucket b's backup section names
 // (R-BAK-3). hc is the HTTP client to the bucket; nil takes the default, so
-// only a test gives one. It is the one place that maps the section to a
-// Backup, for the daily component and for `ganglion backup now`.
-func BackupFor(b Bootstrap, db *sql.DB, key vault.Key, hc *http.Client) (*backup.Backup, error) {
+// only a test gives one; opts say how the cells bucket is exported
+// (cellsExport). It is the one place that maps the section to a Backup, for
+// the daily component and for `ganglion backup now`.
+func BackupFor(b Bootstrap, db *sql.DB, key vault.Key, hc *http.Client, opts ...backup.Option) (*backup.Backup, error) {
 	s := b.Settings.Backup
-	var opts []backup.S3Option
+	var s3opts []backup.S3Option
 	if hc != nil {
-		opts = append(opts, backup.WithHTTPClient(hc))
+		s3opts = append(s3opts, backup.WithHTTPClient(hc))
 	}
 	up, err := backup.NewClient(backup.S3Config{Endpoint: s.Endpoint, Region: s.Region, Bucket: s.Bucket,
-		AccessKeyID: s.AccessKeyID, SecretAccessKey: b.BackupSecret}, opts...)
+		AccessKeyID: s.AccessKeyID, SecretAccessKey: b.BackupSecret}, s3opts...)
 	if err != nil {
 		return nil, err
 	}
 	cfg := backup.DefaultConfig(filepath.Dir(b.DB))
 	cfg.Workspace, cfg.Modules, cfg.Settings = b.Agent.Workspace, b.ModulesDir, settingsFile(b)
 	cfg.Prefix, cfg.Version = s.Prefix, buildinfo.Read().Version
-	return backup.New(db, up, key[:], cfg), nil
+	return backup.New(db, up, key[:], cfg, opts...), nil
+}
+
+// cellsExport is the backup's way to export the cells bucket of the bus nb
+// (R-BUS-4).
+func cellsExport(nb *natsbus.Bus) backup.Option {
+	return backup.WithExport(backup.FileExport(func(ctx context.Context, w io.Writer) error {
+		_, err := nb.ExportKV(ctx, bus.BucketCells, w)
+		return err
+	}))
+}
+
+// BackupOffline makes one backup of the node b over its database db when no
+// node is running on it (`ganglion backup now`): it opens the bus as the
+// node would, exports the cells bucket into the archive and closes the bus.
+// The caller holds the database lock, so no running node has the bus's
+// store open; a running node is asked instead (backup.Ask).
+func BackupOffline(ctx context.Context, b Bootstrap, db *sql.DB, key vault.Key, hc *http.Client) (backup.Result, error) {
+	nb, err := openBus(ctx, b, slog.New(slog.DiscardHandler))
+	if err != nil {
+		return backup.Result{}, err
+	}
+	defer func() { _ = nb.Shutdown(ctx) }()
+	bk, err := BackupFor(b, db, key, hc, cellsExport(nb))
+	if err != nil {
+		return backup.Result{}, err
+	}
+	return bk.Run(ctx)
 }
 
 // backupOn reports whether the node makes backups: the file has a backup
@@ -83,7 +116,11 @@ func BackupComponents() do.Provider[Backups] {
 func BackupDaily() do.Provider[Backups] {
 	return func(i do.Injector) (Backups, error) {
 		b := do.MustInvoke[Bootstrap](i)
-		bk, err := BackupFor(b, do.MustInvoke[Database](i).DB, do.MustInvoke[MasterKey](i).Key, b.BackupHTTP)
+		// Cells first: it loads the cells a restore left, so no backup
+		// exports a bucket that is still waiting for them.
+		do.MustInvoke[*cells.Service](i)
+		bk, err := BackupFor(b, do.MustInvoke[Database](i).DB, do.MustInvoke[MasterKey](i).Key, b.BackupHTTP,
+			cellsExport(do.MustInvoke[*natsbus.Bus](i)))
 		if err != nil {
 			return nil, err
 		}

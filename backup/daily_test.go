@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -25,12 +26,23 @@ type scriptedRunner struct {
 	dir   string
 	steps []Result
 	runs  int
+	// requests are the ids the runs were asked for, "" for a daily one.
+	requests []string
+	// refuse, when set, is what a run fails with before it starts.
+	refuse error
 }
 
-func (r *scriptedRunner) Run(context.Context) (Result, error) {
+func (r *scriptedRunner) Run(ctx context.Context) (Result, error) { return r.RunRequest(ctx, "") }
+
+func (r *scriptedRunner) RunRequest(_ context.Context, request string) (Result, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.refuse != nil {
+		return Result{}, r.refuse
+	}
 	res := r.steps[min(r.runs, len(r.steps)-1)]
+	res.Request = request
+	r.requests = append(r.requests, request)
 	r.runs++
 	if err := writeResult(r.dir, res); err != nil {
 		return res, err
@@ -54,10 +66,12 @@ type dailyKit struct {
 	sent  []event.Outgoing
 	asked chan time.Duration
 	fire  chan time.Time
-	now   time.Time
-	loc   *time.Location
-	logs  *bytes.Buffer
-	rec   *telemetrytest.Recorder
+	// tick fires the wait between two looks for a request file.
+	tick chan time.Time
+	now  time.Time
+	loc  *time.Location
+	logs *bytes.Buffer
+	rec  *telemetrytest.Recorder
 }
 
 func newDailyKit(t *testing.T, steps ...Result) *dailyKit {
@@ -67,7 +81,7 @@ func newDailyKit(t *testing.T, steps ...Result) *dailyKit {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	return &dailyKit{t: t, dir: dir, run: &scriptedRunner{dir: dir, steps: steps}, asked: make(chan time.Duration),
+	return &dailyKit{t: t, dir: dir, run: &scriptedRunner{dir: dir, steps: steps}, asked: make(chan time.Duration), tick: make(chan time.Time),
 		fire: make(chan time.Time), now: time.Date(2026, 11, 17, 10, 0, 0, 0, loc), loc: loc, logs: &bytes.Buffer{},
 		rec: telemetrytest.Install(t)}
 }
@@ -89,8 +103,9 @@ func (k *dailyKit) daily() *Daily {
 		return texts.English, nil
 	}
 	after := func(d time.Duration) <-chan time.Time { k.asked <- d; return k.fire }
+	poll := func(time.Duration) <-chan time.Time { return k.tick }
 	return NewDaily(k.run, k.dir, 3*time.Hour, admins, enqueue, lang, cat, slog.New(slog.NewTextHandler(k.logs, nil)),
-		WithDailyAfter(after), WithDailyClock(func() time.Time { return k.now }), WithDailyLocation(k.loc))
+		WithDailyAfter(after), WithDailyPoll(poll), WithDailyClock(func() time.Time { return k.now }), WithDailyLocation(k.loc))
 }
 
 func (k *dailyKit) start(d *Daily) (step func() time.Duration, stop func()) {
@@ -351,5 +366,208 @@ func TestStatusLines(t *testing.T) {
 	c = one(t, s, scope(28*time.Hour))
 	if c.State != status.Fail || c.Reason != texts.BackupReasonRefused || c.Vars["detail"] != "403 AccessDenied" || !c.Since.Equal(fail.Time) {
 		t.Errorf("failed: %+v", c)
+	}
+}
+
+// syncPoll fires the poll and then once more: the second send is taken only
+// when the component has finished what the first started.
+func (k *dailyKit) syncPoll() {
+	k.t.Helper()
+	for range 2 {
+		select {
+		case k.tick <- time.Time{}:
+		case <-time.After(5 * time.Second):
+			k.t.Fatal("the component did not look for a request")
+		}
+	}
+}
+
+const testRequest = "0123456789ABCDEFGHJKMNPQRS"
+
+func TestDailyServesARequestAndRecordsItsId(t *testing.T) {
+	k := newDailyKit(t, good)
+	step, stop := k.start(k.daily())
+	defer stop()
+	step()
+	k.syncPoll()
+	if k.run.count() != 0 {
+		t.Fatal("it ran without a request")
+	}
+	if err := writeRequest(k.dir, testRequest); err != nil {
+		t.Fatal(err)
+	}
+	k.syncPoll()
+	if got := k.run.requests; len(got) != 1 || got[0] != testRequest {
+		t.Fatalf("runs for %q", got)
+	}
+	if last, err := Last(k.dir); err != nil || last.Request != testRequest || !last.OK {
+		t.Fatalf("recorded %+v, %v", last, err)
+	}
+	if _, err := os.Stat(RequestPath(k.dir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the request is left: %v", err)
+	}
+	k.syncPoll()
+	if k.run.count() != 1 {
+		t.Fatal("it ran a request twice")
+	}
+	if d := k.next(step); k.run.count() != 2 || k.run.requests[1] != "" || d != 17*time.Hour {
+		t.Fatalf("the daily run after it: %q, wait %v", k.run.requests, d)
+	}
+}
+
+func TestDailyAnswersARequestOnlyOnce(t *testing.T) {
+	k := newDailyKit(t, good)
+	answered := good
+	answered.Request = testRequest
+	if err := writeResult(k.dir, answered); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRequest(k.dir, testRequest); err != nil {
+		t.Fatal(err)
+	}
+	step, stop := k.start(k.daily())
+	defer stop()
+	step()
+	k.syncPoll()
+	if k.run.count() != 0 {
+		t.Fatal("a request the last result answers ran again")
+	}
+	if _, err := os.Stat(RequestPath(k.dir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the answered request is left: %v", err)
+	}
+}
+
+func TestDailyIgnoresAndRemovesARequestThatIsNotAnId(t *testing.T) {
+	k := newDailyKit(t, good)
+	step, stop := k.start(k.daily())
+	defer stop()
+	step()
+	for _, bad := range []string{"", "short", testRequest + "X", "../../etc/passwd" + testRequest, "0123456789abcdefghjkmnpqrs"} {
+		if err := os.WriteFile(RequestPath(k.dir), []byte(bad), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		k.syncPoll()
+		if _, err := os.Stat(RequestPath(k.dir)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%q: the request is left: %v", bad, err)
+		}
+	}
+	if k.run.count() != 0 {
+		t.Fatal("a bad request ran a backup")
+	}
+}
+
+func TestDailyKeepsARequestWhileAnotherBackupRuns(t *testing.T) {
+	k := newDailyKit(t, good)
+	k.run.refuse = ErrBusy
+	step, stop := k.start(k.daily())
+	defer stop()
+	step()
+	if err := writeRequest(k.dir, testRequest); err != nil {
+		t.Fatal(err)
+	}
+	k.syncPoll()
+	if _, err := os.Stat(RequestPath(k.dir)); err != nil {
+		t.Fatalf("the request was dropped: %v", err)
+	}
+	k.run.mu.Lock()
+	k.run.refuse = nil
+	k.run.mu.Unlock()
+	k.syncPoll()
+	if got := k.run.requests; len(got) != 1 || got[0] != testRequest {
+		t.Fatalf("runs for %q", got)
+	}
+}
+
+// askKit is Ask with an injected wait: the answers come from the test.
+type askKit struct {
+	dir   string
+	polls int
+	// onPoll runs at the n-th wait for an answer, with the request's id.
+	onPoll  func(n int, id string)
+	timeout bool
+}
+
+func (a *askKit) after(d time.Duration) <-chan time.Time {
+	ch := make(chan time.Time, 1)
+	switch {
+	case d == AnswerWait && a.timeout:
+		ch <- time.Time{}
+	case d == AnswerPoll && !a.timeout:
+		a.polls++
+		data, _ := os.ReadFile(RequestPath(a.dir))
+		a.onPoll(a.polls, string(data))
+		ch <- time.Time{}
+	}
+	return ch
+}
+
+func TestAskWaitsForTheResultWithItsId(t *testing.T) {
+	dir := t.TempDir()
+	a := &askKit{dir: dir}
+	a.onPoll = func(n int, id string) {
+		switch n {
+		case 1: // an older result and one for another request do not answer
+			_ = writeResult(dir, Result{OK: true, Key: "old", Request: "someone else"})
+		case 3:
+			if !validRequestID(id) {
+				t.Errorf("the request holds %q", id)
+			}
+			_ = writeResult(dir, Result{OK: true, Key: "p/a.enc", Size: 9, Request: id})
+		}
+	}
+	res, err := Ask(context.Background(), dir, a.after)
+	if err != nil || res.Key != "p/a.enc" || a.polls != 3 {
+		t.Fatalf("%+v, %v after %d polls", res, err, a.polls)
+	}
+	if info, err := os.Stat(RequestPath(dir)); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("the request file: %v, %v", info, err)
+	}
+}
+
+func TestAskReturnsAFailureWithItsReason(t *testing.T) {
+	dir := t.TempDir()
+	a := &askKit{dir: dir, onPoll: func(_ int, id string) {
+		_ = writeResult(dir, Result{Reason: "backup: put: status 403", Kind: FailureRefused, Request: id})
+	}}
+	res, err := Ask(context.Background(), dir, a.after)
+	if err == nil || err.Error() != "backup: put: status 403" || res.OK {
+		t.Fatalf("%+v, %v", res, err)
+	}
+}
+
+func TestAskGivesUpAndWithdrawsTheRequest(t *testing.T) {
+	dir := t.TempDir()
+	a := &askKit{dir: dir, timeout: true}
+	if _, err := Ask(context.Background(), dir, a.after); !errors.Is(err, ErrNoAnswer) {
+		t.Fatalf("error %v", err)
+	}
+	if _, err := os.Stat(RequestPath(dir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the request is left: %v", err)
+	}
+}
+
+func TestAskStopsWithItsContext(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	never := func(time.Duration) <-chan time.Time { return nil }
+	if _, err := Ask(ctx, dir, never); !errors.Is(err, context.Canceled) {
+		t.Fatalf("error %v", err)
+	}
+	if _, err := os.Stat(RequestPath(dir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the request is left: %v", err)
+	}
+}
+
+func TestAskRefusesWhileAnotherRequestWaits(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeRequest(dir, testRequest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Ask(context.Background(), dir, func(time.Duration) <-chan time.Time { return nil }); !errors.Is(err, ErrPending) {
+		t.Fatalf("error %v", err)
+	}
+	if id, ok := readRequest(dir); !ok || id != testRequest {
+		t.Fatalf("the waiting request changed: %q", id)
 	}
 }
