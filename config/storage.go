@@ -123,11 +123,7 @@ func Cells() do.Provider[*cells.Service] {
 		if err != nil {
 			return nil, err
 		}
-		old, err := sqlstore.New(ctx, do.MustInvoke[Database](i).DB)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := cells.Migrate(ctx, old, store, do.MustInvoke[*slog.Logger](i)); err != nil {
+		if _, err := sqlstore.MigrateToBus(ctx, do.MustInvoke[Database](i).DB, store, do.MustInvoke[*slog.Logger](i)); err != nil {
 			return nil, err
 		}
 		return cells.NewService(store), nil
