@@ -8,6 +8,8 @@ import (
 
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
+	"github.com/igorrius/ganglion/bus/natsbus"
+	"github.com/igorrius/ganglion/bus/natsbus/cellskv"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/cells/sqlstore"
 	"github.com/igorrius/ganglion/language"
@@ -111,12 +113,21 @@ func Sessions() do.Provider[agent.SessionStore] {
 	}
 }
 
-// Cells provides the state cells over the database; confirmations are
-// request cells.
+// Cells provides the state cells over the bus's cells bucket; confirmations
+// are request cells. Cells an older version kept in the database are copied
+// into the bucket once, before anything uses them.
 func Cells() do.Provider[*cells.Service] {
 	return func(i do.Injector) (*cells.Service, error) {
-		store, err := sqlstore.New(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB)
+		ctx := do.MustInvoke[Startup](i)
+		store, err := cellskv.New(ctx, do.MustInvoke[*natsbus.Bus](i).JetStream())
 		if err != nil {
+			return nil, err
+		}
+		old, err := sqlstore.New(ctx, do.MustInvoke[Database](i).DB)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := cells.Migrate(ctx, old, store, do.MustInvoke[*slog.Logger](i)); err != nil {
 			return nil, err
 		}
 		return cells.NewService(store), nil
