@@ -23,7 +23,7 @@ func LockDB(db string) (release func(), err error) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, fmt.Errorf("node: another core process uses %s; one core process owns a database file (ADR-0019)", db)
+			return nil, fmt.Errorf("%w: %s; one core process owns a database file (ADR-0019)", ErrLocked, db)
 		}
 		return nil, fmt.Errorf("node: lock %s: %w", db, err)
 	}

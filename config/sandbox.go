@@ -36,7 +36,7 @@ func Sandbox() do.Provider[*sandbox.Sandbox] {
 		}
 		home, _ := os.UserHomeDir() // none: no home secrets to deny, and HOME=/
 		releases, _ := update.DirFor(b.DB)
-		node := sandbox.NodeFiles{BackupWork: backupWork(b.DB), BackupResult: backupResult(b.DB), BusStore: b.BusDir, Binary: binary, DB: b.DB, Settings: settingsFile(b), LogDir: b.LogDir, ModulesDir: b.ModulesDir, ClaudeDir: b.ClaudeDir,
+		node := sandbox.NodeFiles{BackupWork: backupWork(b.DB), BackupResult: backupResult(b.DB), BackupRequest: backupRequest(b.DB), BusImport: busImport(b.DB), BusStore: b.BusDir, Binary: binary, DB: b.DB, Settings: settingsFile(b), LogDir: b.LogDir, ModulesDir: b.ModulesDir, ClaudeDir: b.ClaudeDir,
 			Workspace: b.Agent.Workspace, Languages: b.Languages, MasterKey: b.MasterKey, Releases: releases}
 		environ := os.Environ()
 		p := sandbox.Policy{
@@ -67,6 +67,22 @@ func backupWork(db string) string {
 		return ""
 	}
 	return backup.WorkPath(filepath.Dir(db))
+}
+
+// backupRequest and busImport are the request file and the import folder
+// beside the database at db; "" for a database that is not a file.
+func backupRequest(db string) string {
+	if db == "" || db == memoryDB {
+		return ""
+	}
+	return backup.RequestPath(filepath.Dir(db))
+}
+
+func busImport(db string) string {
+	if db == "" || db == memoryDB {
+		return ""
+	}
+	return backup.ImportDir(filepath.Dir(db))
 }
 
 func backupResult(db string) string {

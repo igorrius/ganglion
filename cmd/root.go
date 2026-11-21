@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/buildinfo"
@@ -37,7 +38,7 @@ func newRootIO(in io.Reader, out, errOut io.Writer, start startFunc) *cli.Comman
 		Version:   buildinfo.Read().Short(),
 		Writer:    out,
 		ErrWriter: errOut,
-		Commands:  []*cli.Command{runCommand(out, errOut, start), versionCommand(out), relayCommand(in, out), mcpCommand(in, out), secretCommand(in, out), updateCommand(out), backupCommand(out, nil), sandboxCommand()},
+		Commands:  []*cli.Command{runCommand(out, errOut, start), versionCommand(out), relayCommand(in, out), mcpCommand(in, out), secretCommand(in, out), updateCommand(out), backupCommand(out, nil, time.After), sandboxCommand()},
 		// Without a command: help, and a failure, so a supervisor still
 		// starting the command line from before `run` sees an error
 		// instead of a clean exit.

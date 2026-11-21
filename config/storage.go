@@ -1,13 +1,17 @@
 package config
 
 import (
+	"context"
 	"database/sql"
+	"io"
 	"log/slog"
 	"path/filepath"
 	"time"
 
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
+	"github.com/igorrius/ganglion/backup"
+	"github.com/igorrius/ganglion/bus"
 	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/bus/natsbus/cellskv"
 	"github.com/igorrius/ganglion/cells"
@@ -119,8 +123,12 @@ func Sessions() do.Provider[agent.SessionStore] {
 func Cells() do.Provider[*cells.Service] {
 	return func(i do.Injector) (*cells.Service, error) {
 		ctx := do.MustInvoke[Startup](i)
-		store, err := cellskv.New(ctx, do.MustInvoke[*natsbus.Bus](i).JetStream())
+		nb := do.MustInvoke[*natsbus.Bus](i)
+		store, err := cellskv.New(ctx, nb.JetStream())
 		if err != nil {
+			return nil, err
+		}
+		if err := importRestoredCells(ctx, i, nb); err != nil {
 			return nil, err
 		}
 		if _, err := sqlstore.MigrateToBus(ctx, do.MustInvoke[Database](i).DB, store, do.MustInvoke[*slog.Logger](i)); err != nil {
@@ -128,6 +136,20 @@ func Cells() do.Provider[*cells.Service] {
 		}
 		return cells.NewService(store), nil
 	}
+}
+
+// importRestoredCells loads the cells export a restore left beside the
+// database into the bucket, before anything else uses it (R-BAK-6). A node
+// that keeps no database file has no such folder.
+func importRestoredCells(ctx context.Context, i do.Injector, nb *natsbus.Bus) error {
+	b := do.MustInvoke[Bootstrap](i)
+	if b.DB == "" || b.DB == memoryDB {
+		return nil
+	}
+	_, err := backup.ImportPending(ctx, filepath.Dir(b.DB), func(ctx context.Context, r io.Reader) (int, error) {
+		return nb.ImportKV(ctx, bus.BucketCells, r)
+	}, do.MustInvoke[*slog.Logger](i))
+	return err
 }
 
 // Pending provides the calls awaiting confirmation and their buttons.

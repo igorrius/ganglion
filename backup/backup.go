@@ -37,6 +37,31 @@ var ErrNoResult = errors.New("backup: no backup has been recorded")
 // data directory; nothing is recorded for it.
 var ErrBusy = errors.New("backup: another backup of this node is running")
 
+// ExportFunc writes the export of the bus's cells bucket (R-BUS-4) to a new
+// file at path. A node without a bus leaves the file unwritten, and its
+// archive holds no cells entry.
+type ExportFunc func(ctx context.Context, path string) error
+
+// NoExport is the ExportFunc of a node without a bus: it writes nothing.
+func NoExport(context.Context, string) error { return nil }
+
+// FileExport makes an ExportFunc from a function that writes the export to
+// a writer: the file is made 0600 and must not exist.
+func FileExport(write func(ctx context.Context, w io.Writer) error) ExportFunc {
+	return func(ctx context.Context, path string) (err error) {
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return fmt.Errorf("backup: export file: %w", err)
+		}
+		defer func() {
+			if cerr := f.Close(); err == nil && cerr != nil {
+				err = fmt.Errorf("backup: export file: %w", cerr)
+			}
+		}()
+		return write(ctx, f)
+	}
+}
+
 // Uploader puts an object into the bucket. *Client is one; tests use a fake.
 type Uploader interface {
 	Put(ctx context.Context, key string, body io.ReadSeeker, size int64) error
@@ -50,6 +75,9 @@ type Result struct {
 	Key    string    `json:"key"`
 	OK     bool      `json:"ok"`
 	Reason string    `json:"reason"`
+	// Request is the id of the request file this backup answered, or "" for
+	// a daily one (see Ask).
+	Request string `json:"request,omitempty"`
 	// LastOK is the time of the last successful backup, carried through
 	// later failures so "no success for 36 hours" can be told from the file.
 	LastOK time.Time `json:"last_ok"`
@@ -88,11 +116,12 @@ func DefaultConfig(dataDir string) Config {
 
 // Backup makes one backup at a time.
 type Backup struct {
-	db  *sql.DB
-	up  Uploader
-	key []byte
-	cfg Config
-	now func() time.Time
+	db     *sql.DB
+	up     Uploader
+	key    []byte
+	cfg    Config
+	now    func() time.Time
+	export ExportFunc
 }
 
 // Option configures a Backup.
@@ -101,10 +130,14 @@ type Option func(*Backup)
 // WithBackupClock replaces the clock (tests).
 func WithBackupClock(now func() time.Time) Option { return func(b *Backup) { b.now = now } }
 
+// WithExport sets how the cells bucket is exported into the archive; the
+// default exports nothing (a node without a bus).
+func WithExport(f ExportFunc) Option { return func(b *Backup) { b.export = f } }
+
 // New makes a Backup of the live database db, sealed under the 32-byte
 // master key and put through up.
 func New(db *sql.DB, up Uploader, masterKey []byte, cfg Config, opts ...Option) *Backup {
-	b := &Backup{db: db, up: up, key: masterKey, cfg: cfg, now: time.Now}
+	b := &Backup{db: db, up: up, key: masterKey, cfg: cfg, now: time.Now, export: NoExport}
 	for _, o := range opts {
 		o(b)
 	}
@@ -116,14 +149,19 @@ func New(db *sql.DB, up Uploader, masterKey []byte, cfg Config, opts ...Option) 
 // <DataDir>/backup-tmp, which is emptied before and removed after, whatever
 // the outcome, and records the outcome in <DataDir>/backup.json. It returns
 // the error of the failed step; a failure to record it is not hidden.
-func (b *Backup) Run(ctx context.Context) (Result, error) {
+func (b *Backup) Run(ctx context.Context) (Result, error) { return b.RunRequest(ctx, "") }
+
+// RunRequest is Run for a backup that a request file asked for: the id of
+// the request is recorded with the result, which is how the command that
+// asked finds its answer.
+func (b *Backup) RunRequest(ctx context.Context, request string) (Result, error) {
 	release, err := lockRun(b.cfg.DataDir)
 	if err != nil {
 		return Result{}, err
 	}
 	defer release()
 	at := b.now().UTC().Truncate(time.Second)
-	res := Result{Time: at, Key: b.objectKey(at)}
+	res := Result{Time: at, Key: b.objectKey(at), Request: request}
 	size, err := b.make(ctx, res.Key, at)
 	if err != nil {
 		res.Key, res.Reason = "", err.Error()
@@ -160,8 +198,12 @@ func (b *Backup) make(ctx context.Context, key string, at time.Time) (size int64
 	if err := Snapshot(ctx, b.db, snap); err != nil {
 		return 0, err
 	}
+	cells := filepath.Join(work, "cells.jsonl")
+	if err := b.export(ctx, cells); err != nil {
+		return 0, err
+	}
 	tarball := filepath.Join(work, "archive.tar.gz")
-	if err := b.pack(ctx, snap, tarball, at); err != nil {
+	if err := b.pack(ctx, snap, cells, tarball, at); err != nil {
 		return 0, err
 	}
 	sealed := filepath.Join(work, "archive.tar.gz.enc")
@@ -171,8 +213,9 @@ func (b *Backup) make(ctx context.Context, key string, at time.Time) (size int64
 	return upload(ctx, b.up, key, sealed)
 }
 
-// pack writes the archive of the snapshot and the data directory to dst.
-func (b *Backup) pack(ctx context.Context, snap, dst string, at time.Time) (err error) {
+// pack writes the archive of the snapshot, the cells export and the data
+// directory to dst.
+func (b *Backup) pack(ctx context.Context, snap, cells, dst string, at time.Time) (err error) {
 	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return fmt.Errorf("backup: archive file: %w", err)
@@ -182,7 +225,7 @@ func (b *Backup) pack(ctx context.Context, snap, dst string, at time.Time) (err 
 			err = fmt.Errorf("backup: archive file: %w", cerr)
 		}
 	}()
-	_, err = Pack(ctx, f, Sources{DB: snap, Workspace: b.cfg.Workspace, Modules: b.cfg.Modules,
+	_, err = Pack(ctx, f, Sources{DB: snap, Cells: cells, Workspace: b.cfg.Workspace, Modules: b.cfg.Modules,
 		Settings: b.cfg.Settings, Version: b.cfg.Version, Schema: b.cfg.Schema, Time: at})
 	return err
 }

@@ -1170,8 +1170,13 @@ Backups (M7, owner, 2026-11-17,
   `modules/templates`, `ganglion.yaml`, and a manifest (the node's
   version, the time, the schema version, each file's SHA-256). Once cells
   live in the bus (R-BUS-3), the archive also holds an export of the
-  `cells` bucket, values and history, which a restore loads before the
-  node starts; streams are delivery, not data, and are left out. Never the
+  `cells` bucket, values and history, as `bus/cells.jsonl`, which a restore
+  leaves in `bus-import/` and the node loads at its first start, before
+  modules run; streams are delivery, not data, and are left out. A running
+  node holds the database lock and the bus's store, so `ganglion backup
+  now` then asks the node through a request file in the data directory and
+  prints the result the node records; with no node running it makes the
+  backup itself. Never the
   master key, `releases/`, `logs/` or the claude work folder.
 - **R-BAK-2.** The archive is encrypted before it leaves the node: AES-256-GCM
   in 64 KiB chunks under a key derived from the master key (HKDF-SHA256,
@@ -1186,7 +1191,8 @@ Backups (M7, owner, 2026-11-17,
   (HTTPS), region, bucket, prefix, the access key's id, the secret key as
   `env:NAME` or `store:NAME`, and `at`. Without it backups are off. It is
   outside R-CFG-14's allowlist, and no agent tool changes it or starts a
-  backup.
+  backup; the request file and the import folder of R-BAK-1 and R-BAK-6 are
+  on the command sandbox's deny list.
 - **R-BAK-5.** A failed backup alerts the admins once, and its recovery
   once. `/status` shows the last backup's time, size and outcome, says
   when backups are off, and warns when the last success is older than 36
@@ -1195,7 +1201,9 @@ Backups (M7, owner, 2026-11-17,
   R-CFG-10, restores into an empty data directory: it opens every chunk
   and checks the manifest's hashes and the database's integrity before it
   writes a file, refuses absolute paths, `..`, links and devices, and
-  writes nothing on a failure. An acceptance test backs a node up to a
+  writes nothing on a failure; it starts no server and leaves the cells
+  export for the node's first start, which refuses to import it into a
+  bucket that already holds cells. An acceptance test backs a node up to a
   fake S3-compatible server, restores into a new directory, starts a node
   on it and finds its memory, modules and cells.
 

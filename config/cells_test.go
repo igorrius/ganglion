@@ -2,12 +2,17 @@ package config
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/backup"
 	"github.com/igorrius/ganglion/bus"
+	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/cells/sqlstore"
 	"github.com/igorrius/ganglion/sqlitedb"
@@ -55,5 +60,38 @@ func TestCellsMoveFromTheDatabaseToTheBucketOnce(t *testing.T) {
 		if rep := i.Shutdown(); !rep.Succeed {
 			t.Fatalf("shutdown: %v", rep.Error())
 		}
+	}
+}
+
+// A restore made into a node that already has cells stops the start with an
+// error that says so, and keeps the file.
+func TestRestoredCellsAreRefusedByABucketThatHoldsCells(t *testing.T) {
+	ctx := context.Background()
+	b := testConfig(t)
+	b.BusDir = bus.StorePath(filepath.Dir(b.DB))
+	i := New(ctx, b, slog.New(slog.DiscardHandler))
+	if err := do.MustInvoke[*cells.Service](i).Define(ctx, cells.Def{ID: "lamp", Kind: cells.KindSensor}); err != nil {
+		t.Fatal(err)
+	}
+	if rep := i.Shutdown(); !rep.Succeed {
+		t.Fatalf("shutdown: %v", rep.Error())
+	}
+	path := backup.ImportPath(filepath.Dir(b.DB))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const export = `{"key":"other","seq":1,"op":"put","value":"e30="}` + "\n"
+	if err := os.WriteFile(path, []byte(export), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	j := New(ctx, b, slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { _ = j.Shutdown() })
+	_, err := do.Invoke[*cells.Service](j)
+	if !errors.Is(err, natsbus.ErrNotEmpty) || !strings.Contains(err.Error(), "holds 1 entries") {
+		t.Fatalf("error %v", err)
+	}
+	if got, rerr := os.ReadFile(path); rerr != nil || string(got) != export {
+		t.Fatalf("the file: %q, %v", got, rerr)
 	}
 }
