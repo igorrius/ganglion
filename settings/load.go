@@ -294,6 +294,9 @@ func (f File) check() error {
 			return err
 		}
 	}
+	if err := f.Bus.check(); err != nil {
+		return err
+	}
 	if f.Models != nil {
 		return f.Models.check("models")
 	}

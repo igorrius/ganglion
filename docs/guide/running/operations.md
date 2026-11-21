@@ -50,6 +50,14 @@ What the bot writes without a model follows each person's language: the one they
 
 To correct a text, put `<code>.yaml` in the `languages/` directory beside the database (`agent.languages` moves it, but never into the workspace), with the keys you want from [`texts/lang/en.yaml`](https://github.com/igorrius/ganglion/blob/master/texts/lang/en.yaml), and restart. A text keeps its `{placeholders}` and adds no links, mentions or Markdown; one that does not is logged and left out. Your file comes before a shipped file and a translation, key by key.
 
+## The message bus
+
+The node runs a small message server (NATS with JetStream) inside its own process. It keeps its files in the `bus` folder beside the database, opens no network port, and starts and stops with the node. Leave that folder alone: it holds data the node needs, and the node keeps commands away from it. It is not part of the [backup](#backups) yet.
+
+- `/status` shows a **Bus** line with the mode and how much disk the store uses. It fails when the node has lost its connection to the server.
+- The server stores its data on disk only, so it adds little memory. The metrics `ganglion.bus.store_bytes` and `ganglion.bus.connected` show the store and the connection.
+- To use a NATS server you run yourself, set `bus.server: external` and list its addresses in `bus.urls`; see [the `bus` section](configuration.md#bus). The node then starts no server, and it refuses to start when it cannot reach yours.
+
 ## Backups
 
 A node can back itself up every day to a bucket at any S3-compatible provider. Each copy is encrypted on the node before it leaves, so the provider sees only sealed bytes. Without a `backup:` section there are no backups and `/status` says so; the [manual copy](#backing-up-by-hand) below then is your only protection.

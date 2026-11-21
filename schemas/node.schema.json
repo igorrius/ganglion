@@ -27,9 +27,31 @@
     "mcp": { "description": "The remote MCP servers the admin connected from the chat, and the intake page's address (R-MCP-2). It applies at once; mcp.connect, mcp.rule and /mcp write it, config.propose never does.", "$ref": "#/$defs/mcp" },
     "memory": { "description": "The agent's long-term memory by topic (M5, R-MEM-6–9).", "$ref": "#/$defs/memory" },
     "update": { "description": "How the node follows the core releases (R-UPD-6).", "$ref": "#/$defs/update" },
-    "backup": { "description": "The daily encrypted backup to an S3-compatible bucket (R-BAK-4). Missing means backups are off. Only the host edits this section: the agent cannot change it.", "$ref": "#/$defs/backup" }
+    "backup": { "description": "The daily encrypted backup to an S3-compatible bucket (R-BAK-4). Missing means backups are off. Only the host edits this section: the agent cannot change it.", "$ref": "#/$defs/backup" },
+    "bus": { "description": "The node's message bus (R-BUS-1): the NATS server the node runs inside its process, or one the operator runs. Only the host edits this section: the agent cannot change it.", "$ref": "#/$defs/bus" }
   },
   "$defs": {
+    "bus": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "server": {
+          "description": "embedded runs nats-server inside the node, with JetStream on disk in the bus folder beside the database; it opens no port. external connects to the servers in urls.",
+          "type": "string",
+          "enum": ["embedded", "external"],
+          "default": "embedded"
+        },
+        "urls": {
+          "description": "The external server's addresses, nats:// or tls://: one server or the members of a cluster. Required for external, refused for embedded.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^(nats|tls)://[^/?#@]+$" }
+        },
+        "credentials": {
+          "description": "The text of a .creds file for the external server, as env:NAME or store:NAME. Optional, and only for external. It is never written in the file.",
+          "$ref": "#/$defs/secretRef"
+        }
+      }
+    },
     "backup": {
       "type": "object",
       "additionalProperties": false,
