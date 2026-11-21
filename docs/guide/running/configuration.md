@@ -156,6 +156,23 @@ mcp:
 |---|---|---|
 | `check` | `true` | Ask once a day for a newer release and tell the admins once per version, with the version, its date and a link. It never installs one: you do, with `/update install`. Set `off` to stop the asking. Without a release version (a build from source) and with the database in memory, the node asks nothing. |
 
+## bus
+
+The node's message bus. By default the node runs a NATS server inside its own process and keeps its files in the `bus` folder beside the database; it opens no network port. Only a host edit changes this section: the agent cannot. See [The message bus](operations.md#the-message-bus).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `server` | `embedded` | `embedded` runs the server inside the node. `external` connects to a server, or a cluster, you run. |
+| `urls` | none | The external server's addresses, `nats://` or `tls://` with a host and no user or password. Required for `external` and refused for `embedded`. |
+| `credentials` | none | The text of a `.creds` file for the external server, as `env:NAME` or `store:NAME`. It is optional, only for `external`, and is kept in memory, never written to a file. |
+
+```yaml
+bus:
+  server: external
+  urls: [nats://nats.example.com:4222]
+  credentials: store:BUS_CREDENTIALS
+```
+
 ## backup
 
 The daily encrypted backup to an S3-compatible bucket. Without this section there are no backups. Only a host edit changes it: the agent cannot. When the section is there, the first five keys are required. See [Backups](operations.md#backups).

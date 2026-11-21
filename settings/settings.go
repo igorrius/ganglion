@@ -5,6 +5,7 @@
 package settings
 
 import (
+	"github.com/igorrius/ganglion/bus"
 	"path/filepath"
 	"regexp"
 	"time"
@@ -43,6 +44,9 @@ type File struct {
 	// Backup is the daily encrypted backup to an S3-compatible bucket
 	// (R-BAK-4); nil means backups are off.
 	Backup *Backup `yaml:"backup"`
+	// Bus is the node's message bus (R-BUS-1): the embedded NATS server by
+	// default.
+	Bus Bus `yaml:"bus"`
 }
 
 // DefaultBackupAt is the time of day a backup runs when at is not set.
@@ -339,6 +343,7 @@ func Default() File {
 			Search:      Search{Mode: auto, BraveKey: "env:BRAVE_API_KEY"},
 		},
 		Update: Update{Check: true},
+		Bus:    Bus{Server: string(bus.ModeEmbedded)},
 		MCP:    MCP{Page: DefaultIntakePage},
 		Memory: Memory{PromptBudget: 24000, Review: Review{Enabled: true, Quiet: Duration(10 * time.Minute)}, ArchiveDays: 90},
 	}
@@ -368,7 +373,7 @@ func (f File) StoreNames() []string { return f.refNames(SchemeStore) }
 
 // refNames are the names of the file's references of one scheme.
 func (f File) refNames(scheme Scheme) []string {
-	refs := []SecretRef{f.Telegram.Token, f.Agent.Search.BraveKey}
+	refs := []SecretRef{f.Telegram.Token, f.Agent.Search.BraveKey, f.Bus.Credentials}
 	if f.Backup != nil {
 		refs = append(refs, f.Backup.SecretAccessKey)
 	}

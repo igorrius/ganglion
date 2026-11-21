@@ -2,6 +2,7 @@ package config
 
 import (
 	"github.com/igorrius/ganglion/agent"
+	"github.com/igorrius/ganglion/bus/natsbus"
 	"time"
 
 	"github.com/igorrius/ganglion/backup"
@@ -38,6 +39,7 @@ func StatusSources() do.Provider[[]status.Source] {
 			do.MustInvoke[*vault.Vault](i),
 			do.MustInvoke[*mcpadmin.Admin](i),
 			do.MustInvoke[*backup.Status](i),
+			do.MustInvoke[*natsbus.Bus](i),
 			do.MustInvoke[*schedule.Scheduler](i),
 			do.MustInvoke[*sandbox.Sandbox](i),
 			do.MustInvoke[*host.Switch](i),

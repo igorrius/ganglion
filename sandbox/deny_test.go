@@ -54,6 +54,20 @@ func TestDenyListKeepsADatabaseBesideOtherWork(t *testing.T) {
 	}
 }
 
+// TestDenyListDeniesTheBusStore: the embedded bus server's store holds every
+// cell and kept message, so it is denied on its own when the data folder is
+// not.
+func TestDenyListDeniesTheBusStore(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := NodeFiles{DB: filepath.Join(dir, "ganglion.db"), BusStore: filepath.Join(dir, "bus")}
+	if got := DenyList("", dir, node, nil, nil); !slices.Contains(got, filepath.Join(dir, "bus")) {
+		t.Fatalf("the bus store is not denied; got %v", got)
+	}
+}
+
 // TestDenyListDeniesTheBackupFilesBesideOtherWork: the backup's work folder
 // holds a plain copy of the database, and its result file names the last
 // object; both are denied on their own when the data folder is not.

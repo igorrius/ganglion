@@ -29,7 +29,7 @@ flowchart LR
         cli["claude CLI worker"]
     end
 
-    bus{{"Bus<br/>P1: in-process<br/>P2: NATS leaf + JetStream,<br/>KV, Object Store"}}
+    bus{{"Bus<br/>P2 M8: embedded NATS server,<br/>JetStream on disk (or an external one);<br/>later: leaf nodes, Object Store"}}
 
     tg <--> corep
     tg -- "updates by webhook, when the file says so:<br/>the public listener, secret header (ADR-0078)" --> corep
@@ -61,7 +61,7 @@ flowchart LR
 | claude CLI worker | A conversation provider (ADR-0021); standalone heavy tasks later | unmodified `claude -p` | P1 provider; P2 worker (ADR-0015) |
 | MCP bridge | The agent's tools for one `claude -p` run, under the core's policies, taint, journal and call keys | own MCP server in the core on a per-run Unix socket `0600` with a token; the hidden `ganglion mcp-relay` as the CLI's stdio server (ADR-0036, ADR-0037) | P1 (M3b) |
 | The web (outside) | Pages and APIs `web.fetch` reads, search results of `web.search`; everything read is data, and it taints the session | HTTP(S) to public addresses only, checked on every connection | P1 (M3b) |
-| Bus | Messages between roles; across nodes buffering, KV, object store | in-process (P1), NATS (P2) | P1 / P2 |
+| Bus | Messages between roles; across nodes buffering, KV, object store. In the core it is the embedded NATS server with JetStream on disk in `<data>/bus`, reached in-process and opening no port, or a server the operator runs (`bus.server: external`) (R-BUS-1, ADR-0106) | nats-server embedded, `nats.go` client behind `bus/natsbus` | P2 (M8) |
 
 ## Deployment: P1, all-in-one
 

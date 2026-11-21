@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/igorrius/ganglion/bus"
 	"github.com/igorrius/ganglion/cmd/flags"
 	"github.com/igorrius/ganglion/config"
 	"github.com/igorrius/ganglion/internal/buildinfo"
@@ -213,6 +214,12 @@ func fromFile(f settings.File, db string, limit memlimit.Limit, src settings.Sou
 		if b.BackupSecret, err = f.Backup.Secret(src); err != nil {
 			return config.Bootstrap{}, err
 		}
+	}
+	if b.BusCredentials, err = f.Bus.CredentialsText(src); err != nil {
+		return config.Bootstrap{}, err
+	}
+	if db != memoryDB {
+		b.BusDir = bus.StorePath(filepath.Dir(db))
 	}
 	b.Agent, err = agentSettings(f, src)
 	return b, err

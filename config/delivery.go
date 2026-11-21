@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/igorrius/ganglion/bus/natsbus"
 	"log/slog"
 	"time"
 
@@ -299,6 +300,7 @@ func AgentSchedulers() do.Provider[Schedulers] {
 func CoreComponents() do.Provider[[]node.Component] {
 	return func(i do.Injector) ([]node.Component, error) {
 		q := do.MustInvoke[*sqlqueue.Queue](i)
+		do.MustInvoke[*natsbus.Bus](i) // the node starts with its bus, or not at all
 		comps := []node.Component{
 			node.Named("sender", do.MustInvoke[*outbox.Sender](i).Run),
 			node.Named("loop", do.MustInvoke[*core.Loop](i).Run),

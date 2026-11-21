@@ -186,3 +186,12 @@ update:
 #   secret_access_key: env:BACKUP_SECRET_ACCESS_KEY
 #   # The time of day, in node.tz, the backup runs at.
 #   at: "03:00"
+
+# The node's message bus. By default the node runs a NATS server inside its
+# own process and keeps its files in the bus folder beside the database; it
+# opens no port. To use a NATS server you run yourself, set server: external.
+# bus:
+#   server: embedded
+#   urls: [nats://nats.example.com:4222]
+#   # The text of a .creds file; never written here: env:NAME or store:NAME.
+#   credentials: env:BUS_CREDENTIALS

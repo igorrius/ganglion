@@ -36,7 +36,7 @@ func Sandbox() do.Provider[*sandbox.Sandbox] {
 		}
 		home, _ := os.UserHomeDir() // none: no home secrets to deny, and HOME=/
 		releases, _ := update.DirFor(b.DB)
-		node := sandbox.NodeFiles{BackupWork: backupWork(b.DB), BackupResult: backupResult(b.DB), Binary: binary, DB: b.DB, Settings: settingsFile(b), LogDir: b.LogDir, ModulesDir: b.ModulesDir, ClaudeDir: b.ClaudeDir,
+		node := sandbox.NodeFiles{BackupWork: backupWork(b.DB), BackupResult: backupResult(b.DB), BusStore: b.BusDir, Binary: binary, DB: b.DB, Settings: settingsFile(b), LogDir: b.LogDir, ModulesDir: b.ModulesDir, ClaudeDir: b.ClaudeDir,
 			Workspace: b.Agent.Workspace, Languages: b.Languages, MasterKey: b.MasterKey, Releases: releases}
 		environ := os.Environ()
 		p := sandbox.Policy{

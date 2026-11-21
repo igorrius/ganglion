@@ -36,6 +36,11 @@ linters:
           deny:
             - pkg: github.com/samber/do
               desc: only the config package wires the node (ADR-0028)
+        nats:
+          files: ["$all", "!**/bus/natsbus/**"]
+          deny:
+            - pkg: github.com/nats-io
+              desc: only bus/natsbus imports NATS (R-BUS-1)
         command-line:
           files: ["$all", "!**/cmd/**"]
           deny:

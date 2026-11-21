@@ -99,6 +99,13 @@ type Bootstrap struct {
 	// BackupHTTP is the HTTP client the backup talks to the bucket with; nil
 	// takes the default. Only a test sets it, to trust a local server.
 	BackupHTTP *http.Client
+	// BusDir is the embedded bus server's store folder (bus beside the
+	// database); "" makes a private temporary one, for a node that keeps
+	// nothing on disk. Which server the bus uses is Settings.Bus.
+	BusDir string
+	// BusCredentials is the text bus.credentials names, already read; "" when
+	// the bus needs none.
+	BusCredentials string
 	// Metrics draws the node's own metrics for metrics.show and /metrics
 	// (ADR-0045); the command line sets it from telemetry, nil leaves the
 	// tool out.
@@ -108,7 +115,7 @@ type Bootstrap struct {
 // SecretValues are the secret values the node read, which logs and command
 // output hide exactly (redact.Values).
 func (b Bootstrap) SecretValues() []string {
-	out := []string{b.BotToken, b.Agent.BraveKey, b.BackupSecret}
+	out := []string{b.BotToken, b.Agent.BraveKey, b.BackupSecret, b.BusCredentials}
 	for _, k := range b.Agent.Keys {
 		out = append(out, k)
 	}
