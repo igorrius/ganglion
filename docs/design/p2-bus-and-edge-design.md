@@ -327,7 +327,7 @@ owner's key stays in spec 9.3 for later.
 
 ### 7.8. Telemetry
 
-Every N seconds an edge publishes a snapshot of its metrics to `g.tel.<edge>` over plain NATS: no
+Every `edge.telemetry_every` (default 30s) an edge publishes a snapshot of its metrics to `g.tel.<edge>` over plain NATS: no
 JetStream, nothing stored, cumulative counters, so a lost snapshot costs nothing **(owner)**. The
 core adds a `node` label and serves them on its own `/metrics` (R-OBS-9). `/status` gets a line per
 edge: link, buffered events, module versions.
