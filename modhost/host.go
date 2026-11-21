@@ -110,6 +110,9 @@ type Deps struct {
 	Cells *cells.Service
 	Jobs  Jobs
 	Inbox Inbox
+	// Publisher stores a module's message in the NOTIFY stream; the core's
+	// consumer hands it back to Deliver (R-BUS-7).
+	Publisher Publisher
 	// Secrets gives each module its own secret source; Forget drops a
 	// removed module's stored secrets.
 	Secrets SecretsFor

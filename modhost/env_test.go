@@ -468,9 +468,28 @@ type env struct {
 	own       map[string]secrets.Source // a module's own source, by full name, when it has one
 	forgot    []string                  // the modules whose secrets were dropped
 	forgetErr error                     // what dropping them returns
+	pub       modhost.Publisher         // the host's publisher; the loopback when nil
 	now       time.Time
 	logs      *bytes.Buffer
 	logsMu    sync.Mutex
+}
+
+// loopback is a Publisher that hands a message straight to the host's
+// Deliver, as the core's consumer does once the bus has stored it, so a
+// test sees the inbox events when notify returns. The tests that need the
+// stream itself run on a real embedded bus (notify_bus_test.go).
+type loopback struct{ e *env }
+
+func (l loopback) Publish(ctx context.Context, _, id string, _ map[string]string, payload []byte) error {
+	_ = l.e.host.Deliver(ctx, id, payload)
+	return nil
+}
+
+func (e *env) publisher() modhost.Publisher {
+	if e.pub != nil {
+		return e.pub
+	}
+	return loopback{e}
 }
 
 // active is the probe installed as local/<name> from manifest.
@@ -501,6 +520,7 @@ func (e *env) newHost() *modhost.Host {
 		Cells:       e.cells,
 		Jobs:        e.jobs,
 		Inbox:       e.inbox,
+		Publisher:   e.publisher(),
 		Secrets:     e.secretsFor,
 		Forget:      e.forget,
 		NodeSecrets: []string{"TELEGRAM_BOT_TOKEN"},

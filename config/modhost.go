@@ -10,6 +10,7 @@ import (
 
 	"github.com/igorrius/ganglion/alert"
 	"github.com/igorrius/ganglion/builder"
+	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/cells"
 	templates "github.com/igorrius/ganglion/examples/modules"
 	"github.com/igorrius/ganglion/gitrepo"
@@ -42,6 +43,7 @@ func ModuleHost() do.Provider[*modhost.Host] {
 			Cells:        do.MustInvoke[*cells.Service](i),
 			Jobs:         do.MustInvoke[*schedule.Store](i),
 			Inbox:        do.MustInvoke[*sqlqueue.Queue](i),
+			Publisher:    do.MustInvoke[*natsbus.Bus](i),
 			Secrets:      secretsFor(b, store),
 			Forget:       forgetSecrets(store),
 			NodeSecrets:  nodeSecrets(b),
@@ -55,6 +57,15 @@ func ModuleHost() do.Provider[*modhost.Host] {
 		})
 		h.Start(do.MustInvoke[Startup](i))
 		return h, nil
+	}
+}
+
+// NoticeConsumer provides the core's consumer of the NOTIFY stream: it hands
+// each notice a module published to the module host's Deliver, which puts
+// the copies for the module's destinations into the inbox (R-BUS-7).
+func NoticeConsumer() do.Provider[*natsbus.Consumer] {
+	return func(i do.Injector) (*natsbus.Consumer, error) {
+		return do.MustInvoke[*natsbus.Bus](i).NoticeConsumer(natsbus.DefaultNoticeConsumer(), do.MustInvoke[*modhost.Host](i).Deliver), nil
 	}
 }
 

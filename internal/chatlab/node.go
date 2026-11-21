@@ -490,8 +490,8 @@ func (n *Node) Quiet(ctx context.Context, limit time.Duration) error {
 			quiet = 0
 			continue
 		}
-		var left int
-		if err := n.db.QueryRowContext(ctx, busyQuery).Scan(&left); err != nil {
+		left, err := n.left(ctx)
+		if err != nil {
 			if ctx.Err() != nil {
 				return notQuiet
 			}
@@ -504,6 +504,17 @@ func (n *Node) Quiet(ctx context.Context, limit time.Duration) error {
 		quiet++
 	}
 	return nil
+}
+
+// left is what the node has left to do: busyQuery's rows and the notices of
+// modules waiting on the bus, which no table shows yet.
+func (n *Node) left(ctx context.Context) (int, error) {
+	var left int
+	if err := n.db.QueryRowContext(ctx, busyQuery).Scan(&left); err != nil {
+		return 0, err
+	}
+	backlog, err := n.lab.Backlog(ctx)
+	return left + backlog, err
 }
 
 // Stop ends the node and removes its directory. A second Stop does nothing.
