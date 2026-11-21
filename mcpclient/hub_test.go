@@ -67,6 +67,24 @@ func (w *waits) release(t *testing.T) {
 	}
 }
 
+// begun waits until n waits have begun, released or not.
+func (w *waits) begun(t *testing.T, n int) {
+	t.Helper()
+	for {
+		w.mu.Lock()
+		got := len(w.chans)
+		w.mu.Unlock()
+		if got >= n {
+			return
+		}
+		select {
+		case <-w.added:
+		case <-time.After(testTimeout):
+			t.Fatalf("the hub waited %d times, want %d", got, n)
+		}
+	}
+}
+
 func (w *waits) durations() []time.Duration {
 	w.mu.Lock()
 	defer w.mu.Unlock()

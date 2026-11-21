@@ -423,9 +423,11 @@ func TestOAuthFailedRefreshNeedsSignIn(t *testing.T) {
 	rig.hub.Set([]mcpclient.Server{cfg})
 	rig.await(t, "shop", mcpclient.StateConnected)
 
+	// #293: the tool is taken while it is on offer; once the clock moves, the
+	// server's stream may find the token expired first and take it off.
+	search := handler(t, rig.hub, "shop.search")
 	r.clock.advance(time.Hour)
-	_, err := call(handler(t, rig.hub, "shop.search"), `{}`)
-	if err == nil {
+	if _, err := call(search, `{}`); err == nil {
 		t.Fatal("the call ran without a token")
 	}
 	rig.await(t, "shop", mcpclient.StateUnauthorized)
@@ -441,6 +443,10 @@ func TestOAuthFailedRefreshNeedsSignIn(t *testing.T) {
 	if !strings.Contains(r.logs.String(), "needs a new sign-in") {
 		t.Fatalf("logs = %s", r.logs.String())
 	}
+	// #293: the third retry must have failed and be waiting before the new
+	// sign-in; otherwise it may run after the sign-in, connect at once and
+	// leave the release below no wait to end.
+	rig.waits.begun(t, 4)
 	r.as.Update(func(o *mcpclienttest.AuthOptions) { o.RefuseRefresh = false })
 	r.signIn(t, "state-2")
 	rig.waits.release(t)
