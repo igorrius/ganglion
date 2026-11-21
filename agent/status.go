@@ -55,7 +55,7 @@ func (a *Agent) ownStatus(ctx context.Context, t *turn, s status.Scope) []status
 }
 
 // sessionLine names the models an ordinary turn of this session tries now, in order, and the model
-// that answered its last turn when that was not the first.
+// that answered its last turn when an attempt before it failed: a fallback (#298).
 func (a *Agent) sessionLine(ctx context.Context, t *turn) status.Check {
 	c := status.Check{Section: status.SectionModels, State: status.OK, Line: texts.StatusSession}
 	cands, err := a.d.Router.Route(ctx, router.TaskReq{Purpose: router.PurposeChat, Turn: true, Tools: len(a.toolSpecs(t)) > 0, Privacy: t.state.privacy()})
@@ -68,15 +68,16 @@ func (a *Agent) sessionLine(ctx context.Context, t *turn) status.Check {
 		names[i] = cand.Model
 	}
 	c.Vars = texts.Vars{"models": strings.Join(names, ", ")}
-	if by := a.lastAnsweredBy(ctx, t.event.Conv); by != "" && by != names[0] {
+	if by := a.lastFallback(ctx, t.event.Conv); by != "" {
 		c.State, c.Line, c.Vars["model"] = status.Warn, texts.StatusSessionFallback, by
 	}
 	return c
 }
 
-// lastAnsweredBy is the model that answered conv's last turn (answeredBy). "" for none or when it
-// cannot be read.
-func (a *Agent) lastAnsweredBy(ctx context.Context, conv string) string {
+// lastFallback is the model that answered conv's last turn after an earlier attempt failed. "" when
+// the first attempt answered, for none, or when it cannot be read. The model is not compared with the
+// chat's candidates: a turn of another purpose, a memory review, is answered by its own (#298).
+func (a *Agent) lastFallback(ctx context.Context, conv string) string {
 	last, err := a.d.Turns.Last(ctx, conv)
 	if err != nil {
 		if !errors.Is(err, turns.ErrNoTurn) {
@@ -84,7 +85,10 @@ func (a *Agent) lastAnsweredBy(ctx context.Context, conv string) string {
 		}
 		return ""
 	}
-	at, _ := answeredBy(last.Route)
+	at, ok := answeredBy(last.Route)
+	if !ok || last.Route[0].Error == "" {
+		return ""
+	}
 	return at.Model
 }
 

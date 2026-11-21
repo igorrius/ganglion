@@ -27,6 +27,8 @@ There are no `/start` and `/help` commands. Telegram's command menu is set by th
 
 `/reset` is an unlisted alias of `/new`.
 
+To ask the agent about a `/status` answer, reply to it: the agent reads the whole answer. A reply to another command's answer tells the agent only which command it was, since some answers (`/modules`, `/cells`) show text a module wrote, which the agent never reads.
+
 To change settings without editing the file, ask the agent: see [Settings from the chat](settings.md).
 
 If the node runs without a supervisor (a restart policy in your container platform, or systemd), `/restart` just stops it. See [Operations](../running/operations.md#restarting).
