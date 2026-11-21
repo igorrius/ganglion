@@ -349,8 +349,10 @@ func TestStatusAndDisconnectCounter(t *testing.T) {
 	}
 	srv.Shutdown()
 	srv.WaitForShutdown()
+	// The client calls the disconnect handler asynchronously, after
+	// IsConnected already says false: wait for the counter itself.
 	deadline := time.Now().Add(5 * time.Second)
-	for b.nc.IsConnected() && time.Now().Before(deadline) {
+	for (b.nc.IsConnected() || rec.Value(t, "ganglion.bus.disconnects", nil) < 1) && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	checks, _ = b.Status(ctx, status.Scope{})
