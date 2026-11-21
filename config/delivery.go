@@ -251,8 +251,9 @@ func Housekeepers() do.Provider[Housekeeping] {
 // expiry of unanswered confirmations, the janitor, the translator, the
 // runner of host commands, which lives where the agent does, the client of
 // remote MCP servers (R-MCP-1), the
-// reconcile of the cells at start and every five minutes, and the memory
-// review's timer while the review runs.
+// reconcile of the cells at start and every five minutes, the prune of
+// archived sessions past memory.archive_days, and the memory review's timer
+// while the review runs.
 func AgentHousekeepers() do.Provider[Housekeeping] {
 	return func(i do.Injector) (Housekeeping, error) {
 		logger := do.MustInvoke[*slog.Logger](i)
@@ -266,6 +267,8 @@ func AgentHousekeepers() do.Provider[Housekeeping] {
 			node.Named("translator", do.MustInvoke[*language.Translator](i).Run),
 			node.Named("mcpclient", do.MustInvoke[*mcpclient.Hub](i).Run),
 			cells.Reconciler{Service: do.MustInvoke[*cells.Service](i), Every: cells.ReconcileEvery, Log: logger, After: time.After},
+			agent.ArchivePruner{Archive: do.MustInvoke[*agent.Archive](i), Every: pruneEvery, Now: time.Now, Log: logger,
+				Keep: time.Duration(do.MustInvoke[Bootstrap](i).Agent.Memory.ArchiveDays) * 24 * time.Hour},
 		}
 		if reviewOn(i) {
 			hk = append(hk, do.MustInvoke[*agent.ReviewTimer](i))

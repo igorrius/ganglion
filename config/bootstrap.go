@@ -145,10 +145,11 @@ type MemorySettings struct {
 	PromptBudget int           // memory.prompt_budget, default 24000 characters; 0 folds every topic (R-MEM-7)
 	Review       bool          // memory.review.enabled, default on (R-MEM-8)
 	Quiet        time.Duration // memory.review.quiet, default 10m
+	ArchiveDays  int           // memory.archive_days, default 90; 0 keeps every ended session (ADR-0104)
 }
 
 // DefaultMemory is the memory: section's defaults, for a bootstrap made in
 // code (the lab, tests).
 func DefaultMemory() MemorySettings {
-	return MemorySettings{PromptBudget: 24000, Review: true, Quiet: 10 * time.Minute}
+	return MemorySettings{PromptBudget: 24000, Review: true, Quiet: 10 * time.Minute, ArchiveDays: 90}
 }

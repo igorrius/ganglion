@@ -221,3 +221,11 @@ func (a *Agent) observeCompaction(ctx context.Context, ok bool) {
 	}
 	a.in.compactions.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
 }
+
+// prunedCounter counts the archived sessions dropped past memory.archive_days, by outcome
+// (ArchivePruner); the SDK returns the same instrument for the same name.
+func prunedCounter() metric.Int64Counter {
+	c, _ := otel.Meter("ganglion/agent").Int64Counter("ganglion.sessions.pruned",
+		metric.WithDescription("Archived sessions dropped past memory.archive_days, by outcome; a failed pass counts 1."))
+	return c
+}

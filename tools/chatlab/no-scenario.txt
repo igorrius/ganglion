@@ -17,6 +17,7 @@ agent/cells.go
 agent/commands.go
 agent/group_request.go
 agent/secret_closed.go
+agent/sessions_prune.go
 agent/config.go
 agent/limits.go
 agent/model.go

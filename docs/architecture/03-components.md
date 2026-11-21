@@ -208,7 +208,7 @@ flowchart TB
 | Providers | Talk to model backends, translate MCP tools | R-PRV-1…4 |
 | Policies | Decide autonomous / confirm / forbid; audit | R-POL-1…5 |
 | Tool registry | Tools available to the model, local and on edges | — |
-| Memory | Facts by topic in git with where they came from; every topic whole in an admin's system prompt within a budget; a note with Undo for every write; recall over facts and archived sessions; nightly consolidation (M7) later | R-MEM-1…7, 9 |
+| Memory | Facts by topic in git with where they came from; every topic whole in an admin's system prompt within a budget; a note with Undo for every write; recall over facts and archived sessions; archived sessions kept 90 days by a daily pass with no model (M7, ADR-0104); a nightly model pass is in "Not now" | R-MEM-1…7, 9 |
 | Memory review | Reads a quiet private chat, or an ended session, once: the owner's lines and the replies, never a tool's result; stores what the turns missed through the clean-context check, or asks in a session with outside content | R-MEM-8 |
 | Clean-context check | Checks every memory write, and on schedule stored facts and the persona, with a model of the `check` purpose that sees only the text; fails closed into quarantine | R-POL-7 |
 | Scheduler | Crons in the node's zone with catch-up after downtime; reminders and agent tasks with grants, each task in its own conversation | R-SCH-1, R-SCH-2, R-POL-8 |

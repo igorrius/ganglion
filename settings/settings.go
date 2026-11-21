@@ -249,6 +249,10 @@ type Memory struct {
 	// Review is the pass that reads a quiet conversation for facts the turn
 	// missed (R-MEM-8).
 	Review Review `yaml:"review"`
+	// ArchiveDays is how many days an ended session stays in the archive
+	// once the memory review has read it; off (0) keeps every session
+	// (R-MEM-1, ADR-0104).
+	ArchiveDays Count `yaml:"archive_days"`
 }
 
 // Review is the memory review's settings.
@@ -336,7 +340,7 @@ func Default() File {
 		},
 		Update: Update{Check: true},
 		MCP:    MCP{Page: DefaultIntakePage},
-		Memory: Memory{PromptBudget: 24000, Review: Review{Enabled: true, Quiet: Duration(10 * time.Minute)}},
+		Memory: Memory{PromptBudget: 24000, Review: Review{Enabled: true, Quiet: Duration(10 * time.Minute)}, ArchiveDays: 90},
 	}
 }
 
