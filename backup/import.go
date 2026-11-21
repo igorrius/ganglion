@@ -49,7 +49,8 @@ func ImportPending(ctx context.Context, dataDir string, imp ImportFunc, log *slo
 	n, err := imp(ctx, f)
 	_ = f.Close()
 	if err != nil {
-		return 0, fmt.Errorf("backup: cells import from %s (kept for the next start): %w", filepath.Join(importDirName, importFileName), err)
+		return 0, fmt.Errorf("backup: cells import from %s (kept for the next start; the cells go only into an empty bucket: "+
+			"restore into an empty data folder, or remove its bus folder to load them): %w", filepath.Join(importDirName, importFileName), err)
 	}
 	if err := os.Remove(path); err != nil {
 		return n, fmt.Errorf("backup: cells import: %w", err)
