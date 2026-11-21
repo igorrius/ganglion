@@ -17,7 +17,7 @@ func TestToolModuleRefusesCapabilities(t *testing.T) {
 	for name, manifest := range map[string]string{
 		"http.fetch":   "name: m\ncapabilities:\n  http.fetch: [bank.gov.ua]\n",
 		"secret.get":   "name: m\ncapabilities:\n  secret.get: [TOKEN]\n",
-		"event.emit":   "name: m\ncapabilities:\n  event.emit: [x]\n",
+		"port":         "name: m\nports:\n  emits: {x: string}\n",
 		"state":        "name: m\ncapabilities:\n  state: true\n",
 		"notify":       "name: m\ncapabilities:\n  notify: {per_day: 3}\n",
 		"cell trigger": "name: m\ncells:\n  read: [p.soc]\ntriggers:\n  - cell: [p.soc]\n",

@@ -179,7 +179,6 @@ func TestPlanRefusals(t *testing.T) {
 		"bad manifest":   {"local/x", "name: x\nbogus: 1\n", allSet, hostConfig, noOwners, []string{"manifest"}},
 		"another name":   {"local/x", strings.Replace(good, "name: x", "name: y", 1), allSet, hostConfig, noOwners, []string{"names another module"}},
 		"tool no output": {"local/x", strings.Replace(good, "    output:\n      soc: number\n", "", 1), allSet, hostConfig, noOwners, []string{"soc", "output"}},
-		"event emit":     {"local/x", strings.Replace(good, "  state: true\n", "  state: true\n  event.emit: [module]\n", 1), allSet, hostConfig, noOwners, []string{"event.emit"}},
 		"abi":            {"local/x", strings.Replace(good, "abi: 1", "abi: 7", 1), allSet, hostConfig, noOwners, []string{"ABI"}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -562,6 +561,39 @@ func TestWideningListsNewReactsAndAHigherLimit(t *testing.T) {
 	p = plan(t, s, build("local/b", variant("c"), less), noOwners)
 	if len(p.Widening.Reacts) != 0 || p.Widening.NotifyPerDay != 0 {
 		t.Fatalf("lower rights are not a widening: %+v", p.Widening)
+	}
+}
+
+const portsManifest = `name: %s
+version: %d
+abi: 1
+capabilities:
+  notify: {per_day: 2}
+ports:
+  emits: {%s}
+  accepts: {in_a: string}
+  serves: {history: {in: string, out: string}}
+  calls: {price: {in: string, out: number}}
+`
+
+func TestPlanShowsPortsAndWidening(t *testing.T) {
+	s := newEnv(t).open(t)
+	first := fmt.Sprintf(portsManifest, "p", 1, "reading: number")
+	p := plan(t, s, build("local/p", variant("a"), first), noOwners)
+	r := p.Rights
+	if p.Refusal != "" || !slices.Equal(r.Emits, []string{"reading"}) || !slices.Equal(r.Accepts, []string{"in_a"}) ||
+		!slices.Equal(r.Serves, []string{"history"}) || !slices.Equal(r.Calls, []string{"price"}) {
+		t.Fatalf("plan %+v", p)
+	}
+	if w := p.Widening; len(w.Emits)+len(w.Accepts)+len(w.Serves)+len(w.Calls) != 0 {
+		t.Fatalf("a first install widens nothing: %+v", w)
+	}
+	install(t, s, build("local/p", variant("a"), first))
+
+	more := fmt.Sprintf(portsManifest, "p", 2, "reading: number, alert: string")
+	p = plan(t, s, build("local/p", variant("b"), more), noOwners)
+	if w := p.Widening; !slices.Equal(w.Emits, []string{"alert"}) || len(w.Accepts)+len(w.Serves)+len(w.Calls) != 0 {
+		t.Fatalf("widening %+v", p.Widening)
 	}
 }
 

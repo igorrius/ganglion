@@ -624,7 +624,7 @@ and `health` are planned for P1, with the supervisor). It sees only the host fun
 | `log` | Structured logging |
 | `state.get` / `state.put` | Module state in KV; survives version swaps |
 | `http.fetch` | HTTP to allowed domains only |
-| `event.emit` | Events from an allowed list |
+| `emits` ports | Events on the outputs the manifest declares (R-BUS-5) |
 | `tool.call` | Tool calls, through policies |
 | `secret.get` | Secrets from an allowed list; the model never sees them |
 | `config.get` | Values from the manifest's `config` block (e.g. a device serial number) |
@@ -2295,8 +2295,13 @@ The bus ([ADR-0106](adr/0106-embed-nats-with-jetstream-as-the-bus-behind-narrow-
   `cells` table, every cell is copied before modules start; the table stays
   read-only for one release. The backup exports the bucket (R-BAK-1).
 - **R-BUS-5.** A module declares ports in its manifest: `emits`, `accepts`,
-  `serves`, `calls`, each with a shape (R-RUN-14); a module with `notify` has
-  an implicit output `<module>.notify`. `links:` in `ganglion.yaml` connects
+  `serves`, `calls`, each with a shape (R-RUN-14); a port name is
+  `^[a-z][a-z0-9_]{0,31}$`, unique across the four kinds of a module, and
+  `notify` is reserved; a module with `notify` has an implicit output
+  `<module>.notify` of the shape `{text: string, at: string}` (`at` is the
+  notice's time, RFC 3339, UTC). Only local modules have ports; the capability
+  `event.emit` is gone, declaring an output is the grant and the install window
+  lists it. `links:` in `ganglion.yaml` connects
   `from` to `to`; a link is written only after the owner's press, when both
   ends exist, kinds and shapes match, no cycle forms across links and cell
   triggers, and no chain is deeper than 4. Moving a link rebuilds nothing.

@@ -20,7 +20,6 @@ triggers:
 capabilities:
   http.fetch: [api.example.com]
   secret.get: [DEMO_APP_ID, DEMO_APP_SECRET]
-  event.emit: [battery.changed]
   state: true
 config:
   inverter_sn: {type: string, required: true}

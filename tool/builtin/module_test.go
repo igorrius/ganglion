@@ -767,6 +767,38 @@ func TestModuleInstallWideningNamesNewReactsAndANewLimit(t *testing.T) {
 	}
 }
 
+// portsManifest is the reader with ports of the four kinds.
+func portsManifest(emits string) string {
+	return strings.Replace(demoManifest, "triggers:\n", "ports:\n  emits: {"+emits+"}\n  accepts: {command: string}\n"+
+		"  serves: {history: {in: string, out: string}}\n  calls: {price: {in: string, out: number}}\ntriggers:\n", 1)
+}
+
+// R-BUS-5: the window lists each kind of port a module declares, after the
+// cells it reads, and a new version says which ports are new.
+func TestModuleInstallWindowShowsPortsAndNewPorts(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "demo-reader")
+	first := artifact(portsManifest("reading: number"), 161<<10, 1)
+	e.build(t, first)
+	want := strings.Replace(goldenWindow(first.SHA256), "• Reads cells: —\n",
+		"• Reads cells: —\n• Sends events: reading\n• Takes events: command\n• Answers calls: history\n• Makes calls: price\n", 1)
+	c := installCall(first.SHA256)
+	if q := question(t, e, c); q != want {
+		t.Fatalf("window:\n%s\nwant:\n%s", q, want)
+	}
+	if _, err := e.tool(builtin.ModuleInstallTool).Run(context.Background(), pressed(c)); err != nil {
+		t.Fatal(err)
+	}
+	wider := strings.Replace(portsManifest("reading: number, alert: string"), "version: 3", "version: 4", 1)
+	second := artifact(wider, 1024, 2)
+	e.build(t, second)
+	c2 := installCall(second.SHA256)
+	c2.N = 3
+	if first, _, _ := strings.Cut(question(t, e, c2), "\n"); first != "New: sends events alert" {
+		t.Fatalf("first line %q", first)
+	}
+}
+
 func TestModuleInstallWindowEscapesTheManifestsText(t *testing.T) {
 	e := newModuleEnv(t)
 	e.source(t, "demo-reader")

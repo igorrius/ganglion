@@ -122,7 +122,7 @@ func (s *Store) candidate(ctx context.Context, b Builtin, cur Version, src Sourc
 	tool, err := runner.NewLazyTool(wasm, manifest, s.deps)
 	switch {
 	case errors.Is(err, runner.ErrCapabilities):
-		return rel, nil, refuse("the manifest asks for a capability; a tool module gets none")
+		return rel, nil, refuse("the manifest asks for a capability or a port; a tool module gets none")
 	case err != nil:
 		return rel, nil, &refusal{result: ResultRefused, reason: "the module could not be prepared", detail: err.Error()}
 	}

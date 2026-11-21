@@ -164,6 +164,7 @@ func TestBadReleasesAreRefused(t *testing.T) {
 		"wrong sum":     {wrongSum, modstore.ResultRefused, "sum"},
 		"trap":          {release("0.2.0", probe, goodManifest), modstore.ResultFailedSelfTest, "self-test"},
 		"capability":    {release("0.2.0", variant("v2"), goodManifest+"capabilities:\n  state: true\n"), modstore.ResultRefused, "capabilit"},
+		"port":          {release("0.2.0", variant("v2"), goodManifest+"ports:\n  emits: {x: string}\n"), modstore.ResultRefused, "a port"},
 		"memory":        {release("0.2.0", variant("v2"), "name: html2md\nabi: 1\nlimits:\n  memory: 128MiB\n"), modstore.ResultRefused, "memory"},
 		"timeout":       {release("0.2.0", variant("v2"), "name: html2md\nabi: 1\nlimits:\n  timeout: 30s\n"), modstore.ResultRefused, "timeout"},
 		"abi":           {release("0.2.0", variant("v2"), "name: html2md\nabi: 2\n"), modstore.ResultRefused, "ABI"},

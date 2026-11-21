@@ -30,6 +30,7 @@ type Manifest struct {
 	ABI          int                  `yaml:"abi"` // the module ABI it speaks (ADR-0011); missing reads as 1
 	Triggers     []Trigger            `yaml:"triggers"`
 	Capabilities Capabilities         `yaml:"capabilities"`
+	Ports        Ports                `yaml:"ports"` // typed ends for links (R-BUS-5)
 	Cells        Cells                `yaml:"cells"`
 	Config       map[string]ConfigKey `yaml:"config"` // the keys the module reads
 	ConfigValues map[string]string    `yaml:"-"`      // their values, set by the host
@@ -91,7 +92,6 @@ type Cells struct {
 type Capabilities struct {
 	HTTPFetch []string `yaml:"http.fetch"` // allowed host names
 	SecretGet []string `yaml:"secret.get"` // allowed secret names
-	EventEmit []string `yaml:"event.emit"` // allowed event kinds
 	State     bool     `yaml:"state"`
 	Notify    *Notify  `yaml:"notify,omitempty"` // may message the owner, at most PerDay a day
 }
@@ -191,6 +191,9 @@ func (m Manifest) checkV2() error {
 	}
 	if n := m.Capabilities.Notify; n != nil && (n.PerDay < 1 || n.PerDay > MaxNotifyPerDay) {
 		return fmt.Errorf("notify.per_day must be 1..%d", MaxNotifyPerDay)
+	}
+	if err := m.Ports.check(); err != nil {
+		return err
 	}
 	for name, k := range m.Config {
 		switch k.Type {
