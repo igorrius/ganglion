@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/turns"
@@ -188,5 +189,14 @@ func TestStatusUnitsInTheReadersLanguage(t *testing.T) {
 	}
 	if len(e.smart.requests())+len(e.cheap.requests()) != calls {
 		t.Error("a model was called")
+	}
+}
+
+// #297: /status's answer names the command in its origin, so a reply to it brings its text.
+func TestStatusAnswerNamesTheCommand(t *testing.T) {
+	e := statusEnv(t, Config{})
+	out := e.turn(t, message(owner, "Igor", "/status@test_bot"))
+	if len(out) != 1 || out[0].Origin == nil || out[0].Origin.Kind != event.OriginCommand || out[0].Origin.Command != "/status" {
+		t.Fatalf("origin %+v", out[0].Origin)
 	}
 }

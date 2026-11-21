@@ -147,6 +147,7 @@ func (a *Agent) command(ctx context.Context, t *turn) (bool, error) {
 		return false, nil
 	}
 	t.record.Outcome = turns.OutcomeCommand
+	t.cmd, _ = parseCommand(t.msg.Text)
 	return true, run(ctx, t, arg)
 }
 

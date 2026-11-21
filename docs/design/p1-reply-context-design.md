@@ -58,6 +58,7 @@ selected quote does today. What the note holds depends on the replied message:
 | The bot's message from the **current session**, written clean | `[in reply to your message of 14:02: "<first ~150 characters>…"]`: the whole text is already in the history | no |
 | The bot's message from **elsewhere**, written by a clean session | the time, where it came from (an earlier session, a task's report, a reminder) and its text up to ~2,000 characters | no |
 | The bot's message written by a **tainted** session, or of no known origin | its text wrapped as outside content: up to ~2,000 characters, or a ~150-character excerpt when it is of the current session | yes |
+| The node's **answer to a command** (added by ADR-0103) | `/status`: its text up to ~2,000 characters; any other command: its name and time, no text | no |
 | The **sender's own** message, not a forward | the time and its text from Telegram's copy | no |
 | A forward, another person's, a message not found, a message in another chat | wrapped as outside content | yes, as today |
 
