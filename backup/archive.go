@@ -22,8 +22,14 @@ import (
 
 // Archive paths (R-BAK-1). The manifest is the first entry of the tar.
 const (
-	manifestName  = "manifest.json"
-	dbName        = "ganglion.db"
+	manifestName = "manifest.json"
+	dbName       = "ganglion.db"
+	// busName is the archive's folder for what the bus holds, and cellsName
+	// the export of the cells bucket in it (R-BAK-1, R-BUS-4). A restore
+	// does not write it to <data>/bus, which is the embedded server's
+	// store, but to <data>/bus-import (see ImportPending).
+	busName       = "bus"
+	cellsName     = busName + "/cells.jsonl"
 	settingsName  = "ganglion.yaml"
 	workspaceName = "workspace"
 	modulesName   = "modules"
@@ -66,7 +72,10 @@ type Manifest struct {
 // Snapshot; the others are paths in the node's data directory and may be
 // missing, which leaves them out of the archive.
 type Sources struct {
-	DB        string
+	DB string
+	// Cells is the export of the cells bucket made for this backup; "" or a
+	// file that is missing leaves it out of the archive.
+	Cells     string
 	Workspace string
 	Modules   string
 	Settings  string
@@ -180,6 +189,11 @@ func collect(src Sources, m *Manifest) ([]entry, error) {
 		return nil, fmt.Errorf("backup: database snapshot: %w", err)
 	}
 	entries := []entry{{name: dbName, disk: src.DB, mod: m.Time}}
+	if e, ok, err := optionalFile(cellsName, src.Cells, m); err != nil {
+		return nil, err
+	} else if ok {
+		entries = append(entries, e)
+	}
 	if e, ok, err := optionalFile(settingsName, src.Settings, m); err != nil {
 		return nil, err
 	} else if ok {

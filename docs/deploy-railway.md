@@ -254,7 +254,9 @@ repository.
    setpriv --reuid=10001 --regid=10001 --clear-groups ganglion backup now --db /data/ganglion.db
    ```
 
-   `/status` then shows the last copy's time and size.
+   `/status` then shows the last copy's time and size. The command asks
+   the running node, which makes the backup within a few seconds; it never
+   opens the node's database or bus store itself.
 
 **The restore drill, on a fresh service.** Do it once before you need it:
 
@@ -273,8 +275,10 @@ repository.
      ganglion backup restore --data /data/restored --key-file /restore/master.key <archive>
    ```
 
-4. Move the restored files to `/data`, put the key at `/data/master.key`
-   (mode `0600`, owner 10001) and start the node there. Check `/status`,
+4. Move the restored files to `/data` (the `bus-import` folder too: the
+   node loads the cells in it at its first start and removes it), put the
+   key at `/data/master.key` (mode `0600`, owner 10001) and start the node
+   there. Check `/status`,
    that `/memory` lists the topics, `/modules` the modules and the cells
    are there. The restored `ganglion.yaml` names the same bucket: leave the
    fresh service's backups off until the old node is gone, so two nodes do
