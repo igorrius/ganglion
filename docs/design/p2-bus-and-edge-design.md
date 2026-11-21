@@ -151,11 +151,21 @@ backed up (R-BAK-1 changes accordingly).
 
 ### 5.5. Notices on the bus
 
-A module's `notify` publishes to `g.notify.<module>` instead of putting `module.notify` into the
-inbox. A durable consumer in the core reads `NOTIFY` and delivers to the destinations of
-`notify_to`, as today (signature, escaping, limits and the history note unchanged). The
-`module.notify` inbox event goes. In M11 the same stream feeds a page on an edge through a link
-(section 6.5).
+A module's `notify` publishes once to `g.notify.<module>` (the key `notify:<module>:<run>:<n>` is
+the `Nats-Msg-Id`; the body is the notice: module, version, text, limit, run, time) instead of
+putting `module.notify` into the inbox. The count, the daily limit and the limit line stay in the
+module host, before the publish. A durable consumer in the core (`core-notify`, explicit acks,
+unlimited redelivery with back-off, 30 s ack wait) reads `NOTIFY` and hands each message to the
+module host, which resolves the destinations of `notify_to` at that moment and puts one
+`module.notify` inbox event per destination, as before (signature, escaping, limits and the
+history note unchanged). The inbox event stays as the per-destination delivery step: the history
+note is session state that the agent writes in order with its turns, so the consumer must not write
+it itself. The stream sits in front of the inbox, not instead of it. A message is acked only after
+every copy was put (or its module is gone, or no destination resolves); a crash between the put
+and the ack redelivers it, and the inbox keys drop the copies already there. A message whose
+module is no longer loaded is acked, logged and counted (`gone`). The module's answer to `notify`
+now means "stored", so a name that resolves to nothing is counted when the message is delivered.
+In M11 the same stream feeds a page on an edge through a link (section 6.5).
 
 ### 5.6. What stays on the inbox in M8
 

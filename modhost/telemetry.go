@@ -16,6 +16,7 @@ type instruments struct {
 	escalations metric.Int64Counter
 	triggers    metric.Int64Counter
 	notifies    metric.Int64Counter
+	deliveries  metric.Int64Counter
 	journals    metric.Int64Counter
 }
 
@@ -32,6 +33,8 @@ func newInstruments() instruments {
 		metric.WithDescription("Cell triggers of the modules whose runs wrote cells, by producer module and outcome (put, failed, stopped: the chain is deeper than 4)."))
 	in.notifies, _ = m.Int64Counter("ganglion.modhost.notifies",
 		metric.WithDescription("Calls of notify, by module and outcome (sent, limit: past per_day, not_here: init or health, failed: the node could not count or put it), and the copies not sent for a destination that does not resolve (no_destination)."))
+	in.deliveries, _ = m.Int64Counter("ganglion.modhost.notify.deliveries",
+		metric.WithDescription("Messages of the NOTIFY stream handled by the core's consumer, by module and outcome (delivered, gone: the module is no longer loaded, failed: a copy was not put and the message comes again, bad: not a notice)."))
 	in.journals, _ = m.Int64Counter("ganglion.modhost.journal.failures",
 		metric.WithDescription("Runs of the owner's modules the node could not record in the run journal, by module; the run itself went on."))
 	return in
@@ -63,6 +66,12 @@ func (in instruments) triggered(ctx context.Context, module string, o triggerOut
 // notified counts one notify call of module.
 func (in instruments) notified(ctx context.Context, module string, o notifyOutcome) {
 	in.notifies.Add(ctx, 1, metric.WithAttributes(attribute.String("module", module), attribute.String("outcome", string(o))))
+}
+
+// delivered counts one message of the NOTIFY stream the consumer handled;
+// module is "" for a payload that names none.
+func (in instruments) delivered(ctx context.Context, module string, o deliveryOutcome) {
+	in.deliveries.Add(ctx, 1, metric.WithAttributes(attribute.String("module", module), attribute.String("outcome", string(o))))
 }
 
 // journalFailed counts a run the journal could not record or a producer's

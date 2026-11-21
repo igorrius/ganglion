@@ -240,7 +240,9 @@ func TestAMessageGoesToEveryDestinationOfTheLine(t *testing.T) {
 
 // A name that resolves to nothing, or cannot be resolved now, sends
 // nothing there; the other copies go, and the module is told the message
-// was sent. With no copy at all it is told nothing was sent.
+// was sent. The names are resolved when the message is delivered, after
+// the module was told, so with no copy at all it is still told "sent" and
+// the node counts the copies it could not send.
 func TestADestinationThatDoesNotResolveIsSkipped(t *testing.T) {
 	rec := telemetrytest.Install(t)
 	e := newEnv(t, active(t, "local/n", notifyManifest))
@@ -263,8 +265,14 @@ func TestADestinationThatDoesNotResolveIsSkipped(t *testing.T) {
 	if err := e.host.Reload(context.Background(), "local/n"); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.send(t, 2); got != "limit" {
-		t.Fatalf("with no copy sent the module was told %q, want limit (nothing was sent)", got)
+	if got := e.send(t, 2); got != "" {
+		t.Fatalf("the module was told %q, want sent: the names are resolved at delivery", got)
+	}
+	if got := e.copies(t); len(got) != 1 {
+		t.Fatalf("copies %v: a message with no name that resolves put one", got)
+	}
+	if got := rec.Value(t, "ganglion.modhost.notifies", map[string]string{"module": "local/n", "outcome": "no_destination"}); got != 3 {
+		t.Errorf("no_destination = %v, want 3", got)
 	}
 }
 

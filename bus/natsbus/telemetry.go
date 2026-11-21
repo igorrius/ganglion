@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -21,7 +22,15 @@ type metrics struct {
 	disconnects, reconnects metric.Int64Counter
 	connected, storeBytes   metric.Int64ObservableGauge
 	registration            metric.Registration
+	publishes, consumes     metric.Int64Counter
+	pending                 metric.Int64ObservableGauge
 }
+
+// Outcomes of a publish or a consume, the "outcome" attribute.
+const (
+	outcomeOK    = "ok"
+	outcomeError = "error"
+)
 
 func newMetrics() (*metrics, error) {
 	m := otel.Meter("ganglion/bus")
@@ -41,9 +50,45 @@ func newMetrics() (*metrics, error) {
 		metric.WithDescription("1 while the node is connected to the bus's server, by mode.")); err != nil {
 		return nil, err
 	}
-	ms.storeBytes, err = m.Int64ObservableGauge("ganglion.bus.store_bytes",
-		metric.WithDescription("Bytes the JetStream store holds."), metric.WithUnit("By"))
+	if ms.storeBytes, err = m.Int64ObservableGauge("ganglion.bus.store_bytes",
+		metric.WithDescription("Bytes the JetStream store holds."), metric.WithUnit("By")); err != nil {
+		return nil, err
+	}
+	if ms.publishes, err = m.Int64Counter("ganglion.bus.publishes",
+		metric.WithDescription("Messages published to a stream, by outcome (ok, error).")); err != nil {
+		return nil, err
+	}
+	if ms.consumes, err = m.Int64Counter("ganglion.bus.consumes",
+		metric.WithDescription("Messages a consumer handled, by consumer and outcome (ok: acked, error: the handler or the ack failed and the message comes again).")); err != nil {
+		return nil, err
+	}
+	ms.pending, err = m.Int64ObservableGauge("ganglion.bus.consumer_pending",
+		metric.WithDescription("Messages a consumer has not acked yet (waiting or being handled), by consumer: its lag."))
 	return ms, err
+}
+
+func (m *metrics) published(ctx context.Context, outcome string) {
+	m.publishes.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+}
+
+func (m *metrics) consumed(ctx context.Context, consumer, outcome string) {
+	m.consumes.Add(ctx, 1, metric.WithAttributes(attribute.String("consumer", consumer), attribute.String("outcome", outcome)))
+}
+
+// watchLag registers the gauge of c's pending messages; the caller
+// unregisters it when the consumer stops.
+func (m *metrics) watchLag(c jetstream.Consumer, name string) (metric.Registration, error) {
+	return m.meter.RegisterCallback(func(ctx context.Context, o metric.Observer) error {
+		ctx, cancel := context.WithTimeout(ctx, healthTimeout)
+		defer cancel()
+		info, err := c.Info(ctx)
+		if err != nil {
+			return nil // no reading this time
+		}
+		o.ObserveInt64(m.pending, int64(info.NumPending)+int64(info.NumAckPending),
+			metric.WithAttributes(attribute.String("consumer", name)))
+		return nil
+	}, m.pending)
 }
 
 func (m *metrics) disconnected(*nats.Conn, error) { m.disconnects.Add(context.Background(), 1) }

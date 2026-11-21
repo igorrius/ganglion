@@ -13,6 +13,7 @@ import (
 
 	"github.com/igorrius/ganglion/access"
 	"github.com/igorrius/ganglion/agent"
+	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/intake"
@@ -69,6 +70,9 @@ type LabNode struct {
 	Journal    *journal.Journal
 	Components []node.Component
 	Tick       func(context.Context) error // one tick of the scheduler and of the memory review's timer
+	// Backlog is how many notices of the modules wait on the bus to be
+	// delivered, which a lab counts as work the node has left.
+	Backlog func(context.Context) (int, error)
 	// Allow lists a family member by principal and name, so a scenario can have
 	// another person in the owner's chat.
 	Allow    func(ctx context.Context, principal, name string) error
@@ -94,7 +98,7 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 		tick = func(ctx context.Context) error { return errors.Join(scheduler.Tick(ctx), reviews.Tick(ctx)) }
 	}
 	return &LabNode{DB: do.MustInvoke[Database](i).DB, Journal: do.MustInvoke[*journal.Journal](i), Components: components,
-		Tick: tick,
+		Tick: tick, Backlog: do.MustInvoke[*natsbus.Consumer](i).Pending,
 		Allow: func(ctx context.Context, principal, name string) error {
 			return do.MustInvoke[*access.List](i).Allow(ctx, principal, access.RoleFamily, name)
 		},
@@ -137,6 +141,7 @@ func applyLabHousekeeping(i do.Injector) {
 			journal.Pruner{Journal: do.MustInvoke[*journal.Journal](i), Every: pruneEvery, Log: logger},
 			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger, pending.WithAfter(fast)),
 			do.MustInvoke[*host.Runner](i),
+			do.MustInvoke[*natsbus.Consumer](i), // the modules' notices go through the stream here too
 			do.MustInvoke[*builtin.BuildQueue](i),
 			node.Named("mcpclient", do.MustInvoke[*mcpclient.Hub](i).Run),
 		}, nil

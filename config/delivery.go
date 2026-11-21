@@ -263,6 +263,7 @@ func AgentHousekeepers() do.Provider[Housekeeping] {
 			pending.NewExpirer(do.MustInvoke[*pending.Store](i), do.MustInvoke[*sqlqueue.Queue](i).Put, logger),
 			do.MustInvoke[*host.Janitor](i),
 			do.MustInvoke[*host.Runner](i),
+			do.MustInvoke[*natsbus.Consumer](i),
 			do.MustInvoke[*bgjobs.Registry](i),
 			do.MustInvoke[*builtin.BuildQueue](i),
 			node.Named("translator", do.MustInvoke[*language.Translator](i).Run),
