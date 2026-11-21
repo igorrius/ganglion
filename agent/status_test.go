@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/turns"
@@ -143,6 +144,20 @@ func TestOfLimit(t *testing.T) {
 	}
 }
 
+// #298: a memory review is answered by its own purpose's model on its first attempt; that is not a
+// fallback, though the model is not the chat's first.
+func TestStatusReviewIsNoFallback(t *testing.T) {
+	e := statusEnv(t, Config{})
+	err := e.deps.Turns.Record(context.Background(), turns.Turn{EventID: "ev1", Conv: "telegram:42", Started: t0, Finished: t0,
+		Outcome: turns.OutcomeReview, Route: []turns.Attempt{{Provider: "p2", Model: "cheap"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply := statusReply(t, e); strings.Contains(reply, "answered by") || !strings.HasPrefix(reply, "✅") {
+		t.Errorf("reply:\n%s", reply)
+	}
+}
+
 // Review: a turn that compacted its history has the cheap model's attempt last
 // in its route; that is not a fallback.
 func TestStatusCompactionIsNoFallback(t *testing.T) {
@@ -174,5 +189,14 @@ func TestStatusUnitsInTheReadersLanguage(t *testing.T) {
 	}
 	if len(e.smart.requests())+len(e.cheap.requests()) != calls {
 		t.Error("a model was called")
+	}
+}
+
+// #297: /status's answer names the command in its origin, so a reply to it brings its text.
+func TestStatusAnswerNamesTheCommand(t *testing.T) {
+	e := statusEnv(t, Config{})
+	out := e.turn(t, message(owner, "Igor", "/status@test_bot"))
+	if len(out) != 1 || out[0].Origin == nil || out[0].Origin.Kind != event.OriginCommand || out[0].Origin.Command != "/status" {
+		t.Fatalf("origin %+v", out[0].Origin)
 	}
 }

@@ -40,10 +40,15 @@ func TestFromFallsBackToTheModuleVersionThenDev(t *testing.T) {
 
 func TestTheLinkerCommitFillsABuildWithoutVCS(t *testing.T) {
 	const c = "0123456789abcdef0123456789abcdef01234567"
-	if got := withCommit(from("v0.3.1", info("(devel)"), true), c); got.Commit != c {
-		t.Errorf("image build: commit %q", got.Commit)
+	const at = "2026-11-20T09:30:00Z"
+	got := withCommit(from("v0.3.1", info("(devel)"), true), c, at)
+	if got.Commit != c || got.CommitTime.Format(time.RFC3339) != at {
+		t.Errorf("image build: commit %q of %v", got.Commit, got.CommitTime)
 	}
-	if got := withCommit(from("v0.3.1", info("(devel)", vcs...), true), c); got.Commit != vcs[2].Value {
+	if got := withCommit(from("v0.3.1", info("(devel)"), true), c, ""); !got.CommitTime.IsZero() {
+		t.Errorf("no linker time: %v", got.CommitTime)
+	}
+	if got := withCommit(from("v0.3.1", info("(devel)", vcs...), true), c, at); got.Commit != vcs[2].Value {
 		t.Errorf("a VCS stamp wins: commit %q", got.Commit)
 	}
 }

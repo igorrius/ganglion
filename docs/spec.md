@@ -333,7 +333,13 @@ Guarantee: **at-least-once + idempotency.**
   that session was tainted; a reminder's also records its job (R-SCH-2). The origin of a reply to the node's message is read from its own outbox by any part's ref, never
   from the channel's copy. A failed lookup never fails or delays the turn: the channel's copy is then
   outside content. Messages stored outside a turn (alerts, notifiers, the give-up reply) record none
-  and count as tainted.
+  and count as tainted. A person's command answered with no model records the command's word. A reply
+  to the answer of a command whose answer holds the node's words alone (`/status`) brings its text, up
+  to ~2,000 characters, without taint, since a command leaves no note of its answer in the history; a
+  reply to any other command's answer names the command and its time with no text, copy or quote,
+  since it may hold a module's words (R-RUN-13). A word that could not be a command's makes the
+  message one of an unknown source
+  ([ADR-0103](adr/0103-a-commands-answer-records-its-command-and-is-quoted-only-when-it-holds-the-nodes-words.md)).
 - **R-DLV-15.** A module's message (R-RUN-16) records the module that wrote it. A reply to it tells the
   agent the module's name and the time as the node's own words, with none of the message's text, the
   channel's copy or a selected quote, so it does not taint the session and the agent can read and

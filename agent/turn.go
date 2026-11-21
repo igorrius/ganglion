@@ -27,7 +27,10 @@ type turn struct {
 	out    []event.Outgoing
 	// made is what made this turn's messages, for their origin (R-DLV-14); ""
 	// is a turn with a person.
-	made  event.OriginKind
+	made event.OriginKind
+	// cmd is the person's command this turn answers, "/status"; its messages
+	// name it in their origin (#297, ADR-0103). "" for any other turn.
+	cmd   string
 	admin bool // the sender may use tools
 	calls int  // tool calls so far in this turn; the next is calls+1
 	// execCalls are the calls a CLI provider ran through Exec; at most
@@ -116,7 +119,10 @@ func (t *turn) origin() event.Origin {
 		o.Kind, o.Tainted, o.Job = event.OriginReminder, false, t.schedule.Job
 	case event.OriginSystem:
 		o.Kind, o.Tainted = event.OriginSystem, true
-	case event.OriginTurn, event.OriginModule: // a module's message sets its own origin
+	case event.OriginTurn, event.OriginModule, event.OriginCommand: // a module's message sets its own origin
+	}
+	if t.cmd != "" {
+		o.Kind, o.Command = event.OriginCommand, t.cmd
 	}
 	return o
 }

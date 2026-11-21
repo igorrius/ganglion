@@ -12,6 +12,7 @@ const (
 	OriginReminder OriginKind = "reminder" // a reminder, sent as it was set
 	OriginSystem   OriginKind = "system"   // a system job, such as the memory audit
 	OriginModule   OriginKind = "module"   // a module's own text, sent with no model (R-RUN-16)
+	OriginCommand  OriginKind = "command"  // a person's command answered with no model (#297)
 )
 
 // Origin is where a message the node sends came from: the session that made it and
@@ -19,14 +20,17 @@ const (
 // ADR-0055). A message stored with none counts as tainted. A module's message
 // names the module that wrote it, so a reply can say which one without
 // showing its text (R-DLV-15, ADR-0073). A reminder's message names its job,
-// so a reply to it tells the agent which job to stop (R-SCH-2, ADR-0091).
+// so a reply to it tells the agent which job to stop (R-SCH-2, ADR-0091). A
+// command's answer names the command, so a reply brings its text only for a
+// command whose answer holds the node's words alone (ADR-0103).
 type Origin struct {
 	Kind    OriginKind `json:"kind"`
 	Session string     `json:"session,omitempty"`
 	Tainted bool       `json:"tainted,omitempty"`
-	Module  string     `json:"module,omitempty"` // full name, for OriginModule only
-	Run     string     `json:"run,omitempty"`    // the module's run that sent it, for OriginModule only (R-RUN-20)
-	Job     string     `json:"job,omitempty"`    // the job's id, for OriginReminder only
+	Module  string     `json:"module,omitempty"`  // full name, for OriginModule only
+	Run     string     `json:"run,omitempty"`     // the module's run that sent it, for OriginModule only (R-RUN-20)
+	Job     string     `json:"job,omitempty"`     // the job's id, for OriginReminder only
+	Command string     `json:"command,omitempty"` // the command's word, "/status", for OriginCommand only
 }
 
 type originKey struct{}

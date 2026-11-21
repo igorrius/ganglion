@@ -27,7 +27,15 @@ const (
 	unknownSource = "an unknown source"
 	thisSession   = "this session"
 	withFile      = "a message with a file"
+	// commandNotShown follows the time of a command's answer that is not
+	// quoted (#297, ADR-0103).
+	commandNotShown = "; a command's answer is not shown here: it may hold a module's words. What the command showed the model is in the history's note of it"
 )
+
+// quotedCommands are the commands whose answer holds the node's words alone, so a reply to it brings
+// its text (#297, ADR-0103). Any other command's answer may hold a module's words, which the model
+// never reads (R-RUN-13), and is named without its text.
+var quotedCommands = map[string]bool{"/status": true}
 
 // replyKind is how a replied message reached the history; the metric's label.
 type replyKind string
@@ -38,6 +46,7 @@ const (
 	replyEarlier replyKind = "earlier" // the bot's, elsewhere, written clean
 	replyTainted replyKind = "tainted" // the bot's, written tainted or of no known origin
 	replyModule  replyKind = "module"  // a module's, named without its text
+	replyCommand replyKind = "command" // the node's answer to a command
 	replyOwn     replyKind = "own"     // the sender's own words
 	replyOutside replyKind = "outside" // anything else, or not found
 	replyFailed  replyKind = "failed"  // the lookup failed: as outside
@@ -161,6 +170,9 @@ func botNote(m event.Message, got repliedRow, session, at string, loc *time.Loca
 		}
 		return replyNote{kind: replyModule, line: line + moduleWrote + "]"}
 	}
+	if word, ok := commandOf(o); ok {
+		return commandNote(word, at, body)
+	}
 	src, known := unknownSource, false
 	if o != nil {
 		src, known = sources[o.Kind]
@@ -211,6 +223,31 @@ func moduleOf(o *event.Origin) (string, bool) {
 		return "", false
 	}
 	return name, true
+}
+
+// commandPattern is what a command's word may look like in a note: the node's own commands.
+var commandPattern = regexp.MustCompile(`^/[a-z][a-z0-9_]{0,31}$`)
+
+// commandOf is the word of the command whose answer a message of origin o is, false when it is no
+// command's answer or the record names a word the node could not have written: the message is then of
+// an unknown source.
+func commandOf(o *event.Origin) (string, bool) {
+	if o == nil || o.Kind != event.OriginCommand || !commandPattern.MatchString(o.Command) {
+		return "", false
+	}
+	return o.Command, true
+}
+
+// commandNote is the note of a reply to the node's answer to word, sent at: the text whole for a
+// command whose answer holds the node's words alone, since a command leaves no note of its answer in
+// the history; the command's name alone for any other (#297, ADR-0103). Neither taints: the answer
+// was written by the node, not a model, whatever the session's state.
+func commandNote(word, at, body string) replyNote {
+	head := "[in reply to your answer to " + word + " of " + at
+	if !quotedCommands[word] {
+		return replyNote{kind: replyCommand, line: head + commandNotShown + "]"}
+	}
+	return replyNote{kind: replyCommand, line: head + ":]\n" + text.Truncate(body, replyTextRunes)}
 }
 
 // taintedNote is the note of the bot's message from src written tainted or of
