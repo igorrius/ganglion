@@ -178,10 +178,15 @@ func validSwitchValue(v json.RawMessage) bool {
 	return json.Unmarshal(v, &str) == nil && (str == "on" || str == "off")
 }
 
+// maxUpdateAttempts is how often update reads a cell and tries again after a
+// lost compare-and-set (R-BUS-3).
+const maxUpdateAttempts = 5
+
 // update applies fn to the current cell and stores it, retrying on version
-// conflicts when expectVersion is 0.
+// conflicts when expectVersion is 0, from a fresh read, at most
+// maxUpdateAttempts times.
 func (s *Service) update(ctx context.Context, id string, expectVersion int64, fn func(*Cell) (Change, error)) (Cell, error) {
-	for range 10 {
+	for range maxUpdateAttempts {
 		cur, err := s.store.Get(ctx, id)
 		if err != nil {
 			return Cell{}, err
