@@ -371,7 +371,10 @@ func (*ScheduleCreate) Spec() tool.Spec {
 	return tool.Spec{
 		Name: toolCreate,
 		Description: "Schedule a reminder (a fixed text sent at its time, no model) or a task (an instruction run as a full " +
-			"assistant turn, unattended). Give cron for a repeating job or at for one time, in the node's time zone. " +
+			"assistant turn, unattended). A task runs the model on every run: use one only when each run needs reading or " +
+			"judgment (summarize, pick, answer in words). A routine that needs none (watch a value, a feed or a service and tell " +
+			"the owner when something happens or changes) is a module, which runs without a model: when module.build is offered, " +
+			"build one with the module-writing skill instead of a task. Give cron for a repeating job or at for one time, in the node's time zone. " +
 			"A task may use only the tools in its grant, and web.fetch only on the grant's hosts; it runs in its own " +
 			"conversation, so its earlier runs are its history. A task's final answer is delivered automatically as a message " +
 			"to the grant's reply target, so write the text as what to produce, e.g. \"Get … and write a short message " +

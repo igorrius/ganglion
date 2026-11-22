@@ -2026,7 +2026,13 @@ which belongs with the flow engine (9.6).
   which template each starts from, whether they share cells or events, and
   which links to write, and offers all of it in one install window
   (R-RUN-9). It never asks the owner to name a module, a port or a link,
-  and explains them only when asked (owner, 2026-11-22).
+  and explains them only when asked (owner, 2026-11-22). A routine that
+  needs no judgment (watch a value, a feed or a service and tell the owner
+  when something happens) is a module, never a scheduled task, which runs
+  the model on every run; a task is for runs that need reading or judgment.
+  `schedule.create`'s description and the skill's description in the skill
+  list both say so, since the agent chooses before it reads the skill
+  (#358).
 - **R-LS-4.** Until the owner's bot migrates, his reader runs alongside
   `deye.py` and their readings are compared.
 

@@ -1,6 +1,6 @@
 ---
 name: module-writing
-description: Write, build and offer a module of the owner's system - a reader that brings an outside service's numbers into cells, or a reflex that reacts to cells and writes to the owner
+description: Build and offer modules for any routine the owner asks for in plain words that needs no judgment - watching a value, a feed, a device or a service and telling the owner when something happens or changes; modules run without a model, so use this instead of a scheduled task
 ---
 The system you are changing is what you run on as an agent. Be careful not to break it: if it
 breaks, you stop working.
@@ -13,10 +13,12 @@ model works after the module on clean, prepared data, or not at all.
 ## When to make a module
 
 Make one when a task repeats and needs no thought: "read my meter every half hour", "tell me
-when the battery falls below 30", "say so when a reading goes quiet". The module does it every
-time without a model, so it is cheaper and cannot be talked into anything. Do not make one for a
-thing that happens once, for a decision that needs judgment, or for text you would have to read
-to understand. Those stay with you.
+when the battery falls below 30", "say so when a reading goes quiet", "tell me about every new
+Go release". The module does it every time without a model, so it is cheaper and cannot be
+talked into anything. Such a routine is never a scheduled task (`schedule.create`): a task runs
+the model on every run. Do not make a module for a thing that happens once, for a decision that
+needs judgment ("every evening summarize the news about Go"), or for text you would have to read
+to understand. Those stay with you, as an answer now or a scheduled task.
 
 ## Which template
 
