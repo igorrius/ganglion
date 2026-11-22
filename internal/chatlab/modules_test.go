@@ -26,6 +26,21 @@ func TestWithBuildTakesTheNewestDigest(t *testing.T) {
 	}
 }
 
+func TestWithBuildOfTakesTheDigestOfTheNamedModule(t *testing.T) {
+	a, b := repeat('a', 64), repeat('b', 64)
+	req := providertest.Request{Messages: []map[string]any{
+		{"role": "user", "content": `[build finished] one: {"build":"` + a + `","module":"local/one","language":"rust"}`},
+		{"role": "user", "content": `[build finished] two: {"build":"` + b + `","module":"local/two","language":"rust"}`},
+	}}
+	got := withBuildOf(`{"builds":["$BUILD:one","$BUILD:two"]}`, req)
+	if got != `{"builds":["`+a+`","`+b+`"]}` {
+		t.Fatalf("args = %s", got)
+	}
+	if got := withBuildOf(`{"builds":["$BUILD:three"]}`, req); got != `{"builds":["$BUILD:three"]}` {
+		t.Fatalf("a module with no build kept no token: %s", got)
+	}
+}
+
 func repeat(c byte, n int) string {
 	b := make([]byte, n)
 	for i := range b {

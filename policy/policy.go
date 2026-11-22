@@ -36,7 +36,6 @@ const (
 	toolMCPConnect   = "mcp.connect"
 	toolSecretAsk    = "secret.request"
 	toolMemoryWrite  = "memory.write"
-	toolModuleWrite  = "module.write"
 	toolMemoryForget = "memory.forget"
 	toolHostExec     = "host.exec"
 	toolPlanShow     = "plan.show"
@@ -319,8 +318,9 @@ func (p *Policy) outOfGrantText(job string, c tool.Call) string {
 //  7. memory.write and memory.forget: confirm in a tainted session, auto
 //     otherwise (the memory guard still checks the entry), though they
 //     are side effects; language.set likewise, since it changes only the
-//     caller's own language (R-LANG-3); module.write confirms in a tainted
-//     session and follows its own policy otherwise (R-RUN-17);
+//     caller's own language (R-LANG-3); module.write is no exception to its
+//     own policy, tainted or not: the install window is where the owner
+//     decides (R-RUN-17, ADR-0111);
 //     schedule.create of a reminder with no grant likewise: it only writes to
 //     the owner's own chat and the owner sees it with Delete (ADR-0089); a
 //     task, or a reminder with a grant or arguments that do not parse, falls
@@ -357,7 +357,7 @@ type rule func(cfg Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decis
 
 // rules are the rules of Decide, in order.
 var rules = []rule{ruleDepth, ruleAdminOnly, ruleLocalOnly, ruleForbidden, ruleCommandForbidden, ruleGrant,
-	ruleMemoryWrite, ruleReminder, ruleJobDelete, ruleModuleWrite, ruleLanguageSet, ruleMCPConnect, ruleSecretRequest, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
+	ruleMemoryWrite, ruleReminder, ruleJobDelete, ruleLanguageSet, ruleMCPConnect, ruleSecretRequest, ruleHostExec, rulePlanShow, ruleSideEffect, ruleTaintedInput, ruleMessageSend, ruleWebFetch}
 
 // settle returns the tool's own policy with its journal decision; a policy
 // that is none of the three fails closed.
@@ -661,16 +661,6 @@ func ruleJobDelete(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Dec
 		return confirm()
 	}
 	return tool.PolicyAuto, journal.DecisionAllowed, true
-}
-
-// ruleModuleWrite asks before a module's source is written in a session that
-// holds outside content, where a page may have dictated the code; in a clean
-// session the tool's own policy decides (R-RUN-17, ADR-0075).
-func ruleModuleWrite(_ Config, s tool.Spec, c tool.Call) (tool.Policy, journal.Decision, bool) {
-	if s.Name == toolModuleWrite && c.Tainted {
-		return confirm()
-	}
-	return "", "", false
 }
 
 // ruleLanguageSet applies a person's own choice of language at once, and asks in a session that holds

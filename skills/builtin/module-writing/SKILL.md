@@ -32,8 +32,9 @@ A module starts from a template the node ships; you never write one from nothing
 
 A request is often both: "watch my meter and tell me when it drops" is a reader for the meter
 and a reflex that listens to the reader's cells. Make them as two modules, the reader first,
-and install it before you build the reflex, so the cells the reflex names exist. If the cells
-are already there (`cells.list`), the reflex alone is enough.
+then the reflex, and install both with one `module.install` (the reader first in `builds`), so
+the cells the reflex names exist once it starts. If the cells are already there (`cells.list`),
+the reflex alone is enough.
 
 Before you start a reader, find out from the owner or the service's documentation: the address
 to ask and what it answers, how it authenticates, how often it may be asked, and how old a
@@ -141,8 +142,12 @@ trial in the install window.
 
 ## The loop
 
+Building a module asks the owner nothing on the way. Import, write, build, fix and build again
+without narrating each step and without asking permission; the owner is asked once, at the end,
+in the install window. Do not stop between steps to report progress.
+
 1. `module.import` the template (`reader-template` or `reflex-template`) under the new name. It
-   waits for the owner's press.
+   runs at once.
 2. `module.read` its `manifest.yaml` and `src/logic.rs` (and the README).
 3. `module.write` `manifest.yaml`, `src/logic.rs` and `examples.yaml` only: the rules or the service,
    the settings, their tests and the module's examples (see "Examples"). Every other file and
@@ -153,23 +158,32 @@ trial in the install window.
    the owner tells versions apart by that number.
 5. `module.build`. The build runs in the background: the call answers at once, a card in the
    chat shows the owner its progress, and the result comes back later as a note
-   (`[build finished] <name>: …`) that starts your next step. End your turn after the call and
-   tell the owner the build runs; do not call `module.build` or `module.write` on the module
-   again until its note comes (the node refuses both meanwhile). Read the diagnostics in the
-   note: they name your files and lines. Fix and build again.
+   (`[build finished] <name>: …`) that starts your next step. End your turn after the call; do
+   not call `module.build` or `module.write` on the module again until its note comes (the node
+   refuses both meanwhile). Read the diagnostics in the note: they name your files and lines.
+   Fix and build again, quietly.
    After 5 builds of the module in a row the node refuses another until the owner writes: stop,
    tell the owner what fails and ask how to go on.
    The node's build does not run the module's tests; the owner and CI do. Read your tests back
    with `module.read` and keep the logic simple enough to check by reading. What the build does
    run is the module's `examples.yaml`: see "Examples".
-6. When the note shows a clean build and a trial that passed, `module.install` with its digest. The owner sees what the module
-   reacts to, the rights it asks for and how many messages a day, and presses the button. Do not
-   describe it as installed before then.
+6. A request for several modules is built module by module the same way, the reader first. When
+   every module of the request has built clean and its trial passed, call `module.install` once:
+   `builds` is every digest, in the order they install (a module before the one that reads its
+   cells), and `links` is every link the request needs between their ports (`from` and `to`, each
+   `<module>.<port>`; check the ports with the build notes and `link.list`). A link may join two
+   modules of the same request. One window shows the owner each module's rights, its trial and,
+   for a module whose source was written after you read outside content, a warning, then the
+   links; one press installs everything. If the node refuses a build or a link it answers why and
+   shows nothing: fix that and call `module.install` again. Do not call `module.install` for one
+   module of a request and then again for the next.
+7. After the install say one short message: what was installed and linked, or what stopped and
+   why. Do not describe anything as installed before the owner's press. `link.add` is for
+   linking modules that are already installed.
 
-`module.write` writes at once in a clean conversation. Once this conversation has read outside
-content (a web page, a forwarded message, a text a module wrote), every write asks the owner
-first, and a file written that way counts as outside content until a clean conversation writes it
-again. So for more than one small file, say so before you start and ask the owner to send `/new`
-(you cannot type it): it saves them a press per file. `module.status`, `module.read` of a module
-the node wrote and cells that hold numbers do not make a conversation unclean. If a write is
+`module.import` and `module.write` never ask the owner, in any conversation. If this
+conversation has read outside content (a web page, a forwarded message, a text a module wrote,
+a trial's messages), a file you write counts as outside content until a clean conversation
+writes it again, and the install window says so. So write only what the request needs, from the
+owner's words and the template, and never copy text from outside into code. If a write is
 refused, tell the owner; do not look for another way to write the files.

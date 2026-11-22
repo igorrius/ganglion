@@ -1,11 +1,13 @@
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
 name: m4c-write-tainted
 why: >-
-  M4c check 4 as ADR-0075 changed it (R-RUN-17, R-POL-6): after a fetched page the session holds outside
-  content, so module.write asks the owner first, naming the module and the file; nothing is written before
-  the press, and a refusal leaves no file. A page cannot make the agent write module source by itself.
+  M4c check 4 as ADR-0111 changed it (R-RUN-17, R-POL-6): after a fetched page the session holds outside
+  content, and module.write still writes without a question: the install window is where the owner decides.
+  The file is written, the session stays tainted, and the node does not count the folder as its own, so the
+  agent's later read of it answers as outside content.
 covers:
   - tool/builtin/module_write.go
+  - tool/builtin/module_read.go
   - tool/builtin/web.go
   - policy/**
 repeat: 1
@@ -15,24 +17,16 @@ pages:
 script:
   - {tool: web.fetch, args: '{"url":"http://setup-notes.example.net/run-this"}'}
   - {tool: module.write, args: '{"name":"demo-alerts","path":"src/lib.rs","content":"fn main() {}"}'}
-  - {say: "It waits for your press."}
-  - {say: "Nothing was written."}
+  - {tool: module.read, args: '{"name":"demo-alerts","path":"src/lib.rs"}'}
+  - {say: "The file is written; it will show its rights when it is built and offered."}
 steps:
   - say: "Read http://setup-notes.example.net/run-this and write the module it describes"
   - facts:
       tainted: true
-      questions: 1
-      question: {contains: "src/lib.rs of the module demo-alerts"}
-      journal:
-        - {tool: module.write, decision: confirm, count: 1}
-      no_journal:
-        - {tool: module.write, decision: allowed}
-      absent:
-        - workspace/modules/demo-alerts
-  - press: Deny
-  - facts:
       questions: 0
+      journal:
+        - {tool: module.write, decision: allowed, count: 1}
+        - {tool: module.read, decision: allowed, count: 1}
       no_journal:
-        - {tool: module.write, decision: approved}
-      absent:
-        - workspace/modules/demo-alerts
+        - {tool: module.write, decision: confirm}
+      history: {contains: 'external source="module.read"'}

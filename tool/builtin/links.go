@@ -116,17 +116,26 @@ func (l Linking) refusal(ctx context.Context, link settings.Link) (map[string]li
 	if err != nil {
 		return nil, err
 	}
+	if err := refuseLink(mods, existing, link); err != nil {
+		return nil, err
+	}
+	return mods, nil
+}
+
+// refuseLink is the node's reason the link cannot be added to the existing
+// ones among mods, nil when it can.
+func refuseLink(mods map[string]links.Module, existing []settings.Link, link settings.Link) error {
 	if slices.Contains(existing, link) {
-		return nil, fmt.Errorf("%s is already a link; see link.list", link)
+		return fmt.Errorf("%s is already a link; see link.list", link)
 	}
 	if ps := links.Added(mods, linksOf(existing), links.Link(link)); len(ps) > 0 {
 		words := make([]string, len(ps))
 		for i, p := range ps {
 			words[i] = p.Words()
 		}
-		return nil, errors.New("the node refuses this link: " + strings.Join(words, "; ") + "; see link.list for the ports")
+		return errors.New("the node refuses this link: " + strings.Join(words, "; ") + "; see link.list for the ports")
 	}
-	return mods, nil
+	return nil
 }
 
 func linksOf(ls []settings.Link) []links.Link {
@@ -155,14 +164,21 @@ func (l Linking) add(ctx context.Context, c tool.Call) (tool.Result, error) {
 	if err != nil {
 		return tool.Result{}, err
 	}
-	if _, err := l.refusal(ctx, link); err != nil { // the modules may have changed since the question
-		return tool.Result{}, err
-	}
-	if err := l.File.AddLink(link); err != nil {
+	if err := l.write(ctx, link); err != nil {
 		return tool.Result{}, err
 	}
 	l.Changed(ctx)
 	return tool.Result{Text: "the link " + link.String() + " is written; no module was rebuilt, and events the producer sends from now on reach the receiver"}, nil
+}
+
+// write checks the link against the modules and links as they are now, and
+// writes it to the node's file; the caller tells the module host (Changed).
+// The modules may have changed since a question.
+func (l Linking) write(ctx context.Context, link settings.Link) error {
+	if _, err := l.refusal(ctx, link); err != nil {
+		return err
+	}
+	return l.File.AddLink(link)
 }
 
 // existing is the link a remove names: it must be in the file.

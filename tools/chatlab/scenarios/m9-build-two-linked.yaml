@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m9-build-two-linked
+why: >-
+  M9 live check as ADR-0111 changed it (R-RUN-9, R-RUN-17, R-BUS-5, R-AGT-4): the owner asks for a reader and a
+  reflex linked by an event in one message. The node imports, writes and builds both modules without a question, in
+  a conversation that stays clean, then shows one install window with both modules and the link between their
+  ports; one press installs both in order and writes the link. The only question the owner answers is that one.
+covers:
+  - tool/builtin/module.go
+  - tool/builtin/module_build.go
+  - tool/builtin/module_import.go
+  - tool/builtin/module_install.go
+  - tool/builtin/module_request.go
+  - tool/builtin/module_window.go
+  - tool/builtin/module_write.go
+  - tool/builtin/provenance.go
+  - tool/builtin/build_queue.go
+  - tool/builtin/links.go
+  - links/**
+  - policy/**
+  - agent/module_built.go
+  - agent/resume.go
+  - config/builder.go
+  - config/modhost.go
+  - builder/**
+  - internal/rustenv/**
+  - modstore/install.go
+  - modstore/local.go
+  - modhost/**
+  - examples/modules/reader-template/**
+  - examples/modules/reflex-template/**
+  - examples/modules/templates.go
+repeat: 1
+model: scripted
+modules:
+  - {name: producer, manifest: modules/producer.yaml}
+config:
+  reader-template: {station: "roof-1"}
+script:
+  - {tool: module.import, args: '{"from":"reader-template","name":"reader-template"}'}
+  - {tool: module.import, args: '{"from":"reflex-template","name":"reflex-template"}'}
+  - tool: module.write
+    args: |
+      {"name":"reader-template","path":"manifest.yaml","content":"name: reader-template\nversion: 1\nabi: 1\ntriggers:\n  - cron: \"*/30 * * * *\"\n  - tool: status\n    about: \"The last reading of the station: its value and whether it is online.\"\n    output:\n      age_s: integer\n      fresh: boolean\n      sample: {ts: integer, value: number, online: boolean}\ncapabilities:\n  http.fetch: [api.example.com]\n  secret.get: [API_TOKEN]\n  state: true\ncells:\n  report:\n    value: {kind: sensor, type: number, about: \"The station value\"}\n    online: {kind: sensor, type: boolean, about: \"The station is online\"}\n    sample: {kind: sensor, about: \"The whole reading\", type: {ts: integer, value: number, online: boolean}}\nports:\n  emits:\n    reading: {value: number, online: boolean}\nconfig:\n  station: {type: string, required: true}\nlimits: {memory: 32MiB, timeout: 20s}\nescalate:\n  - on: module.exception\n  - on: auth_failed\n  - on: stale\n"}
+  - tool: module.write
+    args: |
+      {"name":"reflex-template","path":"manifest.yaml","content":"name: reflex-template\nversion: 1\nabi: 1\ntriggers:\n  - cell: [producer.value]\n  - cron: \"15 * * * *\"\ncapabilities:\n  state: true\n  notify: {per_day: 24}\ncells:\n  read: [producer.value]\nports:\n  accepts:\n    reading: {value: number, online: boolean}\nconfig:\n  threshold: {type: number, default: \"30\"}\n  stale_after: {type: number, default: \"60\"}\nlimits:\n  memory: 16MiB\n  timeout: 5s\nescalate:\n  - on: module.exception\n"}
+  - {tool: module.build, args: '{"name":"reader-template","note":"the reader"}'}
+  - {say: "The reader builds in the background."}
+  - {tool: module.build, args: '{"name":"reflex-template","note":"the reflex"}'}
+  - {say: "The reflex builds in the background."}
+  - {tool: module.install, args: '{"builds":["$BUILD:reader-template","$BUILD:reflex-template"],"links":[{"from":"reader-template.reading","to":"reflex-template.reading"}],"note":"a reader and a reflex"}'}
+  - {say: "The install of both and the link waits for your press."}
+  - {say: "reader-template and reflex-template are installed and linked."}
+steps:
+  - say: "Build me a reader of my station and a reflex on it, and link them"
+  - facts:
+      questions: 1
+      question: {contains: "One press installs these modules, in this order: local/reader-template, local/reflex-template."}
+      journal:
+        - {tool: module.import, decision: allowed, count: 2}
+        - {tool: module.write, decision: allowed, count: 2}
+        - {tool: module.build, decision: allowed, count: 2}
+        - {tool: module.install, decision: approved, count: 0}
+      no_journal:
+        - {tool: module.import, decision: confirm}
+        - {tool: module.write, decision: confirm}
+      tainted: false
+  - facts:
+      question: {contains: "reader-template.reading → reflex-template.reading"}
+  - press: Approve
+  - facts:
+      questions: 0
+      journal:
+        - {tool: module.install, decision: approved, result_contains: "the link reader-template.reading → reflex-template.reading is written", count: 1}
+      reply: {contains: "installed and linked"}
+      absent:
+        - workspace/modules/reader-template/target
+        - workspace/modules/reflex-template/target

@@ -1,6 +1,6 @@
 # ADR-0075: Reading a module's state keeps the session clean, and a write in a tainted session asks instead of refusing
 
-- **Status:** Accepted
+- **Status:** Accepted; the press of `module.write` in a tainted session is superseded by [ADR-0111](0111-building-a-module-asks-once-at-the-install.md)
 - **Date:** 2026-11-11
 - **Deciders:** Igor Artasevych
 - **Spec:** [7.5](../spec.md#75-runner-and-wasm-modules) (R-RUN-13, R-RUN-14, R-RUN-17), [7.6](../spec.md#76-action-policies-and-risk-classes) (R-POL-6); changes the refusal decided in [ADR-0067](0067-agent-writes-module-source.md); board card G-147

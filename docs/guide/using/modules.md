@@ -15,18 +15,18 @@ Every 15 minutes read the price from https://example.com/api/price
 and tell me when it falls below 100.
 ```
 
-The agent chooses a template, copies it under a new name, edits the two files that matter, builds it in the background (a live card shows progress) and then offers to install it.
+The agent chooses a template, copies it under a new name, edits the files that matter and builds it in the background (a live card shows progress). It asks you nothing on the way: copying a template, writing the source and building never ask, and it fixes and rebuilds on its own until the module's examples pass. Then it offers to install what it built, once.
 
 There are two templates:
 
 - **reader**: reads an outside HTTP service on a schedule and reports the reading to a cell. It handles rate limits (waits and retries), marks a reading as stale when it gets too old, and stops retrying when a login fails.
 - **reflex**: listens to cells and tells you when a rule fires, for example a value crossing a threshold downwards, or a value that has not changed for too long. It says each thing once.
 
-A task often needs both: a reader feeds the cells, a reflex watches them.
+A task often needs both: a reader feeds the cells, a reflex watches them. Ask for both in one message and the agent builds both, then offers them together, with the link between them.
 
 ## Approve
 
-Before anything runs you get an install window with **Approve** and **Deny**. It lists the network hosts, secrets, cells, triggers, schedule, message limit and the ports (the events and calls the module sends, takes, answers and makes). A new version that asks for more rights than the last says so on its own line. If the module ships examples, the window also shows what its trial run sent and wrote, so you see its messages and values before you approve. Read it.
+Nothing runs until you press. When the agent has built everything you asked for, you get one install window with **Approve** and **Deny** for the whole request: one to five modules and the links between them. For each module it lists the network hosts, secrets, cells, triggers, schedule, message limit and the ports (the events and calls the module sends, takes, answers and makes). A new version that asks for more rights than the last says so on its own line. If the agent wrote the module's source after it had read outside content (a web page, a forwarded message), the window says so on that module's block: read what that module may do with extra care. After the modules the window lists the links, each as the two ports with the shape that crosses it. The links are checked as if the modules were already installed, so a link may join two modules of the same request; if the node would refuse a module or a link, there is no window and the agent is told why. One press installs the modules in the order shown and writes the links. If one step fails, the rest is not tried, and what was already installed stays; the agent tells you what was done and what was not. If the module ships examples, the window also shows what its trial run sent and wrote, so you see its messages and values before you approve. Read it.
 
 ### The trial run
 

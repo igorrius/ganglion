@@ -109,6 +109,9 @@ type Modules struct {
 	Now func() time.Time
 	// Queue runs the builds in the background, one at a time (ADR-0069).
 	Queue *BuildQueue
+	// Links are the link tools' parts module.install uses to check and write
+	// the links of a request (ADR-0111).
+	Links Linking
 
 	// locks serialises the writes to each module's folder; NewModuleTools
 	// makes it, one for all the tools it returns.

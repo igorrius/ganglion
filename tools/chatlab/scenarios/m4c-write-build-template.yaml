@@ -32,7 +32,6 @@ modules:
   - {name: producer, manifest: modules/producer.yaml}
 script:
   - {tool: module.import, args: '{"from":"reflex-template","name":"reflex-template"}'}
-  - {say: "The copy waits for your press."}
   - {tool: module.write, args: '{"name":"reflex-template","path":"NOTES.md","content":"The owner wants a line when the value falls below 30.\n"}'}
   - {tool: module.build, args: '{"name":"reflex-template","note":"first build"}'}
   - {say: "The build runs in the background; its card shows how it goes."}
@@ -43,12 +42,9 @@ steps:
   - say: "Make me a reflex from the template"
   - facts:
       questions: 1
-      question: {contains: "reflex-template"}
-  - press: Approve
-  - facts:
-      questions: 1
       question: {contains: "Reacts to"}
       journal:
+        - {tool: module.import, decision: allowed, count: 1}
         - {tool: module.write, decision: allowed, count: 1}
         - {tool: module.build, decision: allowed, result_contains: '"building":"reflex-template"', count: 1}
         - {tool: module.install, decision: approved, count: 0}
