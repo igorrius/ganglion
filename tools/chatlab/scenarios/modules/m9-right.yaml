@@ -1,0 +1,8 @@
+name: right
+version: 1
+capabilities:
+  notify: {per_day: 5}
+ports:
+  accepts: {reading: {v: integer}}
+config:
+  op_event_reading: {type: string, default: '{"op":"notify","value":"right got the reading"}'}

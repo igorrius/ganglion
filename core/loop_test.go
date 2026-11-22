@@ -167,7 +167,10 @@ func TestLoopWaitsOnReadyNotBusy(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventually(t, "the echo after the ready signal", func() bool { return len(outbox(t, q)) == 1 })
-	// Lease after ready: the event, then ErrEmpty.
+	// Lease after ready: the event, then ErrEmpty. The second may come just
+	// after the echo is written, so wait for it, then check no more follow.
+	eventually(t, "the Lease that finds the queue empty", func() bool { return cq.count() >= 3 })
+	time.Sleep(300 * time.Millisecond)
 	if n := cq.count(); n != 3 {
 		t.Fatalf("Lease called %d times, want 3", n)
 	}

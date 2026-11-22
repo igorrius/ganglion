@@ -1,0 +1,8 @@
+name: sender
+version: 1
+triggers:
+  - cron: "*/30 * * * *"
+ports:
+  emits: {reading: {v: integer}}
+config:
+  op_cron: {type: string, default: '{"op":"emit","name":"reading","json":{"v":7}}'}

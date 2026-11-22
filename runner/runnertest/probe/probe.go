@@ -6,6 +6,7 @@ package probe
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -99,6 +100,8 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 		return map[string]any{"err": "", "sent": o.MiB}, nil
 	case "call": // a request o.JSON on the port o.Name; the answer or the error, also noted in the state as call_result
 		return callNoted(h, o)
+	case "call_notify": // as "call", then notify the owner with the answer, "answer <json>", or the error, "error <name>"
+		return callNotified(h, o)
 	case "fetch_call": // fetch o.URL and, when it has answered, call as "call" does
 		_, _ = h.Fetch(pdk.Request{Method: "GET", URL: o.URL})
 		return callNoted(h, o)
@@ -235,6 +238,25 @@ func callNoted(h pdk.Host, o op) (any, error) {
 		h.StatePut("call_result", string(b))
 	}
 	return res, nil
+}
+
+// callNotified calls the port o.Name with o.JSON, as callNoted does, and
+// notifies the owner with what came back.
+func callNotified(h pdk.Host, o op) (any, error) {
+	res, err := callNoted(h, o)
+	if err != nil {
+		return nil, err
+	}
+	m, _ := res.(map[string]any)
+	text := "error " + fmt.Sprint(m["err"])
+	if m["err"] == "" {
+		b, merr := json.Marshal(m["answer"])
+		if merr != nil {
+			return nil, merr
+		}
+		text = "answer " + string(b)
+	}
+	return map[string]string{"err": notifyErr(h.Notify(text))}, nil
 }
 
 // callErr names the pdk error a call failed with, "" for success.

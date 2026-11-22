@@ -492,3 +492,17 @@ func TestAServiceFollowsItsModule(t *testing.T) {
 		t.Fatalf("after shutdown: %v", got)
 	}
 }
+
+// The probe's call_notify operation tells the owner what the call answered,
+// so a scenario sees the answer: the caller's notice is counted once.
+func TestACallersNoticeCarriesTheAnswer(t *testing.T) {
+	notifying := strings.Replace(callerManifest, "capabilities:\n", "capabilities:\n  notify: {per_day: 5}\n", 1)
+	ce := newCallEnv(t, notifying, []string{"b"}, linkCS)
+	ce.start(t)
+	if got := ce.ask(t, `{"op":"call_notify","name":"c","json":1.5}`, "slot-1"); got.Err != "" || string(got.Answer) != `"yes"` {
+		t.Fatalf("the call got %+v, want the answer yes", got)
+	}
+	if n, err := ce.store.NotifiedOn(context.Background(), "local/a", ce.clock()); err != nil || n != 1 {
+		t.Fatalf("notices of the caller: %d, %v, want 1", n, err)
+	}
+}

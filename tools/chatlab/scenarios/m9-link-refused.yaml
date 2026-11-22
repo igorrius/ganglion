@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m9-link-refused
+why: >-
+  M9 check (R-BUS-5): a link between ports of different shapes is refused with the node's reason; no card
+  is shown and nothing is written.
+covers:
+  - links/**
+  - tool/builtin/links.go
+repeat: 1
+model: scripted
+modules:
+  - {name: sender, manifest: modules/m9-sender.yaml}
+  - {name: counter, manifest: modules/m9-counter.yaml}
+script:
+  - {tool: link.add, args: '{"from":"sender.reading","to":"counter.total"}'}
+  - {say: "The node refused the link."}
+steps:
+  - say: "Link the sender's reading to the counter"
+  - facts:
+      questions: 0
+      journal:
+        - {tool: link.add, err_contains: "the node refuses this link", count: 1}
+        - {tool: link.add, decision: approved, count: 0}
