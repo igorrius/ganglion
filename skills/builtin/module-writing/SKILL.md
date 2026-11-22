@@ -147,7 +147,31 @@ trial in the install window.
   example's time starts there, so a `ts` just before it is fresh and one hours earlier is stale.
 - A `cell` step reaches the module as a change of the listed cells made by the producer named
   `trial`, never by the module itself.
-- The examples compare counts, not message text: the node never shows the text to you.
+- A module that only accepts events (an `accepts` port, no cell, cron or tool trigger) is tried
+  with event steps. Never add a trigger to a module only to get a trial.
+- An `event` step delivers an event to an `accepts` port; a `call` step makes a call on a
+  `serves` port. The payload or request must fit the port's shape, or the file is refused.
+  `from` names the sender (`<module>.<port>`) and defaults to `trial.<port>`:
+
+  ```yaml
+  - name: a strong quake raises the alarm
+    steps:
+      - trigger: {event: quake, payload: {mag: 5.4}, from: feed.quake}
+        expect: {emits: {alarm: 1}, messages: 0}
+      - trigger: {event: quake, payload: {mag: 1.2}}
+        expect: {emits: {alarm: 0}}
+  ```
+
+- `expect.emits` counts the events a step emitted, exactly, on each port it names (an `emits`
+  port; `notify` is counted with `messages`). A port it does not name is not checked and
+  `emits: {}` checks nothing. A call step passes when the module answered; the answer is checked
+  with the port's `out` shape.
+- A module that makes calls gets answers from the example's `calls`: `{port: <name>, answer:
+  <value>}` (checked with the port's `out` shape) or `{port: <name>, fails: unavailable}` (one of
+  `denied`, `format`, `not_here`, `failed`, `unavailable`). A calls port with no entry answers
+  "not here".
+- The examples compare counts, not message text or event payloads: the node never shows them to
+  you.
 - Put in the examples only made-up values and made-up secrets, never the owner's real data,
   addresses or secrets.
 - A failed trial refuses the install. Either the module is wrong or the example is: read the

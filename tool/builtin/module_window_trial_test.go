@@ -54,7 +54,7 @@ func TestInstallWindowShowsTheTrialInOrder(t *testing.T) {
 		Examples: []modtrial.ExampleResult{
 			{Name: "charges", Passed: true, Steps: []modtrial.StepResult{
 				{N: 1, Ran: true, OK: true, Messages: []string{"Battery low"}, Reports: []modtrial.Reported{{Cell: "demo-reader.soc", Value: json.RawMessage("{ \"a\": 1,\n \"b\": [2] }")}}},
-				{N: 2, Ran: true, OK: true}}},
+				{N: 2, Ran: true, OK: true, Emitted: []modtrial.Emitted{{Port: "quake", Payload: json.RawMessage(`{ "mag": 5.4 }`)}}}}},
 			{Name: "idle", Passed: true, Steps: []modtrial.StepResult{{N: 1, Ran: true, OK: true}}}},
 		Now: &modtrial.StepResult{N: 1, Ran: true, OK: true, Messages: []string{"now text"}}}
 	e, sha := trialEnv(t, &r)
@@ -64,6 +64,7 @@ func TestInstallWindowShowsTheTrialInOrder(t *testing.T) {
 		"Example: charges",
 		"✉️ Battery low",
 		"demo-reader.soc → `'{\"a\":1,\"b\":[2]}'`",
+		"event quake → `'{\"mag\":5.4}'`",
 		"Example: idle",
 		"nothing sent or written",
 		"On the cells at build time:",

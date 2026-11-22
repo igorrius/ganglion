@@ -118,6 +118,7 @@ ask.module_trial_none: "Пробного запуску не було: у мод
 ask.module_trial_example: "Приклад: {name}"
 ask.module_trial_message: "✉️ {text}"
 ask.module_trial_cell: "{cell} → {value}"
+ask.module_trial_event: "подія {port} → {value}"
 ask.module_trial_nothing: "нічого не надіслано й не записано"
 ask.module_trial_now: "На комірках на час збірки:"
 ask.module_trial_more: "… і ще {n}"

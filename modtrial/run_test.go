@@ -473,3 +473,149 @@ func TestCallIsCheckedAndCallsNobody(t *testing.T) {
 		t.Fatalf("step = %+v, want module.format for a request outside the shape", st)
 	}
 }
+
+func portsRunManifest() runner.Manifest {
+	m := testManifest()
+	str := runner.ConfigKey{Type: "string"}
+	m.Config["op_event_quake"] = str
+	m.Config["op_call_price"] = str
+	num := runner.Shape{Type: "number"}
+	obj := runner.Shape{Type: "object", Fields: map[string]runner.Shape{"mag": num}}
+	val := runner.Shape{Type: "object", Fields: map[string]runner.Shape{"value": num}}
+	m.Ports.Accepts = map[string]runner.Shape{"quake": obj}
+	m.Ports.Emits = map[string]runner.Shape{"alarm": obj, "calm": obj}
+	m.Ports.Serves = map[string]runner.PortCall{"price": {In: runner.Shape{Type: "object", Fields: map[string]runner.Shape{"sym": {Type: "string"}}}, Out: val}}
+	m.Ports.Calls = map[string]runner.PortCall{"rate": {In: runner.Shape{Type: "integer"}, Out: val}}
+	return m
+}
+
+func eventStep(port, payload string, exp Expect) Step {
+	return Step{Trigger: Trigger{Kind: "event", Port: port, Payload: json.RawMessage(payload), From: "feed.quake"}, Expect: exp}
+}
+
+// An event step runs the module with the input modhost builds for an event:
+// the sender and the event, under "from" and "event".
+func TestEventStepDeliversWhatModhostDelivers(t *testing.T) {
+	e := mkEx("ev",
+		eventStep("quake", `{"mag":5.4}`, Expect{}),
+		Step{Trigger: Trigger{Kind: "cron"}},
+	)
+	e = withOp(e, "op_event_quake", `{"op":"echo"}`)
+	e = withOp(e, "op_cron", `{"op":"state_get","name":"last_event"}`)
+	rep := run(t, portsRunManifest(), opts(), e)
+	if !rep.Passed {
+		t.Fatalf("report = %+v", rep)
+	}
+	if got := string(rep.Examples[0].Steps[0].out); got != `{"trigger":"event:quake"}` {
+		t.Fatalf("trigger = %s", got)
+	}
+	var got struct{ Value string }
+	if err := json.Unmarshal(rep.Examples[0].Steps[1].out, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Value != `{"event":{"mag":5.4},"from":"feed.quake"}` {
+		t.Fatalf("the module got %s", got.Value)
+	}
+}
+
+func TestEmitsAreRecordedAndCountedPerPort(t *testing.T) {
+	two := `{"op":"emit_many","name":"alarm","json":{"mag":1},"mib":2}`
+	pass := withOp(mkEx("ok", eventStep("quake", `{"mag":6}`, Expect{Emits: map[string]int{"alarm": 2, "calm": 0}})), "op_event_quake", two)
+	rep := run(t, portsRunManifest(), opts(), pass)
+	if !rep.Passed {
+		t.Fatalf("report = %+v", rep)
+	}
+	if got := rep.Examples[0].Steps[0].Emitted; len(got) != 2 || got[0].Port != "alarm" || string(got[0].Payload) != `{"mag":1}` {
+		t.Fatalf("emitted = %+v", got)
+	}
+
+	bad := withOp(mkEx("bad", eventStep("quake", `{"mag":6}`, Expect{Emits: map[string]int{"alarm": 1, "calm": 1}})), "op_event_quake", two)
+	rep = run(t, portsRunManifest(), opts(), bad)
+	st := rep.Examples[0].Steps[0]
+	if rep.Passed || st.Mismatch != "expected 1 event on alarm, got 2; expected 1 event on calm, got 0" {
+		t.Fatalf("step = %+v", st)
+	}
+	if line := rep.ModelLine(); strings.Contains(line, "mag") {
+		t.Fatalf("the model's line shows a payload: %q", line)
+	}
+
+	// A port the expectation does not name, and an empty map, check nothing.
+	free := withOp(mkEx("free", eventStep("quake", `{"mag":6}`, Expect{Emits: map[string]int{"calm": 0}}), eventStep("quake", `{"mag":6}`, Expect{Emits: map[string]int{}})), "op_event_quake", two)
+	if rep = run(t, portsRunManifest(), opts(), free); !rep.Passed {
+		t.Fatalf("report = %+v", rep)
+	}
+}
+
+func TestEmitsOfOneStepAreNotCarriedToTheNext(t *testing.T) {
+	e := mkEx("two",
+		eventStep("quake", `{"mag":6}`, Expect{Emits: map[string]int{"alarm": 1}}),
+		Step{Trigger: Trigger{Kind: "cron"}, Expect: Expect{Emits: map[string]int{"alarm": 0}}},
+	)
+	e = withOp(e, "op_event_quake", `{"op":"emit","name":"alarm","json":{"mag":1}}`)
+	e = withOp(e, "op_cron", `{"op":"echo"}`)
+	if rep := run(t, portsRunManifest(), opts(), e); !rep.Passed {
+		t.Fatalf("report = %+v", rep)
+	}
+}
+
+func callStep(request string, exp Expect) Step {
+	return Step{Trigger: Trigger{Kind: "call", Port: "price", Payload: json.RawMessage(request), From: "caller.ask"}, Expect: exp}
+}
+
+// A call step's answer is checked against the served port's out shape, as
+// on a node.
+func TestCallStepAnswerIsChecked(t *testing.T) {
+	good := withOp(mkEx("ok", callStep(`{"sym":"abc"}`, Expect{})), "op_call_price", `{"op":"answer","json":{"value":2}}`)
+	rep := run(t, portsRunManifest(), opts(), good)
+	if !rep.Passed || string(rep.Examples[0].Steps[0].out) != `{"value":2}` {
+		t.Fatalf("report = %+v", rep)
+	}
+	bad := withOp(mkEx("bad", callStep(`{"sym":"abc"}`, Expect{})), "op_call_price", `{"op":"answer","json":{"value":"x"}}`)
+	rep = run(t, portsRunManifest(), opts(), bad)
+	if st := rep.Examples[0].Steps[0]; rep.Passed || st.Kind != "module.format" {
+		t.Fatalf("step = %+v, want module.format for an answer outside the shape", st)
+	}
+}
+
+func callingExample(answers ...CannedCall) Example {
+	e := withOp(mkEx("calls", cron(Expect{})), "op_cron", `{"op":"call","name":"rate","json":5}`)
+	e.Calls = answers
+	return e
+}
+
+func callResult(t *testing.T, e Example) (string, json.RawMessage) {
+	t.Helper()
+	rep := run(t, portsRunManifest(), opts(), e)
+	if !rep.Passed {
+		t.Fatalf("report = %+v", rep)
+	}
+	var got struct {
+		Err    string          `json:"err"`
+		Answer json.RawMessage `json:"answer"`
+	}
+	if err := json.Unmarshal(rep.Examples[0].Steps[0].out, &got); err != nil {
+		t.Fatal(err)
+	}
+	return got.Err, got.Answer
+}
+
+func TestCannedCallAnswerReachesTheModule(t *testing.T) {
+	err, ans := callResult(t, callingExample(CannedCall{Port: "rate", Answer: json.RawMessage(`{"value":3}`)}))
+	if err != "" || string(ans) != `{"value":3}` {
+		t.Fatalf("err %q, answer %s", err, ans)
+	}
+}
+
+func TestCannedCallRefusalReachesTheModule(t *testing.T) {
+	for word, code := range map[string]runner.CallCode{"unavailable": runner.CallUnavailable, "failed": runner.CallFailed, "denied": runner.CallDenied} {
+		if err, _ := callResult(t, callingExample(CannedCall{Port: "rate", Code: code})); err != word {
+			t.Errorf("code %d: the module got %q, want %q", code, err, word)
+		}
+	}
+}
+
+func TestACallWithNoCannedAnswerIsNotHere(t *testing.T) {
+	if err, _ := callResult(t, callingExample()); err != "not_here" {
+		t.Fatalf("the module got %q, want not_here", err)
+	}
+}

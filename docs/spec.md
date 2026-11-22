@@ -918,13 +918,17 @@ escalate:                    # when to call the model
   ([ADR-0079](adr/0079-a-modules-messages-go-where-the-nodes-file-says.md)).
 - **R-RUN-19.** A module is tried on its examples right after its build.
   `examples.yaml` beside the manifest holds examples as steps that set
-  cells, move virtual time and fire a trigger, with counted expectations
-  (messages, cells reported, a failure) and canned HTTP answers. The real
+  cells, move virtual time and fire a trigger, which may also deliver an
+  event to an accepts port or a call to a served port (checked with the
+  port's shape, as a node checks before it delivers), with counted
+  expectations (messages, cells reported, events emitted per port, a
+  failure), canned HTTP answers and canned answers of the calls the module
+  makes (a call with no canned answer is "not here"). The real
   `.wasm` runs in a sandbox: an empty state, cells and messages kept in
   memory, no network, fake secrets, a virtual clock; nothing of the node
   changes. The model reads only the node's words (counts, the step that
   failed and why), never the module's text; the install window shows the
-  owner what the module would send and write, and what it would do on the
+  owner what the module would send, emit and write, and what it would do on the
   current cells. A failed trial refuses the build's install; a module
   without examples installs, and the window says it was not tried
   ([ADR-0090](adr/0090-a-module-is-tried-on-its-examples-before-install.md)).
