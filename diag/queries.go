@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/internal/redact"
+	"github.com/igorrius/ganglion/turns"
 )
 
 // callRow is one tool_calls row; its arguments and result were redacted
@@ -150,7 +151,8 @@ func (d *Diag) turnsFailed(ctx context.Context, raw json.RawMessage) (any, error
 		return nil, err
 	}
 	rows, err := d.db.QueryContext(ctx, `SELECT `+turnColumns+` FROM turns
-		WHERE outcome NOT IN ('ok', 'command') AND started_ms >= ? ORDER BY started_ms DESC LIMIT ?`, since.UnixMilli(), limit)
+		WHERE outcome NOT IN (?, ?, ?) AND started_ms >= ? ORDER BY started_ms DESC LIMIT ?`,
+		string(turns.OutcomeOK), string(turns.OutcomeCommand), string(turns.OutcomeReview), since.UnixMilli(), limit)
 	if err != nil {
 		return nil, missing(err)
 	}

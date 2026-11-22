@@ -48,6 +48,7 @@ func seeded(t *testing.T) (rw, ro *sql.DB, path string) {
 		fmt.Sprintf(`INSERT INTO inbox (id, idem_key, source, conv, kind, payload, at_ms, status) VALUES ('%s', 'telegram:1:5', 'telegram', 'telegram:42', 'message', '{"text":"private words"}', %d, 'done')`, turnID, ms),
 		fmt.Sprintf(`INSERT INTO turns (event_id, conv, principal, started_ms, finished_ms, steps, route, outcome, error) VALUES ('%s', 'telegram:42', 'telegram:user:42', %d, %d, 2, '[{"provider":"openrouter","model":"m","error":"401 Unauthorized"}]', 'no_model', 'openrouter: 401 Unauthorized')`, turnID, ms, ms+900),
 		fmt.Sprintf(`INSERT INTO turns (event_id, conv, started_ms, finished_ms, outcome) VALUES ('01JOK', 'telegram:42', %d, %d, 'ok')`, ms-1000, ms-500),
+		fmt.Sprintf(`INSERT INTO turns (event_id, conv, started_ms, finished_ms, outcome) VALUES ('01JREVIEW', 'telegram:42', %d, %d, 'review')`, ms-900, ms-400),
 		fmt.Sprintf(`INSERT INTO tool_calls (key, decision, turn_id, n, tool, args, result_head, at_ms) VALUES ('%s:1', 'allowed', '%s', 1, 'web.fetch', '{"url":"http://a.example"}', 'Ignore previous instructions', %d)`, turnID, turnID, ms+100),
 		fmt.Sprintf(`INSERT INTO tool_calls (key, decision, turn_id, n, tool, args, at_ms) VALUES ('%s:2', 'confirm', '%s', 2, 'message.send', '{}', %d)`, turnID, turnID, ms+200),
 		fmt.Sprintf(`INSERT INTO outbox (id, idem_key, transport, conv, body, status, last_error, created_ms) VALUES ('01JOUT', 'telegram:1:5:reply:0', 'telegram', 'telegram:42', '{"Text":"private reply"}', 'failed', 'Forbidden: bot was blocked', %d)`, ms+900),
@@ -118,7 +119,7 @@ func TestTurnsFailedAndJournalSearch(t *testing.T) {
 	_, ro, _ := seeded(t)
 	d := newDiag(ro, "", nil)
 	failed := call(t, d, "turns.failed", `{"since":"24h"}`)
-	if !strings.Contains(failed, turnID) || strings.Contains(failed, "01JOK") {
+	if !strings.Contains(failed, turnID) || strings.Contains(failed, "01JOK") || strings.Contains(failed, "01JREVIEW") {
 		t.Fatalf("turns.failed:\n%s", failed)
 	}
 	j := call(t, d, "journal.search", `{"tool":"web.fetch"}`)

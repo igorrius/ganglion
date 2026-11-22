@@ -52,6 +52,12 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    # The longest part, the chatlab scenarios, runs beside the rest instead of
+    # after it; the job's time is the slowest part's.
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [unit, chatlab, network]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -66,8 +72,8 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: go-test-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: go-test-${{ runner.os }}-
+          key: go-test-${{ runner.os }}-${{ matrix.part }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: go-test-${{ runner.os }}-${{ matrix.part }}-
       - name: File times follow file contents
         run: scripts/pin-file-times.sh
       - name: A run by hand reuses no result
@@ -79,18 +85,23 @@ jobs:
           toolchain: stable
           targets: wasm32-wasip1
       - name: Build
+        if: matrix.part == 'unit'
         run: go build ./...
       - name: Vet
+        if: matrix.part == 'unit'
         run: go vet ./...
       - name: Test
-        run: |
-          go test -race ./...
-          go test -race -timeout 20m -tags lab ./internal/chatlab/... ./tools/chatlab/...
+        if: matrix.part == 'unit'
+        run: go test -race ./...
+      - name: Chatlab scenarios
+        if: matrix.part == 'chatlab'
+        run: go test -race -timeout 20m -tags lab ./internal/chatlab/... ./tools/chatlab/...
       # The intake page's own script seals a value and makes an OAuth line
       # under Node.js's WebCrypto, afresh on every run; Go opens and parses
       # them (R-INT-4). The committed fixtures cover go test ./... above; the
       # runner's own Node.js is enough.
       - name: The intake page seals, Go opens
+        if: matrix.part == 'network'
         run: |
           dir=$(mktemp -d)
           node intake/testdata/fixtures.mjs "$dir"
@@ -98,6 +109,7 @@ jobs:
       # The tests that fetch crates from crates.io (the Rust example, a build
       # with a dependency): out of go test ./... and never cached.
       - name: Network tests
+        if: matrix.part == 'network'
         run: make test-net
       # Also after a failure: go test keeps only passes, so the next push runs
       # what failed and reuses the rest.
@@ -108,7 +120,7 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: go-test-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: go-test-${{ runner.os }}-${{ matrix.part }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   lint:
     needs: changes

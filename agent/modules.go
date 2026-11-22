@@ -128,15 +128,29 @@ func (a *Agent) modules(ctx context.Context, t *turn, arg string) error {
 		t.reply(a.say(ctx, t, texts.ReplyNotAvailable, nil))
 		return nil
 	}
-	r, err := a.modulesReply(ctx, t, strings.TrimSpace(arg))
-	if err != nil {
-		return fmt.Errorf("agent: /modules: %w", err)
+	// A message of several lines, each a /modules command, runs them in order
+	// with one answer each; a line that is no command makes the whole message
+	// a usage error, so no line's text is taken for a name.
+	lines := strings.Split(strings.TrimSpace(arg), "\n")
+	for i := 1; i < len(lines); i++ {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(lines[i]), "/modules")
+		if !ok || (rest != "" && rest[0] != ' ' && rest[0] != '\t') {
+			lines = []string{"update"} // a verb with no name is the usage line
+			break
+		}
+		lines[i] = rest
 	}
-	t.reply(r.text)
-	if len(r.buttons) > 0 {
-		t.out[len(t.out)-1].Buttons = r.buttons
+	for _, line := range lines {
+		r, err := a.modulesReply(ctx, t, strings.TrimSpace(line))
+		if err != nil {
+			return fmt.Errorf("agent: /modules: %w", err)
+		}
+		t.reply(r.text)
+		if len(r.buttons) > 0 {
+			t.out[len(t.out)-1].Buttons = r.buttons
+		}
+		t.note(modulesNote + r.note)
 	}
-	t.note(modulesNote + r.note)
 	return nil
 }
 
@@ -144,6 +158,11 @@ func (a *Agent) modules(ctx context.Context, t *turn, arg string) error {
 func (a *Agent) modulesReply(ctx context.Context, t *turn, arg string) (moduleReply, error) {
 	verb, name, _ := strings.Cut(arg, " ")
 	name = strings.TrimSpace(name)
+	// A name is one word; config alone takes more (key=value). Text after it
+	// is refused unechoed, not taken for part of the name.
+	if verb != "config" && strings.ContainsAny(name, " \t\r\n") {
+		return plain(a.say(ctx, t, texts.ModulesUsage, nil)), nil
+	}
 	switch {
 	case verb == "":
 		return a.listModules(ctx, t)

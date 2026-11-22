@@ -59,6 +59,8 @@ All of these work in your private chat and none restarts the node.
 | `/modules config <name> key=value` | Changes a setting the module declares. |
 | `/modules runs <name>` | Lists the module's last runs, newest first. See [Why did a module write?](#why-did-a-module-write). |
 
+A name is one word. Several commands in one message, one per line, run in order and get one answer each; text after a name is refused with the usage line.
+
 ## Why did a module write?
 
 The node keeps a journal of every run of a module: when it ran, what started it (the schedule, the agent's call of one of its tools, a change in a value another module wrote, or an event or a call that reached it over a link, with the link named), how long it took, how it ended, which kinds of calls it made (network requests, reading and writing values, messages), the names of the values it wrote and how many messages it sent. It never keeps what the module said, the values themselves or the arguments of a call.
