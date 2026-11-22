@@ -477,7 +477,11 @@ Live turns ([design](design/p1-live-turns-design.md);
   The job's end resumes the conversation at once. Every turn of the conversation carries
   a node note listing its running jobs, not stored in history, and `/status` lists them
   (R-OBS-11). The chat stays usable meanwhile; only work on the same module waits (M4c,
-  owner, 2026-11-10, [ADR-0069](adr/0069-background-jobs-with-a-live-card.md)).
+  owner, 2026-11-10, [ADR-0069](adr/0069-background-jobs-with-a-live-card.md)). A build is
+  quiet: while the conversation waits for a build of its own, the turn that started it and
+  the turns its ends resume send no text (it joins the history), so the owner sees the
+  cards, the install window and one closing line; a person who writes meanwhile is
+  answered (owner, 2026-11-22, [ADR-0112](adr/0112-a-build-is-quiet-until-the-install-window.md)).
 
 ### 7.3. Model router
 

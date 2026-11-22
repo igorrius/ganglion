@@ -202,7 +202,9 @@ in the install window. Do not stop between steps to report progress.
    (`[build finished] <name>: …`) that starts your next step. End your turn after the call; do
    not call `module.build` or `module.write` on the module again until its note comes (the node
    refuses both meanwhile). Read the diagnostics in the note: they name your files and lines.
-   Fix and build again, quietly.
+   Fix and build again, quietly. While a build of yours runs, what you write at the end of a
+   turn does not reach the owner (the build's card does); keep such words short, they are only
+   in your history.
    After 5 builds of the module in a row the node refuses another until the owner writes: stop,
    tell the owner what fails and ask how to go on.
    The node's build does not run the module's tests; the owner and CI do. Read your tests back
