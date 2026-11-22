@@ -131,6 +131,7 @@ func ModuleTools() do.Provider[Moduling] {
 			Provenance:  provenanceDir(b),
 			Now:         time.Now,
 			Queue:       do.MustInvoke[*builtin.BuildQueue](i),
+			Links:       do.MustInvoke[builtin.Linking](i),
 		}
 		return Moduling{Tools: builtin.NewModuleTools(m), Manifest: m.SourceManifest}, nil
 	}

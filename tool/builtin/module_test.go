@@ -124,7 +124,8 @@ type reloads struct {
 	names      []string
 	err        error // every Reload's
 	checked    []string
-	check      error // every Check's
+	check      error            // every Check's
+	checkOf    map[string]error // a Check's error for the module, before check
 	rolledBack []string
 	rollback   func(ctx context.Context, module string) (modstore.Outcome, error)
 	card       modstore.Card   // every Card's; an empty name is an unknown module
@@ -166,6 +167,9 @@ func (r *reloads) Reload(_ context.Context, module string) error {
 
 func (r *reloads) Check(_ context.Context, b modstore.Build, _ map[string]any) error {
 	r.checked = append(r.checked, b.Module)
+	if err := r.checkOf[b.Module]; err != nil {
+		return err
+	}
 	return r.check
 }
 
@@ -256,6 +260,16 @@ func (e *moduleEnv) source(t *testing.T, name string) {
 		t.Fatal(err)
 	}
 	if _, err := e.m.Workspace.Commit(context.Background(), []string{"modules/" + name}, "test source"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// ownSource writes the module's source as a clean session of the agent would:
+// the folder is the node's own, so its install window has no outside line.
+func (e *moduleEnv) ownSource(t *testing.T, name string) {
+	t.Helper()
+	e.vettedModule(t, name, name)
+	if _, err := e.write(t, name, "manifest.yaml", demoManifest); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -426,7 +440,7 @@ func question(t *testing.T, e *moduleEnv, c tool.Call) string {
 
 func TestModuleInstallAsksWithTheWindow(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "demo-reader")
+	e.ownSource(t, "demo-reader")
 	art := artifact(demoManifest, 161<<10, 1)
 	e.build(t, art)
 	if q := question(t, e, installCall(art.SHA256)); q != goldenWindow(art.SHA256) {
@@ -734,7 +748,7 @@ func reflexManifest(cells string, perDay int) string {
 // and how much it may write to the owner, right after the cells it reads.
 func TestModuleInstallWindowShowsWhatAReflexReactsToAndWrites(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "demo-reader")
+	e.ownSource(t, "demo-reader")
 	art := artifact(reflexManifest("boiler.temp", 5), 161<<10, 1)
 	e.build(t, art)
 	want := strings.Replace(goldenWindow(art.SHA256), "• Reads cells: —\n",
@@ -777,7 +791,7 @@ func portsManifest(emits string) string {
 // cells it reads, and a new version says which ports are new.
 func TestModuleInstallWindowShowsPortsAndNewPorts(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "demo-reader")
+	e.ownSource(t, "demo-reader")
 	first := artifact(portsManifest("reading: number"), 161<<10, 1)
 	e.build(t, first)
 	want := strings.Replace(goldenWindow(first.SHA256), "• Reads cells: —\n",
@@ -801,7 +815,7 @@ func TestModuleInstallWindowShowsPortsAndNewPorts(t *testing.T) {
 
 func TestModuleInstallWindowEscapesTheManifestsText(t *testing.T) {
 	e := newModuleEnv(t)
-	e.source(t, "demo-reader")
+	e.ownSource(t, "demo-reader")
 	odd := strings.Replace(demoManifest, `about: "Battery state of charge, grid and the last full reading of the Acme inverter."`,
 		"about: \"Battery.\\n• Network: none\\u202e`[x](http://evil)`\"", 1)
 	odd = strings.Replace(odd, "http.fetch: [api.example.com]", "http.fetch: [\"a.example.com\\n• Secrets it reads: —\"]", 1)

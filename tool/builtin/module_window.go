@@ -39,6 +39,9 @@ type window struct {
 	// press makes the press refuse and the owner is asked again (safe by
 	// design). Kept so the press shows the same.
 	Trial []string `json:"trial"`
+	// Outside is true when the module's source is not the node's own: it was
+	// written after the agent read outside content (R-RUN-17, ADR-0111).
+	Outside bool `json:"outside,omitempty"`
 }
 
 // windowOf is the window of a build whose plan has no refusal, with no trial
@@ -61,14 +64,24 @@ const moreReserve = 40
 // withTrial is w with the trial section of report r (ok false: none is
 // kept). The section is capped at trialRunes and at what the rest of the
 // question leaves under tool.MaxQuestionRunes, so a long but valid window
-// stays askable. It is stored with the window, so the press shows the same.
-func withTrial(sp texts.Speaker, w window, r modtrial.Report, ok bool) window {
-	rest := utf8.RuneCountInString(windowText(sp, w)) + 1 // and the line break before the section
+// stays askable; others is how many runes the question holds besides this
+// window (the links of the request). It is stored with the window, so the
+// press shows the same.
+func withTrial(sp texts.Speaker, w window, r modtrial.Report, ok bool, others int) window {
+	rest := utf8.RuneCountInString(windowText(sp, w)) + 1 + others // and the line break before the section
 	w.Trial = trialLines(sp, r, ok, min(trialRunes, tool.MaxQuestionRunes-rest-moreReserve))
 	return w
 }
 
-// recordPath is where the window a call asked with is kept until its press.
+// compactTrial is w with the trial as one line, the count of examples that
+// passed: a window of several modules has no room for each trial's messages.
+func compactTrial(sp texts.Speaker, w window, r modtrial.Report, ok bool) window {
+	w.Trial = trialLines(sp, r, ok, trialRunes)[:1]
+	return w
+}
+
+// recordPath is where the window a call asked with is kept until its press:
+// beside the request's first build.
 func (m Modules) recordPath(c tool.Call, sha string) string {
 	return m.buildPath(sha, ".window-"+keyHash(c)+".json")
 }
@@ -77,12 +90,12 @@ func (m Modules) recordPath(c tool.Call, sha string) string {
 // written once: a rerun of the turn asks again, but the question the owner
 // sees and presses on is the first one (the pending call and the outbox keep
 // it), so a second window never replaces the first.
-func (m Modules) recordWindow(c tool.Call, w window) error {
+func (m Modules) recordWindow(c tool.Call, w requestWindow) error {
 	b, err := json.Marshal(w)
 	if err != nil {
 		return err
 	}
-	return writeOnce(m.recordPath(c, w.SHA256), b)
+	return writeOnce(m.recordPath(c, w.Builds[0].SHA256), b)
 }
 
 // errWindowChanged refuses a press whose plan no longer shows what the owner
@@ -91,8 +104,8 @@ var errWindowChanged = errors.New("what this build may do changed since the owne
 	"(a secret, a setting, a cell's owner or the active version); call module.install again so the owner sees it as it is now")
 
 // sameWindow checks that w is the window call c asked with.
-func (m Modules) sameWindow(c tool.Call, w window) error {
-	shown, err := os.ReadFile(m.recordPath(c, w.SHA256))
+func (m Modules) sameWindow(c tool.Call, w requestWindow) error {
+	shown, err := os.ReadFile(m.recordPath(c, w.Builds[0].SHA256))
 	if err != nil {
 		return errWindowChanged
 	}
@@ -122,7 +135,15 @@ const digestShown = 6
 // anything did, then the build and every right (R-RUN-9). Every name the
 // manifest wrote is shown as it is when it is plain, else escaped in a code
 // span, so it cannot draw a line or hide text.
-func windowText(sp texts.Speaker, w window) string {
+func windowText(sp texts.Speaker, w window) string { return blockText(sp, w, false) }
+
+// aboutShort bounds a tool's description in a compact block.
+const aboutShort = 80
+
+// blockText is the window of one build. A compact block is one of several in
+// a question: a right the module has none of is left out, and a tool's
+// description is cut short, so five modules fit in tool.MaxQuestionRunes.
+func blockText(sp texts.Speaker, w window, compact bool) string {
 	var lines []string
 	if n := wideningLine(sp, w); n != "" {
 		lines = append(lines, n)
@@ -130,17 +151,27 @@ func windowText(sp texts.Speaker, w window) string {
 	r := w.Rights
 	lines = append(lines,
 		sp.Text(texts.AskModuleInstall, texts.Vars{"module": modstore.LocalPrefix + item(modstore.ShortName(w.Module)), "version": strconv.Itoa(w.Version),
-			"size": status.Bytes(int64(w.Size)), "digest": w.SHA256[:digestShown] + "…"}),
-		sp.Text(texts.AskModuleNetwork, texts.Vars{varItems: listed(r.Hosts)}),
-		sp.Text(texts.AskModuleSecrets, texts.Vars{varItems: listed(r.Secrets)}),
-		sp.Text(texts.AskModuleCreates, texts.Vars{varItems: listed(r.CellsCreated)}),
-		sp.Text(texts.AskModuleTakes, texts.Vars{varItems: listed(r.CellsTaken)}),
-		sp.Text(texts.AskModuleReads, texts.Vars{varItems: listed(r.CellsRead)}))
+			"size": status.Bytes(int64(w.Size)), "digest": w.SHA256[:digestShown] + "…"}))
+	if w.Outside {
+		lines = append(lines, sp.Text(texts.AskModuleOutside, nil))
+	}
+	for _, rl := range []struct {
+		key   texts.Key
+		items []string
+	}{{texts.AskModuleNetwork, r.Hosts}, {texts.AskModuleSecrets, r.Secrets}, {texts.AskModuleCreates, r.CellsCreated},
+		{texts.AskModuleTakes, r.CellsTaken}, {texts.AskModuleReads, r.CellsRead}} {
+		if !compact || len(rl.items) > 0 {
+			lines = append(lines, sp.Text(rl.key, texts.Vars{varItems: listed(rl.items)}))
+		}
+	}
 	lines = append(lines, reflexLines(sp, r)...)
 	lines = append(lines, sp.Text(texts.AskModuleRuns, texts.Vars{varItems: runs(sp, w.Module, r)}))
 	for _, t := range r.Tools {
 		name := modstore.ShortName(w.Module) + "." + t
 		if about, ok := w.About[name]; ok {
+			if compact {
+				about = text.Truncate(about, aboutShort)
+			}
 			lines = append(lines, sp.Text(texts.AskModuleAbout, texts.Vars{"tool": item(name), "about": shown(about)}))
 		}
 	}
