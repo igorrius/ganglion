@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/links"
+	"github.com/igorrius/ganglion/modstore"
+	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/status"
 	"github.com/igorrius/ganglion/texts"
@@ -43,20 +45,27 @@ func (h *Host) Links(_ context.Context, name string) ([]string, error) {
 	return out, nil
 }
 
-// linkProblems are the links that do not work among the running modules: a
-// module that is not running, or one with a port gone or another, counts
-// as a missing end.
-func (h *Host) linkProblems() ([]links.Problem, error) {
+// linkProblems are the links that do not work among the active local
+// modules: installed ones, running or not. A module turned off or stopped
+// keeps its links: what it is sent waits for it (R-BUS-6). A module with no
+// active version, or one with a port gone or another, is a missing end.
+func (h *Host) linkProblems(ctx context.Context) ([]links.Problem, error) {
 	ls, err := h.d.Settings.Links()
 	if err != nil || len(ls) == 0 {
 		return nil, err
 	}
-	h.mu.RLock()
-	mods := make(map[string]links.Module, len(h.running))
-	for _, l := range h.running {
-		mods[l.short] = links.FromManifest(l.m)
+	actives, err := h.d.Store.ActiveLocal(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("modhost: %w", err)
 	}
-	h.mu.RUnlock()
+	mods := make(map[string]links.Module, len(actives))
+	for _, a := range actives {
+		m, err := runner.ParseManifest(a.Manifest)
+		if err != nil {
+			continue // it does not run either
+		}
+		mods[modstore.ShortName(a.Module)] = links.FromManifest(m)
+	}
 	var out []links.Problem
 	for _, p := range links.Check(mods, linksOf(ls)) {
 		if p.Link != (links.Link{}) { // a loop of cell triggers alone is no link's
@@ -77,8 +86,8 @@ func linksOf(ls []settings.Link) []links.Link {
 
 // checkLinks logs each broken link once, at start, after the modules are
 // loaded. A file that cannot be read is logged too, and left to the status.
-func (h *Host) checkLinks() {
-	ps, err := h.linkProblems()
+func (h *Host) checkLinks(ctx context.Context) {
+	ps, err := h.linkProblems(ctx)
 	if err != nil {
 		h.d.Log.Warn("modhost: the links are not checked: the settings cannot be read", "err", err)
 		return
@@ -90,8 +99,8 @@ func (h *Host) checkLinks() {
 
 // linkChecks are the /status lines of the broken links, each with the time
 // it was first seen broken. It holds h.stateMu.
-func (h *Host) linkChecks() []status.Check {
-	ps, err := h.linkProblems()
+func (h *Host) linkChecks(ctx context.Context) []status.Check {
+	ps, err := h.linkProblems(ctx)
 	if err != nil || len(ps) == 0 {
 		h.broken = nil
 		return nil

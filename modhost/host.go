@@ -191,7 +191,7 @@ func (h *Host) Start(ctx context.Context) {
 		h.stateMu.Unlock()
 		return
 	}
-	defer h.checkLinks() // after the lock is let go: it reads the running modules
+	defer h.checkLinks(ctx) // after the lock is let go
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, a := range actives {

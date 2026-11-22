@@ -83,3 +83,15 @@ func TestRemoveTakesTheLinksAndNamesThem(t *testing.T) {
 		t.Fatalf("links of a removed module: %v", got)
 	}
 }
+
+func TestALinkToAModuleTurnedOffIsNoProblem(t *testing.T) {
+	e := linkedEnv(t, settings.Link{From: "a.x", To: "b.y"})
+	e.start(t)
+	if err := e.host.SetOff(context.Background(), "b", true); err != nil {
+		t.Fatal(err)
+	}
+	checks, _ := e.host.Status(context.Background(), status.Scope{})
+	if hasLine(checks, texts.StatusLinkBroken, texts.StatusReasonLinkEnd) {
+		t.Fatalf("status %+v", checks)
+	}
+}

@@ -66,7 +66,7 @@ func (l Linking) Tools() []tool.Handler {
 	}
 	return []tool.Handler{
 		&routeTool{spec: tool.Spec{Name: toolLinkList,
-			Description: "List the links between modules, each marked when it does not work, and the ports of every running local module: " +
+			Description: "List the links between modules, each marked when it does not work, and the ports of every installed local module: " +
 				"its outputs (emits, and notify when it may message the owner), inputs (accepts), the calls it serves and the calls it makes, " +
 				"each with its shape. Call it before link.add: a link joins an output to an input of the same shape, or a calling port to a serving one.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),

@@ -224,7 +224,7 @@ the links is refused, the detail naming the links. Only what the build makes new
 broken beforehand does not block an unrelated build. There is one loop rule: the cell triggers and
 the links are one graph. Removing a module removes the links that name it in the same edit of the
 file, and the removal's answer lists them. At start the module host checks the links against the
-running modules, logs each broken one once and shows it in `/status` under Problems; a broken link
+installed modules, running or not, logs each broken one once and shows it in `/status` under Problems; a broken link
 gets no consumer.
 
 At run time a published event or a call's request and answer is checked against its shape; one that
