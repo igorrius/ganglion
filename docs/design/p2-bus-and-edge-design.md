@@ -217,6 +217,16 @@ At the time a link is written:
 - the graph of all links and cell triggers has no cycle, events and calls together;
 - a chain is at most 4 deep, as today.
 
+The same checks run when a module is installed (plan and install, and rollback): every link that
+touches the module is checked against the new build, and a build that makes one of them wrong (a
+port gone, of another kind or another shape) or that closes a loop or a chain deeper than 4 through
+the links is refused, the detail naming the links. Only what the build makes new counts, so a link
+broken beforehand does not block an unrelated build. There is one loop rule: the cell triggers and
+the links are one graph. Removing a module removes the links that name it in the same edit of the
+file, and the removal's answer lists them. At start the module host checks the links against the
+running modules, logs each broken one once and shows it in `/status` under Problems; a broken link
+gets no consumer.
+
 At run time a published event or a call's request and answer is checked against its shape; one that
 does not match is not sent, and the run counts a format error (R-RUN-14).
 

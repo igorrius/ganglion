@@ -69,6 +69,21 @@ The node keeps a journal of every run of a module: when it ran, what started it 
 
 The journal keeps the last 200 runs of each module. A message sent before the journal existed, or a run older than the last 200, has no chain: the bot says so. Removing a module drops its runs. Names that do not look like a module or a value name are shown as `?`.
 
+## Links
+
+A module can declare ports: events it publishes, events it takes, and calls it answers or makes. A link connects the output of one module to the input of another, so a module can be wired to another without being rebuilt. The links are the `links:` list in `ganglion.yaml`:
+
+```yaml
+links:
+  - { from: battery-reader.reading, to: battery-alerts.reading }
+```
+
+Each end is a module's short name, a dot and a port name. A module that may message you also has an output called `notify`, so a notice can be wired like any event.
+
+You do not write links by hand. Ask the agent to connect two modules. It shows a card with both ends and the shape of what would cross the link, and writes the link when you press Approve. Nothing is rebuilt. The agent can also list the links and remove one, each with a card. A link is accepted only when both modules are running, the ends are an output and an input of the same kind (an event to an event input, a call to a call it can serve), their shapes are equal, the links and the modules that react to each other's values form no loop, and no chain of modules is deeper than 4. Otherwise the agent tells you why, and no card appears.
+
+The same checks guard the modules. A new version of a module that drops a linked port, or changes its kind or its shape, is refused, and the install window names the links it would break. Removing a module also removes its links, and the reply names them. If a link stops working anyway, for example because you edited the file by hand, the node logs it once at start and `/status` lists it under Problems with the reason; such a link carries nothing.
+
 ## The crash-loop rule
 
 If a module fails 5 times within an hour, the node turns it off, raises an alert, and `/status` explains. Fix the cause (or ask the agent to), then turn it on again with `/modules on <name>`.
