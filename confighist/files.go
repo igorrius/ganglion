@@ -140,3 +140,26 @@ func (f MCPFile) RemoveServer(name string) error {
 func (f MCPFile) record(reason string, write func() error) error {
 	return f.History.Record(context.Background(), SourceMCP, reason, write)
 }
+
+// LinksFile is settings.LinksFile with every change recorded.
+type LinksFile struct {
+	File    settings.LinksFile
+	History History
+}
+
+// Links reads the links: lines.
+func (f LinksFile) Links() ([]settings.Link, error) { return f.File.Links() }
+
+// AddLink writes a link.
+func (f LinksFile) AddLink(l settings.Link) error {
+	return f.record("link "+l.String()+": added", func() error { return f.File.AddLink(l) })
+}
+
+// RemoveLink removes a link.
+func (f LinksFile) RemoveLink(l settings.Link) error {
+	return f.record("link "+l.String()+": removed", func() error { return f.File.RemoveLink(l) })
+}
+
+func (f LinksFile) record(reason string, write func() error) error {
+	return f.History.Record(context.Background(), SourceLink, reason, write)
+}
