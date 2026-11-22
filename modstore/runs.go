@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/igorrius/ganglion/sqlitedb"
@@ -32,8 +33,9 @@ func PlainName(s string) bool { return len(s) <= maxPlainName && nodeNameRE.Matc
 type Hop struct {
 	Module  string         `json:"module"` // full name, "local/demo-reader"
 	Version string         `json:"version"`
-	Trigger string         `json:"trigger"`         // cron | tool | cell | event
+	Trigger string         `json:"trigger"`         // cron | tool | cell | event | call
 	Tool    string         `json:"tool,omitempty"`  // the tool's name, "demo-reader.status", for tool
+	Link    string         `json:"link,omitempty"`  // the link, "a.x → b.y", for event and call
 	Cells   []string       `json:"cells,omitempty"` // the cells whose change started it, for cell
 	At      time.Time      `json:"at"`              // when the run started
 	Took    time.Duration  `json:"took"`            // how long it ran
@@ -66,10 +68,10 @@ func (s *Store) RecordRun(ctx context.Context, r Run) error {
 	err = sqlitedb.Immediate(ctx, s.db, func(c *sql.Conn) error {
 		if _, err := c.ExecContext(ctx, `INSERT OR REPLACE INTO module_runs
 			(module, run_id, version, sha256, trigger, tool, cells, producer, producer_run, depth,
-			 at_ms, took_ms, result, kind, calls, wrote, sent, chain)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 at_ms, took_ms, result, kind, calls, wrote, sent, chain, link)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			r.Module, r.ID, r.Version, r.SHA256, r.Trigger, r.Tool, cells, r.Producer, r.ProducerRun, r.Depth,
-			r.At.UnixMilli(), r.Took.Milliseconds(), r.Result, r.Kind, calls, wrote, r.Sent, chain); err != nil {
+			r.At.UnixMilli(), r.Took.Milliseconds(), r.Result, r.Kind, calls, wrote, r.Sent, chain, r.Link); err != nil {
 			return err
 		}
 		_, err := c.ExecContext(ctx, `DELETE FROM module_runs WHERE module = ? AND rowid NOT IN
@@ -124,7 +126,7 @@ func nonNilMap(m map[string]int) map[string]int {
 
 // runColumns are the columns Run and Runs read, in scan order.
 const runColumns = `module, run_id, version, sha256, trigger, tool, cells, producer, producer_run, depth,
-	at_ms, took_ms, result, kind, calls, wrote, sent, chain`
+	at_ms, took_ms, result, kind, calls, wrote, sent, chain, link`
 
 // scanner is a row or rows.
 type scanner interface{ Scan(dest ...any) error }
@@ -137,7 +139,7 @@ func scanRun(sc scanner) (Run, error) {
 		atMS, tookMS               int64
 	)
 	if err := sc.Scan(&r.Module, &r.ID, &r.Version, &r.SHA256, &r.Trigger, &r.Tool, &cells, &r.Producer,
-		&r.ProducerRun, &r.Depth, &atMS, &tookMS, &r.Result, &r.Kind, &calls, &wrote, &r.Sent, &chain); err != nil {
+		&r.ProducerRun, &r.Depth, &atMS, &tookMS, &r.Result, &r.Kind, &calls, &wrote, &r.Sent, &chain, &r.Link); err != nil {
 		return Run{}, err
 	}
 	r.At, r.Took = time.UnixMilli(atMS).UTC(), time.Duration(tookMS)*time.Millisecond
@@ -164,8 +166,23 @@ func scanRun(sc scanner) (Run, error) {
 	return r, nil
 }
 
-// Run is the row of module's run id; false when the journal has none.
+// maxHops is the most hops a chain holds.
+const maxHops = 4
+
+// Run is the row of module's run id; false when the journal has none. A
+// run an event or a call started shows its chain even when it started before
+// its producer's row was written (fillChain).
 func (s *Store) Run(ctx context.Context, module, id string) (Run, bool, error) {
+	r, ok, err := s.rawRun(ctx, module, id)
+	if err != nil || !ok {
+		return Run{}, false, err
+	}
+	r, err = s.fillChain(ctx, r, maxHops)
+	return r, err == nil, err
+}
+
+// rawRun is the row as it was written.
+func (s *Store) rawRun(ctx context.Context, module, id string) (Run, bool, error) {
 	r, err := scanRun(s.db.QueryRowContext(ctx, `SELECT `+runColumns+` FROM module_runs WHERE module = ? AND run_id = ?`, module, id))
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -176,6 +193,29 @@ func (s *Store) Run(ctx context.Context, module, id string) (Run, bool, error) {
 	return r, true, nil
 }
 
+// fillChain gives a run that an event or a call started, and that was
+// written before its producer's row, the chain of that row: the producer's
+// own chain, filled the same way within budget, and the producer's hop, the
+// last maxHops. Other rows, and rows whose producer's row is gone, are as
+// written.
+func (s *Store) fillChain(ctx context.Context, r Run, budget int) (Run, error) {
+	if len(r.Chain) > 0 || r.Producer == "" || r.ProducerRun == "" || (r.Trigger != "event" && r.Trigger != "call") {
+		return r, nil
+	}
+	p, ok, err := s.rawRun(ctx, r.Producer, r.ProducerRun)
+	if err != nil || !ok {
+		return r, err
+	}
+	if budget > 0 {
+		if p, err = s.fillChain(ctx, p, budget-1); err != nil {
+			return r, err
+		}
+	}
+	chain := append(slices.Clone(p.Chain), p.Hop)
+	r.Chain = chain[max(len(chain)-maxHops, 0):]
+	return r, nil
+}
+
 // Runs are module's last n runs, newest first.
 func (s *Store) Runs(ctx context.Context, module string, n int) ([]Run, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+runColumns+` FROM module_runs WHERE module = ?
@@ -183,17 +223,23 @@ func (s *Store) Runs(ctx context.Context, module string, n int) ([]Run, error) {
 	if err != nil {
 		return nil, fmt.Errorf("modstore: runs: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
 	var out []Run
 	for rows.Next() {
 		r, err := scanRun(rows)
 		if err != nil {
+			_ = rows.Close()
 			return nil, fmt.Errorf("modstore: runs: %w", err)
 		}
 		out = append(out, r)
 	}
-	if err := rows.Err(); err != nil {
+	err = errors.Join(rows.Err(), rows.Close())
+	if err != nil {
 		return nil, fmt.Errorf("modstore: runs: %w", err)
+	}
+	for i := range out {
+		if out[i], err = s.fillChain(ctx, out[i], maxHops); err != nil {
+			return nil, fmt.Errorf("modstore: runs: %w", err)
+		}
 	}
 	return out, nil
 }
