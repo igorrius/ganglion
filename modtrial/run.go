@@ -178,6 +178,7 @@ func (x *exampleRun) load(ctx context.Context, wasm []byte, e Example, prefix st
 		State:   runner.NewMemState(),
 		Cells:   x.cells,
 		Notify:  x.notify,
+		Emit:    trialEmit{},
 		HTTP:    &http.Client{Transport: newCannedTransport(e.HTTP)},
 		Secrets: func(n string) (string, bool) { v, ok := secrets[n]; return v, ok },
 		Prefix:  prefix,

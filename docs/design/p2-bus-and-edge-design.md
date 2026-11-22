@@ -233,11 +233,30 @@ does not match is not sent, and the run counts a format error (R-RUN-14).
 ### 6.4. Events
 
 A module publishes with a new host function `emit(port, payload)`; the capability `event.emit` that
-the manifest already lists becomes real. Each link has its own durable JetStream consumer, named after
-the link, filtered to the producer's subject. A delivered event starts the receiving module with
-`Trigger: "event"` and the payload; an acknowledged run acks the message, a failed one is redelivered
-with back-off and counts toward the crash loop. A module that is off or down gets its events when it
-comes back, within the stream's 7 days.
+the manifest already lists becomes real. Each link has its own durable JetStream consumer on `EVENTS`,
+named `link_<first 20 hex of sha256("<from> <to>")>` with the link in its description, filtered to the
+producer's subject (`g.ev.core.<module>.<port>`; `core` is the node token until nodes have names),
+deliver policy new, so a link made today does not replay the stream's 7 days. Its ack wait is the
+receiver's time limit plus 30 s.
+
+The module host reconciles the consumers: one runs for every link that works and whose receiver runs,
+at start, after every reload and after `link.add` or `link.remove`. Each is its own goroutine with its
+own cancel; the set sits behind a mutex that is never held while a goroutine is awaited, and `Shutdown`
+waits for all of them. A receiver that is off keeps its durable consumer, unread, so its events wait on
+the stream within the 7 days; a link that is gone from the file loses its consumer.
+
+A delivered event starts the receiving module with `Trigger: "event:<port>"` and the payload
+`{"from": "<module>.<port>", "event": <payload>}`, one level deeper than the producer's run. An event
+whose depth header is already the chain limit is acked and runs nothing, and one that does not fit the
+receiver's shape is acked and counted bad. An acknowledged run acks the message; a failed one is
+redelivered with back-off and counts toward the crash loop, which turns the module off and so stops its
+consumers. Delivery is at least once: a run that emitted and then failed may emit again when retried,
+and the stream's duplicate window drops only a repeat within two minutes. The run's id is
+`event:<link consumer>:<stream sequence>`, with the delivery count added on a retry.
+
+A sent notice is also published as an event on the module's `notify` output, so a link from
+`<module>.notify` carries it. A build's check and a trial run `emit` through the same port and shape
+check and send nothing.
 
 Cell triggers move onto the bus: a change of a cell is published as an event of its owner, and a
 module that listens to cells has a consumer on those keys. The end-of-run fan-out through the inbox

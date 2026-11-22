@@ -624,7 +624,7 @@ and `health` are planned for P1, with the supervisor). It sees only the host fun
 | `log` | Structured logging |
 | `state.get` / `state.put` | Module state in KV; survives version swaps |
 | `http.fetch` | HTTP to allowed domains only |
-| `emits` ports | Events on the outputs the manifest declares (R-BUS-5) |
+| `emit` | An event on one of the outputs the manifest declares under `ports.emits` (R-BUS-5, R-BUS-6) |
 | `tool.call` | Tool calls, through policies |
 | `secret.get` | Secrets from an allowed list; the model never sees them |
 | `config.get` | Values from the manifest's `config` block (e.g. a device serial number) |
@@ -2316,15 +2316,42 @@ The bus ([ADR-0106](adr/0106-embed-nats-with-jetstream-as-the-bus-behind-narrow-
   edit, and the removal's answer names them. At start the module host logs
   each link that does not work once, and `/status` shows it under Problems
   with its reason; such a link gets no consumer (R-BUS-6).
-- **R-BUS-6.** `emit(port, payload)` publishes an event; each link has its
-  own durable consumer, and a delivered event starts the receiving module
-  (`Trigger: "event"`); a failed run is redelivered with back-off and counts
-  toward the crash loop. `call(port, payload)` sends a request to the linked
+- **R-BUS-6.** `emit(port, payload)` publishes an event. The host function
+  `ganglion.emit(port, payload) int32` answers `0` sent, `-1` denied (no such
+  `emits` port; the implicit `notify` output is not sent by hand), `-2` the
+  payload does not fit the port's shape (nothing is sent and the run fails as
+  `module.format` with the node's words, never the value), `-3` not here
+  (`init`, `health` and a build's check send nothing), `-4` failed (a payload
+  over 64 KiB, a run's 101st event, or the node could not publish). The event
+  is stored in `EVENTS` on `g.ev.core.<module>.<port>` (`core` is the node
+  token until nodes have names, M10; `<module>` is the short name) with
+  `Nats-Msg-Id` `ev:<module>:<run>:<n>` and the headers `Ganglion-From`,
+  `Ganglion-Run` and `Ganglion-Depth` (the run's depth). A notice that was sent
+  is also an event on the module's `notify` output, payload `{text, at}`; one
+  over the daily limit is neither. Each link has its own durable consumer on
+  `EVENTS`, filtered to the producer's subject, that starts at the new
+  messages (a new link does not replay the stream's 7 days); the host runs one
+  for every link that works and whose receiver runs, and reconciles them at
+  start, after every reload and after a link is added or removed. A link whose
+  receiver is off keeps its consumer, unread: its events wait on the stream
+  (7 days). A removed link's consumer is deleted. A delivered event starts the
+  receiver with `Trigger: "event:<accepts port>"` and the payload
+  `{"from": "<module>.<port>", "event": <payload>}` at the producer's depth +
+  1, as an unattended run (counted, escalated, towards the crash loop); an
+  event whose depth header is already 4, and one that does not fit the
+  receiver's shape, are acked and run nothing. A run that succeeds acks the
+  event; one that fails is redelivered with a back-off from 1 s to 5 min, with
+  no limit, until the module is turned off, which stops its consumers until it
+  is on again. Delivery is at least once: a run that emitted and then failed
+  may emit again when it is retried. Metrics: `ganglion.modhost.events` by
+  module and outcome and `ganglion.modhost.event.deliveries` by link consumer
+  and outcome; each consumer's lag is the bus's gauge. `call(port, payload)` sends a request to the linked
   endpoint, registered with NATS `micro`, and waits at most the run's
   remaining time; no responder is an error at once. Payloads and answers are
   checked against their shapes on both sides. From M9 a cell change is an
   event of its owner and cell triggers ride the bus, not the inbox; the
-  journal records `event` and `call` causes with their links (R-RUN-20).
+  journal records `event` and `call` causes with their links (R-RUN-20; the
+  journal row of an event run carries the producer and its run already).
 - **R-BUS-7.** A module's `notify` publishes to `NOTIFY`; a durable consumer
   in the core delivers to `notify_to` as R-RUN-18 says. Metrics count
   publishes and consumes by outcome, consumer lag, stream sizes and KV

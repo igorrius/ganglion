@@ -42,6 +42,15 @@ type Host interface {
 	// sent either way), and ErrNotifyNotHere in a run that sends nothing
 	// (init, health). The host cuts the text at 1000 characters.
 	Notify(text string) error
+	// Emit publishes an event on one of the module's emits ports, by name;
+	// links carry it to the modules that accept it. It fails with
+	// ErrEmitDenied for a port the manifest does not declare,
+	// ErrEmitFormat for a payload that does not fit the port's shape (the
+	// whole call then also fails as KindFormat), ErrEmitNotHere in a run
+	// that sends nothing (init, health), and ErrEmitFailed when the payload
+	// is over 64 KiB, the run already sent 100 events, or the node could not
+	// publish it. Nothing is sent on an error.
+	Emit(port string, v any) error
 	// Now returns the current time.
 	Now() time.Time
 	// Log writes a line to the runner's log.
@@ -55,6 +64,14 @@ var (
 	// message now; nothing was sent.
 	ErrNotifyLimit   = errors.New("today's notify limit is used up")
 	ErrNotifyNotHere = errors.New("notify does nothing in this run")
+)
+
+// Errors of Host.Emit.
+var (
+	ErrEmitDenied  = errors.New("the manifest declares no such emits port")
+	ErrEmitFormat  = errors.New("the payload does not fit the port's shape")
+	ErrEmitNotHere = errors.New("emit does nothing in this run")
+	ErrEmitFailed  = errors.New("the event was not sent")
 )
 
 // Request is an HTTP request made through the host.

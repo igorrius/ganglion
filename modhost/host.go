@@ -115,6 +115,9 @@ type Deps struct {
 	// Publisher stores a module's message in the NOTIFY stream; the core's
 	// consumer hands it back to Deliver (R-BUS-7).
 	Publisher Publisher
+	// Consumers are the bus's durable consumers, for the links' events
+	// (R-BUS-6); nil carries none.
+	Consumers Consumers
 	// Secrets gives each module its own secret source; Forget drops a
 	// removed module's stored secrets.
 	Secrets SecretsFor
@@ -143,8 +146,9 @@ var ErrNotStarted = modstore.ErrNotStarted
 // Host runs the owner's modules. Calls of a module are serialised by its
 // runner; Reload waits for the calls in progress.
 type Host struct {
-	d  Deps
-	in instruments
+	d     Deps
+	in    instruments
+	links *linkSet // the consumers of the links' events (linkconsumers.go)
 
 	mu      sync.RWMutex // guards running; a call holds it for reading
 	running map[string]*loaded
@@ -168,7 +172,10 @@ func New(d Deps) *Host {
 	if d.Location == nil {
 		d.Location = time.UTC
 	}
-	h := &Host{d: d, in: newInstruments(), running: map[string]*loaded{}, stopped: map[string]stop{},
+	if d.Consumers == nil {
+		d.Consumers = noConsumers{}
+	}
+	h := &Host{d: d, in: newInstruments(), links: newLinkSet(), running: map[string]*loaded{}, stopped: map[string]stop{},
 		off: map[string]bool{}, fails: map[string][]time.Time{}, stops: map[string]bool{}, episodes: map[string]map[Kind]string{}, clean: map[string]bool{}}
 	h.tools.Store(&[]tool.Handler{})
 	return h
@@ -191,7 +198,8 @@ func (h *Host) Start(ctx context.Context) {
 		h.stateMu.Unlock()
 		return
 	}
-	defer h.checkLinks(ctx) // after the lock is let go
+	defer h.SyncLinks(ctx)  // after the lock is let go
+	defer h.checkLinks(ctx) // likewise, and before the consumers
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, a := range actives {
@@ -211,6 +219,13 @@ func (h *Host) Start(ctx context.Context) {
 // one that is not is stopped and its jobs deleted, its cells kept.
 // ErrNotStarted names why a module that should run does not.
 func (h *Host) Reload(ctx context.Context, module string) error {
+	err := h.reload(ctx, module)
+	h.SyncLinks(ctx) // whatever happened: the links follow the modules that run
+	return err
+}
+
+// reload is Reload without the links' consumers.
+func (h *Host) reload(ctx context.Context, module string) error {
 	actives, mods, err := h.read(ctx)
 	if err != nil {
 		return err

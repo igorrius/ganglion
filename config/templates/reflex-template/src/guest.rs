@@ -1,7 +1,7 @@
 //! Module-side glue for the ganglion ABI: host functions in the "ganglion"
 //! import module, JSON across the boundary (see `pdk/guest` for Go).
 
-use crate::host::{Host, Notify};
+use crate::host::{Emit, Host, Notify};
 use std::sync::Mutex;
 
 #[link(wasm_import_module = "ganglion")]
@@ -15,6 +15,7 @@ unsafe extern "C" {
     fn config_get(ptr: u32, len: u32) -> i32;
     fn cell_get(ptr: u32, len: u32) -> i32;
     fn notify(ptr: u32, len: u32) -> i32;
+    fn emit(pptr: u32, plen: u32, vptr: u32, vlen: u32) -> i32;
 }
 
 fn take_n(n: usize) -> Vec<u8> {
@@ -62,6 +63,24 @@ impl Host for OwnHost {
             -1 => Err(Notify::Denied),
             -3 => Err(Notify::NotHere),
             _ => Err(Notify::Limit),
+        }
+    }
+    fn emit(&self, port: &str, payload: &serde_json::Value) -> Result<(), Emit> {
+        let v = payload.to_string();
+        let code = unsafe {
+            emit(
+                port.as_ptr() as u32,
+                port.len() as u32,
+                v.as_ptr() as u32,
+                v.len() as u32,
+            )
+        };
+        match code {
+            0 => Ok(()),
+            -2 => Err(Emit::Format),
+            -3 => Err(Emit::NotHere),
+            -4 => Err(Emit::Failed),
+            _ => Err(Emit::Denied),
         }
     }
     fn now_unix(&self) -> i64 {

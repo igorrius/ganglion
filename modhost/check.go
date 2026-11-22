@@ -40,7 +40,7 @@ func (h *Host) Check(ctx context.Context, b modstore.Build, cfg map[string]any) 
 	g := h.newGiven(b.Module, m)
 	log := h.moduleLog(g)
 	mod, err := runner.Load(ctx, b.Wasm, m, runner.Deps{Secrets: h.secret(b.Module, g), State: runner.NewMemState(),
-		Cells: checkCells{cellPort{cells: h.d.Cells, module: b.Module, prefix: short}}, Notify: checkNotify{}, Prefix: short, Logger: log})
+		Cells: checkCells{cellPort{cells: h.d.Cells, module: b.Module, prefix: short}}, Notify: checkNotify{}, Emit: checkEmit{}, Prefix: short, Logger: log})
 	if err != nil {
 		h.d.Log.Warn("modhost: a build does not load", "module", b.Module, "err", err)
 		return fmt.Errorf("%w: it does not load on this node", ErrCheckFailed)
@@ -96,3 +96,16 @@ func (h *Host) health(ctx context.Context, module string) modstore.Health {
 	}
 	return modstore.HealthOK
 }
+
+// checkEmit is the emit port of a build under check: its health run is no
+// run of the module's, so it sends nothing. The runner has checked the
+// port and the shape before it.
+type checkEmit struct{}
+
+// Emit implements runner.EmitPort: not in this run.
+func (checkEmit) Emit(context.Context, string, json.RawMessage) runner.EmitCode {
+	return runner.EmitNotHere
+}
+
+// Refused implements runner.EmitPort.
+func (checkEmit) Refused(context.Context, runner.EmitCode) {}

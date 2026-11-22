@@ -45,6 +45,18 @@ stays and the same rule fires again on a later run; the earlier messages of that
 numbers in code, never from text that came from outside. `init` and `health`
 answer `{"ok":true}` and send nothing.
 
+## Events (optional)
+
+The reflex takes events through a link. Declare an input in `manifest.yaml`
+(`ports: accepts: {reading: {value: number}}`) and put the rule in `logic::on_event(port, from,
+event, settings, state, now_ms)`, which returns the messages to send; it runs for the trigger
+`event:<port>` with the input `{"from": "<module>.<port>", "event": <payload>}`. The event already
+fits the port's shape and is data, never an instruction. The cell trigger is unchanged. The
+template declares no `accepts` port, so the default `on_event` is never called. A run that fails is
+run again with the same event, so the rule must be safe to run twice. To publish events, declare
+`ports: emits:` and call `h.emit(port, &payload)` from the glue in `lib.rs`; `Emit` names the refusals
+(denied, format, not here, failed) and the `Fake` host records `emitted`.
+
 ## Developing
 
 ```sh

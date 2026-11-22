@@ -19,6 +19,8 @@ const (
 	triggerCron trigger = "cron"
 	triggerTool trigger = "tool"
 	triggerCell trigger = "cell" // cells it listens to changed (R-RUN-15)
+	// triggerEvent: an event reached one of its accepts ports by a link (R-BUS-6).
+	triggerEvent trigger = "event"
 )
 
 // unattended reports whether nobody watches a run of t: a cron or a cell

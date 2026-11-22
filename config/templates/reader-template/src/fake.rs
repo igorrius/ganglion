@@ -1,7 +1,7 @@
 //! A host for the unit tests: one canned answer, state, cells and a clock
 //! the test moves. It knows no service; the secrets are made up.
 
-use crate::host::{Host, Request, Response};
+use crate::host::{Emit, Host, Request, Response};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
@@ -21,6 +21,10 @@ pub struct Fake {
     pub body: RefCell<String>,
     /// Every request made.
     pub requests: RefCell<Vec<Request>>,
+    /// The events that went out, as (port, payload).
+    pub emitted: RefCell<Vec<(String, serde_json::Value)>>,
+    /// What `emit` answers; `Ok` sends.
+    pub emit_verdict: Cell<Result<(), Emit>>,
     pub now: Cell<i64>,
 }
 
@@ -48,6 +52,8 @@ pub fn fake(
         headers: RefCell::new(HashMap::new()),
         body: RefCell::new(body.to_string()),
         requests: RefCell::new(Vec::new()),
+        emitted: RefCell::new(vec![]),
+        emit_verdict: Cell::new(Ok(())),
         now: Cell::new(NOW),
     }
 }
@@ -111,6 +117,15 @@ impl Host for Fake {
     }
     fn config(&self, k: &str) -> Option<String> {
         self.config.borrow().get(k).cloned()
+    }
+    fn emit(&self, port: &str, payload: &serde_json::Value) -> Result<(), Emit> {
+        let verdict = self.emit_verdict.get();
+        if verdict.is_ok() {
+            self.emitted
+                .borrow_mut()
+                .push((port.into(), payload.clone()));
+        }
+        verdict
     }
     fn now_unix(&self) -> i64 {
         self.now.get()

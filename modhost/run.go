@@ -13,10 +13,11 @@ import (
 // ends (R-RUN-15). init and health runs carry none.
 type run struct {
 	ID      string   // the run's identity: the slot of a cron run, the call's key, the trigger event's id
-	Trigger trigger  // cron | tool | cell
+	Trigger trigger  // cron | tool | cell | event
 	Depth   int      // 0 outside a chain
 	wrote   *written // the cells the run reported, full ids
 	sent    *int     // messages notify sent so far in this run: the number in the last one's key
+	emitted *int     // events emit sent so far in this run: the number in the last one's key
 	calls   *counts  // the host calls the run made, by kind (R-RUN-20)
 
 	// The cause the journal records (R-RUN-20): the tool's name for a tool
@@ -29,13 +30,20 @@ type run struct {
 
 // newRun is a run that has written and sent nothing yet.
 func newRun(id string, trig trigger, depth int) run {
-	return run{ID: id, Trigger: trig, Depth: depth, wrote: &written{ids: map[string]bool{}}, sent: new(int),
+	return run{ID: id, Trigger: trig, Depth: depth, wrote: &written{ids: map[string]bool{}}, sent: new(int), emitted: new(int),
 		calls: &counts{n: map[string]int{}}}
 }
 
 // byTool is r as the run of the tool called name.
 func (r run) byTool(name string) run {
 	r.tool = name
+	return r
+}
+
+// byEvent is r as the run a producer's run started by an event, which
+// names no cells.
+func (r run) byEvent(producer, producerRun string) run {
+	r.producer, r.producerRun = producer, producerRun
 	return r
 }
 

@@ -32,7 +32,7 @@ func PlainName(s string) bool { return len(s) <= maxPlainName && nodeNameRE.Matc
 type Hop struct {
 	Module  string         `json:"module"` // full name, "local/demo-reader"
 	Version string         `json:"version"`
-	Trigger string         `json:"trigger"`         // cron | tool | cell
+	Trigger string         `json:"trigger"`         // cron | tool | cell | event
 	Tool    string         `json:"tool,omitempty"`  // the tool's name, "demo-reader.status", for tool
 	Cells   []string       `json:"cells,omitempty"` // the cells whose change started it, for cell
 	At      time.Time      `json:"at"`              // when the run started

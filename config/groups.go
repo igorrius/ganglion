@@ -71,11 +71,13 @@ func Destinations() do.Provider[groups.Destinations] {
 }
 
 // Linking provides the admin's tools for the links between modules: the
-// node's file, every change recorded, and the active modules' ports from the
-// store (R-BUS-5).
+// node's file, every change recorded, the active modules' ports from the
+// store (R-BUS-5) and the module host, which starts or stops the link's
+// consumer when the file changes (R-BUS-6).
 func Linking() do.Provider[builtin.Linking] {
 	return func(i do.Injector) (builtin.Linking, error) {
-		return builtin.Linking{File: linksFile(i), Modules: do.MustInvoke[*modstore.Store](i).LinkModules}, nil
+		return builtin.Linking{File: linksFile(i), Modules: do.MustInvoke[*modstore.Store](i).LinkModules,
+			Changed: do.MustInvoke[*modhost.Host](i).SyncLinks}, nil
 	}
 }
 

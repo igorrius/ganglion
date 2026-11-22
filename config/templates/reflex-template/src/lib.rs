@@ -27,6 +27,7 @@ const KEY_STATE: &str = "state";
 pub fn run(h: &dyn Host, input: &[u8]) -> Vec<u8> {
     let out = match parse(input) {
         Some(i) if i.trigger == "init" || i.trigger == "health" => ok(),
+        Some(i) if i.trigger.starts_with("event:") => run_event(h, &i, input),
         Some(i) => {
             let settings = Settings::from_config(&|k| h.config(k));
             let react = |i: &Input, r: &[Reading], s: &mut State, now_ms: i64| {
@@ -37,6 +38,25 @@ pub fn run(h: &dyn Host, input: &[u8]) -> Vec<u8> {
         None => failure("the input is not a ganglion Input"),
     };
     out.to_string().into_bytes()
+}
+
+/// An event that reached an `accepts` port: the input's payload is
+/// `{"from": "<module>.<port>", "event": <payload>}` and the trigger is
+/// `event:<port>`. It is handled like a cell run: `logic::on_event` says what
+/// to send, and the state is stored when every message went out.
+fn run_event(h: &dyn Host, i: &Input, input: &[u8]) -> Value {
+    let v: Value = serde_json::from_slice(input).unwrap_or(Value::Null);
+    let port = i.trigger.trim_start_matches("event:").to_string();
+    let from = v
+        .pointer("/payload/from")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let event = v.pointer("/payload/event").cloned().unwrap_or(Value::Null);
+    let settings = Settings::from_config(&|k| h.config(k));
+    execute(h, i, |_, _, s: &mut State, now_ms| {
+        logic::on_event(&port, &from, &event, &settings, s, now_ms)
+    })
 }
 
 /// One run: load the state, call `react`, send its messages one by one and
@@ -237,6 +257,57 @@ mod tests {
         assert!(seen(&f).is_empty(), "a cell holding null");
         f.cells.borrow_mut().insert(id.into(), (json!(1), 5_000));
         assert_eq!(seen(&f), [(id.to_string(), 5_000, crate::fake::NOW * 1000)]);
+    }
+
+    #[test]
+    fn an_event_trigger_goes_to_the_event_handler_and_a_cell_trigger_still_to_react() {
+        let f = fake();
+        let input = br#"{"trigger":"event:reading","payload":{"from":"a.x","event":{"v":1}}}"#;
+        let out: Value = serde_json::from_slice(&run(&f, input)).unwrap();
+        assert_eq!(out, json!({"ok": true}));
+        assert_eq!(f.attempts.get(), 0, "the default handler says nothing");
+        assert_eq!(
+            stored(&f).as_deref(),
+            Some(r#"{"below":false,"stale":false}"#)
+        );
+        let cell = br#"{"trigger":"cell","payload":{"cells":["producer.value"]}}"#;
+        assert!(is_ok(&serde_json::from_slice(&run(&f, cell)).unwrap()));
+    }
+
+    #[test]
+    fn an_event_run_hands_the_port_the_source_and_the_event_to_the_handler() {
+        let f = fake();
+        let i = parse(br#"{"trigger":"event:reading"}"#).unwrap();
+        let input = br#"{"trigger":"event:reading","payload":{"from":"a.x","event":7}}"#;
+        let seen = std::cell::RefCell::new(None);
+        let v: Value = serde_json::from_slice(input).unwrap();
+        let (port, from, event) = (
+            i.trigger.trim_start_matches("event:").to_string(),
+            v.pointer("/payload/from")
+                .and_then(Value::as_str)
+                .unwrap()
+                .to_string(),
+            v.pointer("/payload/event").cloned().unwrap(),
+        );
+        execute::<Count>(&f, &i, |_, _, _, _| {
+            *seen.borrow_mut() = Some((port.clone(), from.clone(), event.clone()));
+            vec!["got".into()]
+        });
+        assert_eq!(
+            seen.into_inner(),
+            Some(("reading".into(), "a.x".into(), json!(7)))
+        );
+        assert_eq!(*f.sent.borrow(), ["got"]);
+    }
+
+    #[test]
+    fn the_fake_records_what_emit_sends_and_what_it_refuses() {
+        use crate::host::Emit;
+        let f = fake();
+        assert_eq!(f.emit("x", &json!(1)), Ok(()));
+        f.emit_verdict.set(Err(Emit::Format));
+        assert_eq!(f.emit("x", &json!("no")), Err(Emit::Format));
+        assert_eq!(*f.emitted.borrow(), [("x".to_string(), json!(1))]);
     }
 
     #[test]

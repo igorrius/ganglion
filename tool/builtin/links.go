@@ -40,10 +40,16 @@ type LinkFile interface {
 // short name (modstore.Store.LinkModules).
 type LinkModulesFunc func(ctx context.Context) (map[string]links.Module, error)
 
+// LinksChangedFunc tells the module host that the links of the node's file
+// changed, so it starts or stops the consumers that carry events over them
+// (modhost.Host.SyncLinks). It returns when they are in line.
+type LinksChangedFunc func(ctx context.Context)
+
 // Linking is what the link tools work on.
 type Linking struct {
 	File    LinkFile
 	Modules LinkModulesFunc
+	Changed LinksChangedFunc
 }
 
 // Placeholders of the link questions.
@@ -155,7 +161,8 @@ func (l Linking) add(ctx context.Context, c tool.Call) (tool.Result, error) {
 	if err := l.File.AddLink(link); err != nil {
 		return tool.Result{}, err
 	}
-	return tool.Result{Text: "the link " + link.String() + " is written; no module was rebuilt, and nothing travels over it yet"}, nil
+	l.Changed(ctx)
+	return tool.Result{Text: "the link " + link.String() + " is written; no module was rebuilt, and events the producer sends from now on reach the receiver"}, nil
 }
 
 // existing is the link a remove names: it must be in the file.
@@ -182,7 +189,7 @@ func (l Linking) removeQuestion(_ context.Context, c tool.Call) (tool.Result, er
 	return tool.Result{Text: c.Speak.Text(texts.AskLinkRemove, texts.Vars{varFrom: texts.Escape(link.From), varTo: texts.Escape(link.To)})}, nil
 }
 
-func (l Linking) remove(_ context.Context, c tool.Call) (tool.Result, error) {
+func (l Linking) remove(ctx context.Context, c tool.Call) (tool.Result, error) {
 	link, err := l.existing(c)
 	if err != nil {
 		return tool.Result{}, err
@@ -190,7 +197,8 @@ func (l Linking) remove(_ context.Context, c tool.Call) (tool.Result, error) {
 	if err := l.File.RemoveLink(link); err != nil {
 		return tool.Result{}, err
 	}
-	return tool.Result{Text: "the link " + link.String() + " is removed"}, nil
+	l.Changed(ctx)
+	return tool.Result{Text: "the link " + link.String() + " is removed; events not yet delivered over it are dropped"}, nil
 }
 
 // list answers link.list: the ports of the modules, then the links with the

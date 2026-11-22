@@ -93,3 +93,13 @@ func TestTheCardShowsHealth(t *testing.T) {
 		t.Fatalf("a stopped module: health %q, %v", c.Health, err)
 	}
 }
+
+// A build's check is no run: its health's emit answers "not here" and
+// nothing is published (R-BUS-6).
+func TestABuildsCheckCannotEmit(t *testing.T) {
+	e := newEnv(t)
+	m := strings.Replace(probeManifest, "config:\n", "config:\n  lifecycle: {type: string, default: emit}\n", 1) + "ports:\n  emits: {x: number}\n"
+	if err := e.host.Check(context.Background(), build(t, m), nil); err != nil {
+		t.Fatalf("check: %v\n%s", err, e.logText())
+	}
+}

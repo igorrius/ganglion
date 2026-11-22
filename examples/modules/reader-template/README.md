@@ -68,6 +68,18 @@ from `reflex-template` can listen to them: that is how modules are linked.
 - Secret: `API_TOKEN` (`ganglion secret set --module <name> API_TOKEN`).
 - Network: `api.example.com` only.
 
+## Events (optional)
+
+The reader publishes nothing by default. To let other modules be linked to it, declare outputs
+in `manifest.yaml` (`ports: emits: {reading: {value: number, online: boolean}}`) and call
+`h.emit("reading", &json!({"value": v, "online": true}))` in `engine.rs` after the cells were
+reported. `emit` returns `Err(Emit::Denied)` for a port the manifest does not declare,
+`Err(Emit::Format)` when the payload does not fit the port's shape (the run then fails as
+`module.format` whatever the module answers), `Err(Emit::NotHere)` in `init` and `health`, and
+`Err(Emit::Failed)` for a payload over 64 KiB, more than 100 events in a run, or a node that could
+not publish. Nothing is sent on an error. The `Fake` host records what was emitted
+(`emitted`) and can refuse (`emit_verdict`). Delivery is at least once.
+
 ## Developing
 
 ```sh
