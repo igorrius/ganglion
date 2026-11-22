@@ -32,6 +32,7 @@ type StepResult struct {
 	Kind     string     `json:"kind,omitempty"`     // failure kind: module.trap, module.timeout, module.format, a module's kind
 	Messages []string   `json:"messages,omitempty"` // accepted notify texts: the owner's eyes only
 	Reports  []Reported `json:"reports,omitempty"`
+	Emitted  []Emitted  `json:"emitted,omitempty"`  // events the module emitted: the owner's eyes only
 	Mismatch string     `json:"mismatch,omitempty"` // node words: "expected 1 message, got 0"
 	Skipped  string     `json:"skipped,omitempty"`  // node words: why the step did not run
 
@@ -42,6 +43,12 @@ type StepResult struct {
 type Reported struct {
 	Cell  string          `json:"cell"`
 	Value json.RawMessage `json:"value"`
+}
+
+// Emitted is an event a module emitted in a step, on one of its emits ports.
+type Emitted struct {
+	Port    string          `json:"port"`
+	Payload json.RawMessage `json:"payload"`
 }
 
 // Why a step did not run (StepResult.Skipped), in node words.

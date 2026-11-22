@@ -44,7 +44,18 @@ type Example struct {
 	Config  map[string]string `yaml:"config"`  // over the manifest's defaults; keys the manifest declares
 	Secrets map[string]string `yaml:"secrets"` // fake values; names in secret.get
 	HTTP    []Canned          `yaml:"http"`
+	Calls   []CannedCall      `yaml:"-"` // parsed from "calls"
 	Steps   []Step            `yaml:"steps"`
+}
+
+// CannedCall is the answer to a call the module makes on one of its calls
+// ports: an answer that fits the port's out shape, or a refusal. A trial has
+// no links, so these are the only answers a call gets; a calls port with no
+// entry answers "not here".
+type CannedCall struct {
+	Port   string
+	Answer json.RawMessage // the answer, when Code is runner.CallAnswered
+	Code   runner.CallCode // runner.CallAnswered, or the refusal the module gets
 }
 
 // Canned is the answer to one exact URL.
@@ -64,11 +75,20 @@ type Step struct {
 	Expect  Expect                     `yaml:"expect"`
 }
 
-// Trigger is "cell", "cron", a tool call, or none ("" Kind).
+// Trigger is "cell", "cron", a tool call, an event, a call, or none ("" Kind).
 type Trigger struct {
-	Kind string          // "cell" | "cron" | "tool" | ""
+	Kind string          // "cell" | "cron" | "tool" | "event" | "call" | ""
 	Tool string          // the manifest's tool trigger name, for Kind "tool"
 	Args json.RawMessage // an object, for Kind "tool" ({} when none)
+	// Port is the accepts port an event arrives on (Kind "event") or the
+	// served port a call is made on (Kind "call").
+	Port string
+	// Payload is the event or the request, already checked with the port's
+	// shape (Kinds "event" and "call").
+	Payload json.RawMessage
+	// From is the sending end, `<module>.<port>`, as the module sees it
+	// (Kinds "event" and "call").
+	From string
 }
 
 // Expect is what a step must have done; every part is optional.
@@ -76,6 +96,10 @@ type Expect struct {
 	Messages *int     `yaml:"messages"` // exact count of accepted notify calls
 	Reports  []string `yaml:"reports"`  // exact set of cell ids reported; nil = not checked
 	Fails    bool     `yaml:"fails"`    // the step must end in an error
+	// Emits is the exact count of events the step emitted on each named
+	// port; a port not named is not checked, and an empty map checks
+	// nothing. The port is one of the manifest's emits ports.
+	Emits map[string]int `yaml:"emits"`
 }
 
 type rawFile struct {
@@ -88,7 +112,14 @@ type rawExample struct {
 	Config  map[string]string `yaml:"config"`
 	Secrets map[string]string `yaml:"secrets"`
 	HTTP    []Canned          `yaml:"http"`
+	Calls   []rawCall         `yaml:"calls"`
 	Steps   []rawStep         `yaml:"steps"`
+}
+
+type rawCall struct {
+	Port   string    `yaml:"port"`
+	Answer yaml.Node `yaml:"answer"`
+	Fails  string    `yaml:"fails"`
 }
 
 type rawStep struct {
@@ -182,6 +213,10 @@ func (c checker) example(re rawExample) (Example, error) {
 			return e, err
 		}
 	}
+	var err error
+	if e.Calls, err = c.calls(re.Calls); err != nil {
+		return e, err
+	}
 	if len(re.Steps) == 0 {
 		return e, errors.New("has no steps")
 	}
@@ -236,7 +271,24 @@ func (c checker) step(rs rawStep) (Step, error) {
 			return s, fmt.Errorf("expect.reports names %s, which the module does not report", id)
 		}
 	}
-	return s, nil
+	return s, c.emits(rs.Expect.Emits)
+}
+
+// emits checks the ports expect.emits counts: the manifest's emits ports.
+// The notify output is counted by expect.messages.
+func (c checker) emits(counts map[string]int) error {
+	for _, port := range slices.Sorted(maps.Keys(counts)) {
+		if port == runner.NotifyOutput {
+			return errors.New("expect.emits cannot count notify: count messages with expect.messages")
+		}
+		if _, ok := c.m.Ports.Emits[port]; !ok {
+			return fmt.Errorf("expect.emits names %s, which is not an emits port of the manifest", port)
+		}
+		if counts[port] < 0 {
+			return fmt.Errorf("expect.emits %s is negative", port)
+		}
+	}
+	return nil
 }
 
 func parseAfter(n yaml.Node) (time.Duration, error) {
@@ -285,13 +337,22 @@ func (c checker) trigger(n yaml.Node) (Trigger, error) {
 		return c.kindTrigger(n.Value)
 	}
 	if n.Kind != yaml.MappingNode {
-		return Trigger{}, errors.New("trigger must be cell, cron or {tool, args}")
+		return Trigger{}, errors.New("trigger must be cell, cron, {tool, args}, {event, payload} or {call, request}")
 	}
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		if k := n.Content[i].Value; k != "tool" && k != "args" {
-			return Trigger{}, fmt.Errorf("trigger: unknown key %q", k)
-		}
+	kind, err := triggerKind(n)
+	if err != nil {
+		return Trigger{}, err
 	}
+	switch kind {
+	case kindEvent:
+		return c.eventTrigger(n)
+	case kindCall:
+		return c.callTrigger(n)
+	}
+	return c.toolTrigger(n)
+}
+
+func (c checker) toolTrigger(n yaml.Node) (Trigger, error) {
 	var tr struct {
 		Tool string    `yaml:"tool"`
 		Args yaml.Node `yaml:"args"`

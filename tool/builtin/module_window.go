@@ -123,6 +123,7 @@ func (m Modules) sameWindow(c tool.Call, w requestWindow) error {
 const (
 	varItems = "items"
 	varName  = "name"
+	varValue = "value"
 )
 
 // noneShown stands for an empty list in the window.
@@ -244,7 +245,7 @@ func nowLines(sp texts.Speaker, s modtrial.StepResult) []string {
 	return stepLines(sp, s)
 }
 
-// stepLines are the messages and the reported cells of one step.
+// stepLines are the messages, the reported cells and the events of one step.
 func stepLines(sp texts.Speaker, s modtrial.StepResult) []string {
 	var lines []string
 	for _, m := range s.Messages {
@@ -252,7 +253,10 @@ func stepLines(sp texts.Speaker, s modtrial.StepResult) []string {
 		lines = append(lines, sp.Text(texts.AskModuleTrialMessage, texts.Vars{"text": texts.Escape(flat)}))
 	}
 	for _, c := range s.Reports {
-		lines = append(lines, sp.Text(texts.AskModuleTrialCell, texts.Vars{"cell": item(c.Cell), "value": shown(compact(c.Value))}))
+		lines = append(lines, sp.Text(texts.AskModuleTrialCell, texts.Vars{"cell": item(c.Cell), varValue: shown(compact(c.Value))}))
+	}
+	for _, e := range s.Emitted {
+		lines = append(lines, sp.Text(texts.AskModuleTrialEvent, texts.Vars{"port": item(e.Port), varValue: shown(compact(e.Payload))}))
 	}
 	return lines
 }

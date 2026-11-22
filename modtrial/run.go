@@ -24,6 +24,10 @@ const (
 	kindCell = "cell"
 	kindCron = "cron"
 	kindTool = "tool"
+	// kindEvent and kindCall deliver an event to an accepts port and a call
+	// to a served port, as a node does for the receiver of a link.
+	kindEvent = "event"
+	kindCall  = "call"
 )
 
 // Kinds only a trial raises or names for a run the node cannot judge the
@@ -88,6 +92,7 @@ type exampleRun struct {
 	clock  *clock
 	cells  *trialCells
 	notify *trialNotify
+	emit   *trialEmit
 }
 
 // runExample runs one example in a fresh module with an empty state. seed,
@@ -110,6 +115,7 @@ func runExample(ctx context.Context, wasm []byte, m runner.Manifest, prefix stri
 		clock:  clk,
 		cells:  &trialCells{clock: clk, values: map[string]trialCell{}},
 		notify: &trialNotify{clock: clk, days: map[string]int{}},
+		emit:   &trialEmit{},
 	}
 	if m.Capabilities.Notify != nil {
 		x.notify.perDay = m.Capabilities.Notify.PerDay
@@ -178,8 +184,8 @@ func (x *exampleRun) load(ctx context.Context, wasm []byte, e Example, prefix st
 		State:   runner.NewMemState(),
 		Cells:   x.cells,
 		Notify:  x.notify,
-		Emit:    trialEmit{},
-		Call:    trialCall{},
+		Emit:    x.emit,
+		Call:    newTrialCall(e.Calls),
 		HTTP:    &http.Client{Transport: newCannedTransport(e.HTTP)},
 		Secrets: func(n string) (string, bool) { v, ok := secrets[n]; return v, ok },
 		Prefix:  prefix,
@@ -210,7 +216,7 @@ func (x *exampleRun) step(ctx context.Context, n int, s Step, changed []string) 
 	for id, v := range s.Cells {
 		x.cells.set(id, v, x.clock.now)
 	}
-	x.cells.reported, x.notify.sent = nil, nil
+	x.cells.reported, x.notify.sent, x.emit.sent = nil, nil, nil
 	sr := StepResult{N: n, Ran: true}
 	var failed bool
 	if in, ok := input(s.Trigger, changed); ok {
@@ -221,6 +227,7 @@ func (x *exampleRun) step(ctx context.Context, n int, s Step, changed []string) 
 	}
 	sr.Messages = slices.Clone(x.notify.sent)
 	sr.Reports = slices.Clone(x.cells.reported)
+	sr.Emitted = slices.Clone(x.emit.sent)
 	sr.Mismatch = mismatch(s.Expect, sr, failed)
 	sr.OK = sr.Mismatch == ""
 	if failed && !s.Expect.Fails {
@@ -243,6 +250,10 @@ func input(t Trigger, changed []string) (pdk.Input, bool) {
 			args = json.RawMessage(`{}`)
 		}
 		return pdk.Input{Trigger: "tool:" + t.Tool, Payload: args}, true
+	case kindEvent:
+		return withFrom(t, "event", "event:"+t.Port), true
+	case kindCall:
+		return withFrom(t, "request", "call:"+t.Port), true
 	case kindCell:
 		if changed == nil {
 			changed = []string{}
@@ -254,6 +265,14 @@ func input(t Trigger, changed []string) (pdk.Input, bool) {
 		return pdk.Input{Trigger: kindCell, Payload: p}, true
 	}
 	return pdk.Input{}, false
+}
+
+// withFrom is the module input of an event or a call, with the payload
+// modhost builds for it: where it came from, and the event or the request
+// under the key the receiver reads.
+func withFrom(t Trigger, key, trigger string) pdk.Input {
+	p, _ := json.Marshal(map[string]any{keyFrom: t.From, key: t.Payload})
+	return pdk.Input{Trigger: trigger, Payload: p}
 }
 
 // failureKind is the kind a call failed with, "" when it did not. It
@@ -312,10 +331,29 @@ func mismatch(e Expect, sr StepResult, failed bool) string {
 			parts = append(parts, fmt.Sprintf("expected reports of [%s], got [%s]", strings.Join(want, " "), strings.Join(got, " ")))
 		}
 	}
+	parts = append(parts, emitsMismatch(e.Emits, sr.Emitted)...)
 	if e.Fails && !failed {
 		parts = append(parts, "expected the step to fail, it did not")
 	}
 	return strings.Join(parts, "; ")
+}
+
+// emitsMismatch words the ports whose event count is not the expected one,
+// in port order. A port the expectation does not name is not checked.
+func emitsMismatch(want map[string]int, got []Emitted) []string {
+	var parts []string
+	for _, port := range slices.Sorted(maps.Keys(want)) {
+		n := 0
+		for _, g := range got {
+			if g.Port == port {
+				n++
+			}
+		}
+		if n != want[port] {
+			parts = append(parts, fmt.Sprintf("expected %s on %s, got %d", plural(want[port], "event"), port, n))
+		}
+	}
+	return parts
 }
 
 func plural(n int, word string) string {

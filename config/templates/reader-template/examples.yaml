@@ -3,6 +3,12 @@
 # answer to each exact URL, and `secrets` are fake values. Change these when
 # you change logic.rs.
 #
+# A step may also deliver an event to a port the manifest accepts
+# (`trigger: {event: <port>, payload: <value>}`) or a call to a port it serves
+# (`trigger: {call: <port>, request: <value>}`), and `expect: {emits: {<port>: 1}}`
+# counts the events the step emitted. `calls: [{port: <name>, answer: <value>}]`
+# gives the answer of a call the module makes. See the module-writing skill.
+#
 # `start` fixes the example's virtual time, so a canned reading's `ts` is
 # judged against it: just before `start` is fresh, hours before is stale.
 examples:

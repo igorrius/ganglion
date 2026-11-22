@@ -109,26 +109,47 @@ func (t cannedTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 // trialEmit is the emit port of a trial: the runner has checked the port
-// and the shape like a node's, and nothing is sent. The trial does not show
-// events yet.
-type trialEmit struct{}
+// and the shape like a node's, and nothing is sent. It keeps what the
+// runner let through, so a step can count and show the events.
+type trialEmit struct {
+	sent []Emitted // accepted events of the current step
+}
 
 // Emit implements runner.EmitPort.
-func (trialEmit) Emit(context.Context, string, json.RawMessage) runner.EmitCode {
+func (e *trialEmit) Emit(_ context.Context, port string, payload json.RawMessage) runner.EmitCode {
+	e.sent = append(e.sent, Emitted{Port: port, Payload: slices.Clone(payload)})
 	return runner.EmitSent
 }
 
 // Refused implements runner.EmitPort.
-func (trialEmit) Refused(context.Context, runner.EmitCode) {}
+func (*trialEmit) Refused(context.Context, runner.EmitCode) {}
 
 // trialCall is the call port of a trial: the runner has checked the port and
-// the request's shape like a node's, and nobody is called, so the answer is
-// "not here". A trial has no links to carry a call.
-type trialCall struct{}
+// the request's shape like a node's, and nobody is called. A trial has no
+// links to carry a call, so the answer is the example's canned one for the
+// port, or "not here" when it has none.
+type trialCall struct {
+	answers map[string]CannedCall
+}
+
+func newTrialCall(cs []CannedCall) trialCall {
+	t := trialCall{answers: make(map[string]CannedCall, len(cs))}
+	for _, c := range cs {
+		t.answers[c.Port] = c
+	}
+	return t
+}
 
 // Call implements runner.CallPort.
-func (trialCall) Call(context.Context, string, json.RawMessage) (json.RawMessage, runner.CallCode) {
-	return nil, runner.CallNotHere
+func (t trialCall) Call(_ context.Context, port string, _ json.RawMessage) (json.RawMessage, runner.CallCode) {
+	c, ok := t.answers[port]
+	switch {
+	case !ok:
+		return nil, runner.CallNotHere
+	case c.Code != runner.CallAnswered:
+		return nil, c.Code
+	}
+	return slices.Clone(c.Answer), runner.CallAnswered
 }
 
 // Settled implements runner.CallPort.

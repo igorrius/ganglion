@@ -2,6 +2,15 @@
 # (module.build does it). Each example starts from an empty state; a step
 # sets cells, moves time on and pulls a trigger, and `expect` counts what
 # must follow. Change these when you change logic.rs.
+#
+# A step may also deliver an event to a port the manifest accepts:
+#   trigger: {event: <port>, payload: <value>, from: feed.reading}
+# or a call to a port it serves: `trigger: {call: <port>, request: <value>}`.
+# The payload is checked with the port's shape. `expect: {emits: {<port>: 1}}`
+# counts the events the step emitted on a port the manifest emits. A module
+# that only accepts events is tried with event steps: never add a cell or
+# cron trigger just to get a trial. `calls: [{port: <name>, answer: <value>}]`
+# (or `fails: unavailable`) gives the answer of a call the module makes.
 examples:
   - name: a value under the threshold is said once
     steps:
