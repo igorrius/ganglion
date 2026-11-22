@@ -61,6 +61,7 @@ type env struct {
 	cells    *fakeCells
 	notify   *fakeNotify
 	emit     *fakeEmit
+	call     *fakeCall
 	logs     syncBuffer
 }
 
@@ -73,6 +74,7 @@ func (e *env) instance(t *testing.T) Instance {
 		Cells:   e.cells,
 		Notify:  e.notify,
 		Emit:    e.emit,
+		Call:    e.call,
 		Prefix:  "probe-mod",
 		HTTP:    http.DefaultClient,
 		Logger:  slog.New(slog.NewTextHandler(&e.logs, nil)),
@@ -121,6 +123,7 @@ func Run(t *testing.T, load Loader, probe []byte) {
 			cells:   &fakeCells{values: map[string]cellValue{}},
 			notify:  &fakeNotify{},
 			emit:    &fakeEmit{},
+			call:    &fakeCall{},
 		}
 	}
 
@@ -267,6 +270,7 @@ func Run(t *testing.T, load Loader, probe []byte) {
 	runCellTests(t, fresh)
 	runNotifyTests(t, fresh)
 	runEmitTests(t, fresh)
+	runCallTests(t, fresh)
 	runLifecycleTests(t, fresh)
 }
 

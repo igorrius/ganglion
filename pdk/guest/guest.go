@@ -56,6 +56,9 @@ func hostNotify(ptr, size uint32) int32
 //go:wasmimport ganglion emit
 func hostEmit(pptr, psize, vptr, vsize uint32) int32
 
+//go:wasmimport ganglion call
+func hostCall(pptr, psize, vptr, vsize uint32) int32
+
 func ptr(b []byte) uint32 {
 	if len(b) == 0 {
 		return 0
@@ -189,6 +192,30 @@ func (wasmHost) Emit(port string, value any) error {
 		return pdk.ErrEmitFailed
 	}
 	return pdk.ErrEmitDenied
+}
+
+func (wasmHost) Call(port string, req any) (json.RawMessage, error) {
+	v, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	p := []byte(port)
+	code := hostCall(ptr(p), uint32(len(p)), ptr(v), uint32(len(v)))
+	runtime.KeepAlive(p)
+	runtime.KeepAlive(v)
+	switch {
+	case code >= 0:
+		return json.RawMessage(take(code)), nil
+	case code == -2:
+		return nil, pdk.ErrCallFormat
+	case code == -3:
+		return nil, pdk.ErrCallNotHere
+	case code == -4:
+		return nil, pdk.ErrCallFailed
+	case code == -5:
+		return nil, pdk.ErrCallUnavailable
+	}
+	return nil, pdk.ErrCallDenied
 }
 
 func (wasmHost) Now() time.Time { return time.UnixMilli(hostNowMs()) }

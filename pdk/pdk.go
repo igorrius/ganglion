@@ -51,6 +51,18 @@ type Host interface {
 	// is over 64 KiB, the run already sent 100 events, or the node could not
 	// publish it. Nothing is sent on an error.
 	Emit(port string, v any) error
+	// Call sends a request on one of the module's calls ports, by name, to
+	// the module its link names, and waits for the answer, at most the time
+	// left in the run. The answer is the JSON the serving module returned.
+	// It fails with ErrCallDenied for a port the manifest does not declare
+	// or one with no link, ErrCallFormat for a request that does not fit the
+	// port's in shape (the whole call then also fails as KindFormat),
+	// ErrCallNotHere in a run that calls nobody (init, health), ErrCallFailed
+	// when the serving run failed or timed out, the answer does not fit the
+	// out shape, the request or the answer is over 64 KiB, the run already
+	// made 100 calls, the chain is too deep or the node could not send it,
+	// and ErrCallUnavailable when the serving module is not running.
+	Call(port string, req any) (json.RawMessage, error)
 	// Now returns the current time.
 	Now() time.Time
 	// Log writes a line to the runner's log.
@@ -72,6 +84,15 @@ var (
 	ErrEmitFormat  = errors.New("the payload does not fit the port's shape")
 	ErrEmitNotHere = errors.New("emit does nothing in this run")
 	ErrEmitFailed  = errors.New("the event was not sent")
+)
+
+// Errors of Host.Call.
+var (
+	ErrCallDenied      = errors.New("the manifest declares no such calls port, or it has no link")
+	ErrCallFormat      = errors.New("the request does not fit the port's in shape")
+	ErrCallNotHere     = errors.New("call does nothing in this run")
+	ErrCallFailed      = errors.New("the call did not get an answer")
+	ErrCallUnavailable = errors.New("the module that serves the port is not running")
 )
 
 // Request is an HTTP request made through the host.

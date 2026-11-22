@@ -64,6 +64,8 @@ type Deps struct {
 	Notify NotifyPort
 	// Emit is the port for emit; nil means no run sends.
 	Emit EmitPort
+	// Call is the port for call; nil means no run calls.
+	Call CallPort
 	// Prefix is the module's short name, the owner part of its cell ids
 	// ("demo-reader" for demo-reader.soc). It defaults to the manifest's name.
 	Prefix string
@@ -92,6 +94,7 @@ const (
 	CallCellReport = "cell.report"
 	CallNotify     = "notify"
 	CallEmit       = "emit"
+	CallCall       = "call"
 	CallStateGet   = "state.get"
 	CallStatePut   = "state.put"
 	CallSecretGet  = "secret.get"
@@ -100,7 +103,7 @@ const (
 
 // CallKinds are the host call kinds in the order a run's calls are listed.
 func CallKinds() []string {
-	return []string{CallHTTPFetch, CallCellGet, CallCellReport, CallNotify, CallEmit, CallStateGet, CallStatePut, CallSecretGet, CallConfigGet}
+	return []string{CallHTTPFetch, CallCellGet, CallCellReport, CallNotify, CallEmit, CallCall, CallStateGet, CallStatePut, CallSecretGet, CallConfigGet}
 }
 
 // called tells deps.OnCall that the module made a host call of kind.
@@ -127,6 +130,7 @@ type Module struct {
 	// its type during this call; the call then ends as KindFormat.
 	formatErr string
 	emitted   int // events emit let through during this call, at most MaxEmitsPerRun
+	calls     int // calls the module made during this call, at most MaxCallsPerRun
 }
 
 // Load compiles a module and prepares its host functions.
@@ -147,6 +151,9 @@ func load(ctx context.Context, wasm []byte, m Manifest, deps Deps, tool bool) (*
 	}
 	if deps.Emit == nil {
 		deps.Emit = noEmit{}
+	}
+	if deps.Call == nil {
+		deps.Call = noCall{}
 	}
 	if deps.Prefix == "" {
 		deps.Prefix = m.Name
@@ -235,6 +242,7 @@ func (m *Module) handle(ctx context.Context, in pdk.Input) (pdk.Output, callResu
 	m.pending = input
 	m.formatErr = ""
 	m.emitted = 0
+	m.calls = 0
 	res, err := inst.ExportedFunction("handle").Call(ctx, uint64(len(input)))
 	if err != nil {
 		result, err := m.callError(ctx, "handle", err, &stderr)
@@ -358,6 +366,7 @@ func (m *Module) instantiateHost(ctx context.Context) error {
 		return m.notify(ctx, readString(mod, p, n))
 	}).Export("notify").
 		NewFunctionBuilder().WithFunc(m.emitCall).Export("emit").
+		NewFunctionBuilder().WithFunc(m.callCall).Export("call").
 		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
 		m.called(ctx, CallConfigGet)
 		v, ok := m.manifest.ConfigValues[readString(mod, p, n)]
