@@ -19,7 +19,7 @@ func hop(module string, at time.Time) modstore.Hop {
 func TestARunIsReadBackWithEveryField(t *testing.T) {
 	ctx := context.Background()
 	s := newEnv(t).open(t)
-	h := modstore.Hop{Module: "local/b", Version: "1", Trigger: "cell", Tool: "b.status", Cells: []string{"a.soc"},
+	h := modstore.Hop{Module: "local/b", Version: "1", Trigger: "cell", Tool: "b.status", Link: "a.x → b.y", Cells: []string{"a.soc"},
 		At: t0, Took: 1500 * time.Millisecond, Result: "failed", Kind: "stale",
 		Calls: map[string]int{"cell.get": 3, "notify": 1}, Wrote: []string{"b.x", "b.y"}, Sent: 1}
 	want := modstore.Run{

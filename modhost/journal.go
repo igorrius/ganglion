@@ -10,8 +10,8 @@ import (
 // This file is the run journal (R-RUN-20, ADR-0092): every run of a module
 // is written to modstore's journal when it ends, with its cause, its host
 // calls by kind, the cells it reported and the messages it sent, and, for a
-// cell trigger, the chain of runs that led to it copied from the producer's
-// row. Never a module's text. Recording never fails or delays a run: a
+// cell, event or call run, the chain of runs that led to it copied from the
+// producer's row, and the link an event or a call came over. Never a module's text. Recording never fails or delays a run: a
 // failed write is logged and counted.
 
 // onCall is the runner's OnCall: it counts the call on the run ctx carries.
@@ -29,7 +29,7 @@ func (h *Host) record(ctx context.Context, r ran, o outcome) {
 	// The write does not end with ctx: the run happened, so a shutdown must
 	// not lose its row.
 	ctx = context.WithoutCancel(ctx)
-	hop := modstore.Hop{Module: r.l.name, Version: r.l.version, Trigger: string(r.run.Trigger), Tool: r.run.tool,
+	hop := modstore.Hop{Module: r.l.name, Version: r.l.version, Trigger: string(r.run.Trigger), Tool: r.run.tool, Link: r.run.link,
 		Cells: slices.Clone(r.run.cells), At: r.at, Took: r.took, Result: string(o.result), Calls: r.run.calls.copyOf(),
 		Wrote: r.run.wrote.list(), Sent: *r.run.sent}
 	row := modstore.Run{
@@ -41,7 +41,7 @@ func (h *Host) record(ctx context.Context, r ran, o outcome) {
 	if len(row.Wrote) == 0 {
 		row.Wrote = nil
 	}
-	if r.run.Trigger == triggerCell || r.run.Trigger == triggerEvent {
+	if r.run.Trigger == triggerCell || r.run.Trigger == triggerEvent || r.run.Trigger == triggerCall {
 		row.Chain = h.chainOf(ctx, r.l.name, r.run)
 	}
 	if err := h.d.Store.RecordRun(ctx, row); err != nil {
@@ -50,9 +50,11 @@ func (h *Host) record(ctx context.Context, r ran, o outcome) {
 	}
 }
 
-// chainOf is the chain of runs that led to the cell run r: the producer's
-// own chain and the producer's run, the last maxDepth hops. It is empty
-// when the producer's row is gone or cannot be read.
+// chainOf is the chain of runs that led to the run r: the producer's own
+// chain and the producer's run, the last maxDepth hops. It is empty when the
+// producer's row is not there yet (an event is published, and a call
+// waits, while its producer's run goes on: the journal fills the chain
+// when it reads the row), is gone, or cannot be read.
 func (h *Host) chainOf(ctx context.Context, module string, r run) []modstore.Hop {
 	p, ok, err := h.d.Store.Run(ctx, r.producer, r.producerRun)
 	if err != nil {

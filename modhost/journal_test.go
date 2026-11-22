@@ -8,10 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/runner"
-	"github.com/igorrius/ganglion/telemetry/telemetrytest"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -77,20 +75,19 @@ func TestAFailedRunRecordsItsResultAndKind(t *testing.T) {
 // cells, the depth and a copy of the producer's chain: one hop for the
 // producer's cron run, two for the next link.
 func TestACellRunRecordsTheChainThatStartedIt(t *testing.T) {
-	e := newEnv(t, active(t, "local/p", producerManifest), active(t, "local/l", listenerManifest("p.soc, p.grid")),
+	ee := newModulesBusEnv(t, active(t, "local/p", producerManifest), active(t, "local/l", listenerManifest("p.soc, p.grid")),
 		active(t, "local/m", listenerManifest("l.x")))
-	e.start(t)
-	e.state.Put("l", "op_cell", `{"op":"cell_report","name":"x","json":1}`)
-	e.runCron(t, "local/p", "slot-1")
-	prod := e.runRow(t, "local/p", "slot-1")
-	trig := e.triggers(t)
-	if len(trig) != 1 {
-		t.Fatalf("triggers %+v", trig)
+	ee.start(t)
+	ee.waitCellConsumers(t, "cells_l", "cells_m")
+	ee.state.Put("l", "op_cell", `{"op":"cell_report","name":"x","json":1}`)
+	ee.runCron(t, "local/p", "slot-1")
+	waitFor(t, "m to run", func() bool { return len(ee.cellRuns("local/m")) == 1 })
+	prod := ee.runRow(t, "local/p", "slot-1")
+	lr := ee.cellRuns("local/l")
+	if len(lr) != 1 {
+		t.Fatalf("l's runs %+v", lr)
 	}
-	if err := e.host.RunTrigger(context.Background(), trig[0], "01EVL"); err != nil {
-		t.Fatal(err)
-	}
-	l := e.runRow(t, "local/l", "01EVL")
+	l := lr[0]
 	if l.Trigger != "cell" || l.Producer != "local/p" || l.ProducerRun != "slot-1" || l.Depth != 1 ||
 		!slices.Equal(l.Cells, []string{"p.grid", "p.soc"}) || l.Calls[runner.CallCellReport] != 1 {
 		t.Fatalf("row %+v", l)
@@ -99,12 +96,8 @@ func TestACellRunRecordsTheChainThatStartedIt(t *testing.T) {
 		!slices.Equal(l.Chain[0].Wrote, prod.Wrote) || l.Chain[0].Calls[runner.CallCellReport] != 2 {
 		t.Fatalf("chain %+v, producer %+v", l.Chain, prod.Hop)
 	}
-	next := e.triggers(t)
-	if err := e.host.RunTrigger(context.Background(), next[len(next)-1], "01EVM"); err != nil {
-		t.Fatal(err)
-	}
-	m := e.runRow(t, "local/m", "01EVM")
-	if m.Depth != 2 || len(m.Chain) != 2 || m.Chain[0].Module != "local/p" || m.Chain[1].Module != "local/l" {
+	m := ee.cellRuns("local/m")[0]
+	if m.Depth != 2 || len(m.Chain) != 2 || m.Chain[0].Module != "local/p" || m.Chain[1].Module != "local/l" || m.Producer != "local/l" || m.ProducerRun != l.ID {
 		t.Fatalf("row %+v", m)
 	}
 }
@@ -112,13 +105,12 @@ func TestACellRunRecordsTheChainThatStartedIt(t *testing.T) {
 // A producer whose row is gone leaves the chain empty; the row still names
 // the producer.
 func TestACellRunWithoutItsProducersRowHasNoChain(t *testing.T) {
-	e := newEnv(t, active(t, "local/l", listenerManifest("p.soc")))
-	e.start(t)
-	trig := event.ModuleTrigger{Module: "local/l", Producer: "local/p", Run: "gone", Cells: []string{"p.soc"}, Depth: 1}
-	if err := e.host.RunTrigger(context.Background(), trig, "01EV"); err != nil {
-		t.Fatal(err)
-	}
-	if r := e.runRow(t, "local/l", "01EV"); len(r.Chain) != 0 || r.Producer != "local/p" || r.ProducerRun != "gone" {
+	ee := newModulesBusEnv(t, active(t, "local/l", listenerManifest("p.soc")))
+	ee.start(t)
+	ee.waitCellConsumers(t, "cells_l")
+	ee.publishCells(t, "p", "gone", "0", "c1", "p.soc")
+	waitFor(t, "l to run", func() bool { return len(ee.cellRuns("local/l")) == 1 })
+	if r := ee.cellRuns("local/l")[0]; len(r.Chain) != 0 || r.Producer != "local/p" || r.ProducerRun != "gone" {
 		t.Fatalf("row %+v", r)
 	}
 }
@@ -137,29 +129,27 @@ func TestAModulesMessageCarriesItsRunID(t *testing.T) {
 	}
 }
 
-// A store that cannot record leaves the run settled and its cells fanned
-// out; the failure is logged and counted.
+// A store that cannot record leaves the run settled and its cells
+// published; the failure is logged and counted.
 func TestARunIsSettledWhenItsRowCannotBeWritten(t *testing.T) {
-	rec := telemetrytest.Install(t)
-	e := newEnv(t, active(t, "local/p", producerManifest), active(t, "local/l", listenerManifest("p.soc")))
-	e.start(t)
-	e.store.failRecord = errors.New("disk full")
-	e.runCron(t, "local/p", "slot-1")
-	if n := e.store.runs(); n != 1 {
+	ee := newModulesBusEnv(t, active(t, "local/p", producerManifest), active(t, "local/l", listenerManifest("p.soc")))
+	ee.start(t)
+	ee.store.failRecord = errors.New("disk full")
+	ee.runCron(t, "local/p", "slot-1")
+	if n := ee.store.runs(); n != 1 {
 		t.Fatalf("%d runs counted", n)
 	}
-	if got := e.triggers(t); len(got) != 1 {
-		t.Fatalf("triggers %+v", got)
+	if got := ee.eventsOnStream(t); got != 1 {
+		t.Fatalf("EVENTS holds %d messages, want the run's cells", got)
 	}
-	if !strings.Contains(e.logText(), "a run was not recorded") {
-		t.Fatalf("log:\n%s", e.logText())
+	if !strings.Contains(ee.logText(), "a run was not recorded") {
+		t.Fatalf("log:\n%s", ee.logText())
 	}
-	if v := rec.Value(t, "ganglion.modhost.journal.failures", map[string]string{"module": "local/p"}); v != 1 {
+	if v := ee.rec.Value(t, "ganglion.modhost.journal.failures", map[string]string{"module": "local/p"}); v != 1 {
 		t.Errorf("journal failures = %v, want 1", v)
 	}
 }
 
-// The card has the last runs, newest first, and Run finds one by the
 // module's short or full name.
 func TestTheCardHasTheLastRuns(t *testing.T) {
 	e := newEnv(t, active(t, "local/probe", probeManifest))

@@ -32,9 +32,11 @@ const (
 	// KindModule is a module of the owner's that needs the agent: an
 	// escalation the node words itself (R-RUN-14); its payload is a Module.
 	KindModule Kind = "module"
-	// KindModuleTrigger starts a module that listens to cells another
-	// module's run wrote (R-RUN-15, ADR-0065); its payload is a
-	// ModuleTrigger. It runs the module with no model and no turn.
+	// KindModuleTrigger is a legacy kind. It once started a module that
+	// listens to cells another module's run wrote (R-RUN-15, ADR-0065);
+	// cell triggers now travel the bus (ADR-0108), and the node puts none.
+	// One left in the inbox from before the upgrade is dropped. The kind
+	// goes with the release that follows the upgrade.
 	KindModuleTrigger Kind = "module.trigger"
 	// KindModuleNotify is a module's text for its owner (R-RUN-16,
 	// ADR-0066).

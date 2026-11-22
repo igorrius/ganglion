@@ -55,26 +55,20 @@ func TestTheReflexTemplateNotifiesOnALowValue(t *testing.T) {
 	}
 	art := buildTemplate(t, "reflex-template")
 	reflex := modstore.Active{Module: "local/reflex-template", SHA256: art.SHA256, Wasm: art.Wasm, Manifest: art.Manifest}
-	e := newEnv(t, active(t, "local/producer", producerReportsValue), reflex)
+	e := newModulesBusEnv(t, active(t, "local/producer", producerReportsValue), reflex)
 	e.start(t)
+	e.waitCellConsumers(t, "cells_reflex-template")
 
 	e.runCron(t, "local/producer", "slot-1")
-	trigs := e.triggers(t)
-	if len(trigs) != 1 || trigs[0].Module != "local/reflex-template" {
-		t.Fatalf("triggers %+v", trigs)
-	}
-	if err := e.host.RunTrigger(t.Context(), trigs[0], "01EVTRIGGER1"); err != nil {
-		t.Fatal(err)
-	}
+	waitFor(t, "the reflex's notice", func() bool { return len(e.notifies(t)) == 1 })
 	got := e.notifies(t)
-	if len(got) != 1 || got[0].p.Module != "local/reflex-template" || got[0].p.Text != "producer.value fell below 30: it is 12" {
+	if got[0].p.Module != "local/reflex-template" || got[0].p.Text != "producer.value fell below 30: it is 12" {
 		t.Fatalf("notifies %+v", got)
 	}
 
 	// still low: the episode is said once
-	if err := e.host.RunTrigger(t.Context(), trigs[0], "01EVTRIGGER2"); err != nil {
-		t.Fatal(err)
-	}
+	e.runCron(t, "local/producer", "slot-2")
+	waitFor(t, "the second change to be handled", func() bool { return len(e.cellRuns("local/reflex-template")) == 2 })
 	if got := e.notifies(t); len(got) != 1 {
 		t.Fatalf("a second message: %+v", got)
 	}

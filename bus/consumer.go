@@ -29,7 +29,10 @@ type ConsumerSpec struct {
 	// Description is kept with the consumer on the server, for an operator.
 	Description string
 	// Filter is the subject the consumer reads.
-	Filter  string
+	Filter string
+	// Filters are several subjects it reads, instead of Filter when not
+	// empty.
+	Filters []string
 	Deliver DeliverPolicy
 	// AckWait is how long the server waits for an ack before it sends the
 	// message again, which is how a crash between handling and ack is

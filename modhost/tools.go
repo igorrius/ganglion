@@ -160,11 +160,11 @@ func (h *Host) callIf(ctx context.Context, module string, in pdk.Input, r run, s
 	return ran{l: l, run: r, out: out, err: err, at: at, took: max(h.d.Now().Sub(at), 0)}, true
 }
 
-// finish settles a run judged o and then starts the listeners of the cells
-// it wrote, failed or not: the cells changed either way.
+// finish settles a run judged o and then publishes the cells it wrote,
+// failed or not: they changed either way.
 func (h *Host) finish(ctx context.Context, r ran, o outcome) (disabled bool, err error) {
 	disabled, err = h.settle(ctx, r.l, r.run.Trigger, o)
 	h.record(ctx, r, o)
-	h.fanOut(ctx, r.l, r.run)
+	h.publishCells(ctx, r.l, r.run)
 	return disabled, err
 }

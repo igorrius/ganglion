@@ -359,11 +359,12 @@ sequenceDiagram
 ## A module started by another module's cells (P1)
 
 A run that wrote cells starts every running module that listens to any of
-them, through the node's inbox, with no model and no turn (R-RUN-15,
-[ADR-0065](../adr/0065-cell-triggers-through-the-inbox.md)). The run is
-identified by the slot of a cron run, the key of a tool call or the id of
-a trigger event, so a run delivered again puts no second event; a chain
-stops past depth 4. The listener's run is unattended, like cron: counted,
+them, over the bus, with no model and no turn (R-RUN-15,
+[ADR-0065](../adr/0065-cell-triggers-through-the-inbox.md), transport
+superseded by [ADR-0108](../adr/0108-ports-in-the-manifest-links-in-the-nodes-file.md)).
+The run is identified by the slot of a cron run, the key of a tool call or
+the id of a bus delivery, so a run published again starts nobody twice; a
+chain stops past depth 4. The listener's run is unattended, like cron: counted,
 escalated, towards the crash loop.
 
 ```mermaid
@@ -371,26 +372,27 @@ sequenceDiagram
     autonumber
     participant P as demo-reader run
     participant H as Module host
-    participant Q as Inbox
-    participant A as Agent.Handle
+    participant J as Journal
+    participant B as Bus (EVENTS)
+    participant C as cells_demo-alerts consumer
     participant L as demo-alerts module
 
     P->>H: cell_report soc, grid (noted in the run's context)
     Note over H: the run ends: settle (count, escalate, crash loop)
-    H->>H: running listeners of the cells written, not the producer
-    alt depth + 1 at most 4
-        H->>Q: Put(module.trigger, conv module:demo-alerts, key trigger:local/demo-alerts:local/demo-reader:RUN, cells sorted, depth)
-    else deeper
-        H->>H: no event; a log line once per build
-        H->>Q: Put(module.notify, node line chain, key notify:local/demo-reader:chain:SHA)
+    H->>J: RecordRun (the producer's row first)
+    H->>B: publish g.ev.core.demo-reader.cells {cells}, id cells:MODULE:RUN, headers From, Run, Depth
+    B->>C: the message (the consumer reads the owners of the cells it listens to)
+    C->>C: cells it listens to among those written; none: ack
+    alt depth header 4 or more
+        C->>H: no run; a log line once per build and the node line chain
+        C-->>B: ack
+    else
+        C->>H: call(demo-alerts, trigger cell, cells and producer, depth + 1)
+        H->>L: Handle(trigger cell, cells and producer)
+        L->>H: cell_get(demo-reader.soc), ...
+        H->>H: settle as unattended; publish its own cells, depth + 1
+        C-->>B: ack, whatever the run's outcome (unacked only when the node is shutting down)
     end
-    Q->>A: kind module.trigger, before begin: no state, no turn, no model
-    A->>H: RunTrigger(payload, event id)
-    H->>L: Handle(trigger cell, cells and producer)
-    L->>H: cell_get(demo-reader.soc), ...
-    H->>H: settle as unattended; fan out its own cells, depth + 1
-    H-->>A: nil (a failure is the supervisor's); an error only when the run could not start
-    A-->>Q: acknowledged, or retried after the lease on an error
 ```
 
 ## A module writes to its owner (P1)

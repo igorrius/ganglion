@@ -11,6 +11,11 @@ import (
 // the owner (R-BUS-5). No declared port takes it.
 const NotifyOutput = "notify"
 
+// CellsOutput is the name of the implicit output every module with cells has:
+// the ids of the cells a run wrote (R-RUN-15, R-BUS-6). No declared port and
+// no link takes it; the cell triggers ride it.
+const CellsOutput = "cells"
+
 // portNamePattern is a port name: a NATS subject token and a field name.
 var portNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 
@@ -60,6 +65,8 @@ func (p Ports) check() error {
 				return fmt.Errorf("ports.%s %q: a name is a lower-case letter, then letters, digits and _, at most 32", k.name, name)
 			case name == NotifyOutput:
 				return fmt.Errorf("ports.%s %q: the name is reserved for the notice of a module with notify", k.name, name)
+			case name == CellsOutput:
+				return fmt.Errorf("ports.%s %q: the name is reserved for the cells a run wrote, which start the modules that listen to them", k.name, name)
 			case seen[name] != "":
 				return fmt.Errorf("ports.%s %q: the name is already a port in ports.%s; a link names a port by its name alone", k.name, name, seen[name])
 			}

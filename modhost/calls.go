@@ -327,7 +327,7 @@ func (h *Host) runCall(ctx context.Context, module, port string, depth int, req 
 	}
 	id := "call:" + event.NewID(h.d.Now())
 	r, ok := h.callIf(context.WithoutCancel(ctx), module, pdk.Input{Trigger: "call:" + port, Payload: payload},
-		newRun(id, triggerCall, depth+1).byEvent(caller, req.Headers[bus.HeaderRun]), func() bool { return !late(req, h.d.Now()) })
+		newRun(id, triggerCall, depth+1).byEvent(caller, req.Headers[bus.HeaderRun]).over(callerEnd(caller, req.Headers[bus.HeaderPort])+" → "+modstore.ShortName(module)+"."+port), func() bool { return !late(req, h.d.Now()) })
 	if !ok {
 		if late(req, h.d.Now()) {
 			h.in.served(ctx, module, port, servedLate)

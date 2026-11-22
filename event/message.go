@@ -124,19 +124,6 @@ type Module struct {
 	Transport string `json:"transport"` // where the answer goes
 }
 
-// ModuleTrigger is the payload of an event of kind "module.trigger": a run
-// of Producer wrote cells that Module listens to (R-RUN-15, ADR-0065). The
-// module host puts one per listener and producer run, keyed by both and
-// Run, so a run delivered again starts nobody twice. Nothing in it is a
-// module's text: names and cell ids are the node's.
-type ModuleTrigger struct {
-	Module   string   `json:"module"`   // the listener, full name
-	Producer string   `json:"producer"` // full name
-	Run      string   `json:"run"`      // the producer's run identity
-	Cells    []string `json:"cells"`    // the listened cells it wrote, sorted
-	Depth    int      `json:"depth"`    // 1 for a trigger from a cron or tool run
-}
-
 // NotifyNode is what a module.notify event carries instead of a module's
 // text: a closed set of the node's own lines.
 type NotifyNode string

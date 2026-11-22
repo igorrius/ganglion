@@ -166,16 +166,16 @@ func TestInitAndHealthCannotNotify(t *testing.T) {
 // line in their private chat.
 func TestAStoppedChainTellsTheOwnerOnce(t *testing.T) {
 	l := active(t, "local/l", listenerManifest("p.soc"))
-	e := newEnv(t, l, active(t, "local/m", listenerManifest("l.x")))
-	e.start(t)
-	e.state.Put("l", "op_cell", `{"op":"cell_report","name":"x","json":1}`)
+	ee := newModulesBusEnv(t, l)
+	ee.start(t)
+	ee.waitCellConsumers(t, "cells_l")
 	for i := range 2 {
-		trig := event.ModuleTrigger{Module: "local/l", Producer: "local/p", Run: "slot", Cells: []string{"p.soc"}, Depth: 4}
-		if err := e.host.RunTrigger(context.Background(), trig, "01EV"+strconv.Itoa(i)); err != nil {
-			t.Fatal(err)
-		}
+		ee.publishCells(t, "p", "slot", "4", "c"+strconv.Itoa(i), "p.soc")
 	}
-	got := e.notifies(t)
+	waitFor(t, "both to be taken", func() bool {
+		return ee.rec.Value(t, "ganglion.modhost.cell.deliveries", map[string]string{"consumer": "cells_l", "outcome": "deep"}) == 2 && ee.pendingOf(t, "cells_l") == 0
+	})
+	got := ee.notifies(t)
 	want := event.ModuleNotify{Module: "local/l", Version: "1", Node: event.NotifyChainLine, At: t0.UnixMilli(), Principal: owner, Transport: "telegram"}
 	if len(got) != 1 || got[0].ev.IdemKey != "notify:local/l:chain:"+l.SHA256 || got[0].p != want {
 		t.Fatalf("events %+v", got)
