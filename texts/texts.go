@@ -117,6 +117,8 @@ const (
 	AskDestinationRemove Key = "ask.destination_remove" // vars: name
 	AskModuleNotifyTo    Key = "ask.module_notify_to"   // vars: module, places
 	AskGroupDisconnect   Key = "ask.group_disconnect"   // vars: title
+	AskLinkAdd           Key = "ask.link_add"           // vars: from, to, shape
+	AskLinkRemove        Key = "ask.link_remove"        // vars: from, to
 	PlacePrivate         Key = "ask.place_private"      // what a destination points at, inside a question
 	PlaceGroup           Key = "ask.place_group"        // vars: title
 	PlaceTopic           Key = "ask.place_topic"        // vars: topic, title
@@ -281,6 +283,12 @@ const (
 	StatusReasonModuleCrashloop  Key = "status.reason_module_crashloop"
 	StatusModuleStopped          Key = "status.module_stopped"
 	StatusModulesUnread          Key = "status.modules_unread"
+	StatusLinkBroken             Key = "status.link_broken"      // vars: link
+	StatusReasonLinkEnd          Key = "status.reason_link_end"  // a module is not running or has no such port
+	StatusReasonLinkKind         Key = "status.reason_link_kind" // the ends are not an output and an input of one kind
+	StatusReasonLinkShape        Key = "status.reason_link_shape"
+	StatusReasonLinkLoop         Key = "status.reason_link_loop" // vars: path
+	StatusReasonLinkDeep         Key = "status.reason_link_deep" // vars: path, max
 	StatusReasonModuleInit       Key = "status.reason_module_init"
 	StatusReasonModuleCells      Key = "status.reason_module_cells"
 	StatusReasonModuleLoad       Key = "status.reason_module_load"
@@ -403,6 +411,7 @@ const (
 	ModulesOnDone            Key = "modules.on_done"
 	ModulesNotStarted        Key = "modules.not_started"
 	ModulesRemoved           Key = "modules.removed"
+	ModulesRemovedLinks      Key = "modules.removed_links" // vars: name, links
 	ModuleNotifyLimit        Key = "module.notify_limit"
 	ModuleChainStopped       Key = "module.chain_stopped"
 	CellsNone                Key = "cells.none"
@@ -589,6 +598,7 @@ var allKeys = []Key{
 	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateButtonInstall, UpdateButtonRollback, UpdateButtonRollbackImg, UpdateButtonStale, UpdateAlreadyInstalled, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
 	BackupAlertFailed, BackupAlertRecovered, BackupLastNone, BackupReasonRefused, BackupReasonNetwork, BackupReasonChanged, BackupReasonIntegrity, BackupReasonOther, StatusBackupOff, StatusBackupOK, StatusBackupWaiting, StatusBackupStale, StatusBackupNone, StatusReasonBackupStale, StatusBackupFailed, StatusBusOK, StatusBusDown,
 	AskMCPConnect, AskMCPSignIn, AskMCPSignInLink, AskMCPPageWarning, AskMCPToolsCard, AskMCPToolsNone, AskMCPToolsAuto, AskMCPToolsConfirm, AskMCPToolsForbidden, AskMCPToolsSkipped, AskMCPToolsMore, AskMCPToolsAutoWrite, AskMCPToolsForbiddenCount, AskMCPRule, AskMCPRules, AskMCPRuleLine, AskMCPRuleGroup, AskMCPPolicyAuto, AskMCPPolicyConfirm, AskMCPPolicyForbidden, ButtonMCPConnect, ButtonMCPAskAll, ButtonMCPCancel, ButtonMCPDisconnect, MCPConnected, MCPCancelled, MCPCardStale, MCPDisconnected, MCPListFailed, MCPListNone, MCPListHead, MCPListRow, MCPListSignedIn, MCPPrivateOnly, MCPStateConnecting, MCPStateConnected, MCPStateUnreachable, MCPStateToolsChanged, MCPStateUnauthorized, MCPStateLocked, StatusMCPConnecting, StatusMCPUnreachable, StatusMCPToolsChanged, StatusMCPUnauthorized, StatusMCPLocked,
+	AskLinkAdd, AskLinkRemove, ModulesRemovedLinks, StatusLinkBroken, StatusReasonLinkEnd, StatusReasonLinkKind, StatusReasonLinkShape, StatusReasonLinkLoop, StatusReasonLinkDeep,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.

@@ -39,6 +39,9 @@ func (f ModulesFile) SetOff(name string, off bool, why string) error {
 	return f.record("module "+name+": "+what, func() error { return f.File.SetOff(name, off, why) })
 }
 
+// Links reads the links: lines.
+func (f ModulesFile) Links() ([]settings.Link, error) { return f.File.Links() }
+
 // SetNotifyTo writes a module's notify_to.
 func (f ModulesFile) SetNotifyTo(module string, names []string) error {
 	return f.record("module "+module+": notify_to", func() error { return f.File.SetNotifyTo(module, names) })

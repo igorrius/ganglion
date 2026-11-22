@@ -32,7 +32,7 @@ func (h *Host) Status(context.Context, status.Scope) ([]status.Check, error) {
 		return []status.Check{{Section: status.SectionProblems, State: status.Warn, Line: texts.StatusModulesUnread, Since: h.unread}}, nil
 	}
 	if running+len(h.off)+len(h.stopped) == 0 {
-		return nil, nil
+		return h.linkChecks(), nil
 	}
 	out := []status.Check{{Section: status.SectionNode, State: status.OK, Line: texts.StatusModulesLocal,
 		Vars: texts.Vars{"running": strconv.Itoa(running), "off": strconv.Itoa(len(h.off))}}}
@@ -50,5 +50,5 @@ func (h *Host) Status(context.Context, status.Scope) ([]status.Check, error) {
 		out = append(out, status.Check{Section: status.SectionProblems, State: status.Warn, Line: line, Reason: reasonKeys[st.reason],
 			Vars: texts.Vars{"module": name, "kind": string(st.kind)}, Since: st.since})
 	}
-	return out, nil
+	return append(out, h.linkChecks()...), nil
 }

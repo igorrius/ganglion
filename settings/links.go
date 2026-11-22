@@ -92,6 +92,10 @@ func (f LinksFile) Links() ([]Link, error) {
 	return file.Links, nil
 }
 
+// Links reads the links of the file this ModulesFile edits; a module's
+// removal and its start check need them beside the modules.
+func (f ModulesFile) Links() ([]Link, error) { return LinksFile(f).Links() }
+
 // AddLink appends l to links, keeping the comments of the file. A link
 // that is already there is left as it is. The meaning of the link is the
 // caller's to check: the file holds only its form.

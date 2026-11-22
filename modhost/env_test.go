@@ -397,12 +397,19 @@ type conf struct {
 	mods       []settings.Module
 	offs       []string // "name:why"
 	failRemove error
+	links      []settings.Link
 }
 
 func (c *conf) Modules() ([]settings.Module, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.mods), nil
+}
+
+func (c *conf) Links() ([]settings.Link, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.links), nil
 }
 
 func (c *conf) SetOff(name string, off bool, why string) error {
@@ -449,6 +456,7 @@ func (c *conf) RemoveModule(name string) error {
 		return c.failRemove
 	}
 	c.mods = slices.DeleteFunc(c.mods, func(m settings.Module) bool { return m.Name == name })
+	c.links = slices.DeleteFunc(c.links, func(l settings.Link) bool { return l.Touches(name) })
 	return nil
 }
 

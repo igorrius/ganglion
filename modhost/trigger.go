@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/igorrius/ganglion/event"
+	"github.com/igorrius/ganglion/links"
 	"github.com/igorrius/ganglion/pdk"
 )
 
@@ -16,7 +17,7 @@ import (
 
 // maxDepth is the longest chain of modules a run's cells start: a run at
 // this depth that writes cells starts nobody (M4c design section 4).
-const maxDepth = 4
+const maxDepth = links.MaxDepth
 
 // triggerOutcome is what became of a run's cells, for the metrics.
 type triggerOutcome string
