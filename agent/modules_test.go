@@ -297,6 +297,25 @@ func TestModulesOffOnRemoveRollback(t *testing.T) {
 	}
 }
 
+// A message of several /modules lines runs each, one answer apiece; text after
+// a name is refused and never echoed (#363).
+func TestModulesSeveralLinesInOneMessage(t *testing.T) {
+	e, l, _ := ownModulesEnv(t)
+	out := e.turn(t, message(owner, "Igor", "/modules remove demo-reader\n/modules remove ghost"))
+	if len(out) != 2 || out[0].Text != "demo-reader is removed. Its cells stay, read-only." || out[1].Text != "No module named ghost." {
+		t.Fatalf("out %+v", out)
+	}
+	if got := strings.Join(l.calls, ";"); got != "remove demo-reader;remove ghost" {
+		t.Fatalf("calls %s", got)
+	}
+	for _, text := range []string{"/modules remove demo-reader extra words", "/modules remove demo-reader\nsecret words"} {
+		got := oneReply(t, e, text)
+		if !strings.HasPrefix(got, "Usage:") || strings.Contains(got, "extra") || strings.Contains(got, "secret") {
+			t.Errorf("%q: %q", text, got)
+		}
+	}
+}
+
 func TestGroupedNumbers(t *testing.T) {
 	for n, want := range map[int]string{0: "0", 999: "999", 1000: "1,000", 1340: "1,340", 1234567: "1,234,567"} {
 		if got := grouped(n); got != want {
