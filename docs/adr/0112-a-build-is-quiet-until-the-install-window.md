@@ -55,9 +55,11 @@ it builds.
   confirmation card) is sent as before; so is the reply of a turn that ends with no build awaited:
   the install window, the line after the install, or a stop that needs the owner (a sixth build in a
   row, a refusal).
-- **One card per module:** a build of a module in a conversation whose earlier build there already has
-  a card edits that card (back to running, then to the new end) instead of sending a new one. The
-  card names the module and how many builds it took.
+- **One card per module:** a build of a module in a conversation, in a row with its earlier build
+  there (no message from a person between them, the count `MaxBuildsInARow` keeps), edits that
+  build's card (back to running, then to the new end) instead of sending a new one. The card names
+  the module and the build's number. A build after the owner wrote, or after a restart, gets a card
+  of its own, so no edit lands on a card far up the chat.
 
 ## Security
 
