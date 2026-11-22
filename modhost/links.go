@@ -25,6 +25,7 @@ var linkReasonKeys = map[links.Reason]texts.Key{
 	links.ReasonEnd:   texts.StatusReasonLinkEnd,
 	links.ReasonKind:  texts.StatusReasonLinkKind,
 	links.ReasonShape: texts.StatusReasonLinkShape,
+	links.ReasonTaken: texts.StatusReasonLinkTaken,
 	links.ReasonLoop:  texts.StatusReasonLinkLoop,
 	links.ReasonDeep:  texts.StatusReasonLinkDeep,
 }

@@ -287,8 +287,9 @@ const (
 	StatusReasonLinkEnd          Key = "status.reason_link_end"  // a module is not running or has no such port
 	StatusReasonLinkKind         Key = "status.reason_link_kind" // the ends are not an output and an input of one kind
 	StatusReasonLinkShape        Key = "status.reason_link_shape"
-	StatusReasonLinkLoop         Key = "status.reason_link_loop" // vars: path
-	StatusReasonLinkDeep         Key = "status.reason_link_deep" // vars: path, max
+	StatusReasonLinkTaken        Key = "status.reason_link_taken" // a calling port has one link
+	StatusReasonLinkLoop         Key = "status.reason_link_loop"  // vars: path
+	StatusReasonLinkDeep         Key = "status.reason_link_deep"  // vars: path, max
 	StatusReasonModuleInit       Key = "status.reason_module_init"
 	StatusReasonModuleCells      Key = "status.reason_module_cells"
 	StatusReasonModuleLoad       Key = "status.reason_module_load"
@@ -598,7 +599,7 @@ var allKeys = []Key{
 	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateButtonInstall, UpdateButtonRollback, UpdateButtonRollbackImg, UpdateButtonStale, UpdateAlreadyInstalled, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
 	BackupAlertFailed, BackupAlertRecovered, BackupLastNone, BackupReasonRefused, BackupReasonNetwork, BackupReasonChanged, BackupReasonIntegrity, BackupReasonOther, StatusBackupOff, StatusBackupOK, StatusBackupWaiting, StatusBackupStale, StatusBackupNone, StatusReasonBackupStale, StatusBackupFailed, StatusBusOK, StatusBusDown,
 	AskMCPConnect, AskMCPSignIn, AskMCPSignInLink, AskMCPPageWarning, AskMCPToolsCard, AskMCPToolsNone, AskMCPToolsAuto, AskMCPToolsConfirm, AskMCPToolsForbidden, AskMCPToolsSkipped, AskMCPToolsMore, AskMCPToolsAutoWrite, AskMCPToolsForbiddenCount, AskMCPRule, AskMCPRules, AskMCPRuleLine, AskMCPRuleGroup, AskMCPPolicyAuto, AskMCPPolicyConfirm, AskMCPPolicyForbidden, ButtonMCPConnect, ButtonMCPAskAll, ButtonMCPCancel, ButtonMCPDisconnect, MCPConnected, MCPCancelled, MCPCardStale, MCPDisconnected, MCPListFailed, MCPListNone, MCPListHead, MCPListRow, MCPListSignedIn, MCPPrivateOnly, MCPStateConnecting, MCPStateConnected, MCPStateUnreachable, MCPStateToolsChanged, MCPStateUnauthorized, MCPStateLocked, StatusMCPConnecting, StatusMCPUnreachable, StatusMCPToolsChanged, StatusMCPUnauthorized, StatusMCPLocked,
-	AskLinkAdd, AskLinkRemove, ModulesRemovedLinks, StatusLinkBroken, StatusReasonLinkEnd, StatusReasonLinkKind, StatusReasonLinkShape, StatusReasonLinkLoop, StatusReasonLinkDeep,
+	AskLinkAdd, AskLinkRemove, ModulesRemovedLinks, StatusLinkBroken, StatusReasonLinkEnd, StatusReasonLinkKind, StatusReasonLinkShape, StatusReasonLinkTaken, StatusReasonLinkLoop, StatusReasonLinkDeep,
 }
 
 // EnglishAll returns every English text, which a file or a translation is checked against.
