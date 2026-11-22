@@ -7,12 +7,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/igorrius/ganglion/builder"
-	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -96,36 +93,8 @@ func (t *ModuleImport) check(c tool.Call) (importArgs, string, error) {
 // errNotExample refuses a from that is not one of the node's examples.
 var errNotExample = errors.New("from must name an example in the node's examples folder, by its folder name or as examples/modules/<example>")
 
-// example is the folder of the example from names: <Examples>/<x>, where from
-// is x, examples/modules/x or the folder's own path. Any other path is
-// refused, and so is an example that is a symlink or leads out of the
-// examples folder.
-func (t *ModuleImport) example(from string) (string, error) {
-	if t.m.Examples == "" {
-		return "", errors.New("this node has no examples folder")
-	}
-	root, err := filepath.EvalSymlinks(t.m.Examples)
-	if err != nil {
-		return "", fmt.Errorf("the examples folder: %w", err)
-	}
-	clean := path.Clean(filepath.ToSlash(strings.TrimSpace(from)))
-	dir, x := path.Split(clean)
-	dir = strings.TrimSuffix(dir, "/")
-	switch {
-	case modstore.CheckShortName(x) != "":
-		return "", errNotExample
-	case dir == "", dir == examplesRel, dir == filepath.ToSlash(filepath.Clean(t.m.Examples)), dir == filepath.ToSlash(root):
-	default:
-		return "", errNotExample
-	}
-	src := filepath.Join(root, x)
-	if err := realDir(src, src); errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("there is no example %s", x)
-	} else if err != nil {
-		return "", fmt.Errorf("the example %s: %w", x, err)
-	}
-	return src, nil
-}
+// example is the folder of the example from names (Modules.exampleDir).
+func (t *ModuleImport) example(from string) (string, error) { return t.m.exampleDir(from) }
 
 // free checks that modules/<name> is not in the workspace yet.
 func (t *ModuleImport) free(name string) error {
