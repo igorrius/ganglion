@@ -62,6 +62,9 @@ const (
 	ReasonKind Reason = "kind"
 	// ReasonShape: the shapes of the two ports differ.
 	ReasonShape Reason = "shape"
+	// ReasonTaken: the calling port is linked already; a calling port has at
+	// most one link (R-BUS-6).
+	ReasonTaken Reason = "taken"
 	// ReasonLoop: the link closes a cycle through links and cell triggers.
 	ReasonLoop Reason = "loop"
 	// ReasonDeep: a chain of modules is deeper than MaxDepth.
@@ -102,6 +105,8 @@ func (p Problem) Words() string {
 		why = "the kinds do not match: " + p.Detail
 	case ReasonShape:
 		why = "the shapes differ: " + p.Detail
+	case ReasonTaken:
+		why = "the calling port is linked already: " + p.Detail
 	case ReasonLoop:
 		why = "it closes a loop: " + strings.Join(p.Path, " → ")
 	case ReasonDeep:
@@ -120,14 +125,35 @@ func (p Problem) Words() string {
 func Check(mods map[string]Module, ls []Link) []Problem {
 	var out []Problem
 	var good []Link
+	callers := map[string]Link{} // the first good link of each calling port
 	for _, l := range ls {
-		if p, bad := checkLink(mods, l); bad {
+		p, bad := checkLink(mods, l)
+		if !bad {
+			bad = takenCaller(callers, mods, l, &p)
+		}
+		if bad {
 			out = append(out, p)
 		} else {
 			good = append(good, l)
 		}
 	}
 	return append(out, checkGraph(mods, good)...)
+}
+
+// takenCaller reports whether l starts at a calling port that an earlier
+// good link starts at already; it fills p with the problem. Otherwise it
+// notes l as the calling port's link.
+func takenCaller(callers map[string]Link, mods map[string]Module, l Link, p *Problem) bool {
+	if from, ok := end(mods, l.From); !ok || from.kind != kindCalls {
+		return false
+	}
+	first, taken := callers[l.From]
+	if !taken {
+		callers[l.From] = l
+		return false
+	}
+	*p = Problem{Link: l, Reason: ReasonTaken, Detail: fmt.Sprintf("%s is linked to %s", l.From, first.To)}
+	return true
 }
 
 // Added reports the problems that adding l to existing causes: those Check
@@ -250,8 +276,8 @@ func portOf(e string) string {
 	return p
 }
 
-// Ends are the modules and ports of a link that carries events, by short
-// name.
+// Ends are the modules and ports of a link that carries events or calls, by
+// short name.
 type Ends struct {
 	FromModule, FromPort, ToModule, ToPort string
 }
@@ -263,6 +289,19 @@ func EventEnds(mods map[string]Module, l Link) (Ends, bool) {
 	from, okFrom := end(mods, l.From)
 	to, okTo := end(mods, l.To)
 	if !okFrom || !okTo || from.kind != kindEmits || to.kind != kindAccepts {
+		return Ends{}, false
+	}
+	return Ends{FromModule: from.module, FromPort: from.name, ToModule: to.module, ToPort: to.name}, true
+}
+
+// CallEnds are the ends of l when it joins a calling port to a serving
+// port; false for a link of events, or one with an end that is not there.
+// It does not check the shapes: Check does. Ends.FromPort is the calling
+// port, Ends.ToPort the served one.
+func CallEnds(mods map[string]Module, l Link) (Ends, bool) {
+	from, okFrom := end(mods, l.From)
+	to, okTo := end(mods, l.To)
+	if !okFrom || !okTo || from.kind != kindCalls || to.kind != kindServes {
 		return Ends{}, false
 	}
 	return Ends{FromModule: from.module, FromPort: from.name, ToModule: to.module, ToPort: to.name}, true

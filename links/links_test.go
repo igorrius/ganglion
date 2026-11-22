@@ -215,3 +215,45 @@ func TestNotifyOutputIsAnEnd(t *testing.T) {
 		t.Fatalf("%+v", ps)
 	}
 }
+
+// A calling port has at most one link: the second line from it is the
+// problem, the first keeps working.
+func TestACallingPortHasOneLink(t *testing.T) {
+	ms := mods("a", "b", "c")
+	ls := []links.Link{link("a.c", "b.s"), link("a.c", "c.s"), link("b.c", "c.s")}
+	ps := links.Check(ms, ls)
+	if len(ps) != 1 || ps[0].Reason != links.ReasonTaken || ps[0].Link != ls[1] {
+		t.Fatalf("problems %+v, want one taken on the second link", ps)
+	}
+	if got := ps[0].Words(); !strings.Contains(got, "the calling port is linked already") || !strings.Contains(got, "b.s") {
+		t.Fatalf("words %q", got)
+	}
+	if ps := links.Added(ms, ls[:1], ls[1]); len(ps) != 1 || ps[0].Reason != links.ReasonTaken {
+		t.Fatalf("added problems %+v", ps)
+	}
+	// The same emits port may feed many inputs.
+	if ps := links.Check(ms, []links.Link{link("a.x", "b.y"), link("a.x", "c.y")}); len(ps) != 0 {
+		t.Fatalf("problems %+v", ps)
+	}
+}
+
+func TestCallEnds(t *testing.T) {
+	ms := mods("a", "b")
+	got, ok := links.CallEnds(ms, link("a.c", "b.s"))
+	if want := (links.Ends{FromModule: "a", FromPort: "c", ToModule: "b", ToPort: "s"}); !ok || got != want {
+		t.Fatalf("CallEnds = %+v, %v", got, ok)
+	}
+	for name, l := range map[string]links.Link{
+		"an event":   link("a.x", "b.y"),
+		"no module":  link("a.c", "q.s"),
+		"no port":    link("a.c", "b.nope"),
+		"wrong kind": link("a.c", "b.y"),
+	} {
+		if _, ok := links.CallEnds(ms, l); ok {
+			t.Errorf("%s: CallEnds says it is a call", name)
+		}
+	}
+	if _, ok := links.EventEnds(ms, link("a.c", "b.s")); ok {
+		t.Error("EventEnds takes a call")
+	}
+}

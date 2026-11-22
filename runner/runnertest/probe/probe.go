@@ -41,6 +41,10 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 		h.StatePut("last_event", string(payload))
 		payload = nil
 	}
+	if strings.HasPrefix(in.Trigger, "call:") { // a call of a link: noted in the state, the operation scripted
+		h.StatePut("last_call", string(payload))
+		payload = nil
+	}
 	if len(payload) == 0 || string(payload) == "{}" {
 		payload = scripted(h, in.Trigger)
 	}
@@ -93,6 +97,20 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 			}
 		}
 		return map[string]any{"err": "", "sent": o.MiB}, nil
+	case "call": // a request o.JSON on the port o.Name; the answer or the error, also noted in the state as call_result
+		return callNoted(h, o)
+	case "fetch_call": // fetch o.URL and, when it has answered, call as "call" does
+		_, _ = h.Fetch(pdk.Request{Method: "GET", URL: o.URL})
+		return callNoted(h, o)
+	case "call_many": // o.MiB calls on the port o.Name, each the request o.JSON; the first refusal ends it
+		for i := 0; i < o.MiB; i++ {
+			if _, err := h.Call(o.Name, o.JSON); err != nil {
+				return map[string]any{"err": callErr(err), "made": i}, nil
+			}
+		}
+		return map[string]any{"err": "", "made": o.MiB}, nil
+	case "answer": // the answer of a served port: o.JSON as it is
+		return o.JSON, nil
 	case "headers":
 		resp, err := h.Fetch(pdk.Request{Method: "GET", URL: o.URL})
 		if err != nil {
@@ -138,7 +156,7 @@ func scripted(h pdk.Host, trigger string) json.RawMessage {
 // lifecycle answers init and health as the config key "lifecycle" says:
 // "unknown" is a module that has no such trigger, "fail" one that fails, "forge" one that claims the node's module.format kind,
 // "health_auth" one whose health alone fails with auth_failed, "notify" one that fails unless
-// notify answers "not here", "emit" the same for an emit on the port x, "leak" one whose health fails with
+// notify answers "not here", "emit" and "call" the same for an emit or a call on the port x, "leak" one whose health fails with
 // its granted secret PROBE_TOKEN in the error.
 // Otherwise it notes the trigger in its state, so a test can see it.
 func lifecycle(h pdk.Host, trigger string) (any, error) {
@@ -162,6 +180,10 @@ func lifecycle(h pdk.Host, trigger string) (any, error) {
 	case "emit": // init and health may not emit: anything but "not here" fails them
 		if got := emitErr(h.Emit("x", 1)); got != "not_here" {
 			return nil, errors.New("emit in " + trigger + " answered " + got)
+		}
+	case "call": // init and health call nobody: anything but "not here" fails them
+		if _, err := h.Call("x", 1); callErr(err) != "not_here" {
+			return nil, errors.New("call in " + trigger + " answered " + callErr(err))
 		}
 	case "health_auth": // init passes, health reports refused credentials
 		if trigger == "health" {
@@ -200,6 +222,36 @@ func emitErr(err error) string {
 		return "not_here"
 	case errors.Is(err, pdk.ErrEmitFailed):
 		return "failed"
+	}
+	return "other"
+}
+
+// callNoted calls the port o.Name with o.JSON and notes the result in the
+// state, so a test sees what the module got.
+func callNoted(h pdk.Host, o op) (any, error) {
+	ans, err := h.Call(o.Name, o.JSON)
+	res := map[string]any{"err": callErr(err), "answer": ans}
+	if b, merr := json.Marshal(res); merr == nil {
+		h.StatePut("call_result", string(b))
+	}
+	return res, nil
+}
+
+// callErr names the pdk error a call failed with, "" for success.
+func callErr(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, pdk.ErrCallDenied):
+		return "denied"
+	case errors.Is(err, pdk.ErrCallFormat):
+		return "format"
+	case errors.Is(err, pdk.ErrCallNotHere):
+		return "not_here"
+	case errors.Is(err, pdk.ErrCallFailed):
+		return "failed"
+	case errors.Is(err, pdk.ErrCallUnavailable):
+		return "unavailable"
 	}
 	return "other"
 }

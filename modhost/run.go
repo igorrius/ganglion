@@ -13,7 +13,7 @@ import (
 // ends (R-RUN-15). init and health runs carry none.
 type run struct {
 	ID      string   // the run's identity: the slot of a cron run, the call's key, the trigger event's id
-	Trigger trigger  // cron | tool | cell | event
+	Trigger trigger  // cron | tool | cell | event | call
 	Depth   int      // 0 outside a chain
 	wrote   *written // the cells the run reported, full ids
 	sent    *int     // messages notify sent so far in this run: the number in the last one's key
@@ -40,8 +40,8 @@ func (r run) byTool(name string) run {
 	return r
 }
 
-// byEvent is r as the run a producer's run started by an event, which
-// names no cells.
+// byEvent is r as the run a producer's run started by an event or a call,
+// which names no cells.
 func (r run) byEvent(producer, producerRun string) run {
 	r.producer, r.producerRun = producer, producerRun
 	return r

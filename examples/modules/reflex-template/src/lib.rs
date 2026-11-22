@@ -311,6 +311,20 @@ mod tests {
     }
 
     #[test]
+    fn the_fake_records_the_calls_and_answers_as_it_is_told() {
+        use crate::host::Call;
+        let f = fake();
+        *f.call_answer.borrow_mut() = Ok(json!("yes"));
+        assert_eq!(f.call("c", &json!(1)), Ok(json!("yes")));
+        *f.call_answer.borrow_mut() = Err(Call::Unavailable);
+        assert_eq!(f.call("c", &json!(2)), Err(Call::Unavailable));
+        assert_eq!(
+            *f.called.borrow(),
+            [("c".to_string(), json!(1)), ("c".to_string(), json!(2))]
+        );
+    }
+
+    #[test]
     fn the_input_carries_the_trigger_and_the_changed_cells() {
         let i = parse(br#"{"trigger":"cell","payload":{"cells":["a.b","c.d"],"producer":"x"}}"#)
             .unwrap();

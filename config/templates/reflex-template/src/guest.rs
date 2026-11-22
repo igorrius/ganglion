@@ -1,7 +1,7 @@
 //! Module-side glue for the ganglion ABI: host functions in the "ganglion"
 //! import module, JSON across the boundary (see `pdk/guest` for Go).
 
-use crate::host::{Emit, Host, Notify};
+use crate::host::{Call, Emit, Host, Notify};
 use std::sync::Mutex;
 
 #[link(wasm_import_module = "ganglion")]
@@ -16,6 +16,7 @@ unsafe extern "C" {
     fn cell_get(ptr: u32, len: u32) -> i32;
     fn notify(ptr: u32, len: u32) -> i32;
     fn emit(pptr: u32, plen: u32, vptr: u32, vlen: u32) -> i32;
+    fn call(pptr: u32, plen: u32, vptr: u32, vlen: u32) -> i32;
 }
 
 fn take_n(n: usize) -> Vec<u8> {
@@ -81,6 +82,25 @@ impl Host for OwnHost {
             -3 => Err(Emit::NotHere),
             -4 => Err(Emit::Failed),
             _ => Err(Emit::Denied),
+        }
+    }
+    fn call(&self, port: &str, request: &serde_json::Value) -> Result<serde_json::Value, Call> {
+        let v = request.to_string();
+        let code = unsafe {
+            call(
+                port.as_ptr() as u32,
+                port.len() as u32,
+                v.as_ptr() as u32,
+                v.len() as u32,
+            )
+        };
+        match code {
+            n if n >= 0 => serde_json::from_slice(&take_n(n as usize)).map_err(|_| Call::Failed),
+            -2 => Err(Call::Format),
+            -3 => Err(Call::NotHere),
+            -4 => Err(Call::Failed),
+            -5 => Err(Call::Unavailable),
+            _ => Err(Call::Denied),
         }
     }
     fn now_unix(&self) -> i64 {

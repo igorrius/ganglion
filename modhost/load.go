@@ -28,6 +28,7 @@ type loaded struct {
 	notifyTo                  []string      // the destinations of its messages; none is the owner alone (R-RUN-18)
 	escalate                  map[Kind]bool // the manifest's escalate kinds
 	tools                     []tool.Handler
+	service                   *service // its served ports on the bus, nil when it serves none
 }
 
 // recipient is the admin a module belongs to: who installed it, or the
@@ -95,7 +96,7 @@ func (h *Host) prepare(ctx context.Context, a modstore.Active, s settings.Module
 		return nil, st, err
 	}
 	if l.mod, err = runner.Load(ctx, a.Wasm, m, runner.Deps{Secrets: h.secret(a.Module, l.given), State: h.d.State,
-		Cells: cellPort{cells: h.d.Cells, module: l.name, prefix: l.short}, Notify: notifyPort{h: h, l: l}, Emit: emitPort{h: h, l: l}, Prefix: l.short, Logger: l.log, OnCall: onCall}); err != nil {
+		Cells: cellPort{cells: h.d.Cells, module: l.name, prefix: l.short}, Notify: notifyPort{h: h, l: l}, Emit: emitPort{h: h, l: l}, Call: callPort{h: h, l: l}, Prefix: l.short, Logger: l.log, OnCall: onCall}); err != nil {
 		h.d.Log.Warn("modhost: the module does not load", "module", a.Module, "err", err)
 		return nil, stop{reason: ReasonLoad, since: now}, nil
 	}

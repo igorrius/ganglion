@@ -625,6 +625,7 @@ and `health` are planned for P1, with the supervisor). It sees only the host fun
 | `state.get` / `state.put` | Module state in KV; survives version swaps |
 | `http.fetch` | HTTP to allowed domains only |
 | `emit` | An event on one of the outputs the manifest declares under `ports.emits` (R-BUS-5, R-BUS-6) |
+| `call` | A request on one of the calling ports the manifest declares under `ports.calls`, to the module its link names, and the answer (R-BUS-5, R-BUS-6) |
 | `tool.call` | Tool calls, through policies |
 | `secret.get` | Secrets from an allowed list; the model never sees them |
 | `config.get` | Values from the manifest's `config` block (e.g. a device serial number) |
@@ -2306,8 +2307,9 @@ The bus ([ADR-0106](adr/0106-embed-nats-with-jetstream-as-the-bus-behind-narrow-
   file's own check is the form and that no line repeats. A link is written
   only after the owner's press (the agent proposes it with `link.add`, a card
   with both ends and the shape), when both ends exist, kinds and shapes are
-  equal, no cycle forms across links and cell triggers, and no chain is
-  deeper than 4 modules; the press checks it again. Moving a link rebuilds
+  equal, a calling port has no other link (R-BUS-6), no cycle forms across
+  links and cell triggers, and no chain is deeper than 4 modules; the press
+  checks it again. Moving a link rebuilds
   nothing. The same checks guard the modules: a build whose linked port is
   gone, of another kind or another shape, or that closes a loop or a deeper
   chain through the links, is refused at the plan and at the install, the
@@ -2345,13 +2347,44 @@ The bus ([ADR-0106](adr/0106-embed-nats-with-jetstream-as-the-bus-behind-narrow-
   is on again. Delivery is at least once: a run that emitted and then failed
   may emit again when it is retried. Metrics: `ganglion.modhost.events` by
   module and outcome and `ganglion.modhost.event.deliveries` by link consumer
-  and outcome; each consumer's lag is the bus's gauge. `call(port, payload)` sends a request to the linked
-  endpoint, registered with NATS `micro`, and waits at most the run's
-  remaining time; no responder is an error at once. Payloads and answers are
-  checked against their shapes on both sides. From M9 a cell change is an
-  event of its owner and cell triggers ride the bus, not the inbox; the
-  journal records `event` and `call` causes with their links (R-RUN-20; the
-  journal row of an event run carries the producer and its run already).
+  and outcome; each consumer's lag is the bus's gauge. From M9 a cell change is an event
+  of its owner and cell triggers ride the bus, not the inbox; the journal
+  records `event` and `call` causes with their links (R-RUN-20; the journal
+  row of an event or a call run carries the producer and its run already).
+  `call(port, payload)` sends a request to the linked endpoint and waits for
+  the answer. The host function `ganglion.call(port, payload) int32` answers
+  the answer's length, which `take` copies out (zero or more), or `-1` denied
+  (no such `calls` port, or no link that works starts at it), `-2` the request
+  does not fit the port's `in` shape (nothing is sent and the run fails as
+  `module.format`, as for `emit`), `-3` not here (`init`, `health`, a build's
+  check and a trial run call nobody), `-4` failed (the serving run failed or
+  timed out, the answer does not fit the port's `out` shape, a request or an
+  answer over 64 KiB, a run's 101st call, a chain too deep, or the node could
+  not send it) and `-5` unavailable (no responder: the serving module is not
+  running). A `calls` port has at most one link: a second link from it is
+  refused with the reason `taken`, and one already in the file is broken and
+  shown in `/status`. The link names the served port, and the request goes to
+  `g.rpc.core.<module>.<port>` (`core` as for events) with the headers
+  `Ganglion-From`, `Ganglion-Port`, `Ganglion-Run`, `Ganglion-Depth` and
+  `Ganglion-Deadline` (Unix ms). The caller waits at most the time left in its
+  run less 1 s to settle, never past its own deadline; the serving side starts
+  no run for a request past `Ganglion-Deadline`, which bounds what a reload
+  that waits for the module host's lock can hold back. Calls are not stored
+  and not retried. Every running module with `serves` ports is a NATS `micro`
+  service named after it, version `<manifest version>.0.0`, with one endpoint
+  per served port and its shapes in the endpoint metadata; it is registered
+  when the module loads and removed when it unloads (reload, off, crash loop,
+  removal), so discovery and per-endpoint statistics come with it. A request
+  whose chain is already 4 deep, one past its deadline and one outside `in`
+  start no run and get an error answer; otherwise the module runs with
+  `Trigger: "call:<served port>"` and the payload `{"from":
+  "<module>.<calling port>", "request": <payload>}` at the caller's depth + 1,
+  counted and toward the crash loop but not escalated: the caller sees the
+  failure, as a tool call's turn does. The run's result is the answer and is
+  checked against `out` (a mismatch is a `module.format` failure of the serving
+  run and `-4` for the caller). An error answer carries a code and the node's
+  fixed words, never module text. Metrics: `ganglion.modhost.calls` by module
+  and outcome and `ganglion.modhost.served` by module, port and outcome.
 - **R-BUS-7.** A module's `notify` publishes to `NOTIFY`; a durable consumer
   in the core delivers to `notify_to` as R-RUN-18 says. Metrics count
   publishes and consumes by outcome, consumer lag, stream sizes and KV

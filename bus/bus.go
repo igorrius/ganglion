@@ -56,6 +56,8 @@ const (
 	HeaderDepth = "Ganglion-Depth"
 	// HeaderRun names the run that produced the message.
 	HeaderRun = "Ganglion-Run"
+	// HeaderPort names the calling port of a request, in the caller's module.
+	HeaderPort = "Ganglion-Port"
 )
 
 // Sentinel errors of a bus.

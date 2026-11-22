@@ -30,6 +30,11 @@ cells:
 # ports:
 #   emits:
 #     reading: {value: number, online: boolean}
+# To let another module ask for the reading, declare a served port and answer
+# it in `logic::on_call` (see the README, "Calls"); `in` and `out` are both
+# required and the caller's port must have the same shapes:
+#   serves:
+#     last: {in: {}, out: {value: number, online: boolean}}
 config:
   station: {type: string, required: true}
 limits: {memory: 32MiB, timeout: 20s}

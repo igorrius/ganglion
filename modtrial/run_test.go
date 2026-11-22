@@ -452,3 +452,24 @@ func TestEmitIsCheckedAndSendsNothing(t *testing.T) {
 		t.Fatalf("step = %+v, want module.format for a payload outside the shape", st)
 	}
 }
+
+func callManifest() runner.Manifest {
+	m := testManifest()
+	m.Ports.Calls = map[string]runner.PortCall{"ask": {In: runner.Shape{Type: "integer"}, Out: runner.Shape{Type: "string"}}}
+	return m
+}
+
+// A trial's call checks the port and the request's shape as a node's does,
+// needs no link, and calls nobody: the module is told "not here", which is
+// no failure of the run.
+func TestCallIsCheckedAndCallsNobody(t *testing.T) {
+	ok := withOp(mkEx("ok", cron(Expect{})), "op_cron", `{"op":"call","name":"ask","json":5}`)
+	if rep := run(t, callManifest(), opts(), ok); !rep.Passed {
+		t.Fatalf("report = %+v", rep)
+	}
+	bad := withOp(mkEx("bad", cron(Expect{})), "op_cron", `{"op":"call","name":"ask","json":"high"}`)
+	rep := run(t, callManifest(), opts(), bad)
+	if st := rep.Examples[0].Steps[0]; rep.Passed || st.Kind != "module.format" {
+		t.Fatalf("step = %+v, want module.format for a request outside the shape", st)
+	}
+}

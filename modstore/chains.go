@@ -108,7 +108,7 @@ func refusalOf(p links.Problem) string {
 		return linkLoopRefusal
 	case links.ReasonDeep:
 		return deepRefusal
-	case links.ReasonEnd, links.ReasonKind, links.ReasonShape:
+	case links.ReasonEnd, links.ReasonKind, links.ReasonShape, links.ReasonTaken:
 	}
 	return brokenLinkReason
 }
@@ -121,7 +121,7 @@ func detailOf(module string, ps []links.Problem) string {
 		return strings.Join(loopFrom(module, ps[0].Path), " → ")
 	case links.ReasonDeep:
 		return strings.Join(ps[0].Path, " → ")
-	case links.ReasonEnd, links.ReasonKind, links.ReasonShape:
+	case links.ReasonEnd, links.ReasonKind, links.ReasonShape, links.ReasonTaken:
 	}
 	words := make([]string, 0, len(ps))
 	for _, p := range ps {

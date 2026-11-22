@@ -118,6 +118,9 @@ type Deps struct {
 	// Consumers are the bus's durable consumers, for the links' events
 	// (R-BUS-6); nil carries none.
 	Consumers Consumers
+	// Calls is the bus's services and requests, for the served ports and the
+	// call host function (R-BUS-6); nil serves nothing and finds nobody.
+	Calls Calls
 	// Secrets gives each module its own secret source; Forget drops a
 	// removed module's stored secrets.
 	Secrets SecretsFor
@@ -174,6 +177,9 @@ func New(d Deps) *Host {
 	}
 	if d.Consumers == nil {
 		d.Consumers = noConsumers{}
+	}
+	if d.Calls == nil {
+		d.Calls = noCalls{}
 	}
 	h := &Host{d: d, in: newInstruments(), links: newLinkSet(), running: map[string]*loaded{}, stopped: map[string]stop{},
 		off: map[string]bool{}, fails: map[string][]time.Time{}, stops: map[string]bool{}, episodes: map[string]map[Kind]string{}, clean: map[string]bool{}}
@@ -289,8 +295,10 @@ func (h *Host) apply(ctx context.Context, module string, a *modstore.Active, s s
 	}
 	old := h.running[module]
 	h.running[module] = l
+	h.serve(l) // before the old one goes: a request meets one or the other, both run the module that runs
 	h.refreshTools()
 	if old != nil {
+		h.unserve(old)
 		_ = old.mod.Close(ctx)
 	}
 	h.setStopped(module, stop{}, false)
@@ -314,6 +322,7 @@ func (h *Host) unload(ctx context.Context, module string) {
 		return
 	}
 	delete(h.running, module)
+	h.unserve(l)
 	h.refreshTools()
 	_ = l.mod.Close(ctx)
 	h.resetFailures(module)

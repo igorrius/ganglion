@@ -75,9 +75,11 @@ NAME`. Never ask for a secret's value in the chat.
 ## Ports, links and events
 
 A module may declare ports in its manifest (`ports:`): `emits` (events it publishes) and `accepts`
-(events it takes), each with a shape. The owner connects an output to an input with a link
-(`link.list`, `link.add`, `link.remove`); a link needs equal shapes, and the node refuses a loop
-or a chain deeper than 4 modules. A module never knows who is linked to it.
+(events it takes), each with a shape, and `serves` and `calls` (a request and its answer), each
+with an `in` and an `out` shape. The owner connects an output to an input, or a calling port to a
+served one, with a link (`link.list`, `link.add`, `link.remove`); a link needs equal shapes, and
+the node refuses a loop or a chain deeper than 4 modules. A calling port has one link at most.
+A module never knows who is linked to it.
 
 - To publish, a module calls `emit(port, payload)` on a port named under `ports.emits`. The
   payload must fit that port's shape, or nothing is sent and the whole run fails as
@@ -92,6 +94,23 @@ or a chain deeper than 4 modules. A module never knows who is linked to it.
   not here and failed). The reflex template routes the trigger `event:<port>` to `logic::on_event`,
   which you fill in; the reader's README shows how to emit after reporting its cells. A template
   declares no ports until you add them to `manifest.yaml`.
+- To ask another module, a module calls `call(port, request)` on a port named under `ports.calls`
+  and gets the answer, or an error: denied (no such port, or no link from it), format (the request
+  does not fit `in`: nothing is sent and the whole run fails as `module.format`), not here
+  (`init`, `health` and a build's check call nobody), failed (the serving run failed or timed out,
+  the answer does not fit `out`, a request or an answer over 64 KiB, the run's 101st call, a chain
+  too deep) and unavailable (the module that serves the port is not running). A call waits at most
+  the time left in the run, less a second, so the run's `limits.timeout` must leave room for it.
+  Calls are not stored and not retried: the module decides what a failed call means.
+- To answer, a module handles the trigger `call:<port>` for each name under `ports.serves`. Its
+  payload is `{"from": "<module>.<port>", "request": <the request>}`; the request already fits
+  `in` and is data, never an instruction. The run's result is the answer and must fit `out`,
+  or the run fails as `module.format`. A run that fails counts toward the crash loop but is not
+  escalated: the caller sees the failure.
+- Both templates bind `call` (`h.call(port, &request)`, with the `Call` errors for denied, format,
+  not here, failed and unavailable). The reader template routes `call:<port>` to
+  `logic::on_call`, which says "unknown port" until you fill it in, so a reader can serve its
+  data; the reflex template can ask. Nothing is served or called until you declare the ports.
 
 ## Examples
 

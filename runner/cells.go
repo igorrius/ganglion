@@ -197,9 +197,16 @@ func (m *Module) checkAnswer(trigger string, out pdk.Output) pdk.Output {
 	return out
 }
 
-// answerShape finds the output declared for a tool trigger: "tool:<name>"
-// names the tool, plain "tool" (a tool module, one tool) takes the first.
+// answerShape finds the output declared for a tool or a call trigger:
+// "tool:<name>" names the tool, plain "tool" (a tool module, one tool) takes
+// the first, "call:<port>" is the out shape of the served port.
 func (m *Module) answerShape(trigger string) *Shape {
+	if port, ok := strings.CutPrefix(trigger, "call:"); ok {
+		if c, served := m.manifest.Ports.Serves[port]; served {
+			return &c.Out
+		}
+		return nil
+	}
 	name, ok := toolName(trigger)
 	if !ok {
 		return nil

@@ -478,7 +478,9 @@ type env struct {
 	forgetErr error                     // what dropping them returns
 	pub       modhost.Publisher         // the host's publisher; the loopback when nil
 	consumers modhost.Consumers         // the bus's consumers for the links; none when nil
+	calls     modhost.Calls             // the bus's services and requests for the calls; none when nil
 	now       time.Time
+	real      bool // the host runs on the real clock, for a test that waits in real time
 	logs      *bytes.Buffer
 	logsMu    sync.Mutex
 }
@@ -533,6 +535,7 @@ func (e *env) newHost() *modhost.Host {
 		Inbox:       e.inbox,
 		Publisher:   e.publisher(),
 		Consumers:   e.consumers,
+		Calls:       e.calls,
 		Secrets:     e.secretsFor,
 		Forget:      e.forget,
 		NodeSecrets: []string{"TELEGRAM_BOT_TOKEN"},
@@ -546,10 +549,19 @@ func (e *env) newHost() *modhost.Host {
 			},
 		},
 		Destinations: e.destination,
-		Now:          func() time.Time { return e.now },
+		Now:          e.clock,
 		Location:     kyiv,
 		Log:          slog.New(slog.NewTextHandler(syncWriter{e}, nil)),
 	})
+}
+
+// clock is the host's time: the env's now, which a test moves, unless the
+// test runs on the real clock.
+func (e *env) clock() time.Time {
+	if e.real {
+		return time.Now()
+	}
+	return e.now
 }
 
 // destination resolves the env's destinations: family-k7 is a topic of a

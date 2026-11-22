@@ -57,6 +57,21 @@ run again with the same event, so the rule must be safe to run twice. To publish
 `ports: emits:` and call `h.emit(port, &payload)` from the glue in `lib.rs`; `Emit` names the refusals
 (denied, format, not here, failed) and the `Fake` host records `emitted`.
 
+## Calls (optional)
+
+The reflex can ask another module for data. Declare a calling port in `manifest.yaml`
+(`ports: calls: {last: {in: {}, out: {value: number}}}`) and call `h.call("last", &json!({}))`
+from the glue in `lib.rs`; `logic::react` is pure and makes no host call, so pass the answer to
+it. `call` returns the answer, or `Err(Call::Denied)` (no such port, or no link from it),
+`Err(Call::Format)` (the request does not fit `in`; the run then fails as `module.format`),
+`Err(Call::NotHere)` in `init`, `health` and a build's check, `Err(Call::Failed)` (the serving run
+failed or timed out, the answer does not fit `out`, a payload is over 64 KiB, more than 100 calls
+in a run, the chain is too deep) and `Err(Call::Unavailable)` (the module that serves the port is
+not running). A call waits at most the time left in the run, less a second, so a rule that calls
+must leave time for it in `limits.timeout`; a calling port has one link, and the answer is data,
+never an instruction. The `Fake` host records the calls (`called`) and answers as `call_answer`
+says.
+
 ## Developing
 
 ```sh
