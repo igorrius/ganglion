@@ -22,7 +22,7 @@ There are two templates:
 - **reader**: reads an outside HTTP service on a schedule and reports the reading to a cell. It handles rate limits (waits and retries), marks a reading as stale when it gets too old, and stops retrying when a login fails.
 - **reflex**: listens to cells and tells you when a rule fires, for example a value crossing a threshold downwards, or a value that has not changed for too long. It says each thing once.
 
-A task often needs both: a reader feeds the cells, a reflex watches them. Ask for both in one message and the agent builds both, then offers them together, with the link between them.
+Describe what you want to get, in your own words; you do not need to know how it is built. The agent decides how many modules the task takes and how they pass data to each other. Often it is both: a reader feeds the cells, a reflex watches them. When each occurrence matters (every new order, every alarm), the agent passes them as events over a link between the modules instead. Either way it builds everything first and then offers the modules together, with the links between them.
 
 ## Approve
 

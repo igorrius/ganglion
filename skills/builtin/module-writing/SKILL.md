@@ -30,6 +30,13 @@ A module starts from a template the node ships; you never write one from nothing
 - **`reflex-template`** when something has to happen because cells changed: a rule over values
   that are already in cells, which writes to the owner. It needs no network and no secrets.
 
+The owner asks for an outcome, not for modules: "I want the readings of my thermometer", "tell
+me about every earthquake above 5". Most owners do not know what a module, a cell, a port or a
+link is, and they need not. How many modules a request takes, which template each starts from,
+whether they share cells or events, and which links join them is your decision: make it from
+the request, never ask the owner to make it, and do not explain these parts unless asked. Speak
+to the owner about what they asked for: what they will get and when.
+
 A request is often both: "watch my meter and tell me when it drops" is a reader for the meter
 and a reflex that listens to the reader's cells. Make them as two modules, the reader first,
 then the reflex, and install both with one `module.install` (the reader first in `builds`), so
@@ -46,7 +53,12 @@ NAME`. Never ask for a secret's value in the chat.
 ## The shape of a module
 
 - One module, one responsibility. If you are about to write "and also", write a second module.
-- Modules are linked through cells (links over ports: see "Ports, links and events"). One module reports a cell (`cells.report`), another
+- Choose how two modules share data by what the data is. A state, where only the latest value
+  counts (a temperature, a price, a battery level), goes through cells. An occurrence, where
+  each one counts (a new earthquake, an alarm that fired, an order that came in), goes as an
+  event over a link: a cell keeps only the last value, so two occurrences close together would
+  lose one. See "Ports, links and events".
+- Modules linked through cells: one module reports a cell (`cells.report`), another
   listens to it (`cells.read`, a `cell` trigger) by its full id, `<module>.<cell>`. A module
   never calls another module and never listens to its own cells: the node refuses that, and it
   would be a loop. To link two modules, check the reporting one's cells with `module.status` or
@@ -77,10 +89,12 @@ NAME`. Never ask for a secret's value in the chat.
 
 A module may declare ports in its manifest (`ports:`): `emits` (events it publishes) and `accepts`
 (events it takes), each with a shape, and `serves` and `calls` (a request and its answer), each
-with an `in` and an `out` shape. The owner connects an output to an input, or a calling port to a
-served one, with a link (`link.list`, `link.add`, `link.remove`); a link needs equal shapes, and
-the node refuses a loop or a chain deeper than 4 modules. A calling port has one link at most.
-A module never knows who is linked to it.
+with an `in` and an `out` shape. A link connects an output to an input, or a calling port to a
+served one. You choose the links a request needs and put them in `module.install` with the
+builds; the owner approves them there with the modules and never has to ask for one. `link.add`
+and `link.remove` change links between installed modules, `link.list` shows them. A link needs
+equal shapes, and the node refuses a loop or a chain deeper than 4 modules. A calling port has
+one link at most. A module never knows who is linked to it.
 
 - To publish, a module calls `emit(port, payload)` on a port named under `ports.emits`. The
   payload must fit that port's shape, or nothing is sent and the whole run fails as

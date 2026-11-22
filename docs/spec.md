@@ -2001,10 +2001,18 @@ which belongs with the flow engine (9.6).
   that the settings parse and that the secrets are set (owner's live
   check, 2026-11-10).
 - **R-RDR-4.** The built-in skill `module-writing` says which template
-  fits a request (a reader, a reflex, or both linked through cells), what
-  to find out about a service before writing a reader, and how the
-  modules are linked. It is embedded in the binary, so it is updated with
-  the node.
+  fits a request (a reader, a reflex, or both), what to find out about a
+  service before writing a reader, and how the modules are linked: through
+  cells for a state (the latest value counts), through events and a link
+  for occurrences (each one counts, R-BUS-5). It is embedded in the
+  binary, so it is updated with the node.
+- **R-RDR-5.** The owner asks for an outcome in everyday words ("the
+  readings of my thermometer", "tell me about every earthquake above 5"),
+  not for modules. The agent decides how many modules the request needs,
+  which template each starts from, whether they share cells or events, and
+  which links to write, and offers all of it in one install window
+  (R-RUN-9). It never asks the owner to name a module, a port or a link,
+  and explains them only when asked (owner, 2026-11-22).
 - **R-LS-4.** Until the owner's bot migrates, his reader runs alongside
   `deye.py` and their readings are compared.
 
