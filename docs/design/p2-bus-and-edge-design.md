@@ -214,6 +214,7 @@ At the time a link is written:
 
 - both ends exist and are of matching kinds (`emits` → `accepts`, `calls` → `serves`);
 - the shapes are equal;
+- a `calls` port has no other link: one port, one served port to ask (reason `taken`, in `/status` in every language);
 - the graph of all links and cell triggers has no cycle, events and calls together;
 - a chain is at most 4 deep, as today.
 
@@ -264,11 +265,49 @@ module that listens to cells has a consumer on those keys. The end-of-run fan-ou
 
 ### 6.5. Calls
 
-A module that `serves` a port registers it as an endpoint of a NATS `micro` service named after the
-module; discovery and per-endpoint statistics come with it, and the graph and `/status` read them. A
-new host function `call(port, payload)` sends a request to the linked endpoint and waits for the
-answer, at most the time left in the run. No responder is an error at once; calls are not stored. The
-serving module is started for each request, as a tool call of the agent starts one today.
+A new host function `call(port, payload)` (import `ganglion.call`, ABI stays 1) sends a request on a
+`calls` port and waits for the answer. The link from the calling port names the served port, and the
+request goes to `g.rpc.core.<module>.<port>`; a calling port has one link. A result of zero or more is
+the answer's length, taken with `take` as `http_fetch` does; the codes are `-1` denied (no such `calls`
+port, or no link that works from it), `-2` format (the request does not fit `in`: not sent, the run
+fails as `module.format`, as for `emit`), `-3` not here (`init`, `health`, a check, a trial run), `-4`
+failed (the serving run failed or timed out, the answer does not fit `out`, a payload over 64 KiB, the
+run's 101st call, a chain too deep, or the node could not send it) and `-5` unavailable (no responder,
+or the serving module answered that it is not running). Calls are not stored and not retried.
+
+The caller waits at most the time left in its run less 1 s to settle, and never past the run's own
+deadline. The request carries that time as `Ganglion-Deadline` (Unix ms), with `Ganglion-From`,
+`Ganglion-Port`, `Ganglion-Run` and `Ganglion-Depth`, so the serving side starts no run for a caller that
+has gone. No responder is `-5` at once.
+
+A running module with `serves` ports is a NATS `micro` service named after the module, version
+`<manifest version>.0.0`, with one endpoint per served port on its subject and the shapes in the
+endpoint metadata; discovery and per-endpoint statistics come with it, and the graph and `/status` can
+read them. The service is added when the module loads and stopped when it unloads (reload, off, crash
+loop, removal, shutdown). A reload registers the new service before it stops the old one, and both
+handlers run whichever module runs by then. Stopping drains and does not wait, so it is done under the
+host's lock.
+
+The handler answers a request past its deadline, one whose depth header is already the chain limit (the
+chain line as for events) and one outside `in` with an error answer and no run. Otherwise the module
+runs with `Trigger: "call:<port>"` and the payload `{"from": "<module>.<port>", "request": <payload>}`
+one level deeper than the caller's run. The run is counted and counts toward the crash loop but is not
+escalated: the caller sees the failure, as a tool call's turn does. The run's result is the answer,
+checked against `out`; a mismatch is a `module.format` failure of the serving run and `-4` for the
+caller. Errors travel as micro error headers with a code (`late`, `deep`, `format`, `failed`,
+`unavailable`) and the node's fixed words, never module text. The run's id is `call:` and a time-ordered
+id; the journal row names the caller and its run.
+
+**The lock.** `Host.call` holds the host's read lock for the whole run, so the serving run of a call made
+from inside another run takes a second read lock in another goroutine. A reload that waits for the
+write lock holds the serving side back until the caller's wait ends: it is bounded, not a deadlock. Two
+things keep it bounded: the caller's wait ends at its deadline less 1 s, and the serving side reads the
+deadline header again once it has the lock, so it runs nothing for a caller that has gone.
+
+A build's check and a trial run answer `-3` after the same port and shape checks, and the link is not
+needed there. Metrics: `ganglion.modhost.calls` by module and outcome (answered, denied, format,
+not_here, failed, unavailable) and `ganglion.modhost.served` by module, port and outcome (ok, failed,
+bad, deep, late).
 
 Calls serve three later needs: a module asking another for data; the agent calling a tool of a module
 that runs on an edge (spec 9.5); the core relaying an HTTP request to an edge's module (Not now).
