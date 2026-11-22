@@ -75,6 +75,7 @@ func TestWhere(t *testing.T) {
 		"mcp.servers":              settings.PlaceOwnTool,
 		"mcp.page":                 settings.PlaceOwnTool,
 		"destinations":             settings.PlaceOwnTool,
+		"links":                    settings.PlaceOwnTool,
 		"modules":                  settings.PlaceOwnTool,
 		"agent.limits":             settings.PlaceHost,
 		"httpx":                    settings.PlaceHost,

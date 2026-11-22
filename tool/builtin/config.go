@@ -254,7 +254,7 @@ func (g Configuring) check(cs []settings.Change) (checked, error) {
 func placeWords(p settings.Place) string {
 	switch p {
 	case settings.PlaceOwnTool:
-		return "by its own tool (modules, destinations, groups, the update mode), not here"
+		return "by its own tool (modules, destinations, links, groups, the update mode), not here"
 	case settings.PlaceChat:
 		return "here"
 	case settings.PlaceHost:
