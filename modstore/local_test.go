@@ -614,7 +614,7 @@ func TestPlanAndInstallRefuseATriggerLoop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Result != modstore.ResultRefused || o.Reason != "the triggers would form a loop" {
+	if o.Result != modstore.ResultRefused || o.Reason != "the triggers would form a loop: a → b → a" {
 		t.Fatalf("install %+v", o)
 	}
 }

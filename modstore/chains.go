@@ -4,75 +4,43 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
+	"github.com/igorrius/ganglion/links"
 	"github.com/igorrius/ganglion/runner"
 )
 
-// ErrLoop is the refusal of a module whose cell triggers would close a loop
-// with the active modules: one's report would start another that starts the
-// first again (R-RUN-15).
+// ErrLoop is the refusal of a module whose cell triggers or links would
+// close a loop with the active modules: one's report would start another
+// that starts the first again (R-RUN-15, R-BUS-5).
 var ErrLoop = errors.New("modstore: the triggers would form a loop")
 
-// loopRefusal is the node's reason for a loop; the loop itself is the detail.
-const loopRefusal = "the triggers would form a loop"
+// The node's reasons for a build that breaks the module graph; the detail
+// names the loop, the chain or the links.
+const (
+	loopRefusal      = "the triggers would form a loop"
+	linkLoopRefusal  = "the links would form a loop"
+	deepRefusal      = "the build would make a chain of modules that is too deep"
+	brokenLinkReason = "the build breaks a link"
+)
 
-// loopOf returns the loop the module's listens would close among the active
-// local modules (for example ["a","b","a"]), nil when none. Names are short
-// names. Edges run from a cell's owner (the id's prefix) to each module that
-// listens to it. others holds what the other modules listen to; the module's
-// own active version is not among them.
-func loopOf(module string, listens []string, others map[string][]string) []string {
-	all := make(map[string][]string, len(others)+1)
-	for name, l := range others {
-		if name != module {
-			all[name] = l
-		}
-	}
-	all[module] = listens
-	names := sortedKeys(all)
-	next := func(owner string) []string {
-		var out []string
-		for _, n := range names {
-			if slices.ContainsFunc(all[n], func(id string) bool { return strings.HasPrefix(id, owner+".") }) {
-				out = append(out, n)
-			}
-		}
-		return out
-	}
-	path, seen := []string{module}, map[string]bool{}
-	var walk func(n string) bool
-	walk = func(n string) bool {
-		for _, m := range next(n) {
-			if m == module {
-				path = append(path, m)
-				return true
-			}
-			if seen[m] {
-				continue
-			}
-			seen[m] = true
-			path = append(path, m)
-			if walk(m) {
-				return true
-			}
-			path = path[:len(path)-1]
-		}
-		return false
-	}
-	if walk(module) {
-		return path
-	}
-	return nil
-}
+// LinksFunc reads the links of the node's file as they are now
+// (settings.LinksFile.Links, converted).
+type LinksFunc func() ([]links.Link, error)
 
-// otherListens is what every active local module but module listens to, by
-// short name. A version whose files cannot be read or parsed listens to
-// nothing: it does not run either.
-func (s *Store) otherListens(ctx context.Context, module string) (map[string][]string, error) {
+// NoLinks is the LinksFunc of a store whose node has none.
+func NoLinks() ([]links.Link, error) { return nil, nil }
+
+// UseLinks sets where the store reads the links its plan and install check
+// a build against. It is called once, when the store is wired.
+func (s *Store) UseLinks(f LinksFunc) { s.links = f }
+
+// LinkModules are the active local modules with their ports and the cells
+// they listen to, by short name. A version whose files cannot be read or
+// parsed is left out: it does not run either.
+func (s *Store) LinkModules(ctx context.Context) (map[string]links.Module, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT module, version, source, sha256, manifest_sha256, state, reason, installed_ms FROM module_versions
-		WHERE source = ? AND state = 'active' AND module <> ?`, SourceLocal, module)
+		WHERE source = ? AND state = 'active'`, SourceLocal)
 	if err != nil {
 		return nil, fmt.Errorf("modstore: %w", err)
 	}
@@ -80,7 +48,7 @@ func (s *Store) otherListens(ctx context.Context, module string) (map[string][]s
 	if err != nil {
 		return nil, fmt.Errorf("modstore: %w", err)
 	}
-	out := map[string][]string{}
+	out := map[string]links.Module{}
 	for _, v := range vs {
 		_, manifest, err := s.readLocal(v)
 		if err != nil {
@@ -90,24 +58,72 @@ func (s *Store) otherListens(ctx context.Context, module string) (map[string][]s
 		if err != nil {
 			continue
 		}
-		out[ShortName(v.Module)] = m.Listens()
+		out[ShortName(v.Module)] = links.FromManifest(m)
 	}
 	return out, nil
 }
 
-// checkLoop is the refusal and its detail when the build's cell triggers
-// would close a loop with the active local modules; "" when none.
-func (s *Store) checkLoop(ctx context.Context, module string, m runner.Manifest) (string, string, error) {
-	listens := m.Listens()
-	if len(listens) == 0 {
-		return "", "", nil
+// checkLinks is the refusal and its detail when the build breaks the module
+// graph: a link that touches the module no longer joins what it joined (a
+// port gone, of another kind or another shape), or a loop or a chain deeper
+// than links.MaxDepth runs through it. Only what the build makes new counts:
+// a link already broken before it stays the owner's to mend. "" when none.
+func (s *Store) checkLinks(ctx context.Context, module string, m runner.Manifest) (string, string, error) {
+	ls, err := s.links()
+	if err != nil {
+		return "", "", fmt.Errorf("modstore: %w", err)
 	}
-	others, err := s.otherListens(ctx, module)
+	now, err := s.LinkModules(ctx)
 	if err != nil {
 		return "", "", err
 	}
-	if loop := loopOf(ShortName(module), listens, others); loop != nil {
-		return loopRefusal, strings.Join(loop, " → "), nil
+	short := ShortName(module)
+	had := map[string]bool{}
+	for _, p := range links.Check(now, ls) {
+		had[p.Words()] = true
 	}
-	return "", "", nil
+	next := make(map[string]links.Module, len(now)+1)
+	for name, lm := range now {
+		next[name] = lm
+	}
+	next[short] = links.FromManifest(m)
+	var broken []links.Problem
+	for _, p := range links.Check(next, ls) {
+		if p.Involves(short) && !had[p.Words()] {
+			broken = append(broken, p)
+		}
+	}
+	if len(broken) == 0 {
+		return "", "", nil
+	}
+	return refusalOf(broken[0]), detailOf(broken), nil
+}
+
+// refusalOf is the node's reason for a problem of the graph.
+func refusalOf(p links.Problem) string {
+	switch p.Reason {
+	case links.ReasonLoop:
+		if p.Link == (links.Link{}) {
+			return loopRefusal
+		}
+		return linkLoopRefusal
+	case links.ReasonDeep:
+		return deepRefusal
+	case links.ReasonEnd, links.ReasonKind, links.ReasonShape:
+	}
+	return brokenLinkReason
+}
+
+// detailOf names the loop or the chain, or the links the build breaks.
+func detailOf(ps []links.Problem) string {
+	switch ps[0].Reason {
+	case links.ReasonLoop, links.ReasonDeep:
+		return strings.Join(ps[0].Path, " → ")
+	case links.ReasonEnd, links.ReasonKind, links.ReasonShape:
+	}
+	words := make([]string, 0, len(ps))
+	for _, p := range ps {
+		words = append(words, p.Words())
+	}
+	return strings.Join(words, "; ")
 }

@@ -127,6 +127,7 @@ type Store struct {
 	active   map[string]string   // module → source of the active version, for the gauge
 	fellBack map[string]fallback // modules whose stored version failed its check at start, for /status
 	log      *slog.Logger
+	links    LinksFunc // the node file's links, which a build is checked against
 
 	updates  metric.Int64Counter
 	selftest metric.Float64Histogram
@@ -144,7 +145,7 @@ func Open(ctx context.Context, db *sql.DB, dir string, now func() time.Time, dep
 		return nil, err
 	}
 	s := &Store{db: db, dir: dir, now: now, deps: deps, builtins: map[string]Builtin{}, tools: map[string]*runner.SwapTool{},
-		active: map[string]string{}, fellBack: map[string]fallback{}, log: deps.Logger}
+		active: map[string]string{}, fellBack: map[string]fallback{}, log: deps.Logger, links: NoLinks}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
 	}
