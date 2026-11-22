@@ -183,3 +183,39 @@ func runCallTests(t *testing.T, fresh func() *env) {
 		})
 	}
 }
+
+// runServeTests is the serving side as the runner sees it: the answer of a
+// call trigger is checked against the served port's out shape.
+func runServeTests(t *testing.T, fresh func() *env) {
+	serve := func(e *env, op string) {
+		e.manifest.Ports.Serves = map[string]runner.PortCall{
+			"ask": {In: runner.Shape{Type: "integer"}, Out: runner.Shape{Type: "string"}},
+		}
+		e.manifest.ConfigValues = map[string]string{"op_call_ask": op}
+	}
+	handle := func(t *testing.T, inst Instance) pdk.Output {
+		t.Helper()
+		out, err := inst.Handle(context.Background(), pdk.Input{Trigger: "call:ask", Payload: json.RawMessage(`{"from":"a.c","request":1}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+
+	t.Run("the answer of a call trigger that fits the out shape is the result", func(t *testing.T) {
+		e := fresh()
+		serve(e, `{"op":"answer","json":"yes"}`)
+		if out := handle(t, e.instance(t)); !out.OK || string(out.Result) != `"yes"` {
+			t.Fatalf("output = %+v, want the answer", out)
+		}
+	})
+
+	t.Run("an answer outside the out shape fails the run as module.format, in the node's words", func(t *testing.T) {
+		e := fresh()
+		serve(e, `{"op":"answer","json":12}`)
+		out := handle(t, e.instance(t))
+		if out.OK || out.Kind != pdk.KindFormat || out.Error != "expected string, got number" {
+			t.Fatalf("output = %+v, want module.format", out)
+		}
+	})
+}

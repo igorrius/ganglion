@@ -271,6 +271,7 @@ func Run(t *testing.T, load Loader, probe []byte) {
 	runNotifyTests(t, fresh)
 	runEmitTests(t, fresh)
 	runCallTests(t, fresh)
+	runServeTests(t, fresh)
 	runLifecycleTests(t, fresh)
 }
 
