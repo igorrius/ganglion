@@ -195,15 +195,20 @@ func (b *Bus) createConsumer(ctx context.Context, spec bus.ConsumerSpec) (jetstr
 	if spec.Deliver == bus.DeliverNew {
 		policy = jetstream.DeliverNewPolicy
 	}
-	cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+	cfg := jetstream.ConsumerConfig{
 		Durable:       spec.Name,
 		Description:   spec.Description,
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		AckWait:       spec.AckWait,
 		MaxDeliver:    -1,
 		DeliverPolicy: policy,
-		FilterSubject: spec.Filter,
-	})
+	}
+	if len(spec.Filters) > 0 {
+		cfg.FilterSubjects = spec.Filters
+	} else {
+		cfg.FilterSubject = spec.Filter
+	}
+	cons, err := stream.CreateOrUpdateConsumer(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("natsbus: consumer %s: %w", spec.Name, err)
 	}
