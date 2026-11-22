@@ -20,7 +20,6 @@ agent/secret_closed.go
 agent/sessions_prune.go
 agent/config.go
 agent/limits.go
-links/**
 agent/model.go
 agent/modules.go
 agent/persona.go
@@ -113,7 +112,6 @@ sqlitedb/**
 tool/args.go
 tool/tool.go
 tool/builtin/destinations.go
-tool/builtin/links.go
 tool/builtin/diag.go
 tool/builtin/message.go
 tool/builtin/secret_request.go

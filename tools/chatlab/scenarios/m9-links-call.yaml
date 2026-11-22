@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m9-links-call
+why: >-
+  M9 check (R-BUS-6): a calling port linked to a serving one by an approved link gets its answer, with no
+  model turn after the link and no rebuild.
+covers:
+  - links/**
+  - tool/builtin/links.go
+  - modhost/calls.go
+repeat: 1
+model: scripted
+modules:
+  - {name: asker, manifest: modules/m9-asker.yaml}
+  - {name: counter, manifest: modules/m9-counter.yaml}
+script:
+  - {tool: link.add, args: '{"from":"asker.total","to":"counter.total"}'}
+  - {say: "It waits for your press."}
+  - {say: "The link is written."}
+steps:
+  - say: "Let the asker call the counter"
+  - press: Approve
+  - advance: {scheduler: 31m}
+  - facts:
+      replies: 1
+      reply: {contains: 'answer {"sum":3}'}
+      model_saw: {not_contains: 'answer {"sum":3}'}
+      history: {contains: "[module] asker notified you at"}
+      journal:
+        - {tool: link.add, decision: approved, count: 1}
+        - {tool: module.build, count: 0}

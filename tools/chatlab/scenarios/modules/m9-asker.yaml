@@ -1,0 +1,10 @@
+name: asker
+version: 1
+triggers:
+  - cron: "*/30 * * * *"
+capabilities:
+  notify: {per_day: 5}
+ports:
+  calls: {total: {in: {n: integer}, out: {sum: integer}}}
+config:
+  op_cron: {type: string, default: '{"op":"call_notify","name":"total","json":{"n":2}}'}

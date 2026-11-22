@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m9-links-events
+why: >-
+  M9 check (R-BUS-5, R-BUS-6): one module's event reaches two modules by two links the owner approved, with
+  no model turn for the delivery (the model was sent nothing of it) and no rebuild; after a link is removed only the other receiver is reached.
+covers:
+  - links/**
+  - tool/builtin/links.go
+  - modhost/events.go
+  - modhost/linkconsumers.go
+  - modhost/cellevents.go
+repeat: 1
+model: scripted
+modules:
+  - {name: sender, manifest: modules/m9-sender.yaml}
+  - {name: left, manifest: modules/m9-left.yaml}
+  - {name: right, manifest: modules/m9-right.yaml}
+script:
+  - {tool: link.add, args: '{"from":"sender.reading","to":"left.reading"}'}
+  - {say: "It waits for your press."}
+  - {say: "The first link is written."}
+  - {tool: link.add, args: '{"from":"sender.reading","to":"right.reading"}'}
+  - {say: "It waits for your press."}
+  - {say: "The second link is written."}
+  - {tool: link.remove, args: '{"from":"sender.reading","to":"right.reading"}'}
+  - {say: "It waits for your press."}
+  - {say: "The second link is removed."}
+steps:
+  - say: "Link the sender's reading to left"
+  - facts:
+      questions: 1
+      question: {contains: "sender.reading"}
+  - press: Approve
+  - say: "Link the sender's reading to right as well"
+  - press: Approve
+  - facts:
+      journal:
+        - {tool: link.add, decision: approved, result_contains: "no module was rebuilt", count: 2}
+  - advance: {scheduler: 31m}
+  - facts:
+      replies: 2
+      reply: {contains: "left got the reading"}
+      model_saw: {not_contains: "got the reading"}
+  - facts:
+      reply: {contains: "right got the reading"}
+  - say: "Remove the link to right"
+  - press: Approve
+  - facts:
+      journal:
+        - {tool: link.remove, decision: approved, result_contains: "is removed", count: 1}
+  - advance: {scheduler: 30m}
+  - facts:
+      replies: 1
+      reply: {contains: "left got the reading", not_contains: "right got the reading"}
+      journal:
+        - {tool: module.build, count: 0}

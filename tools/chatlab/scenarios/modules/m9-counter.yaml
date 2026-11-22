@@ -1,0 +1,6 @@
+name: counter
+version: 1
+ports:
+  serves: {total: {in: {n: integer}, out: {sum: integer}}}
+config:
+  op_call_total: {type: string, default: '{"op":"answer","json":{"sum":3}}'}
