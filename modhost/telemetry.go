@@ -18,6 +18,8 @@ type instruments struct {
 	notifies    metric.Int64Counter
 	deliveries  metric.Int64Counter
 	journals    metric.Int64Counter
+	events      metric.Int64Counter
+	evDelivered metric.Int64Counter
 }
 
 func newInstruments() instruments {
@@ -37,6 +39,10 @@ func newInstruments() instruments {
 		metric.WithDescription("Messages of the NOTIFY stream handled by the core's consumer, by module and outcome (delivered, gone: the module is no longer loaded, failed: a copy was not put and the message comes again, bad: not a notice)."))
 	in.journals, _ = m.Int64Counter("ganglion.modhost.journal.failures",
 		metric.WithDescription("Runs of the owner's modules the node could not record in the run journal, by module; the run itself went on."))
+	in.events, _ = m.Int64Counter("ganglion.modhost.events",
+		metric.WithDescription("Calls of emit, by module and outcome (sent, denied: no such emits port, format: the payload broke the port's shape, not_here: init, health or a check, failed: over a limit or the node could not publish it)."))
+	in.evDelivered, _ = m.Int64Counter("ganglion.modhost.event.deliveries",
+		metric.WithDescription("Events a link's consumer handled, by link consumer and outcome (ok: the receiver ran and succeeded, failed: the run failed or the receiver was not running and the event comes again, bad: the payload does not fit the receiver's port, deep: the chain is too deep)."))
 	return in
 }
 
@@ -78,4 +84,14 @@ func (in instruments) delivered(ctx context.Context, module string, o deliveryOu
 // row it could not read.
 func (in instruments) journalFailed(ctx context.Context, module string) {
 	in.journals.Add(ctx, 1, metric.WithAttributes(attribute.String("module", module)))
+}
+
+// emitted counts one emit call of module.
+func (in instruments) emitted(ctx context.Context, module string, o eventOutcome) {
+	in.events.Add(ctx, 1, metric.WithAttributes(attribute.String("module", module), attribute.String("outcome", string(o))))
+}
+
+// eventDelivered counts one event a link consumer handled.
+func (in instruments) eventDelivered(ctx context.Context, consumer string, o eventDeliveryOutcome) {
+	in.evDelivered.Add(ctx, 1, metric.WithAttributes(attribute.String("consumer", consumer), attribute.String("outcome", string(o))))
 }

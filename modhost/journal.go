@@ -41,7 +41,7 @@ func (h *Host) record(ctx context.Context, r ran, o outcome) {
 	if len(row.Wrote) == 0 {
 		row.Wrote = nil
 	}
-	if r.run.Trigger == triggerCell {
+	if r.run.Trigger == triggerCell || r.run.Trigger == triggerEvent {
 		row.Chain = h.chainOf(ctx, r.l.name, r.run)
 	}
 	if err := h.d.Store.RecordRun(ctx, row); err != nil {

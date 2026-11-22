@@ -17,8 +17,8 @@ import (
 
 // This file is what the host does with the links of the node's file
 // (R-BUS-5): it names the links a removal takes, and at start and in
-// /status it reports the ones that do not work. Nothing travels over a link
-// here; a broken one gets no consumer (R-BUS-6).
+// /status it reports the ones that do not work. A broken link gets no
+// consumer (R-BUS-6, linkconsumers.go).
 
 // linkReasonKeys are the /status reasons of a broken link.
 var linkReasonKeys = map[links.Reason]texts.Key{
@@ -45,18 +45,19 @@ func (h *Host) Links(_ context.Context, name string) ([]string, error) {
 	return out, nil
 }
 
-// linkProblems are the links that do not work among the active local
-// modules: installed ones, running or not. A module turned off or stopped
-// keeps its links: what it is sent waits for it (R-BUS-6). A module with no
-// active version, or one with a port gone or another, is a missing end.
-func (h *Host) linkProblems(ctx context.Context) ([]links.Problem, error) {
+// linkState is the links of the file, the active local modules' ports by
+// short name (installed ones, running or not) and the problems among them.
+// A module turned off or stopped keeps its links: what it is sent waits for
+// it (R-BUS-6). A module with no active version, or one with a port gone or
+// another, is a missing end.
+func (h *Host) linkState(ctx context.Context) ([]settings.Link, map[string]links.Module, []links.Problem, error) {
 	ls, err := h.d.Settings.Links()
 	if err != nil || len(ls) == 0 {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	actives, err := h.d.Store.ActiveLocal(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("modhost: %w", err)
+		return nil, nil, nil, fmt.Errorf("modhost: %w", err)
 	}
 	mods := make(map[string]links.Module, len(actives))
 	for _, a := range actives {
@@ -72,7 +73,14 @@ func (h *Host) linkProblems(ctx context.Context) ([]links.Problem, error) {
 			out = append(out, p)
 		}
 	}
-	return out, nil
+	return ls, mods, out, nil
+}
+
+// linkProblems are the links that do not work among the active local
+// modules.
+func (h *Host) linkProblems(ctx context.Context) ([]links.Problem, error) {
+	_, _, ps, err := h.linkState(ctx)
+	return ps, err
 }
 
 // linksOf is the links of the file as the links package takes them.

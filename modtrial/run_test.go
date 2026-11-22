@@ -432,3 +432,23 @@ func TestBudgetSkipIsWordedAsTheBudget(t *testing.T) {
 		t.Fatalf("line %q", got)
 	}
 }
+
+func emitManifest() runner.Manifest {
+	m := testManifest()
+	m.Ports.Emits = map[string]runner.Shape{"reading": {Type: "integer"}}
+	return m
+}
+
+// A trial's emit checks the port and the shape as a node's does, and sends
+// nothing.
+func TestEmitIsCheckedAndSendsNothing(t *testing.T) {
+	ok := withOp(mkEx("ok", cron(Expect{})), "op_cron", `{"op":"emit","name":"reading","json":5}`)
+	if rep := run(t, emitManifest(), opts(), ok); !rep.Passed {
+		t.Fatalf("report = %+v", rep)
+	}
+	bad := withOp(mkEx("bad", cron(Expect{})), "op_cron", `{"op":"emit","name":"reading","json":"high"}`)
+	rep := run(t, emitManifest(), opts(), bad)
+	if st := rep.Examples[0].Steps[0]; rep.Passed || st.Kind != "module.format" {
+		t.Fatalf("step = %+v, want module.format for a payload outside the shape", st)
+	}
+}

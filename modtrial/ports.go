@@ -107,3 +107,16 @@ func (t cannedTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		Request:       r,
 	}, nil
 }
+
+// trialEmit is the emit port of a trial: the runner has checked the port
+// and the shape like a node's, and nothing is sent. The trial does not show
+// events yet.
+type trialEmit struct{}
+
+// Emit implements runner.EmitPort.
+func (trialEmit) Emit(context.Context, string, json.RawMessage) runner.EmitCode {
+	return runner.EmitSent
+}
+
+// Refused implements runner.EmitPort.
+func (trialEmit) Refused(context.Context, runner.EmitCode) {}

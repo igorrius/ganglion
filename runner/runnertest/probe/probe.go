@@ -37,6 +37,10 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 		h.StatePut("last_cell", string(payload))
 		payload = nil
 	}
+	if strings.HasPrefix(in.Trigger, "event:") { // an event of a link: noted in the state, the operation scripted
+		h.StatePut("last_event", string(payload))
+		payload = nil
+	}
 	if len(payload) == 0 || string(payload) == "{}" {
 		payload = scripted(h, in.Trigger)
 	}
@@ -134,7 +138,7 @@ func scripted(h pdk.Host, trigger string) json.RawMessage {
 // lifecycle answers init and health as the config key "lifecycle" says:
 // "unknown" is a module that has no such trigger, "fail" one that fails, "forge" one that claims the node's module.format kind,
 // "health_auth" one whose health alone fails with auth_failed, "notify" one that fails unless
-// notify answers "not here", "leak" one whose health fails with
+// notify answers "not here", "emit" the same for an emit on the port x, "leak" one whose health fails with
 // its granted secret PROBE_TOKEN in the error.
 // Otherwise it notes the trigger in its state, so a test can see it.
 func lifecycle(h pdk.Host, trigger string) (any, error) {
@@ -154,6 +158,10 @@ func lifecycle(h pdk.Host, trigger string) (any, error) {
 	case "notify": // init and health may not notify: anything but "not here" fails them
 		if got := notifyErr(h.Notify("from " + trigger)); got != "not_here" {
 			return nil, errors.New("notify in " + trigger + " answered " + got)
+		}
+	case "emit": // init and health may not emit: anything but "not here" fails them
+		if got := emitErr(h.Emit("x", 1)); got != "not_here" {
+			return nil, errors.New("emit in " + trigger + " answered " + got)
 		}
 	case "health_auth": // init passes, health reports refused credentials
 		if trigger == "health" {

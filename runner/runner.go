@@ -357,10 +357,7 @@ func (m *Module) instantiateHost(ctx context.Context) error {
 		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
 		return m.notify(ctx, readString(mod, p, n))
 	}).Export("notify").
-		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, pp, pn, vp, vn uint32) int32 {
-		v, _ := mod.Memory().Read(vp, vn)
-		return m.emit(ctx, readString(mod, pp, pn), bytes.Clone(v))
-	}).Export("emit").
+		NewFunctionBuilder().WithFunc(m.emitCall).Export("emit").
 		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
 		m.called(ctx, CallConfigGet)
 		v, ok := m.manifest.ConfigValues[readString(mod, p, n)]

@@ -107,8 +107,12 @@ func (p notifyPort) notify(ctx context.Context, text string) notifyOutcome {
 	}
 	*r.sent++
 	key := "notify:" + p.l.name + ":" + r.ID + ":" + strconv.Itoa(*r.sent)
-	return p.h.publish(ctx, p.l, key, event.ModuleNotify{Module: p.l.name, Version: p.l.version, Text: text, PerDay: perDay(p.l),
+	o := p.h.publish(ctx, p.l, key, event.ModuleNotify{Module: p.l.name, Version: p.l.version, Text: text, PerDay: perDay(p.l),
 		At: now.UnixMilli(), Run: r.ID})
+	if o == notifySent { // a notice that was sent is also an event on the notify output (R-BUS-6)
+		p.h.publishNotice(ctx, p.l, r, text, *r.sent)
+	}
+	return o
 }
 
 // publish stores one message of l in the NOTIFY stream under key, once for

@@ -1,9 +1,12 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/tetratelabs/wazero/api"
 )
 
 // EmitCode is the answer of the emit host function (R-BUS-6).
@@ -39,6 +42,13 @@ type noEmit struct{}
 
 func (noEmit) Emit(context.Context, string, json.RawMessage) EmitCode { return EmitNotHere }
 func (noEmit) Refused(context.Context, EmitCode)                      {}
+
+// emitCall is the emit host function as the module's memory sees it: the
+// port's name and the payload.
+func (m *Module) emitCall(ctx context.Context, mod api.Module, pp, pn, vp, vn uint32) int32 {
+	v, _ := mod.Memory().Read(vp, vn)
+	return m.emit(ctx, readString(mod, pp, pn), bytes.Clone(v))
+}
 
 // emit is the emit host function: the port must be a declared emits port
 // (the implicit notify output is not sent by hand), the payload must fit

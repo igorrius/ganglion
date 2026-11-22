@@ -477,6 +477,7 @@ type env struct {
 	forgot    []string                  // the modules whose secrets were dropped
 	forgetErr error                     // what dropping them returns
 	pub       modhost.Publisher         // the host's publisher; the loopback when nil
+	consumers modhost.Consumers         // the bus's consumers for the links; none when nil
 	now       time.Time
 	logs      *bytes.Buffer
 	logsMu    sync.Mutex
@@ -488,8 +489,10 @@ type env struct {
 // stream itself run on a real embedded bus (notify_bus_test.go).
 type loopback struct{ e *env }
 
-func (l loopback) Publish(ctx context.Context, _, id string, _ map[string]string, payload []byte) error {
-	_ = l.e.host.Deliver(ctx, id, payload)
+func (l loopback) Publish(ctx context.Context, subject, id string, _ map[string]string, payload []byte) error {
+	if strings.HasPrefix(subject, "g.notify.") { // events have no consumer here
+		_ = l.e.host.Deliver(ctx, id, payload)
+	}
 	return nil
 }
 
@@ -529,6 +532,7 @@ func (e *env) newHost() *modhost.Host {
 		Jobs:        e.jobs,
 		Inbox:       e.inbox,
 		Publisher:   e.publisher(),
+		Consumers:   e.consumers,
 		Secrets:     e.secretsFor,
 		Forget:      e.forget,
 		NodeSecrets: []string{"TELEGRAM_BOT_TOKEN"},
@@ -570,7 +574,9 @@ func (w syncWriter) Write(p []byte) (int, error) {
 
 func (e *env) start(t *testing.T) {
 	t.Helper()
-	e.host.Start(context.Background())
+	h := e.host
+	h.Start(context.Background())
+	t.Cleanup(func() { _ = h.Shutdown(context.Background()) })
 }
 
 // tool returns the host's tool called name, or nil.

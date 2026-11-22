@@ -356,7 +356,9 @@ func (h *Host) Remove(ctx context.Context, name string) error {
 	}
 	h.clearEpisodes(ctx, module)
 	_, derr := h.d.Cells.Disown(ctx, module)
-	return errors.Join(h.d.Settings.RemoveModule(module), derr, h.d.Forget(ctx, module))
+	err = errors.Join(h.d.Settings.RemoveModule(module), derr, h.d.Forget(ctx, module))
+	h.SyncLinks(ctx) // its links went with its line: their consumers go
+	return err
 }
 
 // clearOrphans deletes the jobs of local modules that have no active

@@ -141,11 +141,16 @@ func (h *Host) putTrigger(ctx context.Context, producer string, sub listener, r 
 // is a backstop.
 func (h *Host) chainStopped(ctx context.Context, l *loaded) {
 	h.in.triggered(ctx, l.name, triggerStopped)
+	h.chainLine(ctx, l, "a chain of modules deeper than 4 stopped; its run's cells start no module")
+}
+
+// chainLine says in the log, with msg, and to l's owner, that a chain
+// through l stopped, once per active build.
+func (h *Host) chainLine(ctx context.Context, l *loaded, msg string) {
 	if !h.firstStop(l.sha) {
 		return
 	}
-	h.d.Log.Warn("modhost: a chain of modules deeper than 4 stopped; its run's cells start no module",
-		"module", l.name, "version", l.version, "sha", l.sha)
+	h.d.Log.Warn("modhost: "+msg, "module", l.name, "version", l.version, "sha", l.sha)
 	line := event.ModuleNotify{Node: event.NotifyChainLine, PerDay: perDay(l)}
 	if err := h.putNotify(ctx, l, "notify:"+l.name+":chain:"+l.sha, line, h.d.Now()); err != nil {
 		h.d.Log.Error("modhost: the line of a stopped chain was not put", "module", l.name, "err", err)

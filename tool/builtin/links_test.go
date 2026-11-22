@@ -14,7 +14,10 @@ import (
 )
 
 // linkFake is the links of the node's file.
-type linkFake struct{ ls []settings.Link }
+type linkFake struct {
+	ls      []settings.Link
+	changed int // how many times the host was told the links changed
+}
 
 func (f *linkFake) Links() ([]settings.Link, error) { return slices.Clone(f.ls), nil }
 func (f *linkFake) AddLink(l settings.Link) error   { f.ls = append(f.ls, l); return nil }
@@ -39,7 +42,8 @@ func linkMods() map[string]links.Module {
 }
 
 func newLinking(f *linkFake, mods map[string]links.Module) map[string]tool.Handler {
-	l := builtin.Linking{File: f, Modules: func(context.Context) (map[string]links.Module, error) { return mods, nil }}
+	l := builtin.Linking{File: f, Modules: func(context.Context) (map[string]links.Module, error) { return mods, nil },
+		Changed: func(context.Context) { f.changed++ }}
 	out := map[string]tool.Handler{}
 	for _, h := range l.Tools() {
 		out[h.Spec().Name] = h
@@ -87,6 +91,9 @@ func TestLinkAddShowsBothEndsAndTheShapeThenWrites(t *testing.T) {
 	}
 	if len(f.ls) != 1 || f.ls[0] != (settings.Link{From: "reader.reading", To: "alerts.reading_in"}) {
 		t.Fatalf("links %+v", f.ls)
+	}
+	if f.changed != 1 {
+		t.Fatalf("the host was told %d times that the links changed, want once after the write", f.changed)
 	}
 	// the same link again is no new link
 	if _, err := ask(t, add, c); err == nil || !strings.Contains(err.Error(), "already") {
@@ -147,8 +154,8 @@ func TestLinkRemoveAndList(t *testing.T) {
 	if q, err := ask(t, rm, c); err != nil || !strings.Contains(q, "gone.reading") {
 		t.Fatalf("question %q, %v", q, err)
 	}
-	if _, err := rm.Run(context.Background(), c); err != nil || len(f.ls) != 1 {
-		t.Fatalf("links %+v, %v", f.ls, err)
+	if _, err := rm.Run(context.Background(), c); err != nil || len(f.ls) != 1 || f.changed != 1 {
+		t.Fatalf("links %+v, told %d times, %v; want one link left and the host told once", f.ls, f.changed, err)
 	}
 	if _, err := ask(t, rm, c); err == nil {
 		t.Fatal("removing a link that is not there")

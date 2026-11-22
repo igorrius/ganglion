@@ -249,3 +249,21 @@ func portOf(e string) string {
 	_, p, _ := strings.Cut(e, ".")
 	return p
 }
+
+// Ends are the modules and ports of a link that carries events, by short
+// name.
+type Ends struct {
+	FromModule, FromPort, ToModule, ToPort string
+}
+
+// EventEnds are the ends of l when it joins an output to an input; false
+// for a link of calls, or one with an end that is not there. It does not
+// check the shapes: Check does.
+func EventEnds(mods map[string]Module, l Link) (Ends, bool) {
+	from, okFrom := end(mods, l.From)
+	to, okTo := end(mods, l.To)
+	if !okFrom || !okTo || from.kind != kindEmits || to.kind != kindAccepts {
+		return Ends{}, false
+	}
+	return Ends{FromModule: from.module, FromPort: from.name, ToModule: to.module, ToPort: to.name}, true
+}
