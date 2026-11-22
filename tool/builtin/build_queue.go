@@ -84,6 +84,10 @@ type jobRecord struct {
 	Told      bool       `json:"told,omitempty"`
 	Started   int64      `json:"started_ms"`
 	Ended     int64      `json:"ended_ms,omitempty"`
+	// CardOf is the key of the module's previous build in a row whose card
+	// this one takes over, Build its number in the row (ADR-0112).
+	CardOf string `json:"card_of,omitempty"`
+	Build  int    `json:"build,omitempty"`
 }
 
 // open reports whether the build has not ended.
@@ -98,7 +102,7 @@ func (r jobRecord) outcome() BuildOutcome {
 // card is r's job for the registry, in state s.
 func (r jobRecord) card(s jobs.State) jobs.Job {
 	return jobs.Job{Key: r.Key, Kind: jobs.KindBuild, Conv: r.Conv, Transport: r.Transport, Principal: r.Principal, Title: r.Module,
-		State: s}
+		State: s, CardOf: r.CardOf, Build: r.Build}
 }
 
 // buildEnd is how a build ended: its answer and the card's last state.
@@ -162,11 +166,15 @@ type BuildQueue struct {
 	// module since a person's last message there; in memory, so a restart
 	// starts it afresh.
 	streak map[streakKey]int
+	// last is the key of the latest build queued in a streak: the next build
+	// of the streak takes over its card (ADR-0112).
+	last map[streakKey]string
 }
 
 // NewBuildQueue returns a build queue over d.
 func NewBuildQueue(d BuildQueueDeps) *BuildQueue {
-	return &BuildQueue{d: d, wake: make(chan struct{}, 1), busy: map[string]string{}, streak: map[streakKey]int{}}
+	return &BuildQueue{d: d, wake: make(chan struct{}, 1), busy: map[string]string{}, streak: map[streakKey]int{},
+		last: map[streakKey]string{}}
 }
 
 // Name implements node.Component.
@@ -213,13 +221,19 @@ func (q *BuildQueue) retell(ctx context.Context) {
 }
 
 // OwnerSpoke starts the count of builds in a row afresh for every module of
-// conv: a person wrote there (MaxBuildsInARow).
+// conv: a person wrote there (MaxBuildsInARow), so the next build gets a card
+// of its own below the message.
 func (q *BuildQueue) OwnerSpoke(conv string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for k := range q.streak {
 		if k.conv == conv {
 			delete(q.streak, k)
+		}
+	}
+	for k := range q.last {
+		if k.conv == conv {
+			delete(q.last, k)
 		}
 	}
 }
@@ -243,7 +257,9 @@ func (q *BuildQueue) Building(name string) bool {
 }
 
 // submit queues rec's build and starts its card: running when no other build
-// runs or waits, else queued. A module whose build runs or waits is refused,
+// runs or waits, else queued. A build that follows another of its module in a
+// row in rec's conversation takes over that one's card, which shows the
+// build's number (ADR-0112). A module whose build runs or waits is refused,
 // and so is one built MaxBuildsInARow times in a row in rec's conversation;
 // a key that has a record already (the same call asked again) queues
 // nothing. The module is reserved under the lock and the record written
@@ -254,7 +270,7 @@ func (q *BuildQueue) submit(ctx context.Context, rec jobRecord, work buildWork) 
 	} else if !errors.Is(err, ErrNoBuildJob) {
 		return err
 	}
-	state, err := q.reserve(rec)
+	rec, state, err := q.reserve(rec)
 	if err != nil || state == "" {
 		return err
 	}
@@ -265,6 +281,7 @@ func (q *BuildQueue) submit(ctx context.Context, rec jobRecord, work buildWork) 
 	}
 	q.mu.Lock()
 	q.waiting = append(q.waiting, &buildTask{rec: rec, work: work})
+	q.last[streakKey{rec.Conv, rec.Module}] = rec.Key
 	q.mu.Unlock()
 	if err := q.d.Jobs.Start(ctx, rec.card(state)); err != nil {
 		// The card is a sign of life, not the build: its end still comes.
@@ -277,20 +294,21 @@ func (q *BuildQueue) submit(ctx context.Context, rec jobRecord, work buildWork) 
 	return nil
 }
 
-// reserve takes rec's module for its build and counts it in the streak;
+// reserve takes rec's module for its build and counts it in the streak; rec
+// comes back with its number in the streak and the card it takes over, and
 // state is the card's first state, "" when the key is reserved already.
-func (q *BuildQueue) reserve(rec jobRecord) (jobs.State, error) {
+func (q *BuildQueue) reserve(rec jobRecord) (jobRecord, jobs.State, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if key, ok := q.busy[rec.Module]; ok {
 		if key == rec.Key {
-			return "", nil
+			return rec, "", nil
 		}
-		return "", errBeingBuilt(rec.Module)
+		return rec, "", errBeingBuilt(rec.Module)
 	}
 	sk := streakKey{rec.Conv, rec.Module}
 	if q.streak[sk] >= MaxBuildsInARow {
-		return "", errTooManyBuilds(rec.Module)
+		return rec, "", errTooManyBuilds(rec.Module)
 	}
 	state := jobs.StateQueued
 	if len(q.waiting) == 0 && len(q.busy) == 0 {
@@ -298,7 +316,8 @@ func (q *BuildQueue) reserve(rec jobRecord) (jobs.State, error) {
 	}
 	q.busy[rec.Module] = rec.Key
 	q.streak[sk]++
-	return state, nil
+	rec.CardOf, rec.Build = q.last[sk], q.streak[sk]
+	return rec, state, nil
 }
 
 // release gives back the reservation of rec's build that was not queued.
@@ -346,18 +365,19 @@ func (q *BuildQueue) run(ctx context.Context, task *buildTask) {
 	q.finish(context.WithoutCancel(ctx), rec, end)
 }
 
-// finish stores how the build ended, frees its module, ends its card and
-// tells the agent. A record that cannot be stored tells nothing: the agent
-// could not read the answer.
+// finish stores how the build ended, ends its card, frees its module and
+// tells the agent. The card ends before the module is free, so the module's
+// next build, which takes the card over, edits it after this end. A record
+// that cannot be stored tells nothing: the agent could not read the answer.
 func (q *BuildQueue) finish(ctx context.Context, rec jobRecord, end buildEnd) {
 	rec.State, rec.Answer, rec.External, rec.Ended = end.State, end.Answer, end.External, q.d.Now().UnixMilli()
 	saveErr := q.save(rec)
-	q.mu.Lock()
-	delete(q.busy, rec.Module)
-	q.mu.Unlock()
 	if err := q.d.Jobs.End(ctx, rec.Key, end.State); err != nil {
 		q.logErr(ctx, "builds: a build's card was not ended", err, "key", rec.Key)
 	}
+	q.mu.Lock()
+	delete(q.busy, rec.Module)
+	q.mu.Unlock()
 	if saveErr != nil {
 		q.logErr(ctx, "builds: a build's end was not recorded, so the agent is not told", saveErr, "key", rec.Key)
 		return

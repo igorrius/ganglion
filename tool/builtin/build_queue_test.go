@@ -396,6 +396,55 @@ func TestEachCallIsABuildOfItsOwn(t *testing.T) {
 	}
 }
 
+// ADR-0112: a build that follows another of its module in a row in a
+// conversation takes over that build's card and shows its number. Another
+// module, another conversation and a build after the owner wrote get a card
+// of their own.
+func TestARebuildTakesOverTheModulesCard(t *testing.T) {
+	e := newModuleEnv(t)
+	e.source(t, "demo-reader")
+	e.source(t, "other")
+	e.b.art = artifact(demoManifest, 1024, 1)
+	build := func(conv, name string) jobs.Job {
+		t.Helper()
+		e.calls++
+		c := call(builtin.ModuleBuildTool, `{"name":"`+name+`"}`)
+		c.N, c.Conv = e.calls, conv
+		res, err := e.tool(builtin.ModuleBuildTool).Run(context.Background(), c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.runBuild(t, res.Job)
+		st := e.jobs.starts(res.Job)
+		if len(st) == 0 {
+			t.Fatalf("no card for %s", res.Job)
+		}
+		for _, j := range st {
+			if j.CardOf != st[0].CardOf || j.Build != st[0].Build {
+				t.Fatalf("the card changed between starts: %+v", st)
+			}
+		}
+		return st[0]
+	}
+	first := build("telegram:42", "demo-reader")
+	second := build("telegram:42", "demo-reader")
+	third := build("telegram:42", "demo-reader")
+	if first.CardOf != "" || first.Build != 1 || second.CardOf != first.Key || second.Build != 2 ||
+		third.CardOf != second.Key || third.Build != 3 {
+		t.Fatalf("cards %+v, %+v, %+v", first, second, third)
+	}
+	if j := build("telegram:42", "other"); j.CardOf != "" || j.Build != 1 {
+		t.Fatalf("another module %+v", j)
+	}
+	if j := build("telegram:7", "demo-reader"); j.CardOf != "" || j.Build != 1 {
+		t.Fatalf("another conversation %+v", j)
+	}
+	e.m.Queue.OwnerSpoke("telegram:42")
+	if j := build("telegram:42", "demo-reader"); j.CardOf != "" || j.Build != 1 {
+		t.Fatalf("after the owner wrote %+v", j)
+	}
+}
+
 // Owner's ruling (2026-11-10): at most MaxBuildsInARow builds of a module in
 // a row in a conversation without a person's message there; the next is
 // refused in the node's words, and a message from the owner starts the count

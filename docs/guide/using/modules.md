@@ -15,7 +15,7 @@ Every 15 minutes read the price from https://example.com/api/price
 and tell me when it falls below 100.
 ```
 
-The agent chooses a template, copies it under a new name, edits the files that matter and builds it in the background (a live card shows progress). It asks you nothing on the way: copying a template, writing the source and building never ask, and it fixes and rebuilds on its own until the module's examples pass. While it builds it does not write to you either: the build's card shows the progress. Then it offers to install what it built, once. If you write to it while it builds, it answers.
+The agent chooses a template, copies it under a new name, edits the files that matter and builds it in the background (a live card shows progress; when it rebuilds a module, the same card shows the new build and its number). It asks you nothing on the way: copying a template, writing the source and building never ask, and it fixes and rebuilds on its own until the module's examples pass. While it builds it does not write to you either: the card shows the progress. Then it offers to install what it built, once. If you write to it while it builds, it answers.
 
 There are two templates:
 

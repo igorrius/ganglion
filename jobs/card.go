@@ -39,7 +39,7 @@ func Elapsed(d time.Duration) string {
 // job's title as written and its count, never anything the job printed
 // (ADR-0069).
 func render(sp texts.Speaker, j Job, now time.Time) string {
-	v := texts.Vars{"title": texts.Escape(text.Truncate(j.Title, maxTitleRunes)), "kind": sp.Text(kindWords[j.Kind], nil)}
+	v := texts.Vars{"title": texts.Escape(text.Truncate(j.Title, maxTitleRunes)), "kind": kindWord(sp, j)}
 	switch j.State {
 	case StateQueued:
 		return sp.Text(texts.JobCardQueued, v)
@@ -55,6 +55,15 @@ func render(sp texts.Speaker, j Job, now time.Time) string {
 		return sp.Text(endTexts[j.State], v)
 	}
 	return ""
+}
+
+// kindWord is j's kind as its card names it: "build 3" for the third build
+// of a module in a row on one card (ADR-0112), else the kind alone.
+func kindWord(sp texts.Speaker, j Job) string {
+	if j.Kind == KindBuild && j.Build > 1 {
+		return sp.Text(texts.JobKindBuildNth, texts.Vars{"n": strconv.Itoa(j.Build)})
+	}
+	return sp.Text(kindWords[j.Kind], nil)
 }
 
 // Note is what the model reads of a conversation's open jobs at the start of

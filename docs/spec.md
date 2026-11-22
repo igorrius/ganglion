@@ -474,6 +474,11 @@ Live turns ([design](design/p1-live-turns-design.md);
   a message the node sends when the job starts and edits in place every 10 s without a
   model (`🔨 battery-alerts · build · 0:45 · crates built: 14`), ending as done, failed or
   interrupted by a restart; it carries only the node's words, the job's title and counts.
+  A module's builds in a row in a conversation (with no message from a person between them)
+  share one card: a rebuild edits the card of the module's earlier build there, back to
+  running or queued and then to its end, and the card names the build's number
+  (`🔨 battery-alerts · build 3 · 0:45`;
+  [ADR-0112](adr/0112-a-build-is-quiet-until-the-install-window.md)).
   The job's end resumes the conversation at once. Every turn of the conversation carries
   a node note listing its running jobs, not stored in history, and `/status` lists them
   (R-OBS-11). The chat stays usable meanwhile; only work on the same module waits (M4c,
