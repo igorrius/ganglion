@@ -84,6 +84,8 @@ You do not write links by hand. Ask the agent to connect two modules. It shows a
 
 The same checks guard the modules. A new version of a module that drops a linked port, or changes its kind or its shape, is refused, and the install window names the links it would break. Removing a module also removes its links, and the reply names them. If a link stops working anyway, for example because you edited the file by hand, the node logs it once at start and `/status` lists it under Problems with the reason; such a link carries nothing.
 
+Events flow over a link once it is written. A module publishes an event on one of its outputs, and the node delivers it to every module linked to that output: each receiver runs once with the event. If the run fails, the node delivers the event again, after a pause that grows from one second to five minutes, until a run succeeds. A module you turn off does not lose its events: they wait for up to 7 days and are delivered when you turn it on again. A new link carries only the events sent after it was made, and removing a link drops the events it had not delivered. Delivery is at least once, so a module that emitted before it failed may emit the same event again on the retry. An event that does not fit the receiving port, or comes from a chain of more than 4 modules, is dropped and logged.
+
 ## The crash-loop rule
 
 If a module fails 5 times within an hour, the node turns it off, raises an alert, and `/status` explains. Fix the cause (or ask the agent to), then turn it on again with `/modules on <name>`.
