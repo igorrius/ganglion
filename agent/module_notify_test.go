@@ -141,7 +141,7 @@ func TestModuleNotifyFromElsewhereIsIgnored(t *testing.T) {
 // no apology, only the admins' alert.
 func TestGiveUpOnANodeEventApologisesToNobody(t *testing.T) {
 	e := newEnv(t, Config{}, nil)
-	trig, _ := json.Marshal(event.ModuleTrigger{Module: "local/l", Producer: "local/p", Run: "r", Cells: []string{"p.soc"}, Depth: 1})
+	trig := json.RawMessage(`{"module":"local/l","producer":"local/p","run":"r","cells":["p.soc"],"depth":1}`)
 	for name, ev := range map[string]event.Event{
 		"notify":  notifyEvent(demoAlert()),
 		"module":  moduleEvent(authFailed()),
