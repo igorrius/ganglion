@@ -69,6 +69,9 @@ type Rights struct {
 	Memory                                                            uint64
 	Timeout                                                           time.Duration
 	NotifyPerDay                                                      int // messages to the owner a day; 0 = not granted
+	// Ports the manifest declares, by kind: sorted port names. The implicit
+	// notify output is not repeated here; the notify line covers it.
+	Emits, Accepts, Serves, Calls []string
 }
 
 // Plan is a build checked but not installed.
@@ -139,8 +142,6 @@ func checkBuild(b Build) (runner.Manifest, string, string) {
 		return m, "the manifest names another module", ""
 	case m.ABI != runner.ABIVersion:
 		return m, fmt.Sprintf("the module speaks ABI %d; this core speaks %d", m.ABI, runner.ABIVersion), ""
-	case len(m.Capabilities.EventEmit) > 0:
-		return m, "the manifest asks for event.emit; a local module may not emit events", ""
 	}
 	for _, t := range m.Triggers {
 		if t.Tool != "" && t.Output == nil {
@@ -323,6 +324,7 @@ func baseRights(m runner.Manifest) Rights {
 	if n := m.Capabilities.Notify; n != nil {
 		r.NotifyPerDay = n.PerDay
 	}
+	r.Emits, r.Accepts, r.Serves, r.Calls = m.Ports.Names()
 	for _, t := range m.Triggers {
 		if t.Cron != "" {
 			r.Crons = append(r.Crons, t.Cron)
@@ -378,6 +380,8 @@ func widening(next Rights, old activeRightsSet) Rights {
 		Reacts: minus(next.Reacts, old.Reacts),
 		Memory: wider(next.Memory, old.Memory), Timeout: wider(next.Timeout, old.Timeout),
 		NotifyPerDay: wider(next.NotifyPerDay, old.NotifyPerDay),
+		Emits:        minus(next.Emits, old.Emits), Accepts: minus(next.Accepts, old.Accepts),
+		Serves: minus(next.Serves, old.Serves), Calls: minus(next.Calls, old.Calls),
 	}
 }
 

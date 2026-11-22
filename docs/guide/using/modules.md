@@ -26,7 +26,7 @@ A task often needs both: a reader feeds the cells, a reflex watches them.
 
 ## Approve
 
-Before anything runs you get an install window with **Approve** and **Deny**. It lists the network hosts, secrets, cells, triggers, schedule and message limit. A new version that asks for more rights than the last says so on its own line. If the module ships examples, the window also shows what its trial run sent and wrote, so you see its messages and values before you approve. Read it.
+Before anything runs you get an install window with **Approve** and **Deny**. It lists the network hosts, secrets, cells, triggers, schedule, message limit and the ports (the events and calls the module sends, takes, answers and makes). A new version that asks for more rights than the last says so on its own line. If the module ships examples, the window also shows what its trial run sent and wrote, so you see its messages and values before you approve. Read it.
 
 ### The trial run
 

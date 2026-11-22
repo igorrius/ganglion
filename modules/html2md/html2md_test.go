@@ -229,7 +229,7 @@ func TestManifestGrantsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := m.Capabilities
-	if m.Name != "html2md" || len(c.HTTPFetch)+len(c.SecretGet)+len(c.EventEmit) != 0 || c.State {
+	if m.Name != "html2md" || len(c.HTTPFetch)+len(c.SecretGet) != 0 || c.State {
 		t.Fatalf("manifest = %+v", m)
 	}
 }

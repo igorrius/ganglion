@@ -251,9 +251,9 @@ func capped(sp texts.Speaker, lines []string, limit int) []string {
 	return lines
 }
 
-// reflexLines are the lines of what a module reacts to and how much it may
-// write to the owner; none for a module that does neither, so the window of
-// an ordinary module stays as it was.
+// reflexLines are the lines of what a module reacts to, how much it may
+// write to the owner and the ports it declares; none for a module that does
+// none of these, so the window of an ordinary module stays as it was.
 func reflexLines(sp texts.Speaker, r modstore.Rights) []string {
 	var lines []string
 	if len(r.Reacts) > 0 {
@@ -262,7 +262,32 @@ func reflexLines(sp texts.Speaker, r modstore.Rights) []string {
 	if r.NotifyPerDay > 0 {
 		lines = append(lines, sp.Text(texts.AskModuleNotify, texts.Vars{"n": strconv.Itoa(r.NotifyPerDay)}))
 	}
+	for _, p := range portKeys(r, false) {
+		lines = append(lines, sp.Text(p.key, texts.Vars{varItems: listed(p.names)}))
+	}
 	return lines
+}
+
+// portLine is the ports of one kind with the text that lists them.
+type portLine struct {
+	key   texts.Key
+	names []string
+}
+
+// portKeys are the non-empty kinds of r's ports, in the order of the
+// manifest; added picks the texts of the "New" part.
+func portKeys(r modstore.Rights, added bool) []portLine {
+	keys := [4]texts.Key{texts.AskModuleEmits, texts.AskModuleAccepts, texts.AskModuleServes, texts.AskModuleCalls}
+	if added {
+		keys = [4]texts.Key{texts.AskModuleNewEmits, texts.AskModuleNewAccepts, texts.AskModuleNewServes, texts.AskModuleNewCalls}
+	}
+	var out []portLine
+	for i, names := range [4][]string{r.Emits, r.Accepts, r.Serves, r.Calls} {
+		if len(names) > 0 {
+			out = append(out, portLine{keys[i], names})
+		}
+	}
+	return out
 }
 
 // wideningLine is "New: …" with each right the active version did not have;
@@ -280,6 +305,9 @@ func wideningLine(sp texts.Speaker, w window) string {
 	add(texts.AskModuleNewCells, append(append([]string(nil), n.CellsCreated...), n.CellsTaken...))
 	add(texts.AskModuleNewReads, n.CellsRead)
 	add(texts.AskModuleNewReacts, n.Reacts)
+	for _, p := range portKeys(n, true) {
+		add(p.key, p.names)
+	}
 	if n.NotifyPerDay > 0 {
 		parts = append(parts, sp.Text(texts.AskModuleNewNotify, texts.Vars{"n": strconv.Itoa(n.NotifyPerDay)}))
 	}
