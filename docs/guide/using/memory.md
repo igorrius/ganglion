@@ -42,6 +42,8 @@ There are two kinds.
 - A **reminder** sends fixed text at its time. No model runs.
 - A **task** runs an instruction as a full unattended assistant turn, at its time.
 
+A task uses the model on every run, so the agent keeps tasks for work that needs reading or judgment, like picking the best links. Watching something and telling you when it happens or changes ("tell me about every new Go release") needs no judgment: the agent builds a [module](modules.md) for it instead, which runs without a model.
+
 A schedule is either a cron expression with five fields, or a single date and time in the node's time zone. Check `node.tz` first: the default is `Europe/Kyiv`, and it decides what "9 in the morning" means.
 
 A reminder is set at once and shown back to you as a message with a **Delete** button, so a mistake is one press away. If the session is [tainted](tools-and-safety.md#tainted-sessions), the agent asks first, as it does for a task. You confirm a task when it is created. The confirmation lists what it may do: its tools, the web hosts it may fetch, the exact host commands, and who gets the reply. You approve that once. After that, runs need no button presses, and anything outside the approved list is denied with one notice. Tasks count against your [daily limits](../running/models.md#limits).
