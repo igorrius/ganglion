@@ -29,6 +29,38 @@ func withBuild(args string, r providertest.Request) string {
 	return fill(args, BuildToken, buildRE, r)
 }
 
+// BuildOfToken stands in a scripted tool call's arguments, as "$BUILD:<module>",
+// for the digest of the newest build of that module the node answered, for a
+// request that installs several builds at once.
+const BuildOfToken = "$BUILD:"
+
+var buildOfRE = regexp.MustCompile(`\$BUILD:([a-z][a-z0-9_-]*)`)
+
+// withBuildOf is args with each "$BUILD:<module>" replaced by the digest in
+// the newest tool result or note of r that names that module's build; a token
+// with no such digest is left in place, so the call fails and so does the
+// scenario.
+func withBuildOf(args string, r providertest.Request) string {
+	return buildOfRE.ReplaceAllStringFunc(args, func(tok string) string {
+		name := strings.TrimPrefix(tok, BuildOfToken)
+		re := regexp.MustCompile(`\\?"build\\?":\s*\\?"([0-9a-f]{64})\\?",\s*\\?"module\\?":\s*\\?"local/` + regexp.QuoteMeta(name) + `\\?"`)
+		for _, msg := range slices.Backward(r.Messages) {
+			raw, err := json.Marshal(msg["content"])
+			if err != nil {
+				continue
+			}
+			var text string
+			if json.Unmarshal(raw, &text) != nil {
+				text = string(raw)
+			}
+			if m := re.FindStringSubmatch(text); m != nil {
+				return m[1]
+			}
+		}
+		return tok
+	})
+}
+
 // JobToken stands in a scripted tool call's arguments for the job the newest
 // reply to a reminder names, which no script can know in advance. A note that
 // names none leaves it in place, so the call fails and so does the scenario.

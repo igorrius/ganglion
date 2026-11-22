@@ -17,16 +17,12 @@ modules:
   - {name: producer, manifest: modules/producer.yaml}
 script:
   - {tool: module.import, args: '{"from":"reflex-template","name":"reflex-template"}'}
-  - {say: "The copy waits for your press."}
   - {tool: module.write, args: '{"name":"reflex-template","path":"examples.yaml","content":"examples:\n  - name: a low value is said twice\n    steps:\n      - cells: {producer.value: 12}\n        trigger: cell\n        expect: {messages: 2}\n"}'}
   - {tool: module.build, args: '{"name":"reflex-template","note":"build with a wrong example"}'}
   - {say: "The build runs in the background; its card shows how it goes."}
   - {say: "The trial failed: the example expects two messages and the module sends one; I will fix the example."}
 steps:
   - say: "Make me a reflex from the template"
-  - facts:
-      questions: 1
-  - press: Approve
   - facts:
       questions: 0
       journal:

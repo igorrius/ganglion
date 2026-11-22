@@ -398,7 +398,12 @@ Guarantee: **at-least-once + idempotency.**
   which amends the 8 of ADR-0036). Plan calls and the on-demand calls of
   R-MCP-4a do not spend it.
 - **R-AGT-4.** A depth limit on "the agent called itself" chains, a daily
-  limit on turns and tokens; exceeding it alerts the administrator.
+  limit on turns and tokens; exceeding it alerts the administrator. A turn
+  resumed by the owner's press runs at the depth of the call that asked: a
+  press is the owner's answer, not the agent calling itself, so a chain of
+  presses never deepens
+  ([ADR-0111](adr/0111-building-a-module-asks-once-at-the-install.md)); a turn
+  a host command's end resumes still goes one level deeper (nobody pressed).
 - **R-AGT-5.** Every turn is written to the `turns` table: input, route, tool
   calls, cost, reply (a trace for observability and memory consolidation).
 - **R-AGT-6.** A conversation is split into sessions. A new session starts
@@ -742,6 +747,20 @@ escalate:                    # when to call the model
     ([ADR-0075](adr/0075-reading-a-modules-state-keeps-the-session-clean.md)); the install
     window lists the network, secrets, cells created and read, triggers and
     limits, and a version that widens its rights says so on its own line;
+    `module.install` takes one to five builds (each of a different module)
+    and up to ten links, and asks once for the whole request: per module a
+    compact block (its rights, what widened, its trial, and a line when its
+    source is not the node's own, "written after the agent read outside
+    content"), then the links as `a.x → b.y` with the shape that crosses each,
+    checked with the builds installed, since a link may join two modules of
+    the same request. A build or link the node refuses is refused before the
+    window, with the node's reasons. One press installs each build in order
+    through the checks above, then writes each link (R-BUS-5), then tells the
+    module host; each is checked again at the press, a failure stops at that
+    item and the answer names what was installed, what failed and what was
+    not tried, and each module's install and each link keeps its own journal
+    and history entries
+    ([ADR-0111](adr/0111-building-a-module-asks-once-at-the-install.md));
   - a build that is not already in the module's journal must carry a
     manifest `version` above every version the node has had of the module;
     otherwise the plan and the install refuse it and name the number to
@@ -858,15 +877,19 @@ escalate:                    # when to call the model
 - **R-RUN-17.** The agent writes a module's source with `module.write`
   (one file in `workspace/modules/<name>/`, relative path without `..`,
   hidden segments, `target/` or symlinks, at most 256 KB a file, 16 MB and
-  200 files a module, a workspace commit per write, no press) and reads it
+  200 files a module, a workspace commit per write) and reads it
   with `module.read` (M4c,
-  [ADR-0067](adr/0067-agent-writes-module-source.md)). In a tainted
-  session `module.write` asks the owner first, with the file and how many
-  of its lines are new or changed, and a file written on that press is not
-  the node's own: the folder answers as outside content until a clean
-  session writes the file again; a tainted call that was not pressed is
-  refused ([ADR-0075](adr/0075-reading-a-modules-state-keeps-the-session-clean.md),
-  R-POL-6). The node records each module
+  [ADR-0067](adr/0067-agent-writes-module-source.md)). Neither `module.write`
+  nor `module.import` ever asks the owner, in a clean or a tainted session: the
+  source does nothing until it is built and the owner presses on the install
+  window, which shows what the module may do
+  ([ADR-0111](adr/0111-building-a-module-asks-once-at-the-install.md), which
+  replaces the press of a tainted write from
+  [ADR-0075](adr/0075-reading-a-modules-state-keeps-the-session-clean.md)).
+  A file written in a tainted session is not the node's own: the folder
+  answers as outside content until a clean session writes the file again, and
+  the install window says so; a tainted call with no person behind it (a
+  scheduled task's run) is refused. The node records each module
   file's digest as its own tools left it (`module.import` of an example,
   `module.write` from a clean session); a build or a read of a folder that
   matches its record does not taint, and the build then keeps only rustc's
@@ -2330,7 +2353,10 @@ The bus ([ADR-0106](adr/0106-embed-nats-with-jetstream-as-the-bus-behind-narrow-
   with both ends and the shape), when both ends exist, kinds and shapes are
   equal, a calling port has no other link (R-BUS-6), no cycle forms across
   links and cell triggers, and no chain is deeper than 4 modules; the press
-  checks it again. Moving a link rebuilds
+  checks it again. The agent may also propose links in the same request as
+  the builds of the modules they join: `module.install` shows them in its one
+  window and the one press writes them after the installs (R-RUN-9,
+  [ADR-0111](adr/0111-building-a-module-asks-once-at-the-install.md)). Moving a link rebuilds
   nothing. The same checks guard the modules: a build whose linked port is
   gone, of another kind or another shape, or that closes a loop or a deeper
   chain through the links, is refused at the plan and at the install, the

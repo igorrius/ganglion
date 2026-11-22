@@ -20,15 +20,14 @@ modules:
   - {name: producer, manifest: modules/listener-loop.yaml}
 script:
   - {tool: module.import, args: '{"from":"reflex-template","name":"reflex-template"}'}
-  - {say: "The copy waits for your press."}
   - {tool: module.build, args: '{"name":"reflex-template","note":"loop check"}'}
   - {say: "The build runs in the background."}
   - {tool: module.install, args: '{"build":"$BUILD","note":"loop check"}'}
   - {say: "The install was refused."}
 steps:
   - say: "Build and install reflex-template"
-  - press: Approve
   - facts:
+      questions: 0
       journal:
         - {tool: module.build, decision: allowed, count: 1}
         - {tool: module.install, err_contains: "would form a loop", count: 1}

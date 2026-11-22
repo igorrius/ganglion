@@ -1,9 +1,10 @@
 # yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
 name: m4-build-and-install
 why: >-
-  M4 check 3 (R-RUN-9, ADR-0061, ADR-0064): "build and install reader-template" imports the reader template into the
-  workspace, builds it in the sandbox, shows the install window with the build's rights, and after the press
-  installs exactly that build and runs it; no build folder (target/) is left in the workspace.
+  M4 check 3 (R-RUN-9, ADR-0061, ADR-0064, ADR-0111): "build and install reader-template" imports the reader
+  template into the workspace and builds it in the sandbox without a question, shows the install window with the
+  build's rights, and after the press installs exactly that build and runs it; no build folder (target/) is left
+  in the workspace.
 covers:
   - tool/builtin/module.go
   - tool/builtin/module_build.go
@@ -28,7 +29,6 @@ config:
   reader-template: {station: "roof-1"}
 script:
   - {tool: module.import, args: '{"from":"reader-template","name":"reader-template"}'}
-  - {say: "The copy waits for your press."}
   - {tool: module.build, args: '{"name":"reader-template","note":"first build"}'}
   - {say: "The build runs in the background."}
   - {tool: module.install, args: '{"build":"$BUILD","note":"first install"}'}
@@ -38,15 +38,9 @@ steps:
   - say: "Build and install reader-template"
   - facts:
       questions: 1
-      question: {contains: "reader-template"}
-      journal:
-        - {tool: module.build, count: 0}
-  - press: Approve
-  - facts:
-      questions: 1
       question: {contains: "api.example.com"}
       journal:
-        - {tool: module.import, decision: approved, count: 1}
+        - {tool: module.import, decision: allowed, count: 1}
         - {tool: module.build, decision: allowed, count: 1}
         - {tool: module.install, decision: approved, count: 0}
       history: {contains: '"language":"rust"'}

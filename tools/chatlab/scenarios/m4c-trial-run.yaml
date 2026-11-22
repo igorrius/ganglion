@@ -19,7 +19,6 @@ modules:
   - {name: producer, manifest: modules/producer.yaml}
 script:
   - {tool: module.import, args: '{"from":"reflex-template","name":"reflex-template"}'}
-  - {say: "The copy waits for your press."}
   - {tool: module.build, args: '{"name":"reflex-template","note":"build with the template examples"}'}
   - {say: "The build runs in the background; its card shows how it goes."}
   - {tool: module.install, args: '{"build":"$BUILD","note":"install after the trial"}'}
@@ -27,10 +26,6 @@ script:
   - {say: "reflex-template is installed."}
 steps:
   - say: "Make me a reflex from the template"
-  - facts:
-      questions: 1
-      question: {contains: "reflex-template"}
-  - press: Approve
   - facts:
       questions: 1
       question: {contains: "Trial run: 5 of 5 examples passed"}
