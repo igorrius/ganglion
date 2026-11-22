@@ -1,7 +1,7 @@
 //! A host for the unit tests: state, config, cells and a clock the test
 //! moves, and the messages the module sent.
 
-use crate::host::{Host, Notify};
+use crate::host::{Emit, Host, Notify};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
@@ -18,6 +18,10 @@ pub struct Fake {
     pub verdict: Cell<Result<(), Notify>>,
     /// How many times `notify` was called.
     pub attempts: Cell<usize>,
+    /// The events that went out, as (port, payload).
+    pub emitted: RefCell<Vec<(String, serde_json::Value)>>,
+    /// What `emit` answers; `Ok` sends.
+    pub emit_verdict: Cell<Result<(), Emit>>,
     pub now: Cell<i64>,
 }
 
@@ -29,6 +33,8 @@ pub fn fake() -> Fake {
         sent: RefCell::new(vec![]),
         verdict: Cell::new(Ok(())),
         attempts: Cell::new(0),
+        emitted: RefCell::new(vec![]),
+        emit_verdict: Cell::new(Ok(())),
         now: Cell::new(NOW),
     }
 }
@@ -51,6 +57,15 @@ impl Host for Fake {
         let verdict = self.verdict.get();
         if verdict.is_ok() {
             self.sent.borrow_mut().push(text.into());
+        }
+        verdict
+    }
+    fn emit(&self, port: &str, payload: &serde_json::Value) -> Result<(), Emit> {
+        let verdict = self.emit_verdict.get();
+        if verdict.is_ok() {
+            self.emitted
+                .borrow_mut()
+                .push((port.into(), payload.clone()));
         }
         verdict
     }

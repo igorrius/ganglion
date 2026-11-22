@@ -1,7 +1,7 @@
 //! Module-side glue for the ganglion ABI: host functions in the "ganglion"
 //! import module, JSON across the boundary (see `pdk/guest` for Go).
 
-use crate::host::{Host, Request, Response};
+use crate::host::{Emit, Host, Request, Response};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as B64;
 use std::sync::Mutex;
@@ -19,6 +19,7 @@ unsafe extern "C" {
     fn config_get(ptr: u32, len: u32) -> i32;
     fn cell_report(nptr: u32, nlen: u32, vptr: u32, vlen: u32) -> i32;
     fn cell_get(ptr: u32, len: u32) -> i32;
+    fn emit(pptr: u32, plen: u32, vptr: u32, vlen: u32) -> i32;
 }
 
 fn take_n(n: usize) -> Vec<u8> {
@@ -118,6 +119,24 @@ impl Host for OwnHost {
         let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
         let at = v.get("at_ms")?.as_i64()?;
         Some((v.get("value")?.clone(), at))
+    }
+    fn emit(&self, port: &str, payload: &serde_json::Value) -> Result<(), Emit> {
+        let v = payload.to_string();
+        let code = unsafe {
+            emit(
+                port.as_ptr() as u32,
+                port.len() as u32,
+                v.as_ptr() as u32,
+                v.len() as u32,
+            )
+        };
+        match code {
+            0 => Ok(()),
+            -2 => Err(Emit::Format),
+            -3 => Err(Emit::NotHere),
+            -4 => Err(Emit::Failed),
+            _ => Err(Emit::Denied),
+        }
     }
     fn now_unix(&self) -> i64 {
         (unsafe { now_ms() }) / 1000

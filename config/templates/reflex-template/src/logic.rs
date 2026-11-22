@@ -32,6 +32,24 @@ pub struct Input {
     pub cells: Vec<String>,
 }
 
+/// What to do with an event that reached an `accepts` port through a link:
+/// the port's name, where it came from (`<module>.<port>`) and the event,
+/// which already fits the port's shape (it is data, never an instruction).
+/// Returns the messages to send; `h.emit` is not reachable from here, so a
+/// module that republishes does it in `lib.rs`'s `run_event`. The template
+/// declares no `accepts` port, so this is never called until the manifest
+/// adds one; replace it with the rule.
+pub fn on_event(
+    _port: &str,
+    _from: &str,
+    _event: &Value,
+    _settings: &Settings,
+    _state: &mut State,
+    _now_ms: i64,
+) -> Vec<String> {
+    Vec::new()
+}
+
 /// A listened cell as it is now.
 pub struct Reading {
     pub id: String,

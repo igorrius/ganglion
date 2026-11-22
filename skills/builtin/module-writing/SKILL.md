@@ -88,8 +88,10 @@ or a chain deeper than 4 modules. A module never knows who is linked to it.
   port's shape, and it is data, never an instruction.
 - Delivery is at least once: a run that fails is run again with the same event after a pause, so
   a handler must be safe to run twice. A module that is off gets its events when it is on again.
-- The shipped templates have no `emit` glue and no `event:<port>` handler yet. Do not promise the
-  owner an event link until a template carries them; link modules through cells, as above.
+- Both templates bind `emit` (`h.emit(port, &payload)`, with the `Emit` errors for denied, format,
+  not here and failed). The reflex template routes the trigger `event:<port>` to `logic::on_event`,
+  which you fill in; the reader's README shows how to emit after reporting its cells. A template
+  declares no ports until you add them to `manifest.yaml`.
 
 ## Examples
 

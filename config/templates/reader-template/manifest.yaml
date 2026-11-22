@@ -24,6 +24,12 @@ cells:
     # The whole reading. The status tool answers from it when the service cannot be read.
     sample: {kind: sensor, about: "The whole reading",
              type: {ts: integer, value: number, online: boolean}}
+# To publish events other modules can be linked to, declare the outputs and
+# call `h.emit(port, &payload)` after the cells are reported (see the README,
+# "Events"). The payload must fit the port's shape. This template declares none:
+# ports:
+#   emits:
+#     reading: {value: number, online: boolean}
 config:
   station: {type: string, required: true}
 limits: {memory: 32MiB, timeout: 20s}
