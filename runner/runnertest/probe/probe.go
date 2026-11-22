@@ -80,6 +80,15 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 		return map[string]any{"ok": ok, "value": v, "at_ms": at.UnixMilli()}, nil
 	case "notify":
 		return map[string]string{"err": notifyErr(h.Notify(o.Value))}, nil
+	case "emit": // the port o.Name, the payload o.JSON
+		return map[string]string{"err": emitErr(h.Emit(o.Name, o.JSON))}, nil
+	case "emit_many": // o.MiB events of the port o.Name, each the payload o.JSON; the first refusal ends it
+		for i := 0; i < o.MiB; i++ {
+			if err := h.Emit(o.Name, o.JSON); err != nil {
+				return map[string]any{"err": emitErr(err), "sent": i}, nil
+			}
+		}
+		return map[string]any{"err": "", "sent": o.MiB}, nil
 	case "headers":
 		resp, err := h.Fetch(pdk.Request{Method: "GET", URL: o.URL})
 		if err != nil {
@@ -166,6 +175,23 @@ func notifyErr(err error) string {
 		return "not_here"
 	case errors.Is(err, pdk.ErrNotifyDenied):
 		return "denied"
+	}
+	return "other"
+}
+
+// emitErr names the pdk error an emit call failed with, "" for success.
+func emitErr(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, pdk.ErrEmitDenied):
+		return "denied"
+	case errors.Is(err, pdk.ErrEmitFormat):
+		return "format"
+	case errors.Is(err, pdk.ErrEmitNotHere):
+		return "not_here"
+	case errors.Is(err, pdk.ErrEmitFailed):
+		return "failed"
 	}
 	return "other"
 }

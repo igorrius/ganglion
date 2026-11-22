@@ -53,6 +53,9 @@ func hostCellGet(ptr, size uint32) int32
 //go:wasmimport ganglion notify
 func hostNotify(ptr, size uint32) int32
 
+//go:wasmimport ganglion emit
+func hostEmit(pptr, psize, vptr, vsize uint32) int32
+
 func ptr(b []byte) uint32 {
 	if len(b) == 0 {
 		return 0
@@ -164,6 +167,28 @@ func (wasmHost) Notify(text string) error {
 		return pdk.ErrNotifyNotHere
 	}
 	return pdk.ErrNotifyDenied
+}
+
+func (wasmHost) Emit(port string, value any) error {
+	v, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	p := []byte(port)
+	code := hostEmit(ptr(p), uint32(len(p)), ptr(v), uint32(len(v)))
+	runtime.KeepAlive(p)
+	runtime.KeepAlive(v)
+	switch code {
+	case 0:
+		return nil
+	case -2:
+		return pdk.ErrEmitFormat
+	case -3:
+		return pdk.ErrEmitNotHere
+	case -4:
+		return pdk.ErrEmitFailed
+	}
+	return pdk.ErrEmitDenied
 }
 
 func (wasmHost) Now() time.Time { return time.UnixMilli(hostNowMs()) }
