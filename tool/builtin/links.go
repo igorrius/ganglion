@@ -46,6 +46,12 @@ type Linking struct {
 	Modules LinkModulesFunc
 }
 
+// Placeholders of the link questions.
+const (
+	varFrom = "from"
+	varTo   = "to"
+)
+
 // linkArgs are the arguments of link.add and link.remove.
 type linkArgs struct {
 	From string `json:"from"`
@@ -134,7 +140,7 @@ func (l Linking) addQuestion(ctx context.Context, c tool.Call) (tool.Result, err
 	if err != nil {
 		return tool.Result{}, err
 	}
-	return tool.Result{Text: c.Speak.Text(texts.AskLinkAdd, texts.Vars{"from": texts.Escape(link.From), "to": texts.Escape(link.To),
+	return tool.Result{Text: c.Speak.Text(texts.AskLinkAdd, texts.Vars{varFrom: texts.Escape(link.From), varTo: texts.Escape(link.To),
 		"shape": texts.Escape(links.Describe(mods, links.Link(link)))})}, nil
 }
 
@@ -173,7 +179,7 @@ func (l Linking) removeQuestion(_ context.Context, c tool.Call) (tool.Result, er
 	if err != nil {
 		return tool.Result{}, err
 	}
-	return tool.Result{Text: c.Speak.Text(texts.AskLinkRemove, texts.Vars{"from": texts.Escape(link.From), "to": texts.Escape(link.To)})}, nil
+	return tool.Result{Text: c.Speak.Text(texts.AskLinkRemove, texts.Vars{varFrom: texts.Escape(link.From), varTo: texts.Escape(link.To)})}, nil
 }
 
 func (l Linking) remove(_ context.Context, c tool.Call) (tool.Result, error) {

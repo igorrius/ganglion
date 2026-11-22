@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/igorrius/ganglion/links"
@@ -82,10 +83,7 @@ func (s *Store) checkLinks(ctx context.Context, module string, m runner.Manifest
 	for _, p := range links.Check(now, ls) {
 		had[p.Words()] = true
 	}
-	next := make(map[string]links.Module, len(now)+1)
-	for name, lm := range now {
-		next[name] = lm
-	}
+	next := maps.Clone(now)
 	next[short] = links.FromManifest(m)
 	var broken []links.Problem
 	for _, p := range links.Check(next, ls) {

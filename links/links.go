@@ -7,6 +7,7 @@ package links
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/igorrius/ganglion/runner"
@@ -87,12 +88,7 @@ func (p Problem) Involves(module string) bool {
 	if p.Link.Touches(module) {
 		return true
 	}
-	for _, m := range p.Path {
-		if m == module {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.Path, module)
 }
 
 // Words is the problem in the node's fixed words (English, for the model
@@ -219,7 +215,7 @@ func checkLink(mods map[string]Module, l Link) (Problem, bool) {
 		return bad(ReasonEnd, missing("from", mods, from))
 	case !okTo:
 		return bad(ReasonEnd, missing("to", mods, to))
-	case !(from.kind == kindEmits && to.kind == kindAccepts) && !(from.kind == kindCalls && to.kind == kindServes):
+	case (from.kind != kindEmits || to.kind != kindAccepts) && (from.kind != kindCalls || to.kind != kindServes):
 		return bad(ReasonKind, fmt.Sprintf("%s is %s, %s is %s; a link joins emits to accepts, or calls to serves", l.From, from.kind, l.To, to.kind))
 	}
 	if from.event != nil && !from.event.Equal(*to.event) {
