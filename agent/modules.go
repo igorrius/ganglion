@@ -49,6 +49,9 @@ type LocalModules interface {
 	SetOff(ctx context.Context, name string, off bool) error
 	Rollback(ctx context.Context, name string) (modstore.Outcome, error)
 	Remove(ctx context.Context, name string) error
+	// Links are the links of the node's file that name the module, as
+	// `a.x → b.y`: removing it takes them too.
+	Links(ctx context.Context, name string) ([]string, error)
 	// Run is the journal's row of a module's run id; false when it has none
 	// (R-RUN-20).
 	Run(ctx context.Context, name, id string) (modstore.Run, bool, error)
@@ -80,6 +83,9 @@ func (NoLocalModules) Rollback(context.Context, string) (modstore.Outcome, error
 
 // Remove has no module.
 func (NoLocalModules) Remove(context.Context, string) error { return modstore.ErrUnknownModule }
+
+// Links has no module.
+func (NoLocalModules) Links(context.Context, string) ([]string, error) { return nil, nil }
 
 // Run has no journal.
 func (NoLocalModules) Run(context.Context, string, string) (modstore.Run, bool, error) {
@@ -437,14 +443,23 @@ func (a *Agent) switchModule(ctx context.Context, t *turn, name string, off bool
 
 // removeModule removes a local module; its cells and journal stay.
 func (a *Agent) removeModule(ctx context.Context, t *turn, name string) (moduleReply, error) {
-	err := a.d.Local.Remove(ctx, name)
+	taken, err := a.d.Local.Links(ctx, name) // read first: the removal drops them
+	if err != nil {
+		return moduleReply{}, err
+	}
+	err = a.d.Local.Remove(ctx, name)
 	switch {
 	case errors.Is(err, modstore.ErrUnknownModule):
 		return a.unknown(ctx, t, name), nil
 	case err != nil:
 		return moduleReply{}, err
 	}
-	return plain(a.say(ctx, t, texts.ModulesRemoved, texts.Vars{varName: texts.Escape(modstore.ShortName(name))})), nil
+	vars := texts.Vars{varName: texts.Escape(modstore.ShortName(name))}
+	if len(taken) == 0 {
+		return plain(a.say(ctx, t, texts.ModulesRemoved, vars)), nil
+	}
+	vars["links"] = texts.Escape(strings.Join(taken, ", "))
+	return plain(a.say(ctx, t, texts.ModulesRemovedLinks, vars)), nil
 }
 
 // rollback returns a local module to its previous version, or else a

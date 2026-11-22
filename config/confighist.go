@@ -52,6 +52,13 @@ func destinationsFile(i do.Injector) confighist.DestinationsFile {
 		History: do.MustInvoke[confighist.History](i)}
 }
 
+// linksFile is the links: section of the node's file, every change
+// recorded.
+func linksFile(i do.Injector) confighist.LinksFile {
+	return confighist.LinksFile{File: settings.LinksFile{Path: settingsFile(do.MustInvoke[Bootstrap](i))},
+		History: do.MustInvoke[confighist.History](i)}
+}
+
 // mcpFile is the mcp: section of the node's file, every change recorded.
 func mcpFile(i do.Injector) confighist.MCPFile {
 	return confighist.MCPFile{File: settings.MCPFile{Path: settingsFile(do.MustInvoke[Bootstrap](i))},

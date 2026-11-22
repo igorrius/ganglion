@@ -87,6 +87,7 @@ type fakeLocal struct {
 	config error
 	runs   map[string]modstore.Run // by "<module>|<id>"
 	runErr error
+	links  []string
 }
 
 func (f *fakeLocal) Run(_ context.Context, name, id string) (modstore.Run, bool, error) {
@@ -131,6 +132,8 @@ func (f *fakeLocal) Rollback(_ context.Context, name string) (modstore.Outcome, 
 	}
 	return modstore.Outcome{Module: "local/demo-reader", From: "3", To: "2", Result: modstore.ResultRolledBack}, nil
 }
+
+func (f *fakeLocal) Links(context.Context, string) ([]string, error) { return f.links, nil }
 
 func (f *fakeLocal) Remove(_ context.Context, name string) error {
 	f.calls = append(f.calls, "remove "+name)
@@ -299,5 +302,14 @@ func TestGroupedNumbers(t *testing.T) {
 		if got := grouped(n); got != want {
 			t.Errorf("%d: %s", n, got)
 		}
+	}
+}
+
+func TestModulesRemoveNamesTheLinksItTakes(t *testing.T) {
+	e, l, _ := ownModulesEnv(t)
+	l.links = []string{"demo-reader.reading → battery-alerts.reading"}
+	want := "demo-reader is removed. Its cells stay, read-only. Links removed with it: demo-reader.reading → battery-alerts.reading."
+	if got := oneReply(t, e, "/modules remove demo-reader"); got != want {
+		t.Fatalf("%q, want %q", got, want)
 	}
 }
