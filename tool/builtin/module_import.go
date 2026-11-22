@@ -13,7 +13,6 @@ import (
 
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/modstore"
-	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -25,10 +24,10 @@ const maxImport = 16 << 20
 const examplesRel = "examples/modules"
 
 // ModuleImport is module.import: it copies an example module the node ships
-// into the workspace as modules/<name> and commits it, after the owner's
-// press (ruling 5 of M4b). Only the examples folder is read: the sandbox
-// keeps commands out of the workspace, and an arbitrary host folder is not
-// the agent's to copy.
+// into the workspace as modules/<name> and commits it, with no press
+// (ADR-0111): the files are the node's own and do nothing until built and
+// installed. Only the examples folder is read: the sandbox keeps commands out
+// of the workspace, and an arbitrary host folder is not the agent's to copy.
 type ModuleImport struct{ m Modules }
 
 type importArgs struct {
@@ -41,33 +40,19 @@ func (t *ModuleImport) Spec() tool.Spec {
 	return tool.Spec{Name: ModuleImportTool,
 		Description: "Copy an example module the node ships into the workspace as modules/<name>, so module.build can build it. " +
 			"from names the example: its folder name, or examples/modules/<example> (the node keeps them in " + t.m.Examples + "). " +
-			"The owner approves the copy with a press; the copy is committed to the workspace's history. A name already in the workspace is refused.",
+			"Nothing asks the owner; the copy is committed to the workspace's history. A name already in the workspace is refused.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"from":{"type":"string","description":"the example, such as reader-template or examples/modules/reader-template"},` +
 			`"name":{"type":"string","description":"the module's name: lower-case letters, digits, - and _, starting with a letter"}},` +
 			`"required":["from","name"],"additionalProperties":false}`),
-		Class: tool.ClassSideEffect, Policy: tool.PolicyConfirm, AdminOnly: true}
+		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true}
 }
 
 // Offered implements tool.Gated: only on a node with an examples folder.
 func (t *ModuleImport) Offered() bool { return t.m.Examples != "" }
 
-// Question implements tool.Questioner: the example's folder on this machine
-// and the workspace folder it becomes. A call that would be refused is
-// refused before it is asked.
-func (t *ModuleImport) Question(_ context.Context, c tool.Call) (string, error) {
-	a, src, err := t.check(c)
-	if err != nil {
-		return "", err
-	}
-	return whole(ModuleImportTool, c.Speak.Text(texts.AskModuleImport, texts.Vars{"from": shown(src), varName: item(a.Name)}))
-}
-
-// Run implements tool.Handler: only pressed, it copies and commits.
+// Run implements tool.Handler: it copies and commits.
 func (t *ModuleImport) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
-	if !c.Approved {
-		return tool.Result{}, fmt.Errorf("%s: an import needs the owner's press", ModuleImportTool)
-	}
 	a, src, err := t.check(c)
 	if err != nil {
 		return tool.Result{}, err

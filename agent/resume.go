@@ -448,8 +448,9 @@ func (a *Agent) closeReplaced(ctx context.Context, t *turn, it pending.Item) {
 // page is not the owner's words and must not fill the prompt.
 //
 // The resumed turn passes the daily limit as a message does; over it the
-// note joins the history without a model turn. Its calls run one level
-// deeper than the resumed call (R-AGT-4, ruling R33). A call that left a
+// note joins the history without a model turn. Its calls run at the depth
+// of the resumed call: a press is the owner's answer, not the agent calling
+// itself, so a chain of presses never deepens (R-AGT-4, ADR-0111). A call that left a
 // host command in the background lists it, once, so its end resumes the
 // conversation in turn (R-CMD-4).
 func (a *Agent) continueWith(ctx context.Context, t *turn, it pending.Item, o pending.Outcome) error {
@@ -468,7 +469,7 @@ func (a *Agent) continueWith(ctx context.Context, t *turn, it pending.Item, o pe
 		t.state.Messages, t.state.Last = append(t.state.Messages, note), t.now
 		return nil
 	}
-	t.depth = it.Depth + 1
+	t.depth = it.Depth
 	if done, err := a.converse(ctx, t, note); err != nil || done {
 		return err
 	}

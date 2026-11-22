@@ -827,18 +827,11 @@ func TestModuleImportCopiesAndCommits(t *testing.T) {
 	}
 	h := e.tool(builtin.ModuleImportTool)
 	c := call(builtin.ModuleImportTool, `{"from":"examples/modules/demo-reader","name":"demo-reader"}`)
-	q, err := h.(tool.Questioner).Question(context.Background(), c)
-	if err != nil {
-		t.Fatal(err)
+	if _, ok := h.(tool.Questioner); ok {
+		t.Fatal("module.import asks (ADR-0111)")
 	}
-	want := "Copy `" + realPath(t, example) + "` into the workspace as modules/demo-reader?"
-	if q != want {
-		t.Fatalf("question %q, want %q", q, want)
-	}
-	if _, err := h.Run(context.Background(), c); err == nil {
-		t.Fatal("copied without a press")
-	}
-	res, err := h.Run(context.Background(), pressed(c))
+	c.Tainted = true // no press, even in a session that holds outside content
+	res, err := h.Run(context.Background(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -859,7 +852,7 @@ func TestModuleImportCopiesAndCommits(t *testing.T) {
 	if err != nil || strings.TrimSpace(string(out)) != "module demo-reader: import from "+realPath(t, example) {
 		t.Fatalf("commit %q, %v", out, err)
 	}
-	if _, err := h.(tool.Questioner).Question(context.Background(), c); err == nil || !strings.Contains(err.Error(), "already in the workspace") {
+	if _, err := h.Run(context.Background(), c); err == nil || !strings.Contains(err.Error(), "already in the workspace") {
 		t.Fatalf("an existing target: %v", err)
 	}
 }
@@ -890,10 +883,7 @@ func TestModuleImportRefusesWhatIsNotAnExample(t *testing.T) {
 		t.Run(tc.from+" "+tc.name, func(t *testing.T) {
 			args, _ := json.Marshal(map[string]string{"from": tc.from, "name": tc.name})
 			c := call(builtin.ModuleImportTool, string(args))
-			if _, err := e.tool(builtin.ModuleImportTool).(tool.Questioner).Question(context.Background(), c); err == nil {
-				t.Fatal("asked")
-			}
-			if _, err := e.tool(builtin.ModuleImportTool).Run(context.Background(), pressed(c)); err == nil {
+			if _, err := e.tool(builtin.ModuleImportTool).Run(context.Background(), c); err == nil {
 				t.Fatal("copied")
 			}
 		})
@@ -936,7 +926,7 @@ func TestModuleToolsSpecs(t *testing.T) {
 		class tool.Class
 		pol   tool.Policy
 	}{
-		{builtin.ModuleImportTool, tool.ClassSideEffect, tool.PolicyConfirm},
+		{builtin.ModuleImportTool, tool.ClassRead, tool.PolicyAuto},
 		{builtin.ModuleBuildTool, tool.ClassRead, tool.PolicyAuto},
 		{builtin.ModuleInstallTool, tool.ClassSideEffect, tool.PolicyConfirm},
 	} {

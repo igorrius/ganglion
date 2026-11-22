@@ -8,11 +8,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/igorrius/ganglion/builder"
-	"github.com/igorrius/ganglion/texts"
 	"github.com/igorrius/ganglion/tool"
 )
 
@@ -27,17 +25,17 @@ const (
 )
 
 // errWriteTainted refuses module.write in a session with outside content
-// when the owner did not press for it: outside text must not dictate code
-// whose install window shows only its rights (R-RUN-17). The policy asks
-// first (ADR-0075); this holds for a call that reached Run without a press,
-// such as a scheduled task's under its grant.
-var errWriteTainted = errors.New(ModuleWriteTool + ": this conversation holds content from outside, so writing a module's source needs the owner's press; " +
-	"without it, start a new conversation and ask again")
+// when no person is behind the call, such as a scheduled task's run under its
+// grant. With a person the write goes through without a press (ADR-0111): the
+// file is then not the node's own, and the owner reads that in the install
+// window.
+var errWriteTainted = errors.New(ModuleWriteTool + ": this conversation holds content from outside and no person is behind this call, " +
+	"so a module's source is not written; start a new conversation and ask again")
 
 // ModuleWrite is module.write: it writes one file of a module's source into
-// workspace/modules/<name>/ and commits it, with no press; the source does
-// nothing until it is built and the owner presses on its install window
-// (R-RUN-17, ADR-0067).
+// workspace/modules/<name>/ and commits it, with no press in any session; the
+// source does nothing until it is built and the owner presses on its install
+// window (R-RUN-17, ADR-0067, ADR-0111).
 type ModuleWrite struct{ m Modules }
 
 type moduleWriteArgs struct {
@@ -53,15 +51,15 @@ type writeAnswer struct {
 }
 
 // Spec implements tool.Handler. module.write is a read for the policy: the
-// owner ruled out a press per write (ruling 9 of M4c). In a tainted session
-// the policy asks for one (ruleModuleWrite, ADR-0075), and Run refuses a
-// tainted call that was not pressed.
+// owner ruled out a press per write (ruling 9 of M4c), in a tainted session
+// too (ADR-0111). Run refuses a tainted call with no person behind it.
 func (*ModuleWrite) Spec() tool.Spec {
 	return tool.Spec{Name: ModuleWriteTool,
 		Description: "Write one file of a module's source in the workspace, modules/<name>/<path>, and commit it. A new name makes a new module folder. " +
 			"path is relative, without .., hidden names or target/; at most 256 KB a file, 16 MB and 200 files a module. " +
-			"There is no delete: rewrite a file instead. In a conversation that holds content from outside the owner is asked first, " +
-			"and the file then counts as outside content until it is written again from a new conversation. module.build builds the folder.",
+			"There is no delete: rewrite a file instead. Nothing asks the owner. Written in a conversation that holds content from outside, " +
+			"the file counts as outside content until it is written again from a new conversation, and the install window says so. " +
+			"module.build builds the folder.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"name":{"type":"string","description":"the module's name: lower-case letters, digits, - and _, starting with a letter"},` +
 			`"path":{"type":"string","description":"the file's path in the module's folder, such as src/lib.rs, Cargo.toml or manifest.yaml"},` +
@@ -79,57 +77,9 @@ func moduleWriteArgsOf(c tool.Call) (moduleWriteArgs, error) {
 	return a, moduleName(ModuleWriteTool, a.Name)
 }
 
-// Question implements tool.Questioner, for a write in a session that holds
-// outside content (ADR-0075): the file, its size and how much of it is new
-// or changed, in the node's words. The content is not shown: it is code, and
-// may be long; the count is what tells a one-line fix from a rewrite.
-func (t *ModuleWrite) Question(_ context.Context, c tool.Call) (string, error) {
-	a, err := moduleWriteArgsOf(c)
-	if err != nil {
-		return "", err
-	}
-	lines, changed := changedLines(t.m.currentFile(a.Name, a.Path), a.Content)
-	return whole(ModuleWriteTool, c.Speak.Text(texts.AskModuleWrite, texts.Vars{
-		"name": a.Name, "path": a.Path, "lines": strconv.Itoa(lines), "changed": strconv.Itoa(changed)}))
-}
-
-// currentFile is the file as it is now, "" when there is none or it cannot
-// be read as module.read would read it: the question then counts every line
-// as new.
-func (m Modules) currentFile(name, path string) string {
-	dir, err := m.moduleFolder(name)
-	if err != nil {
-		return ""
-	}
-	text, err := readSource(dir, path)
-	if err != nil {
-		return ""
-	}
-	return text
-}
-
-// changedLines is how many lines next has, and how many of them old does not
-// have: a count for the owner, not a diff.
-func changedLines(old, next string) (lines, changed int) {
-	had := map[string]int{}
-	for l := range strings.Lines(old) {
-		had[strings.TrimRight(l, "\r\n")]++
-	}
-	for l := range strings.Lines(next) {
-		lines++
-		l = strings.TrimRight(l, "\r\n")
-		if had[l] > 0 {
-			had[l]--
-			continue
-		}
-		changed++
-	}
-	return lines, changed
-}
-
 // Run implements tool.Handler.
 func (t *ModuleWrite) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
-	if c.Tainted && !c.Approved {
+	if c.Tainted && c.Grant != nil {
 		return tool.Result{}, errWriteTainted
 	}
 	a, err := moduleWriteArgsOf(c)
@@ -145,7 +95,7 @@ func (t *ModuleWrite) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 		return tool.Result{}, fmt.Errorf("%s: %w", ModuleWriteTool, err)
 	}
 	if c.Tainted {
-		// Written on the owner's press in a session with outside content:
+		// Written in a session with outside content:
 		// the file is not the node's own, so what is read or built from the
 		// folder stays outside content until a clean session writes it again.
 		if err := t.m.forgetFile(a.Name, a.Path, fresh); err != nil {

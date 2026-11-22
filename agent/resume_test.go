@@ -683,36 +683,30 @@ func TestResumedTurnOverTheDailyLimitIsRefused(t *testing.T) {
 	}
 }
 
-// Ruling R33: a call parked in a resumed turn carries its parent's depth
-// plus one, so a chain of approvals that keeps asking again ends at
-// policy.DefaultMaxDepth: the call past it is forbidden, not asked.
-func TestResumeChainDeeperThanMaxDepthIsForbidden(t *testing.T) {
+// ADR-0111: a resume after the owner's press keeps the depth of the call that
+// asked, so a chain of presses never reaches policy.DefaultMaxDepth: a call
+// after more presses than the limit is asked as the first was, not forbidden.
+func TestPressesInARowKeepTheDepth(t *testing.T) {
 	side := newSideTool()
 	e := newConfirmEnv(t, side)
-	q, ev := e.ask(t, "schedule.create")
-	for hop := 1; ; hop++ {
+	q, _ := e.ask(t, "schedule.create")
+	for hop := 1; hop <= policy.DefaultMaxDepth+2; hop++ {
 		e.smart.push(callTool("schedule.create"), say("asked again"))
 		out := e.turn(t, press(owner, q.Buttons[0].ID, "77"))
 		next, asked := findOut(out, func(o event.Outgoing) bool { return len(o.Buttons) > 0 })
-		if hop <= policy.DefaultMaxDepth {
-			if !asked {
-				t.Fatalf("hop %d: no question; out %+v", hop, out)
-			}
-			q = next
-			continue
+		if !asked {
+			t.Fatalf("hop %d: no question; out %+v", hop, out)
 		}
-		if asked {
-			t.Fatalf("hop %d: a call deeper than MaxDepth was asked: %+v", hop, next)
-		}
-		break
+		q = next
 	}
 	entries, err := e.journal.Entries(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	last := entries[len(entries)-1]
-	if last.Decision != journal.DecisionForbidden || last.Tool != "schedule.create" || strings.HasPrefix(last.Key, ev.ID) {
-		t.Fatalf("last journal entry %+v, want the deep call forbidden", last)
+	for _, en := range entries {
+		if en.Decision == journal.DecisionForbidden {
+			t.Fatalf("a call was forbidden after presses: %+v", en)
+		}
 	}
 }
 

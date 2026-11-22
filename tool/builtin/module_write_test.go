@@ -114,45 +114,26 @@ func sameFiles(rec map[string]any, want map[string]string) bool {
 	return true
 }
 
-// A tainted call the owner did not press for writes nothing: outside text
-// must not dictate code the window shows only the rights of (R-RUN-17,
-// ADR-0067). The policy asks first (ADR-0075); this is the call that reached
-// Run without a press, such as a task's under its grant.
-func TestModuleWriteRefusesATaintedCallWithoutAPress(t *testing.T) {
-	e := newModuleEnv(t)
-	before := e.head(t)
-	c := writeCall(t, "blink", "src/lib.rs", "pub fn f() {}\n")
-	c.Tainted = true
-	_, err := e.tool(builtin.ModuleWriteTool).Run(context.Background(), c)
-	want := "this conversation holds content from outside, so writing a module's source needs the owner's press"
-	if err == nil || !strings.Contains(err.Error(), want) {
-		t.Fatalf("error %v", err)
-	}
-	if _, err := os.Lstat(e.moduleDir("blink")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("a tainted call made the folder: %v", err)
-	}
-	if _, ok := e.record(t, "blink"); ok || e.head(t) != before {
-		t.Fatal("a tainted call recorded or committed")
-	}
-}
-
-// ADR-0075: on the owner's press a tainted session writes the file, but not
-// as the node's own: the folder then reads as outside content, until a clean
-// session writes the file again.
-func TestAPressedWriteInATaintedSessionIsNotTheNodesOwn(t *testing.T) {
+// ADR-0111: a tainted call with a person behind it writes with no press, but
+// not as the node's own: the folder then reads as outside content, until a
+// clean session writes the file again.
+func TestAWriteInATaintedSessionIsNotTheNodesOwn(t *testing.T) {
 	e := newModuleEnv(t)
 	e.vettedModule(t, "blink", "blink")
 	if res := e.read(t, "blink", "src/lib.rs"); res.External {
 		t.Fatal("a folder the node wrote reads as outside content")
 	}
+	if _, ok := e.tool(builtin.ModuleWriteTool).(tool.Questioner); ok {
+		t.Fatal("module.write asks (ADR-0111)")
+	}
 	c := writeCall(t, "blink", "src/lib.rs", "two\n")
-	c.Tainted, c.Approved = true, true
+	c.Tainted = true
 	if _, err := e.tool(builtin.ModuleWriteTool).Run(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
 	res := e.read(t, "blink", "src/lib.rs")
 	if res.Text != "two\n" || !res.External {
-		t.Fatalf("after a pressed tainted write: text %q, outside %v", res.Text, res.External)
+		t.Fatalf("after a tainted write: text %q, outside %v", res.Text, res.External)
 	}
 	if _, err := e.write(t, "blink", "src/lib.rs", "three\n"); err != nil {
 		t.Fatal(err)
@@ -162,34 +143,22 @@ func TestAPressedWriteInATaintedSessionIsNotTheNodesOwn(t *testing.T) {
 	}
 }
 
-// The question of a write names the file and counts what changes, without
-// the code.
-func TestModuleWriteQuestionCountsTheChange(t *testing.T) {
+// A tainted call with no person behind it (a scheduled task's, under a grant)
+// writes nothing.
+func TestModuleWriteRefusesATaintedScheduledCall(t *testing.T) {
 	e := newModuleEnv(t)
-	if _, err := e.write(t, "blink", "src/lib.rs", "a\nb\nc\n"); err != nil {
-		t.Fatal(err)
+	before := e.head(t)
+	c := writeCall(t, "blink", "src/lib.rs", "pub fn f() {}\n")
+	c.Tainted, c.Grant = true, &tool.Grant{Tools: []string{builtin.ModuleWriteTool}}
+	_, err := e.tool(builtin.ModuleWriteTool).Run(context.Background(), c)
+	if err == nil || !strings.Contains(err.Error(), "no person is behind this call") {
+		t.Fatalf("error %v", err)
 	}
-	q, ok := e.tool(builtin.ModuleWriteTool).(tool.Questioner)
-	if !ok {
-		t.Fatal("module.write words no question")
+	if _, err := os.Lstat(e.moduleDir("blink")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a refused call made the folder: %v", err)
 	}
-	c := writeCall(t, "blink", "src/lib.rs", "a\nB\nc\nd\n")
-	c.Tainted = true
-	got, err := q.Question(context.Background(), c)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"src/lib.rs", "blink", "4 lines, 2 of them new or changed", "content from outside"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("question %q lacks %q", got, want)
-		}
-	}
-	if strings.Contains(got, "B\n") {
-		t.Fatalf("the question shows the code: %q", got)
-	}
-	fresh := writeCall(t, "newmod", "src/lib.rs", "x\ny\n")
-	if got, err := q.Question(context.Background(), fresh); err != nil || !strings.Contains(got, "2 lines, 2 of them new or changed") {
-		t.Fatalf("a new file's question %q, err %v", got, err)
+	if _, ok := e.record(t, "blink"); ok || e.head(t) != before {
+		t.Fatal("a refused call recorded or committed")
 	}
 }
 
