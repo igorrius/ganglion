@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/igorrius/ganglion/links"
@@ -94,7 +95,7 @@ func (s *Store) checkLinks(ctx context.Context, module string, m runner.Manifest
 	if len(broken) == 0 {
 		return "", "", nil
 	}
-	return refusalOf(broken[0]), detailOf(broken), nil
+	return refusalOf(broken[0]), detailOf(short, broken), nil
 }
 
 // refusalOf is the node's reason for a problem of the graph.
@@ -112,10 +113,13 @@ func refusalOf(p links.Problem) string {
 	return brokenLinkReason
 }
 
-// detailOf names the loop or the chain, or the links the build breaks.
-func detailOf(ps []links.Problem) string {
+// detailOf names the loop or the chain, or the links the build breaks. A
+// loop is told from the module's side: it starts and ends at module.
+func detailOf(module string, ps []links.Problem) string {
 	switch ps[0].Reason {
-	case links.ReasonLoop, links.ReasonDeep:
+	case links.ReasonLoop:
+		return strings.Join(loopFrom(module, ps[0].Path), " → ")
+	case links.ReasonDeep:
 		return strings.Join(ps[0].Path, " → ")
 	case links.ReasonEnd, links.ReasonKind, links.ReasonShape:
 	}
@@ -124,4 +128,19 @@ func detailOf(ps []links.Problem) string {
 		words = append(words, p.Words())
 	}
 	return strings.Join(words, "; ")
+}
+
+// loopFrom turns a loop (["a","b","a"]) to start and end at module when
+// module is on it; another loop is returned as it is.
+func loopFrom(module string, loop []string) []string {
+	if len(loop) < 2 {
+		return loop
+	}
+	ring := loop[:len(loop)-1]
+	i := slices.Index(ring, module)
+	if i <= 0 {
+		return loop
+	}
+	out := append(slices.Clone(ring[i:]), ring[:i]...)
+	return append(out, module)
 }
