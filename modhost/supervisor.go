@@ -175,6 +175,7 @@ func (h *Host) disable(ctx context.Context, l *loaded) error {
 	h.unload(ctx, l.name)
 	h.mu.Unlock()
 	h.stopReceiver(l.short) // its events wait on the bus until it is on again
+	h.stopCells(l.short)    // the changes of cells it misses while it does not run are not kept
 	h.setStopped(l.name, stop{reason: ReasonCrashloop, since: h.d.Now()}, true)
 	h.in.disabled(ctx, l.name, ReasonCrashloop)
 	h.d.Log.Warn("modhost: module disabled after a crash loop", "module", l.name, "version", l.version)

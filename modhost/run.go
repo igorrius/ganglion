@@ -26,6 +26,7 @@ type run struct {
 	producer    string
 	producerRun string
 	cells       []string
+	link        string // the link an event or a call came over, "a.x → b.y"
 }
 
 // newRun is a run that has written and sent nothing yet.
@@ -44,6 +45,12 @@ func (r run) byTool(name string) run {
 // which names no cells.
 func (r run) byEvent(producer, producerRun string) run {
 	r.producer, r.producerRun = producer, producerRun
+	return r
+}
+
+// over is r as the run that came over link.
+func (r run) over(link string) run {
+	r.link = link
 	return r
 }
 

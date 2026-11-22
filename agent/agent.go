@@ -73,16 +73,6 @@ func NoReminderButtons(context.Context, texts.Speaker, schedule.Job) ([]event.Bu
 	return nil, nil
 }
 
-// ModuleTriggerFunc runs the listener of a module.trigger event once, as
-// the run with the event's id (R-RUN-15, ADR-0065): no model, no turn. A
-// run that failed is no error (its host counts it); an error is a run the
-// host could not start, and the event is tried again.
-type ModuleTriggerFunc func(ctx context.Context, e event.ModuleTrigger, id string) error
-
-// NoModuleTrigger is the ModuleTriggerFunc of a node that hosts no modules:
-// the event is acknowledged and dropped.
-func NoModuleTrigger(context.Context, event.ModuleTrigger, string) error { return nil }
-
 // Deps are the agent's collaborators. All are required except Middleware,
 // QuickActions, SystemJobs, Facts, Inbox, Plans, Status, Now and Log; the composition root
 // passes no-op implementations where a part is off (ADR-0028).
@@ -116,10 +106,7 @@ type Deps struct {
 	SystemJobs map[string]SystemJob
 	// ModuleCron runs a module's cron job (modhost); NoModuleCron when unset.
 	ModuleCron ModuleCronFunc
-	// ModuleTrigger runs a module whose listened cells changed (modhost);
-	// NoModuleTrigger when unset.
-	ModuleTrigger ModuleTriggerFunc
-	IsAdmin       AdminFunc
+	IsAdmin    AdminFunc
 	// Names are the access list's names, for the line that tells a task
 	// run who receives its answer (ruling R41).
 	Names   NameFunc
@@ -280,9 +267,6 @@ func withOwnModules(d Deps) Deps {
 	if d.ReminderButtons == nil {
 		d.ReminderButtons = NoReminderButtons
 	}
-	if d.ModuleTrigger == nil {
-		d.ModuleTrigger = NoModuleTrigger
-	}
 	if d.Modules == nil {
 		d.Modules = NoModules{}
 	}
@@ -401,11 +385,13 @@ func withBackground(d Deps) Deps {
 // Handle implements core.Handler: it runs the turn's stages and returns
 // the replies and the new state. It answers text messages, button
 // presses, the expiry of pending calls, scheduled jobs and the end of host
-// commands and module builds that went on in the background; a module trigger runs its
-// module with no turn at all; other events are left alone.
+// commands and module builds that went on in the background; a module.trigger
+// left from before the upgrade is dropped with no turn at all; other events
+// are left alone.
 func (a *Agent) Handle(ctx context.Context, e event.Event) ([]event.Outgoing, queue.StateUpdate, error) {
 	if e.Kind == event.KindModuleTrigger {
-		return nil, queue.StateUpdate{}, a.moduleTrigger(ctx, e) // no begin, no turn, no state
+		a.dropLegacyTrigger(e) // no begin, no turn, no state
+		return nil, queue.StateUpdate{}, nil
 	}
 	t, ok, err := a.begin(ctx, e)
 	if err != nil || !ok {

@@ -14,7 +14,8 @@ type instruments struct {
 	runs        metric.Int64Counter
 	disables    metric.Int64Counter
 	escalations metric.Int64Counter
-	triggers    metric.Int64Counter
+	cellEvents  metric.Int64Counter
+	cellDelivs  metric.Int64Counter
 	notifies    metric.Int64Counter
 	deliveries  metric.Int64Counter
 	journals    metric.Int64Counter
@@ -33,8 +34,10 @@ func newInstruments() instruments {
 		metric.WithDescription("Modules the node turned off, by module and reason."))
 	in.escalations, _ = m.Int64Counter("ganglion.modhost.escalations",
 		metric.WithDescription("Escalations to the agent, by module, kind and outcome (put, held: an episode of the kind is open, failed)."))
-	in.triggers, _ = m.Int64Counter("ganglion.modhost.triggers",
-		metric.WithDescription("Cell triggers of the modules whose runs wrote cells, by producer module and outcome (put, failed, stopped: the chain is deeper than 4)."))
+	in.cellEvents, _ = m.Int64Counter("ganglion.modhost.cell.events",
+		metric.WithDescription("Runs that wrote cells and published them on the module's cells output, by producer module and outcome (sent, failed: the node could not publish it)."))
+	in.cellDelivs, _ = m.Int64Counter("ganglion.modhost.cell.deliveries",
+		metric.WithDescription("Cells events a listener's consumer handled, by consumer and outcome (ok: the module ran, none: no cell it listens to, deep: the chain is deeper than 4, gone: the module is not running, bad: not a cells event)."))
 	in.notifies, _ = m.Int64Counter("ganglion.modhost.notifies",
 		metric.WithDescription("Calls of notify, by module and outcome (sent, limit: past per_day, not_here: init or health, failed: the node could not count or put it), and the copies not sent for a destination that does not resolve (no_destination)."))
 	in.deliveries, _ = m.Int64Counter("ganglion.modhost.notify.deliveries",
@@ -69,10 +72,14 @@ func (in instruments) escalated(ctx context.Context, module string, kind Kind, o
 		attribute.String("outcome", string(o))))
 }
 
-// triggered counts what became of one listener's trigger, or of a chain
-// that stopped, for the producer module.
-func (in instruments) triggered(ctx context.Context, module string, o triggerOutcome) {
-	in.triggers.Add(ctx, 1, metric.WithAttributes(attribute.String("module", module), attribute.String("outcome", string(o))))
+// cellsPublished counts the cells of one run of module published.
+func (in instruments) cellsPublished(ctx context.Context, module string, o cellOutcome) {
+	in.cellEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("module", module), attribute.String("outcome", string(o))))
+}
+
+// cellsDelivered counts one cells event a listener's consumer handled.
+func (in instruments) cellsDelivered(ctx context.Context, consumer string, o cellDeliveryOutcome) {
+	in.cellDelivs.Add(ctx, 1, metric.WithAttributes(attribute.String("consumer", consumer), attribute.String("outcome", string(o))))
 }
 
 // notified counts one notify call of module.

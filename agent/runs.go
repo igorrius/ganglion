@@ -37,6 +37,11 @@ const (
 	trigCron = "cron"
 	trigTool = "tool"
 	trigCell = "cell"
+	// trigEvent and trigCall are runs a link started (R-BUS-6).
+	trigEvent = "event"
+	trigCall  = "call"
+	// linkArrow separates the two ends of a link as the journal writes it.
+	linkArrow = " → "
 	// hopIndent starts a hop's second line.
 	hopIndent = "   "
 )
@@ -95,8 +100,24 @@ func (a *Agent) runCause(sp texts.Speaker, h modstore.Hop, producer string) stri
 		}
 		vars["producer"] = plainShown(moduleName(producer))
 		return sp.Text(texts.RunCauseCellBy, vars)
+	case trigEvent:
+		return sp.Text(texts.RunCauseEvent, texts.Vars{"link": linkShown(h.Link, plainShown)})
+	case trigCall:
+		return sp.Text(texts.RunCauseCall, texts.Vars{"link": linkShown(h.Link, plainShown)})
 	}
 	return unshown
+}
+
+// linkShown is a link of the journal, `a.x → b.y`, with each end through
+// the plain-name check of show: an end that is not a plain name, or a link
+// that is not two ends, shows as "?". The link comes from the bus's data,
+// so it is never shown as it is.
+func linkShown(link string, show func(string) string) string {
+	from, to, ok := strings.Cut(link, linkArrow)
+	if !ok {
+		return unshown
+	}
+	return show(from) + linkArrow + show(to)
 }
 
 // runResult is "ok", or "failed: <kind>" in the node's words.
@@ -187,6 +208,10 @@ func causeWords(h modstore.Hop) string {
 			names[i] = plainName(c)
 		}
 		return "on a change of " + strings.Join(names, ", ")
+	case trigEvent:
+		return "by an event over " + linkShown(h.Link, plainName)
+	case trigCall:
+		return "by a call over " + linkShown(h.Link, plainName)
 	}
 	return unshown
 }

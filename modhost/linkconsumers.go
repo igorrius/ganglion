@@ -23,7 +23,8 @@ import (
 // receiver runs. The host reconciles them with the links and the modules:
 // at start, after every reload and after a link is added or removed. A
 // link whose receiver is off keeps its consumer on the server, unread, so
-// its events wait; a link that is gone from the file loses it.
+// its events wait; a link that is gone from the file loses it. The same
+// reconcile runs the cell listeners' consumers (cellevents.go).
 
 // Consumers is the bus as the link consumers need it; bus/natsbus
 // implements it.
@@ -103,7 +104,8 @@ type runningLink struct {
 type linkSet struct {
 	mu      sync.Mutex
 	running map[string]*runningLink
-	ctx     context.Context // the host's: Shutdown ends it, and with it every consumer
+	cells   map[string]*runningCells // the listeners' consumers, by name
+	ctx     context.Context          // the host's: Shutdown ends it, and with it every consumer
 	end     context.CancelFunc
 	wg      sync.WaitGroup
 	recon   sync.Mutex // serialises the reconciles: one at a time
@@ -111,7 +113,7 @@ type linkSet struct {
 
 func newLinkSet() *linkSet {
 	ctx, end := context.WithCancel(context.Background())
-	return &linkSet{running: map[string]*runningLink{}, ctx: ctx, end: end}
+	return &linkSet{running: map[string]*runningLink{}, cells: map[string]*runningCells{}, ctx: ctx, end: end}
 }
 
 // SyncLinks brings the consumers in line with the links of the file and
@@ -123,6 +125,7 @@ func newLinkSet() *linkSet {
 func (h *Host) SyncLinks(ctx context.Context) {
 	h.links.recon.Lock()
 	defer h.links.recon.Unlock()
+	defer h.syncCells(ctx)
 	want, all, err := h.wantedLinks(ctx)
 	if err != nil {
 		h.d.Log.Warn("modhost: the links' consumers are not reconciled: the links or the modules cannot be read", "err", err)
@@ -228,15 +231,20 @@ func (h *Host) runLinkConsumer(name string, w wantedLink, c *runningLink) {
 		h.links.mu.Unlock()
 		close(c.done)
 	}()
-	handler := func(ctx context.Context, d bus.Delivery) error { return h.deliverEvent(ctx, name, w, d) }
-	for c.ctx.Err() == nil {
-		err := h.d.Consumers.RunConsumer(c.ctx, c.spec, handler)
-		if err == nil || c.ctx.Err() != nil {
+	h.consume(c.ctx, c.spec, "the link "+w.link.String(), func(ctx context.Context, d bus.Delivery) error { return h.deliverEvent(ctx, name, w, d) })
+}
+
+// consume reads spec's consumer until ctx ends, and starts again after a
+// wait when the bus could not make it; what names it in the log.
+func (h *Host) consume(ctx context.Context, spec bus.ConsumerSpec, what string, handler bus.DeliveryHandler) {
+	for ctx.Err() == nil {
+		err := h.d.Consumers.RunConsumer(ctx, spec, handler)
+		if err == nil || ctx.Err() != nil {
 			return
 		}
-		h.d.Log.Warn("modhost: a link's consumer could not run; trying again", "link", w.link.String(), "err", err)
+		h.d.Log.Warn("modhost: a consumer could not run; trying again", "for", what, "err", err)
 		select {
-		case <-c.ctx.Done():
+		case <-ctx.Done():
 			return
 		case <-time.After(linkRestart):
 		}
@@ -353,7 +361,7 @@ func (h *Host) runEvent(ctx context.Context, name string, w wantedLink, d bus.De
 	producer := strings.TrimPrefix(d.Headers[bus.HeaderFrom], fromNode+"/")
 	in := pdk.Input{Trigger: "event:" + w.ends.ToPort, Payload: payload}
 	r, ok := h.call(context.WithoutCancel(ctx), fullName(w.ends.ToModule), in,
-		newRun(id, triggerEvent, depth+1).byEvent(producer, d.Headers[bus.HeaderRun]))
+		newRun(id, triggerEvent, depth+1).byEvent(producer, d.Headers[bus.HeaderRun]).over(w.link.String()))
 	if !ok {
 		h.in.eventDelivered(ctx, name, eventRetried)
 		return errReceiverGone

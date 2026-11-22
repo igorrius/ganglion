@@ -45,6 +45,20 @@ type eventEnv struct {
 // receive; the links are ls.
 func newEventEnv(t *testing.T, receivers []string, ls ...settings.Link) *eventEnv {
 	t.Helper()
+	actives := []modstore.Active{active(t, "local/a", eventProducer)}
+	for _, r := range receivers {
+		actives = append(actives, active(t, "local/"+r, eventReceiver))
+	}
+	ee := newModulesBusEnv(t, actives...)
+	ee.conf.links = ls
+	ee.host = ee.newHost()
+	return ee
+}
+
+// newBusEnv is an env of the modules actives over a real embedded bus, for
+// the tests of what travels on it: events, calls and cells.
+func newModulesBusEnv(t *testing.T, actives ...modstore.Active) *eventEnv {
+	t.Helper()
 	rec := telemetrytest.Install(t)
 	ctx := context.Background()
 	b, err := natsbus.Open(ctx, natsbus.DefaultConfig(t.TempDir()), slog.New(slog.DiscardHandler))
@@ -55,15 +69,28 @@ func newEventEnv(t *testing.T, receivers []string, ls ...settings.Link) *eventEn
 	if err := b.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}
-	actives := []modstore.Active{active(t, "local/a", eventProducer)}
-	for _, r := range receivers {
-		actives = append(actives, active(t, "local/"+r, eventReceiver))
-	}
 	e := newEnv(t, actives...)
-	e.conf.links = ls
-	e.pub, e.consumers = b, b
+	e.pub, e.consumers = teePublisher{e: e, b: b}, b
 	e.host = e.newHost()
 	return &eventEnv{env: e, bus: b, rec: rec}
+}
+
+// teePublisher stores every message on the bus, and hands a notice to the
+// host's Deliver as the core's consumer does once the bus has stored it, so
+// a test sees the inbox events a module's message makes.
+type teePublisher struct {
+	e *env
+	b *natsbus.Bus
+}
+
+func (p teePublisher) Publish(ctx context.Context, subject, id string, headers map[string]string, payload []byte) error {
+	if err := p.b.Publish(ctx, subject, id, headers, payload); err != nil {
+		return err
+	}
+	if strings.HasPrefix(subject, "g.notify.") {
+		_ = p.e.host.Deliver(ctx, id, payload)
+	}
+	return nil
 }
 
 // waitFor polls cond until it holds; a condition that never does fails the

@@ -400,6 +400,13 @@ type conf struct {
 	links      []settings.Link
 }
 
+// offList is the SetOff calls so far, as "name:off:why".
+func (c *conf) offList() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.offs)
+}
+
 func (c *conf) Modules() ([]settings.Module, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
