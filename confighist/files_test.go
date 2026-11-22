@@ -18,6 +18,7 @@ func TestWrappersRecordTheirSource(t *testing.T) {
 	dests := confighist.DestinationsFile{File: settings.DestinationsFile{Path: file}, History: h}
 	tg := confighist.TelegramFile{File: settings.TelegramFile{Path: file}, History: h}
 	mcp := confighist.MCPFile{File: settings.MCPFile{Path: file}, History: h}
+	lnk := confighist.LinksFile{File: settings.LinksFile{Path: file}, History: h}
 	shop := settings.MCPServer{URL: "https://mcp.example.com/mcp", Auth: settings.MCPAuthNone, Timeout: settings.Duration(time.Minute),
 		Tools: map[string]settings.MCPPolicy{"search": settings.MCPPolicyAuto}, Fingerprint: "sha256:" + strings.Repeat("0", 64)}
 
@@ -43,6 +44,8 @@ func TestWrappersRecordTheirSource(t *testing.T) {
 			return mcp.SetPolicies("shop", map[string]settings.MCPPolicy{"search": settings.MCPPolicyConfirm})
 		}, confighist.SourceMCP, "mcp server shop: rules of 1 tools"},
 		{func() error { return mcp.RemoveServer("shop") }, confighist.SourceMCP, "mcp server shop: disconnected"},
+		{func() error { return lnk.AddLink(settings.Link{From: "a.x", To: "b.y"}) }, confighist.SourceLink, "link a.x → b.y: added"},
+		{func() error { return lnk.RemoveLink(settings.Link{From: "a.x", To: "b.y"}) }, confighist.SourceLink, "link a.x → b.y: removed"},
 	}
 	for i, s := range steps {
 		if err := s.do(); err != nil {

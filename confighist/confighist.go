@@ -35,6 +35,7 @@ const (
 	SourceGroup       Source = "group"
 	SourceHost        Source = "host"
 	SourceMCP         Source = "mcp"
+	SourceLink        Source = "link"
 )
 
 // CopyPath is where the copy of the file lives in the workspace.

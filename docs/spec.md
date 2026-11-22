@@ -2302,9 +2302,20 @@ The bus ([ADR-0106](adr/0106-embed-nats-with-jetstream-as-the-bus-behind-narrow-
   notice's time, RFC 3339, UTC). Only local modules have ports; the capability
   `event.emit` is gone, declaring an output is the grant and the install window
   lists it. `links:` in `ganglion.yaml` connects
-  `from` to `to`; a link is written only after the owner's press, when both
-  ends exist, kinds and shapes match, no cycle forms across links and cell
-  triggers, and no chain is deeper than 4. Moving a link rebuilds nothing.
+  `from` to `to`, each `<module>.<port>` with the module's short name; the
+  file's own check is the form and that no line repeats. A link is written
+  only after the owner's press (the agent proposes it with `link.add`, a card
+  with both ends and the shape), when both ends exist, kinds and shapes are
+  equal, no cycle forms across links and cell triggers, and no chain is
+  deeper than 4 modules; the press checks it again. Moving a link rebuilds
+  nothing. The same checks guard the modules: a build whose linked port is
+  gone, of another kind or another shape, or that closes a loop or a deeper
+  chain through the links, is refused at the plan and at the install, the
+  detail naming the links (`a.x → b.y`); a link that was broken before the
+  build does not refuse it. Removing a module removes its links in the same
+  edit, and the removal's answer names them. At start the module host logs
+  each link that does not work once, and `/status` shows it under Problems
+  with its reason; such a link gets no consumer (R-BUS-6).
 - **R-BUS-6.** `emit(port, payload)` publishes an event; each link has its
   own durable consumer, and a delivered event starts the receiving module
   (`Trigger: "event"`); a failed run is redelivered with back-off and counts

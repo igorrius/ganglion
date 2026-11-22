@@ -220,7 +220,7 @@ func (s *Store) PlanLocal(ctx context.Context, b Build, secrets Secrets, config 
 	if p.Refusal, p.RefusalDetail = missing(m, secrets, config); p.Refusal != "" {
 		return p, nil
 	}
-	if p.Refusal, p.RefusalDetail, err = s.checkLoop(ctx, b.Module, m); err != nil || p.Refusal != "" {
+	if p.Refusal, p.RefusalDetail, err = s.checkLinks(ctx, b.Module, m); err != nil || p.Refusal != "" {
 		return p, err
 	}
 	if p.Refusal, err = s.checkVersion(ctx, b.Module, p.SHA256, m.Version); err != nil || p.Refusal != "" {
@@ -433,8 +433,8 @@ func (s *Store) InstallLocal(ctx context.Context, b Build, sha string) (Outcome,
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if why, _, err := s.checkLoop(ctx, b.Module, m); err != nil || why != "" {
-		return Outcome{Module: b.Module, Result: ResultRefused, Reason: why}, err
+	if why, detail, err := s.checkLinks(ctx, b.Module, m); err != nil || why != "" {
+		return Outcome{Module: b.Module, Result: ResultRefused, Reason: why + ": " + detail}, err
 	}
 	if why, err := s.checkVersion(ctx, b.Module, sha, m.Version); err != nil || why != "" {
 		return Outcome{Module: b.Module, Result: ResultRefused, Reason: why}, err
@@ -567,13 +567,13 @@ func (s *Store) rollbackLocal(ctx context.Context, module string) (Outcome, erro
 	// The other modules changed since the previous version ran: its triggers
 	// may close a loop now (R-RUN-15).
 	if m, perr := runner.ParseManifest(manifest); perr == nil {
-		why, loop, err := s.checkLoop(ctx, module, m)
+		why, detail, err := s.checkLinks(ctx, module, m)
 		if err != nil {
 			return Outcome{}, err
 		}
 		if why != "" {
 			s.count(ctx, module, ResultRefused)
-			return Outcome{Module: module, From: cur.Version, To: prev.Version, Result: ResultRefused, Reason: why + ": " + loop}, nil
+			return Outcome{Module: module, From: cur.Version, To: prev.Version, Result: ResultRefused, Reason: why + ": " + detail}, nil
 		}
 	}
 	var retired []string

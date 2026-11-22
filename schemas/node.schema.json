@@ -24,6 +24,11 @@
       "type": "array",
       "items": { "$ref": "#/$defs/module" }
     },
+    "links": {
+      "description": "Connections between the ports of the modules (R-BUS-5): each joins an output or a calling port of one module to an input or a serving port of another. Missing means none; link.add writes this list after the owner's press. The node checks the ends, kinds and shapes against the manifests, not the form alone.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/link" }
+    },
     "mcp": { "description": "The remote MCP servers the admin connected from the chat, and the intake page's address (R-MCP-2). It applies at once; mcp.connect, mcp.rule and /mcp write it, config.propose never does.", "$ref": "#/$defs/mcp" },
     "memory": { "description": "The agent's long-term memory by topic (M5, R-MEM-6–9).", "$ref": "#/$defs/memory" },
     "update": { "description": "How the node follows the core releases (R-UPD-6).", "$ref": "#/$defs/update" },
@@ -31,6 +36,15 @@
     "bus": { "description": "The node's message bus (R-BUS-1): the NATS server the node runs inside its process, or one the operator runs. Only the host edits this section: the agent cannot change it.", "$ref": "#/$defs/bus" }
   },
   "$defs": {
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "description": "The producer or the caller: <module>.<port>, the module's short name (the name after local/) and an output or a calling port of its manifest. A module with notify also has the output notify.", "type": "string", "pattern": "^[a-z][a-z0-9_-]*\\.[a-z][a-z0-9_]{0,31}$" },
+        "to": { "description": "The receiver or the server: <module>.<port>, an input or a serving port of the other module's manifest. Its shape must equal the shape of from.", "type": "string", "pattern": "^[a-z][a-z0-9_-]*\\.[a-z][a-z0-9_]{0,31}$" }
+      }
+    },
     "bus": {
       "type": "object",
       "additionalProperties": false,

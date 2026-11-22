@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/agent"
+	"github.com/igorrius/ganglion/links"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/modstore/release"
 	"github.com/igorrius/ganglion/modules/html2md"
 	"github.com/igorrius/ganglion/runner"
+	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/tool"
 	"github.com/igorrius/ganglion/tool/builtin"
 	"github.com/igorrius/ganglion/web"
@@ -20,10 +22,24 @@ import (
 // whose updates come from the project's releases (R-RUN-8, ADR-0041).
 func Modules() do.Provider[*modstore.Store] {
 	return func(i do.Injector) (*modstore.Store, error) {
-		return modstore.Open(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[Bootstrap](i).ModulesDir,
+		s, err := modstore.Open(do.MustInvoke[Startup](i), do.MustInvoke[Database](i).DB, do.MustInvoke[Bootstrap](i).ModulesDir,
 			time.Now, runner.Deps{Logger: do.MustInvoke[*slog.Logger](i)},
 			modstore.Builtin{Name: html2mdName, Wasm: html2md.Wasm, Manifest: html2md.Manifest, SelfTest: html2md.SelfTest,
 				Ceiling: modstore.Ceiling{ABI: html2md.ABI, MaxMemory: html2md.MaxMemory, MaxTimeout: html2md.MaxTimeout}})
+		if err != nil {
+			return nil, err
+		}
+		// A build is checked against the links the node's file holds now.
+		file := settings.LinksFile{Path: settingsFile(do.MustInvoke[Bootstrap](i))}
+		s.UseLinks(func() ([]links.Link, error) {
+			ls, err := file.Links()
+			out := make([]links.Link, len(ls))
+			for i, l := range ls {
+				out[i] = links.Link(l)
+			}
+			return out, err
+		})
+		return s, nil
 	}
 }
 

@@ -149,14 +149,18 @@ func (f ModulesFile) SetNotifyTo(module string, names []string) error {
 // RemoveModule is RemoveModule on this file.
 func (f ModulesFile) RemoveModule(name string) error { return RemoveModule(f.Path, name) }
 
-// RemoveModule drops the line of name from modules:; a name that is not
-// there is not an error.
+// RemoveModule drops the line of name from modules:, and the links that
+// name the module, in one edit; a name that is not there is not an error.
 func RemoveModule(path, name string) error {
-	return edit(path, func(seq *yaml.Node) error {
+	return editDoc(path, func(doc *yaml.Node) error {
+		seq, err := modulesNode(doc)
+		if err != nil {
+			return err
+		}
 		if i := indexOf(seq, name); i >= 0 {
 			seq.Content = append(seq.Content[:i], seq.Content[i+1:]...)
 		}
-		return nil
+		return dropModuleLinks(doc, name)
 	})
 }
 

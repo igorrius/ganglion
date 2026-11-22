@@ -74,6 +74,8 @@ type Inbox interface {
 // (settings.ModulesFile).
 type SettingsPort interface {
 	Modules() ([]settings.Module, error)
+	// Links are the links of the file; removing a module drops its own.
+	Links() ([]settings.Link, error)
 	SetOff(name string, off bool, why string) error
 	SetModule(m settings.Module) error
 	RemoveModule(name string) error
@@ -152,8 +154,9 @@ type Host struct {
 	stopped map[string]stop
 	off     map[string]bool
 	fails   map[string][]time.Time
-	unread  time.Time       // when Start could not read the store or the settings; zero when it could
-	stops   map[string]bool // the builds (sha) whose chain stopped past maxDepth, told once
+	unread  time.Time            // when Start could not read the store or the settings; zero when it could
+	stops   map[string]bool      // the builds (sha) whose chain stopped past maxDepth, told once
+	broken  map[string]time.Time // the links seen broken, by their words, since when (/status)
 
 	episodeMu sync.Mutex                 // held across the store's calls on episodes, so the cache and the store change together
 	episodes  map[string]map[Kind]string // module → kind → the sha of its open episode, a cache of the store's
@@ -188,6 +191,7 @@ func (h *Host) Start(ctx context.Context) {
 		h.stateMu.Unlock()
 		return
 	}
+	defer h.checkLinks(ctx) // after the lock is let go
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, a := range actives {

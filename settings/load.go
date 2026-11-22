@@ -286,6 +286,9 @@ func (f File) check() error {
 	if err := checkDestinations(f.Destinations, f.Modules); err != nil {
 		return err
 	}
+	if err := checkLinks(f.Links); err != nil {
+		return err
+	}
 	if err := f.MCP.check(f.Modules); err != nil {
 		return err
 	}

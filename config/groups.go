@@ -9,6 +9,7 @@ import (
 	"github.com/igorrius/ganglion/confighist"
 	"github.com/igorrius/ganglion/groups"
 	"github.com/igorrius/ganglion/modhost"
+	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/settings"
 	"github.com/igorrius/ganglion/tool/builtin"
@@ -66,6 +67,15 @@ func Destinations() do.Provider[groups.Destinations] {
 	return func(i do.Injector) (groups.Destinations, error) {
 		file := settings.DestinationsFile{Path: settingsFile(do.MustInvoke[Bootstrap](i))}
 		return groups.Destinations{List: file.Destinations}, nil
+	}
+}
+
+// Linking provides the admin's tools for the links between modules: the
+// node's file, every change recorded, and the active modules' ports from the
+// store (R-BUS-5).
+func Linking() do.Provider[builtin.Linking] {
+	return func(i do.Injector) (builtin.Linking, error) {
+		return builtin.Linking{File: linksFile(i), Modules: do.MustInvoke[*modstore.Store](i).LinkModules}, nil
 	}
 }
 

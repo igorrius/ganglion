@@ -35,6 +35,9 @@ type File struct {
 	Destinations []Destination `yaml:"destinations"`
 	// Modules lists the modules the node runs and their configuration (M4b).
 	Modules []Module `yaml:"modules"`
+	// Links connects the ports of the modules (R-BUS-5): the agent proposes
+	// one and the owner approves it.
+	Links []Link `yaml:"links"`
 	// MCP is the remote MCP servers the admin connected (R-MCP-2).
 	MCP MCP `yaml:"mcp"`
 	// Memory is the agent's long-term memory (M5, R-CFG-8).
