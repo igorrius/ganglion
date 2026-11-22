@@ -810,15 +810,32 @@ escalate:                    # when to call the model
 
 - **R-RUN-15.** A module can run when cells it listens to change
   (`triggers: - cell: [demo-reader.soc, …]`), with no model (M4c,
-  [ADR-0065](adr/0065-cell-triggers-through-the-inbox.md)). Every cell a
-  trigger names is in `cells.read`; a module never listens to its own
-  cells, and the install and a rollback refuse a loop between modules. When a run that
-  wrote cells ends, the host puts one `module.trigger` event per listening
-  module into the inbox, keyed by listener, producer and run, so it
-  survives a restart and is never doubled; the node routes it to the
-  module host. The listener reads the values with `cell_get`. The chain's
-  depth travels in the event, and above 4 the host stops it and tells the
-  owner. Runs from triggers are unattended, supervised and escalated like
+  [ADR-0065](adr/0065-cell-triggers-through-the-inbox.md), transport
+  superseded by [ADR-0108](adr/0108-ports-in-the-manifest-links-in-the-nodes-file.md)).
+  Every cell a trigger names is in `cells.read`; a module never listens to
+  its own cells, and the install and a rollback refuse a loop between
+  modules. When a run that wrote cells is settled and recorded, the host
+  publishes one event of the run's module on its implicit `cells` output
+  (`g.ev.core.<module>.cells`, payload `{cells: [...]}`, the ids it wrote,
+  sorted; `Nats-Msg-Id` `cells:<module>:<run>`, so it is never doubled), and
+  every running module that listens to any of them has one durable consumer
+  on `EVENTS`, named `cells_<short name>`, filtered to the `cells` subjects
+  of the owners of the cells it listens to, that starts at the new messages.
+  The host reconciles the consumers with the modules that run (at start, after
+  every reload and when the links change): one starts when the module runs,
+  follows its listened cells, and is deleted when the module stops running (off,
+  crash loop, removal), so a listener that did not run misses the changes of
+  that time and a week of stale triggers is not replayed: it reads the current
+  values with `cell_get` when it next runs. The module is run with
+  `Trigger: "cell"` and `{cells, producer}`, the cells being those of the event
+  it listens to; none of them, or the module's own, runs nothing. The depth
+  travels in the `Ganglion-Depth` header, and a message at depth 4 is acked,
+  runs nothing and tells the owner once per build. The event is acked whatever
+  the run's outcome (a cell run is not repeated; the next change starts it
+  again), and left unacked only when the node is shutting down before the run
+  could start. `cells` is a reserved port name, and no link names it. A
+  `module.trigger` event left in the inbox from before the upgrade is
+  acknowledged and dropped with one log line. Runs from triggers are unattended, supervised and escalated like
   cron (R-RUN-12). The window says "Reacts to: …"; the cards show the
   chain both ways ("Reacts to", "Feeds").
 - **R-RUN-16.** A module granted `notify: {per_day: N}` writes plain text
@@ -897,9 +914,13 @@ escalate:                    # when to call the model
   counts (`http.fetch`, `cell.get`, `cell.report`, `notify`, `state.get`,
   `state.put`, `secret.get`, `config.get`; a denied call counts), the cells
   written and the messages sent; never an argument, a value, a text or the
-  module's error. A run from a cell trigger copies the producer's row and
-  its chain into its own when written, so the chain lasts as long as the
-  run does. A module's message records the run that sent it (R-RUN-16).
+  module's error. The cause of a run a link started (an `event` over a link,
+  a `call` over a link) names the link, `a.x → b.y`. A run from a cell
+  trigger, an event or a call copies the producer's row and its chain into its
+  own when written, so the chain lasts as long as the run does; an event or a
+  serving run may start before its producer's row is written (an event is
+  published mid-run, a call waits for its answer), so when the row is read and
+  the chain is empty it is filled from the producer's row, at most 4 hops. A module's message records the run that sent it (R-RUN-16).
   An admin sees it with no model: `/why` as a reply to a module's message
   shows the chain from the cron line or the agent's call to the message;
   the card of `/modules <name>` has a Runs button, and `/modules runs
@@ -2348,9 +2369,8 @@ The bus ([ADR-0106](adr/0106-embed-nats-with-jetstream-as-the-bus-behind-narrow-
   may emit again when it is retried. Metrics: `ganglion.modhost.events` by
   module and outcome and `ganglion.modhost.event.deliveries` by link consumer
   and outcome; each consumer's lag is the bus's gauge. From M9 a cell change is an event
-  of its owner and cell triggers ride the bus, not the inbox; the journal
-  records `event` and `call` causes with their links (R-RUN-20; the journal
-  row of an event or a call run carries the producer and its run already).
+  of its owner and cell triggers ride the bus, not the inbox (R-RUN-15); the
+  journal records `event` and `call` causes with their links (R-RUN-20).
   `call(port, payload)` sends a request to the linked endpoint and waits for
   the answer. The host function `ganglion.call(port, payload) int32` answers
   the answer's length, which `take` copies out (zero or more), or `-1` denied

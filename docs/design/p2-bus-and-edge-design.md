@@ -169,8 +169,8 @@ In M11 the same stream feeds a page on an edge through a link (section 6.5).
 
 ### 5.6. What stays on the inbox in M8
 
-Cell triggers keep the inbox path of ADR-0065 in M8 and move to the bus in M9 together with links,
-so M8 changes the store, not behaviour **(owner)**. Telegram's updates and the agent's turns stay on
+Cell triggers keep the inbox path of ADR-0065 in M8 and move to the bus in M9 together with links
+(section 6.4), so M8 changes the store, not behaviour **(owner)**. Telegram's updates and the agent's turns stay on
 the SQLite inbox and outbox: they are one node's work, and the spec keeps SQLite inside a node.
 
 ### 5.7. Observability
@@ -259,9 +259,30 @@ A sent notice is also published as an event on the module's `notify` output, so 
 `<module>.notify` carries it. A build's check and a trial run `emit` through the same port and shape
 check and send nothing.
 
-Cell triggers move onto the bus: a change of a cell is published as an event of its owner, and a
-module that listens to cells has a consumer on those keys. The end-of-run fan-out through the inbox
-(ADR-0065) goes.
+Cell triggers move onto the bus: a change of a cell is an event of its owner. When a run that wrote
+cells is settled and recorded (so the producer's journal row exists first), the host publishes one
+message to `g.ev.core.<owner>.cells` with `{cells: [...]}` (the ids it wrote, sorted), `Nats-Msg-Id`
+`cells:<module>:<run>` and the `Ganglion-From`, `-Run` and `-Depth` headers. `cells` is a reserved
+port name, like `notify`, and no link names it.
+
+A running module with a cell trigger has one durable consumer on `EVENTS`, named `cells_<short>`,
+filtered to the `cells` subjects of the owners of the cells it listens to (several filter subjects;
+its own module never), deliver policy new. The reconcile of section 6.4 runs it: it starts when the
+module runs, is brought to the listened cells when they change, and is **deleted** when the module
+stops running (off, crash loop, removal). A listener that did not run misses the changes of that
+time, as before: it reads the current values with `cell_get` when it next runs, so a week of stale
+triggers is not replayed. A restart of the node keeps the consumer and what it had not acked.
+
+The handler intersects the message's cells with the module's listens (none: ack), checks that the
+producer owns them, and stops at a depth header of 4 or more with an ack and the chain line; else the
+module runs with `Trigger: "cell"` and `{cells, producer}` at depth + 1 as an unattended run. The
+message is acked whatever the run's outcome, which keeps ADR-0065's rule that a cell run is not
+repeated (the next change starts it again); it is left unacked only when the run could not start
+because the node is shutting down. The run is `cell:<consumer>:<stream sequence>`, with the delivery
+count on a retry. The end-of-run fan-out through the inbox (ADR-0065) goes: a `module.trigger` event
+still in the inbox from before the upgrade is acknowledged and dropped with one log line, and the
+kind goes with the release after it. Metrics: `ganglion.modhost.cell.events` by producer module and
+outcome, `ganglion.modhost.cell.deliveries` by consumer and outcome (ok, none, deep, gone, bad).
 
 ### 6.5. Calls
 
@@ -315,7 +336,14 @@ that runs on an edge (spec 9.5); the core relaying an HTTP request to an edge's 
 ### 6.6. The journal
 
 A run's cause gains `event` (the link and the producing run) and `call` (the link and the calling
-run); `/why` names the links in the chain. Values and text are still never journaled (R-RUN-20).
+run): the hop carries `link` (`a.x → b.y`), a column `link` of `module_runs`. An event or a serving
+run may start before its producer's row is written (an event is published mid-run, a call waits for
+its answer), so its chain is copied when the row is written if the producer's row is there, and
+otherwise filled when the row is read (`Run`, `Runs`) from the producer's row, itself filled the
+same way, at most 4 hops. A cell run is published after its producer is recorded, so it copies at
+write time. `/why`, the runs list and the model's note say "by an event over `a.x → b.y`" and "by a
+call over `a.x → b.y`", each end through the plain-name check. Values and text are still never
+journaled (R-RUN-20).
 
 ## 7. Security and edges (M10)
 
