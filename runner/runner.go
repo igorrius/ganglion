@@ -367,13 +367,17 @@ func (m *Module) instantiateHost(ctx context.Context) error {
 	}).Export("notify").
 		NewFunctionBuilder().WithFunc(m.emitCall).Export("emit").
 		NewFunctionBuilder().WithFunc(m.callCall).Export("call").
-		NewFunctionBuilder().WithFunc(func(ctx context.Context, mod api.Module, p, n uint32) int32 {
-		m.called(ctx, CallConfigGet)
-		v, ok := m.manifest.ConfigValues[readString(mod, p, n)]
-		return m.offer(v, ok)
-	}).Export("config_get").
+		NewFunctionBuilder().WithFunc(m.configGet).Export("config_get").
 		Instantiate(ctx)
 	return err
+}
+
+// configGet is the config_get host function: a value of the manifest's
+// config block, left for take, or -1 when it has none.
+func (m *Module) configGet(ctx context.Context, mod api.Module, p, n uint32) int32 {
+	m.called(ctx, CallConfigGet)
+	v, ok := m.manifest.ConfigValues[readString(mod, p, n)]
+	return m.offer(v, ok)
 }
 
 // httpFetch is the http_fetch host function: it leaves the response for take
