@@ -878,7 +878,8 @@ escalate:                    # when to call the model
   (one file in `workspace/modules/<name>/`, relative path without `..`,
   hidden segments, `target/` or symlinks, at most 256 KB a file, 16 MB and
   200 files a module, a workspace commit per write) and reads it
-  with `module.read` (M4c,
+  with `module.read`, which also reads an example the node ships in place,
+  as the node's own, with no copy and no question (M4c,
   [ADR-0067](adr/0067-agent-writes-module-source.md)). Neither `module.write`
   nor `module.import` ever asks the owner, in a clean or a tainted session: the
   source does nothing until it is built and the owner presses on the install

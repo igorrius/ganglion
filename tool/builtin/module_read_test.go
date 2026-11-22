@@ -197,3 +197,40 @@ func (e *moduleEnv) rerecord(t *testing.T, name string) {
 		t.Fatal(err)
 	}
 }
+
+// An example the node ships is read in place, as the node's own, with no copy
+// in the workspace (#350).
+func TestModuleReadReadsAShippedExample(t *testing.T) {
+	e := newModuleEnv(t)
+	example := filepath.Join(e.examples, "demo-reflex")
+	if err := os.MkdirAll(example, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(example, "examples.yaml"), []byte("examples: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args string) (tool.Result, error) {
+		return e.tool(builtin.ModuleReadTool).Run(context.Background(), call(builtin.ModuleReadTool, args))
+	}
+	res, err := run(`{"example":"demo-reflex","path":"examples.yaml"}`)
+	if err != nil || res.External || res.Text != "examples: []\n" {
+		t.Fatalf("a shipped file: %+v, %v", res, err)
+	}
+	res, err = run(`{"example":"examples/modules/demo-reflex"}`)
+	if err != nil || res.External || !strings.Contains(res.Text, `"examples.yaml"`) {
+		t.Fatalf("a shipped folder's list: %+v, %v", res, err)
+	}
+	if _, err := os.Stat(e.moduleDir("demo-reflex")); !os.IsNotExist(err) {
+		t.Fatalf("reading an example left a copy in the workspace: %v", err)
+	}
+	// A workspace name that is an example says how to read it.
+	if _, err := run(`{"name":"demo-reflex"}`); err == nil || !strings.Contains(err.Error(), `{"example": "demo-reflex"}`) {
+		t.Fatalf("an example asked by name: %v", err)
+	}
+	for _, args := range []string{`{}`, `{"name":"demo-reflex","example":"demo-reflex"}`, `{"example":"../demo-reflex"}`,
+		`{"example":"/etc"}`, `{"example":"nope"}`, `{"example":"demo-reflex","path":"../../x"}`} {
+		if res, err := run(args); err == nil {
+			t.Fatalf("%s: read %+v", args, res)
+		}
+	}
+}

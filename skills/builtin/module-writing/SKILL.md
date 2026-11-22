@@ -186,7 +186,10 @@ in the install window. Do not stop between steps to report progress.
 
 1. `module.import` the template (`reader-template` or `reflex-template`) under the new name. It
    runs at once.
-2. `module.read` its `manifest.yaml` and `src/logic.rs` (and the README).
+2. `module.read` its `manifest.yaml` and `src/logic.rs` (and the README). To look at a template
+   without making a module of it, read it in place: `module.read {"example": "reflex-template",
+   "path": "examples.yaml"}`. Never import a template only to read it, and never read the node's
+   files with host commands.
 3. `module.write` `manifest.yaml`, `src/logic.rs` and `examples.yaml` only: the rules or the service,
    the settings, their tests and the module's examples (see "Examples"). Every other file and
    `Cargo.lock` stay as the template has them. Write a Rust
