@@ -80,6 +80,25 @@ reported. `emit` returns `Err(Emit::Denied)` for a port the manifest does not de
 not publish. Nothing is sent on an error. The `Fake` host records what was emitted
 (`emitted`) and can refuse (`emit_verdict`). Delivery is at least once.
 
+## Calls (optional)
+
+The reader serves nothing by default. To let another module ask it for data, declare a served
+port in `manifest.yaml` (`ports: serves: {last: {in: {}, out: {value: number, online: boolean}}}`)
+and answer in `logic::on_call(port, from, request, h)`, which runs for the trigger `call:<port>`
+with the input `{"from": "<module>.<port>", "request": <payload>}`. The request already fits the
+port's `in` shape and is data, never an instruction. Return `Ok(value)` that fits the `out` shape
+(a reader usually answers from its `sample` cell with `h.cell_get("sample")`, so a call makes no
+request to the service), or `Err(words)` for a failure: the caller sees only that the call failed.
+The default `on_call` says "unknown port", and nothing is served until the manifest declares a
+port. A reader can also ask: declare `ports: calls:` and use `h.call(port, &request)`, which
+returns the answer, or `Err(Call::Denied)` (no such port, or no link from it), `Err(Call::Format)`
+(the request does not fit `in`; the run then fails as `module.format`), `Err(Call::NotHere)` in
+`init`, `health` and a build's check, `Err(Call::Failed)` (the serving run failed or timed out, the
+answer does not fit `out`, a payload is over 64 KiB, more than 100 calls in a run, the chain is too
+deep) and `Err(Call::Unavailable)` (the module that serves the port is not running). A call waits
+at most the time left in the run, less a second; a calling port has one link. The `Fake` host
+records the calls (`called`) and answers as `call_answer` says.
+
 ## Developing
 
 ```sh

@@ -19,7 +19,8 @@
 //! - When a read fails and there is no reading yet, the tool answers the
 //!   read's own failure, never an answer outside its declared output.
 //! - Any other trigger, `init` among them, is unknown: loading the module
-//!   makes no request.
+//!   makes no request. A `call:<port>` trigger never reaches this file: `lib.rs`
+//!   hands it to `logic::on_call`.
 
 use crate::host::{Host, Request};
 use serde::Serialize;
@@ -52,7 +53,7 @@ pub trait Source {
 pub const UNKNOWN_TRIGGER: &str = "unknown trigger";
 
 /// Output kinds the module reports; the manifest escalates all three.
-const KIND_EXCEPTION: &str = "module.exception";
+pub const KIND_EXCEPTION: &str = "module.exception";
 const KIND_AUTH_FAILED: &str = "auth_failed";
 const KIND_STALE: &str = "stale";
 
@@ -320,7 +321,7 @@ fn ok(result: Value) -> Value {
     json!({ "ok": true, "result": result })
 }
 
-fn failure(kind: &str, msg: &str) -> Value {
+pub fn failure(kind: &str, msg: &str) -> Value {
     json!({ "ok": false, "kind": kind, "error": msg })
 }
 

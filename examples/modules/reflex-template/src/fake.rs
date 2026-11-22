@@ -1,7 +1,7 @@
 //! A host for the unit tests: state, config, cells and a clock the test
 //! moves, and the messages the module sent.
 
-use crate::host::{Emit, Host, Notify};
+use crate::host::{Call, Emit, Host, Notify};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
@@ -22,6 +22,10 @@ pub struct Fake {
     pub emitted: RefCell<Vec<(String, serde_json::Value)>>,
     /// What `emit` answers; `Ok` sends.
     pub emit_verdict: Cell<Result<(), Emit>>,
+    /// The calls that were made, as (port, request).
+    pub called: RefCell<Vec<(String, serde_json::Value)>>,
+    /// What `call` answers: the answer, or why there is none.
+    pub call_answer: RefCell<Result<serde_json::Value, Call>>,
     pub now: Cell<i64>,
 }
 
@@ -35,6 +39,8 @@ pub fn fake() -> Fake {
         attempts: Cell::new(0),
         emitted: RefCell::new(vec![]),
         emit_verdict: Cell::new(Ok(())),
+        called: RefCell::new(vec![]),
+        call_answer: RefCell::new(Ok(serde_json::Value::Null)),
         now: Cell::new(NOW),
     }
 }
@@ -59,6 +65,12 @@ impl Host for Fake {
             self.sent.borrow_mut().push(text.into());
         }
         verdict
+    }
+    fn call(&self, port: &str, request: &serde_json::Value) -> Result<serde_json::Value, Call> {
+        self.called
+            .borrow_mut()
+            .push((port.into(), request.clone()));
+        self.call_answer.borrow().clone()
     }
     fn emit(&self, port: &str, payload: &serde_json::Value) -> Result<(), Emit> {
         let verdict = self.emit_verdict.get();

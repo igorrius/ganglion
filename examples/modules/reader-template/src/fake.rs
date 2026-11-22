@@ -1,7 +1,7 @@
 //! A host for the unit tests: one canned answer, state, cells and a clock
 //! the test moves. It knows no service; the secrets are made up.
 
-use crate::host::{Emit, Host, Request, Response};
+use crate::host::{Call, Emit, Host, Request, Response};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
@@ -25,6 +25,10 @@ pub struct Fake {
     pub emitted: RefCell<Vec<(String, serde_json::Value)>>,
     /// What `emit` answers; `Ok` sends.
     pub emit_verdict: Cell<Result<(), Emit>>,
+    /// The calls that were made, as (port, request).
+    pub called: RefCell<Vec<(String, serde_json::Value)>>,
+    /// What `call` answers: the answer, or why there is none.
+    pub call_answer: RefCell<Result<serde_json::Value, Call>>,
     pub now: Cell<i64>,
 }
 
@@ -54,6 +58,8 @@ pub fn fake(
         requests: RefCell::new(Vec::new()),
         emitted: RefCell::new(vec![]),
         emit_verdict: Cell::new(Ok(())),
+        called: RefCell::new(vec![]),
+        call_answer: RefCell::new(Ok(serde_json::Value::Null)),
         now: Cell::new(NOW),
     }
 }
@@ -126,6 +132,12 @@ impl Host for Fake {
                 .push((port.into(), payload.clone()));
         }
         verdict
+    }
+    fn call(&self, port: &str, request: &serde_json::Value) -> Result<serde_json::Value, Call> {
+        self.called
+            .borrow_mut()
+            .push((port.into(), request.clone()));
+        self.call_answer.borrow().clone()
     }
     fn now_unix(&self) -> i64 {
         self.now.get()

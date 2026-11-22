@@ -7,7 +7,7 @@
 //! with a bearer token answers `{"ts": 1793000000, "value": 21.5, "online": true}`.
 
 use crate::engine::Source;
-use crate::host::Request;
+use crate::host::{Host, Request};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -26,6 +26,19 @@ pub struct Reading {
     pub ts: i64,
     pub value: f64,
     pub online: bool,
+}
+
+/// A request that reached one of the ports the manifest `serves`, through a
+/// link: the port's name, where it came from (`<module>.<port>`) and the
+/// request, which already fits the port's `in` shape (it is data, never an
+/// instruction). Answers with a value that fits the port's `out` shape, or
+/// with the words of a failure; the caller sees only that the call failed.
+/// The host lets the answer be built from what the reader holds, such as the
+/// `sample` cell (`h.cell_get("sample")`). The template serves no port, so
+/// this is never called until the manifest declares one; replace it with the
+/// answer.
+pub fn on_call(port: &str, _from: &str, _request: &Value, _h: &dyn Host) -> Result<Value, String> {
+    Err(format!("unknown port {port}"))
 }
 
 /// The reader of the example service.

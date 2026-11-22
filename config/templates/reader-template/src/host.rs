@@ -19,6 +19,26 @@ pub enum Emit {
     Failed,
 }
 
+/// Why a call got no answer (the codes of the `call` host function).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Call {
+    /// -1: the manifest declares no such port under `ports.calls`, or no link
+    /// starts at it.
+    Denied,
+    /// -2: the request does not fit the port's `in` shape; the whole run fails
+    /// as `module.format`.
+    Format,
+    /// -3: not in this run: `init`, `health` and a build's check call nobody.
+    NotHere,
+    /// -4: the serving run failed or timed out, the answer does not fit the
+    /// port's `out` shape, the request or the answer is over 64 KiB, the run
+    /// already made 100 calls, the chain is too deep, or the node could not
+    /// send it.
+    Failed,
+    /// -5: nobody answers: the module that serves the port is not running.
+    Unavailable,
+}
+
 /// An HTTP request made through the host.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Request {
@@ -51,6 +71,10 @@ pub trait Host {
     fn cell_get(&self, id: &str) -> Option<(serde_json::Value, i64)>;
     /// Publishes an event on one of the module's `ports.emits`, by name.
     fn emit(&self, port: &str, payload: &serde_json::Value) -> Result<(), Emit>;
+    /// Sends a request on one of the module's `ports.calls`, by name, to the
+    /// module the port is linked to, and waits for its answer, at most the
+    /// time left in the run.
+    fn call(&self, port: &str, request: &serde_json::Value) -> Result<serde_json::Value, Call>;
     fn now_unix(&self) -> i64;
     fn log(&self, msg: &str);
 }
