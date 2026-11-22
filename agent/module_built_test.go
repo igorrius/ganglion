@@ -203,14 +203,19 @@ func TestResumeKeepsOnlyRunningBuilds(t *testing.T) {
 // that has already failed, recorded at the call's depth.
 type buildTool struct {
 	fakeTool
-	builds fakeBuilds
+	builds  fakeBuilds
+	running bool // the queued build is still running when the turn ends
 }
 
 func (b *buildTool) Run(ctx context.Context, c tool.Call) (tool.Result, error) {
 	_, _ = b.fakeTool.Run(ctx, c)
 	key := fmt.Sprintf("build:battery-alerts:%d", len(b.calls))
+	state := bg.StateFailed
+	if b.running {
+		state = bg.StateRunning
+	}
 	b.builds[key] = builtin.BuildOutcome{Key: key, Module: "battery-alerts", Conv: c.Conv, Transport: c.Transport, Principal: c.Principal,
-		Depth: c.Depth, State: bg.StateFailed, Answer: `{"error":"the build failed","log_tail":"error[E0308]: src/logic.rs:3:5"}`}
+		Depth: c.Depth, State: state, Answer: `{"error":"the build failed","log_tail":"error[E0308]: src/logic.rs:3:5"}`}
 	return tool.Result{Text: `{"building":"battery-alerts"}`, Job: key}, nil
 }
 
@@ -303,5 +308,57 @@ func TestABuildInATaskResumesUnderTheTaskGrant(t *testing.T) {
 	}
 	if st := e.stateOf(t, "task:j1"); len(st.Commands) != 0 {
 		t.Fatalf("task state %+v", st)
+	}
+}
+
+// ADR-0112: while the session waits for a build, the turn that started it
+// and the turns its notes resume send no text (the card is the sign of
+// life); the text stays in the history. A person's question meanwhile is
+// answered, and the turn that ends with no build awaited replies.
+func TestABuildIsQuietUntilNothingIsAwaited(t *testing.T) {
+	builds := fakeBuilds{}
+	bt := &buildTool{builds: builds, running: true}
+	bt.name = "module.build"
+	e := newConfirmEnv(t, bt)
+	e.withBuilds(builds)
+	replies := func(out []event.Outgoing) []string {
+		var r []string
+		for _, o := range out {
+			if isReply(o) && strings.HasSuffix(o.IdemKey, ":reply:0") {
+				r = append(r, o.Text)
+			}
+		}
+		return r
+	}
+
+	e.smart.push(callTool("module.build"), say("I am building it now."))
+	if r := replies(e.turn(t, message(owner, "Igor", "tell me about every earthquake"))); len(r) != 0 {
+		t.Fatalf("the turn that started a build replied %q", r)
+	}
+	if st := e.state(t); !slices.ContainsFunc(st.Messages, func(m provider.Message) bool { return m.Content == "I am building it now." }) {
+		t.Fatalf("the quiet text is not in the history: %+v", st.Messages)
+	}
+
+	// The first build ends; the agent fixes and builds again: still quiet.
+	builds["build:battery-alerts:1"] = builtin.BuildOutcome{Key: "build:battery-alerts:1", Module: "battery-alerts", Conv: "telegram:42",
+		Transport: "telegram", Principal: owner, State: bg.StateFailed, Answer: `{"error":"the build failed"}`}
+	e.smart.push(callTool("module.build"), say("Fixed a type error, building again."))
+	if r := replies(e.turn(t, builtEvent("telegram:42", "build:battery-alerts:1", "battery-alerts"))); len(r) != 0 {
+		t.Fatalf("a rebuild's turn replied %q", r)
+	}
+
+	// A person asks meanwhile: answered.
+	e.smart.push(say("Still building the module."))
+	if r := replies(e.turn(t, message(owner, "Igor", "how is it going?"))); len(r) != 1 {
+		t.Fatalf("a person's question got %q", r)
+	}
+
+	// The last build ends and nothing is awaited: the turn replies.
+	o := builds["build:battery-alerts:2"]
+	o.State, o.Answer = bg.StateDone, `{"build":"ab12"}`
+	builds["build:battery-alerts:2"] = o
+	e.smart.push(say("Built; it waits for your press."))
+	if r := replies(e.turn(t, builtEvent("telegram:42", "build:battery-alerts:2", "battery-alerts"))); len(r) != 1 {
+		t.Fatalf("the turn with nothing awaited got %q", r)
 	}
 }

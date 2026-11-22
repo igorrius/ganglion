@@ -541,3 +541,88 @@ func TestTheNoteCutsALongTitle(t *testing.T) {
 		t.Errorf("note %q", got)
 	}
 }
+
+// ADR-0112: a rebuild takes over the card of its module's earlier build. Its
+// first message is an edit of that card, and so is every later one, under
+// keys of its own; a third build edits the first build's card, and a restart
+// ends it there too.
+func TestARebuildEditsTheEarlierBuildsCard(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	if err := e.r.Start(ctx, build("b:1", "telegram:1", "solar")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.r.End(ctx, "b:1", jobs.StateFailed); err != nil {
+		t.Fatal(err)
+	}
+	second := build("b:2", "telegram:1", "solar")
+	second.CardOf, second.Build = "b:1", 2
+	if err := e.r.Start(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+	e.clock.add(30 * time.Second)
+	if err := e.r.End(ctx, "b:2", jobs.StateFailed); err != nil {
+		t.Fatal(err)
+	}
+	third := build("b:3", "telegram:1", "solar")
+	third.CardOf, third.Build = "b:2", 3
+	if err := e.r.Start(ctx, third); err != nil {
+		t.Fatal(err)
+	}
+	got := e.box.got()
+	want := []string{"🔨 solar · build · 0:00", "❌ solar · build failed in 0:00", "🔨 solar · build 2 · 0:00",
+		"❌ solar · build 2 failed in 0:30", "🔨 solar · build 3 · 0:00"}
+	if !slices.Equal(textsOf(got), want) {
+		t.Fatalf("texts %q, want %q", textsOf(got), want)
+	}
+	keys := []string{"job:b:1:card", "job:b:1:card:v1", "job:b:2:card:v0", "job:b:2:card:v1", "job:b:3:card:v0"}
+	for i, m := range got {
+		if m.IdemKey != keys[i] || (i > 0 && m.EditOf != "job:b:1:card") {
+			t.Fatalf("message %d: %+v", i, m)
+		}
+	}
+	e.r = e.registry() // the node restarted while the third build ran
+	e.run(t)
+	if got := e.box.got(); len(got) != 1 || got[0].Text != "⚠️ solar · build 3 interrupted by a restart" ||
+		got[0].IdemKey != "job:b:3:card:v1" || got[0].EditOf != "job:b:1:card" {
+		t.Fatalf("after the restart %+v", got)
+	}
+}
+
+// A card is taken over only when there is one to edit: the job it names has
+// a row, has ended, reports to the same conversation and got its card into
+// the outbox. Otherwise the job sends a card of its own.
+func TestACardWithNothingToEditIsNotTakenOver(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	if err := e.r.Start(ctx, build("open", "telegram:1", "solar")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.r.Start(ctx, build("elsewhere", "telegram:2", "solar")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.r.End(ctx, "elsewhere", jobs.StateDone); err != nil {
+		t.Fatal(err)
+	}
+	e.box.fail(errors.New("outbox: full"))
+	if err := e.r.Start(ctx, build("unsent", "telegram:1", "solar")); err == nil {
+		t.Fatal("Start hid the refused card")
+	}
+	if err := e.r.End(ctx, "unsent", jobs.StateDone); err == nil {
+		t.Fatal("End hid the refused card")
+	}
+	e.box.fail(nil)
+	before := len(e.box.got())
+	for _, of := range []string{"missing", "open", "elsewhere", "unsent"} {
+		j := build("after-"+of, "telegram:1", "solar")
+		j.CardOf, j.Build = of, 2
+		if err := e.r.Start(ctx, j); err != nil {
+			t.Fatal(of, err)
+		}
+		got := e.box.got()
+		if m := got[len(got)-1]; len(got) != before+1 || m.IdemKey != "job:after-"+of+":card" || m.EditOf != "" {
+			t.Fatalf("card of %s: %+v", of, m)
+		}
+		before = len(got)
+	}
+}

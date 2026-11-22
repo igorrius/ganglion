@@ -376,6 +376,7 @@ job.card_done: "✅ {title} · {kind} · готово за {elapsed}"
 job.card_failed: "❌ {title} · {kind} · помилка через {elapsed}"
 job.card_interrupted: "⚠️ {title} · {kind} · перервано перезапуском"
 job.kind_build: "збірка"
+job.kind_build_nth: "збірка {n}"
 job.kind_command: "команда"
 
 hint.module_auth_failed: "Сервіс відхилив вхід модуля: треба перевірити його секрети або налаштування; module.status з іменем {name} показує його налаштування і здоровʼя."

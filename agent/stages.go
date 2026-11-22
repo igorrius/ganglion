@@ -186,6 +186,7 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 		t.state.Session, t.state.Started = t.event.ID, t.now
 	}
 	t.known = knownURLs(append(slices.Clone(t.state.Messages), user))
+	awaited := slices.Clone(t.state.Commands)
 	t.jobs = a.jobsNote(t)
 	turnCtx, cancel := context.WithTimeout(ctx, a.cfg.TurnTimeout)
 	defer cancel()
@@ -211,7 +212,13 @@ func (a *Agent) converse(ctx context.Context, t *turn, user provider.Message) (b
 	}
 	t.state.Messages = append(append(t.state.Messages, user), added...)
 	t.state.Last = t.now
-	t.reply(text)
+	quiet, err := a.quietForBuild(ctx, t, awaited)
+	if err != nil {
+		return false, err
+	}
+	if !quiet {
+		t.reply(text)
+	}
 	return false, nil
 }
 

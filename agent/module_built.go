@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/igorrius/ganglion/event"
 	"github.com/igorrius/ganglion/internal/text"
@@ -130,6 +131,40 @@ func (a *Agent) buildToBeTold(ctx context.Context, key string) (bool, error) {
 		return false, fmt.Errorf("agent: build %s: %w", key, err)
 	}
 	return true, nil
+}
+
+// quietForBuild reports whether a turn's text is kept out of the chat
+// (ADR-0112): the session waits for a build of its own that is queued or
+// running, and the turn is not a person's message, or it is the one that
+// started a build (awaited is the list before the turn). The text joins the
+// history; the build's note resumes the conversation, and the build's card
+// is the owner's sign of life. A question the turn asked goes out as its
+// own card, not as this text, and a person who asks while a build runs gets
+// an answer.
+func (a *Agent) quietForBuild(ctx context.Context, t *turn, awaited []string) (bool, error) {
+	started := false
+	for _, k := range t.state.Commands {
+		if strings.HasPrefix(k, builtin.BuildKeyPrefix) && !slices.Contains(awaited, k) {
+			started = true
+		}
+	}
+	if t.event.Kind == event.KindMessage && !started {
+		return false, nil
+	}
+	for _, k := range t.state.Commands {
+		if !strings.HasPrefix(k, builtin.BuildKeyPrefix) {
+			continue
+		}
+		running, err := a.buildRunning(ctx, k)
+		if err != nil {
+			return false, err
+		}
+		if running {
+			a.log.Debug("agent: a turn's text is kept quiet while a build runs", "conv", t.event.Conv, "build", k)
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // buildRunning reports whether key is a build that runs or waits.

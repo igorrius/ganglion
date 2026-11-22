@@ -40,7 +40,8 @@ type row struct {
 }
 
 // cardColumns are a row's columns in the order scanCard reads them.
-const cardColumns = `key, kind, conv, transport, principal, title, state, count, started_ms, ended_ms, version, shown`
+const cardColumns = `key, kind, conv, transport, principal, title, state, count, started_ms, ended_ms, version, shown,
+	card_of, build`
 
 // rowScanner is a *sql.Row or *sql.Rows.
 type rowScanner interface{ Scan(dest ...any) error }
@@ -53,7 +54,7 @@ func scanCard(s rowScanner) (row, error) {
 		started, ended int64
 	)
 	if err := s.Scan(&c.job.Key, &kind, &c.job.Conv, &c.job.Transport, &c.job.Principal, &c.job.Title, &state,
-		&c.job.Count, &started, &ended, &c.version, &c.shown); err != nil {
+		&c.job.Count, &started, &ended, &c.version, &c.shown, &c.job.CardOf, &c.job.Build); err != nil {
 		return row{}, err
 	}
 	c.job.Kind, c.job.State, c.job.Started = Kind(kind), State(state), time.UnixMilli(started).UTC()
@@ -76,13 +77,32 @@ func (s *Store) known(ctx context.Context, key string) (bool, error) {
 	return true, nil
 }
 
+// cardRoot is the key of the job whose message the card of the ended job key
+// is: that job's own key, or the one it reused. ok is false when there is no
+// such message to edit in conv on transport: key has no row, it is still
+// open (its own edits go on), it reports elsewhere, or the message never
+// reached the outbox.
+func (s *Store) cardRoot(ctx context.Context, key, conv, transport string) (root string, ok bool, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT r.key FROM background_jobs p
+		JOIN background_jobs r ON r.key = CASE p.card_of WHEN '' THEN p.key ELSE p.card_of END
+		WHERE p.key = ? AND p.state NOT IN ('queued', 'running') AND r.shown != '' AND r.conv = ? AND r.transport = ?`,
+		key, conv, transport).Scan(&root)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("jobs: card of %s: %w", key, err)
+	}
+	return root, true, nil
+}
+
 // insert stores a new job with its first card.
 func (s *Store) insert(ctx context.Context, c row) error {
 	j := c.job
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO background_jobs (key, kind, conv, transport, principal, title, state, count,
-		started_ms, version, shown) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (key) DO NOTHING`,
+		started_ms, version, shown, card_of, build) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (key) DO NOTHING`,
 		j.Key, string(j.Kind), j.Conv, j.Transport, j.Principal, j.Title, string(j.State), j.Count, j.Started.UnixMilli(),
-		c.version, c.shown); err != nil {
+		c.version, c.shown, j.CardOf, j.Build); err != nil {
 		return fmt.Errorf("jobs: insert %s: %w", j.Key, err)
 	}
 	return nil

@@ -3,8 +3,10 @@
 // ADR-0069). Each job has one card in its conversation, a message the node
 // sends when the job starts and edits in place every 10 s without a model,
 // through the outbox like the plan message (ADR-0052), until it ends as done,
-// failed or interrupted by a restart. The card carries only the node's fixed
-// words, the job's title and its count. The registry also tells the model and
+// failed or interrupted by a restart. A job may instead take over the card of
+// an earlier, ended job (a rebuild of a module, ADR-0112): its first message
+// is then an edit of that card. The card carries only the node's fixed words,
+// the job's title and its counts. The registry also tells the model and
 // /status what runs.
 package jobs
 
@@ -61,6 +63,14 @@ type Job struct {
 	Ended     time.Time
 	State     State
 	Count     int // progress: crates built for a build; 0 when none
+	// CardOf is the key of an earlier, ended job in the same conversation
+	// whose card this job edits instead of sending its own (ADR-0112); ""
+	// for a card of its own. Start resolves it to the job that sent the
+	// message, and drops it when there is no such message to edit.
+	CardOf string
+	// Build is which build of its module in a row the card shows ("build
+	// 3") from 2 up; 0 and 1 show none. Only a build's card shows it.
+	Build int
 }
 
 // TickEvery is how often a running job's card is edited (ruling 14).
@@ -138,6 +148,15 @@ func New(d Deps) *Registry {
 	return r
 }
 
+// card is the key of the job whose message j's card is: j's own, or the one
+// it took over.
+func (j Job) card() string {
+	if j.CardOf != "" {
+		return j.CardOf
+	}
+	return j.Key
+}
+
 // cardKey is the key of a job's first message, which its edits name.
 func cardKey(key string) string { return "job:" + key + ":card" }
 
@@ -178,18 +197,39 @@ func (r *Registry) Start(ctx context.Context, j Job) error {
 	return r.update(ctx, c, func(*row) {})
 }
 
-// register stores first, c's first row; a key that has a row already, or a
-// row that cannot be stored, drops c.
+// register stores first, c's first row, with the card it takes over
+// resolved; a key that has a row already, or a row that cannot be stored,
+// drops c.
 func (r *Registry) register(ctx context.Context, c *card, first row) error {
 	known, err := r.d.Store.known(ctx, first.job.Key)
 	if err == nil && !known {
+		first.job.CardOf, err = r.cardOf(ctx, first.job)
+	}
+	if err == nil && !known {
 		err = r.d.Store.insert(ctx, first)
 		if err == nil {
+			r.mu.Lock()
+			c.row.job.CardOf = first.job.CardOf
+			r.mu.Unlock()
 			return nil
 		}
 	}
 	r.drop(c)
 	return err
+}
+
+// cardOf is the job whose message j's card edits: the one that sent the card
+// j.CardOf shows, or "" for a card of j's own when j names none or that card
+// cannot be edited (Store.cardRoot).
+func (r *Registry) cardOf(ctx context.Context, j Job) (string, error) {
+	if j.CardOf == "" || j.CardOf == j.Key {
+		return "", nil
+	}
+	root, ok, err := r.d.Store.cardRoot(ctx, j.CardOf, j.Conv, j.Transport)
+	if err != nil || !ok {
+		return "", err
+	}
+	return root, nil
 }
 
 // drop takes c off the live jobs for good.
@@ -300,16 +340,19 @@ func (r *Registry) update(ctx context.Context, c *card, change func(*row)) error
 
 // plan decides the card's message for next, whose text is text: the first
 // message is sent here, before the row is stored; an edit is returned, to be
-// sent after it. A task's job has no card.
+// sent after it. A task's job has no card. A job that took over an earlier
+// card edits that card from its first message on, under keys of its own.
 func (r *Registry) plan(ctx context.Context, cur row, next *row, text string) (*event.Outgoing, error) {
 	j := next.job
 	switch {
 	case cardless(j.Conv):
 		return nil, nil
 	case cur.shown == "":
-		err := r.d.Outbox.Enqueue(ctx, event.Outgoing{IdemKey: cardKey(j.Key), Transport: j.Transport, Conv: j.Conv,
-			Text: text, Silent: true})
-		if err != nil {
+		first := event.Outgoing{IdemKey: cardKey(j.Key), Transport: j.Transport, Conv: j.Conv, Text: text, Silent: true}
+		if j.CardOf != "" {
+			first.IdemKey, first.EditOf = editKey(j.Key, 0), cardKey(j.CardOf)
+		}
+		if err := r.d.Outbox.Enqueue(ctx, first); err != nil {
 			r.tel.edit(ctx, editFailed)
 			return nil, fmt.Errorf("jobs: card of %s: %w", j.Key, err)
 		}
@@ -318,7 +361,7 @@ func (r *Registry) plan(ctx context.Context, cur row, next *row, text string) (*
 		return nil, nil
 	case text != cur.shown:
 		next.version, next.shown = cur.version+1, text
-		return &event.Outgoing{IdemKey: editKey(j.Key, next.version), EditOf: cardKey(j.Key), Transport: j.Transport,
+		return &event.Outgoing{IdemKey: editKey(j.Key, next.version), EditOf: cardKey(j.card()), Transport: j.Transport,
 			Conv: j.Conv, Text: text, Silent: true}, nil
 	}
 	return nil, nil

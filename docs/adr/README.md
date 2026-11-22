@@ -117,6 +117,7 @@ considered, how they compare, the decision and its consequences. See
 | [0109](0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-time-code.md) | Keep the NATS trust chain in the secret store, give each edge its own permissions in one account, and join an edge by a one-time code with its key born on the edge | Accepted | 2026-11-21 |
 | [0110](0110-modules-answer-http-on-an-edges-loopback.md) | Let a module answer HTTP on an edge's loopback listener, with the node owning the listener and the headers | Accepted | 2026-11-21 |
 | [0111](0111-building-a-module-asks-once-at-the-install.md) | Build modules without a press on the way, and ask once, at the install, for every module and link of the request | Accepted | 2026-11-22 |
+| [0112](0112-a-build-is-quiet-until-the-install-window.md) | Keep a module build quiet until the install window: no text while a build is awaited, one card per module | Accepted | 2026-11-22 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

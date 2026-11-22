@@ -129,7 +129,10 @@ func (t *ModuleBuild) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 
 // buildKey is the job key of a build that call c asked for: the module and
 // the call, so the same call asked again is the same build.
-func buildKey(name string, c tool.Call) string { return "build:" + name + ":" + keyHash(c) }
+func buildKey(name string, c tool.Call) string { return BuildKeyPrefix + name + ":" + keyHash(c) }
+
+// BuildKeyPrefix starts the key of every module build's job.
+const BuildKeyPrefix = "build:"
 
 // work is the build of a's module as the queue runs it: the answer it ends
 // with is the one module.build gave when it built inside the call.

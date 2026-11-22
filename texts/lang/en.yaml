@@ -378,6 +378,7 @@ job.card_done: "✅ {title} · {kind} done in {elapsed}"
 job.card_failed: "❌ {title} · {kind} failed in {elapsed}"
 job.card_interrupted: "⚠️ {title} · {kind} interrupted by a restart"
 job.kind_build: "build"
+job.kind_build_nth: "build {n}"
 job.kind_command: "command"
 
 # What the model reads about a module's failure, after the node's words for it (R-RUN-14).
