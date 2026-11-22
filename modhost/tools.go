@@ -21,12 +21,14 @@ const (
 	triggerCell trigger = "cell" // cells it listens to changed (R-RUN-15)
 	// triggerEvent: an event reached one of its accepts ports by a link (R-BUS-6).
 	triggerEvent trigger = "event"
+	// triggerCall: a module was asked through a served port by a link (R-BUS-6).
+	triggerCall trigger = "call"
 )
 
-// unattended reports whether nobody watches a run of t: a cron or a cell
-// trigger's failure is escalated, a tool call's is the calling turn's to
-// tell.
-func (t trigger) unattended() bool { return t != triggerTool }
+// unattended reports whether nobody watches a run of t: a cron, a cell or an
+// event trigger's failure is escalated, a tool call's is the calling turn's
+// to tell, and a served call's is the caller's.
+func (t trigger) unattended() bool { return t != triggerTool && t != triggerCall }
 
 // noArgs is the input schema of a module's tool: it takes no arguments.
 var noArgs = json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
@@ -136,10 +138,21 @@ type ran struct {
 // not unloaded meanwhile; ok is false when it is not running. The call's
 // context carries r, so the host functions' ports see it.
 func (h *Host) call(ctx context.Context, module string, in pdk.Input, r run) (ran, bool) {
+	return h.callIf(ctx, module, in, r, always)
+}
+
+// always is the condition of a call that has none.
+func always() bool { return true }
+
+// callIf is call that runs the module only if still holds once the lock is
+// held; ok is false when the module is not running or still does not hold.
+// A caller that waits for the call's answer may be gone by the time a
+// waiting Reload lets the call in (R-BUS-6).
+func (h *Host) callIf(ctx context.Context, module string, in pdk.Input, r run, still func() bool) (ran, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	l, ok := h.running[module]
-	if !ok {
+	if !ok || !still() {
 		return ran{}, false
 	}
 	at := h.d.Now()

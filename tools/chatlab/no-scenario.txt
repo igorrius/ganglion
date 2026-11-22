@@ -94,6 +94,7 @@ router/rules/**
 runner/cells.go
 runner/contract.go
 runner/kept.go
+runner/call.go
 runner/emit.go
 runner/manifest.go
 runner/notify.go

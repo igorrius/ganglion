@@ -45,6 +45,7 @@ func ModuleHost() do.Provider[*modhost.Host] {
 			Inbox:        do.MustInvoke[*sqlqueue.Queue](i),
 			Publisher:    do.MustInvoke[*natsbus.Bus](i),
 			Consumers:    do.MustInvoke[*natsbus.Bus](i),
+			Calls:        do.MustInvoke[*natsbus.Bus](i),
 			Secrets:      secretsFor(b, store),
 			Forget:       forgetSecrets(store),
 			NodeSecrets:  nodeSecrets(b),

@@ -275,10 +275,12 @@ func (h *Host) dropGone(ctx context.Context, all map[string]bool) {
 	}
 }
 
-// Shutdown stops every link's consumer and waits for their goroutines, or
-// for ctx. A message in hand is neither acked nor refused: the server sends
-// it again after the ack wait.
+// Shutdown removes the modules' served ports from the bus, stops every
+// link's consumer and waits for their goroutines, or for ctx. A message in
+// hand is neither acked nor refused: the server sends it again after the ack
+// wait.
 func (h *Host) Shutdown(ctx context.Context) error {
+	h.unserveAll()
 	h.links.end()
 	done := make(chan struct{})
 	go func() {

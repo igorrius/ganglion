@@ -20,6 +20,8 @@ type instruments struct {
 	journals    metric.Int64Counter
 	events      metric.Int64Counter
 	evDelivered metric.Int64Counter
+	calls       metric.Int64Counter
+	servings    metric.Int64Counter
 }
 
 func newInstruments() instruments {
@@ -43,6 +45,10 @@ func newInstruments() instruments {
 		metric.WithDescription("Calls of emit, by module and outcome (sent, denied: no such emits port, format: the payload broke the port's shape, not_here: init, health or a check, failed: over a limit or the node could not publish it)."))
 	in.evDelivered, _ = m.Int64Counter("ganglion.modhost.event.deliveries",
 		metric.WithDescription("Events a link's consumer handled, by link consumer and outcome (ok: the receiver ran and succeeded, failed: the run failed or the receiver was not running and the event comes again, bad: the payload does not fit the receiver's port, deep: the chain is too deep)."))
+	in.calls, _ = m.Int64Counter("ganglion.modhost.calls",
+		metric.WithDescription("Calls of call, by module and outcome (answered, denied: no such calls port or no working link, format: the request broke the port's in shape, not_here: init, health, a check or a trial run, failed: the serving run failed, timed out or answered outside the out shape, a limit, or the node could not send it, unavailable: nobody serves the port)."))
+	in.servings, _ = m.Int64Counter("ganglion.modhost.served",
+		metric.WithDescription("Requests a served port got, by module, port and outcome (ok, failed: the run failed or the module was not running, bad: the request does not fit the port's in shape, deep: the chain is too deep, late: the caller had given up)."))
 	return in
 }
 
@@ -94,4 +100,14 @@ func (in instruments) emitted(ctx context.Context, module string, o eventOutcome
 // eventDelivered counts one event a link consumer handled.
 func (in instruments) eventDelivered(ctx context.Context, consumer string, o eventDeliveryOutcome) {
 	in.evDelivered.Add(ctx, 1, metric.WithAttributes(attribute.String("consumer", consumer), attribute.String("outcome", string(o))))
+}
+
+// called counts one call of module.
+func (in instruments) called(ctx context.Context, module string, o callOutcome) {
+	in.calls.Add(ctx, 1, metric.WithAttributes(attribute.String("module", module), attribute.String("outcome", string(o))))
+}
+
+// served counts one request a served port of module got.
+func (in instruments) served(ctx context.Context, module, port string, o servedOutcome) {
+	in.servings.Add(ctx, 1, metric.WithAttributes(attribute.String("module", module), attribute.String("port", port), attribute.String("outcome", string(o))))
 }

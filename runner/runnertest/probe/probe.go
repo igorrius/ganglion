@@ -97,9 +97,11 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 			}
 		}
 		return map[string]any{"err": "", "sent": o.MiB}, nil
-	case "call": // a request o.JSON on the port o.Name; the answer or the error
-		ans, err := h.Call(o.Name, o.JSON)
-		return map[string]any{"err": callErr(err), "answer": ans}, nil
+	case "call": // a request o.JSON on the port o.Name; the answer or the error, also noted in the state as call_result
+		return callNoted(h, o)
+	case "fetch_call": // fetch o.URL and, when it has answered, call as "call" does
+		_, _ = h.Fetch(pdk.Request{Method: "GET", URL: o.URL})
+		return callNoted(h, o)
 	case "call_many": // o.MiB calls on the port o.Name, each the request o.JSON; the first refusal ends it
 		for i := 0; i < o.MiB; i++ {
 			if _, err := h.Call(o.Name, o.JSON); err != nil {
@@ -222,6 +224,17 @@ func emitErr(err error) string {
 		return "failed"
 	}
 	return "other"
+}
+
+// callNoted calls the port o.Name with o.JSON and notes the result in the
+// state, so a test sees what the module got.
+func callNoted(h pdk.Host, o op) (any, error) {
+	ans, err := h.Call(o.Name, o.JSON)
+	res := map[string]any{"err": callErr(err), "answer": ans}
+	if b, merr := json.Marshal(res); merr == nil {
+		h.StatePut("call_result", string(b))
+	}
+	return res, nil
 }
 
 // callErr names the pdk error a call failed with, "" for success.

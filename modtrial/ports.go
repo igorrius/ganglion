@@ -120,3 +120,16 @@ func (trialEmit) Emit(context.Context, string, json.RawMessage) runner.EmitCode 
 
 // Refused implements runner.EmitPort.
 func (trialEmit) Refused(context.Context, runner.EmitCode) {}
+
+// trialCall is the call port of a trial: the runner has checked the port and
+// the request's shape like a node's, and nobody is called, so the answer is
+// "not here". A trial has no links to carry a call.
+type trialCall struct{}
+
+// Call implements runner.CallPort.
+func (trialCall) Call(context.Context, string, json.RawMessage) (json.RawMessage, runner.CallCode) {
+	return nil, runner.CallNotHere
+}
+
+// Settled implements runner.CallPort.
+func (trialCall) Settled(context.Context, runner.CallCode) {}
