@@ -60,6 +60,14 @@ The node runs a small message server (NATS with JetStream) inside its own proces
 - The server stores its data on disk only, so it adds little memory. The metrics `ganglion.bus.store_bytes` and `ganglion.bus.connected` show the store and the connection.
 - To use a NATS server you run yourself, set `bus.server: external` and list its addresses in `bus.urls`; see [the `bus` section](configuration.md#bus). The node then starts no server, and it refuses to start when it cannot reach yours. To put your server on the node's trust chain instead of your own credentials, run `ganglion bus trust --db <database>` as the node's user, add the lines it prints to your server's configuration (they hold only public keys), restart the server and set `bus.trust: chain`; the node sends its account to the server at every start.
 
+## Edges
+
+An edge is the same `ganglion` binary run with `--roles edge` on another computer, next to your devices. It runs its modules and their schedules, keeps its own message store, and has no Telegram, agent or model: you talk to your main node, and the main node hears from its edges. Give it a name and the main node's bus in [the `edge` section](configuration.md#edge).
+
+- The edge dials out to your main node; it opens no port. When the link is down, its modules keep running and their events stay on the edge (up to 256 MiB, at most 7 days, the oldest go first). Within a few seconds of the link coming back, your main node has them all, in order and once.
+- Every `edge.telemetry_every` (30 seconds by default) the edge sends its metrics and its state. Your main node serves the edges' metrics on its own `/metrics`, each series with a `node` label naming the edge, so one dashboard shows every computer.
+- `/status` on your main node shows a line per edge: **linked**, with its modules and their versions and how many of its events are still on the way; **not heard**, with the time of its last word and how many events it held then (the edge is off or its link is down); or **not heard since the node started**, for an edge your main node knows but that has not spoken since its restart.
+
 ## Backups
 
 A node can back itself up every day to a bucket at any S3-compatible provider. Each copy is encrypted on the node before it leaves, so the provider sees only sealed bytes. Without a `backup:` section there are no backups and `/status` says so; the [manual copy](#backing-up-by-hand) below then is your only protection.

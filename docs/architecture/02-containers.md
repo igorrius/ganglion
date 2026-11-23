@@ -29,7 +29,7 @@ flowchart LR
         cli["claude CLI worker"]
     end
 
-    bus{{"Bus<br/>P2 M8: embedded NATS server,<br/>JetStream on disk (or an external one);<br/>later: leaf nodes, Object Store"}}
+    bus{{"Bus<br/>P2 M8: embedded NATS server,<br/>JetStream on disk (or an external one);<br/>M10: an edge is a leaf with its own JetStream domain;<br/>later: Object Store"}}
 
     tg <--> corep
     tg -- "updates by webhook, when the file says so:<br/>the public listener, secret header (ADR-0078)" --> corep
@@ -112,7 +112,13 @@ a running core, and opens no port.
 The core runs a NATS server with JetStream. Each edge runs a leaf node that
 dials out to the core, so no inbound ports or NAT forwarding are needed.
 While the link is down, edges keep running on their modules and local
-policies; events queue up in JetStream and are delivered later.
+policies; their events stay in the `EVENTS` stream of the edge's own
+JetStream domain, and the core's `EVENTS` stream sources it, so they arrive
+within a few seconds of the link coming back, in order and once
+([ADR-0115](../adr/0115-an-edge-keeps-its-events-in-its-own-domain-and-the-core-sources-them.md)).
+Every `edge.telemetry_every` the edge sends a snapshot on `g.tel.<edge>`;
+the core serves the edges' metrics on its own `/metrics` and shows a line
+per edge in `/status`.
 
 ```mermaid
 flowchart LR
@@ -129,7 +135,7 @@ flowchart LR
     subgraph pc["owner's PC"]
         wk["ganglion run --roles worker<br/>claude CLI"]
     end
-    e1 -- "leaf connection, TLS" --> cn
+    e1 -- "leaf link over wss://, own JetStream domain;<br/>EVENTS sourced by the core; g.tel.edge" --> cn
     e2 -.-> cn
     wk -- "NATS client" --> cn
     esp -- "MQTT" --> e1

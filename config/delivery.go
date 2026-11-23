@@ -3,6 +3,7 @@ package config
 import (
 	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/bus/wsproxy"
+	"github.com/igorrius/ganglion/edge"
 	"log/slog"
 	"time"
 
@@ -330,6 +331,7 @@ func CoreComponents() do.Provider[[]node.Component] {
 			node.Named("loop", do.MustInvoke[*core.Loop](i).Run),
 			do.MustInvoke[*intake.Registry](i),
 			sqlqueue.Pruner{Queue: q, Every: pruneEvery, Log: do.MustInvoke[*slog.Logger](i)},
+			do.MustInvoke[*edge.Collector](i),
 		}
 		comps = append(comps, do.MustInvoke[Housekeeping](i)...)
 		comps = append(comps, do.MustInvoke[Schedulers](i)...)

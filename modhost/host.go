@@ -108,6 +108,10 @@ func NothingToForget(context.Context, string) error { return nil }
 
 // Deps are the host's collaborators; all are required.
 type Deps struct {
+	// Node is this node's token in subjects and in the Ganglion-From
+	// header: CoreNode on the core, the edge's name on an edge. "" is
+	// CoreNode.
+	Node  string
 	Store Store
 	Cells *cells.Service
 	Jobs  Jobs
@@ -174,6 +178,9 @@ type Host struct {
 func New(d Deps) *Host {
 	if d.Location == nil {
 		d.Location = time.UTC
+	}
+	if d.Node == "" {
+		d.Node = CoreNode
 	}
 	if d.Consumers == nil {
 		d.Consumers = noConsumers{}

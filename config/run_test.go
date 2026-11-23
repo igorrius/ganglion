@@ -161,6 +161,13 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 	return s.w.Write(p)
 }
 
+// String reads what was written so far, under the same lock.
+func (s *syncWriter) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.String()
+}
+
 func TestWrongTokenEndsRun(t *testing.T) {
 	fake := telegramtest.NewServer(t, testToken)
 	cfg := testConfig(t)

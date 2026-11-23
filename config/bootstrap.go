@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/igorrius/ganglion/telemetry"
 	"net/http"
 	"time"
 
@@ -110,6 +111,11 @@ type Bootstrap struct {
 	// (ADR-0045); the command line sets it from telemetry, nil leaves the
 	// tool out.
 	Metrics builtin.MetricsRenderer
+	// Telemetry is the node's telemetry, for an edge's snapshots and the
+	// core's view of its edges' series (R-OBS-9); nil sends and keeps none.
+	Telemetry *telemetry.Telemetry
+	// EdgeRole makes the node an edge (R-EDGE-7); Run sets it from the roles.
+	EdgeRole bool
 }
 
 // SecretValues are the secret values the node read, which logs and command

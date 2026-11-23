@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/expfmt"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -53,6 +54,8 @@ type Telemetry struct {
 	srv  *http.Server
 	ln   net.Listener
 	dash *dash.Dashboard
+	reg  *prometheus.Registry
+	net  *Network
 }
 
 // Setup installs the global meter provider (and tracer provider, when
@@ -76,7 +79,7 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 	if err != nil {
 		return nil, err
 	}
-	t := &Telemetry{mp: sdkmetric.NewMeterProvider(sdkmetric.WithReader(exp), sdkmetric.WithResource(res))}
+	t := &Telemetry{mp: sdkmetric.NewMeterProvider(sdkmetric.WithReader(exp), sdkmetric.WithResource(res)), reg: reg, net: NewNetwork()}
 	otel.SetMeterProvider(t.mp)
 
 	if getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" || getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != "" {
@@ -90,7 +93,9 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 
 	// HandlerFor without a Registry in the options does not count its own
 	// calls, so the dashboard's polling stays out of what scrapers see.
-	metrics := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
+	// The edges' series join the node's own (R-OBS-9); one edge's family
+	// that does not fit is left out, never the whole page.
+	metrics := promhttp.HandlerFor(prometheus.Gatherers{reg, t.net}, promhttp.HandlerOpts{ErrorHandling: promhttp.ContinueOnError})
 	// The dashboard runs even with nothing listening: it reads the
 	// handler in process, and the picture in the chat is drawn from it
 	// (ADR-0045).
@@ -113,6 +118,26 @@ func Setup(ctx context.Context, cfg Config) (*Telemetry, error) {
 	go func() { _ = t.srv.Serve(ln) }()
 	return t, nil
 }
+
+// Snapshot writes the node's own metrics in the Prometheus text format, for
+// an edge's telemetry (R-OBS-9).
+func (t *Telemetry) Snapshot(w io.Writer) error {
+	mfs, err := t.reg.Gather()
+	if err != nil && len(mfs) == 0 {
+		return err
+	}
+	enc := expfmt.NewEncoder(w, expfmt.NewFormat(expfmt.TypeTextPlain))
+	for _, mf := range mfs {
+		if err := enc.Encode(mf); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Network is where the core keeps the series its edges send; they are
+// served beside the node's own.
+func (t *Telemetry) Network() *Network { return t.net }
 
 // Renderer draws the node's own metrics for the chat.
 func (t *Telemetry) Renderer() *Renderer { return &Renderer{d: t.dash} }

@@ -166,3 +166,5 @@ restart/**
 config/restart.go
 bus/**
 config/bus.go
+config/edge.go
+edge/**

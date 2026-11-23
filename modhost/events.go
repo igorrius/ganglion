@@ -15,10 +15,6 @@ import (
 // a notice that was sent is also an event on the module's notify output.
 // The links' consumers read them (linkconsumers.go).
 
-// eventNode is the node token of an event's subject until nodes have names
-// (M10): the same word the Ganglion-From header says.
-const eventNode = fromNode
-
 // eventOutcome is what became of an emit call, for the metrics: a closed
 // set.
 type eventOutcome string
@@ -78,9 +74,9 @@ func (p emitPort) Refused(ctx context.Context, code runner.EmitCode) {
 // with the run's identity and depth. The publish does not end with ctx: the
 // run goes on, and an event stored once is stored.
 func (h *Host) publishEvent(ctx context.Context, l *loaded, port, id string, r run, payload []byte) eventOutcome {
-	subject, err := bus.Event(eventNode, l.short, port)
+	subject, err := bus.Event(h.d.Node, l.short, port)
 	if err == nil {
-		headers := map[string]string{bus.HeaderFrom: fromNode + "/" + l.name, bus.HeaderRun: r.ID, bus.HeaderDepth: strconv.Itoa(r.Depth)}
+		headers := map[string]string{bus.HeaderFrom: h.d.Node + "/" + l.name, bus.HeaderRun: r.ID, bus.HeaderDepth: strconv.Itoa(r.Depth)}
 		err = h.d.Publisher.Publish(context.WithoutCancel(ctx), subject, id, headers, payload)
 	}
 	if err != nil {

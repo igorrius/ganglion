@@ -46,10 +46,19 @@ type Config struct {
 	// AuthTimeout is how long a connection to the WebSocket listener may
 	// stay silent before the server closes it.
 	AuthTimeout time.Duration
+	// Leaf makes the embedded server an edge's leaf node (ADR-0115): its own
+	// JetStream domain, and a link to the core that comes and goes. nil is
+	// the core's or a single node's bus. Only for the embedded server, and
+	// not with a Chain: an edge's own server has one user, the edge.
+	Leaf *Leaf
 	// testListen opens a listener on a free loopback port, for the tests of
 	// this package that must read the server's refusals. Nothing outside
 	// the package can set it.
 	testListen bool
+	// testLeafPort opens a leaf-node listener on this loopback port, for
+	// the tests that join an edge to this server; the link transport
+	// itself is the public listener's (R-EDGE-4).
+	testLeafPort int
 	// StartTimeout is how long the embedded server may take to be ready,
 	// and the connection to be made.
 	StartTimeout time.Duration
@@ -60,6 +69,20 @@ type Config struct {
 	// attempts to an external server, which doubles from the first to the
 	// second.
 	ReconnectMin, ReconnectMax time.Duration
+}
+
+// Leaf is how an edge's server links to the core.
+type Leaf struct {
+	// Domain is the edge's JetStream domain: the edge's name, so the core
+	// reaches its streams as $JS.<Domain>.API.
+	Domain string
+	// URL is where the core's leaf listener is: nats-leaf://, ws:// or
+	// wss://. "" runs the edge with no link, as an edge whose link is
+	// down for good.
+	URL string
+	// CredsFile is the path of the edge's .creds file (its user JWT and
+	// seed); the server reads it itself on every connect.
+	CredsFile string
 }
 
 // DefaultConfig returns the embedded server storing under storeDir.
@@ -97,5 +120,26 @@ func (c Config) check() error {
 	default:
 		return fmt.Errorf("natsbus: unknown mode %q", c.Mode)
 	}
+	if err := c.checkLeaf(); err != nil {
+		return err
+	}
 	return c.checkChain()
+}
+
+// checkLeaf refuses a leaf setting the bus cannot run.
+func (c Config) checkLeaf() error {
+	l := c.Leaf
+	switch {
+	case l == nil:
+		return nil
+	case c.Mode != bus.ModeEmbedded:
+		return fmt.Errorf("natsbus: a leaf node is the embedded server")
+	case c.Chain != nil:
+		return fmt.Errorf("natsbus: a leaf node runs without a trust chain: the core's chain does not leave the core")
+	case bus.CheckEdgeName(l.Domain) != nil:
+		return fmt.Errorf("natsbus: the leaf's domain must be the edge's name, one subject token and not %q", bus.CoreNode)
+	case l.URL != "" && l.CredsFile == "":
+		return fmt.Errorf("natsbus: a leaf link needs the edge's credentials file")
+	}
+	return nil
 }

@@ -174,6 +174,23 @@ bus:
   credentials: store:BUS_CREDENTIALS
 ```
 
+## edge
+
+For a node run as an edge, `ganglion run --roles edge`: a computer next to your devices that runs modules and links to your main node. The section counts only for that role. Only a host edit changes it: the agent cannot. See [Edges](operations.md#edges).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `name` | none | The edge's name in your network, one word with no dots or spaces, such as `garage`, and not `core`. Required for `--roles edge`. |
+| `url` | none | Your main node's bus, `wss://<public address>/bus`. Left out, the edge runs on its own and keeps its events until it has a link. |
+| `credentials` | `edge.creds` beside the database | The edge's credentials file, which your main node gives the edge when it joins. With `url` set, the edge refuses to start without it. |
+| `telemetry_every` | `30s` | How often the edge sends its metrics and its state to your main node; `5s` or more. |
+
+```yaml
+edge:
+  name: garage
+  url: wss://example.com/bus
+```
+
 ## backup
 
 The daily encrypted backup to an S3-compatible bucket. Without this section there are no backups. Only a host edit changes it: the agent cannot. When the section is there, the first five keys are required. See [Backups](operations.md#backups).
