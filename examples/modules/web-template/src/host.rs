@@ -1,0 +1,68 @@
+//! What the module may ask of the node: the ganglion host functions as a
+//! trait, so the logic runs under `cargo test` with a fake and inside the
+//! node with the glue of `guest.rs`.
+
+/// Why a message did not go out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Notify {
+    /// The manifest does not grant `notify`.
+    Denied,
+    /// Today's limit is used up (or the node could not take it now).
+    Limit,
+    /// Not in this run: `init` and `health` send nothing.
+    NotHere,
+}
+
+/// Why an event did not go out (the codes of the `emit` host function).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Emit {
+    /// -1: the manifest declares no such port under `ports.emits`.
+    Denied,
+    /// -2: the payload does not fit the port's shape; the whole run fails as
+    /// `module.format`.
+    Format,
+    /// -3: not in this run: `init`, `health` and a build's check send nothing.
+    NotHere,
+    /// -4: the payload is over 64 KiB, the run already sent 100 events, or
+    /// the node could not publish it.
+    Failed,
+}
+
+/// Why a call got no answer (the codes of the `call` host function).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Call {
+    /// -1: the manifest declares no such port under `ports.calls`, or no link
+    /// starts at it.
+    Denied,
+    /// -2: the request does not fit the port's `in` shape; the whole run fails
+    /// as `module.format`.
+    Format,
+    /// -3: not in this run: `init`, `health` and a build's check call nobody.
+    NotHere,
+    /// -4: the serving run failed or timed out, the answer does not fit the
+    /// port's `out` shape, the request or the answer is over 64 KiB, the run
+    /// already made 100 calls, the chain is too deep, or the node could not
+    /// send it.
+    Failed,
+    /// -5: nobody answers: the module that serves the port is not running.
+    Unavailable,
+}
+
+/// Everything the module may ask of the runner.
+pub trait Host {
+    fn state_get(&self, key: &str) -> Option<String>;
+    fn state_put(&self, key: &str, value: &str);
+    fn config(&self, key: &str) -> Option<String>;
+    /// Reads a listed cell by id, with the time it last changed in ms.
+    fn cell_get(&self, id: &str) -> Option<(serde_json::Value, i64)>;
+    /// Writes to the owner. The text is made by the module's own code.
+    fn notify(&self, text: &str) -> Result<(), Notify>;
+    /// Publishes an event on one of the module's `ports.emits`, by name.
+    fn emit(&self, port: &str, payload: &serde_json::Value) -> Result<(), Emit>;
+    /// Sends a request on one of the module's `ports.calls`, by name, to the
+    /// module the port is linked to, and waits for its answer, at most the
+    /// time left in the run.
+    fn call(&self, port: &str, request: &serde_json::Value) -> Result<serde_json::Value, Call>;
+    fn now_unix(&self) -> i64;
+    fn log(&self, msg: &str);
+}
