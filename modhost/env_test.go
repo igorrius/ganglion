@@ -136,6 +136,7 @@ type store struct {
 	by         map[string]string // sha → who installed it
 	counts     []countCall
 	rolledBack []string
+	previous   map[string]modstore.Active // what a rollback of the module makes active
 	removed    []string
 	gone       []string          // removed through RemoveLocal; the journal still has them
 	failActive error             // ActiveLocal's, when set
@@ -289,6 +290,13 @@ func (s *store) Rollback(_ context.Context, module string) (modstore.Outcome, er
 	s.rolledBack = append(s.rolledBack, module)
 	if !slices.ContainsFunc(s.active, func(a modstore.Active) bool { return a.Module == module }) {
 		return modstore.Outcome{}, modstore.ErrUnknownModule
+	}
+	if p, ok := s.previous[module]; ok {
+		for i := range s.active {
+			if s.active[i].Module == module {
+				s.active[i] = p
+			}
+		}
 	}
 	return modstore.Outcome{Module: module, From: "3", To: "2", Result: modstore.ResultRolledBack}, nil
 }

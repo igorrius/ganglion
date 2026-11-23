@@ -130,6 +130,9 @@ type Step struct {
 	// fake authorization server takes the link, and the owner pastes the
 	// line the intake page would show.
 	SignIn bool `yaml:"sign_in"`
+	// JoinEdge is an edge joining with the code in the newest card that
+	// shows one, as the join command on the owner's computer would.
+	JoinEdge bool `yaml:"join_edge"`
 }
 
 // Reply is the person replying to the newest bot message whose text holds
@@ -395,7 +398,7 @@ func (s Scenario) checkSteps() error {
 func (st Step) check() error {
 	set := 0
 	for _, on := range []bool{st.Say != "", st.Press != "", st.Judge != "", st.Language != "", st.Send != nil, st.Reply != nil, st.Adds != nil, st.Advance != nil, st.Reach != nil,
-		st.Facts != nil && !st.Facts.empty(), st.SignIn} {
+		st.Facts != nil && !st.Facts.empty(), st.SignIn, st.JoinEdge} {
 		if on {
 			set++
 		}

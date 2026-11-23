@@ -153,6 +153,8 @@ func (r *repeatRun) step(ctx context.Context, st Step) error {
 			return err
 		}
 		return r.settle(ctx)
+	case st.JoinEdge:
+		return r.joinEdge(ctx)
 	case st.Reach != nil:
 		return r.reach(ctx, *st.Reach)
 	case st.Facts != nil:
@@ -162,6 +164,14 @@ func (r *repeatRun) step(ctx context.Context, st Step) error {
 		return nil
 	}
 	return r.judge(ctx, st.Judge)
+}
+
+func (r *repeatRun) joinEdge(ctx context.Context) error {
+	fmt.Fprintf(&r.log, "\n**an edge joins** with the code in the newest card\n")
+	if err := r.n.JoinEdge(ctx); err != nil {
+		return err
+	}
+	return r.settle(ctx)
 }
 
 func (r *repeatRun) note(st Step) {
