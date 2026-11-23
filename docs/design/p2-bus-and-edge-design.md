@@ -374,7 +374,10 @@ One account for the network, permissions per edge user **(owner)**. An edge may 
 `g.ev.<edge>.>`, `g.tel.<edge>`, `g.rpc` answers of its own modules, the KV keys of its own modules'
 cells and `actual.<edge>.>`; it may subscribe only to what the links of its modules need, to
 `desired.<edge>.>` and to the `modules` objects it is assigned. The node derives the permissions from
-the links and re-issues the edge's JWT when they change. The join card shows them.
+the links and re-issues the edge's JWT when they change; the edge renews it every hour. The join card
+shows them. The exact subjects are in
+[ADR-0116](../adr/0116-an-edge-joins-with-a-one-time-code-over-https-and-renews-its-jwt-by-a-signed-request.md),
+which supersedes the subject names above.
 
 ### 7.3. Reaching the core
 
@@ -404,7 +407,8 @@ sequenceDiagram
 ```
 
 The code is stored hashed, used once, and expires after 10 minutes; a wrong code is refused and
-counted, with a limit on attempts per minute. The edge keeps its seed and JWT in its data directory,
+counted, with one limit on failed attempts for the whole listener (the exact numbers are in
+[ADR-0116](../adr/0116-an-edge-joins-with-a-one-time-code-over-https-and-renews-its-jwt-by-a-signed-request.md)). The edge keeps its seed and JWT in its data directory,
 readable only by its user, and trusts only the operator key it was given.
 
 ### 7.5. Revocation

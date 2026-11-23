@@ -89,6 +89,7 @@ func (a *Agent) commandTable() []commandEntry {
 			transport.LangRussian:   "Сохранённые секреты: /secrets, /secrets rm <модуль|node> ИМЯ",
 			transport.LangUkrainian: "Збережені секрети: /secrets, /secrets rm <модуль|node> НАЗВА"}},
 		{"/mcp", a.mcpCmd, mcpHint()},
+		{"/edges", a.edgesCmd, edgesHint()},
 		{"/update", a.updateCmd, map[transport.Lang]string{
 			transport.LangDefault:   "Update the node: /update, /update install vX.Y.Z, /update rollback",
 			transport.LangRussian:   "Обновить ноду: /update, /update install vX.Y.Z, /update rollback",

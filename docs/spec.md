@@ -2464,7 +2464,8 @@ The bus ([ADR-0106](adr/0106-embed-nats-with-jetstream-as-the-bus-behind-narrow-
   publishes and consumes by outcome, consumer lag, stream sizes and KV
   retries; `/status` has a "Bus" line.
 
-Edges ([ADR-0109](adr/0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-time-code.md)):
+Edges ([ADR-0109](adr/0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-time-code.md),
+[ADR-0116](adr/0116-an-edge-joins-with-a-one-time-code-over-https-and-renews-its-jwt-by-a-signed-request.md)):
 
 - **R-EDGE-1.** The trust chain is NATS's decentralized model: operator →
   account `NET` (with a signing key) and the system account → users (the core
@@ -2476,14 +2477,23 @@ Edges ([ADR-0109](adr/0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-
   modules' cell keys and `actual.<edge>.>`, and subscribe only to what its
   modules' links need, `desired.<edge>.>` and its assigned module objects.
   The node derives the permissions from the links and re-issues the JWT when
-  they change. Only the core writes `desired.` keys and module objects.
+  they change: the JWT lives 24 hours and the edge renews it every hour
+  (R-EDGE-3). Only the core writes `desired.` keys and module objects.
 - **R-EDGE-3.** Join: the owner asks in the chat, approves a card with the
-  edge's name and permissions, and gets a one-time code (128 bits, stored
-  hashed, single use, 10 minutes, bound to the name, attempts rate limited).
-  `ganglion edge join <url> <code>` generates the edge's NKey, posts the code
-  and the public key over HTTPS, and gets the user JWT, the operator public
-  key and the bus URL. The seed never leaves the edge. The owner is told of
-  every join.
+  edge's name and permissions, and gets a one-time code (128 bits, written as
+  26 Crockford base32 characters in groups of four, stored hashed, single use,
+  10 minutes, bound to the name). `ganglion edge join <url> <code>` generates
+  the edge's NKey, posts the code and the public key to `POST /edge/join` on
+  the public listener over HTTPS, and gets the user JWT (24 hours), the
+  operator public key and the bus URL. The seed never leaves the edge. The
+  owner is told of every join. To renew, the edge sends `POST /edge/renew`
+  with a request signed by its key, every hour; the core answers only for a
+  joined edge that is not revoked, with a JWT from the permissions as they
+  are now. The join is refused when the links changed after the card (the
+  edge gets only the permissions the owner read) and for a key a joined
+  edge holds. Join attempts have one limiter (a burst of 5, one more every
+  12 s; past it, 429); renewals are checked by signature and are not under
+  it, so a stranger cannot make edges' JWTs run out.
 - **R-EDGE-4.** The edge's leaf dials `wss://<public address>/bus`; the public
   listener proxies the upgrade to the embedded server's WebSocket listener on
   `127.0.0.1`. NATS refuses any connection without a valid JWT and nonce
@@ -2491,8 +2501,10 @@ Edges ([ADR-0109](adr/0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-
   at most 64 tunnels at once; the server takes messages up to 1 MiB and
   closes a socket silent for 2 s
   ([ADR-0114](adr/0114-the-public-listener-proxies-the-buss-websocket-and-the-server-checks-the-jwt.md)).
-- **R-EDGE-5.** A Revoke button puts the edge's public key into the account
-  JWT's revocations; the server drops and refuses it.
+- **R-EDGE-5.** `/edges` lists the joined edges, each with a Revoke button. It
+  puts the edge's public key into the account JWT's revocations (the server
+  drops and refuses it), stops the core sourcing the edge's events and frees
+  the edge's name.
 - **R-EDGE-6.** A module with `node: <edge>` in `modules:` is delivered by
   desired state: the `.wasm` and manifest in the `modules` Object Store,
   `desired.<edge>.<module>` with version and SHA-256, `actual.<edge>.<module>`

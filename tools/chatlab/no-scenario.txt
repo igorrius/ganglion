@@ -32,6 +32,7 @@ agent/telemetry.go
 alert/**
 groups/**
 cmd/bus.go
+cmd/edge.go
 cmd/dispatch.go
 cmd/mcp.go
 cmd/relay.go
@@ -167,4 +168,8 @@ config/restart.go
 bus/**
 config/bus.go
 config/edge.go
+config/edge_join.go
+edgeadmin/**
+edgejoin/**
+agent/edges_cmd.go
 edge/**

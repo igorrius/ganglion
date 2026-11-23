@@ -120,6 +120,12 @@ Every `edge.telemetry_every` the edge sends a snapshot on `g.tel.<edge>`;
 the core serves the edges' metrics on its own `/metrics` and shows a line
 per edge in `/status`.
 
+An edge joins with a one-time code the owner gets in the chat: it posts the
+code and its public key to `/edge/join` on the core's public listener and
+receives its user JWT; every hour it asks `/edge/renew` with a request signed
+by its key for a fresh one
+([ADR-0116](../adr/0116-an-edge-joins-with-a-one-time-code-over-https-and-renews-its-jwt-by-a-signed-request.md)).
+
 ```mermaid
 flowchart LR
     subgraph server["server or cloud"]
@@ -136,6 +142,7 @@ flowchart LR
         wk["ganglion run --roles worker<br/>claude CLI"]
     end
     e1 -- "leaf link over wss://, own JetStream domain;<br/>EVENTS sourced by the core; g.tel.edge" --> cn
+    e1 -- "HTTPS: POST /edge/join (once, with the code),<br/>POST /edge/renew (hourly, signed)" --> cn
     e2 -.-> cn
     wk -- "NATS client" --> cn
     esp -- "MQTT" --> e1

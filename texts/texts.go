@@ -589,6 +589,26 @@ const (
 	StatusMCPToolsChanged     Key = "status.mcp_tools_changed" // vars: server
 	StatusMCPUnauthorized     Key = "status.mcp_unauthorized"  // vars: server
 	StatusMCPLocked           Key = "status.mcp_locked"        // vars: server
+	ButtonEdgeApprove         Key = "button.edge_approve"
+	ButtonEdgeCancel          Key = "button.edge_cancel"
+	ButtonEdgeRevoke          Key = "button.edge_revoke"   // vars: name
+	EdgeCard                  Key = "edge.card"            // vars: name, publish, subscribe
+	EdgeNone                  Key = "edge.none"            // an empty list of permissions
+	EdgeApproved              Key = "edge.approved"        // vars: name, time, command
+	EdgeAddressUnknown        Key = "edge.address_unknown" // stands for the node's address in the command
+	EdgeCancelled             Key = "edge.cancelled"       // vars: name
+	EdgeStale                 Key = "edge.stale"           // vars: name
+	EdgeTaken                 Key = "edge.taken"           // vars: name
+	EdgeBusy                  Key = "edge.busy"
+	EdgeListNone              Key = "edge.list_none"
+	EdgeListHead              Key = "edge.list_head"
+	EdgeListRow               Key = "edge.list_row"  // vars: name, time
+	EdgeListNote              Key = "edge.list_note" // permissions are not shown
+	EdgePrivateOnly           Key = "edge.private_only"
+	EdgeRevoked               Key = "edge.revoked"       // vars: name
+	EdgeGone                  Key = "edge.gone"          // vars: name
+	EdgeRevokeFailed          Key = "edge.revoke_failed" // vars: name
+	EdgeJoined                Key = "edge.joined"        // vars: name, time
 )
 
 var allKeys = []Key{
@@ -610,6 +630,7 @@ var allKeys = []Key{
 	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateButtonInstall, UpdateButtonRollback, UpdateButtonRollbackImg, UpdateButtonStale, UpdateAlreadyInstalled, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
 	BackupAlertFailed, BackupAlertRecovered, BackupLastNone, BackupReasonRefused, BackupReasonNetwork, BackupReasonChanged, BackupReasonIntegrity, BackupReasonOther, StatusBackupOff, StatusBackupOK, StatusBackupWaiting, StatusBackupStale, StatusBackupNone, StatusReasonBackupStale, StatusBackupFailed, StatusBusOK, StatusBusDown, StatusBusNoChain, StatusEdgeOK, StatusEdgeSilent, StatusEdgeUnheard,
 	AskMCPConnect, AskMCPSignIn, AskMCPSignInLink, AskMCPPageWarning, AskMCPToolsCard, AskMCPToolsNone, AskMCPToolsAuto, AskMCPToolsConfirm, AskMCPToolsForbidden, AskMCPToolsSkipped, AskMCPToolsMore, AskMCPToolsAutoWrite, AskMCPToolsForbiddenCount, AskMCPRule, AskMCPRules, AskMCPRuleLine, AskMCPRuleGroup, AskMCPPolicyAuto, AskMCPPolicyConfirm, AskMCPPolicyForbidden, ButtonMCPConnect, ButtonMCPAskAll, ButtonMCPCancel, ButtonMCPDisconnect, MCPConnected, MCPCancelled, MCPCardStale, MCPDisconnected, MCPListFailed, MCPListNone, MCPListHead, MCPListRow, MCPListSignedIn, MCPPrivateOnly, MCPStateConnecting, MCPStateConnected, MCPStateUnreachable, MCPStateToolsChanged, MCPStateUnauthorized, MCPStateLocked, StatusMCPConnecting, StatusMCPUnreachable, StatusMCPToolsChanged, StatusMCPUnauthorized, StatusMCPLocked,
+	ButtonEdgeApprove, ButtonEdgeCancel, ButtonEdgeRevoke, EdgeCard, EdgeNone, EdgeApproved, EdgeAddressUnknown, EdgeCancelled, EdgeStale, EdgeTaken, EdgeBusy, EdgeListNone, EdgeListHead, EdgeListRow, EdgeListNote, EdgePrivateOnly, EdgeRevoked, EdgeGone, EdgeRevokeFailed, EdgeJoined,
 	AskLinkAdd, AskLinkRemove, ModulesRemovedLinks, StatusLinkBroken, StatusReasonLinkEnd, StatusReasonLinkKind, StatusReasonLinkShape, StatusReasonLinkTaken, StatusReasonLinkLoop, StatusReasonLinkDeep,
 }
 
@@ -652,7 +673,7 @@ func limit(k Key) int {
 // missing any of these is refused whole (R-LANG-5).
 func IsApproval(k Key) bool {
 	switch k {
-	case ButtonApprove, ButtonDeny, ButtonDelete, ButtonRunNow, ButtonDone, ButtonAllow, ButtonRefuse, GroupRequestCard, ButtonMCPConnect, ButtonMCPAskAll, ButtonMCPCancel, MemoryProposal, ButtonRemember, ButtonSkip, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands,
+	case ButtonApprove, ButtonDeny, ButtonDelete, ButtonRunNow, ButtonDone, ButtonAllow, ButtonRefuse, GroupRequestCard, ButtonMCPConnect, ButtonMCPAskAll, ButtonMCPCancel, ButtonEdgeApprove, ButtonEdgeCancel, EdgeCard, MemoryProposal, ButtonRemember, ButtonSkip, SchedSummaryReminder, SchedSummaryTask, SchedSummaryCommands,
 		SchedOnce, SchedEvery, SchedEveryNext, SchedThisChat, SchedNone:
 		return true
 	default:

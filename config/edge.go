@@ -93,13 +93,33 @@ func EdgeComponents() do.Provider[[]node.Component] {
 			pub.Metrics = b.Telemetry.Snapshot
 		}
 		log.Info("node: edge on", "edge", pub.Edge, "linked_to", b.Settings.Edge.URL != "", "telemetry_every", pub.Every)
-		return []node.Component{
+		comps := []node.Component{
 			node.Named("loop", do.MustInvoke[*core.Loop](i).Run),
 			sqlqueue.Pruner{Queue: q, Every: pruneEvery, Log: log},
 			do.MustInvoke[*schedule.Scheduler](i),
 			pub,
-		}, nil
+		}
+		return append(comps, edgeRenewer(b, nb, log)...), nil
 	}
+}
+
+// edgeRenewer is the component that renews the edge's JWT (R-EDGE-3), or
+// none for an edge with no link or a bus address that has no https address.
+func edgeRenewer(b Bootstrap, nb *natsbus.Bus, log *slog.Logger) []node.Component {
+	e := b.Settings.Edge
+	if e.URL == "" {
+		return nil
+	}
+	addr, err := edge.NodeURL(e.URL)
+	if err != nil {
+		log.Warn("node: edge credentials are not renewed", "error", err)
+		return nil
+	}
+	file := e.Credentials
+	if file == "" {
+		file = filepath.Join(filepath.Dir(b.DB), edgeCredsFile)
+	}
+	return []node.Component{edge.NewRenewer(addr, file, nb.RedialLeaf, log)}
 }
 
 // edgeModules are the modules an edge runs, for its telemetry.

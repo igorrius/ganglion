@@ -33,6 +33,7 @@ nav:
       - Models and providers: running/models.md
       - "Telegram: polling or webhook": running/telegram-updates.md
       - Operations: running/operations.md
+      - Connecting a computer as an edge: running/edges.md
       - Deploying on Railway: running/railway.md
   - Troubleshooting: troubleshooting.md
   - For contributors: contributors.md

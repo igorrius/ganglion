@@ -4,6 +4,7 @@ import (
 	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/bus/wsproxy"
 	"github.com/igorrius/ganglion/edge"
+	"github.com/igorrius/ganglion/edgejoin"
 	"log/slog"
 	"time"
 
@@ -79,13 +80,16 @@ func PublicListeners() do.Provider[Listeners] {
 }
 
 // HTTPListeners provides the public listener as a component, with the
-// edges' entry on /bus when the bus has one (R-EDGE-4, ADR-0114).
+// edges' entry on /bus and their join routes when the bus has an entry
+// (R-EDGE-4, ADR-0114, ADR-0116).
 func HTTPListeners() do.Provider[Listeners] {
 	return func(i do.Injector) (Listeners, error) {
 		l := do.MustInvoke[*publichttp.Listener](i)
-		if err := mountBus(l, do.MustInvoke[*natsbus.Bus](i), do.MustInvoke[*slog.Logger](i)); err != nil {
+		nb, log := do.MustInvoke[*natsbus.Bus](i), do.MustInvoke[*slog.Logger](i)
+		if err := mountBus(l, nb, log); err != nil {
 			return nil, err
 		}
+		mountEdgeJoin(l, do.MustInvoke[*edgejoin.Service](i), nb, log)
 		return Listeners{l}, nil
 	}
 }
