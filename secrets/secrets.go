@@ -79,6 +79,17 @@ const serverPrefix = "mcp:"
 // (docs/design/mcp-client-and-secret-intake-design.md, section 6).
 func ServerScope(server string) Scope { return Scope(serverPrefix + server) }
 
+// reservedPrefix starts the names of the node's own keys in its scope: the
+// bus's trust chain (ADR-0113). No person, tool or module reads, sets or
+// removes them; only the code that owns them does.
+const reservedPrefix = "bus."
+
+// Reserved reports whether name in scope is one of the node's own keys,
+// which only their owner may touch.
+func Reserved(scope Scope, name string) bool {
+	return scope == ScopeNode && strings.HasPrefix(name, reservedPrefix)
+}
+
 // maxName is the longest name of a stored secret.
 const maxName = 128
 

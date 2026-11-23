@@ -42,6 +42,13 @@ func TestExternalBusLoads(t *testing.T) {
 	}
 }
 
+func TestExternalBusOnTheChainLoads(t *testing.T) {
+	f, err := settings.Parse([]byte("bus:\n  server: external\n  urls: [nats://a.example.com:4222]\n  trust: chain\n"))
+	if err != nil || f.Bus.Trust != settings.TrustChain {
+		t.Fatalf("bus = %+v, %v", f.Bus, err)
+	}
+}
+
 func TestBusIsChecked(t *testing.T) {
 	for name, tc := range map[string]struct{ doc, want string }{
 		"unknown server":       {"bus: {server: cloud}", "bus.server"},
@@ -52,6 +59,9 @@ func TestBusIsChecked(t *testing.T) {
 		"password in url":      {"bus: {server: external, urls: ['nats://u:hunter2@x.example.com:4222']}", "bus.urls[0]"},
 		"literal credentials":  {"bus: {server: external, urls: ['nats://x.example.com'], credentials: hunter2}", "bus.credentials"},
 		"unknown key":          {"bus: {server: embedded, port: 4222}", "port"},
+		"trust for embedded":   {"bus: {trust: chain}", "bus.trust"},
+		"unknown trust":        {"bus: {server: external, urls: ['nats://x.example.com'], trust: hunter2}", "bus.trust"},
+		"trust and creds":      {"bus: {server: external, urls: ['nats://x.example.com'], trust: chain, credentials: env:BUS_CREDS}", "bus.trust"},
 	} {
 		_, err := settings.Parse([]byte(tc.doc))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -87,7 +97,7 @@ func TestBusIsNotOnTheAllowlist(t *testing.T) {
 			t.Errorf("%s is on the allowlist", p)
 		}
 	}
-	for _, p := range []string{"bus", "bus.server", "bus.urls", "bus.credentials"} {
+	for _, p := range []string{"bus", "bus.server", "bus.urls", "bus.credentials", "bus.trust"} {
 		if settings.Allowed(p) || settings.Where(p) != settings.PlaceHost {
 			t.Errorf("%s: allowed %v, place %s", p, settings.Allowed(p), settings.Where(p))
 		}

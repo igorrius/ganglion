@@ -163,6 +163,9 @@ func (a *Agent) removeSecret(ctx context.Context, sp texts.Speaker, args []strin
 	if !ok {
 		return secretsReply{text: sp.Text(texts.SecretsUsage, nil)}, nil
 	}
+	if secrets.Reserved(scope, args[1]) {
+		return secretsReply{text: sp.Text(texts.SecretsReserved, texts.Vars{varName: texts.Escape(args[1])})}, nil
+	}
 	removed, err := a.d.Secrets.Remove(ctx, scope, args[1])
 	if err != nil {
 		return secretsReply{}, err

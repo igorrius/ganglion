@@ -238,3 +238,15 @@ func TestSecretSetWorksBesideARunningNode(t *testing.T) {
 		t.Fatalf("set beside a node that holds the lock: %v", err)
 	}
 }
+
+// The node's own keys cannot be set or removed from the command line.
+func TestSecretCommandsRefuseReservedNames(t *testing.T) {
+	clearEnv(t)
+	db := filepath.Join(t.TempDir(), "g.db")
+	if _, err := secretRun(t, strings.NewReader(cliSecret), "set", "--db", db, "bus.chain"); !errors.Is(err, vault.ErrReserved) {
+		t.Fatalf("set: %v", err)
+	}
+	if _, err := secretRun(t, strings.NewReader(""), "rm", "--db", db, "bus.revoked"); !errors.Is(err, vault.ErrReserved) {
+		t.Fatalf("rm: %v", err)
+	}
+}

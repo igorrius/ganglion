@@ -30,6 +30,9 @@ var (
 	ErrEmpty   = errors.New("vault: an empty value")
 	ErrTooLong = errors.New("vault: a value over 4096 bytes")
 	ErrLocked  = errors.New("vault: the store is locked: its key does not fit")
+	// ErrReserved is a name kept for the node's own keys (secrets.Reserved):
+	// the store's ordinary methods refuse it, and only Internal reaches it.
+	ErrReserved = errors.New("vault: the name is reserved for the node's own keys")
 
 	errNonce = errors.New("vault: a nonce of the wrong length")
 )
@@ -81,6 +84,14 @@ func Open(ctx context.Context, db *sql.DB, key Key, now func() time.Time) (*Vaul
 // Get is the value of name in scope; "" when it is not stored. A row that
 // does not decrypt is an error naming the scope and the name.
 func (v *Vault) Get(ctx context.Context, scope secrets.Scope, name string) (string, error) {
+	if secrets.Reserved(scope, name) {
+		return "", fmt.Errorf("vault: get %s %s: %w", scope, name, ErrReserved)
+	}
+	return v.getCounted(ctx, scope, name)
+}
+
+// getCounted reads and counts one value.
+func (v *Vault) getCounted(ctx context.Context, scope secrets.Scope, name string) (string, error) {
 	value, out, err := v.get(ctx, scope, name)
 	v.in.count(ctx, opGet, out)
 	if err != nil {
@@ -112,6 +123,14 @@ func (v *Vault) get(ctx context.Context, scope secrets.Scope, name string) (stri
 // Set stores value, replacing an earlier one. by is who set it: "cli" or
 // a principal.
 func (v *Vault) Set(ctx context.Context, scope secrets.Scope, name, value, by string) error {
+	if secrets.Reserved(scope, name) {
+		return fmt.Errorf("vault: set %s %s: %w", scope, name, ErrReserved)
+	}
+	return v.setCounted(ctx, scope, name, value, by)
+}
+
+// setCounted stores and counts one value.
+func (v *Vault) setCounted(ctx context.Context, scope secrets.Scope, name, value, by string) error {
 	err := v.set(ctx, scope, name, value, by)
 	v.in.count(ctx, opSet, setOutcome(err))
 	if err != nil {
@@ -163,6 +182,9 @@ func check(name, value string) error {
 
 // Remove deletes one secret; false when there was none.
 func (v *Vault) Remove(ctx context.Context, scope secrets.Scope, name string) (bool, error) {
+	if secrets.Reserved(scope, name) {
+		return false, fmt.Errorf("vault: remove %s %s: %w", scope, name, ErrReserved)
+	}
 	n, err := v.remove(ctx, `DELETE FROM secrets WHERE scope = ? AND name = ?`, string(scope), name)
 	if err != nil {
 		return false, fmt.Errorf("vault: remove %s %s: %w", scope, name, err)
@@ -170,8 +192,12 @@ func (v *Vault) Remove(ctx context.Context, scope secrets.Scope, name string) (b
 	return n > 0, nil
 }
 
-// RemoveScope deletes every secret of scope and returns how many.
+// RemoveScope deletes every secret of scope and returns how many. The
+// node's scope holds its own keys, so it is refused.
 func (v *Vault) RemoveScope(ctx context.Context, scope secrets.Scope) (int, error) {
+	if scope == secrets.ScopeNode {
+		return 0, fmt.Errorf("vault: remove %s: %w", scope, ErrReserved)
+	}
 	n, err := v.remove(ctx, `DELETE FROM secrets WHERE scope = ?`, string(scope))
 	if err != nil {
 		return 0, fmt.Errorf("vault: remove %s: %w", scope, err)
@@ -199,7 +225,7 @@ func (v *Vault) exec(ctx context.Context, query string, args ...any) (int, error
 	return int(n), err
 }
 
-// List is every entry, by scope then name.
+// List is every entry, by scope then name, without the node's own keys.
 func (v *Vault) List(ctx context.Context) ([]Entry, error) {
 	rows, err := v.db.QueryContext(ctx, `SELECT scope, name, set_ms, set_by FROM secrets ORDER BY scope, name`)
 	if err != nil {
@@ -215,6 +241,9 @@ func (v *Vault) List(ctx context.Context) ([]Entry, error) {
 		if err := rows.Scan(&e.Scope, &e.Name, &setMS, &e.By); err != nil {
 			return nil, fmt.Errorf("vault: list: %w", err)
 		}
+		if secrets.Reserved(e.Scope, e.Name) {
+			continue
+		}
 		e.SetAt = time.UnixMilli(setMS)
 		out = append(out, e)
 	}
@@ -223,6 +252,33 @@ func (v *Vault) List(ctx context.Context) ([]Entry, error) {
 	}
 	return out, nil
 }
+
+// Internal is the store as the owner of the node's own keys sees it: it
+// reads and writes only reserved names (secrets.Reserved), in the node's
+// scope. The bus's trust chain is its one user.
+type Internal struct{ v *Vault }
+
+// Internal returns the store's view for the node's own keys.
+func (v *Vault) Internal() Internal { return Internal{v: v} }
+
+// Get implements natsbus.SeedStore.
+func (in Internal) Get(ctx context.Context, scope secrets.Scope, name string) (string, error) {
+	if !secrets.Reserved(scope, name) {
+		return "", fmt.Errorf("vault: get %s %s: %w", scope, name, ErrName)
+	}
+	return in.v.getCounted(ctx, scope, name)
+}
+
+// Set implements natsbus.SeedStore.
+func (in Internal) Set(ctx context.Context, scope secrets.Scope, name, value, by string) error {
+	if !secrets.Reserved(scope, name) {
+		return fmt.Errorf("vault: set %s %s: %w", scope, name, ErrName)
+	}
+	return in.v.setCounted(ctx, scope, name, value, by)
+}
+
+// Locked reports whether the store is locked.
+func (in Internal) Locked() bool { return in.v.Locked() }
 
 // scoped reads one scope of the store as a secrets.Source.
 type scoped struct {

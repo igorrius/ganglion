@@ -63,6 +63,11 @@
         "credentials": {
           "description": "The text of a .creds file for the external server, as env:NAME or store:NAME. Optional, and only for external. It is never written in the file.",
           "$ref": "#/$defs/secretRef"
+        },
+        "trust": {
+          "description": "chain puts an external server on the node's own trust chain: the server trusts the node's operator and runs resolver: full, and the node pushes its account claims and connects as its own user (ganglion bus trust prints the server's part). Only for external, not with credentials. The embedded server always runs on the chain.",
+          "type": "string",
+          "enum": ["chain"]
         }
       }
     },

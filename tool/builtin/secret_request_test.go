@@ -102,6 +102,8 @@ func TestSecretRequestRefusals(t *testing.T) {
 		"node secret":         {h, secretCall(`{"name":"BOT_TOKEN","why":"x","module":"shop"}`)},
 		"node secret file":    {h, secretCall(`{"name":"BOT_TOKEN_FILE","why":"x","module":"shop"}`)},
 		"bad name":            {h, secretCall(`{"name":"a b","why":"x"}`)},
+		"reserved name":       {h, secretCall(`{"name":"bus.chain","why":"x"}`)},
+		"reserved revocation": {h, secretCall(`{"name":"bus.revoked","why":"x"}`)},
 		"empty why":           {h, secretCall(`{"name":"A","why":"  "}`)},
 		"long why":            {h, secretCall(`{"name":"A","why":"` + long + `"}`)},
 		"unknown argument":    {h, secretCall(`{"name":"A","why":"x","value":"hunter2"}`)},

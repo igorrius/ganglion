@@ -111,6 +111,8 @@ func (t *SecretRequest) askOf(c tool.Call) (intake.SecretAsk, error) {
 	switch {
 	case !secrets.ValidName(a.Name):
 		return intake.SecretAsk{}, errors.New("name: a letter or _, then letters, digits, _, . and -, at most 128")
+	case a.Module == "" && secrets.Reserved(secrets.ScopeNode, a.Name):
+		return intake.SecretAsk{}, errors.New("name: bus.* names are the node's own keys; nobody sets them")
 	case why == "" || utf8.RuneCountInString(why) > maxReasonRunes:
 		return intake.SecretAsk{}, fmt.Errorf("why: one line of 1 to %d characters", maxReasonRunes)
 	}

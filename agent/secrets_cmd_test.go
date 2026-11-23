@@ -124,6 +124,8 @@ func TestSecretsCommandRemoves(t *testing.T) {
 		"/secrets rm local/demo-reader DEMO_APP_ID": "demo-reader: DEMO\\_APP\\_ID is removed.",
 		"/secrets rm node TELEGRAM_BOT_TOKEN":       "The node's own: TELEGRAM\\_BOT\\_TOKEN is removed.",
 		"/secrets rm demo-reader NOPE":              "demo-reader has no secret NOPE.",
+		"/secrets rm node bus.chain":                "bus.chain is one of the node's own keys, the bus's trust chain; it cannot be removed here.",
+		"/secrets rm node bus.revoked":              "bus.revoked is one of the node's own keys, the bus's trust chain; it cannot be removed here.",
 	} {
 		if out := e.turn(t, message(owner, "Igor", cmd)); len(out) != 1 || out[0].Text != want {
 			t.Errorf("%s: %+v", cmd, out)

@@ -19,7 +19,16 @@ type Bus struct {
 	// Credentials is the text of a .creds file, as env:NAME or store:NAME.
 	// Optional, and only for external.
 	Credentials SecretRef `yaml:"credentials"`
+	// Trust is "chain" when an external server trusts the node's own trust
+	// chain (ADR-0113): the node pushes its account claims and connects as
+	// its core user. Only for external, and not with Credentials. The
+	// embedded server always runs on the chain.
+	Trust string `yaml:"trust"`
 }
+
+// TrustChain is the value of bus.trust that puts an external server on the
+// node's trust chain.
+const TrustChain = "chain"
 
 // check refuses a bus section that cannot run. An error names the key and
 // never repeats a value, which may hold a password.
@@ -32,6 +41,9 @@ func (b Bus) check() error {
 		if b.Credentials != "" {
 			return pathError("bus.credentials", "are for server: external")
 		}
+		if b.Trust != "" {
+			return pathError("bus.trust", "is for server: external; the embedded server always runs on the node's trust chain")
+		}
 	case bus.ModeExternal:
 		return b.checkExternal()
 	default:
@@ -42,6 +54,12 @@ func (b Bus) check() error {
 
 // checkExternal refuses an external section without a usable address.
 func (b Bus) checkExternal() error {
+	switch {
+	case b.Trust != "" && b.Trust != TrustChain:
+		return pathError("bus.trust", "must be chain or left out")
+	case b.Trust == TrustChain && b.Credentials != "":
+		return pathError("bus.trust", "and bus.credentials do not go together: the chain gives the node its own credentials")
+	}
 	if len(b.URLs) == 0 {
 		return pathError("bus.urls", "must name the server, such as nats://nats.example.com:4222")
 	}
