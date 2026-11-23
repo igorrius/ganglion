@@ -46,8 +46,11 @@ func Open(ctx context.Context, cfg Config, logger *slog.Logger) (*Bus, error) {
 		return nil, fmt.Errorf("natsbus: metrics: %w", err)
 	}
 	b := &Bus{cfg: cfg, log: logger, metrics: m}
-	if cfg.Mode == bus.ModeEmbedded {
+	switch {
+	case cfg.Mode == bus.ModeEmbedded:
 		err = b.startServer(cfg)
+	case cfg.Chain != nil:
+		err = pushClaims(ctx, cfg)
 	}
 	if err == nil {
 		err = b.connect()
@@ -68,6 +71,13 @@ func (b *Bus) connect() error {
 		nats.MaxReconnects(-1),
 		nats.DisconnectErrHandler(b.onDisconnect),
 		nats.ReconnectHandler(b.onReconnect),
+	}
+	if b.cfg.Chain != nil {
+		creds, err := b.cfg.Chain.coreCreds()
+		if err != nil {
+			return err
+		}
+		opts = append(opts, nats.UserCredentialBytes(creds))
 	}
 	url := ""
 	if b.srv != nil {
@@ -176,7 +186,13 @@ func (b *Bus) Health(ctx context.Context) Health {
 		return h
 	}
 	if b.srv != nil {
-		h.StoreBytes = b.srv.GlobalAccount().JetStreamUsage().Store
+		acc := b.srv.GlobalAccount()
+		if c := b.cfg.Chain; c != nil {
+			if a, err := b.srv.LookupAccount(c.AccountPublicKey()); err == nil {
+				acc = a
+			}
+		}
+		h.StoreBytes = acc.JetStreamUsage().Store
 		return h
 	}
 	if info, err := b.js.AccountInfo(ctx); err == nil {

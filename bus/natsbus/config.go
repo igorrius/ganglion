@@ -22,6 +22,15 @@ type Config struct {
 	// Credentials is the text of a .creds file for an external server; ""
 	// connects without any. The text stays in memory.
 	Credentials string
+	// Chain is the node's trust chain (ADR-0109, ADR-0113). With one the
+	// embedded server runs in operator mode, and an external server is sent
+	// the account claims; the node connects as the core's user either way.
+	// nil runs as before: no authentication on the embedded server, and
+	// Credentials, if any, for an external one.
+	Chain *Chain
+	// ChainLocked says Chain is nil because the secret store is locked
+	// (ADR-0113): the bus runs as before and /status says why.
+	ChainLocked bool
 	// StartTimeout is how long the embedded server may take to be ready,
 	// and the connection to be made.
 	StartTimeout time.Duration
@@ -66,5 +75,5 @@ func (c Config) check() error {
 	default:
 		return fmt.Errorf("natsbus: unknown mode %q", c.Mode)
 	}
-	return nil
+	return c.checkChain()
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/cells/sqlstore"
+	"github.com/igorrius/ganglion/secrets/vault"
 	"github.com/igorrius/ganglion/sqlitedb"
 	"github.com/samber/do/v2"
 )
@@ -45,6 +46,7 @@ func seedOldCells(t *testing.T, path string) {
 func TestCellsMoveFromTheDatabaseToTheBucketOnce(t *testing.T) {
 	b := testConfig(t)
 	b.BusDir = bus.StorePath(filepath.Dir(b.DB))
+	b.MasterKey = vault.KeyPath(b.DB) // the bus's chain lives in the store, which must open again
 	seedOldCells(t, b.DB)
 	for start := range 2 {
 		i := New(context.Background(), b, slog.New(slog.DiscardHandler))
@@ -69,6 +71,7 @@ func TestRestoredCellsAreRefusedByABucketThatHoldsCells(t *testing.T) {
 	ctx := context.Background()
 	b := testConfig(t)
 	b.BusDir = bus.StorePath(filepath.Dir(b.DB))
+	b.MasterKey = vault.KeyPath(b.DB) // the bus's chain lives in the store, which must open again
 	i := New(ctx, b, slog.New(slog.DiscardHandler))
 	if err := do.MustInvoke[*cells.Service](i).Define(ctx, cells.Def{ID: "lamp", Kind: cells.KindSensor}); err != nil {
 		t.Fatal(err)

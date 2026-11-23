@@ -11,7 +11,9 @@ import (
 func (b *Bus) Name() string { return "bus" }
 
 // Status implements status.Source (R-OBS-11): the mode and the store in use
-// while the node is connected, a failing line when it is not.
+// while the node is connected, a failing line when it is not, and a
+// failing line while the bus runs without its trust chain because the
+// secret store is locked.
 func (b *Bus) Status(ctx context.Context, _ status.Scope) ([]status.Check, error) {
 	h := b.Health(ctx)
 	vars := texts.Vars{"mode": string(h.Mode)}
@@ -19,7 +21,11 @@ func (b *Bus) Status(ctx context.Context, _ status.Scope) ([]status.Check, error
 		return []status.Check{{Section: status.SectionProblems, State: status.Fail, Line: texts.StatusBusDown, Vars: vars}}, nil
 	}
 	vars["size"] = status.Bytes(int64(h.StoreBytes))
-	return []status.Check{{Section: status.SectionProblems, State: status.OK, Line: texts.StatusBusOK, Vars: vars}}, nil
+	checks := []status.Check{{Section: status.SectionProblems, State: status.OK, Line: texts.StatusBusOK, Vars: vars}}
+	if b.cfg.ChainLocked {
+		checks = append(checks, status.Check{Section: status.SectionProblems, State: status.Fail, Line: texts.StatusBusNoChain, Vars: texts.Vars{"mode": string(h.Mode)}})
+	}
+	return checks, nil
 }
 
 var _ status.Source = (*Bus)(nil)

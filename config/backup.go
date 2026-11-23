@@ -81,7 +81,11 @@ func cellsExport(nb *natsbus.Bus) backup.Option {
 // The caller holds the database lock, so no running node has the bus's
 // store open; a running node is asked instead (backup.Ask).
 func BackupOffline(ctx context.Context, b Bootstrap, db *sql.DB, key vault.Key, hc *http.Client) (backup.Result, error) {
-	nb, err := openBus(ctx, b, slog.New(slog.DiscardHandler))
+	v, err := vault.Open(ctx, db, key, time.Now)
+	if err != nil {
+		return backup.Result{}, err
+	}
+	nb, err := openBus(ctx, b, v, slog.New(slog.DiscardHandler))
 	if err != nil {
 		return backup.Result{}, err
 	}

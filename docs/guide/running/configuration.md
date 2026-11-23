@@ -165,6 +165,7 @@ The node's message bus. By default the node runs a NATS server inside its own pr
 | `server` | `embedded` | `embedded` runs the server inside the node. `external` connects to a server, or a cluster, you run. |
 | `urls` | none | The external server's addresses, `nats://` or `tls://` with a host and no user or password. Required for `external` and refused for `embedded`. |
 | `credentials` | none | The text of a `.creds` file for the external server, as `env:NAME` or `store:NAME`. It is optional, only for `external`, and is kept in memory, never written to a file. |
+| `trust` | none | `chain` puts the external server on the node's own trust chain: the server is configured with the lines `ganglion bus trust` prints, and the node connects with its own key. Only for `external`, and not together with `credentials`. The embedded server always runs on the chain. |
 
 ```yaml
 bus:
