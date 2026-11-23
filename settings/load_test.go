@@ -181,6 +181,13 @@ func TestMemorySection(t *testing.T) {
 func TestWebhookSettings(t *testing.T) {
 	for src, path := range map[string]string{
 		"http:\n  addr: nowhere\n":                                          "http.addr",
+		"http:\n  local_addr: '0.0.0.0:8090'\n":                             "http.local_addr",
+		"http:\n  local_addr: '[::]:8090'\n":                                "http.local_addr",
+		"http:\n  local_addr: '192.168.1.10:8090'\n":                        "http.local_addr",
+		"http:\n  local_addr: 'example.com:8090'\n":                         "http.local_addr",
+		"http:\n  local_addr: ':8090'\n":                                    "http.local_addr",
+		"http:\n  local_addr: '127.0.0.1:0'\n":                              "http.local_addr",
+		"http:\n  local_addr: '127.0.0.1'\n":                                "http.local_addr",
 		"http:\n  public_url: http://x.example\n":                           "http.public_url",
 		"http:\n  public_url: https://x.example/hook\n":                     "http.public_url",
 		"http:\n  public_url: https://x.example:9000\n":                     "http.public_url",
@@ -205,5 +212,23 @@ func TestWebhookSettings(t *testing.T) {
 	}
 	if d := settings.Default(); d.HTTP.On() || d.Telegram.Updates != settings.UpdatesPolling {
 		t.Errorf("the default opens a listener or leaves polling: %+v %q", d.HTTP, d.Telegram.Updates)
+	}
+}
+
+// R-HTTP-1, R-HTTP-3: the listener of modules' pages is on 127.0.0.1:8090
+// unless the file says another loopback address or off.
+func TestLocalAddr(t *testing.T) {
+	for src, want := range map[string]string{
+		"":                           "127.0.0.1:8090",
+		"http:\n  addr: ':8080'\n":   "127.0.0.1:8090",
+		"http:\n  local_addr: off\n": "off",
+		"http:\n  local_addr: 'localhost:9000'\n": "localhost:9000",
+		"http:\n  local_addr: '[::1]:8090'\n":     "[::1]:8090",
+		"http:\n  local_addr: '127.0.0.5:8090'\n": "127.0.0.5:8090",
+	} {
+		f, err := settings.Parse([]byte(src))
+		if err != nil || f.HTTP.LocalAddr != want {
+			t.Errorf("%q: %q, %v; want %q", src, f.HTTP.LocalAddr, err, want)
+		}
 	}
 }

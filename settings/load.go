@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"net/netip"
 	"net/url"
 	"reflect"
 	"regexp"
@@ -259,6 +260,7 @@ func (f File) check() error {
 		{pathLogLevel, "must be debug, info, warn or error", slices.Contains([]string{"debug", "info", "warn", "error"}, f.Log.Level)},
 		{"metrics.addr", `must be host:port or off`, validAddr(f.Metrics.Addr)},
 		{"http.addr", `must be host:port or off`, validAddr(f.HTTP.Addr)},
+		{"http.local_addr", `must be off or a loopback address: 127.0.0.1, [::1] or localhost, with a port`, validLocalAddr(f.HTTP.LocalAddr)},
 		{keyPublicURL, "must be an https address with no path, on no port or on 443, 80, 88 or 8443", validPublicURL(f.HTTP.PublicURL)},
 		{keyUpdates, "must be polling or webhook", slices.Contains([]string{UpdatesPolling, UpdatesWebhook}, f.Telegram.Updates)},
 		{keyUpdates, "webhook needs the public listener: set http.addr", f.Telegram.Updates != UpdatesWebhook || f.HTTP.On()},
@@ -387,6 +389,27 @@ func validAddr(a string) bool {
 	}
 	_, _, err := net.SplitHostPort(a)
 	return err == nil
+}
+
+// validLocalAddr accepts "", off, or host:port with a loopback host: the
+// listener of modules' pages never binds another interface (R-HTTP-3). A
+// port 0 is refused: the owner opens the page at a known address.
+func validLocalAddr(a string) bool {
+	if a == "" || a == off {
+		return true
+	}
+	host, port, err := net.SplitHostPort(a)
+	if err != nil {
+		return false
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.IsLoopback() && ip.Zone() == ""
 }
 
 func validURL(s string) bool {

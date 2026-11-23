@@ -114,6 +114,10 @@ type Modules struct {
 	// Links are the link tools' parts module.install uses to check and write
 	// the links of a request (ADR-0111).
 	Links Linking
+	// HTTPAddr is the address of the loopback listener that serves modules'
+	// pages (http.local_addr, R-HTTP-1): the window shows it; "" is the
+	// default.
+	HTTPAddr string
 
 	// locks serialises the writes to each module's folder; NewModuleTools
 	// makes it, one for all the tools it returns.

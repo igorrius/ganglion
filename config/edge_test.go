@@ -19,10 +19,14 @@ func TestEdgeRunsWithoutTelegram(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
 	cfg.Settings.Edge.Name = "garage"
+	cfg.Settings.HTTP.LocalAddr = "127.0.0.1:0" // the edge serves modules' pages (R-EDGE-7)
 	logs := &syncWriter{w: &bytes.Buffer{}}
 	r := runNode(t, []node.Role{node.Edge}, cfg, slog.New(slog.NewTextHandler(logs, nil)))
 	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hi"})
 	eventually(t, "the edge's start", func() bool { return strings.Contains(logs.String(), "node: edge on") })
+	eventually(t, "the pages' listener", func() bool {
+		return strings.Contains(logs.String(), "modhttp: serving modules' pages\" addr=http://127.0.0.1:")
+	})
 	time.Sleep(300 * time.Millisecond)
 	r.cancel()
 	if err := r.result(t); err != nil {

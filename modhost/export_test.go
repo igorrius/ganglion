@@ -10,3 +10,11 @@ func (h *Host) WriterWaiting() bool {
 	}
 	return true
 }
+
+// WebHeld is how many requests of the page module short are admitted now.
+func (h *Host) WebHeld(short string) int {
+	if l := h.pageOf(short); l != nil {
+		return len(l.web)
+	}
+	return -1
+}

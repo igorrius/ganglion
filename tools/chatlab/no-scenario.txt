@@ -169,6 +169,8 @@ bus/**
 config/bus.go
 config/edge.go
 config/edge_join.go
+config/pages.go
+modhttp/**
 edgeadmin/**
 edgejoin/**
 agent/edges_cmd.go

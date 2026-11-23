@@ -345,6 +345,11 @@ func CoreComponents() do.Provider[[]node.Component] {
 		comps = append(comps, do.MustInvoke[Restarts](i)...)
 		comps = append(comps, do.MustInvoke[UpdateChecks](i)...)
 		comps = append(comps, do.MustInvoke[Backups](i)...)
+		pages, err := pageListener(i) // a core beside the edge role serves pages too
+		if err != nil {
+			return nil, err
+		}
+		comps = append(comps, pages...)
 		return append(comps, do.MustInvoke[Inbound](i)...), nil
 	}
 }

@@ -143,6 +143,7 @@ func ModuleTools() do.Provider[Moduling] {
 			Now:         time.Now,
 			Queue:       do.MustInvoke[*builtin.BuildQueue](i),
 			Links:       do.MustInvoke[builtin.Linking](i),
+			HTTPAddr:    b.Settings.HTTP.LocalAddr,
 		}
 		return Moduling{Tools: builtin.NewModuleTools(m), Manifest: m.SourceManifest}, nil
 	}

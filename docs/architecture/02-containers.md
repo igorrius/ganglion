@@ -21,6 +21,7 @@ flowchart LR
     subgraph edgerole["edge role"]
         runner["Runner<br/>wazero, supervisor,<br/>policies, scheduler"]
         mods["WASM modules<br/>a reader, a reflex"]
+        pages["modhttp<br/>loopback listener for module pages,<br/>127.0.0.1:8090 by default"]
         cells[("State cells<br/>desired / reported<br/>P1")]
     end
 
@@ -39,6 +40,8 @@ flowchart LR
     corep <--> bus
     runner <--> bus
     runner --> mods
+    pages -- "a request as an http trigger run" --> runner
+    browser(["Browser on the edge's own computer"]) -- "127.0.0.1 only" --> pages
     mods <--> cells
     api <--> bus
     cli <--> bus
@@ -55,6 +58,7 @@ flowchart LR
 | SQLite | Inbox/outbox, conversation history, `turns`, scheduled jobs and `cron_runs`, the tool-call journal `tool_calls`, calls awaiting confirmation and their buttons, `allowed` | modernc.org/sqlite, WAL | P1 |
 | Memory repo | `memory/*.md` (facts; held-back ones under `memory/quarantine/`), `persona/*.md`, skills; later embeddings | git, the `git` binary (ADR-0033) | P1 (files), P2 (embeddings) |
 | Runner | Module runtime, local policies, offline scheduler | wazero, embedded NATS in P2 | P0 (spike), P1 |
+| Page listener (`modhttp`) | Serves the pages of running modules that have an `http` trigger, on the loopback of a node with the edge role (`http.local_addr`); the node owns the checks and the security headers | Go, `net/http` | P2 M11 |
 | WASM modules | Compiled reflexes with manifests | TinyGo / Rust / AssemblyScript | P0 (Deye by hand), P3 (by the model) |
 | State cells | Desired and reported state of loads, sensors, kill switches, confirmations; backends and observers (ADR-0014) | KV: memory or SQLite in P1; the NATS KV bucket `cells` in P2 (the old tables are renamed and dropped one release later) | P1 |
 | API provider client | Chat completions | net/http | P1 |

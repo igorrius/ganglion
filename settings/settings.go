@@ -118,7 +118,19 @@ type HTTP struct {
 	// PublicURL is the HTTPS address the outside reaches the listener at;
 	// "" when nobody was told one.
 	PublicURL string `yaml:"public_url"`
+	// LocalAddr is the loopback address host:port of the listener that serves
+	// the pages of modules with an http trigger (R-HTTP-1, ADR-0110), or "off"
+	// for none. It binds loopback only: a host that is not 127.0.0.1, ::1 or
+	// localhost is refused when the file is read.
+	LocalAddr string `yaml:"local_addr"`
 }
+
+// DefaultLocalAddr is http.local_addr when the file sets none.
+const DefaultLocalAddr = "127.0.0.1:8090"
+
+// LocalOn reports whether the node serves modules' pages: a file made in
+// code that names no address serves none.
+func (h HTTP) LocalOn() bool { return h.LocalAddr != off && h.LocalAddr != "" }
 
 // On reports whether the node runs the public listener: a file made in
 // code that names no address runs none.
@@ -341,7 +353,7 @@ func Default() File {
 		Node:    Node{TZ: "Europe/Kyiv"},
 		Log:     Log{Level: "info"},
 		Metrics: Metrics{Addr: "127.0.0.1:9464"},
-		HTTP:    HTTP{Addr: off},
+		HTTP:    HTTP{Addr: off, LocalAddr: DefaultLocalAddr},
 		Telegram: Telegram{
 			Token:     "env:TELEGRAM_BOT_TOKEN",
 			APIURL:    "https://api.telegram.org",

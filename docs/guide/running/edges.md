@@ -43,6 +43,15 @@ The card lists what the edge may do on your network. In plain words, an edge may
 
 When you link a module on the edge to a module on the main node, the edge's permissions change. The change reaches the edge within an hour, because the edge asks for fresh credentials hourly and reconnects when they differ; restarting the edge applies it at once.
 
+## Pages on the edge
+
+A module can serve a web page, for example a small dashboard of what it reads. A node with the edge role serves such pages on its own computer only:
+
+- Open `http://127.0.0.1:8090/<module>/` in a browser on the edge's computer. `http://127.0.0.1:8090/` lists the pages of the modules that are running.
+- Nothing else can reach it. The address is the computer's loopback, so another computer on your network gets no answer. To look at a page from elsewhere, use your own tunnel (for example `ssh -L 8090:127.0.0.1:8090 <edge>`).
+- The port comes from the `http.local_addr` setting of the node that runs the module, so each edge decides its own; the default is `127.0.0.1:8090`, and `off` serves no pages. See [the `http` section](configuration.md#http).
+- In the install window of a module with pages you see a line like "Serves web pages at `http://127.0.0.1:8090/<module>/`" with its routes. That address is on the computer that runs the module.
+
 ## Revoke an edge
 
 Send `/edges` in your private chat. It lists the joined edges, each with a **Revoke** button. Revoke drops the edge's connection at once and the main node refuses its key from then on.

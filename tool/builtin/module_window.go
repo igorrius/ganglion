@@ -42,11 +42,15 @@ type window struct {
 	// Outside is true when the module's source is not the node's own: it was
 	// written after the agent read outside content (R-RUN-17, ADR-0111).
 	Outside bool `json:"outside,omitempty"`
+	// Address is where its pages are served, with the module's prefix, when
+	// it has an http trigger (R-HTTP-1): the listener's address on the node
+	// that runs it ("" for a module with no pages).
+	Address string `json:"address,omitempty"`
 }
 
 // windowOf is the window of a build whose plan has no refusal, with no trial
 // section yet (see withTrial).
-func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest) window {
+func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest, listener string) window {
 	short := modstore.ShortName(b.Module)
 	about := map[string]string{}
 	for _, t := range m.Triggers {
@@ -54,7 +58,11 @@ func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest) window {
 			about[short+"."+t.Tool] = t.Description()
 		}
 	}
-	return window{Module: b.Module, SHA256: p.SHA256, Version: p.Version, Size: p.Size, Rights: p.Rights, Widening: p.Widening, About: about}
+	w := window{Module: b.Module, SHA256: p.SHA256, Version: p.Version, Size: p.Size, Rights: p.Rights, Widening: p.Widening, About: about}
+	if len(p.Rights.Pages) > 0 {
+		w.Address = "http://" + listener + "/" + short + "/"
+	}
+	return w
 }
 
 // moreReserve is the room kept for the line that counts what the trial
@@ -166,6 +174,9 @@ func blockText(sp texts.Speaker, w window, compact bool) string {
 		}
 	}
 	lines = append(lines, reflexLines(sp, r)...)
+	if len(r.Pages) > 0 {
+		lines = append(lines, sp.Text(texts.AskModulePages, texts.Vars{"address": item(w.Address), varItems: routesShown(r.Pages)}))
+	}
 	lines = append(lines, sp.Text(texts.AskModuleRuns, texts.Vars{varItems: runs(sp, w.Module, r)}))
 	for _, t := range r.Tools {
 		name := modstore.ShortName(w.Module) + "." + t
@@ -343,6 +354,9 @@ func wideningLine(sp texts.Speaker, w window) string {
 	for _, p := range portKeys(n, true) {
 		add(p.key, p.names)
 	}
+	if len(n.Pages) > 0 {
+		parts = append(parts, sp.Text(texts.AskModuleNewPages, texts.Vars{varItems: routesShown(n.Pages)}))
+	}
 	if n.NotifyPerDay > 0 {
 		parts = append(parts, sp.Text(texts.AskModuleNewNotify, texts.Vars{"n": strconv.Itoa(n.NotifyPerDay)}))
 	}
@@ -406,6 +420,23 @@ func item(s string) string {
 	return shown(s)
 }
 
+// plainRoute is a route as the manifest allows one, "GET /api".
+var plainRoute = regexp.MustCompile(`^(GET|POST|PUT|PATCH|DELETE) /[A-Za-z0-9._~/-]*$`)
+
+// routesShown are the routes of a page module, each in a code span: as it
+// is when it is plain, else escaped.
+func routesShown(routes []string) string {
+	out := make([]string, len(routes))
+	for i, r := range routes {
+		if plainRoute.MatchString(r) {
+			out[i] = text.CodeSpan(r)
+		} else {
+			out[i] = shown(r)
+		}
+	}
+	return strings.Join(out, ", ")
+}
+
 // cronShown is a cron line in a code span: as it is when it is plain, else
 // escaped as host.exec's question shows an argument.
 func cronShown(c string) string {
@@ -430,4 +461,16 @@ func timeoutShown(d time.Duration) string {
 		return fmt.Sprintf("%d s", d/time.Second)
 	}
 	return d.String()
+}
+
+// DefaultHTTPAddr is the loopback listener's address when http.local_addr
+// names none (R-HTTP-1).
+const DefaultHTTPAddr = "127.0.0.1:8090"
+
+// listener is the address the window shows for a module's pages.
+func (m *Modules) listener() string {
+	if m.HTTPAddr == "" {
+		return DefaultHTTPAddr
+	}
+	return m.HTTPAddr
 }

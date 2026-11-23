@@ -46,6 +46,10 @@ func Run(h pdk.Host, in pdk.Input) (any, error) {
 		h.StatePut("last_call", string(payload))
 		payload = nil
 	}
+	if in.Trigger == "http" { // a browser's request: noted in the state, the operation scripted
+		h.StatePut("last_http", string(payload))
+		payload = nil
+	}
 	if len(payload) == 0 || string(payload) == "{}" {
 		payload = scripted(h, in.Trigger)
 	}

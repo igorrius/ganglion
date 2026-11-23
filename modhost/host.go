@@ -174,6 +174,7 @@ type Host struct {
 	edges   map[string]string    // module → the edge its line sends it to (delivery.go)
 	// undelivered are the edge modules whose last delivery failed.
 	undelivered map[string]bool
+	webSeq      atomic.Uint64 // the number of the last http run, for its id
 
 	episodeMu sync.Mutex                 // held across the store's calls on episodes, so the cache and the store change together
 	episodes  map[string]map[Kind]string // module → kind → the sha of its open episode, a cache of the store's

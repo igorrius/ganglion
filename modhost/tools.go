@@ -23,12 +23,14 @@ const (
 	triggerEvent trigger = "event"
 	// triggerCall: a module was asked through a served port by a link (R-BUS-6).
 	triggerCall trigger = "call"
+	// triggerHTTP: a browser asked the loopback listener for the module's page (R-HTTP-2).
+	triggerHTTP trigger = "http"
 )
 
 // unattended reports whether nobody watches a run of t: a cron, a cell or an
 // event trigger's failure is escalated, a tool call's is the calling turn's
-// to tell, and a served call's is the caller's.
-func (t trigger) unattended() bool { return t != triggerTool && t != triggerCall }
+// to tell, a served call's is the caller's and a page's is the browser's.
+func (t trigger) unattended() bool { return t != triggerTool && t != triggerCall && t != triggerHTTP }
 
 // noArgs is the input schema of a module's tool: it takes no arguments.
 var noArgs = json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
