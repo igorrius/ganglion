@@ -116,7 +116,7 @@ A1, B1, C1.
 - **Rollback** on the core is `/modules rollback`: the store's previous
   version becomes active and is delivered; the edge holds it as its
   previous version and switches back.
-- **The edge's user** (`natsbus.DeliveryPermissions`, for #322): publish
+- **The edge's user** (`natsbus.DeliveryPermissions`, given to every edge at its join through `EdgeNeeds.Extra`, ADR-0116): publish
   `$JS.core.API.STREAM.INFO` of the two streams, consumer create on
   `KV_delivery` filtered to `$KV.delivery.desired.<edge>.*`, consumer
   create on the objects' chunks, direct get of the objects' meta, consumer

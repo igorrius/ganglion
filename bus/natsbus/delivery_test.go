@@ -15,13 +15,15 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-func joinPerms(ps ...UserPermissions) UserPermissions {
-	var out UserPermissions
-	for _, p := range ps {
-		out.Publish = append(out.Publish, p.Publish...)
-		out.Subscribe = append(out.Subscribe, p.Subscribe...)
+// joinedPerms are the permissions the join gives edge: its own subjects
+// and module delivery, as config's edgeNeeds asks.
+func joinedPerms(t *testing.T, edge string) UserPermissions {
+	t.Helper()
+	p, err := EdgePermissions(edge, EdgeNeeds{Extra: DeliveryPermissions(edge)})
+	if err != nil {
+		t.Fatal(err)
 	}
-	return out
+	return p
 }
 
 // linkedEdge is a core and an edge e1 joined to it with the permissions
@@ -29,7 +31,7 @@ func joinPerms(ps ...UserPermissions) UserPermissions {
 func linkedEdge(t *testing.T) (hub, edge *Bus) {
 	t.Helper()
 	hub, port := hubForEdges(t, filepath.Join(t.TempDir(), "hub"))
-	creds := edgeCreds(t, hub, "e1", joinPerms(edgePerms("e1"), DeliveryPermissions("e1")))
+	creds := edgeCreds(t, hub, "e1", joinedPerms(t, "e1"))
 	edge = openEdge(t, filepath.Join(t.TempDir(), "edge"), "e1", "nats-leaf://127.0.0.1:"+itoa(port), creds)
 	waitFor(t, func() bool { return edge.EdgeHealth(context.Background()).Linked })
 	return hub, edge
@@ -178,7 +180,7 @@ func TestEdgeCannotFillTheCoresDisk(t *testing.T) {
 	if err := hub.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}
-	creds := edgeCreds(t, hub, "e1", joinPerms(edgePerms("e1"), DeliveryPermissions("e1")))
+	creds := edgeCreds(t, hub, "e1", joinedPerms(t, "e1"))
 	edge := openEdge(t, filepath.Join(t.TempDir(), "edge"), "e1", "nats-leaf://127.0.0.1:"+itoa(cfg.testLeafPort), creds)
 	waitFor(t, func() bool { return edge.EdgeHealth(ctx).Linked })
 
