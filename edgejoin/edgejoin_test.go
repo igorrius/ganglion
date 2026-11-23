@@ -61,7 +61,11 @@ type rig struct {
 func newRig(t *testing.T) *rig {
 	t.Helper()
 	r := &rig{store: &memStore{m: map[string]string{}}, clk: &clock{t: time.Now()}, joined: make(chan Edge, 8), needs: &natsbus.EdgeNeeds{}}
-	chain, err := natsbus.LoadChain(context.Background(), r.store, func() bool { return false }, r.clk.now)
+	// The chain keeps the real clock: the server compares a revocation's
+	// time with the JWT's issue time, which the JWT library takes from the
+	// real clock, so a frozen chain clock would revoke nothing issued a
+	// second later.
+	chain, err := natsbus.LoadChain(context.Background(), r.store, func() bool { return false }, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,9 +337,23 @@ func TestRevokedKeyCannotReconnectOrJoinOrRenew(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the revoked edge's connection stayed open")
 	}
-	if d2, _, err := r.connect(creds); err == nil {
-		d2()
-		t.Fatal("a revoked edge reconnected")
+	// The server's refusal can race the socket's close, which the client
+	// then sees as a broken pipe: no try may get in, and one must read the
+	// refusal itself.
+	refused := false
+	for range 10 {
+		d2, _, err := r.connect(creds)
+		if err == nil {
+			d2()
+			t.Fatal("a revoked edge reconnected")
+		}
+		if errors.Is(err, natsbus.ErrUserRefused) {
+			refused = true
+			break
+		}
+	}
+	if !refused {
+		t.Fatal("no reconnect of the revoked edge was refused by the server for its credentials")
 	}
 	if es, _ := r.svc.Edges(ctx); len(es) != 0 {
 		t.Fatalf("edges = %+v", es)
@@ -483,5 +501,91 @@ func TestCodesAreNotKeptInTheClear(t *testing.T) {
 		if strings.Contains(string(k[:]), plain) {
 			t.Fatal("the code is kept as it is")
 		}
+	}
+}
+
+// A stranger flooding /edge/renew with bad requests does not hold back a
+// joined edge's renewal, nor the owner's join.
+func TestBadRenewFloodDoesNotStopRenewOrJoin(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	creds, err := r.join(r.code(t, "home"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stranger, _ := natsbus.NewUserKey()
+	spub, _ := stranger.PublicKey()
+	for range 50 {
+		now := r.clk.now().Unix()
+		_, err := r.svc.Renew(ctx, spub, now, base64.StdEncoding.EncodeToString([]byte("not a signature")))
+		if !errors.Is(err, ErrBadSignature) {
+			t.Fatalf("a bad renewal: %v", err)
+		}
+	}
+	if _, err := Renew(ctx, r.srv.Client(), r.srv.URL, creds.Creds, r.clk.now()); err != nil {
+		t.Fatalf("a valid renewal after a flood: %v", err)
+	}
+	if _, err := r.join(r.code(t, "second")); err != nil {
+		t.Fatalf("a join after a flood of renewals: %v", err)
+	}
+}
+
+// Parallel attempts never pass on one token.
+func TestLimiterHoldsUnderParallelAttempts(t *testing.T) {
+	r := newRig(t)
+	for range FailBurst - 1 {
+		_, _ = r.svc.Join(context.Background(), "WRONG", "")
+	}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	looked := 0
+	for range 20 {
+		wg.Go(func() {
+			if _, err := r.svc.Join(context.Background(), "WRONG", ""); !errors.Is(err, ErrLimited) {
+				mu.Lock()
+				looked++
+				mu.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+	if looked != 1 {
+		t.Fatalf("%d attempts were looked at on one token", looked)
+	}
+}
+
+// The edge gets the permissions the owner read on the card, or nothing: a
+// change of the links between Approve and the join refuses it.
+func TestJoinRefusesPermissionsTheCardDidNotShow(t *testing.T) {
+	r := newRig(t)
+	c := r.code(t, "home")
+	r.mu.Lock()
+	r.needs.Calls = []natsbus.PortRef{{Module: "reader", Port: "read"}}
+	r.mu.Unlock()
+	_, err := r.join(c)
+	refusedWith(t, err, http.StatusConflict)
+	if es, _ := r.svc.Edges(context.Background()); len(es) != 0 {
+		t.Fatalf("an edge joined with permissions not on its card: %+v", es)
+	}
+}
+
+// One key is one edge.
+func TestJoinRefusesAKeyAJoinedEdgeHolds(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	creds, err := r.join(r.code(t, "home"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, _ := mustSeedCreds(t, creds.Creds).PublicKey()
+	c := r.code(t, "other")
+	if _, err := r.svc.Join(ctx, c, pub); !errors.Is(err, ErrKeyTaken) {
+		t.Fatalf("a second name under one key: %v", err)
+	}
+	if _, err := r.join(c); err != nil {
+		t.Fatalf("the refused key used up the code: %v", err)
+	}
+	if es, _ := r.svc.Edges(ctx); len(es) != 2 {
+		t.Fatalf("edges = %+v", es)
 	}
 }

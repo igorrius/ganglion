@@ -60,9 +60,10 @@ the edge's server over the leaf link; `allow_responses` does not cover them
 
 ### Limiting attempts
 
-- **E1.** A limit on failed attempts for the whole listener: a burst of 5,
-  one more every 12 s; past it the answer is 429 without looking at the
-  code.
+- **E1.** A limit on join attempts for the whole listener: a burst of 5,
+  one more every 12 s, each attempt taking a token up front and a successful
+  join giving it back; past it the answer is 429 without looking at the
+  code. Renewals are not under it.
 - **E2.** A limit per remote address.
 
 ## Comparison
@@ -93,7 +94,7 @@ the edge's server over the leaf link; `allow_responses` does not cover them
 | Criterion | E1 | E2 |
 |---|---|---|
 | Works behind the platform's proxy (one address for all) | yes | the address is the proxy's |
-| A stranger can lock the owner out | for about a minute | for about a minute |
+| A stranger can block joins | while the stranger keeps failing, and about a minute after | the same, from behind one proxy address |
 
 ## Decision
 
@@ -101,11 +102,13 @@ A1, B1, C1, D2, E1.
 
 - **Code:** 128 bits, shown once in the chat, bound to the edge's name and to
   the owner who approved it. Stored as SHA-256 in memory with an expiry of 10
-  minutes; the first use removes it, a failed use removes nothing. At most 8
+  minutes; it is spent at the first use with a usable key, whatever comes after; a wrong code, a bad key or a key a joined edge holds spends nothing. At most 8
   codes are live; asking for another for the same name replaces the first.
 - **Join:** `POST /edge/join` with `{code, public_key}`. The core hashes the
-  code, finds it in constant time, checks the expiry and that the name is
-  still free, then issues a 24-hour user JWT for the key. The answer holds
+  code, finds it in constant time, checks the expiry, that the name is
+  still free, that no joined edge holds the key, and that the permissions
+  are still those the card showed (their digest is bound to the code; a
+  change of the links in between refuses the join with 409), then issues a 24-hour user JWT for the key. The answer holds
   the JWT, the operator public key, the bus URL (when the public address is
   known) and the edge's name. The seed is made on the edge and never sent.
   The owner is told "`<edge>` joined" in the chat; the notice carries the
@@ -136,8 +139,11 @@ A1, B1, C1, D2, E1.
 - **Revoke:** the Revoke button calls `Bus.Revoke` for the key, then
   `UnsourceEdge`, then removes the edge from `bus.edges` after both succeed
   and shows the result. A press of Revoke on an edge that is gone is a no-op.
-- **Limit:** failed attempts on `/edge/join` and `/edge/renew` share one
-  limiter (E1); a limited request gets 429 and is not looked at.
+- **Limit:** `/edge/join` has the limiter (E1); a limited request gets 429
+  and is not looked at. `/edge/renew` is not limited by it: its signature
+  is checked first and needs the seed, so there is nothing to guess, and a
+  stranger's bad renewals must not hold back a joined edge's renewal, which
+  would let its JWT run out. The listener's own limits bound the work.
 
 ## Security
 
@@ -151,7 +157,12 @@ A1, B1, C1, D2, E1.
   - a code used twice: removed at the first use; the second gets 401;
   - an expired code: 401 at 10 minutes and one second;
   - a wrong or truncated code: 401, counted; past the burst 429;
-  - a flood of attempts: the limiter answers 429 before any work;
+  - a flood of join attempts: the limiter answers 429 before any work, and
+    parallel attempts never pass on one token;
+  - a flood of bad renewals: refused at the signature, and a joined edge's
+    renewal and the owner's join still work;
+  - a code used with permissions the card did not show: refused, 409;
+  - a second name under a key a joined edge holds: refused, 409;
   - a code asked for a name that is taken or not a valid edge name: no card,
     no code;
   - a person who is not an admin approving a card or asking for one: refused
@@ -174,8 +185,10 @@ A1, B1, C1, D2, E1.
 - An edge's permission change reaches it within an hour, or at once after a
   restart.
 - A restart of the core loses unused codes.
-- A stranger can make the join fail for about a minute by failing five
-  times; the owner asks again. No code is lost to a failed try.
+- A stranger who keeps failing joins blocks joins for as long as it goes on
+  and about a minute after (one token every 12 s); the owner asks again.
+  Renewals of joined edges go on regardless. No code is lost to a failed
+  try.
 - The leaf link keeps the shared `$JSC.R.>` publish: a compromised edge can
   forge an answer to a JetStream request of the core on a subject it can
   only learn by seeing the request, which only its own server's requests

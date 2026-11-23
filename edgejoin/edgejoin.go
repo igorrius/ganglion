@@ -65,6 +65,8 @@ var (
 	ErrBadKey = errors.New("edgejoin: not a usable user key")
 	// ErrRevoked is a revoked key.
 	ErrRevoked = errors.New("edgejoin: the key is revoked")
+	// ErrKeyTaken is a public key a joined edge holds already.
+	ErrKeyTaken = errors.New("edgejoin: a joined edge has this key already")
 	// ErrNameTaken is an edge name that a joined edge holds.
 	ErrNameTaken = errors.New("edgejoin: an edge has this name already")
 	// ErrUnknownEdge is a name or key no joined edge has.
@@ -252,30 +254,44 @@ func (s *Service) Approve(ctx context.Context, name, digest string) (string, tim
 }
 
 // Join is the edge's first request: the code and the public key of the user
-// it made. It gives the user JWT. A failed attempt costs the limiter a
-// token; the code stays unless it was used.
+// it made. It gives the user JWT. Every attempt takes a token of the
+// limiter up front and a join that succeeds gives it back, so parallel
+// attempts never pass on one token. A code is used only when the key is
+// usable, and is spent once taken, whatever comes after.
 func (s *Service) Join(ctx context.Context, plain, pub string) (Answer, error) {
-	if !s.allowed() {
+	if !s.reserve() {
 		return Answer{}, ErrLimited
 	}
+	ans, err := s.join(ctx, plain, pub)
+	if err == nil {
+		s.refund()
+	}
+	return ans, err
+}
+
+func (s *Service) join(ctx context.Context, plain, pub string) (Answer, error) {
 	if !natsbus.IsUserKey(pub) || pub == s.cfg.Chain.CorePublicKey() {
-		s.fail()
 		return Answer{}, ErrBadKey
 	}
 	if s.cfg.Chain.Revoked(pub) {
-		s.fail()
 		return Answer{}, ErrRevoked
-	}
-	c, ok := s.take(plain)
-	if !ok {
-		s.fail()
-		return Answer{}, ErrBadCode
 	}
 	s.edgesMu.Lock()
 	defer s.edgesMu.Unlock()
 	edges, err := s.readEdges(ctx)
 	if err != nil {
 		return Answer{}, err
+	}
+	// One key is one edge: two names under one key would make a renewal
+	// pick one and a revoke cut both.
+	for _, e := range edges {
+		if e.Key == pub {
+			return Answer{}, ErrKeyTaken
+		}
+	}
+	c, ok := s.take(plain)
+	if !ok {
+		return Answer{}, ErrBadCode
 	}
 	if _, taken := edges[c.name]; taken {
 		return Answer{}, ErrNameTaken
@@ -286,6 +302,10 @@ func (s *Service) Join(ctx context.Context, plain, pub string) (Answer, error) {
 	perms, err := s.permissions(c.name)
 	if err != nil {
 		return Answer{}, err
+	}
+	// The edge gets exactly what the owner read on the card, or nothing.
+	if subtle.ConstantTimeCompare([]byte(Digest(perms)), []byte(c.digest)) != 1 {
+		return Answer{}, ErrStale
 	}
 	ans, err := s.issue(c.name, pub, perms)
 	if err != nil {
@@ -309,19 +329,17 @@ func RenewMessage(pub string, at int64) []byte { return fmt.Appendf(nil, "renew 
 // Renew gives a joined edge a new JWT with the permissions as they are now.
 // The request is signed with the edge's key (sig is base64 of the NATS
 // signature) and its time is within MaxClockSkew. The reply goes to whoever
-// has the signature, who still cannot use it without the seed.
+// has the signature, who still cannot use it without the seed. Renewal is
+// not under the join's limiter: nothing in it can be guessed (a signature
+// needs the seed), and a stranger's bad requests must not hold back a
+// joined edge's renewal; the listener's own limits bound the work.
 func (s *Service) Renew(ctx context.Context, pub string, at int64, sig string) (Answer, error) {
-	if !s.allowed() {
-		return Answer{}, ErrLimited
-	}
 	raw, err := base64.StdEncoding.DecodeString(sig)
 	d := s.now().Sub(time.Unix(at, 0))
 	if err != nil || d > MaxClockSkew || d < -MaxClockSkew || natsbus.VerifyUser(pub, RenewMessage(pub, at), raw) != nil {
-		s.fail()
 		return Answer{}, ErrBadSignature
 	}
 	if s.cfg.Chain.Revoked(pub) {
-		s.fail()
 		return Answer{}, ErrRevoked
 	}
 	s.edgesMu.Lock()
@@ -338,7 +356,6 @@ func (s *Service) Renew(ctx context.Context, pub string, at int64, sig string) (
 		}
 	}
 	if !found {
-		s.fail()
 		return Answer{}, ErrUnknownEdge
 	}
 	perms, err := s.permissions(e.Name)
@@ -481,21 +498,24 @@ func (s *Service) refill() {
 	s.last = now
 }
 
-// allowed reports whether a request may be looked at: the limiter holds a
-// token for a failure it might cause.
-func (s *Service) allowed() bool {
+// reserve takes a token for an attempt; false when none is left.
+func (s *Service) reserve() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.refill()
-	return s.tok >= 1
+	if s.tok < 1 {
+		return false
+	}
+	s.tok--
+	return true
 }
 
-// fail charges the limiter for a failed attempt.
-func (s *Service) fail() {
+// refund gives back the token of an attempt that succeeded.
+func (s *Service) refund() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.refill()
-	s.tok = max(0, s.tok-1)
+	s.tok = min(FailBurst, s.tok+1)
 }
 
 // The code's alphabet is Crockford base32: no I, L, O, U.

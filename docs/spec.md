@@ -2489,8 +2489,11 @@ Edges ([ADR-0109](adr/0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-
   owner is told of every join. To renew, the edge sends `POST /edge/renew`
   with a request signed by its key, every hour; the core answers only for a
   joined edge that is not revoked, with a JWT from the permissions as they
-  are now. Both routes share one limiter on failed attempts (a burst of 5,
-  one more every 12 s; past it, 429).
+  are now. The join is refused when the links changed after the card (the
+  edge gets only the permissions the owner read) and for a key a joined
+  edge holds. Join attempts have one limiter (a burst of 5, one more every
+  12 s; past it, 429); renewals are checked by signature and are not under
+  it, so a stranger cannot make edges' JWTs run out.
 - **R-EDGE-4.** The edge's leaf dials `wss://<public address>/bus`; the public
   listener proxies the upgrade to the embedded server's WebSocket listener on
   `127.0.0.1`. NATS refuses any connection without a valid JWT and nonce

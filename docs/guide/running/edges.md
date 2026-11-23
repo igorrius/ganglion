@@ -54,7 +54,8 @@ A lost or stolen computer: revoke it, then join a new one. The name is free agai
 | What you see | Why | What to do |
 |---|---|---|
 | The join command says the code was refused | The code was already used, was mistyped or cut short, or its 10 minutes ran out | Ask the bot for a new one; a new code for the same name replaces the old |
-| The join command says too many attempts | Five wrong tries in a row lock joins for a short while, about 12 seconds per further try. This is for the whole node, so a stranger's tries can lock you out too | Wait a minute and run the command again with the same code; a failed try does not use the code up |
+| The join command says too many attempts | Five wrong tries in a row lock joins for a short while, about 12 seconds per further try. This is for the whole node, so a stranger's tries can lock you out too | Wait a minute and run the command again with the same code; a failed try does not use the code up. Edges already connected are not affected |
+| The join command says the permissions changed since the card | The modules or links of that computer changed after you approved the card, so the code no longer matches what you read | Ask for the edge again in the chat; the new card shows what it will get now |
 | The bot says the name is taken | An edge with that name is already joined | Pick another name, or revoke the old edge in `/edges` first |
 | The code expired or the bot does not know it | The 10 minutes passed, or the main node restarted: unused codes are lost on a restart | Ask the bot again |
 | The command refuses to write the files | `edge.creds` is already there | Run it again with `--force` if you mean to replace it |

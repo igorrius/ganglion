@@ -118,6 +118,10 @@ func status(err error) (int, string) {
 		return http.StatusBadRequest, "bad request"
 	case errors.Is(err, ErrNameTaken):
 		return http.StatusConflict, "an edge has this name"
+	case errors.Is(err, ErrKeyTaken):
+		return http.StatusConflict, "an edge has this key"
+	case errors.Is(err, ErrStale):
+		return http.StatusConflict, "the permissions changed since the card; ask for a new code"
 	case errors.Is(err, ErrTooMany):
 		return http.StatusServiceUnavailable, "try again later"
 	}

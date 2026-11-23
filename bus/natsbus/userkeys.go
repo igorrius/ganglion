@@ -107,6 +107,10 @@ func ReadUserJWT(tok string) (CredsInfo, error) {
 	return ci, nil
 }
 
+// ErrUserRefused is a connection the server refused for the user's
+// credentials: not authorized, or revoked.
+var ErrUserRefused = errors.New("natsbus: the server refused the user")
+
 // DialUser connects to url as the user of creds and returns the connection's
 // close and a channel closed when the server drops it. It is how a test, or
 // a check, sees what the server lets a user do.
@@ -114,6 +118,9 @@ func DialUser(url string, creds []byte, timeout time.Duration) (closeConn func()
 	gone := make(chan struct{})
 	nc, err := nats.Connect(url, nats.UserCredentialBytes(creds), nats.Timeout(timeout), nats.MaxReconnects(0),
 		nats.ClosedHandler(func(*nats.Conn) { close(gone) }))
+	if errors.Is(err, nats.ErrAuthorization) || errors.Is(err, nats.ErrAuthRevoked) || errors.Is(err, nats.ErrAuthExpired) {
+		return nil, nil, fmt.Errorf("%w: %w", ErrUserRefused, err)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
