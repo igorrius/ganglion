@@ -130,10 +130,7 @@ mod tests {
     use crate::http::base64_decode;
 
     fn get(f: &Fake, path: &str) -> Value {
-        call(
-            f,
-            json!({"method": "GET", "path": path, "query": {}, "headers": {}, "body": ""}),
-        )
+        call(f, json!({"method": "GET", "path": path}))
     }
 
     fn call(f: &Fake, payload: Value) -> Value {
@@ -304,6 +301,16 @@ mod tests {
         let data: Value = serde_json::from_str(&body(&get(&f, "/api/data"))).unwrap();
         assert_eq!(data["points"], json!([]));
         assert_eq!(f.state.borrow().get("state").cloned(), stored);
+    }
+
+    #[test]
+    fn a_get_without_query_headers_or_body_is_answered_200_and_writes_nothing() {
+        let f = fake();
+        let v = call(&f, json!({"method": "GET", "path": "/"}));
+        assert_eq!(status(&v), 200);
+        let v = call(&f, json!({"method": "GET", "path": "/api/data"}));
+        assert_eq!(status(&v), 200);
+        assert!(f.state.borrow().is_empty());
     }
 
     #[test]
