@@ -19,8 +19,8 @@ func TestEdgeRunsWithoutTelegram(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.BotToken, cfg.BotAPIURL, cfg.Admin = testToken, fake.URL(), "telegram:user:42"
 	cfg.Settings.Edge.Name = "garage"
-	var logs bytes.Buffer
-	r := runNode(t, []node.Role{node.Edge}, cfg, slog.New(slog.NewTextHandler(&syncWriter{w: &logs}, nil)))
+	logs := &syncWriter{w: &bytes.Buffer{}}
+	r := runNode(t, []node.Role{node.Edge}, cfg, slog.New(slog.NewTextHandler(logs, nil)))
 	fake.AddMessage(telegramtest.Incoming{ChatID: 42, UserID: 42, Text: "hi"})
 	eventually(t, "the edge's start", func() bool { return strings.Contains(logs.String(), "node: edge on") })
 	time.Sleep(300 * time.Millisecond)
