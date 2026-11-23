@@ -41,6 +41,11 @@ func DeliveryPermissions(edge string) UserPermissions {
 			api + "DIRECT.GET." + obj + ".$O." + bus.ObjectModules + ".M.*",
 			api + "CONSUMER.CREATE." + obj + ".*.$O." + bus.ObjectModules + ".C.*",
 			api + "CONSUMER.DELETE." + obj + ".*",
+			// The server asks a reader of a large object for flow control
+			// (a reply to a subject of its own, $JS.FC.<stream>.<consumer>.<n>);
+			// without the answer the read of anything past the first chunks
+			// stalls. A small test file never needed it (#374).
+			"$JS.FC." + obj + ".>",
 			api + "$KV." + bus.BucketDelivery + ".actual." + edge + ".*",
 		},
 		Subscribe: []string{EdgeInbox(edge) + ".>"},

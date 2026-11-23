@@ -1,0 +1,9 @@
+name: edge-probe
+version: 1
+triggers:
+  - cron: "*/30 * * * *"
+cells:
+  report:
+    value: {kind: sensor, type: integer, about: "A reading of the probe"}
+config:
+  op_cron: {type: string, default: '{"op":"cell_report","name":"value","json":20}'}

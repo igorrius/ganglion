@@ -75,10 +75,12 @@ type Node struct {
 	stopOnce sync.Once
 	stopErr  error
 	logs     string
-	pending  atomic.Int64 // how far the confirmations' clock is ahead, ns
-	sched    atomic.Int64 // how far the scheduler's clock is ahead, ns
-	tokens   *Counter     // counts the node's model calls
-	calls0   int          // the counter's calls when this node started
+	pending  atomic.Int64        // how far the confirmations' clock is ahead, ns
+	sched    atomic.Int64        // how far the scheduler's clock is ahead, ns
+	tokens   *Counter            // counts the node's model calls
+	calls0   int                 // the counter's calls when this node started
+	joined   *config.LabEdgeJoin // the edge that joined, set by JoinEdge
+	edge     *labEdge            // the edge that runs beside the node, set by StartEdge
 }
 
 // Start runs a node for o. Stop ends it and removes its directory.
@@ -178,10 +180,8 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	b.Metrics = tel.Renderer()
 	// Built here, not in the goroutine: the tables exist when Start returns,
 	// and a container that cannot be built is Start's error.
-	for name, cfg := range o.Scenario.Config {
-		if err := settings.SetModule(filepath.Join(n.dir, settings.FileName), settings.Module{Name: "local/" + name, Config: cfg}); err != nil {
-			return fmt.Errorf("chatlab: settings for %s: %w", name, err)
-		}
+	if err := n.writeSettings(o.Scenario); err != nil {
+		return err
 	}
 	mods, err := labModules(o.Scenario)
 	if err != nil {
@@ -190,7 +190,7 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	n.lab, err = config.NewLab(runCtx, b, logger, config.LabOptions{Models: models, Keys: keys, Relay: o.Relay, Resolver: pages, Connect: pages.connect, Modules: mods, MCPHTTP: mcpHTTP,
 		PendingNow: func() time.Time { return time.Now().Add(time.Duration(n.pending.Load())) },
 		SchedNow:   func() time.Time { return time.Now().Add(time.Duration(n.sched.Load())) },
-		Wrap:       o.Tokens.Wrap})
+		Wrap:       o.Tokens.Wrap, EdgeEntry: o.Scenario.Edge})
 	if err != nil {
 		return fmt.Errorf("chatlab: %w", err)
 	}
@@ -199,6 +199,40 @@ func (n *Node) run(ctx context.Context, o NodeOptions, models settings.Models, k
 	}()
 	n.db = n.lab.DB
 	n.peer = NewTelegram(fake, labChat, labOwner)
+	return nil
+}
+
+// writeSettings writes what the owner wrote in the node's file before it
+// starts: the places of the modules that name an edge, then the modules'
+// config.
+func (n *Node) writeSettings(s Scenario) error {
+	if err := n.writeEdgeLines(s); err != nil {
+		return err
+	}
+	for name, cfg := range s.Config {
+		if err := settings.SetModule(filepath.Join(n.dir, settings.FileName), settings.Module{Name: "local/" + name, Config: cfg}); err != nil {
+			return fmt.Errorf("chatlab: settings for %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// writeEdgeLines writes the settings lines of the modules that name an edge,
+// as the owner would write them; the node's settings API sets a module's
+// config and switch, not its place. The names are checked by the scenario.
+func (n *Node) writeEdgeLines(s Scenario) error {
+	var b strings.Builder
+	for _, m := range s.Modules {
+		if m.Node != "" {
+			fmt.Fprintf(&b, "  - name: local/%s\n    node: %s\n", m.Name, m.Node)
+		}
+	}
+	if b.Len() == 0 {
+		return nil
+	}
+	if err := os.WriteFile(filepath.Join(n.dir, settings.FileName), []byte("modules:\n"+b.String()), 0o600); err != nil {
+		return fmt.Errorf("chatlab: settings for the edge's modules: %w", err)
+	}
 	return nil
 }
 
@@ -521,6 +555,7 @@ func (n *Node) left(ctx context.Context) (int, error) {
 // Stop ends the node and removes its directory. A second Stop does nothing.
 func (n *Node) Stop(ctx context.Context) error {
 	n.stopOnce.Do(func() {
+		edgeErr := n.stopEdge()
 		n.cancel()
 		select {
 		case err := <-n.done:
@@ -535,6 +570,7 @@ func (n *Node) Stop(ctx context.Context) error {
 		n.lab.Shutdown(sctx)
 		n.closers.clean()
 		_ = os.RemoveAll(n.dir)
+		n.stopErr = errors.Join(n.stopErr, edgeErr)
 	})
 	return n.stopErr
 }
@@ -656,9 +692,11 @@ func (n *Node) JoinEdge(ctx context.Context) error {
 				continue
 			}
 			words := strings.Fields(line)
-			if err := n.lab.JoinEdge(ctx, words[len(words)-1]); err != nil {
+			j, err := n.lab.JoinEdge(ctx, words[len(words)-1])
+			if err != nil {
 				return fmt.Errorf("chatlab: the edge's join: %w", err)
 			}
+			n.joined = &j
 			return nil
 		}
 	}

@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m10-edge-module-update-rollback
+why: >-
+  M10 check, P2 gate (R-EDGE-6, ADR-0117): a module whose line names an edge runs there, not on the node. A new
+  version the node installs is delivered to the edge and reported in its actual key, and one command,
+  /modules rollback, brings the version before it back, with no model asked.
+covers:
+  - edge/**
+  - edgejoin/**
+  - modhost/**
+  - modstore/**
+  - agent/modules.go
+  - bus/natsbus/delivery.go
+  - config/edge.go
+  - config/lab_edge.go
+repeat: 1
+model: scripted
+edge: true
+modules:
+  - {name: edge-probe, manifest: modules/edge-probe-v1.yaml, node: garage}
+script:
+  - {tool: edge.join, args: '{"name":"garage"}'}
+  - {say: "It waits for your press."}
+  - {say: "The card is waiting for your press."}
+steps:
+  - say: "Connect my computer as garage"
+  - press: Approve
+  - press: Approve
+  - join_edge: true
+  - start_edge: true
+  # The version the node delivered before the edge joined runs on the edge.
+  - facts:
+      edge:
+        running: {module: edge-probe, version: "1"}
+        actual: {module: edge-probe, result: running, version: "1"}
+  - install_module: {name: edge-probe, manifest: modules/edge-probe-v2.yaml}
+  - facts:
+      edge:
+        running: {module: edge-probe, version: "2"}
+        actual: {module: edge-probe, result: running, version: "2"}
+  - say: "/modules rollback edge-probe"
+  - facts:
+      reply: {contains: rolled back from 2 to 1}
+      edge:
+        running: {module: edge-probe, version: "1"}
+        actual: {module: edge-probe, result: running, version: "1"}

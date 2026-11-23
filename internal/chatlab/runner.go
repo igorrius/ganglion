@@ -69,6 +69,7 @@ type repeatRun struct {
 	log   strings.Builder
 	shown []Message // what the person saw after the last step
 	last  []Message // the model's words since the last action
+	dir   string    // the scenario's directory
 }
 
 // errStopRepeat ends a repeat early; its reason is already in rep.
@@ -83,7 +84,7 @@ func runRepeat(ctx context.Context, o RunOptions, s Scenario) Repeat {
 	if err != nil {
 		return Repeat{NotRun: "the node did not start: " + err.Error()}
 	}
-	run := &repeatRun{o: o, n: n}
+	run := &repeatRun{o: o, n: n, dir: s.Dir}
 	defer func() { _ = n.Stop(context.WithoutCancel(ctx)) }()
 	for _, st := range s.Steps {
 		if err := run.step(ctx, st); err != nil {
@@ -153,8 +154,8 @@ func (r *repeatRun) step(ctx context.Context, st Step) error {
 			return err
 		}
 		return r.settle(ctx)
-	case st.JoinEdge:
-		return r.joinEdge(ctx)
+	case st.JoinEdge, st.usesEdge() && st.Facts == nil, st.InstallModule != nil:
+		return r.edgeStep(ctx, st)
 	case st.Reach != nil:
 		return r.reach(ctx, *st.Reach)
 	case st.Facts != nil:
@@ -172,6 +173,44 @@ func (r *repeatRun) joinEdge(ctx context.Context) error {
 		return err
 	}
 	return r.settle(ctx)
+}
+
+// edgeStep is a step of an edge: its join, its start, its link, its events or
+// a new build of a module it runs.
+func (r *repeatRun) edgeStep(ctx context.Context, st Step) error {
+	switch {
+	case st.JoinEdge:
+		return r.joinEdge(ctx)
+	case st.StartEdge:
+		fmt.Fprintf(&r.log, "\n**the edge that joined starts** beside the node, linked to its entry\n")
+		return r.n.StartEdge(ctx)
+	case st.EdgeLink != "":
+		fmt.Fprintf(&r.log, "\n**the edge's link goes %s**\n", st.EdgeLink)
+		return r.n.EdgeLink(ctx, st.EdgeLink)
+	case st.EdgeEmit != 0:
+		fmt.Fprintf(&r.log, "\n**the edge makes %d events**\n", st.EdgeEmit)
+		return r.n.EdgeEmit(ctx, st.EdgeEmit)
+	}
+	fmt.Fprintf(&r.log, "\n**a new build of %s** is installed on the node\n", st.InstallModule.Name)
+	return r.n.InstallModule(ctx, *st.InstallModule, r.dir)
+}
+
+// waitEdgeFacts waits, within EdgePatience, until the edge's facts hold: the
+// node's copy of the edge's events and the edge's report come on their own
+// clocks. A fact that never holds is reported by the facts check that follows.
+func (r *repeatRun) waitEdgeFacts(ctx context.Context, want *EdgeFact) {
+	ctx, cancel := context.WithTimeout(ctx, EdgePatience)
+	defer cancel()
+	for {
+		if v, err := r.n.ReadEdge(ctx, want); err == nil && len(checkEdge(want, v)) == 0 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
 }
 
 func (r *repeatRun) note(st Step) {
@@ -243,9 +282,17 @@ func (r *repeatRun) reach(ctx context.Context, want Reach) error {
 }
 
 func (r *repeatRun) facts(ctx context.Context, f Facts) error {
+	if f.Edge != nil {
+		r.waitEdgeFacts(ctx, f.Edge)
+	}
 	v, err := ReadView(ctx, r.n, r.last)
 	if err != nil {
 		return err
+	}
+	if f.Edge != nil {
+		if v.Edge, err = r.n.ReadEdge(ctx, f.Edge); err != nil {
+			return err
+		}
 	}
 	r.rep.Failures = append(r.rep.Failures, Check(f, v)...)
 	return nil

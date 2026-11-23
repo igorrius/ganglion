@@ -25,7 +25,20 @@ type View struct {
 	Exists     func(rel string) bool // whether a path under the node's folder exists; nil: none does
 	Deleted    int                   // the person's messages the bot deleted
 	ModelSaw   string                // everything a scripted model was sent
+	Edge       *EdgeView             // the edge beside the node; nil when none runs
 }
+
+// EdgeView is what a facts step reads of the edge beside the node.
+type EdgeView struct {
+	Linked   bool
+	Held     int         // events its own stream keeps
+	CoreHeld int         // its events the node's stream holds
+	Running  string      // the version that runs of the module a fact names
+	Actual   *ActualView // what it says it runs; nil when it said nothing
+}
+
+// ActualView is the edge's report of a module, as the node reads it.
+type ActualView struct{ Result, Version string }
 
 // Check returns one line per failed check, saying what was wanted and what
 // was found; none means the facts hold.
@@ -59,6 +72,7 @@ func Check(f Facts, v View) []string {
 	out = append(out, checkText("card", f.Card, words(cards(v.Messages)))...)
 	out = append(out, checkCounts(f, v)...)
 	out = append(out, checkAbsent(f.Absent, v.Exists)...)
+	out = append(out, checkEdge(f.Edge, v.Edge)...)
 	if f.Jobs != nil && v.Jobs[f.Jobs.Kind] != f.Jobs.Count {
 		out = append(out, fmt.Sprintf("jobs: wanted %d of kind %s, found %d", f.Jobs.Count, f.Jobs.Kind, v.Jobs[f.Jobs.Kind]))
 	}
@@ -189,4 +203,37 @@ func words(ms []Message) string {
 		parts[i] = m.Text
 	}
 	return strings.Join(parts, "\n")
+}
+
+// checkEdge checks the edge facts against what the edge shows; none is
+// running is one failure.
+func checkEdge(f *EdgeFact, v *EdgeView) []string {
+	switch {
+	case f == nil:
+		return nil
+	case v == nil:
+		return []string{"edge: none runs beside the node"}
+	}
+	var out []string
+	if f.Linked != nil && v.Linked != *f.Linked {
+		out = append(out, fmt.Sprintf("edge: wanted linked %t, found %t", *f.Linked, v.Linked))
+	}
+	if f.Held != nil && v.Held != *f.Held {
+		out = append(out, fmt.Sprintf("edge: wanted %d events held on the edge, found %d", *f.Held, v.Held))
+	}
+	if f.CoreHeld != nil && v.CoreHeld != *f.CoreHeld {
+		out = append(out, fmt.Sprintf("edge: wanted %d of its events in the node's stream, found %d", *f.CoreHeld, v.CoreHeld))
+	}
+	if f.Running != nil && v.Running != f.Running.Version {
+		out = append(out, fmt.Sprintf("edge: %s runs version %q on the edge, wanted %q", f.Running.Module, v.Running, f.Running.Version))
+	}
+	if a := f.Actual; a != nil {
+		switch {
+		case v.Actual == nil:
+			out = append(out, fmt.Sprintf("edge: no actual key of %s", a.Module))
+		case v.Actual.Result != a.Result || (a.Version != "" && v.Actual.Version != a.Version):
+			out = append(out, fmt.Sprintf("edge: actual of %s is %s %q, wanted %s %q", a.Module, v.Actual.Result, v.Actual.Version, a.Result, a.Version))
+		}
+	}
+	return out
 }
