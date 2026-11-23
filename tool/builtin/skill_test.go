@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/internal/redact"
 	"github.com/igorrius/ganglion/sandbox"
 	"github.com/igorrius/ganglion/skills"
 	"github.com/igorrius/ganglion/tool"
@@ -316,5 +317,36 @@ func TestChangeScriptThatStartedIsNotRetried(t *testing.T) {
 	}
 	if _, err := hs["skill.clean_cache"].Run(context.Background(), c); err == nil || !strings.Contains(err.Error(), "not run again") {
 		t.Fatalf("the rerun: %v", err)
+	}
+}
+
+// Review finding: a script's stdout loses secrets as its stderr does, by
+// pattern and by the node's own values, and a secret cut at the end of a
+// capped output is not left half shown.
+func TestScriptStdoutAndStderrAreHiddenAlike(t *testing.T) {
+	const pat, own = "sk-test-0000000000000000", "node-secret-value-42"
+	for _, stream := range []string{"", " >&2"} {
+		ws := t.TempDir()
+		dir := filepath.Join(ws, "skills", "leaks")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		_ = os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: leaks\ndescription: x\nscript:\n  run: run.sh\n  effects: read\n---\nx\n"), 0o600)
+		exit := ""
+		if stream != "" {
+			exit = "exit 2\n"
+		}
+		_ = os.WriteFile(filepath.Join(dir, "run.sh"), []byte("#!/bin/sh\necho 'a "+pat+" b "+own+" c'"+stream+"\n"+exit), 0o700)
+		set, _, _ := skills.Load(skills.Builtin, ws, nil)
+		values := redact.Values(own)
+		hide := builtin.WithSkillHide(func(s string) string { return values(redact.String(s)) })
+		h := byName(builtin.NewSkillTools(set, skills.NewRunner(skills.DefaultRunConfig(), unconfined{}), fakeRuns{}, gate{}, hide))["skill.leaks"]
+		res, err := h.Run(context.Background(), tool.Call{Name: "skill.leaks", Args: []byte(`{}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(res.Text, pat) || strings.Contains(res.Text, own) || !strings.Contains(res.Text, "[redacted]") {
+			t.Errorf("stream %q: %q", stream, res.Text)
+		}
 	}
 }

@@ -27,7 +27,11 @@ const SkillReadTool = "skill.read"
 // (R-RTR-5, ADR-0042), all for admins only. A script's tool is on offer only
 // while gate is open (the command sandbox is on, ADR-0039); a skill without
 // a script needs no sandbox.
-func NewSkillTools(set skills.Set, run *skills.Runner, begun ScriptRuns, gate Gate) []tool.Handler {
+func NewSkillTools(set skills.Set, run *skills.Runner, begun ScriptRuns, gate Gate, opts ...SkillOption) []tool.Handler {
+	hide := redact.String
+	for _, o := range opts {
+		o(&hide)
+	}
 	m := otel.Meter("ganglion/skills")
 	runs, _ := m.Int64Counter("ganglion.skill.runs", metric.WithDescription("Skill script runs, by skill and result."))
 	dur, _ := m.Float64Histogram("ganglion.skill.run.duration", metric.WithUnit("s"), buckets.Seconds,
@@ -35,11 +39,19 @@ func NewSkillTools(set skills.Set, run *skills.Runner, begun ScriptRuns, gate Ga
 	out := []tool.Handler{&skillRead{set: set}}
 	for _, name := range set.Names() {
 		if sk, _ := set.Get(name); sk.Script != nil {
-			out = append(out, &skillScript{sk: sk, run: run, begun: begun, gate: gate, runs: runs, dur: dur})
+			out = append(out, &skillScript{sk: sk, run: run, begun: begun, gate: gate, hide: hide, runs: runs, dur: dur})
 		}
 	}
 	return out
 }
+
+// SkillOption configures NewSkillTools.
+type SkillOption func(*func(string) string)
+
+// WithSkillHide sets how a script's output loses secrets, stdout and stderr
+// alike; the default is redact.String, and config adds the node's own secret
+// values.
+func WithSkillHide(f func(string) string) SkillOption { return func(h *func(string) string) { *h = f } }
 
 type skillRead struct{ set skills.Set }
 
@@ -80,6 +92,7 @@ type skillScript struct {
 	run   *skills.Runner
 	begun ScriptRuns
 	gate  Gate
+	hide  func(string) string // how the script's output loses secrets
 	runs  metric.Int64Counter
 	dur   metric.Float64Histogram
 }
@@ -176,11 +189,16 @@ func (s *skillScript) Run(ctx context.Context, c tool.Call) (tool.Result, error)
 		// stderr is the script's own text, maybe a page it read: outside
 		// content, never the node's words in an error.
 		result = "exit"
-		return tool.Result{Text: fmt.Sprintf("the script failed (exit %d): %s", out.Exit, text.Truncate(redact.String(out.Stderr), errHead)),
+		return tool.Result{Text: fmt.Sprintf("the script failed (exit %d): %s", out.Exit, text.Truncate(s.hide(out.Stderr), errHead)),
 			External: true}, nil
 	}
-	res := out.Stdout
+	res := s.hide(out.Stdout)
 	if out.Truncated {
+		// The cut may have gone through a secret, which hide could not match
+		// half written: the last word is dropped.
+		if i := strings.LastIndexAny(res, " \t\r\n"); i >= 0 {
+			res = res[:i]
+		}
 		res += "\n[output cut]"
 	}
 	return tool.Result{Text: res, External: true}, nil

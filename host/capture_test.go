@@ -143,3 +143,23 @@ func TestFortySecretsAtTheHeadShowNoPart(t *testing.T) {
 	got, _ = c.text(hideSecret)
 	noPartOf(t, got)
 }
+
+// A secret of 256 bytes or more (a private key) across a cut is hidden
+// whole too: the edge is longer than the longest secret the node reads.
+func TestALongSecretAcrossEitherCutIsHiddenWhole(t *testing.T) {
+	long := strings.Repeat("K", 2000)
+	hide := func(s string) string { return strings.ReplaceAll(s, long, "[redacted]") }
+	for _, before := range []int{10, 40} {
+		c := newCapture(32, 32)
+		out := strings.Repeat("a", before) + long + strings.Repeat("b", 5000) + long + strings.Repeat("c", 40)
+		for len(out) > 0 {
+			n := min(7, len(out))
+			_, _ = c.Write([]byte(out[:n]))
+			out = out[n:]
+		}
+		got, cut := c.text(hide)
+		if !cut || strings.Contains(got, "KKKKKK") {
+			t.Fatalf("before %d: cut %v, text %q", before, cut, got)
+		}
+	}
+}

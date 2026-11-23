@@ -8,7 +8,10 @@ import (
 
 // edge is how many bytes capture keeps past each cut, so a secret the cut
 // goes through is hidden whole before the cut: a secret is shorter than this.
-const edge = 256
+// It holds a private key of 4096 bits in PEM form, the longest secret a node
+// reads; a longer one is hidden by pattern or by value only when it lies
+// inside the head or the tail.
+const edge = 8 << 10
 
 // capture keeps the first head and the last tail bytes of a command's
 // output, and counts all of it: enough for the model to see how it began
