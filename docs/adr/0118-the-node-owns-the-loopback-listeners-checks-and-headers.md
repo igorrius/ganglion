@@ -89,8 +89,12 @@ The rest of the contract, fixed with it:
   counts toward the crash loop like any run, is not escalated to the agent (the browser saw it),
   and is the only kind of http run written to the run journal.
 - **Where it runs.** The listener is a component of any node with the edge role, an edge alone or
-  beside the core; `http.local_addr` takes a loopback host only, or `off`, and a port it cannot
-  bind stops the node.
+  beside the core; `http.local_addr` takes `127.0.0.1`, `::1` or `localhost` (any case) with a
+  port, or `off`: another loopback address would bind and then refuse every `Host`. A port it
+  cannot bind stops the node.
+- **The install window** names the prefix `/<module>/` and the routes, and says the host and port
+  are the `http.local_addr` of the node that runs the module: the node that asks does not know an
+  edge's setting.
 
 ## Security
 
@@ -121,6 +125,9 @@ The rest of the contract, fixed with it:
   browser sends the page's own `Origin`.
 - A page cannot be embedded in another site or open one in a frame, and a link from another site
   opens it but cannot post to it.
+- A browser that sends neither `Origin` nor `Sec-Fetch-Site` passes the cross-site check on a
+  `GET`, so a template or a module never changes state on `GET`: writes go on `POST`, `PUT`,
+  `PATCH` or `DELETE`, which every current browser marks with `Origin`.
 - The `web` template serves its scripts and styles as routes of their own: the policy refuses
   inline ones.
 - A module's trial run cannot yet pull an http trigger; `examples.yaml` steps for it are a

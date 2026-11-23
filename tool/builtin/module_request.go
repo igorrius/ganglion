@@ -214,7 +214,7 @@ func (t *ModuleInstall) prepare(ctx context.Context, c tool.Call) (installReques
 		return installRequest{}, requestWindow{}, fmt.Errorf("%s: %w", ModuleInstallTool, err)
 	}
 	for i := range ps {
-		ps[i].win = windowOf(ps[i].b, ps[i].plan, ps[i].m, t.m.listener())
+		ps[i].win = windowOf(ps[i].b, ps[i].plan, ps[i].m)
 		ps[i].win.Outside = !t.m.ownSource(modstore.ShortName(ps[i].b.Module))
 	}
 	rw := requestWindow{Links: shown}

@@ -42,15 +42,16 @@ type window struct {
 	// Outside is true when the module's source is not the node's own: it was
 	// written after the agent read outside content (R-RUN-17, ADR-0111).
 	Outside bool `json:"outside,omitempty"`
-	// Address is where its pages are served, with the module's prefix, when
-	// it has an http trigger (R-HTTP-1): the listener's address on the node
-	// that runs it ("" for a module with no pages).
+	// Address is the prefix its pages are served under when it has an http
+	// trigger (R-HTTP-1), "/<module>/"; "" for a module with no pages. Only
+	// the path: the host and port are the http.local_addr of the node that
+	// runs it, which the asking node does not know (an edge has its own).
 	Address string `json:"address,omitempty"`
 }
 
 // windowOf is the window of a build whose plan has no refusal, with no trial
 // section yet (see withTrial).
-func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest, listener string) window {
+func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest) window {
 	short := modstore.ShortName(b.Module)
 	about := map[string]string{}
 	for _, t := range m.Triggers {
@@ -60,7 +61,7 @@ func windowOf(b modstore.Build, p modstore.Plan, m runner.Manifest, listener str
 	}
 	w := window{Module: b.Module, SHA256: p.SHA256, Version: p.Version, Size: p.Size, Rights: p.Rights, Widening: p.Widening, About: about}
 	if len(p.Rights.Pages) > 0 {
-		w.Address = "http://" + listener + "/" + short + "/"
+		w.Address = "/" + short + "/"
 	}
 	return w
 }
@@ -175,7 +176,8 @@ func blockText(sp texts.Speaker, w window, compact bool) string {
 	}
 	lines = append(lines, reflexLines(sp, r)...)
 	if len(r.Pages) > 0 {
-		lines = append(lines, sp.Text(texts.AskModulePages, texts.Vars{"address": item(w.Address), varItems: routesShown(r.Pages)}))
+		lines = append(lines, sp.Text(texts.AskModulePages, texts.Vars{"address": item(w.Address), varItems: routesShown(r.Pages),
+			"setting": text.CodeSpan("http.local_addr"), "fallback": text.CodeSpan("127.0.0.1:8090"), "off": text.CodeSpan("off")}))
 	}
 	lines = append(lines, sp.Text(texts.AskModuleRuns, texts.Vars{varItems: runs(sp, w.Module, r)}))
 	for _, t := range r.Tools {
@@ -461,16 +463,4 @@ func timeoutShown(d time.Duration) string {
 		return fmt.Sprintf("%d s", d/time.Second)
 	}
 	return d.String()
-}
-
-// DefaultHTTPAddr is the loopback listener's address when http.local_addr
-// names none (R-HTTP-1).
-const DefaultHTTPAddr = "127.0.0.1:8090"
-
-// listener is the address the window shows for a module's pages.
-func (m *Modules) listener() string {
-	if m.HTTPAddr == "" {
-		return DefaultHTTPAddr
-	}
-	return m.HTTPAddr
 }

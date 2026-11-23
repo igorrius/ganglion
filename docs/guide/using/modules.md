@@ -65,7 +65,7 @@ modules:
 
 ## Modules with web pages
 
-A module can also serve a web page. The install window then has a line "Serves web pages at `http://127.0.0.1:8090/<module>/`" with the module's routes, and a new version that adds or changes a route says so in its "New:" line. Open the address in a browser on the computer that runs the module; `http://127.0.0.1:8090/` lists every page there. A node with the edge role serves pages, on the port of its `http.local_addr` setting; see [Pages on the edge](../running/edges.md#pages-on-the-edge).
+A module can also serve a web page. The install window then has a line "Serves web pages at the path `/<module>/` on the node that runs it" with the module's routes (the host and port are that node's `http.local_addr`, `127.0.0.1:8090` unless set), and a new version that adds or changes a route says so in its "New:" line. Open the address in a browser on the computer that runs the module; `http://127.0.0.1:8090/` lists every page there. A node with the edge role serves pages, on the port of its `http.local_addr` setting; see [Pages on the edge](../running/edges.md#pages-on-the-edge).
 
 What your node does so a page is safe to open:
 

@@ -438,12 +438,12 @@ func TestAModulesNameWithoutTheSlashLeadsToItsPage(t *testing.T) {
 }
 
 func TestTheListenerBindsLoopbackOnly(t *testing.T) {
-	for _, addr := range []string{"0.0.0.0:8090", "[::]:8090", "192.168.1.10:8090", "example.com:8090", ":8090", "127.0.0.1", "[fe80::1%eth0]:8090", "[::ffff:10.0.0.1]:8090"} {
+	for _, addr := range []string{"0.0.0.0:8090", "[::]:8090", "192.168.1.10:8090", "example.com:8090", ":8090", "127.0.0.1", "[fe80::1%eth0]:8090", "[::ffff:10.0.0.1]:8090", "127.0.0.5:8090", "[::ffff:127.0.0.1]:8090"} {
 		if _, err := modhttp.New(modhttp.DefaultConfig(addr), &fake{}, slog.New(slog.DiscardHandler)); err == nil || !strings.Contains(err.Error(), "modhttp: address") {
 			t.Errorf("%q: %v, want a refusal", addr, err)
 		}
 	}
-	for _, addr := range []string{"127.0.0.1:0", "localhost:0", "[::1]:0", "LOCALHOST:0", "[::ffff:127.0.0.1]:0"} {
+	for _, addr := range []string{"127.0.0.1:0", "localhost:0", "[::1]:0", "LOCALHOST:0", "LocalHost:0"} {
 		l, err := modhttp.New(modhttp.DefaultConfig(addr), &fake{}, slog.New(slog.DiscardHandler))
 		if err != nil {
 			t.Errorf("%q: %v", addr, err)

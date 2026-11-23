@@ -50,7 +50,7 @@ A module can serve a web page, for example a small dashboard of what it reads. A
 - Open `http://127.0.0.1:8090/<module>/` in a browser on the edge's computer. `http://127.0.0.1:8090/` lists the pages of the modules that are running.
 - Nothing else can reach it. The address is the computer's loopback, so another computer on your network gets no answer. To look at a page from elsewhere, use your own tunnel (for example `ssh -L 8090:127.0.0.1:8090 <edge>`).
 - The port comes from the `http.local_addr` setting of the node that runs the module, so each edge decides its own; the default is `127.0.0.1:8090`, and `off` serves no pages. See [the `http` section](configuration.md#http).
-- In the install window of a module with pages you see a line like "Serves web pages at `http://127.0.0.1:8090/<module>/`" with its routes. That address is on the computer that runs the module.
+- In the install window of a module with pages you see a line like "Serves web pages at the path `/<module>/` on the node that runs it" with its routes. The window names the path only: the host and port are the `http.local_addr` of the edge that runs the module, and a node whose setting is `off` serves no pages.
 
 ## Revoke an edge
 

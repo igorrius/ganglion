@@ -824,7 +824,7 @@ func TestModuleInstallWindowShowsThePagesAddress(t *testing.T) {
 	first := artifact(page("{path: /, methods: [GET]}"), 161<<10, 1)
 	e.build(t, first)
 	want := strings.Replace(goldenWindow(first.SHA256), "• Reads cells: —\n",
-		"• Reads cells: —\n• Serves web pages at `http://127.0.0.1:8090/demo-reader/`, routes `GET /`\n", 1)
+		"• Reads cells: —\n• Serves web pages at the path `/demo-reader/` on the node that runs it: at its `http.local_addr`, `127.0.0.1:8090` unless set, and none when that is `off`; routes `GET /`\n", 1)
 	c := installCall(first.SHA256)
 	if q := question(t, e, c); q != want {
 		t.Fatalf("window:\n%s\nwant:\n%s", q, want)

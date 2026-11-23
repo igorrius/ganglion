@@ -153,11 +153,13 @@ func loopback(addr string) (netip.AddrPort, error) {
 	if strings.EqualFold(host, "localhost") {
 		host = "127.0.0.1"
 	}
+	// Only the addresses the Host check answers (setBound): another
+	// loopback address would bind, and refuse every request.
 	ip, err := netip.ParseAddr(host)
-	if err != nil || !ip.IsLoopback() || ip.Zone() != "" {
-		return netip.AddrPort{}, fmt.Errorf("modhttp: address %q is not loopback: modules' pages are served on 127.0.0.1, ::1 or localhost only", addr)
+	if err != nil || ip.Zone() != "" || (ip != netip.MustParseAddr("127.0.0.1") && ip != netip.IPv6Loopback()) {
+		return netip.AddrPort{}, fmt.Errorf("modhttp: address %q is not 127.0.0.1, ::1 or localhost: modules' pages are served there only", addr)
 	}
-	return netip.AddrPortFrom(ip.Unmap(), uint16(p)), nil
+	return netip.AddrPortFrom(ip, uint16(p)), nil
 }
 
 // Name implements node.Component.

@@ -2530,7 +2530,8 @@ HTTP modules ([ADR-0110](adr/0110-modules-answer-http-on-an-edges-loopback.md)):
   edge's listener (`http.local_addr`, default `127.0.0.1:8090`, `off` for
   none) gives each module the prefix `/<module>/` and lists the module pages
   at `/`. A route is an exact path; the methods are `GET`, `POST`, `PUT`,
-  `PATCH` and `DELETE`. The install window shows the address and the routes.
+  `PATCH` and `DELETE`. The install window shows the path, the setting that gives the host and
+  port on the node that runs the module, and the routes.
 - **R-HTTP-2.** A request starts the module with `Trigger: "http"`: method,
   path inside the prefix, query, a body up to 1 MiB and an allowlist of
   headers (`accept`, `content-type`, `if-none-match`) as

@@ -94,7 +94,7 @@ ask.module_notify: "• Пише вам: до {n} повідомлень на д
 ask.module_emits: "• Надсилає події: {items}"
 ask.module_accepts: "• Приймає події: {items}"
 ask.module_serves: "• Відповідає на виклики: {items}"
-ask.module_pages: "• Віддає веб-сторінки за адресою {address}, маршрути {items}"
+ask.module_pages: "• Віддає веб-сторінки за шляхом {address} на вузлі, де працює: за його {setting}, {fallback} типово, і жодних, якщо він {off}; маршрути {items}"
 ask.module_calls: "• Робить виклики: {items}"
 ask.module_runs: "• Запуски: {items}"
 ask.module_tool: "інструмент {name}"

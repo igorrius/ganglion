@@ -260,7 +260,7 @@ func (f File) check() error {
 		{pathLogLevel, "must be debug, info, warn or error", slices.Contains([]string{"debug", "info", "warn", "error"}, f.Log.Level)},
 		{"metrics.addr", `must be host:port or off`, validAddr(f.Metrics.Addr)},
 		{"http.addr", `must be host:port or off`, validAddr(f.HTTP.Addr)},
-		{"http.local_addr", `must be off or a loopback address: 127.0.0.1, [::1] or localhost, with a port`, validLocalAddr(f.HTTP.LocalAddr)},
+		{"http.local_addr", `must be off or 127.0.0.1, [::1] or localhost with a port`, validLocalAddr(f.HTTP.LocalAddr)},
 		{keyPublicURL, "must be an https address with no path, on no port or on 443, 80, 88 or 8443", validPublicURL(f.HTTP.PublicURL)},
 		{keyUpdates, "must be polling or webhook", slices.Contains([]string{UpdatesPolling, UpdatesWebhook}, f.Telegram.Updates)},
 		{keyUpdates, "webhook needs the public listener: set http.addr", f.Telegram.Updates != UpdatesWebhook || f.HTTP.On()},
@@ -405,11 +405,20 @@ func validLocalAddr(a string) bool {
 	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
 		return false
 	}
-	if host == "localhost" {
+	return LoopbackHost(host)
+}
+
+// LoopbackHost reports whether host is one the listener of modules' pages
+// binds and answers to: 127.0.0.1, ::1 or localhost (any case). Another
+// loopback address is refused: the listener answers only the Host values
+// 127.0.0.1, localhost and [::1] with its port (R-HTTP-3), so a page there
+// could never be opened.
+func LoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
 		return true
 	}
 	ip, err := netip.ParseAddr(host)
-	return err == nil && ip.IsLoopback() && ip.Zone() == ""
+	return err == nil && ip.Zone() == "" && (ip == netip.MustParseAddr("127.0.0.1") || ip == netip.IPv6Loopback())
 }
 
 func validURL(s string) bool {
