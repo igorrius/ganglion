@@ -33,9 +33,9 @@ type Publisher interface {
 	Publish(ctx context.Context, subject, id string, headers map[string]string, payload []byte) error
 }
 
-// fromNode names the producer of a notice in its Ganglion-From header:
-// this node's core, then the module.
-const fromNode = "core"
+// CoreNode is the node token of the core's subjects and the first part of
+// its Ganglion-From header; an edge uses its own name (R-EDGE-7).
+const CoreNode = "core"
 
 // notifyOutcome is what became of a notify call, for the metrics.
 type notifyOutcome string
@@ -123,7 +123,7 @@ func (h *Host) publish(ctx context.Context, l *loaded, key string, p event.Modul
 	if err == nil {
 		var payload []byte
 		if payload, err = json.Marshal(p); err == nil {
-			headers := map[string]string{bus.HeaderFrom: fromNode + "/" + l.name, bus.HeaderRun: p.Run}
+			headers := map[string]string{bus.HeaderFrom: h.d.Node + "/" + l.name, bus.HeaderRun: p.Run}
 			err = h.d.Publisher.Publish(context.WithoutCancel(ctx), subject, key, headers, payload)
 		}
 	}

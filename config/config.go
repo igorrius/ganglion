@@ -29,7 +29,7 @@ type ProcessStart time.Time
 var Core = do.Package(
 	do.Lazy(Lock()), do.Lazy(DB()), do.Lazy(Bus()), do.Lazy(Queue()), do.Lazy(Access()), do.Lazy(Languages()), do.Lazy(Texts()), do.Lazy(Admins()), do.Lazy(GroupStore()), do.Lazy(NodeKey()), do.Lazy(Vault()), do.Lazy(GroupsFile()), do.Lazy(AccessGroups()), do.Lazy(GroupActions()), do.Lazy(GroupTopics()), do.Lazy(Destinations()), do.Lazy(Routing()), do.Lazy(Linking()),
 	do.Lazy(Turns()), do.Lazy(Archive()), do.Lazy(Sessions()), do.Lazy(Journal()), do.Lazy(Cells()), do.Lazy(Pending()), do.Lazy(Jobs()), do.Lazy(Scheduler()), do.Lazy(Scheduling()), do.Lazy(Convs()), do.Lazy(Guard()), do.Lazy(Workspace()), do.Lazy(FileHistory()), do.Lazy(Configuring()), do.Lazy(RestartNote()), do.Lazy(RestartBack()), do.Lazy(Memory()), do.Lazy(Remember()), do.Lazy(ReviewDue()), do.Lazy(ReviewTimer()), do.Lazy(ModuleTools()), do.Lazy(Modules()), do.Lazy(ModuleAdmin()), do.Lazy(ModuleHost()), do.Lazy(NoticeConsumer()), do.Lazy(MCPHTTP()), do.Lazy(MCPHub()), do.Lazy(MCPSignIns()), do.Lazy(MCPAdmin()), do.Lazy(HTML2MD()), do.Lazy(Fetcher()), do.Lazy(Read()), do.Lazy(Diagnostics()), do.Lazy(Skills()), do.Lazy(Plans()), do.Lazy(Tools()), do.Lazy(Policy()), do.Lazy(Asker()), do.Lazy(IsAdmin()), do.Lazy(Providers()), do.Lazy(Router()), do.Lazy(Sandbox()), do.Lazy(Builder()), do.Lazy(Places()), do.Lazy(Janitor()), do.Lazy(Stats()), do.Lazy(BackgroundJobs()), do.Lazy(Builds()), do.Lazy(Runner()), do.Lazy(Switch()), do.Lazy(HostExec()), do.Lazy(BackupStatus()), do.Lazy(StatusSources()), do.Lazy(Agent()),
-	do.Lazy(Translator()), do.Lazy(Telegram()), do.Lazy(TelegramHealth()), do.Lazy(WebhookRecord()), do.Lazy(IntakePage()), do.Lazy(Intake()), do.Lazy(SecretAsker()), do.Lazy(PublicListener()), do.Lazy(Reactor()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(ReleaseStore()), do.Lazy(CoreComponents()),
+	do.Lazy(Translator()), do.Lazy(Telegram()), do.Lazy(TelegramHealth()), do.Lazy(WebhookRecord()), do.Lazy(IntakePage()), do.Lazy(Intake()), do.Lazy(SecretAsker()), do.Lazy(PublicListener()), do.Lazy(Reactor()), do.Lazy(Sender()), do.Lazy(Loop()), do.Lazy(ReleaseStore()), do.Lazy(CoreComponents()), do.Lazy(EdgeCollector()),
 	// Extension points: the interface, then each implementation under its name.
 	do.Lazy(Handler()), do.LazyNamed(handlerAgent, AgentHandler()), do.EagerNamed(handlerEcho, core.Handler(core.EchoHandler)),
 	do.Lazy(GiveUp()), do.LazyNamed(giveUpAgent, AgentGiveUp()), do.EagerNamed(giveUpNone, core.GiveUp(core.NoGiveUp)),
@@ -70,8 +70,15 @@ func New(ctx context.Context, b Bootstrap, logger *slog.Logger) *do.RootScope {
 func Run(ctx context.Context, roles []node.Role, b Bootstrap, logger *slog.Logger) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
+	b.EdgeRole = EdgeOnly(roles)
 	i := New(ctx, b, logger)
 	do.OverrideValue(i, agent.RestartFunc(func() { cancel(node.ErrRestart) }))
+	if b.EdgeRole {
+		do.Override(i, EdgeHandler())
+		do.Override(i, func(do.Injector) (core.GiveUp, error) { return core.NoGiveUp, nil })
+		do.Override(i, func(do.Injector) (core.TurnHook, error) { return core.NoTurnHook, nil })
+		do.Override(i, EdgeComponents())
+	}
 	defer func() {
 		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()

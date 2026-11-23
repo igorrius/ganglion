@@ -61,7 +61,7 @@ func runCommand(out, errOut io.Writer, start startFunc) *cli.Command {
 			tel, stop := startTelemetry(ctx, b.MetricsAddr, in, logger)
 			defer stop()
 			if tel != nil {
-				b.Metrics = tel.Renderer()
+				b.Metrics, b.Telemetry = tel.Renderer(), tel
 			}
 			announce(logger, b)
 			err = start(ctx, roles, b, logger)

@@ -161,7 +161,7 @@ func (h *Host) wantedLinks(ctx context.Context) (want map[string]wantedLink, all
 		if broken[l] || !ok || !running {
 			continue
 		}
-		subject, err := bus.Event(eventNode, ends.FromModule, ends.FromPort)
+		subject, err := bus.Event(h.d.Node, ends.FromModule, ends.FromPort)
 		if err != nil {
 			h.d.Log.Warn("modhost: a link has no subject; it gets no consumer", "link", l.String(), "err", err)
 			continue
@@ -358,7 +358,7 @@ func (h *Host) runEvent(ctx context.Context, name string, w wantedLink, d bus.De
 	if d.Tries > 1 {
 		id += ":" + strconv.FormatUint(d.Tries, 10) // a retry is its own row in the journal
 	}
-	producer := strings.TrimPrefix(d.Headers[bus.HeaderFrom], fromNode+"/")
+	producer := strings.TrimPrefix(d.Headers[bus.HeaderFrom], h.d.Node+"/")
 	in := pdk.Input{Trigger: "event:" + w.ends.ToPort, Payload: payload}
 	r, ok := h.call(context.WithoutCancel(ctx), fullName(w.ends.ToModule), in,
 		newRun(id, triggerEvent, depth+1).byEvent(producer, d.Headers[bus.HeaderRun]).over(w.link.String()))

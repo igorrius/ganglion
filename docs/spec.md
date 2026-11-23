@@ -2503,7 +2503,9 @@ Edges ([ADR-0109](adr/0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-
   model. Without a link its modules keep running and its events are kept;
   the core sources them when the link returns. Every `edge.telemetry_every` (default 30s) it publishes
   its metrics to `g.tel.<edge>` over plain NATS (R-OBS-9); `/status` has a
-  line per edge.
+  line per edge. The edge's name is its JetStream domain, and the core's
+  `EVENTS` stream sources the edge's
+  ([ADR-0114](adr/0114-an-edge-keeps-its-events-in-its-own-domain-and-the-core-sources-them.md)).
 
 HTTP modules ([ADR-0110](adr/0110-modules-answer-http-on-an-edges-loopback.md)):
 

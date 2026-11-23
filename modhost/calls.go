@@ -46,10 +46,6 @@ func (noCalls) Request(context.Context, string, map[string]string, []byte) ([]by
 	return nil, bus.ErrNoResponder
 }
 
-// callNode is the node token of a call's subject until nodes have names
-// (M10): the same word the Ganglion-From header says.
-const callNode = fromNode
-
 // callSettle is what a caller keeps of its run after it gave up waiting: the
 // time to take a failed answer and finish.
 const callSettle = time.Second
@@ -117,7 +113,7 @@ func (p callPort) Call(ctx context.Context, port string, request json.RawMessage
 	if !linked {
 		return nil, runner.CallDenied
 	}
-	subject, err := bus.Call(callNode, ends.ToModule, ends.ToPort)
+	subject, err := bus.Call(p.h.d.Node, ends.ToModule, ends.ToPort)
 	if err != nil {
 		p.h.d.Log.Warn("modhost: a link has no subject; a call is not sent", "module", p.l.name, "port", port, "err", err)
 		return nil, runner.CallFailed
@@ -128,7 +124,7 @@ func (p callPort) Call(ctx context.Context, port string, request json.RawMessage
 		return nil, runner.CallFailed // no time is left to wait
 	}
 	until, _ := wctx.Deadline()
-	headers := map[string]string{bus.HeaderFrom: fromNode + "/" + p.l.name, bus.HeaderPort: port, bus.HeaderRun: r.ID,
+	headers := map[string]string{bus.HeaderFrom: p.h.d.Node + "/" + p.l.name, bus.HeaderPort: port, bus.HeaderRun: r.ID,
 		bus.HeaderDepth: strconv.Itoa(r.Depth), bus.HeaderDeadline: strconv.FormatInt(until.UnixMilli(), 10)}
 	answer, err := p.h.d.Calls.Request(wctx, subject, headers, request)
 	if err != nil {
@@ -212,7 +208,7 @@ func (h *Host) serve(l *loaded) {
 	}
 	var eps []bus.Endpoint
 	for _, port := range slices.Sorted(maps.Keys(l.m.Ports.Serves)) {
-		subject, err := bus.Call(callNode, l.short, port)
+		subject, err := bus.Call(h.d.Node, l.short, port)
 		if err != nil {
 			h.d.Log.Warn("modhost: a served port has no subject", "module", l.name, "port", port, "err", err)
 			continue
@@ -320,7 +316,7 @@ func (l *loaded) servedPort(running bool, port string) (runner.PortCall, bool) {
 // runCall runs module for a request that was let through and settles the run
 // as the run of the call; the answer is its result.
 func (h *Host) runCall(ctx context.Context, module, port string, depth int, req bus.Request) ([]byte, error) {
-	caller := strings.TrimPrefix(req.Headers[bus.HeaderFrom], fromNode+"/")
+	caller := strings.TrimPrefix(req.Headers[bus.HeaderFrom], h.d.Node+"/")
 	payload, err := json.Marshal(callInput{From: callerEnd(caller, req.Headers[bus.HeaderPort]), Request: req.Payload})
 	if err != nil {
 		return nil, callError(bus.CodeFailed, "the call failed")

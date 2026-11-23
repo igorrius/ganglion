@@ -19,7 +19,7 @@ func (f fn) Name() string                  { return f.name }
 func (f fn) Run(ctx context.Context) error { return f.run(ctx) }
 func waitCtx(ctx context.Context) error    { <-ctx.Done(); return nil }
 func failNow(context.Context) error        { return errors.New("broken") }
-func noCore() ([]Component, error)         { panic("core built without the core role") }
+func noCore() ([]Component, error)         { panic("components built without the core or edge role") }
 func coreOf(c ...Component) func() ([]Component, error) {
 	return func() ([]Component, error) { return c, nil }
 }
@@ -39,15 +39,27 @@ func TestRunAllReturnsNilWhenTheContextEnds(t *testing.T) {
 	}
 }
 
-func TestRunWithoutCoreWaitsAndLogsTheRoles(t *testing.T) {
+func TestRunWorkerOnlyWaitsAndLogsTheRoles(t *testing.T) {
 	var logs bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	if err := Run(ctx, []Role{Edge, Worker}, noCore, slog.New(slog.NewTextHandler(&logs, nil))); err != nil {
+	if err := Run(ctx, []Role{Worker}, noCore, slog.New(slog.NewTextHandler(&logs, nil))); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(logs.String(), "roles=edge,worker") || !strings.Contains(logs.String(), "node stopped") {
+	if !strings.Contains(logs.String(), "roles=worker") || !strings.Contains(logs.String(), "node stopped") {
 		t.Fatalf("logs:\n%s", logs.String())
+	}
+}
+
+func TestRunEdgeRunsItsComponents(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	ran := false
+	if err := Run(ctx, []Role{Edge}, coreOf(fn{"edge", func(ctx context.Context) error { ran = true; <-ctx.Done(); return nil }}), slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatal(err)
+	}
+	if !ran {
+		t.Fatal("the edge's components did not run")
 	}
 }
 

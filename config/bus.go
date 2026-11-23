@@ -29,7 +29,13 @@ func Bus() do.Provider[*natsbus.Bus] {
 // the one place that does, for the node and for a backup made without one.
 func openBus(ctx context.Context, b Bootstrap, v *vault.Vault, log *slog.Logger) (*natsbus.Bus, error) {
 	cfg := busConfig(b)
-	if err := withChain(ctx, &cfg, b, v); err != nil {
+	if b.EdgeRole {
+		l, err := edgeLeaf(b)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Leaf = l // an edge's own server has no chain: the chain stays on the core
+	} else if err := withChain(ctx, &cfg, b, v); err != nil {
 		return nil, err
 	}
 	nb, err := natsbus.Open(ctx, cfg, log)

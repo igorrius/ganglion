@@ -21,11 +21,11 @@ type Component interface {
 }
 
 // Run starts the given roles and blocks until ctx is cancelled, then
-// returns nil, or ErrRestart when ctx was cancelled with that cause. core
-// builds the core role's components; it is called only when roles include
-// Core. An error building or running a component ends Run with that error.
-// Edge and worker have no behaviour yet (docs/spec.md, section 10).
-func Run(ctx context.Context, roles []Role, core func() ([]Component, error), logger *slog.Logger) error {
+// returns nil, or ErrRestart when ctx was cancelled with that cause. build
+// builds the components of the roles; it is called only when roles include
+// Core or Edge. An error building or running a component ends Run with that
+// error. Worker has no behaviour yet (docs/spec.md, section 10).
+func Run(ctx context.Context, roles []Role, build func() ([]Component, error), logger *slog.Logger) error {
 	if len(roles) == 0 {
 		return errors.New("node: no roles to run")
 	}
@@ -35,7 +35,7 @@ func Run(ctx context.Context, roles []Role, core func() ([]Component, error), lo
 	}
 	logger.Info("node started", "roles", strings.Join(names, ","))
 	defer logger.Info("node stopped")
-	err := run(ctx, roles, core)
+	err := run(ctx, roles, build)
 	if errors.Is(err, ErrRestart) {
 		logger.Info("node: restart requested; stopping for the supervisor to start it again")
 	}
@@ -43,12 +43,12 @@ func Run(ctx context.Context, roles []Role, core func() ([]Component, error), lo
 }
 
 // run runs the roles until ctx ends; see Run.
-func run(ctx context.Context, roles []Role, core func() ([]Component, error)) error {
-	if !slices.Contains(roles, Core) {
+func run(ctx context.Context, roles []Role, build func() ([]Component, error)) error {
+	if !slices.Contains(roles, Core) && !slices.Contains(roles, Edge) {
 		<-ctx.Done()
 		return stopped(ctx)
 	}
-	components, err := core()
+	components, err := build()
 	if err == nil {
 		err = RunAll(ctx, components)
 	}

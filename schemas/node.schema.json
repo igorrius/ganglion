@@ -33,9 +33,20 @@
     "memory": { "description": "The agent's long-term memory by topic (M5, R-MEM-6–9).", "$ref": "#/$defs/memory" },
     "update": { "description": "How the node follows the core releases (R-UPD-6).", "$ref": "#/$defs/update" },
     "backup": { "description": "The daily encrypted backup to an S3-compatible bucket (R-BAK-4). Missing means backups are off. Only the host edits this section: the agent cannot change it.", "$ref": "#/$defs/backup" },
-    "bus": { "description": "The node's message bus (R-BUS-1): the NATS server the node runs inside its process, or one the operator runs. Only the host edits this section: the agent cannot change it.", "$ref": "#/$defs/bus" }
+    "bus": { "description": "The node's message bus (R-BUS-1): the NATS server the node runs inside its process, or one the operator runs. Only the host edits this section: the agent cannot change it.", "$ref": "#/$defs/bus" },
+    "edge": { "description": "The edge role (--roles edge): the edge's name, the core's bus it links to, and how often it sends its metrics. Only the host edits this section: the agent cannot change it.", "$ref": "#/$defs/edge" }
   },
   "$defs": {
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "description": "The edge's name in the network: its JetStream domain and the last word of its subjects. One word, no dots or spaces. Required for --roles edge.", "type": "string", "pattern": "^[^.*> \\t\\r\\n]+$" },
+        "url": { "description": "The core's bus for the edge's link: wss://<public address>/bus. Left out, the edge runs with no link and keeps its events.", "type": "string", "pattern": "^(wss|ws|nats-leaf|tls)://[^/?#@]+(/.*)?$" },
+        "credentials": { "description": "The path of the edge's .creds file; edge.creds beside the database when left out.", "type": "string" },
+        "telemetry_every": { "description": "How often the edge sends its metrics to the core; 5s or more.", "$ref": "#/$defs/duration", "default": "30s" }
+      }
+    },
     "link": {
       "type": "object",
       "additionalProperties": false,

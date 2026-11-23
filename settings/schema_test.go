@@ -47,6 +47,7 @@ func TestSchemaMatchesTheLoader(t *testing.T) {
 		"/$defs/update":      settings.Update{},
 		"/$defs/backup":      settings.Backup{},
 		"/$defs/bus":         settings.Bus{},
+		"/$defs/edge":        settings.Edge{},
 		"/$defs/mcp":         settings.MCP{},
 		"/$defs/mcpServer":   settings.MCPServer{},
 	} {

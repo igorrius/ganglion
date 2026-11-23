@@ -63,11 +63,11 @@ func (h *Host) publishCells(ctx context.Context, l *loaded, r run) {
 	if len(cells) == 0 {
 		return
 	}
-	subject, err := bus.Event(eventNode, l.short, runner.CellsOutput)
+	subject, err := bus.Event(h.d.Node, l.short, runner.CellsOutput)
 	if err == nil {
 		var payload []byte
 		if payload, err = json.Marshal(cellsEvent{Cells: cells}); err == nil {
-			headers := map[string]string{bus.HeaderFrom: fromNode + "/" + l.name, bus.HeaderRun: r.ID, bus.HeaderDepth: strconv.Itoa(r.Depth)}
+			headers := map[string]string{bus.HeaderFrom: h.d.Node + "/" + l.name, bus.HeaderRun: r.ID, bus.HeaderDepth: strconv.Itoa(r.Depth)}
 			err = h.d.Publisher.Publish(context.WithoutCancel(ctx), subject, "cells:"+l.name+":"+r.ID, headers, payload)
 		}
 	}
@@ -97,14 +97,14 @@ type runningCells struct {
 // cellFilters are the subjects of the cells events of the modules that own
 // the cells ids, sorted, other than the module short itself: a module's own
 // cells never start it. The owner of a cell is the first part of its id.
-func cellFilters(short string, ids []string) []string {
+func cellFilters(node, short string, ids []string) []string {
 	var out []string
 	for _, id := range ids {
 		owner, _, _ := strings.Cut(id, ".")
 		if owner == short {
 			continue
 		}
-		subject, err := bus.Event(eventNode, owner, runner.CellsOutput)
+		subject, err := bus.Event(node, owner, runner.CellsOutput)
 		if err != nil || slices.Contains(out, subject) {
 			continue
 		}
@@ -121,7 +121,7 @@ func (h *Host) wantedCellConsumers() map[string]wantedCells {
 	defer h.mu.RUnlock()
 	want := map[string]wantedCells{}
 	for _, l := range h.running {
-		filters := cellFilters(l.short, l.m.Listens())
+		filters := cellFilters(h.d.Node, l.short, l.m.Listens())
 		if len(filters) == 0 {
 			continue
 		}
@@ -257,7 +257,7 @@ func (h *Host) deliverCells(ctx context.Context, name, short string, d bus.Deliv
 		h.d.Log.Warn("modhost: a cells event the node cannot read; dropped", "module", l.name, "err", err)
 		return nil
 	}
-	producer := strings.TrimPrefix(d.Headers[bus.HeaderFrom], fromNode+"/")
+	producer := strings.TrimPrefix(d.Headers[bus.HeaderFrom], h.d.Node+"/")
 	hit := listened(l, producer, ev.Cells)
 	if len(hit) == 0 {
 		h.in.cellsDelivered(ctx, name, cellNone)

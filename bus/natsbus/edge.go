@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/igorrius/ganglion/bus"
 	"github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -174,4 +176,38 @@ func (b *Bus) EdgeHealth(ctx context.Context) EdgeHealth {
 		}
 	}
 	return h
+}
+
+// PublishTelemetry sends an edge's snapshot to g.tel.<edge> over plain
+// NATS (R-OBS-9): nothing keeps it, and none goes out while the link is
+// down.
+func (b *Bus) PublishTelemetry(edge string, data []byte) error {
+	if b.nc == nil {
+		return bus.ErrNotConnected
+	}
+	subj, err := bus.Telemetry(edge)
+	if err != nil {
+		return err
+	}
+	return b.nc.Publish(subj, data)
+}
+
+// WatchTelemetry calls fn with every snapshot an edge sends, and the edge's
+// name from the subject, never from the payload, until stop is called.
+// fn runs on one goroutine, one snapshot at a time.
+func (b *Bus) WatchTelemetry(fn func(edge string, data []byte)) (stop func() error, err error) {
+	if b.nc == nil {
+		return nil, bus.ErrNotConnected
+	}
+	sub, err := b.nc.Subscribe(bus.SubjectsTelemetry, func(m *nats.Msg) {
+		edge := strings.TrimPrefix(m.Subject, bus.TelemetryPrefix)
+		if bus.CheckToken(edge) != nil {
+			return
+		}
+		fn(edge, m.Data)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("natsbus: telemetry: %w", err)
+	}
+	return sub.Unsubscribe, nil
 }

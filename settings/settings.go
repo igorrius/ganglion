@@ -50,6 +50,8 @@ type File struct {
 	// Bus is the node's message bus (R-BUS-1): the embedded NATS server by
 	// default.
 	Bus Bus `yaml:"bus"`
+	// Edge is the edge role's settings (R-EDGE-7).
+	Edge Edge `yaml:"edge"`
 }
 
 // DefaultBackupAt is the time of day a backup runs when at is not set.
@@ -347,6 +349,7 @@ func Default() File {
 		},
 		Update: Update{Check: true},
 		Bus:    Bus{Server: string(bus.ModeEmbedded)},
+		Edge:   Edge{TelemetryEvery: Duration(DefaultTelemetryEvery)},
 		MCP:    MCP{Page: DefaultIntakePage},
 		Memory: Memory{PromptBudget: 24000, Review: Review{Enabled: true, Quiet: Duration(10 * time.Minute)}, ArchiveDays: 90},
 	}

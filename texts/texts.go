@@ -536,9 +536,12 @@ const (
 	StatusBackupFailed      Key = "status.backup_failed"
 
 	// The message bus in /status (R-BUS-1, R-OBS-11).
-	StatusBusOK      Key = "status.bus_ok"       // vars: mode, size
-	StatusBusDown    Key = "status.bus_down"     // vars: mode: the connection to the server is lost
-	StatusBusNoChain Key = "status.bus_no_chain" // vars: mode: the secret store is locked, so the bus runs without its trust chain
+	StatusBusOK       Key = "status.bus_ok"       // vars: mode, size
+	StatusBusDown     Key = "status.bus_down"     // vars: mode: the connection to the server is lost
+	StatusBusNoChain  Key = "status.bus_no_chain" // vars: mode: the secret store is locked, so the bus runs without its trust chain
+	StatusEdgeOK      Key = "status.edge_ok"      // vars: name, modules, waiting: an edge heard on time
+	StatusEdgeSilent  Key = "status.edge_silent"  // vars: name, held: no snapshot for three intervals
+	StatusEdgeUnheard Key = "status.edge_unheard" // vars: name: sourced, not heard since the node started
 
 	// The remote MCP servers' cards, /mcp and /status (R-MCP-3, R-MCP-9, R-MCP-10).
 	AskMCPConnect             Key = "ask.mcp_connect"     // vars: server, url
@@ -605,7 +608,7 @@ var allKeys = []Key{
 	CmdRead, CmdContent, CmdUnknown, CmdPath, CmdScript, CmdRoot, CmdOutside, CmdAllEnv, CmdScriptFile, CmdDockerOther, CmdRemove, CmdMove, CmdCreate, CmdPerms, CmdKill, CmdArchive, CmdTruncate, CmdNetwork, CmdGoClean, CmdCargoClean, CmdDockerImagePrune, CmdDockerRmi, CmdDockerBuilderPrune, CmdDockerRm, CmdDockerStop, CmdDockerVolumeRm, CmdDockerSystemPrune, CmdSystemctlStop, CmdJournalVacuum, CmdGitIgnored, CmdReason, CmdIn, CmdWrapper,
 	UpdateAlertFailed, UpdateAlertUnverified, UpdateAlertNoExec, UpdateAlertExec, UpdateDBRestored, UpdateDBKept, UpdateImageVersion, UpdateConfirmed, UpdateStarted, UpdateAvailable,
 	UpdatePrivateOnly, UpdateUsage, UpdateUnavailable, UpdateStatus, UpdateStatusNext, UpdateStatusCurrent, UpdateNoImage, UpdateDevBuild, UpdateDevBuildAny, UpdateInstalling, UpdateInstalled, UpdateRolledBack, UpdateButtonInstall, UpdateButtonRollback, UpdateButtonRollbackImg, UpdateButtonStale, UpdateAlreadyInstalled, UpdateRefusedBadVersion, UpdateRefusedNotNewer, UpdateRefusedNotFound, UpdateRefusedNoPlatform, UpdateRefusedIncomplete, UpdateRefusedSignature, UpdateRefusedSums, UpdateRefusedMismatch, UpdateRefusedManifest, UpdateRefusedEnv, UpdateRefusedBusy, UpdateRefusedFetch, UpdateRefusedNoPrevious, UpdateRefusedState, UpdateRefusedOther,
-	BackupAlertFailed, BackupAlertRecovered, BackupLastNone, BackupReasonRefused, BackupReasonNetwork, BackupReasonChanged, BackupReasonIntegrity, BackupReasonOther, StatusBackupOff, StatusBackupOK, StatusBackupWaiting, StatusBackupStale, StatusBackupNone, StatusReasonBackupStale, StatusBackupFailed, StatusBusOK, StatusBusDown, StatusBusNoChain,
+	BackupAlertFailed, BackupAlertRecovered, BackupLastNone, BackupReasonRefused, BackupReasonNetwork, BackupReasonChanged, BackupReasonIntegrity, BackupReasonOther, StatusBackupOff, StatusBackupOK, StatusBackupWaiting, StatusBackupStale, StatusBackupNone, StatusReasonBackupStale, StatusBackupFailed, StatusBusOK, StatusBusDown, StatusBusNoChain, StatusEdgeOK, StatusEdgeSilent, StatusEdgeUnheard,
 	AskMCPConnect, AskMCPSignIn, AskMCPSignInLink, AskMCPPageWarning, AskMCPToolsCard, AskMCPToolsNone, AskMCPToolsAuto, AskMCPToolsConfirm, AskMCPToolsForbidden, AskMCPToolsSkipped, AskMCPToolsMore, AskMCPToolsAutoWrite, AskMCPToolsForbiddenCount, AskMCPRule, AskMCPRules, AskMCPRuleLine, AskMCPRuleGroup, AskMCPPolicyAuto, AskMCPPolicyConfirm, AskMCPPolicyForbidden, ButtonMCPConnect, ButtonMCPAskAll, ButtonMCPCancel, ButtonMCPDisconnect, MCPConnected, MCPCancelled, MCPCardStale, MCPDisconnected, MCPListFailed, MCPListNone, MCPListHead, MCPListRow, MCPListSignedIn, MCPPrivateOnly, MCPStateConnecting, MCPStateConnected, MCPStateUnreachable, MCPStateToolsChanged, MCPStateUnauthorized, MCPStateLocked, StatusMCPConnecting, StatusMCPUnreachable, StatusMCPToolsChanged, StatusMCPUnauthorized, StatusMCPLocked,
 	AskLinkAdd, AskLinkRemove, ModulesRemovedLinks, StatusLinkBroken, StatusReasonLinkEnd, StatusReasonLinkKind, StatusReasonLinkShape, StatusReasonLinkTaken, StatusReasonLinkLoop, StatusReasonLinkDeep,
 }

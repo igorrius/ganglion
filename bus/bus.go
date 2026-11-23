@@ -39,6 +39,10 @@ const (
 	SubjectsNotify = "g.notify.>"
 	// SubjectsEvents is what the EVENTS stream keeps.
 	SubjectsEvents = "g.ev.>"
+	// SubjectsTelemetry is every node's telemetry, one token per node.
+	SubjectsTelemetry = "g.tel.*"
+	// TelemetryPrefix is the part of a telemetry subject before the node.
+	TelemetryPrefix = "g.tel."
 )
 
 // subjectRoot is the first token of every subject the node uses.

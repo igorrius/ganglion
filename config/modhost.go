@@ -38,7 +38,12 @@ func ModuleHost() do.Provider[*modhost.Host] {
 	return func(i do.Injector) (*modhost.Host, error) {
 		b, logger := do.MustInvoke[Bootstrap](i), do.MustInvoke[*slog.Logger](i)
 		store := do.MustInvoke[*vault.Vault](i)
+		node := modhost.CoreNode
+		if b.EdgeRole {
+			node = b.Settings.Edge.Name
+		}
 		h := modhost.New(modhost.Deps{
+			Node:         node,
 			Store:        do.MustInvoke[*modstore.Store](i),
 			Cells:        do.MustInvoke[*cells.Service](i),
 			Jobs:         do.MustInvoke[*schedule.Store](i),
