@@ -31,6 +31,10 @@ type Config struct {
 	// ChainLocked says Chain is nil because the secret store is locked
 	// (ADR-0113): the bus runs as before and /status says why.
 	ChainLocked bool
+	// testListen opens a listener on a free loopback port, for the tests of
+	// this package that must read the server's refusals. Nothing outside
+	// the package can set it.
+	testListen bool
 	// StartTimeout is how long the embedded server may take to be ready,
 	// and the connection to be made.
 	StartTimeout time.Duration

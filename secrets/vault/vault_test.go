@@ -283,3 +283,46 @@ func TestOperationsAreCounted(t *testing.T) {
 		}
 	}
 }
+
+// The node's own keys (bus.* in its scope) are out of reach of the store's
+// ordinary methods: not read, set, removed or listed; Internal reaches them
+// and nothing else.
+func TestReservedNamesOnlyThroughInternal(t *testing.T) {
+	ctx := context.Background()
+	v := open(t, memory(t), vault.Key{1}, newClock())
+	in := v.Internal()
+	if err := in.Set(ctx, secrets.ScopeNode, "bus.chain", "seeds", "node"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := in.Get(ctx, secrets.ScopeNode, "bus.chain"); err != nil || got != "seeds" {
+		t.Fatalf("internal get = %q, %v", got, err)
+	}
+	if _, err := v.Get(ctx, secrets.ScopeNode, "bus.chain"); !errors.Is(err, vault.ErrReserved) {
+		t.Errorf("get: %v", err)
+	}
+	if got, err := v.Source(secrets.ScopeNode).Secret("bus.chain"); !errors.Is(err, vault.ErrReserved) || got != "" {
+		t.Errorf("source: %q, %v", got, err)
+	}
+	if err := v.Set(ctx, secrets.ScopeNode, "bus.revoked", "{}", "telegram:user:1"); !errors.Is(err, vault.ErrReserved) {
+		t.Errorf("set: %v", err)
+	}
+	if _, err := v.Remove(ctx, secrets.ScopeNode, "bus.chain"); !errors.Is(err, vault.ErrReserved) {
+		t.Errorf("remove: %v", err)
+	}
+	if _, err := v.RemoveScope(ctx, secrets.ScopeNode); !errors.Is(err, vault.ErrReserved) {
+		t.Errorf("remove the node's scope: %v", err)
+	}
+	if entries, err := v.List(ctx); err != nil || len(entries) != 0 {
+		t.Errorf("list = %+v, %v", entries, err)
+	}
+	if got, err := in.Get(ctx, secrets.ScopeNode, "bus.chain"); err != nil || got != "seeds" {
+		t.Fatalf("after the refusals: %q, %v", got, err)
+	}
+	// Internal reaches nothing else, and a module's bus.* name is its own.
+	if err := in.Set(ctx, secrets.ScopeNode, "TOKEN", "x", "node"); !errors.Is(err, vault.ErrName) {
+		t.Errorf("internal set of an ordinary name: %v", err)
+	}
+	if err := v.Set(ctx, secrets.ModuleScope("local/shop"), "bus.key", "x", "cli"); err != nil {
+		t.Errorf("a module's bus.* name: %v", err)
+	}
+}

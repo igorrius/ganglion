@@ -88,10 +88,23 @@ fixed from; B2 keeps the node up and loses nothing silently.
   core's user. `Chain.OperatorJWT` gives the text the server's owner puts in
   its configuration once. `bus.trust` and `bus.credentials` are mutually
   exclusive.
-- **Keys:** five seeds are stored under node-scope names `bus.operator`,
-  `bus.account`, `bus.signing`, `bus.system`, `bus.core`, plus the revocation
-  list as JSON under `bus.revoked`. A seed is made on first need and never
-  rewritten. The system user for pushes and every edge's user are made from
+- **Keys:** the five seeds are stored together, as one JSON entry
+  `bus.chain` in the node's scope, written once when the store has no chain,
+  so a chain is never stored half made; a chain missing a seed stops the
+  start and is never made again over the old one. The revocation list is the
+  JSON entry `bus.revoked`. A process beside a running node (`ganglion bus
+  trust` while the database is locked) only reads the chain.
+- **Reserved names:** `bus.*` in the node's scope belongs to the node. The
+  store's ordinary methods (read, set, remove, remove the node's scope, list)
+  refuse or hide it, so neither `/secrets rm`, `secret.request`, `ganglion
+  secret`, a `store:` reference in the file, nor a module reaches it; only
+  the store's internal view, which the chain uses, does. `/secrets reset`
+  still drops it, with every other secret: that is the owner's explicit
+  start-over.
+- **Publishing claims:** one lock is held from a change of the revocation
+  list until the server has the new claims, so concurrent revocations never
+  hand the server an older list after a newer one.
+- The system user for pushes and every edge's user are made from
   a key pair that the issuer does not keep.
 - **Claims:** a user JWT is signed by the signing key and says the account it
   belongs to (`IssuerAccount`), so the account's identity key is used only to
@@ -118,6 +131,9 @@ fixed from; B2 keeps the node up and loses nothing silently.
   - seeds read from a copy of the database: sealed with AES-256-GCM under the
     master key (ADR-0077);
   - two stores present at the move: the start fails and nothing is touched;
+  - the agent, a chat command or a module deleting or overwriting a seed or
+    the revocation list (which would make a new chain or un-revoke every
+    edge): refused by the reserved names in the store itself;
   - a locked store: no chain, no listener, a failing `/status` line; the
     in-process server is reachable by the node alone, as before M10.
 

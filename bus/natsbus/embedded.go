@@ -35,6 +35,9 @@ func (b *Bus) startServer(cfg Config) error {
 		DontListen:         true,
 		NoSigs:             true,
 	}
+	if cfg.testListen {
+		opts.DontListen, opts.Host, opts.Port = false, "127.0.0.1", -1
+	}
 	if cfg.Chain != nil {
 		if err := adoptGlobalStore(dir, cfg.Chain.AccountPublicKey()); err != nil {
 			return err

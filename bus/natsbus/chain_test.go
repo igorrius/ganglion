@@ -2,6 +2,7 @@ package natsbus
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ func (s *memStore) Set(_ context.Context, scope secrets.Scope, name, value, _ st
 
 func unlocked() bool { return false }
 
-func loadChain(t *testing.T, s SeedStore, now func() time.Time) *Chain {
+func mustChain(t *testing.T, s SeedStore, now func() time.Time) *Chain {
 	t.Helper()
 	c, err := LoadChain(context.Background(), s, unlocked, now)
 	if err != nil {
@@ -56,18 +57,22 @@ func loadChain(t *testing.T, s SeedStore, now func() time.Time) *Chain {
 // brings the same operator and account back.
 func TestChainIsMadeOnceAndReadBack(t *testing.T) {
 	s := newMemStore()
-	a := loadChain(t, s, time.Now)
-	if s.sets != 5 {
-		t.Fatalf("sets = %d, want 5 seeds", s.sets)
+	a := mustChain(t, s, time.Now)
+	if s.sets != 1 {
+		t.Fatalf("sets = %d, want the chain in one write", s.sets)
 	}
-	for _, name := range []string{SeedOperator, SeedAccount, SeedSigning, SeedSystem, SeedCore} {
-		if !strings.HasPrefix(s.m["node/"+name], "S") {
-			t.Errorf("%s is not a seed", name)
+	var sc storedChain
+	if err := json.Unmarshal([]byte(s.m["node/"+ChainName]), &sc); err != nil {
+		t.Fatal(err)
+	}
+	for role, seed := range map[string]string{"operator": sc.Operator, "account": sc.Account, "signing": sc.Signing, "system": sc.System, "core": sc.Core} {
+		if !strings.HasPrefix(seed, "S") {
+			t.Errorf("%s is not a seed", role)
 		}
 	}
-	b := loadChain(t, s, time.Now)
-	if s.sets != 5 {
-		t.Fatalf("a second load wrote %d more", s.sets-5)
+	b := mustChain(t, s, time.Now)
+	if s.sets != 1 {
+		t.Fatalf("a second load wrote %d more", s.sets-1)
 	}
 	if a.OperatorPublicKey() != b.OperatorPublicKey() || a.AccountPublicKey() != b.AccountPublicKey() ||
 		a.CorePublicKey() != b.CorePublicKey() || a.SystemAccountPublicKey() != b.SystemAccountPublicKey() {
@@ -94,14 +99,31 @@ func TestChainRefusals(t *testing.T) {
 	if _, err := LoadChain(ctx, s, func() bool { return true }, time.Now); !errors.Is(err, ErrStoreLocked) || s.sets != 0 {
 		t.Fatalf("locked: %v, sets %d", err, s.sets)
 	}
-	user := must(nkeys.CreateUser())
-	seed := string(must(user.Seed()))
-	s.m["node/"+SeedOperator] = seed
+	if _, err := ReadChain(ctx, s, unlocked, time.Now); !errors.Is(err, ErrNoStoredChain) || s.sets != 0 {
+		t.Fatalf("read with no chain: %v, sets %d", err, s.sets)
+	}
+	mustChain(t, s, time.Now)
+	var sc storedChain
+	if err := json.Unmarshal([]byte(s.m["node/"+ChainName]), &sc); err != nil {
+		t.Fatal(err)
+	}
+	good := sc
+	seed := string(must(must(nkeys.CreateUser()).Seed()))
+	sc.Operator = seed
+	s.m["node/"+ChainName] = string(must(json.Marshal(sc)))
 	if _, err := LoadChain(ctx, s, unlocked, time.Now); err == nil || !strings.Contains(err.Error(), "wrong kind") || strings.Contains(err.Error(), seed) {
 		t.Fatalf("wrong kind: %v", err)
 	}
-	s.m["node/"+SeedOperator] = "not a seed"
-	if _, err := LoadChain(ctx, s, unlocked, time.Now); err == nil || !strings.Contains(err.Error(), SeedOperator) {
+	// A chain missing a seed is refused, never made again over the old one.
+	sc = good
+	sc.Core = ""
+	s.m["node/"+ChainName] = string(must(json.Marshal(sc)))
+	sets := s.sets
+	if _, err := LoadChain(ctx, s, unlocked, time.Now); err == nil || !strings.Contains(err.Error(), "core") || s.sets != sets {
+		t.Fatalf("missing seed: %v, sets %d", err, s.sets-sets)
+	}
+	s.m["node/"+ChainName] = "not json"
+	if _, err := LoadChain(ctx, s, unlocked, time.Now); err == nil || !strings.Contains(err.Error(), ChainName) {
 		t.Fatalf("garbage: %v", err)
 	}
 	s = newMemStore()
@@ -112,7 +134,7 @@ func TestChainRefusals(t *testing.T) {
 }
 
 func TestIssueUserRefusals(t *testing.T) {
-	c := loadChain(t, newMemStore(), time.Now)
+	c := mustChain(t, newMemStore(), time.Now)
 	edge := must(must(nkeys.CreateUser()).PublicKey())
 	for name, tc := range map[string]struct {
 		pub  string
@@ -138,7 +160,8 @@ func TestIssueUserRefusals(t *testing.T) {
 func openChained(t *testing.T, dir string, s SeedStore) *Bus {
 	t.Helper()
 	cfg := DefaultConfig(dir)
-	cfg.Chain = loadChain(t, s, time.Now)
+	cfg.Chain = mustChain(t, s, time.Now)
+	cfg.testListen = true
 	b, err := Open(context.Background(), cfg, quiet())
 	if err != nil {
 		t.Fatal(err)
@@ -150,10 +173,10 @@ func openChained(t *testing.T, dir string, s SeedStore) *Bus {
 	return b
 }
 
-// connectAs connects to the embedded server in-process with the given
-// user JWT and seed.
+// connectAs connects to the embedded server over its test listener with
+// the user JWT tok, answering the nonce with kp.
 func connectAs(b *Bus, tok string, kp nkeys.KeyPair) (*nats.Conn, error) {
-	return nats.Connect("", nats.InProcessServer(b.srv),
+	return nats.Connect(b.srv.ClientURL(),
 		nats.UserJWT(func() (string, error) { return tok, nil }, kp.Sign),
 		nats.Timeout(2*time.Second), nats.NoReconnect())
 }
@@ -167,9 +190,8 @@ func TestEmbeddedOnTheChain(t *testing.T) {
 	if h := b.Health(context.Background()); !h.Connected || h.StoreBytes == 0 {
 		t.Fatalf("health = %+v", h)
 	}
-	if _, err := nats.Connect("", nats.InProcessServer(b.srv), nats.NoReconnect()); err == nil {
-		t.Fatal("an anonymous connection was let in")
-	}
+	_, err := nats.Connect(b.srv.ClientURL(), nats.NoReconnect())
+	refused(t, err, "an anonymous connection was let in")
 }
 
 // The streams and the cells bucket a node kept before the chain move into
@@ -204,7 +226,7 @@ func TestStoreMovesIntoTheNetworkAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := DefaultConfig(dir)
-	cfg.Chain = loadChain(t, s, time.Now)
+	cfg.Chain = mustChain(t, s, time.Now)
 	if _, err := Open(ctx, cfg, quiet()); err == nil || !strings.Contains(err.Error(), "both") {
 		t.Fatalf("two stores: %v", err)
 	}
@@ -264,35 +286,31 @@ func TestEdgeUserAbuse(t *testing.T) {
 		rogue := must(nkeys.CreateAccount())
 		uc := jwt.NewUserClaims(edgePub)
 		uc.IssuerAccount = c.AccountPublicKey()
-		if _, err := connectAs(b, must(uc.Encode(rogue)), edge); err == nil {
-			t.Fatal("a JWT signed by a foreign key was let in")
-		}
+		_, err := connectAs(b, must(uc.Encode(rogue)), edge)
+		refused(t, err, "a JWT signed by a foreign key was let in")
 	})
 
 	t.Run("issued by another chain", func(t *testing.T) {
 		t.Parallel()
-		other := loadChain(t, newMemStore(), time.Now)
+		other := mustChain(t, newMemStore(), time.Now)
 		k := must(nkeys.CreateUser())
-		if _, err := connectAs(b, must(other.IssueUser("x", must(k.PublicKey()), perms, time.Hour)), k); err == nil {
-			t.Fatal("a JWT from another chain was let in")
-		}
+		_, err := connectAs(b, must(other.IssueUser("x", must(k.PublicKey()), perms, time.Hour)), k)
+		refused(t, err, "a JWT from another chain was let in")
 	})
 
 	t.Run("someone else's JWT", func(t *testing.T) {
 		t.Parallel()
 		thief := must(nkeys.CreateUser())
-		if _, err := connectAs(b, tok, thief); err == nil {
-			t.Fatal("a JWT was used without its seed")
-		}
+		_, err := connectAs(b, tok, thief)
+		refused(t, err, "a JWT was used without its seed")
 	})
 
 	t.Run("expired", func(t *testing.T) {
 		t.Parallel()
-		past := loadChain(t, s, func() time.Time { return time.Now().Add(-2 * time.Hour) })
+		past := mustChain(t, s, func() time.Time { return time.Now().Add(-2 * time.Hour) })
 		k := must(nkeys.CreateUser())
-		if _, err := connectAs(b, must(past.IssueUser("old", must(k.PublicKey()), perms, time.Hour)), k); err == nil {
-			t.Fatal("an expired JWT was let in")
-		}
+		_, err := connectAs(b, must(past.IssueUser("old", must(k.PublicKey()), perms, time.Hour)), k)
+		refused(t, err, "an expired JWT was let in")
 	})
 
 	t.Run("revoked", func(t *testing.T) {
@@ -314,9 +332,8 @@ func TestEdgeUserAbuse(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatal("the revoked user's connection stayed open")
 		}
-		if _, err := connectAs(b, tok, edge); err == nil {
-			t.Fatal("a revoked user was let in again")
-		}
+		_, err = connectAs(b, tok, edge)
+		refused(t, err, "a revoked user was let in again")
 		if _, err := c.IssueUser("home", edgePub, perms, time.Hour); !errors.Is(err, ErrRevoked) {
 			t.Fatalf("issue to a revoked key: %v", err)
 		}
@@ -324,7 +341,7 @@ func TestEdgeUserAbuse(t *testing.T) {
 			t.Fatalf("a second revoke: %v", err)
 		}
 		// The revocation is stored: a restart on the same store keeps it.
-		again := loadChain(t, s, time.Now)
+		again := mustChain(t, s, time.Now)
 		if !again.Revoked(edgePub) {
 			t.Fatal("the revocation was not stored")
 		}
@@ -333,6 +350,17 @@ func TestEdgeUserAbuse(t *testing.T) {
 			t.Fatal("the account claims do not carry the revocation")
 		}
 	})
+}
+
+// refused fails unless err is the server's refusal of the credentials.
+func refused(t *testing.T, err error, what string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("%s was let in", what)
+	}
+	if !errors.Is(err, nats.ErrAuthorization) && !errors.Is(err, nats.ErrAuthExpired) && !errors.Is(err, nats.ErrAuthRevoked) {
+		t.Fatalf("%s: %v, want the server's authorization refusal", what, err)
+	}
 }
 
 func expectPermissionError(t *testing.T, errs <-chan error, subject string) {
@@ -353,7 +381,7 @@ func expectPermissionError(t *testing.T, errs <-chan error, subject string) {
 func TestExternalServerOnTheChain(t *testing.T) {
 	ctx := context.Background()
 	s := newMemStore()
-	c := loadChain(t, s, time.Now)
+	c := mustChain(t, s, time.Now)
 	oc := must(jwt.DecodeOperatorClaims(must(c.OperatorJWT())))
 	res, err := server.NewDirAccResolver(t.TempDir(), 0, time.Minute, server.NoDelete)
 	if err != nil {
@@ -397,6 +425,7 @@ func TestExternalServerOnTheChain(t *testing.T) {
 	for {
 		nc, err := connect()
 		if err != nil {
+			refused(t, err, "the revoked user")
 			break
 		}
 		nc.Close()
@@ -412,7 +441,7 @@ func TestExternalServerOnTheChain(t *testing.T) {
 // that says what is wrong; credentials and the chain together are refused.
 func TestExternalChainRefusals(t *testing.T) {
 	ctx := context.Background()
-	c := loadChain(t, newMemStore(), time.Now)
+	c := mustChain(t, newMemStore(), time.Now)
 	url := startExternal(t, &server.Options{})
 	cfg := DefaultConfig("")
 	cfg.Mode, cfg.URLs, cfg.StartTimeout, cfg.Chain = bus.ModeExternal, []string{url}, time.Second, c

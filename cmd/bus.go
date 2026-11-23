@@ -9,6 +9,7 @@ import (
 
 	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/cmd/flags"
+	"github.com/igorrius/ganglion/node"
 	"github.com/urfave/cli/v3"
 )
 
@@ -25,7 +26,9 @@ func busCommand(out io.Writer) *cli.Command {
 // busTrust prints the part of a NATS server's configuration that makes it
 // trust the node's chain: the operator's JWT, the system account and a full
 // resolver preloaded with it. Everything printed is public: JWTs and public
-// keys, never a seed. The chain is made in the store when it is not there.
+// keys, never a seed. With no node running it holds the database's lock and
+// makes the chain when the store has none; beside a running node, which owns
+// the chain, it only reads it.
 func busTrust(out io.Writer) *cli.Command {
 	var db string
 	return &cli.Command{
@@ -36,12 +39,22 @@ func busTrust(out io.Writer) *cli.Command {
 			"account to the server at every start. Run this as the node's user, beside the database.",
 		Flags: []cli.Flag{flags.DBFlag(&db)},
 		Action: func(ctx context.Context, _ *cli.Command) error {
+			load := natsbus.LoadChain
+			release, err := node.LockDB(db)
+			switch {
+			case errors.Is(err, node.ErrLocked):
+				load = natsbus.ReadChain
+			case err != nil:
+				return err
+			default:
+				defer release()
+			}
 			v, done, err := openStore(ctx, db, true)
 			if err != nil {
 				return storeError(err)
 			}
 			defer done()
-			c, err := natsbus.LoadChain(ctx, v, v.Locked, time.Now)
+			c, err := load(ctx, v.Internal(), v.Locked, time.Now)
 			if errors.Is(err, natsbus.ErrStoreLocked) {
 				return fmt.Errorf("%w: %s", err, lockedHelp)
 			} else if err != nil {

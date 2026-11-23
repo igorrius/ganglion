@@ -31,6 +31,8 @@ func (b *Bus) Revoke(ctx context.Context, pub string) error {
 	if c == nil {
 		return ErrNoChain
 	}
+	c.publishing.Lock()
+	defer c.publishing.Unlock()
 	if _, err := c.revoke(ctx, pub); err != nil {
 		return err
 	}
@@ -38,10 +40,11 @@ func (b *Bus) Revoke(ctx context.Context, pub string) error {
 }
 
 // publishClaims hands the server the current claims of NET: in memory to
-// the embedded server, through the system account to an external one.
+// the embedded server, through the system account to an external one. The
+// caller holds the chain's publishing lock.
 func (b *Bus) publishClaims(ctx context.Context) error {
 	if b.srv == nil {
-		return pushClaims(ctx, b.cfg)
+		return pushLocked(ctx, b.cfg)
 	}
 	c := b.cfg.Chain
 	tok, err := c.AccountJWT()
@@ -66,6 +69,13 @@ func (b *Bus) publishClaims(ctx context.Context) error {
 // (ADR-0113). The server must trust the chain's operator and run a full
 // resolver; one that does not says so in the error.
 func pushClaims(ctx context.Context, cfg Config) error {
+	cfg.Chain.publishing.Lock()
+	defer cfg.Chain.publishing.Unlock()
+	return pushLocked(ctx, cfg)
+}
+
+// pushLocked is pushClaims under the chain's publishing lock.
+func pushLocked(ctx context.Context, cfg Config) error {
 	c := cfg.Chain
 	creds, err := c.systemCreds()
 	if err != nil {

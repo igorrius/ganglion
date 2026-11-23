@@ -15,18 +15,26 @@ import (
 	"github.com/nats-io/nkeys"
 )
 
-// The names of the chain's entries in the node's scope of the secret store
-// (ADR-0109, ADR-0113). Each seed is made on first need and never rewritten.
+// The chain's entries in the node's scope of the secret store (ADR-0109,
+// ADR-0113); both names are reserved (secrets.Reserved), so no person, tool
+// or module reads, sets or removes them.
 const (
-	SeedOperator = "bus.operator"
-	SeedAccount  = "bus.account"
-	SeedSigning  = "bus.signing"
-	SeedSystem   = "bus.system"
-	SeedCore     = "bus.core"
+	// ChainName holds the five seeds as one JSON object, written once, so a
+	// chain is never stored half made.
+	ChainName = "bus.chain"
 	// RevokedName holds the revoked user keys as JSON: public key → Unix
 	// seconds of the revocation.
 	RevokedName = "bus.revoked"
 )
+
+// storedChain is the JSON of ChainName: the seeds by role.
+type storedChain struct {
+	Operator string `json:"operator"`
+	Account  string `json:"account"`
+	Signing  string `json:"signing"`
+	System   string `json:"system"`
+	Core     string `json:"core"`
+}
 
 // AccountName is the name in the claims of the network's account.
 const AccountName = "NET"
@@ -51,6 +59,8 @@ var (
 	ErrBadTTL = errors.New("natsbus: a user JWT lives more than 0 and at most 90 days")
 	// ErrCoreKey is an attempt to revoke the core's own user.
 	ErrCoreKey = errors.New("natsbus: the core's own user cannot be revoked")
+	// ErrNoStoredChain is ReadChain on a store that holds no chain yet.
+	ErrNoStoredChain = errors.New("natsbus: the secret store holds no trust chain yet; the node makes it at its first start")
 )
 
 // SeedStore is the part of the secret store the chain needs:
@@ -83,40 +93,70 @@ type Chain struct {
 
 	mu      sync.Mutex
 	revoked map[string]int64 // user public key → Unix seconds
+
+	// publishing is held from a change of the account claims until the
+	// server has them, so two revocations never hand it an older list
+	// after a newer one.
+	publishing sync.Mutex
 }
 
-// seedKind is a stored seed's name and the kind of key it holds.
+// seedKind is a seed's role and the kind of key it must be.
 type seedKind struct {
-	name   string
+	role   string
+	seed   *string
+	dst    *nkeys.KeyPair
 	create func() (nkeys.KeyPair, error)
 	prefix nkeys.PrefixByte
 }
 
-// LoadChain reads the chain from store, making each seed that is missing.
-// A locked store is ErrStoreLocked: nothing is read and nothing is made.
-// A stored seed of the wrong kind is an error that names the entry.
+// LoadChain reads the chain from store, or makes and stores all of it in
+// one write when the store holds none. A locked store is ErrStoreLocked:
+// nothing is read and nothing is made. A broken entry, or a seed of the
+// wrong kind, is an error that names the entry and never the value.
 func LoadChain(ctx context.Context, store SeedStore, locked LockedFunc, now func() time.Time) (*Chain, error) {
+	return loadChain(ctx, store, locked, now, true)
+}
+
+// ReadChain is LoadChain that never writes: a store with no chain is
+// ErrNoStoredChain. For a process beside a running node, which owns the
+// chain.
+func ReadChain(ctx context.Context, store SeedStore, locked LockedFunc, now func() time.Time) (*Chain, error) {
+	return loadChain(ctx, store, locked, now, false)
+}
+
+func loadChain(ctx context.Context, store SeedStore, locked LockedFunc, now func() time.Time, create bool) (*Chain, error) {
 	if locked() {
 		return nil, ErrStoreLocked
 	}
 	c := &Chain{store: store, now: now, revoked: map[string]int64{}}
-	for _, s := range []struct {
-		kind seedKind
-		dst  *nkeys.KeyPair
-	}{
-		{seedKind{SeedOperator, nkeys.CreateOperator, nkeys.PrefixByteOperator}, &c.op},
-		{seedKind{SeedAccount, nkeys.CreateAccount, nkeys.PrefixByteAccount}, &c.acc},
-		{seedKind{SeedSigning, nkeys.CreateAccount, nkeys.PrefixByteAccount}, &c.signing},
-		{seedKind{SeedSystem, nkeys.CreateAccount, nkeys.PrefixByteAccount}, &c.sys},
-		{seedKind{SeedCore, nkeys.CreateUser, nkeys.PrefixByteUser}, &c.core},
-	} {
-		kp, err := loadSeed(ctx, store, s.kind)
-		if err != nil {
+	var sc storedChain
+	kinds := []seedKind{
+		{"operator", &sc.Operator, &c.op, nkeys.CreateOperator, nkeys.PrefixByteOperator},
+		{"account", &sc.Account, &c.acc, nkeys.CreateAccount, nkeys.PrefixByteAccount},
+		{"signing", &sc.Signing, &c.signing, nkeys.CreateAccount, nkeys.PrefixByteAccount},
+		{"system", &sc.System, &c.sys, nkeys.CreateAccount, nkeys.PrefixByteAccount},
+		{"core", &sc.Core, &c.core, nkeys.CreateUser, nkeys.PrefixByteUser},
+	}
+	v, err := store.Get(ctx, secrets.ScopeNode, ChainName)
+	switch {
+	case err != nil:
+		return nil, fmt.Errorf("natsbus: chain: %w", err)
+	case v == "" && !create:
+		return nil, ErrNoStoredChain
+	case v == "":
+		if err := makeChain(ctx, store, kinds, &sc); err != nil {
 			return nil, err
 		}
-		*s.dst = kp
+	default:
+		if err := json.Unmarshal([]byte(v), &sc); err != nil {
+			return nil, fmt.Errorf("natsbus: chain: %s is not a trust chain", ChainName)
+		}
+		for _, k := range kinds {
+			if *k.dst, err = parseSeed(*k.seed, k.prefix); err != nil {
+				return nil, fmt.Errorf("natsbus: chain: %s: the %s seed %w", ChainName, k.role, err)
+			}
+		}
 	}
-	var err error
 	pubs := []*string{&c.opPub, &c.accPub, &c.sigPub, &c.sysPub, &c.corePub}
 	for i, kp := range []nkeys.KeyPair{c.op, c.acc, c.signing, c.sys, c.core} {
 		if *pubs[i], err = kp.PublicKey(); err != nil {
@@ -129,32 +169,41 @@ func LoadChain(ctx context.Context, store SeedStore, locked LockedFunc, now func
 	return c, nil
 }
 
-// loadSeed reads one seed, or makes and stores it when there is none.
-func loadSeed(ctx context.Context, store SeedStore, k seedKind) (nkeys.KeyPair, error) {
-	v, err := store.Get(ctx, secrets.ScopeNode, k.name)
-	if err != nil {
-		return nil, fmt.Errorf("natsbus: chain: %w", err)
-	}
-	if v != "" {
-		kp, err := nkeys.FromSeed([]byte(v))
+// makeChain makes every key and stores the seeds in one entry.
+func makeChain(ctx context.Context, store SeedStore, kinds []seedKind, sc *storedChain) error {
+	for _, k := range kinds {
+		kp, err := k.create()
 		if err != nil {
-			return nil, fmt.Errorf("natsbus: chain: %s is not a seed", k.name)
+			return fmt.Errorf("natsbus: chain: make the %s key: %w", k.role, err)
 		}
-		if p, _, err := nkeys.DecodeSeed([]byte(v)); err != nil || p != k.prefix {
-			return nil, fmt.Errorf("natsbus: chain: %s holds a seed of the wrong kind", k.name)
+		seed, err := kp.Seed()
+		if err != nil {
+			return fmt.Errorf("natsbus: chain: make the %s key: %w", k.role, err)
 		}
-		return kp, nil
+		*k.dst, *k.seed = kp, string(seed)
 	}
-	kp, err := k.create()
+	b, err := json.Marshal(sc)
 	if err != nil {
-		return nil, fmt.Errorf("natsbus: chain: make %s: %w", k.name, err)
+		return fmt.Errorf("natsbus: chain: %w", err)
 	}
-	seed, err := kp.Seed()
+	if err := store.Set(ctx, secrets.ScopeNode, ChainName, string(b), "node"); err != nil {
+		return fmt.Errorf("natsbus: chain: %w", err)
+	}
+	return nil
+}
+
+// parseSeed reads one seed and checks its kind. The error never holds it.
+func parseSeed(seed string, prefix nkeys.PrefixByte) (nkeys.KeyPair, error) {
+	p, _, err := nkeys.DecodeSeed([]byte(seed))
 	if err != nil {
-		return nil, fmt.Errorf("natsbus: chain: make %s: %w", k.name, err)
+		return nil, errors.New("is not a seed")
 	}
-	if err := store.Set(ctx, secrets.ScopeNode, k.name, string(seed), "node"); err != nil {
-		return nil, fmt.Errorf("natsbus: chain: %w", err)
+	if p != prefix {
+		return nil, errors.New("is of the wrong kind")
+	}
+	kp, err := nkeys.FromSeed([]byte(seed))
+	if err != nil {
+		return nil, errors.New("is not a seed")
 	}
 	return kp, nil
 }

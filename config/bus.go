@@ -60,7 +60,7 @@ func withChain(ctx context.Context, cfg *natsbus.Config, b Bootstrap, v *vault.V
 	if cfg.Mode == bus.ModeExternal && b.Settings.Bus.Trust != settings.TrustChain {
 		return nil
 	}
-	c, err := natsbus.LoadChain(ctx, v, v.Locked, time.Now)
+	c, err := natsbus.LoadChain(ctx, v.Internal(), v.Locked, time.Now)
 	switch {
 	case errors.Is(err, natsbus.ErrStoreLocked) && cfg.Mode == bus.ModeEmbedded:
 		cfg.ChainLocked = true
