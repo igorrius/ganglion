@@ -398,9 +398,17 @@ func (s Scenario) checkPaths() error {
 func (s Scenario) checkModules() error {
 	mods := slices.Clone(s.Modules)
 	for _, st := range s.Steps {
-		if st.InstallModule != nil {
-			mods = append(mods, *st.InstallModule)
+		m := st.InstallModule
+		if m == nil {
+			continue
 		}
+		if m.Node != "" {
+			return fmt.Errorf("install_module %s: node is the place of a module listed in modules:, not of a new build", m.Name)
+		}
+		if !slices.ContainsFunc(s.Modules, func(l Module) bool { return l.Name == m.Name }) {
+			return fmt.Errorf("install_module %s: the module is not in the list of modules", m.Name)
+		}
+		mods = append(mods, *m)
 	}
 	for _, m := range mods {
 		if !nameRE.MatchString(m.Name) || m.Manifest == "" {

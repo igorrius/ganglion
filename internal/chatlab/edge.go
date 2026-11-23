@@ -23,6 +23,10 @@ const (
 	// edgeLinkWait bounds the wait for a restored link to be up again: the
 	// leaf redials about once a second.
 	edgeLinkWait = 30 * time.Second
+	// edgeSettle is how long a count of the node's copy of the edge's events
+	// is watched after it matches: two resyncs of the node's collector, so a
+	// copy made twice shows as a count past the match.
+	edgeSettle = 2 * time.Second
 	// EdgePatience is how long a facts step waits for the edge's facts to
 	// hold: the node copies the events of a restored link on its own timer,
 	// and an edge takes a module after its check.

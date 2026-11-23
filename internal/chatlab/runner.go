@@ -203,6 +203,14 @@ func (r *repeatRun) waitEdgeFacts(ctx context.Context, want *EdgeFact) {
 	defer cancel()
 	for {
 		if v, err := r.n.ReadEdge(ctx, want); err == nil && len(checkEdge(want, v)) == 0 {
+			if want.CoreHeld != nil {
+				// Past the first match: the node copies on a timer of its own,
+				// and a copy taken twice would show now, not at the match.
+				select {
+				case <-ctx.Done():
+				case <-time.After(edgeSettle):
+				}
+			}
 			return
 		}
 		select {

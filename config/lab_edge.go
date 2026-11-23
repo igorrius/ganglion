@@ -73,6 +73,7 @@ func NewLabEdge(ctx context.Context, o LabEdgeOptions, logger *slog.Logger) (*La
 	applyEdge(i)
 	components, err := do.Invoke[[]node.Component](i)
 	if err != nil {
+		_ = i.Shutdown()
 		return nil, err
 	}
 	nb, host := do.MustInvoke[*natsbus.Bus](i), do.MustInvoke[*modhost.Host](i)

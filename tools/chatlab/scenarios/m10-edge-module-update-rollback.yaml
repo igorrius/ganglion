@@ -40,6 +40,7 @@ steps:
         actual: {module: edge-probe, result: running, version: "2"}
   - say: "/modules rollback edge-probe"
   - facts:
+      model_calls: 3 # the join's turns only: the rollback command asked no model
       reply: {contains: rolled back from 2 to 1}
       edge:
         running: {module: edge-probe, version: "1"}
