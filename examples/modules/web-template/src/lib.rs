@@ -125,6 +125,7 @@ fn failure(msg: &str) -> Value {
 mod tests {
     use super::*;
     use crate::fake::{Fake, NOW, fake};
+    use crate::http::base64_decode;
 
     fn get(f: &Fake, path: &str) -> Value {
         call(
@@ -151,8 +152,10 @@ mod tests {
         v["result"]["status"].as_u64().unwrap()
     }
 
-    fn body(v: &Value) -> &str {
-        v["result"]["body"].as_str().unwrap()
+    /// The answer's body, decoded.
+    fn body(v: &Value) -> String {
+        let raw = base64_decode(v["result"]["body"].as_str().unwrap()).unwrap();
+        String::from_utf8(raw).unwrap()
     }
 
     #[test]
@@ -199,7 +202,7 @@ mod tests {
         assert_eq!(status(&get(&f, "/../state")), 404);
         let v = call(
             &f,
-            json!({"method": "POST", "path": "/api/data", "body": "x"}),
+            json!({"method": "POST", "path": "/api/data", "body": "eA=="}),
         );
         assert_eq!(status(&v), 405);
     }
@@ -233,7 +236,7 @@ mod tests {
         let v = get(&f, "/api/data");
         assert_eq!(status(&v), 200);
         assert_eq!(v["result"]["headers"]["cache-control"], "no-store");
-        let data: Value = serde_json::from_str(body(&v)).unwrap();
+        let data: Value = serde_json::from_str(&body(&v)).unwrap();
         assert_eq!(data["current"]["value"], 42);
         assert_eq!(data["points"][0][1], 41.5);
         assert_eq!(data["notices"][0]["text"], "battery low");
@@ -254,7 +257,7 @@ mod tests {
             !b.contains('<') && !b.contains('>') && !b.contains('&'),
             "{b}"
         );
-        let data: Value = serde_json::from_str(b).unwrap();
+        let data: Value = serde_json::from_str(&b).unwrap();
         assert_eq!(
             data["notices"][0]["text"], hostile,
             "the text itself is kept"
@@ -285,7 +288,7 @@ mod tests {
         f.state
             .borrow_mut()
             .insert("state".into(), "not json".into());
-        let data: Value = serde_json::from_str(body(&get(&f, "/api/data"))).unwrap();
+        let data: Value = serde_json::from_str(&body(&get(&f, "/api/data"))).unwrap();
         assert!(data["current"].is_null());
         assert_eq!(data["points"], json!([]));
     }

@@ -2,17 +2,19 @@
 //! answer it takes back, and the escaping every piece of text that reaches a
 //! browser goes through.
 //!
-//! Shapes (spec R-HTTP-2, ADR-0110; the field names are this template's
-//! reading of them, kept in this one file so they are easy to adjust):
+//! Shapes (spec R-HTTP-2, ADR-0110; the exact JSON the node implements,
+//! `pdk.HTTPRequest` and `pdk.HTTPAnswer`), kept in this one file:
 //!
 //! - the input is `{"trigger": "http", "payload": {"method": "GET", "path":
-//!   "/api/data", "query": {"k": "v"}, "headers": {"accept": "..."}, "body":
-//!   "..."}}`; `path` is the path inside the module's prefix, `query` is an
-//!   object of strings (a raw query string is read too), `headers` holds the
-//!   allowlisted request headers and `body` is text;
+//!   "/api/data", "query": "a=1&b=2", "headers": {"accept": "..."}, "body":
+//!   "<base64>"}}`; `path` is the path inside the module's prefix and always
+//!   one of the declared routes, `query` is the raw query string without `?`,
+//!   `headers` holds `accept`, `content-type` and `if-none-match` in lower
+//!   case; `query`, `headers` and `body` are left out when empty;
 //! - the answer is `{"ok": true, "result": {"status": 200, "headers":
-//!   {"content-type": "..."}, "body": "..."}}`; the node drops every header
-//!   outside `content-type`, `cache-control` and `etag`.
+//!   {"content-type": "..."}, "body": "<base64>"}}`; an unknown field is a
+//!   contract break (the browser gets 502), and the node keeps only
+//!   `content-type`, `cache-control` and `etag`.
 
 use serde_json::{Map, Value, json};
 
@@ -25,7 +27,8 @@ pub struct Request {
     pub query: Vec<(String, String)>,
     /// Lower-case names.
     pub headers: Vec<(String, String)>,
-    pub body: String,
+    /// The decoded body bytes.
+    pub body: Vec<u8>,
 }
 
 impl Request {
@@ -35,14 +38,11 @@ impl Request {
     pub fn from_payload(p: &Value) -> Option<Request> {
         let method = p.get("method")?.as_str()?.to_ascii_uppercase();
         let path = p.get("path")?.as_str()?.to_string();
-        let query = match p.get("query") {
-            Some(Value::Object(o)) => o
-                .iter()
-                .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
-                .collect(),
-            Some(Value::String(s)) => parse_query(s),
-            _ => Vec::new(),
-        };
+        let query = p
+            .get("query")
+            .and_then(Value::as_str)
+            .map(parse_query)
+            .unwrap_or_default();
         let headers = match p.get("headers") {
             Some(Value::Object(o)) => o
                 .iter()
@@ -50,11 +50,10 @@ impl Request {
                 .collect(),
             _ => Vec::new(),
         };
-        let body = p
-            .get("body")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
+        let body = match p.get("body").and_then(Value::as_str) {
+            Some(b) => base64_decode(b)?,
+            None => Vec::new(),
+        };
         Some(Request {
             method,
             path,
@@ -143,9 +142,57 @@ impl Response {
         }
         json!({
             "ok": true,
-            "result": { "status": self.status, "headers": headers, "body": self.body },
+            "result": { "status": self.status, "headers": headers, "body": base64_encode(self.body.as_bytes()) },
         })
     }
+}
+
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Standard base64 with padding, as Go's `[]byte` is written in JSON.
+pub fn base64_encode(data: &[u8]) -> String {
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let n = (u32::from(c[0]) << 16)
+            | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*c.get(2).unwrap_or(&0));
+        for i in 0..4 {
+            if i <= c.len() {
+                out.push(B64[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// The bytes of a padded standard base64 text; `None` when it is not one.
+pub fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    let b = s.as_bytes();
+    if !b.len().is_multiple_of(4) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(b.len() / 4 * 3);
+    for (k, q) in b.chunks(4).enumerate() {
+        let last = k == b.len() / 4 - 1;
+        let pad = q.iter().rev().take_while(|c| **c == b'=').count();
+        if pad > 2 || (pad > 0 && !last) {
+            return None;
+        }
+        let mut n = 0u32;
+        for (i, c) in q.iter().enumerate() {
+            let v = if i >= 4 - pad {
+                0
+            } else {
+                B64.iter().position(|x| x == c)? as u32
+            };
+            n = (n << 6) | v;
+        }
+        let bytes = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
+        out.extend_from_slice(&bytes[..3 - pad]);
+    }
+    Some(out)
 }
 
 /// Escapes text for HTML, in element content and in quoted attributes.
@@ -216,20 +263,42 @@ mod tests {
     }
 
     #[test]
-    fn a_request_reads_an_object_or_a_raw_query_and_lowers_header_names() {
+    fn a_request_reads_the_raw_query_the_headers_and_a_base64_body() {
         let a = Request::from_payload(&json!({
-            "method": "get", "path": "/x", "query": {"hours": "6"},
-            "headers": {"If-None-Match": "\"v\""}, "body": ""
+            "method": "get", "path": "/x", "query": "hours=6&b",
+            "headers": {"If-None-Match": "\"v\""}, "body": "aGk="
         }))
         .unwrap();
         assert_eq!(a.method, "GET");
         assert_eq!(a.param("hours"), Some("6"));
+        assert_eq!(a.param("b"), Some(""));
         assert_eq!(a.header("if-none-match"), Some("\"v\""));
-        let b = Request::from_payload(&json!({"method": "GET", "path": "/", "query": "?a=1&b"}))
-            .unwrap();
-        assert_eq!(b.param("a"), Some("1"));
-        assert_eq!(b.param("b"), Some(""));
+        assert_eq!(a.body, b"hi");
+        let b = Request::from_payload(&json!({"method": "GET", "path": "/"})).unwrap();
+        assert!(b.query.is_empty() && b.headers.is_empty() && b.body.is_empty());
         assert!(Request::from_payload(&json!({"path": "/"})).is_none());
+        assert!(
+            Request::from_payload(&json!({"method": "GET", "path": "/", "body": "%%"})).is_none()
+        );
+    }
+
+    #[test]
+    fn base64_matches_the_standard_vectors_both_ways() {
+        for (raw, enc) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg=="),
+        ] {
+            assert_eq!(base64_encode(raw.as_bytes()), enc);
+            assert_eq!(base64_decode(enc).unwrap(), raw.as_bytes());
+        }
+        let all: Vec<u8> = (0..=255).collect();
+        assert_eq!(base64_decode(&base64_encode(&all)).unwrap(), all);
+        for bad in ["Zg=", "Z===", "Zg==Zm8=", "Zm 9", "Zm9v!"] {
+            assert!(base64_decode(bad).is_none(), "{bad}");
+        }
     }
 
     #[test]
@@ -238,7 +307,13 @@ mod tests {
         let v = r.to_output();
         assert_eq!(v["ok"], true);
         assert_eq!(v["result"]["status"], 404);
-        assert_eq!(v["result"]["body"], "not found");
+        assert_eq!(v["result"]["body"], base64_encode(b"not found"));
+        let keys: Vec<&String> = v["result"].as_object().unwrap().keys().collect();
+        assert_eq!(
+            keys,
+            ["body", "headers", "status"],
+            "no field outside the contract"
+        );
         assert_eq!(v["result"]["headers"]["cache-control"], "no-store");
     }
 

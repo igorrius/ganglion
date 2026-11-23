@@ -61,17 +61,19 @@ so the page can load only its own files:
 - `src/assets.rs` has tests that fail on `innerHTML`, `eval`, an inline script
   or an outside address; keep them passing when you change the page.
 
-## Assumptions about the HTTP shapes
+## The HTTP shapes
 
-The spec fixes what a request and an answer hold but not the field names. This
-template reads the request as `{"trigger": "http", "payload": {"method",
-"path", "query", "headers", "body"}}` (`path` is inside the module's prefix,
-`query` an object of strings, `headers` an object with lower-case names, `body`
-text) and answers `{"ok": true, "result": {"status", "headers", "body"}}`
-with `content-type`, `cache-control` and `etag` as headers. All of it is in
-`src/http.rs` (`Request::from_payload` and `Response::to_output`), so a change
-in the node's shapes is a change in that one file. The page's cells are read
-without a cell trigger, with `cells.read` alone.
+The node's shapes (`pdk.HTTPRequest`, `pdk.HTTPAnswer`) are all in `src/http.rs`
+(`Request::from_payload`, `Response::to_output`). The request is `{"trigger":
+"http", "payload": {"method", "path", "query", "headers", "body"}}`: `path` is
+inside the module's prefix and always a declared route, `query` the raw query
+string without `?`, `headers` only `accept`, `content-type` and `if-none-match`
+in lower case, `body` base64; `query`, `headers` and `body` are left out when
+empty. The answer is `{"ok": true, "result": {"status", "headers", "body"}}`
+with a base64 `body`; a field outside these three is a contract break and the
+browser gets 502. The node keeps `content-type`, `cache-control` and `etag`.
+Routes match exactly, so `manifest.yaml` lists every file the page loads. The
+page's cells are read with `cells.read` alone, without a cell trigger.
 
 ## Events and the trial run
 
