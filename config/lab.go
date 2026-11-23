@@ -5,6 +5,7 @@ package config
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/cells"
+	"github.com/igorrius/ganglion/edge"
 	"github.com/igorrius/ganglion/edgejoin"
 	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/intake"
@@ -55,6 +57,10 @@ type LabOptions struct {
 	// MCPHTTP is the client of the remote MCP servers and their sign-ins:
 	// one that reaches the lab's fakes; nil leaves the node's.
 	MCPHTTP *http.Client
+	// EdgeEntry opens the node's WebSocket entry for edges on a loopback
+	// port, as the public listener would reach it, so a lab edge can link
+	// to this node (LabNode.EdgeEntry).
+	EdgeEntry bool
 }
 
 // LabModule is a built module a lab node has installed from the start.
@@ -78,9 +84,28 @@ type LabNode struct {
 	// another person in the owner's chat.
 	Allow func(ctx context.Context, principal, name string) error
 	// JoinEdge is an edge joining with a one-time code, as the join command
-	// would on the owner's computer, with a key of its own made here.
-	JoinEdge func(ctx context.Context, code string) error
-	Shutdown func(context.Context)
+	// would on the owner's computer, with a key of its own made here. It
+	// returns the edge's name and its credentials file.
+	JoinEdge func(ctx context.Context, code string) (LabEdgeJoin, error)
+	// EdgeEntry is the host:port of the node's WebSocket entry for edges, ""
+	// unless LabOptions.EdgeEntry opened it.
+	EdgeEntry func() string
+	// InstallModule installs a build of a module as the owner's admin's, as
+	// an update of the one installed before, and has the node run it or
+	// deliver it to the edge its line names.
+	InstallModule func(ctx context.Context, m LabModule) error
+	// EdgeEvents is how many events of an edge the node's stream holds.
+	EdgeEvents func(ctx context.Context, edgeName string) (uint64, error)
+	// EdgeActual is what an edge says it runs of a module, as the node
+	// reads it; false when it has said nothing.
+	EdgeActual func(ctx context.Context, edgeName, module string) (edge.Actual, bool, error)
+	Shutdown   func(context.Context)
+}
+
+// LabEdgeJoin is what an edge's join gave: its name and its credentials file.
+type LabEdgeJoin struct {
+	Name  string
+	Creds []byte
 }
 
 // NewLab builds the core container of b with o's differences. The tables
@@ -88,6 +113,9 @@ type LabNode struct {
 func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions) (*LabNode, error) {
 	i := New(ctx, b, logger)
 	applyLab(i, o)
+	if o.EdgeEntry {
+		do.Override(i, busWith(func(c *natsbus.Config) { c.WebSocket = c.Chain != nil }))
+	}
 	components, err := do.Invoke[[]node.Component](i)
 	if err != nil {
 		return nil, err
@@ -106,21 +134,38 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 		Allow: func(ctx context.Context, principal, name string) error {
 			return do.MustInvoke[*access.List](i).Allow(ctx, principal, access.RoleFamily, name)
 		},
-		JoinEdge: func(ctx context.Context, code string) error {
+		JoinEdge: func(ctx context.Context, code string) (LabEdgeJoin, error) {
 			svc := do.MustInvoke[*edgejoin.Service](i)
 			if svc == nil {
-				return errors.New("lab: the node takes no edges")
+				return LabEdgeJoin{}, errors.New("lab: the node takes no edges")
 			}
 			k, err := natsbus.NewUserKey()
 			if err != nil {
-				return err
+				return LabEdgeJoin{}, err
 			}
 			pub, err := k.PublicKey()
 			if err != nil {
-				return err
+				return LabEdgeJoin{}, err
 			}
-			_, err = svc.Join(ctx, code, pub)
-			return err
+			ans, err := svc.Join(ctx, code, pub)
+			if err != nil {
+				return LabEdgeJoin{}, err
+			}
+			creds, err := k.Creds(ans.JWT)
+			return LabEdgeJoin{Name: ans.Name, Creds: creds}, err
+		},
+		EdgeEntry: do.MustInvoke[*natsbus.Bus](i).WebSocketAddr,
+		InstallModule: func(ctx context.Context, m LabModule) error {
+			return installLabModules(ctx, i, b.Admin, []LabModule{m})
+		},
+		EdgeEvents: do.MustInvoke[*natsbus.Bus](i).EventsOf,
+		EdgeActual: func(ctx context.Context, edgeName, module string) (edge.Actual, bool, error) {
+			raw, ok, err := do.MustInvoke[*natsbus.Bus](i).Actual(ctx, edgeName, module)
+			if err != nil || !ok {
+				return edge.Actual{}, false, err
+			}
+			var a edge.Actual
+			return a, true, json.Unmarshal(raw, &a)
 		},
 		Shutdown: func(ctx context.Context) { _ = i.ShutdownWithContext(ctx) },
 	}, nil

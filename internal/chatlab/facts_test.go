@@ -143,3 +143,27 @@ func TestModelCalls(t *testing.T) {
 		t.Fatalf("a model call was not found: %v", got)
 	}
 }
+
+func TestCheckEdge(t *testing.T) {
+	yes, held := true, 8
+	v := &EdgeView{Linked: true, Held: 8, CoreHeld: 8, Running: "2", Actual: &ActualView{Result: "running", Version: "2"}}
+	ok := &EdgeFact{Linked: &yes, Held: &held, CoreHeld: &held,
+		Running: &RunningFact{Module: "probe", Version: "2"}, Actual: &ActualFact{Module: "probe", Result: "running", Version: "2"}}
+	if got := checkEdge(ok, v); len(got) != 0 {
+		t.Fatalf("facts that hold failed: %v", got)
+	}
+	bad := &EdgeFact{Held: new(int), CoreHeld: new(int), Running: &RunningFact{Module: "probe", Version: "1"},
+		Actual: &ActualFact{Module: "probe", Result: "refused"}}
+	if got := checkEdge(bad, v); len(got) != 4 {
+		t.Fatalf("want 4 failures, got %v", got)
+	}
+	if got := checkEdge(ok, &EdgeView{Actual: nil, Running: "2", Held: 8, CoreHeld: 8, Linked: true}); len(got) != 1 || !strings.Contains(got[0], "no actual key") {
+		t.Fatalf("no actual key: %v", got)
+	}
+	if got := checkEdge(ok, nil); len(got) != 1 {
+		t.Fatalf("no edge: %v", got)
+	}
+	if got := checkEdge(nil, nil); len(got) != 0 {
+		t.Fatalf("no fact: %v", got)
+	}
+}

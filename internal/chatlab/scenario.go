@@ -45,9 +45,12 @@ type Scenario struct {
 	Config map[string]map[string]any `yaml:"config"`
 	// MCP is a remote MCP server the node can connect, at MCPURL; nil for
 	// none.
-	MCP   *MCPServer `yaml:"mcp"`
-	Steps []Step     `yaml:"steps"`
-	Dir   string     `yaml:"-"` // where the scenario's file is
+	MCP *MCPServer `yaml:"mcp"`
+	// Edge opens the node's entry for edges, so the steps start_edge and
+	// edge_link can run one beside it.
+	Edge  bool   `yaml:"edge"`
+	Steps []Step `yaml:"steps"`
+	Dir   string `yaml:"-"` // where the scenario's file is
 }
 
 // ScriptStep is one answer of the scripted model: words or a tool call.
@@ -85,6 +88,9 @@ type Adds struct {
 type Module struct {
 	Name     string `yaml:"name"`     // the short name; the manifest's name too
 	Manifest string `yaml:"manifest"` // under the scenario's directory
+	// Node is the edge the module's line in the node's file names: the node
+	// delivers the module there and does not run it. "" runs it on the node.
+	Node string `yaml:"node"`
 }
 
 // MCPURL is where a scenario's MCP server answers: the lab routes its host
@@ -133,7 +139,25 @@ type Step struct {
 	// JoinEdge is an edge joining with the code in the newest card that
 	// shows one, as the join command on the owner's computer would.
 	JoinEdge bool `yaml:"join_edge"`
+	// StartEdge runs the edge that joined beside the node, in the same
+	// process, as a leaf of the node's embedded server.
+	StartEdge bool `yaml:"start_edge"`
+	// EdgeLink cuts the edge's link (EdgeDown) or restores it (EdgeUp). A
+	// restore waits until the edge is linked again.
+	EdgeLink string `yaml:"edge_link"`
+	// EdgeEmit makes that many events on the edge, as one of its modules
+	// would.
+	EdgeEmit int `yaml:"edge_emit"`
+	// InstallModule installs a new build of a module the scenario lists, as
+	// the owner's install would, and waits for the node to take it.
+	InstallModule *Module `yaml:"install_module"`
 }
+
+// The two values of Step.EdgeLink.
+const (
+	EdgeDown = "down"
+	EdgeUp   = "up"
+)
 
 // Reply is the person replying to the newest bot message whose text holds
 // To, with the words Say.
@@ -196,6 +220,33 @@ type Facts struct {
 	Deleted         *int          `yaml:"deleted"`     // the person's messages the bot deleted so far
 	ModelSaw        *Text         `yaml:"model_saw"`   // everything a scripted model was sent so far
 	Card            *Text         `yaml:"card"`        // the messages showing buttons now
+	Edge            *EdgeFact     `yaml:"edge"`        // the edge beside the node; waited for
+}
+
+// EdgeFact checks the edge that runs beside the node. The edge works on its
+// own clock, so a facts step with an edge fact waits, within a limit, until
+// all of it holds.
+type EdgeFact struct {
+	Linked   *bool `yaml:"linked"`    // its link to the node is up
+	Held     *int  `yaml:"held"`      // events its own stream keeps
+	CoreHeld *int  `yaml:"core_held"` // its events the node's stream holds
+	// Running is the version of the module the edge runs, "" for none.
+	Running *RunningFact `yaml:"running"`
+	// Actual is what the edge says it runs, as the node reads it.
+	Actual *ActualFact `yaml:"actual"`
+}
+
+// RunningFact is the version of a module that runs on the edge.
+type RunningFact struct {
+	Module  string `yaml:"module"`
+	Version string `yaml:"version"`
+}
+
+// ActualFact is the edge's own report of a module (the actual key).
+type ActualFact struct {
+	Module  string `yaml:"module"`
+	Result  string `yaml:"result"`  // running, refused or removed
+	Version string `yaml:"version"` // "" is not checked
 }
 
 var nameRE = regexp.MustCompile(`^[a-z0-9-]+$`)
@@ -327,7 +378,39 @@ func (s Scenario) checkPaths() error {
 			return fmt.Errorf("page %s: %w", p.File, err)
 		}
 	}
-	for _, m := range s.Modules {
+	if err := s.checkModules(); err != nil {
+		return err
+	}
+	dirs := slices.Clone(s.Skills)
+	if s.Persona != PersonaDefault {
+		dirs = append(dirs, s.Persona)
+	}
+	for _, d := range dirs {
+		if err := inside(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkModules checks the modules a scenario installs from the start and
+// those its install_module steps install later.
+func (s Scenario) checkModules() error {
+	mods := slices.Clone(s.Modules)
+	for _, st := range s.Steps {
+		m := st.InstallModule
+		if m == nil {
+			continue
+		}
+		if m.Node != "" {
+			return fmt.Errorf("install_module %s: node is the place of a module listed in modules:, not of a new build", m.Name)
+		}
+		if !slices.ContainsFunc(s.Modules, func(l Module) bool { return l.Name == m.Name }) {
+			return fmt.Errorf("install_module %s: the module is not in the list of modules", m.Name)
+		}
+		mods = append(mods, *m)
+	}
+	for _, m := range mods {
 		if !nameRE.MatchString(m.Name) || m.Manifest == "" {
 			return fmt.Errorf("module %q needs a name and a manifest", m.Name)
 		}
@@ -337,14 +420,8 @@ func (s Scenario) checkPaths() error {
 		if _, err := os.Stat(filepath.Join(s.Dir, m.Manifest)); err != nil {
 			return fmt.Errorf("module %s: %w", m.Name, err)
 		}
-	}
-	dirs := slices.Clone(s.Skills)
-	if s.Persona != PersonaDefault {
-		dirs = append(dirs, s.Persona)
-	}
-	for _, d := range dirs {
-		if err := inside(d); err != nil {
-			return err
+		if m.Node != "" && !nameRE.MatchString(m.Node) {
+			return fmt.Errorf("module %s: node %q is not an edge's name", m.Name, m.Node)
 		}
 	}
 	return nil
@@ -387,6 +464,9 @@ func (s Scenario) checkSteps() error {
 		if st.Judge != "" && s.Model == ModelScripted {
 			return fmt.Errorf("step %d: judge has nothing to read on a scripted model", i+1)
 		}
+		if st.usesEdge() && !s.Edge {
+			return fmt.Errorf("step %d: an edge step needs edge: true", i+1)
+		}
 		canFail = canFail || st.Judge != "" || st.Language != "" || st.Facts != nil
 	}
 	if !canFail {
@@ -395,10 +475,15 @@ func (s Scenario) checkSteps() error {
 	return nil
 }
 
+// usesEdge reports whether the step acts on, or reads, the edge beside the node.
+func (st Step) usesEdge() bool {
+	return st.StartEdge || st.EdgeLink != "" || st.EdgeEmit != 0 || (st.Facts != nil && st.Facts.Edge != nil)
+}
+
 func (st Step) check() error {
 	set := 0
 	for _, on := range []bool{st.Say != "", st.Press != "", st.Judge != "", st.Language != "", st.Send != nil, st.Reply != nil, st.Adds != nil, st.Advance != nil, st.Reach != nil,
-		st.Facts != nil && !st.Facts.empty(), st.SignIn, st.JoinEdge} {
+		st.Facts != nil && !st.Facts.empty(), st.SignIn, st.JoinEdge, st.StartEdge, st.EdgeLink != "", st.EdgeEmit != 0, st.InstallModule != nil} {
 		if on {
 			set++
 		}
@@ -417,6 +502,12 @@ func (st Step) check() error {
 		return errors.New("adds needs say and then")
 	case st.Reach != nil && st.Reach.Journal.Tool == "":
 		return errors.New("reach needs journal.tool")
+	case st.EdgeLink != "" && st.EdgeLink != EdgeDown && st.EdgeLink != EdgeUp:
+		return fmt.Errorf("edge_link %q", st.EdgeLink)
+	case st.EdgeEmit < 0:
+		return errors.New("edge_emit counts events")
+	case st.InstallModule != nil && (!nameRE.MatchString(st.InstallModule.Name) || st.InstallModule.Manifest == ""):
+		return errors.New("install_module needs a name and a manifest")
 	case st.Send != nil && st.Send.Kind != KindDocument && st.Send.Kind != KindPhoto:
 		return fmt.Errorf("file kind %q", st.Send.Kind)
 	}
@@ -426,5 +517,5 @@ func (st Step) check() error {
 func (f *Facts) empty() bool {
 	return len(f.Journal) == 0 && len(f.NoJournal) == 0 && f.Questions == nil && f.MessageReplaced == "" && f.Question == nil &&
 		f.Reply == nil && f.History == nil && f.Memory == nil && f.Files == nil && f.Jobs == nil && f.Taken == nil && f.Replies == nil &&
-		f.Tainted == nil && f.ModelCalls == nil && len(f.Absent) == 0 && f.Deleted == nil && f.ModelSaw == nil && f.Card == nil
+		f.Tainted == nil && f.ModelCalls == nil && len(f.Absent) == 0 && f.Deleted == nil && f.ModelSaw == nil && f.Card == nil && f.Edge == nil
 }

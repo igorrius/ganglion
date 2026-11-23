@@ -76,10 +76,7 @@ func Run(ctx context.Context, roles []node.Role, b Bootstrap, logger *slog.Logge
 	i := New(ctx, b, logger)
 	do.OverrideValue(i, agent.RestartFunc(func() { cancel(node.ErrRestart) }))
 	if b.EdgeRole {
-		do.Override(i, EdgeHandler())
-		do.Override(i, func(do.Injector) (core.GiveUp, error) { return core.NoGiveUp, nil })
-		do.Override(i, func(do.Injector) (core.TurnHook, error) { return core.NoTurnHook, nil })
-		do.Override(i, EdgeComponents())
+		applyEdge(i)
 	}
 	defer func() {
 		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)

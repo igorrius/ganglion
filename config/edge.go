@@ -34,6 +34,16 @@ func EdgeOnly(roles []node.Role) bool {
 	return slices.Contains(roles, node.Edge) && !slices.Contains(roles, node.Core)
 }
 
+// applyEdge gives i the edge role's parts in place of the core's: the turn
+// handler of module cron jobs, no apology or typing, and the edge's
+// components.
+func applyEdge(i do.Injector) {
+	do.Override(i, EdgeHandler())
+	do.Override(i, func(do.Injector) (core.GiveUp, error) { return core.NoGiveUp, nil })
+	do.Override(i, func(do.Injector) (core.TurnHook, error) { return core.NoTurnHook, nil })
+	do.Override(i, EdgeComponents())
+}
+
 // edgeLeaf is the leaf setting of an edge's bus: its name as the domain and
 // the link from the settings. A link without its credentials file stops the
 // start: the edge would dial the core and be refused for ever.

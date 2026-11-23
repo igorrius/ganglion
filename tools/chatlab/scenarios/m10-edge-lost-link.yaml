@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m10-edge-lost-link
+why: >-
+  M10 check, P2 gate (R-EDGE-7, ADR-0115): an edge that runs beside the node keeps its events while its link is
+  down, and when the link is back the node has all of them, once. The edge joins with the card's code, runs as a
+  leaf of the node's own server, and its link is cut and restored.
+covers:
+  - bus/natsbus/**
+  - edge/**
+  - edgejoin/**
+  - config/edge.go
+  - config/lab_edge.go
+repeat: 1
+model: scripted
+edge: true
+script:
+  - {tool: edge.join, args: '{"name":"garage"}'}
+  - {say: "It waits for your press."}
+  - {say: "The card is waiting for your press."}
+steps:
+  - say: "Connect my computer as garage"
+  - press: Approve
+  - press: Approve
+  - join_edge: true
+  - start_edge: true
+  - facts:
+      edge: {linked: true, held: 0, core_held: 0}
+  # While the link is up the events reach the node as they are made.
+  - edge_emit: 3
+  - facts:
+      edge: {linked: true, held: 3, core_held: 3}
+  # While it is down the edge keeps them, and the node has none of them.
+  - edge_link: down
+  - edge_emit: 5
+  - facts:
+      edge: {linked: false, held: 8, core_held: 3}
+  # When it is back the node has all eight, none twice.
+  - edge_link: up
+  - facts:
+      edge: {linked: true, held: 8, core_held: 8}

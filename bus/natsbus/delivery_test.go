@@ -112,6 +112,24 @@ func TestEdgeTakesItsDelivery(t *testing.T) {
 	}
 }
 
+// A real module is megabytes, and the server asks the reader of such an
+// object for flow control: the edge's user may answer, or the read stalls
+// (#374, found when a lab edge took a module of 4.5 MB).
+func TestEdgeReadsALargeModule(t *testing.T) {
+	ctx := context.Background()
+	hub, edge := linkedEdge(t)
+	wasm := bytes.Repeat([]byte("0123456789abcdef"), 5<<16) // 5 MiB
+	if err := hub.PutModule(ctx, "big", "d1", wasm, []byte("name: big\n")); err != nil {
+		t.Fatal(err)
+	}
+	short, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	got, _, err := edge.GetModule(short, "big", "d1", 8<<20)
+	if err != nil || !bytes.Equal(got, wasm) {
+		t.Fatalf("GetModule of %d bytes = %d bytes, %v", len(wasm), len(got), err)
+	}
+}
+
 // What e1's user may not do of delivery is refused by the core's server:
 // watching another edge's keys, writing a desired key or another edge's
 // actual key, writing a module's file.

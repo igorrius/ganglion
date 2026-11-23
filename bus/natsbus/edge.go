@@ -189,6 +189,32 @@ func (b *Bus) EdgeHealth(ctx context.Context) EdgeHealth {
 	return h
 }
 
+// EventsOf is how many events of edge this bus's EVENTS stream holds: on
+// the core, the copies it has made of the edge's stream; on the edge, its
+// own events. A lab and a status line read it; it counts nothing else.
+func (b *Bus) EventsOf(ctx context.Context, edge string) (uint64, error) {
+	if b.js == nil {
+		return 0, bus.ErrNotConnected
+	}
+	if _, err := bus.Telemetry(edge); err != nil { // the same token check
+		return 0, err
+	}
+	filter := "g.ev." + edge + ".>"
+	s, err := b.js.Stream(ctx, bus.StreamEvents)
+	if err != nil {
+		return 0, fmt.Errorf("natsbus: events of %s: %w", edge, err)
+	}
+	info, err := s.Info(ctx, jetstream.WithSubjectFilter(filter))
+	if err != nil {
+		return 0, fmt.Errorf("natsbus: events of %s: %w", edge, err)
+	}
+	var n uint64
+	for _, c := range info.State.Subjects {
+		n += c
+	}
+	return n, nil
+}
+
 // PublishTelemetry sends an edge's snapshot to g.tel.<edge> over plain
 // NATS (R-OBS-9): nothing keeps it, and none goes out while the link is
 // down.
