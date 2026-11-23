@@ -115,7 +115,8 @@ type EdgeSource struct {
 	Idle time.Duration
 }
 
-// EdgeSources reports each sourced edge, in the order they were added.
+// EdgeSources reports each sourced edge, in name order: the server gives
+// a stream's sources in no fixed order.
 func (b *Bus) EdgeSources(ctx context.Context) ([]EdgeSource, error) {
 	if b.nc == nil {
 		return nil, bus.ErrNotConnected
@@ -139,6 +140,7 @@ func (b *Bus) EdgeSources(ctx context.Context) ([]EdgeSource, error) {
 		}
 		out = append(out, EdgeSource{Edge: edge, Lag: si.Lag, Idle: si.Active})
 	}
+	slices.SortFunc(out, func(a, b EdgeSource) int { return strings.Compare(a.Edge, b.Edge) })
 	return out, nil
 }
 
