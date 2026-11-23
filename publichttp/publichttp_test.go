@@ -189,3 +189,49 @@ func TestBusyAddressFailsRun(t *testing.T) {
 		t.Fatal("Run on a busy address returned nil")
 	}
 }
+
+// A stream route is not counted against MaxInFlight, so long tunnels cannot
+// starve the short routes; the short routes still hit their limit, and the
+// stream's request ends when the listener stops (ADR-0114).
+func TestStreamRoutesAreNotCountedAndEndWithTheListener(t *testing.T) {
+	cfg := DefaultConfig("127.0.0.1:0")
+	cfg.MaxInFlight = 1
+	l, err := New(cfg, slog.New(slog.DiscardHandler), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	open, ended := make(chan struct{}, 8), make(chan struct{}, 8)
+	l.HandleStream("/s", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		open <- struct{}{}
+		<-r.Context().Done()
+		ended <- struct{}{}
+	}))
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- l.Run(ctx) }()
+	base := "http://" + l.Addr(t.Context())
+	for range 3 { // more streams than MaxInFlight
+		resp, err := http.Get(base + "/s") //nolint:noctx // a test against its own listener
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		<-open
+	}
+	if code, _ := get(t, base+HealthPath); code != http.StatusOK {
+		t.Fatalf("open streams starved a short route: %d", code)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		select {
+		case <-ended:
+		case <-time.After(5 * time.Second):
+			t.Fatal("a stream's request did not end with the listener")
+		}
+	}
+}

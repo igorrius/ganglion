@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/igorrius/ganglion/bus"
@@ -132,4 +133,19 @@ func (c Config) checkChain() error {
 		return fmt.Errorf("natsbus: an external server takes credentials or the node's trust chain, not both")
 	}
 	return nil
+}
+
+// WebSocketAddr is the loopback host:port of the edges' entry (ADR-0114),
+// the address the public listener proxies `/bus` to. It is "" unless the
+// embedded server runs with a chain and Config.WebSocket: with no chain,
+// a locked store or an external server there is nothing to reach.
+func (b *Bus) WebSocketAddr() string {
+	if b.srv == nil || b.cfg.Chain == nil || !b.cfg.WebSocket {
+		return ""
+	}
+	u, err := url.Parse(b.srv.WebsocketURL())
+	if err != nil {
+		return ""
+	}
+	return u.Host
 }

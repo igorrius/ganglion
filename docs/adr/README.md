@@ -119,6 +119,7 @@ considered, how they compare, the decision and its consequences. See
 | [0111](0111-building-a-module-asks-once-at-the-install.md) | Build modules without a press on the way, and ask once, at the install, for every module and link of the request | Accepted | 2026-11-22 |
 | [0112](0112-a-build-is-quiet-until-the-install-window.md) | Keep a module build quiet until the install window: no text while a build is awaited, one card per module | Accepted | 2026-11-22 |
 | [0113](0113-the-embedded-bus-runs-in-operator-mode-and-adopts-its-store-into-the-network-account.md) | Run the embedded bus in operator mode from the vault's chain, move the existing store into the network account, and make an external server's chain opt-in | Accepted | 2026-11-23 |
+| [0114](0114-the-public-listener-proxies-the-buss-websocket-and-the-server-checks-the-jwt.md) | Proxy `/bus` from the public listener to the embedded server's loopback WebSocket; the server checks the JWT, the proxy bounds what reaches it | Accepted | 2026-11-23 |
 
 Open questions that will become ADRs are listed in
 [spec section 11](../spec.md#11-open-decisions).

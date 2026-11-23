@@ -69,5 +69,8 @@ func withChain(ctx context.Context, cfg *natsbus.Config, b Bootstrap, v *vault.V
 		return err
 	}
 	cfg.Chain = c
+	// The edges' entry is opened only for an embedded server that has a
+	// public listener to be reached through (ADR-0114).
+	cfg.WebSocket = cfg.Mode == bus.ModeEmbedded && httpOn(b)
 	return nil
 }
