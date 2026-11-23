@@ -91,7 +91,9 @@ fn serve(h: &dyn Host, req: &Request) -> Response {
                 .first()
                 .and_then(|id| h.cell_get(id))
                 .filter(|(v, _)| !v.is_null());
-            let data = logic::snapshot(&settings(h), &load(h), current, h.now_unix());
+            let (cfg, mut state, now_s) = (settings(h), load(h), h.now_unix());
+            state.trim(&cfg, now_s);
+            let data = logic::snapshot(&cfg, &state, current, now_s);
             Response::new(
                 200,
                 "application/json; charset=utf-8",
@@ -291,6 +293,17 @@ mod tests {
         let data: Value = serde_json::from_str(&body(&get(&f, "/api/data"))).unwrap();
         assert!(data["current"].is_null());
         assert_eq!(data["points"], json!([]));
+    }
+
+    #[test]
+    fn the_data_leaves_out_readings_older_than_the_window_without_storing_the_trim() {
+        let f = fake();
+        assert!(is_ok(&event(&f, "reading", json!({"value": 5}))));
+        let stored = f.state.borrow().get("state").cloned();
+        f.now.set(NOW + 25 * 3600);
+        let data: Value = serde_json::from_str(&body(&get(&f, "/api/data"))).unwrap();
+        assert_eq!(data["points"], json!([]));
+        assert_eq!(f.state.borrow().get("state").cloned(), stored);
     }
 
     #[test]

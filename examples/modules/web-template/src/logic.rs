@@ -104,10 +104,19 @@ pub fn on_reading(event: &Value, settings: &Settings, state: &mut State, now_s: 
         return;
     }
     state.points.push(Point { t: now_s, v });
-    let oldest = now_s - settings.keep_hours * 3600;
-    state.points.retain(|p| p.t >= oldest);
-    let over = state.points.len().saturating_sub(settings.max_points);
-    state.points.drain(..over);
+    state.trim(settings, now_s);
+}
+
+impl State {
+    /// Drops the readings older than `keep_hours` and any over `max_points`
+    /// (the oldest first). A request trims what it shows too, so a feed that
+    /// stopped does not leave an old chart on the page.
+    pub fn trim(&mut self, settings: &Settings, now_s: i64) {
+        let oldest = now_s - settings.keep_hours * 3600;
+        self.points.retain(|p| p.t >= oldest);
+        let over = self.points.len().saturating_sub(settings.max_points);
+        self.points.drain(..over);
+    }
 }
 
 /// A notice reached the `notices` port: `{"text": <string>, "at": <string>}`
@@ -197,6 +206,18 @@ mod tests {
         assert_eq!(v, vec![3.0, 4.0, 5.0], "the oldest went first");
         on_reading(&reading(9.0), &s, &mut st, NOW + 7200);
         assert_eq!(st.points.len(), 1, "an hour is gone");
+    }
+
+    #[test]
+    fn trimming_on_read_drops_old_readings_after_the_feed_stopped() {
+        let s = Settings::default();
+        let mut st = State::default();
+        on_reading(&reading(1.0), &s, &mut st, NOW);
+        on_reading(&reading(2.0), &s, &mut st, NOW + 3600);
+        st.trim(&s, NOW + 24 * 3600 + 60);
+        assert_eq!(st.points.len(), 1, "the first is over a day old");
+        st.trim(&s, NOW + 49 * 3600);
+        assert!(st.points.is_empty());
     }
 
     #[test]
