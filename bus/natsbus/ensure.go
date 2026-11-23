@@ -50,7 +50,7 @@ func (b *Bus) Ensure(ctx context.Context) error {
 		return fmt.Errorf("natsbus: bucket %s: %w", bus.BucketCells, err)
 	}
 	for _, cfg := range streams {
-		if _, err := b.js.CreateOrUpdateStream(ctx, cfg); err != nil {
+		if err := b.ensureStream(ctx, cfg); err != nil {
 			return fmt.Errorf("natsbus: stream %s: %w", cfg.Name, err)
 		}
 	}

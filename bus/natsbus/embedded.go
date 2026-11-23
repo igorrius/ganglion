@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/igorrius/ganglion/bus"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats-server/v2/server"
 )
@@ -44,6 +46,14 @@ func (b *Bus) startServer(cfg Config) error {
 	if cfg.testListen {
 		opts.DontListen, opts.Host, opts.Port = false, loopback, -1
 	}
+	if cfg.testLeafPort != 0 {
+		opts.LeafNode.Host, opts.LeafNode.Port = "127.0.0.1", cfg.testLeafPort
+	}
+	if cfg.Leaf != nil {
+		if err := leafOptions(opts, cfg.Leaf); err != nil {
+			return err
+		}
+	}
 	if cfg.Chain != nil {
 		if err := adoptGlobalStore(dir, cfg.Chain.AccountPublicKey()); err != nil {
 			return err
@@ -67,6 +77,28 @@ func (b *Bus) startServer(cfg Config) error {
 		return fmt.Errorf("natsbus: server: not ready after %s", cfg.StartTimeout)
 	}
 	b.srv = srv
+	return nil
+}
+
+// leafOptions makes opts an edge's leaf node (ADR-0114): the JetStream
+// domain is the edge's name, and the remote is the core's leaf listener.
+// The edge's events are not exported as plain messages: they travel only
+// through the core's stream, which sources the edge's, so a message that
+// arrives by both ways cannot be stored twice.
+func leafOptions(opts *server.Options, l *Leaf) error {
+	opts.JetStreamDomain = l.Domain
+	if l.URL == "" {
+		return nil
+	}
+	u, err := url.Parse(l.URL)
+	if err != nil || u.Hostname() == "" {
+		return fmt.Errorf("natsbus: the core's leaf address is not an address")
+	}
+	opts.LeafNode.Remotes = []*server.RemoteLeafOpts{{
+		URLs:        []*url.URL{u},
+		Credentials: l.CredsFile,
+		DenyExports: []string{bus.SubjectsEvents},
+	}}
 	return nil
 }
 
