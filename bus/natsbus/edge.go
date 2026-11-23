@@ -35,6 +35,8 @@ func edgeDeliver(edge string) string { return "g.src." + edge }
 // capped in size; the core's EVENTS stream keeps the edges it sources,
 // which Ensure must not drop (ADR-0115).
 func (b *Bus) ensureStream(ctx context.Context, cfg jetstream.StreamConfig) error {
+	b.sources.Lock()
+	defer b.sources.Unlock()
 	if b.IsEdge() {
 		cfg.MaxBytes = edgeStreamMaxBytes
 		cfg.Discard = jetstream.DiscardOld
@@ -75,6 +77,8 @@ func (b *Bus) changeSources(ctx context.Context, edge string, add bool) error {
 	if err := bus.CheckEdgeName(edge); err != nil {
 		return err
 	}
+	b.sources.Lock()
+	defer b.sources.Unlock()
 	s, err := b.js.Stream(ctx, bus.StreamEvents)
 	if err != nil {
 		return fmt.Errorf("natsbus: stream %s: %w", bus.StreamEvents, err)

@@ -126,7 +126,7 @@ A1, B1, C1, D2, E1.
   subscribe `$JS.<edge>.API.>`. Each link whose one end is a module on the
   edge and the other a module on the core adds: for a call from the edge,
   publish `g.rpc.core.<module>.<port>`; for a call to the edge, subscribe
-  `g.rpc.<edge>.<module>.<port>` and the right to answer. Nothing else is
+  `g.rpc.<edge>.<module>.<port>`. Nothing else is
   derived. The source of an edge uses `DeliverPrefix` `g.src.<edge>`, so an
   edge cannot write into another's deliveries (#369). Desired state and
   module objects, which only the core writes, are added by the work that

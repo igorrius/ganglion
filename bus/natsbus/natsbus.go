@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/igorrius/ganglion/bus"
@@ -32,6 +33,11 @@ type Bus struct {
 	js      jetstream.JetStream
 	tmpDir  string // a store folder this Bus made and removes
 	metrics *metrics
+
+	// sources serialises every change of the EVENTS stream's configuration
+	// (ensureStream, changeSources): each reads it and writes it back, so two
+	// at once would drop each other's edge (#369).
+	sources sync.Mutex
 }
 
 // Open starts the embedded server or connects to the external one, as
