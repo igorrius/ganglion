@@ -15,6 +15,7 @@ import (
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/edge"
 	"github.com/igorrius/ganglion/modhost"
+	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/node"
 	"github.com/igorrius/ganglion/queue/sqlqueue"
 	"github.com/igorrius/ganglion/schedule"
@@ -98,6 +99,7 @@ func EdgeComponents() do.Provider[[]node.Component] {
 			sqlqueue.Pruner{Queue: q, Every: pruneEvery, Log: log},
 			do.MustInvoke[*schedule.Scheduler](i),
 			pub,
+			edgeConverger(i, nb, host),
 		}
 		return append(comps, edgeRenewer(b, nb, log)...), nil
 	}
@@ -120,6 +122,28 @@ func edgeRenewer(b Bootstrap, nb *natsbus.Bus, log *slog.Logger) []node.Componen
 		file = filepath.Join(filepath.Dir(b.DB), edgeCredsFile)
 	}
 	return []node.Component{edge.NewRenewer(addr, file, nb.RedialLeaf, log)}
+}
+
+// edgeConverger is the edge's delivery (R-EDGE-6, ADR-0117): it watches
+// the edge's desired keys at the core and runs what they say, once checked.
+func edgeConverger(i do.Injector, nb *natsbus.Bus, host *modhost.Host) *edge.Converger {
+	b := do.MustInvoke[Bootstrap](i)
+	return &edge.Converger{
+		Edge: b.Settings.Edge.Name,
+		Watch: func(ctx context.Context, name string, fn func(edge.Update)) (func() error, error) {
+			return nb.WatchDesired(ctx, name, func(u natsbus.DesiredUpdate) {
+				fn(edge.Update{Edge: u.Edge, Module: u.Module, Value: u.Value, Deleted: u.Deleted})
+			})
+		},
+		Fetch:  nb.GetModule,
+		Report: nb.PutActual,
+		Linked: func(ctx context.Context) bool { return nb.EdgeHealth(ctx).Linked },
+		Host:   host,
+		Store:  do.MustInvoke[*modstore.Store](i),
+		Lines:  modulesFile(i),
+		Now:    time.Now,
+		Log:    do.MustInvoke[*slog.Logger](i),
+	}
 }
 
 // edgeModules are the modules an edge runs, for its telemetry.

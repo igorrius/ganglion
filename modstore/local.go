@@ -424,6 +424,23 @@ func sortedKeys[V any](m map[string]V) []string {
 // then, in one transaction, the old active becomes previous and the one
 // before it retired with its files removed (its journal row stays).
 func (s *Store) InstallLocal(ctx context.Context, b Build, sha string) (Outcome, error) {
+	return s.installBuild(ctx, b, sha, true)
+}
+
+// InstallDelivered is InstallLocal for an edge (R-EDGE-6, ADR-0117): the
+// build the core delivered, whose digest the edge has checked against the
+// desired key. The core checked its links and its version at its own
+// install; an edge has neither its links nor the module's history, and a
+// rollback on the core delivers a lower version on purpose, so neither is
+// checked again. A build the edge holds as its previous version becomes
+// active again with its files.
+func (s *Store) InstallDelivered(ctx context.Context, b Build, sha string) (Outcome, error) {
+	return s.installBuild(ctx, b, sha, false)
+}
+
+// installBuild is InstallLocal; ours says whether the links and the version are
+// the node's own to check.
+func (s *Store) installBuild(ctx context.Context, b Build, sha string, ours bool) (Outcome, error) {
 	if Digest(b.Wasm, b.Manifest) != sha {
 		return Outcome{}, ErrBuildMismatch
 	}
@@ -433,11 +450,13 @@ func (s *Store) InstallLocal(ctx context.Context, b Build, sha string) (Outcome,
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if why, detail, err := s.checkLinks(ctx, b.Module, m); err != nil || why != "" {
-		return Outcome{Module: b.Module, Result: ResultRefused, Reason: why + ": " + detail}, err
-	}
-	if why, err := s.checkVersion(ctx, b.Module, sha, m.Version); err != nil || why != "" {
-		return Outcome{Module: b.Module, Result: ResultRefused, Reason: why}, err
+	if ours {
+		if why, detail, err := s.checkLinks(ctx, b.Module, m); err != nil || why != "" {
+			return Outcome{Module: b.Module, Result: ResultRefused, Reason: why + ": " + detail}, err
+		}
+		if why, err := s.checkVersion(ctx, b.Module, sha, m.Version); err != nil || why != "" {
+			return Outcome{Module: b.Module, Result: ResultRefused, Reason: why}, err
+		}
 	}
 	from := ""
 	if cur, err := s.versions(ctx, b.Module, StateActive); err != nil {

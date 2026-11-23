@@ -59,6 +59,9 @@ type Config struct {
 	// the tests that join an edge to this server; the link transport
 	// itself is the public listener's (R-EDGE-4).
 	testLeafPort int
+	// testDeliveryMaxBytes is the delivery bucket's cap in place of
+	// deliveryMaxBytes, for the test that fills it.
+	testDeliveryMaxBytes int64
 	// StartTimeout is how long the embedded server may take to be ready,
 	// and the connection to be made.
 	StartTimeout time.Duration

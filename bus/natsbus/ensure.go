@@ -18,6 +18,16 @@ const (
 	// streamDuplicates is the window in which a repeated Nats-Msg-Id is
 	// dropped.
 	streamDuplicates = 2 * time.Minute
+	// deliveryHistory is how many values the delivery bucket keeps per
+	// key: what an edge was told and said lately, for the log of a change.
+	deliveryHistory = 8
+	// deliveryMaxValue is the largest value the delivery bucket takes: an
+	// edge reads no larger desired value (edge.MaxDesired).
+	deliveryMaxValue = 64 << 10
+	// deliveryMaxBytes caps the delivery bucket. A full bucket refuses new
+	// writes: an edge that floods its actual keys fills this, never the
+	// core's disk (ADR-0117).
+	deliveryMaxBytes = 64 << 20
 )
 
 // streams are the streams the bus keeps, by name and subject.
@@ -53,6 +63,41 @@ func (b *Bus) Ensure(ctx context.Context) error {
 		if err := b.ensureStream(ctx, cfg); err != nil {
 			return fmt.Errorf("natsbus: stream %s: %w", cfg.Name, err)
 		}
+	}
+	if b.IsEdge() {
+		// An edge reads the core's delivery bucket and files; a bucket of
+		// its own would take the actual keys it writes for the core.
+		return nil
+	}
+	return b.ensureDelivery(ctx)
+}
+
+// deliveryCap is the delivery bucket's cap: deliveryMaxBytes, or a test's
+// smaller one.
+func (b *Bus) deliveryCap() int64 {
+	if b.cfg.testDeliveryMaxBytes > 0 {
+		return b.cfg.testDeliveryMaxBytes
+	}
+	return deliveryMaxBytes
+}
+
+// ensureDelivery creates the delivery bucket and the modules' Object Store
+// (ADR-0117).
+func (b *Bus) ensureDelivery(ctx context.Context) error {
+	if _, err := b.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:       bus.BucketDelivery,
+		History:      deliveryHistory,
+		MaxValueSize: deliveryMaxValue,
+		MaxBytes:     b.deliveryCap(),
+		Storage:      jetstream.FileStorage,
+	}); err != nil {
+		return fmt.Errorf("natsbus: bucket %s: %w", bus.BucketDelivery, err)
+	}
+	if _, err := b.js.CreateOrUpdateObjectStore(ctx, jetstream.ObjectStoreConfig{
+		Bucket:  bus.ObjectModules,
+		Storage: jetstream.FileStorage,
+	}); err != nil {
+		return fmt.Errorf("natsbus: object store %s: %w", bus.ObjectModules, err)
 	}
 	return nil
 }

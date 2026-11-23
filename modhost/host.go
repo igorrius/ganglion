@@ -125,6 +125,9 @@ type Deps struct {
 	// Calls is the bus's services and requests, for the served ports and the
 	// call host function (R-BUS-6); nil serves nothing and finds nobody.
 	Calls Calls
+	// Delivery sends a module whose line names an edge to that edge
+	// (R-EDGE-6); nil on an edge, or on a core with no bus for edges.
+	Delivery Delivery
 	// Secrets gives each module its own secret source; Forget drops a
 	// removed module's stored secrets.
 	Secrets SecretsFor
@@ -168,6 +171,9 @@ type Host struct {
 	unread  time.Time            // when Start could not read the store or the settings; zero when it could
 	stops   map[string]bool      // the builds (sha) whose chain stopped past maxDepth, told once
 	broken  map[string]time.Time // the links seen broken, by their words, since when (/status)
+	edges   map[string]string    // module → the edge its line sends it to (delivery.go)
+	// undelivered are the edge modules whose last delivery failed.
+	undelivered map[string]bool
 
 	episodeMu sync.Mutex                 // held across the store's calls on episodes, so the cache and the store change together
 	episodes  map[string]map[Kind]string // module → kind → the sha of its open episode, a cache of the store's
@@ -189,7 +195,7 @@ func New(d Deps) *Host {
 		d.Calls = noCalls{}
 	}
 	h := &Host{d: d, in: newInstruments(), links: newLinkSet(), running: map[string]*loaded{}, stopped: map[string]stop{},
-		off: map[string]bool{}, fails: map[string][]time.Time{}, stops: map[string]bool{}, episodes: map[string]map[Kind]string{}, clean: map[string]bool{}}
+		off: map[string]bool{}, fails: map[string][]time.Time{}, stops: map[string]bool{}, edges: map[string]string{}, undelivered: map[string]bool{}, episodes: map[string]map[Kind]string{}, clean: map[string]bool{}}
 	h.tools.Store(&[]tool.Handler{})
 	return h
 }
@@ -213,6 +219,13 @@ func (h *Host) Start(ctx context.Context) {
 	}
 	defer h.SyncLinks(ctx)  // after the lock is let go
 	defer h.checkLinks(ctx) // likewise, and before the consumers
+	defer func() {          // likewise: the bus may be slow
+		for _, a := range actives {
+			if h.d.Delivery != nil {
+				h.deliverOne(ctx, a.Module, &a, settingOf(mods, a.Module))
+			}
+		}
+	}()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, a := range actives {
@@ -234,6 +247,7 @@ func (h *Host) Start(ctx context.Context) {
 func (h *Host) Reload(ctx context.Context, module string) error {
 	err := h.reload(ctx, module)
 	h.SyncLinks(ctx) // whatever happened: the links follow the modules that run
+	h.toEdge(ctx, module)
 	return err
 }
 
@@ -286,6 +300,17 @@ func settingOf(mods []settings.Module, module string) settings.Module {
 // apply loads module from a, or stops it when a is nil (not active) or the
 // settings turn it off. It holds h.mu.
 func (h *Host) apply(ctx context.Context, module string, a *modstore.Active, s settings.Module) error {
+	e := h.edgeOf(s)
+	if a == nil || s.Off {
+		e = "" // nothing runs anywhere: it is off or gone here as well
+	}
+	h.placeElsewhere(ctx, module, e)
+	if e != "" { // it runs on its edge; toEdge sends it there
+		if err := h.d.Jobs.DeleteModule(ctx, module); err != nil {
+			return fmt.Errorf("modhost: %w", err)
+		}
+		return nil
+	}
 	if a == nil || s.Off {
 		h.unload(ctx, module)
 		h.setStopped(module, stop{}, a != nil)

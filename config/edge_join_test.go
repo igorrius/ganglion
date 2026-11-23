@@ -4,8 +4,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/edgejoin"
 	"github.com/igorrius/ganglion/publichttp"
 )
@@ -41,5 +44,37 @@ func TestEdgeJoinRoutesFollowTheBusEntry(t *testing.T) {
 		if got := routeStatus(t, "127.0.0.1:8222", nil, path); got != http.StatusNotFound {
 			t.Errorf("%s with no service answered %d, want 404", path, got)
 		}
+	}
+}
+
+// Every edge the core joins may take module deliveries: its JWT carries
+// the delivery permissions of its own name, and none of another edge's.
+func TestJoinedEdgesTakeDeliveries(t *testing.T) {
+	n, err := edgeNeeds("home")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := natsbus.EdgePermissions("home", n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := natsbus.DeliveryPermissions("home")
+	for _, s := range want.Publish {
+		if !slices.Contains(p.Publish, s) {
+			t.Errorf("publish %s is missing", s)
+		}
+	}
+	for _, s := range want.Subscribe {
+		if !slices.Contains(p.Subscribe, s) {
+			t.Errorf("subscribe %s is missing", s)
+		}
+	}
+	for _, s := range append(slices.Clone(p.Publish), p.Subscribe...) {
+		if strings.Contains(s, ".garage.") || strings.Contains(s, "_garage") {
+			t.Errorf("%s names another edge", s)
+		}
+	}
+	if slices.Contains(p.Subscribe, "_INBOX.>") {
+		t.Error("the edge may read every reply in the account")
 	}
 }

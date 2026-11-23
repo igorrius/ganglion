@@ -602,34 +602,45 @@ Escalation to the model: Deye or backend auth error, a backend not
 converging desired and reported state, no data for over an hour. Shadow mode
 is simply the `virtual` backend.
 
-## Module rollout via desired state (P2)
+## A module update on an edge (P2)
+
+The owner installs a build, or rolls it back with `/modules rollback`, of a
+module whose line says `node: <edge>`. The core's store keeps the versions as
+for any module; the core does not run it.
+([ADR-0117](../adr/0117-the-core-keeps-edge-modules-in-its-store-and-the-edge-pulls-and-checks-what-it-runs.md))
 
 ```mermaid
 sequenceDiagram
-    participant Core as Core
-    participant OS as NATS Object Store
-    participant KV as NATS KV
-    participant E as Edge runner
-    participant Old as Module v2
-    participant New as Module v3
+    participant O as Owner
+    participant C as Core: store and module host
+    participant D as delivery KV, modules Object Store
+    participant E as Edge converger
+    participant Old as Running version
+    participant New as Throwaway instance
 
-    Core->>OS: put modules/demo-monitor v3 .wasm
-    Core->>KV: modules.demo-monitor = version, sha256, signature, manifest
-    Core->>KV: nodes.edge-home.desired = v3
-    KV-->>E: watch fires
-    E->>OS: download v3
-    E->>E: verify sha256 and owner signature
-    E->>New: init, health
+    O->>C: install, or /modules rollback
+    C->>D: put the files modules/module.digest (wasm, manifest)
+    C->>D: put desired.edge.module = version, sha256, config
+    D-->>E: the watch of desired.edge.* fires
+    E->>E: the key is its own edge, the value well formed
+    E->>D: fetch both files (16 MiB each at most)
+    E->>E: sha256 over both files equals the key's
+    E->>New: health trigger
     alt health ok
-        E->>New: take over triggers
-        E->>Old: drain, then unload
-        E->>KV: nodes.edge-home.actual = v3
-    else health fails
+        E->>E: install, write the module's line
+        E->>Old: reload: unload, load the new one, init
+        E->>D: put actual.edge.module = running, version, sha256
+    else digest, health or init fails
         E->>New: discard
-        E->>KV: nodes.edge-home.actual = v2, error
+        E->>Old: keeps running (a failed init: rolled back to it)
+        E->>D: put actual.edge.module = refused, reason
     end
-    Note over Core,KV: rollback means writing v2 back to desired
+    D-->>C: /modules reads actual: on the edge, what runs there
+    Note over C,E: rollback is the store's previous version written to desired
 ```
+
+Module signing with the owner's key (spec 9.3) is not part of this flow yet:
+the digest is trusted because only the core writes `desired`.
 
 ## Escalating a dangerous action (P2–P3)
 

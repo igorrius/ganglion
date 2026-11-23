@@ -66,7 +66,7 @@ func (h *Host) Local(ctx context.Context) ([]modstore.LocalModule, error) {
 	}
 	out := make([]modstore.LocalModule, 0, len(names))
 	for _, n := range names {
-		out = append(out, modstore.LocalModule{Name: modstore.ShortName(n), State: h.runState(n), Version: activeVersion(by[n])})
+		out = append(out, modstore.LocalModule{Name: modstore.ShortName(n), State: h.runState(n), Version: activeVersion(by[n]), Edge: h.edgeRun(ctx, n, by[n])})
 	}
 	return out, nil
 }
@@ -82,6 +82,9 @@ func (h *Host) runState(module string) modstore.RunState {
 	}
 	h.stateMu.Lock()
 	defer h.stateMu.Unlock()
+	if _, ok := h.edges[module]; ok {
+		return modstore.RunEdge
+	}
 	switch st, stopped := h.stopped[module]; {
 	case stopped && st.reason == ReasonCrashloop:
 		return modstore.RunCrashloop
@@ -131,7 +134,7 @@ func (h *Host) Card(ctx context.Context, name string) (modstore.Card, error) {
 	if err != nil {
 		return modstore.Card{}, fmt.Errorf("modhost: %w", err)
 	}
-	c := modstore.Card{Name: modstore.ShortName(module), State: h.runState(module), Version: activeVersion(vs), Journal: journal,
+	c := modstore.Card{Name: modstore.ShortName(module), State: h.runState(module), Version: activeVersion(vs), Edge: h.edgeRun(ctx, module, vs), Journal: journal,
 		Health: h.health(ctx, module)}
 	if runs, err := h.d.Store.Runs(ctx, module, cardRuns); err != nil {
 		h.d.Log.Warn("modhost: the card's runs cannot be read", "module", module, "err", err)

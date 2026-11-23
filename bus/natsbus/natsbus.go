@@ -78,6 +78,11 @@ func (b *Bus) connect() error {
 		nats.DisconnectErrHandler(b.onDisconnect),
 		nats.ReconnectHandler(b.onReconnect),
 	}
+	if b.cfg.Leaf != nil {
+		// An edge's replies come back under its own prefix, so its user is
+		// let read its own and no one else's (ADR-0117).
+		opts = append(opts, nats.CustomInboxPrefix(EdgeInbox(b.cfg.Leaf.Domain)))
+	}
 	if b.cfg.Chain != nil {
 		creds, err := b.cfg.Chain.coreCreds()
 		if err != nil {
@@ -104,6 +109,9 @@ func (b *Bus) connect() error {
 	b.nc, b.js = nc, js
 	return nil
 }
+
+// EdgeInbox is the prefix of an edge's reply subjects: _INBOX_<edge>.
+func EdgeInbox(edge string) string { return "_INBOX_" + edge }
 
 // onDisconnect counts and logs a lost connection; the client reconnects on
 // its own.

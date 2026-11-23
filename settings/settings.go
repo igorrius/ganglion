@@ -284,6 +284,18 @@ type Module struct {
 	// DestinationOwner or a name under destinations; missing means the
 	// owner alone (R-RUN-18).
 	NotifyTo []string `yaml:"notify_to"`
+	// Node is the edge the module runs on (R-EDGE-6): the core delivers it
+	// there and does not run it itself. "" and "core" run it on this node.
+	Node string `yaml:"node"`
+}
+
+// OnEdge is the edge the module's line sends it to; "" when it runs on the
+// core.
+func (m Module) OnEdge() string {
+	if m.Node == bus.CoreNode {
+		return ""
+	}
+	return m.Node
 }
 
 // DestinationOwner is the built-in destination: the private chat of a

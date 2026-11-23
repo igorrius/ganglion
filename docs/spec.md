@@ -2509,7 +2509,12 @@ Edges ([ADR-0109](adr/0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-
   desired state: the `.wasm` and manifest in the `modules` Object Store,
   `desired.<edge>.<module>` with version and SHA-256, `actual.<edge>.<module>`
   written back after `init` and `health`; a failed health keeps the old
-  version; rollback writes the previous version to `desired`.
+  version; rollback writes the previous version to `desired`. The core
+  keeps the module's versions in its own store and does not run it; the
+  KV bucket is `delivery` in the core's JetStream domain `core`; the edge
+  checks the build's digest (over the `.wasm` and the manifest) against
+  the desired value before it runs anything, and refuses a key of another
+  edge ([ADR-0117](adr/0117-the-core-keeps-edge-modules-in-its-store-and-the-edge-pulls-and-checks-what-it-runs.md)).
 - **R-EDGE-7.** `--roles edge` runs a leaf with JetStream in its own domain,
   the module host and the loopback HTTP listener; no Telegram, agent or
   model. Without a link its modules keep running and its events are kept;

@@ -30,13 +30,19 @@ func EdgeJoin() do.Provider[*edgejoin.Service] {
 		}
 		return edgejoin.New(edgejoin.Config{
 			Chain: nb.Chain(), Bus: nb, Store: do.MustInvoke[*vault.Vault](i).Internal(),
-			// No module is placed on an edge yet (#323 fills this from the node's file).
-			Needs:  func(string) (natsbus.EdgeNeeds, error) { return natsbus.EdgeNeeds{}, nil },
+			Needs:  edgeNeeds,
 			Joined: do.MustInvoke[edgeadmin.Notice](i).Joined,
 			// BusURL stays empty: the edge derives its bus address from the one it joined at.
 			BusURL: "",
 		}), nil
 	}
+}
+
+// edgeNeeds is what every edge's user is given beyond its own subjects:
+// module delivery (R-EDGE-6, ADR-0117), so a module placed on it after it
+// joined reaches it without a new JWT.
+func edgeNeeds(edge string) (natsbus.EdgeNeeds, error) {
+	return natsbus.EdgeNeeds{Extra: natsbus.DeliveryPermissions(edge)}, nil
 }
 
 // EdgeNotice provides the notice every admin gets when an edge joins.

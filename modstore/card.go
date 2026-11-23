@@ -11,13 +11,37 @@ const (
 	RunOff       RunState = "off"       // the owner turned it off
 	RunCrashloop RunState = "crashloop" // the node turned it off after five failures within an hour
 	RunStopped   RunState = "stopped"   // it should run and does not: see /status
+	RunEdge      RunState = "edge"      // it runs on an edge: see LocalModule.Edge
 )
+
+// What an edge says of a module delivered to it (R-EDGE-6).
+const (
+	EdgeRunning     = "running"     // it runs the version it was told
+	EdgeRefused     = "refused"     // the version it was told did not pass; Version is what runs
+	EdgeRemoved     = "removed"     // it took the module out of service
+	EdgeUndelivered = "undelivered" // the core could not write the delivery; set on the core
+	EdgeWaiting     = "waiting"     // the edge has not answered for the active version yet; set on the core
+)
+
+// EdgeRun is how a module stands on the edge its line names: what the
+// edge last said, or "" Result when it has said nothing yet.
+type EdgeRun struct {
+	Node    string // the edge
+	Version string // the version it runs; "" when none
+	SHA256  string // the digest it runs
+	Desired string // the digest it was last told to run
+	Result  string
+	Reason  string // why the told version was refused, in the node's words
+}
 
 // LocalModule is one local module in the list of /modules.
 type LocalModule struct {
 	Name    string // the short name, "demo-reader"
 	State   RunState
 	Version string // the active version's number
+	// Edge is how it stands on its edge when its line names one; nil when
+	// it runs on this node.
+	Edge *EdgeRun
 }
 
 // ConfigLine is one config key the manifest declares, with what the module

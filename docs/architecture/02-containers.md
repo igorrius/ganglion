@@ -29,7 +29,7 @@ flowchart LR
         cli["claude CLI worker"]
     end
 
-    bus{{"Bus<br/>P2 M8: embedded NATS server,<br/>JetStream on disk (or an external one);<br/>M10: an edge is a leaf with its own JetStream domain;<br/>later: Object Store"}}
+    bus{{"Bus<br/>P2 M8: embedded NATS server,<br/>JetStream on disk (or an external one);<br/>M10: an edge is a leaf with its own JetStream domain;<br/>the core's domain is `core`: bucket `delivery` and<br/>Object Store `modules` hold what an edge runs (#323)"}}
 
     tg <--> corep
     tg -- "updates by webhook, when the file says so:<br/>the public listener, secret header (ADR-0078)" --> corep
@@ -125,6 +125,13 @@ code and its public key to `/edge/join` on the core's public listener and
 receives its user JWT; every hour it asks `/edge/renew` with a request signed
 by its key for a fresh one
 ([ADR-0116](../adr/0116-an-edge-joins-with-a-one-time-code-over-https-and-renews-its-jwt-by-a-signed-request.md)).
+A module whose line says `node: <edge>` is kept and installed by the core as
+any module, and run by the edge. The core's server runs the JetStream domain
+`core`: the core writes the module's files into the Object Store `modules`
+and the version and digest into `desired.<edge>.<module>` of the KV bucket
+`delivery`; the edge watches its own desired keys across that domain, fetches
+the files, checks them and writes `actual.<edge>.<module>` back
+([ADR-0117](../adr/0117-the-core-keeps-edge-modules-in-its-store-and-the-edge-pulls-and-checks-what-it-runs.md)).
 
 ```mermaid
 flowchart LR
@@ -143,6 +150,7 @@ flowchart LR
     end
     e1 -- "leaf link over wss://, own JetStream domain;<br/>EVENTS sourced by the core; g.tel.edge" --> cn
     e1 -- "HTTPS: POST /edge/join (once, with the code),<br/>POST /edge/renew (hourly, signed)" --> cn
+    e1 -- "pulls desired, modules; writes actual<br/>(domain core, KV delivery)" --> cn
     e2 -.-> cn
     wk -- "NATS client" --> cn
     esp -- "MQTT" --> e1

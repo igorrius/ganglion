@@ -548,7 +548,8 @@
         "name": { "description": "The module's name.", "type": "string", "minLength": 1 },
         "config": { "description": "The module's own settings, checked against its manifest. Missing means none.", "type": "object" },
         "off": { "description": "Keep the module installed but not running.", "type": "boolean", "default": false },
-        "notify_to": { "description": "Where the module's messages go: owner (the private chat of its owner) or names under destinations, each message to every one. Missing means the owner alone (R-RUN-18).", "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "type": "string" } }
+        "notify_to": { "description": "Where the module's messages go: owner (the private chat of its owner) or names under destinations, each message to every one. Missing means the owner alone (R-RUN-18).", "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "type": "string" } },
+        "node": { "description": "The edge the module runs on: the core delivers it there and does not run it itself. Missing or core runs it on this node (R-EDGE-6).", "type": "string", "pattern": "^[^.*> \\t\\r\\n]+$" }
       }
     }
   }
