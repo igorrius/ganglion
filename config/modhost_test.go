@@ -138,7 +138,7 @@ func TestExamplesDirIsTheBinarysTemplates(t *testing.T) {
 	if err != nil || got != filepath.Join(modules, "templates") {
 		t.Fatalf("examples %q, %v", got, err)
 	}
-	for _, name := range []string{"reader-template", "reflex-template"} {
+	for _, name := range []string{"reader-template", "reflex-template", "web-template"} {
 		if _, err := os.Stat(filepath.Join(got, name, "manifest.yaml")); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}

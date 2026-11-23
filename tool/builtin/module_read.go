@@ -45,7 +45,7 @@ func (*ModuleRead) Spec() tool.Spec {
 			"as outside content.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{` +
 			`"name":{"type":"string","description":"the module's folder under modules/ in the workspace; give name or example, not both"},` +
-			`"example":{"type":"string","description":"an example the node ships, such as reader-template or reflex-template"},` +
+			`"example":{"type":"string","description":"an example the node ships, such as reader-template, reflex-template or web-template"},` +
 			`"path":{"type":"string","description":"the file's path in the folder, such as src/lib.rs; leave it out for the list"}},` +
 			`"additionalProperties":false}`),
 		Class: tool.ClassRead, Policy: tool.PolicyAuto, AdminOnly: true}

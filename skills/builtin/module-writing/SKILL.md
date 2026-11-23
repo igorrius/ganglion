@@ -31,6 +31,18 @@ A module starts from a template the node ships; you never write one from nothing
   secret; it writes nothing to the owner.
 - **`reflex-template`** when something has to happen because cells changed: a rule over values
   that are already in cells, which writes to the owner. It needs no network and no secrets.
+- **`web-template`** when the owner asks for a page to look at: a value, a chart of the last day,
+  the latest notices. It serves `http://127.0.0.1:8090/<module>/` on the computer where it runs
+  (an edge, when the module has `node:`), only to a browser there. The page reads current values
+  with `cell_get`, keeps a day of readings in its own state from `reading` events and a list of
+  notices from `notices` events, and the browser polls `/api/data` every 15 seconds. Make the page
+  and the module that feeds it (a reader) as two modules; link the reader's event to the page's
+  `reading` port and, for notices, another module's `<module>.notify` to its `notices` port.
+  Change `manifest.yaml` (routes, cells, ports, config), `src/logic.rs` and `assets/`
+  (`index.html`, `app.js`, `app.css`); keep `src/lib.rs` and `src/http.rs`. The page never
+  writes anything: no inline script or style, no outside address (the node's policy allows only
+  the module's own files), text from outside goes in with `textContent` and never as markup. Never
+  weaken the guards in `src/assets.rs`. The README lists the request and answer shapes.
 
 The owner asks for an outcome, not for modules: "I want the readings of my thermometer", "tell
 me about every earthquake above 5". Most owners do not know what a module, a cell, a port or a
@@ -186,13 +198,13 @@ Building a module asks the owner nothing on the way. Import, write, build, fix a
 without narrating each step and without asking permission; the owner is asked once, at the end,
 in the install window. Do not stop between steps to report progress.
 
-1. `module.import` the template (`reader-template` or `reflex-template`) under the new name. It
+1. `module.import` the template (`reader-template`, `reflex-template` or `web-template`) under the new name. It
    runs at once.
 2. `module.read` its `manifest.yaml` and `src/logic.rs` (and the README). To look at a template
    without making a module of it, read it in place: `module.read {"example": "reflex-template",
    "path": "examples.yaml"}`. Never import a template only to read it, and never read the node's
    files with host commands.
-3. `module.write` `manifest.yaml`, `src/logic.rs` and `examples.yaml` only: the rules or the service,
+3. `module.write` `manifest.yaml`, `src/logic.rs` and `examples.yaml` only (a page also its files in `assets/`): the rules or the service,
    the settings, their tests and the module's examples (see "Examples"). Every other file and
    `Cargo.lock` stay as the template has them. Write a Rust
    test in `logic.rs` for every rule or function, and keep `react` and `parse` free of host calls.

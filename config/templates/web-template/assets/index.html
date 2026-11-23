@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<main>
+<h1>{{title}}</h1>
+<section class="cards">
+<div class="card"><span class="label">Now</span><span id="current" class="big">…</span><span id="age" class="muted"></span></div>
+<div class="card"><span class="label">Last day</span><span id="range" class="big">…</span><span class="muted">low – high</span></div>
+</section>
+<section>
+<h2>Chart</h2>
+<div id="chart" role="img" aria-label="The last day of readings"></div>
+</section>
+<section>
+<h2>Notices</h2>
+<ul id="notices"></ul>
+<p id="status" class="muted" role="status"></p>
+</section>
+</main>
+</body>
+</html>

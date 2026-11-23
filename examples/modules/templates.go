@@ -20,6 +20,8 @@ import (
 //go:embed reader-template/README.md reader-template/manifest.yaml reader-template/examples.yaml reader-template/src
 //go:embed reflex-template/.gitignore reflex-template/Cargo.lock reflex-template/Cargo.toml
 //go:embed reflex-template/README.md reflex-template/manifest.yaml reflex-template/examples.yaml reflex-template/src
+//go:embed web-template/.gitignore web-template/Cargo.lock web-template/Cargo.toml
+//go:embed web-template/README.md web-template/manifest.yaml web-template/examples.yaml web-template/src web-template/assets
 var files embed.FS
 
 // FS is the templates, one folder each.
