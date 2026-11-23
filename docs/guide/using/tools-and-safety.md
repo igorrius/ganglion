@@ -43,4 +43,4 @@ Send `/new` to clear it. It also clears by itself after 6 hours of silence.
 
 ## Secrets
 
-The model never sees a secret. Secrets are redacted from logs and the tool-call journal before anything is written. Keep them in `env:` variables or the encrypted store, and never type one in chat. See [Configure](../getting-started/configure.md#secrets).
+The model never sees a secret. Secrets are redacted from logs, the tool-call journal and the output of commands and skill scripts (stdout and stderr alike) before anything is written or shown. Besides your own secrets and values like `password=...`, the node recognises common token shapes on their own: `sk-...` keys, GitHub tokens (`ghp_...`), Slack, AWS and Google keys, JSON web tokens, private-key blocks and long random-looking strings. A secret that a long output cuts through is hidden whole. Keep them in `env:` variables or the encrypted store, and never type one in chat. See [Configure](../getting-started/configure.md#secrets).

@@ -249,7 +249,7 @@ func Skills() do.Provider[Skilled] {
 			return Skilled{}, err
 		}
 		box := do.MustInvoke[*sandbox.Sandbox](i)
-		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg, box), runs, sandboxGate{box}), Problems: problems}, nil
+		return Skilled{Set: set, Tools: builtin.NewSkillTools(set, skills.NewRunner(cfg, box), runs, sandboxGate{box}, builtin.WithSkillHide(secretRedact(b))), Problems: problems}, nil
 	}
 }
 

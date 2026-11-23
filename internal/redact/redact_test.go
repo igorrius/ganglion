@@ -64,3 +64,45 @@ func TestValuesLongestFirst(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// A token has a shape of its own: it is hidden wherever it stands, with no
+// key name or header beside it.
+func TestTokenShapesAreHiddenAnywhere(t *testing.T) {
+	long := strings.Repeat("Ab3dE", 10) // 50 characters, three classes
+	for _, tc := range []struct{ name, in, gone string }{
+		{"openai style", "the key is sk-test-0000000000000000 ok", "sk-test-0000000000000000"},
+		{"anthropic style", "sk-ant-api03-Test0000_0000-0000000000", "Test0000_0000-0000000000"},
+		{"github classic", "token ghp_000000000000000000000000000000000000 end", "ghp_000000000000000000000000000000000000"},
+		{"github fine grained", "github_pat_11TEST0000_000000000000000000000000", "11TEST0000_000000000000000000000000"},
+		{"github oauth", "gho_000000000000000000000000000000000000", "gho_000000000000000000000000000000000000"},
+		{"slack", "xoxb-000000000000-testtesttest", "xoxb-000000000000-testtesttest"},
+		{"aws access key id", "id AKIA0000000000TEST00 here", "AKIA0000000000TEST00"},
+		{"google api key", "AIza" + strings.Repeat("t0", 17) + "tes", "AIza" + strings.Repeat("t0", 17)},
+		{"jwt", "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.c2lnbmF0dXJl", "eyJzdWIiOiJ0ZXN0In0"},
+		{"bare mixed token", "see " + long + " for it", long},
+		{"in json value", `{"note":"use sk-test-0000000000000000 now"}`, "sk-test-0000000000000000"},
+		{"pem block", "x\n-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX\n-----END RSA PRIVATE KEY-----\ny", "MIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX"},
+		{"pem block cut before its end", "-----BEGIN PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX\nMIIBOgIBAAJB", "MIIBOgIBAAJB"},
+	} {
+		if got := String(tc.in); strings.Contains(got, tc.gone) || !strings.Contains(got, redacted) {
+			t.Errorf("%s: %q still holds %q", tc.name, got, tc.gone)
+		}
+	}
+}
+
+// Text that only looks long is left alone: commit ids, digests, paths and
+// words are not secrets.
+func TestOrdinaryLongTextIsKept(t *testing.T) {
+	for _, in := range []string{
+		"commit 0123456789abcdef0123456789abcdef01234567",
+		"sha256 " + strings.Repeat("0123456789abcdef", 4),
+		"/var/lib/ganglion/some/very/long/path/to/a/file-with-a-long-name.txt",
+		"internationalizationAndLocalizationOfTheApplication",
+		"the task sk-1 and ask-me-later are fine",
+		"ghost_town and AKIA are words",
+	} {
+		if got := String(in); got != in {
+			t.Errorf("%q became %q", in, got)
+		}
+	}
+}

@@ -91,7 +91,9 @@ func TestASkillScriptCannotReadTheNodesSecrets(t *testing.T) {
 	if !strings.Contains(res.Text, "own: mine") {
 		t.Errorf("the script could not read its own copy:\n%s", res.Text)
 	}
-	if n := strings.Count(res.Text, "Permission denied"); n != 3 {
+	// stdout is scrubbed like stderr, so the "token: Permission" of the secret
+	// file's error may read "[redacted] denied": count the word they share.
+	if n := strings.Count(res.Text, "denied"); n != 3 {
 		t.Errorf("%d reads were denied, want 3 (database, environment, secret file):\n%s", n, res.Text)
 	}
 	for _, secret := range []string{envSecret, fileSecret} {
