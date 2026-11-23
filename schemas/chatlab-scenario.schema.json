@@ -90,6 +90,7 @@
         "advance": { "$ref": "#/$defs/advance" },
         "reach": { "$ref": "#/$defs/reach" },
         "facts": { "$ref": "#/$defs/facts" },
+        "join_edge": { "description": "An edge joins with the one-time code in the newest card that shows one, as the join command on the owner's computer would.", "const": true },
         "sign_in": { "description": "The owner signs in from the newest sign-in card at the fake authorization server and pastes the line the intake page shows. Needs mcp with oauth.", "const": true }
       }
     },

@@ -15,6 +15,7 @@ import (
 	"github.com/igorrius/ganglion/agent"
 	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/cells"
+	"github.com/igorrius/ganglion/edgejoin"
 	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/intake"
 	"github.com/igorrius/ganglion/mcpclient"
@@ -75,7 +76,10 @@ type LabNode struct {
 	Backlog func(context.Context) (int, error)
 	// Allow lists a family member by principal and name, so a scenario can have
 	// another person in the owner's chat.
-	Allow    func(ctx context.Context, principal, name string) error
+	Allow func(ctx context.Context, principal, name string) error
+	// JoinEdge is an edge joining with a one-time code, as the join command
+	// would on the owner's computer, with a key of its own made here.
+	JoinEdge func(ctx context.Context, code string) error
 	Shutdown func(context.Context)
 }
 
@@ -101,6 +105,22 @@ func NewLab(ctx context.Context, b Bootstrap, logger *slog.Logger, o LabOptions)
 		Tick: tick, Backlog: do.MustInvoke[*natsbus.Consumer](i).Pending,
 		Allow: func(ctx context.Context, principal, name string) error {
 			return do.MustInvoke[*access.List](i).Allow(ctx, principal, access.RoleFamily, name)
+		},
+		JoinEdge: func(ctx context.Context, code string) error {
+			svc := do.MustInvoke[*edgejoin.Service](i)
+			if svc == nil {
+				return errors.New("lab: the node takes no edges")
+			}
+			k, err := natsbus.NewUserKey()
+			if err != nil {
+				return err
+			}
+			pub, err := k.PublicKey()
+			if err != nil {
+				return err
+			}
+			_, err = svc.Join(ctx, code, pub)
+			return err
 		},
 		Shutdown: func(ctx context.Context) { _ = i.ShutdownWithContext(ctx) },
 	}, nil

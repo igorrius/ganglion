@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -451,5 +452,35 @@ func TestCoreDeliversAModuleItsLineSendsToAnEdge(t *testing.T) {
 	}
 	if ms, _ := e.host.Local(ctx); ms[0].State != modstore.RunOff {
 		t.Fatalf("turned off, it shows %+v", ms[0])
+	}
+}
+
+// The owner's one command, module.rollback, on a module that runs on an
+// edge: the core delivers the previous version's digest to that edge's
+// desired key and runs nothing itself (P2 gate, #324).
+func TestRollbackOfAnEdgeModuleDeliversThePreviousVersion(t *testing.T) {
+	ctx := context.Background()
+	v4 := active(t, "local/probe", withLifecycle("ok"))
+	v3 := active(t, "local/probe", withLifecycle("health_auth"))
+	if v3.SHA256 == v4.SHA256 {
+		t.Fatal("the two versions have one digest")
+	}
+	e := newEnv(t, v4)
+	d := &fakeDelivery{}
+	e.delivery = d
+	e.store.previous = map[string]modstore.Active{"local/probe": v3}
+	e.conf.mods = []settings.Module{{Name: "local/probe", Node: "e1"}}
+	e.host = e.newHost()
+	e.start(t)
+
+	if _, err := e.host.Rollback(ctx, "probe"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"e1:local/probe:" + v4.SHA256, "e1:local/probe:" + v3.SHA256}
+	if !slices.Equal(d.delivered, want) {
+		t.Fatalf("delivered %v, want %v", d.delivered, want)
+	}
+	if len(e.host.Handlers()) != 0 {
+		t.Fatal("the core runs a module that is on an edge")
 	}
 }

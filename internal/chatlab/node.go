@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -639,4 +640,27 @@ func (n *Node) history(ctx context.Context) (string, error) {
 		fmt.Fprintf(&b, "\n%s: %s", m.Role, m.Content)
 	}
 	return b.String(), nil
+}
+
+// joinCommand is the line of a card that tells the owner what to type on
+// the computer: the command, the node's address and the one-time code.
+const joinCommand = "ganglion edge join "
+
+// JoinEdge makes an edge join with the code in the newest message that
+// shows the join command, which is the last word of its line.
+func (n *Node) JoinEdge(ctx context.Context) error {
+	msgs := n.peer.Messages()
+	for _, m := range slices.Backward(msgs) {
+		for line := range strings.SplitSeq(m.Text, "\n") {
+			if !strings.Contains(line, joinCommand) {
+				continue
+			}
+			words := strings.Fields(line)
+			if err := n.lab.JoinEdge(ctx, words[len(words)-1]); err != nil {
+				return fmt.Errorf("chatlab: the edge's join: %w", err)
+			}
+			return nil
+		}
+	}
+	return errors.New("chatlab: no card shows a join code")
 }

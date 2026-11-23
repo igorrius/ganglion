@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../../../schemas/chatlab-scenario.schema.json
+name: m10-edge-join-revoke
+why: >-
+  M10 check (R-EDGE-3, R-EDGE-5): the owner connects a computer in the chat. Nothing is made until the press,
+  the one-time code is shown only in the card (the model is sent no part of it), and a Revoke press ends the
+  edge and frees its name for a new machine.
+covers:
+  - edgeadmin/**
+  - edgejoin/**
+  - tool/builtin/links.go
+repeat: 1
+model: scripted
+script:
+  - {tool: edge.join, args: '{"name":"home-pc"}'}
+  - {say: "It waits for your press."}
+  - {say: "The card is waiting for your press."}
+  - {tool: edge.join, args: '{"name":"home-pc"}'}
+  - {say: "It waits for your press."}
+  - {say: "The new card is waiting for your press."}
+steps:
+  - say: "Connect my computer as home-pc"
+  - press: Approve
+  - facts:
+      card: {contains: "one-time code"}
+      journal:
+        - {tool: edge.join, decision: approved, count: 1}
+  - press: Approve
+  - facts:
+      model_saw: {not_contains: "ganglion edge join"}
+  - join_edge: true
+  - say: "/edges"
+  - facts:
+      card: {contains: "home-pc"}
+  - press: Revoke home-pc
+  - facts:
+      card: {not_contains: "home-pc"}
+  - say: "/edges"
+  - facts:
+      card: {not_contains: "home-pc"}
+  - say: "Connect my computer as home-pc again"
+  - press: Approve
+  - facts:
+      journal:
+        - {tool: edge.join, decision: approved, count: 2}
