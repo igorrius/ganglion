@@ -2,6 +2,7 @@ package config
 
 import (
 	"github.com/igorrius/ganglion/bus/natsbus"
+	"github.com/igorrius/ganglion/bus/wsproxy"
 	"log/slog"
 	"time"
 
@@ -76,11 +77,33 @@ func PublicListeners() do.Provider[Listeners] {
 	return choose[Listeners](httpOn, listenersHTTP, listenersNone)
 }
 
-// HTTPListeners provides the public listener as a component.
+// HTTPListeners provides the public listener as a component, with the
+// edges' entry on /bus when the bus has one (R-EDGE-4, ADR-0114).
 func HTTPListeners() do.Provider[Listeners] {
 	return func(i do.Injector) (Listeners, error) {
-		return Listeners{do.MustInvoke[*publichttp.Listener](i)}, nil
+		l := do.MustInvoke[*publichttp.Listener](i)
+		if err := mountBus(l, do.MustInvoke[*natsbus.Bus](i), do.MustInvoke[*slog.Logger](i)); err != nil {
+			return nil, err
+		}
+		return Listeners{l}, nil
 	}
+}
+
+// mountBus routes /bus on l to the bus's WebSocket listener. A bus with
+// none (no chain, a locked store, an external server) gets no route, so
+// /bus is a 404 like any other unknown path: it fails closed.
+func mountBus(l *publichttp.Listener, nb *natsbus.Bus, log *slog.Logger) error {
+	addr := nb.WebSocketAddr()
+	if addr == "" {
+		return nil
+	}
+	h, err := wsproxy.New(addr, wsproxy.DefaultConfig(), log)
+	if err != nil {
+		return err
+	}
+	l.HandleStream(wsproxy.Path, h)
+	l.HandleStream(wsproxy.LeafPath, h)
+	return nil
 }
 
 // TelegramHealth provides what /status shows of Telegram's polling, kept apart

@@ -80,7 +80,8 @@ type Listener struct {
 
 	mu     sync.Mutex
 	routes map[string]http.Handler
-	bound  chan struct{} // closed when the listener has its address
+	stream map[string]bool // routes that outlive a request and bound themselves
+	bound  chan struct{}   // closed when the listener has its address
 	addr   string
 }
 
@@ -94,7 +95,7 @@ func New(cfg Config, log *slog.Logger, after AfterFunc) (*Listener, error) {
 	l := &Listener{
 		cfg: cfg, log: log, after: after, nonce: hex.EncodeToString(raw),
 		slots: make(chan struct{}, cfg.MaxInFlight), in: newInstruments(),
-		routes: map[string]http.Handler{}, bound: make(chan struct{}),
+		routes: map[string]http.Handler{}, stream: map[string]bool{}, bound: make(chan struct{}),
 		// The check asks one fixed path of the operator's own address and
 		// follows nothing: a redirect is not this process answering.
 		hc: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
@@ -109,6 +110,18 @@ func (l *Listener) Handle(path string, h http.Handler) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.routes[path] = h
+}
+
+// HandleStream serves the exact path with h like Handle, for a handler
+// whose requests last (a WebSocket tunnel, ADR-0114): it is not counted
+// against MaxInFlight, which would let tunnels starve the short routes, and
+// its body is not capped. The handler bounds itself. Its request context
+// ends when the listener stops, so a stop closes the tunnels.
+func (l *Listener) HandleStream(path string, h http.Handler) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.routes[path] = h
+	l.stream[path] = true
 }
 
 // Name implements node.Component.
@@ -126,8 +139,12 @@ func (l *Listener) Run(ctx context.Context) error {
 	l.addr = ln.Addr().String()
 	l.mu.Unlock()
 	close(l.bound)
+	// Requests of the streams end with this context: Shutdown does not wait
+	// for, or close, a connection a handler has taken over.
+	base, stop := context.WithCancel(context.WithoutCancel(ctx))
+	defer stop()
 	srv := &http.Server{
-		Handler: l, ReadHeaderTimeout: l.cfg.ReadHeaderTimeout, ReadTimeout: l.cfg.ReadTimeout,
+		Handler: l, BaseContext: func(net.Listener) context.Context { return base }, ReadHeaderTimeout: l.cfg.ReadHeaderTimeout, ReadTimeout: l.cfg.ReadTimeout,
 		WriteTimeout: l.cfg.WriteTimeout, IdleTimeout: l.cfg.IdleTimeout, MaxHeaderBytes: 16 << 10,
 	}
 	l.log.Info("publichttp: listening", "addr", l.addr)
@@ -143,6 +160,7 @@ func (l *Listener) Run(ctx context.Context) error {
 	if err := srv.Shutdown(sctx); err != nil {
 		_ = srv.Close()
 	}
+	stop() // the tunnels a handler took over end now
 	if err := <-served; !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("publichttp: serve: %w", err)
 	}
@@ -167,6 +185,7 @@ func (l *Listener) Addr(ctx context.Context) string {
 func (l *Listener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.mu.Lock()
 	h, ok := l.routes[r.URL.Path]
+	long := l.stream[r.URL.Path]
 	l.mu.Unlock()
 	route := routeOther
 	if ok {
@@ -176,6 +195,10 @@ func (l *Listener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() { l.in.count(r.Context(), route, rec.code) }()
 	if !ok {
 		http.NotFound(rec, r)
+		return
+	}
+	if long {
+		h.ServeHTTP(rec, r)
 		return
 	}
 	select {
@@ -255,3 +278,10 @@ func (r *recorder) WriteHeader(code int) {
 	r.code = code
 	r.ResponseWriter.WriteHeader(code)
 }
+
+// Unwrap lets a handler reach the connection (a WebSocket upgrade takes it
+// over) through http.ResponseController.
+func (r *recorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
+// Flush lets a streaming handler flush through the recorder.
+func (r *recorder) Flush() { _ = http.NewResponseController(r.ResponseWriter).Flush() }

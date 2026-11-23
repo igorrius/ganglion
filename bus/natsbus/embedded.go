@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats-server/v2/server"
@@ -14,6 +15,9 @@ import (
 // storeDirMode is the permission of the embedded server's store folder: the
 // node's own user only.
 const storeDirMode = 0o700
+
+// loopback is where the embedded server's listeners bind.
+const loopback = "127.0.0.1"
 
 // globalAccount is the account a server without operator keys stores
 // JetStream under.
@@ -34,9 +38,11 @@ func (b *Bus) startServer(cfg Config) error {
 		JetStreamMaxMemory: cfg.MemoryStoreBytes,
 		DontListen:         true,
 		NoSigs:             true,
+		MaxPayload:         cfg.MaxPayload,
+		MaxConn:            cfg.MaxConnections,
 	}
 	if cfg.testListen {
-		opts.DontListen, opts.Host, opts.Port = false, "127.0.0.1", -1
+		opts.DontListen, opts.Host, opts.Port = false, loopback, -1
 	}
 	if cfg.Chain != nil {
 		if err := adoptGlobalStore(dir, cfg.Chain.AccountPublicKey()); err != nil {
@@ -44,6 +50,9 @@ func (b *Bus) startServer(cfg Config) error {
 		}
 		if err := operatorOptions(opts, cfg.Chain); err != nil {
 			return err
+		}
+		if cfg.WebSocket {
+			webSocketOptions(opts, cfg)
 		}
 	}
 	srv, err := server.NewServer(opts)
@@ -91,6 +100,19 @@ func operatorOptions(opts *server.Options, c *Chain) error {
 	opts.AccountResolver = res
 	opts.SystemAccount = c.SystemAccountPublicKey()
 	return nil
+}
+
+// webSocketOptions opens the edges' entry (ADR-0114): a WebSocket listener
+// and the leaf-node listener a leaf over WebSocket needs, both on a free
+// loopback port and without TLS (it ends at the platform). Authentication
+// is the operator mode's: a user JWT and the nonce signature, or a refusal;
+// the timeout closes a connection that never sends them.
+func webSocketOptions(opts *server.Options, cfg Config) {
+	opts.Websocket = server.WebsocketOpts{
+		Host: loopback, Port: -1, NoTLS: true,
+		AuthTimeout: cfg.AuthTimeout.Seconds(), HandshakeTimeout: 5 * time.Second,
+	}
+	opts.LeafNode.Host, opts.LeafNode.Port = loopback, -1
 }
 
 // adoptGlobalStore moves the JetStream data a server without operator keys

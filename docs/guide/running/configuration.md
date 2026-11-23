@@ -30,7 +30,7 @@ A field that takes a secret holds `env:NAME` or `store:NAME`. See [Configure](..
 
 | Key | Default | Meaning |
 |---|---|---|
-| `addr` | `off` | The node's public listener, `host:port`. It serves plain HTTP behind a proxy that ends TLS and carries the Telegram webhook and a health route. It is never the metrics endpoint. |
+| `addr` | `off` | The node's public listener, `host:port`. It serves plain HTTP behind a proxy that ends TLS and carries the Telegram webhook, a health route and, on the node's own bus, `/bus`, the one path your edges connect to. Nothing passes `/bus` without a valid key issued by this node: a missing, expired, revoked or copied key is refused, as is an oversized message or a flood of connections past 64. It is never the metrics endpoint. |
 | `public_url` | none | The HTTPS address the outside world reaches the listener at, with no path and no port or one of 443, 80, 88, 8443. |
 
 See [Telegram updates](telegram-updates.md).

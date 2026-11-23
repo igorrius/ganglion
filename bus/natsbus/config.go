@@ -31,6 +31,21 @@ type Config struct {
 	// ChainLocked says Chain is nil because the secret store is locked
 	// (ADR-0113): the bus runs as before and /status says why.
 	ChainLocked bool
+	// WebSocket opens the edges' entry (ADR-0114): a WebSocket and a
+	// leaf-node listener on loopback, served to the public listener by
+	// WebSocketAddr. Only an embedded server with a chain opens it; without
+	// a chain there is none (fail closed).
+	WebSocket bool
+	// MaxPayload is the largest message, and WebSocket frame, the embedded
+	// server takes, in bytes.
+	MaxPayload int32
+	// MaxConnections is the embedded server's own limit on connections, a
+	// backstop above the public proxy's cap on tunnels; the core's own
+	// connection counts.
+	MaxConnections int
+	// AuthTimeout is how long a connection to the WebSocket listener may
+	// stay silent before the server closes it.
+	AuthTimeout time.Duration
 	// testListen opens a listener on a free loopback port, for the tests of
 	// this package that must read the server's refusals. Nothing outside
 	// the package can set it.
@@ -54,6 +69,9 @@ func DefaultConfig(storeDir string) Config {
 		StoreDir:         storeDir,
 		StartTimeout:     10 * time.Second,
 		MemoryStoreBytes: 1 << 20,
+		MaxPayload:       1 << 20,
+		MaxConnections:   128,
+		AuthTimeout:      2 * time.Second,
 		ReconnectMin:     500 * time.Millisecond,
 		ReconnectMax:     30 * time.Second,
 	}

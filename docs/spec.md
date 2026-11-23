@@ -2487,7 +2487,10 @@ Edges ([ADR-0109](adr/0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-
 - **R-EDGE-4.** The edge's leaf dials `wss://<public address>/bus`; the public
   listener proxies the upgrade to the embedded server's WebSocket listener on
   `127.0.0.1`. NATS refuses any connection without a valid JWT and nonce
-  signature.
+  signature. The proxy admits only an upgrade on `/bus` and `/bus/leafnode`,
+  at most 64 tunnels at once; the server takes messages up to 1 MiB and
+  closes a socket silent for 2 s
+  ([ADR-0114](adr/0114-the-public-listener-proxies-the-buss-websocket-and-the-server-checks-the-jwt.md)).
 - **R-EDGE-5.** A Revoke button puts the edge's public key into the account
   JWT's revocations; the server drops and refuses it.
 - **R-EDGE-6.** A module with `node: <edge>` in `modules:` is delivered by
