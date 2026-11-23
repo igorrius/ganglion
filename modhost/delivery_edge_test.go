@@ -123,7 +123,13 @@ func version(t *testing.T, manifest string, n string) modstore.Build {
 // told is the update of e1's desired key of probe naming digest at version.
 func told(t *testing.T, digest, ver string) edge.Update {
 	t.Helper()
-	v, err := json.Marshal(edge.Desired{V: edge.DeliveryVersion, Module: "probe", Version: ver, SHA256: digest})
+	return toldWith(t, digest, ver, nil)
+}
+
+// toldWith is told with the module's config.
+func toldWith(t *testing.T, digest, ver string, cfg map[string]any) edge.Update {
+	t.Helper()
+	v, err := json.Marshal(edge.Desired{V: edge.DeliveryVersion, Module: "probe", Version: ver, SHA256: digest, Config: cfg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,6 +257,47 @@ func TestEdgeRollsBackAVersionThatDoesNotStart(t *testing.T) {
 	}
 	if a := e.core.said(t); a.Result != modstore.EdgeRefused || a.SHA256 != d3 || a.Desired != d4 || a.Reason == "" {
 		t.Fatalf("actual %+v", a)
+	}
+}
+
+// A new version that brings a new config and does not start leaves the
+// version before running with its own config, in the file as well.
+func TestEdgeKeepsTheOldConfigWhenTheNewVersionDoesNotStart(t *testing.T) {
+	e := newEdgeEnv(t)
+	oldCfg := map[string]any{"op_tool_status": `{"op":"now"}`}
+	d3 := e.core.offer(version(t, withLifecycle("ok"), "3"))
+	e.apply(toldWith(t, d3, "3", oldCfg))
+	if err := e.cells.DefineOwned(context.Background(), cells.OwnedDef{ID: "probe.taken", Owner: "local/other", Kind: cells.KindSensor}); err != nil {
+		t.Fatal(err)
+	}
+	taken := strings.Replace(withLifecycle("ok"), "  report:\n", "  report:\n    taken: {kind: sensor, type: integer, about: \"Taken\"}\n", 1)
+	d4 := e.core.offer(version(t, taken, "4"))
+
+	e.apply(toldWith(t, d4, "4", map[string]any{"op_tool_status": `{"op":"echo"}`}))
+	if got := e.running(t); got != "3" {
+		t.Fatalf("running %q, want 3 back", got)
+	}
+	line := func() any {
+		mods, _ := e.conf.Modules()
+		for _, m := range mods {
+			if m.Name == "local/probe" {
+				return m.Config["op_tool_status"]
+			}
+		}
+		return nil
+	}
+	if got := line(); got != `{"op":"now"}` {
+		t.Fatalf("the line holds %v, want the old config", got)
+	}
+	// Told v3 with its config again (a rollback on the core), nothing is
+	// rewritten: the config it runs with is the old one.
+	e.apply(toldWith(t, d3, "3", oldCfg))
+	if got := line(); got != `{"op":"now"}` || e.running(t) != "3" {
+		t.Fatalf("after v3 again: line %v, running %q", got, e.running(t))
+	}
+	// With the new config the status tool would break its contract.
+	if res, err := e.call(t, "probe.status"); err != nil {
+		t.Fatalf("v3 does not answer with its old config: %+v %v", res, err)
 	}
 }
 

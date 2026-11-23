@@ -2,6 +2,8 @@ package edge
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -70,5 +72,40 @@ func TestConvergerWatchesWhileLinked(t *testing.T) {
 	defer mu.Unlock()
 	if stops != 2 {
 		t.Fatalf("stops = %d, want 2: the old watch goes before a new one, the last at the end", stops)
+	}
+}
+
+// A fetch that stalls ends at FetchTimeout: the converger goes on, and the
+// edge says the files could not be fetched; nothing is kept refused, so the
+// next watch tries again.
+func TestConvergerStopsAStalledFetch(t *testing.T) {
+	var said []byte
+	c := &Converger{
+		Edge: "e1",
+		Fetch: func(ctx context.Context, _, _ string, _ int64) ([]byte, []byte, error) {
+			<-ctx.Done()
+			return nil, nil, ctx.Err()
+		},
+		Report:       func(_ context.Context, _, _ string, v []byte) error { said = v; return nil },
+		Store:        emptyStore{},
+		FetchTimeout: 50 * time.Millisecond,
+	}
+	v, _ := json.Marshal(Desired{V: DeliveryVersion, Module: "probe", Version: "3", SHA256: strings.Repeat("ab", 32)})
+	done := make(chan struct{})
+	go func() {
+		c.Apply(context.Background(), Update{Edge: "e1", Module: "probe", Value: v})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a stalled fetch blocked the converger")
+	}
+	var a Actual
+	if err := json.Unmarshal(said, &a); err != nil || a.Result != modstore.EdgeRefused || !strings.Contains(a.Reason, "cannot be fetched") {
+		t.Fatalf("actual %s (%v)", said, err)
+	}
+	if c.wasRefused(context.Background(), "probe", a.Desired) {
+		t.Fatal("a fetch that timed out is kept as a refusal")
 	}
 }

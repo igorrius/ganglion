@@ -28,6 +28,9 @@ import (
 // builder's own limit on a .wasm.
 const MaxModuleFile = 16 << 20
 
+// fetchTimeout is FetchTimeout when it is 0.
+const fetchTimeout = 2 * time.Minute
+
 // Update is one of the edge's desired keys as the watch hands it over: the
 // edge and the module from the key.
 type Update struct {
@@ -78,6 +81,10 @@ type Converger struct {
 	// often the watch starts afresh and every key is reported again, 0
 	// five minutes.
 	Poll, Resync time.Duration
+	// FetchTimeout bounds one fetch of a build's files, 0 two minutes: a
+	// read that stalls must not keep the converger from the link's return
+	// or its next resync.
+	FetchTimeout time.Duration
 	Now          func() time.Time
 	Log          *slog.Logger
 
@@ -230,7 +237,7 @@ func (c *Converger) Apply(ctx context.Context, u Update) {
 	case c.wasRefused(ctx, u.Module, d.SHA256):
 		return
 	}
-	wasm, manifest, err := c.Fetch(ctx, u.Module, d.SHA256, MaxModuleFile)
+	wasm, manifest, err := c.fetch(ctx, u.Module, d.SHA256)
 	if err != nil {
 		// The link or the core may be at fault: not kept, tried again at the
 		// next start of the watch.
@@ -251,26 +258,51 @@ func (c *Converger) Apply(ctx context.Context, u Update) {
 	c.install(ctx, u.Module, b, d, cur)
 }
 
+// fetch reads a build's files from the core within FetchTimeout.
+func (c *Converger) fetch(ctx context.Context, short, digest string) (wasm, manifest []byte, err error) {
+	limit := c.FetchTimeout
+	if limit <= 0 {
+		limit = fetchTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	return c.Fetch(ctx, short, digest, MaxModuleFile)
+}
+
 // install installs a checked build, runs it, and rolls back to cur when its
 // init fails.
 func (c *Converger) install(ctx context.Context, short string, b modstore.Build, d Desired, cur modstore.Version) {
-	if err := c.Lines.SetModule(settings.Module{Name: b.Module, Config: d.Config}); err != nil {
-		c.Log.Warn("edge: a delivered module's config is not written; it runs with its defaults", "module", b.Module, "err", err)
-	} else {
-		c.setConfig(short, d.Config)
+	// The host reads the config from the line when it starts the module, so
+	// the new config is written first; every way out that does not run the
+	// new version writes the old line back before the old version starts.
+	old, known := c.fileConfig(b.Module)
+	wrote := c.Lines.SetModule(settings.Module{Name: b.Module, Config: d.Config}) == nil
+	if !wrote {
+		c.Log.Warn("edge: a delivered module's config is not written; it runs with its defaults", "module", b.Module)
+	}
+	restore := func() {
+		if !wrote || !known {
+			return
+		}
+		if err := c.Lines.SetModule(settings.Module{Name: b.Module, Config: old}); err != nil {
+			c.Log.Warn("edge: the config of the version before is not written back", "module", b.Module, "err", err)
+		}
 	}
 	o, err := c.Store.InstallDelivered(ctx, b, d.SHA256)
 	switch {
 	case err != nil:
+		restore()
 		c.Log.Warn("edge: a delivered module is not installed", "module", b.Module, "err", err)
 		c.report(ctx, short, d.SHA256, modstore.EdgeRefused, "it could not be stored on the edge")
 		return
 	case o.Result == modstore.ResultRefused:
+		restore()
 		c.refuse(ctx, short, d.SHA256, o.Reason)
 		return
 	}
 	if err := c.Host.Reload(ctx, b.Module); err != nil {
 		c.Log.Warn("edge: a delivered module did not start; the version before it runs again", "module", b.Module, "err", err)
+		restore()
 		if cur.SHA256 != "" && cur.SHA256 != d.SHA256 {
 			if _, rerr := c.Host.Rollback(ctx, b.Module); rerr != nil {
 				c.Log.Warn("edge: the rollback failed", "module", b.Module, "err", rerr)
@@ -283,6 +315,9 @@ func (c *Converger) install(ctx context.Context, short string, b modstore.Build,
 		}
 		c.refuse(ctx, short, d.SHA256, startWords(err))
 		return
+	}
+	if wrote {
+		c.setConfig(short, d.Config)
 	}
 	c.Log.Info("edge: delivered module running", "module", b.Module, "version", d.Version)
 	c.report(ctx, short, d.SHA256, modstore.EdgeRunning, "")

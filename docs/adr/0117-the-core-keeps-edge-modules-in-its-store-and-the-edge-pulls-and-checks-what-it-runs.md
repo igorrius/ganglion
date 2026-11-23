@@ -84,7 +84,8 @@ A1, B1, C1.
   files, then `desired.<edge>.<module>`, and deletes the module's desired
   key on every other edge. A removed or turned-off module is withdrawn
   from every edge, and its files go.
-- **Names:** KV bucket `delivery` in the core's domain, history 8:
+- **Names:** KV bucket `delivery` in the core's domain, history 8,
+  values up to 64 KiB, at most 64 MiB in all:
   `desired.<edge>.<module>` and `actual.<edge>.<module>`, the module by its
   short name. Object Store `modules`: `<module>.<digest>.wasm` and
   `<module>.<digest>.yaml`, written once; the core prunes the module's
@@ -104,7 +105,8 @@ A1, B1, C1.
   runs, it only writes the config; otherwise it fetches both files (16 MiB
   each at most), refuses them unless their digest is the one in the key,
   checks the build in a throwaway instance with its health trigger, writes
-  the module's line with its config, installs it (`InstallDelivered`: no
+  the module's line with its config (written back as it was when the new
+  version does not start), installs it (`InstallDelivered`: no
   version or link check, which are the core's) and reloads it, which runs
   `init`. If the reload fails it rolls back to the version before, or
   removes a first version. Then it writes `actual`. A refused digest is not
@@ -155,6 +157,24 @@ A1, B1, C1.
     and escaped;
   - reading replies meant for others: the edge's inbox prefix and its
     subscribe permission are its own.
+  - an edge flooding its own actual keys with many module names: its
+    permission allows any module token under `actual.<edge>.*`, so the
+    bucket is capped (values 64 KiB, 64 MiB in all) and a full bucket
+    refuses writes; the core's disk is not at risk, but a full bucket also
+    stops new deliveries until it is cleared
+    (`TestEdgeCannotFillTheCoresDisk`).
+- **Accepted, by design:**
+  - every edge can read every module's files: the object permissions
+    (`DIRECT.GET …$O.modules.M.*`, `CONSUMER.CREATE …$O.modules.C.*`) are
+    not scoped per edge, since an object's chunk subject is not known
+    before it is written; modules hold no secrets (those live in each
+    node's secret store), so a module's code is not confidential among the
+    owner's edges;
+  - a build an edge refused at its start stays in the edge's store as the
+    previous version (it was installed, then rolled back), until the next
+    install retires it;
+  - the core calls Withdraw for every module at every start and reload,
+    one key listing each; tracked in #373.
 - Module signing with the owner's key stays in spec 9.3 for later: the
   digest is trusted because only the core writes `desired`.
 

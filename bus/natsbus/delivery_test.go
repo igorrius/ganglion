@@ -9,6 +9,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/igorrius/ganglion/bus"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 func joinPerms(ps ...UserPermissions) UserPermissions {
@@ -117,13 +121,18 @@ func TestEdgeDeliveryAbuse(t *testing.T) {
 	}
 	short, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
+	// The server drops what the user may not publish: the edge's client
+	// hears no responder at once. A timeout would only say the core is slow.
+	own, err := edge.WatchDesired(short, "e1", func(DesiredUpdate) {})
+	if err != nil {
+		t.Fatalf("e1 cannot watch its own keys, so the refusals below prove nothing: %v", err)
+	}
+	_ = own()
 	var w watched
-	if stop, err := edge.WatchDesired(short, "e2", w.add); err == nil {
-		time.Sleep(time.Second)
-		_ = stop()
-		if len(w.all()) != 0 {
-			t.Fatalf("e1 read e2's desired keys: %+v", w.all())
-		}
+	_, err = edge.WatchDesired(short, "e2", w.add)
+	refusedByServer(t, "watching e2's desired keys", err)
+	if len(w.all()) != 0 {
+		t.Fatalf("e1 read e2's desired keys: %+v", w.all())
 	}
 	// The writes themselves, not a read before them: the bucket's and the
 	// store's info are allowed, the puts are not.
@@ -131,19 +140,15 @@ func TestEdgeDeliveryAbuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := kv.Put(short, "desired.e1.probe", []byte(`{"v":9}`)); err == nil {
-		t.Fatal("e1 wrote a desired key")
-	}
-	if err := edge.PutActual(short, "e2", "probe", []byte(`{}`)); err == nil {
-		t.Fatal("e1 wrote e2's actual key")
-	}
+	_, err = kv.Put(short, "desired.e1.probe", []byte(`{"v":9}`))
+	refusedByServer(t, "writing a desired key", err)
+	refusedByServer(t, "writing e2's actual key", edge.PutActual(short, "e2", "probe", []byte(`{}`)))
 	obs, err := edge.modulesStore(short)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := obs.PutBytes(short, "probe.d9.wasm", []byte("x")); err == nil {
-		t.Fatal("e1 wrote a module's file")
-	}
+	_, err = obs.PutBytes(short, "probe.d9.wasm", []byte("x"))
+	refusedByServer(t, "writing a module's file", err)
 	if _, ok, _ := hub.Actual(ctx, "e2", "probe"); ok {
 		t.Fatal("e2's actual key holds what e1 wrote")
 	}
@@ -152,6 +157,74 @@ func TestEdgeDeliveryAbuse(t *testing.T) {
 	}
 	if edges, err := hub.DesiredEdges(ctx, "probe"); err != nil || !slices.Equal(edges, []string{"e2"}) {
 		t.Fatalf("DesiredEdges = %v %v", edges, err)
+	}
+}
+
+// An edge that floods its own actual keys fills the capped delivery
+// bucket, never the core's disk: a value over the bucket's limit is
+// refused, and once the bucket is full a write is refused too.
+func TestEdgeCannotFillTheCoresDisk(t *testing.T) {
+	ctx := context.Background()
+	cfg := DefaultConfig(filepath.Join(t.TempDir(), "hub"))
+	cfg.Chain = mustChain(t, newMemStore(), time.Now)
+	cfg.testLeafPort = freePort(t)
+	const capBytes = 256 << 10
+	cfg.testDeliveryMaxBytes = capBytes
+	hub, err := Open(ctx, cfg, quiet())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = hub.Shutdown(context.Background()) })
+	if err := hub.Ensure(ctx); err != nil {
+		t.Fatal(err)
+	}
+	creds := edgeCreds(t, hub, "e1", joinPerms(edgePerms("e1"), DeliveryPermissions("e1")))
+	edge := openEdge(t, filepath.Join(t.TempDir(), "edge"), "e1", "nats-leaf://127.0.0.1:"+itoa(cfg.testLeafPort), creds)
+	waitFor(t, func() bool { return edge.EdgeHealth(ctx).Linked })
+
+	if err := edge.PutActual(ctx, "e1", "big", bytes.Repeat([]byte("x"), deliveryMaxValue+1)); err == nil {
+		t.Fatal("a value over the bucket's limit was stored")
+	}
+	if _, ok, _ := hub.Actual(ctx, "e1", "big"); ok {
+		t.Fatal("the core holds the oversized value")
+	}
+	value := bytes.Repeat([]byte("x"), 16<<10)
+	refused := -1
+	for i := range 64 { // 1 MiB if nothing stopped it, four times the cap
+		if err := edge.PutActual(ctx, "e1", "m"+itoa(i), value); err != nil {
+			refused = i
+			break
+		}
+	}
+	if refused < 0 {
+		t.Fatal("the edge wrote past the bucket's cap")
+	}
+	s, err := hub.JetStream().Stream(ctx, "KV_"+bus.BucketDelivery)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := s.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.State.Bytes > capBytes {
+		t.Fatalf("the bucket holds %d bytes, over its cap of %d", info.State.Bytes, capBytes)
+	}
+	t.Logf("refused at write %d; the bucket holds %d bytes", refused, info.State.Bytes)
+}
+
+// refusedByServer fails unless err is the core's server refusing what
+// the edge's user may not publish: no responder, at once, never a timeout.
+func refusedByServer(t *testing.T, what string, err error) {
+	t.Helper()
+	switch {
+	case err == nil:
+		t.Fatalf("%s: allowed", what)
+	case errors.Is(err, context.DeadlineExceeded):
+		t.Fatalf("%s: timed out instead of being refused: %v", what, err)
+	case !errors.Is(err, nats.ErrNoResponders) && !errors.Is(err, jetstream.ErrNoStreamResponse) &&
+		!errors.Is(err, jetstream.ErrJetStreamNotEnabled) && !errors.Is(err, nats.ErrJetStreamNotEnabled):
+		t.Fatalf("%s: %v, want the server's refusal (no responders)", what, err)
 	}
 }
 
