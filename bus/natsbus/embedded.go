@@ -53,6 +53,11 @@ func (b *Bus) startServer(cfg Config) error {
 		if err := leafOptions(opts, cfg.Leaf); err != nil {
 			return err
 		}
+	} else {
+		// The core's domain: an edge reaches the delivery bucket and the
+		// modules' files as $JS.core.API (ADR-0117). The node's own client
+		// keeps $JS.API.
+		opts.JetStreamDomain = bus.CoreNode
 	}
 	if cfg.Chain != nil {
 		if err := adoptGlobalStore(dir, cfg.Chain.AccountPublicKey()); err != nil {

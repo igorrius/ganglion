@@ -216,12 +216,37 @@ func (a *Agent) listModules(ctx context.Context, t *turn) (moduleReply, error) {
 	lines := a.builtinLines(ctx, t, vs)
 	for _, m := range local {
 		lines = append(lines, "- "+a.say(ctx, t, texts.ModulesLocalRow, texts.Vars{varName: texts.Escape(m.Name),
-			"state": a.say(ctx, t, stateKey(m.State), nil), varVersion: texts.Escape(m.Version)}))
+			"state": a.stateText(ctx, t, m), varVersion: texts.Escape(m.Version)}))
 	}
 	if len(lines) == 0 {
 		return plain(a.say(ctx, t, texts.ModulesNone, nil)), nil
 	}
 	return plain(a.say(ctx, t, texts.ModulesHeader, nil) + "\n" + strings.Join(lines, "\n")), nil
+}
+
+// stateText is how a local module stands, in words: on its edge, what the
+// edge says it runs (R-EDGE-6); the edge's words are escaped.
+func (a *Agent) stateText(ctx context.Context, t *turn, m modstore.LocalModule) string {
+	if m.State != modstore.RunEdge || m.Edge == nil {
+		return a.say(ctx, t, stateKey(m.State), nil)
+	}
+	e := m.Edge
+	running := a.say(ctx, t, texts.ModulesEdgeNothing, nil)
+	if e.Version != "" {
+		running = a.say(ctx, t, texts.ModulesEdgeRunning, texts.Vars{varVersion: texts.Escape(e.Version)})
+	}
+	var how string
+	switch e.Result {
+	case modstore.EdgeRunning:
+		how = running
+	case modstore.EdgeRefused:
+		how = a.say(ctx, t, texts.ModulesEdgeRefused, texts.Vars{varVersion: texts.Escape(m.Version), "reason": texts.Escape(e.Reason), "running": running})
+	case modstore.EdgeUndelivered:
+		how = a.say(ctx, t, texts.ModulesEdgeUndelivered, nil)
+	default:
+		how = a.say(ctx, t, texts.ModulesEdgeWaiting, texts.Vars{varVersion: texts.Escape(m.Version)})
+	}
+	return a.say(ctx, t, texts.ModulesStateEdge, texts.Vars{"node": texts.Escape(e.Node), "how": how})
 }
 
 // stateKey is the text of a local module's state.
@@ -233,7 +258,7 @@ func stateKey(s modstore.RunState) texts.Key {
 		return texts.ModulesStateOff
 	case modstore.RunCrashloop:
 		return texts.ModulesStateCrashloop
-	case modstore.RunStopped:
+	case modstore.RunStopped, modstore.RunEdge: // an edge module's words are stateText's
 	}
 	return texts.ModulesStateStopped
 }
@@ -295,7 +320,7 @@ func (a *Agent) moduleCard(ctx context.Context, t *turn, name string) (moduleRep
 	if c.State == modstore.RunRunning {
 		b.WriteString(a.say(ctx, t, texts.ModulesCardRunning, vars))
 	} else {
-		vars["state"] = a.say(ctx, t, stateKey(c.State), nil)
+		vars["state"] = a.stateText(ctx, t, c.LocalModule)
 		b.WriteString(a.say(ctx, t, texts.ModulesCardStopped, vars))
 	}
 	if line := a.healthLine(ctx, t, c.Health); line != "" {

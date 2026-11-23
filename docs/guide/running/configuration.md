@@ -109,6 +109,7 @@ The modules the node runs and their settings. Installing a module writes to this
 | `name` | The module's name. |
 | `config` | Its settings, checked against what the module declares. |
 | `off` | Set to turn the module off. |
+| `node` | The name of an edge that runs the module instead of this node. Left out, the module runs here. See [Running a module on an edge](../using/modules.md#running-a-module-on-an-edge). |
 | `notify_to` | Where its messages go: `owner` (your private chat, the default) or names from `destinations`. Up to 8, each message goes to every one. |
 
 ```yaml

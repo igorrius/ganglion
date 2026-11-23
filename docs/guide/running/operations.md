@@ -67,6 +67,7 @@ An edge is the same `ganglion` binary run with `--roles edge` on another compute
 - The edge dials out to your main node; it opens no port. When the link is down, its modules keep running and their events stay on the edge (up to 256 MiB, at most 7 days, the oldest go first). Within a few seconds of the link coming back, your main node has them all, in order and once.
 - Every `edge.telemetry_every` (30 seconds by default) the edge sends its metrics and its state. Your main node serves the edges' metrics on its own `/metrics`, each series with a `node` label naming the edge, so one dashboard shows every computer.
 - `/status` on your main node shows a line per edge: **linked**, with its modules and their versions and how many of its events are still on the way; **not heard**, with the time of its last word and how many events it held then (the edge is off or its link is down); or **not heard since the node started**, for an edge your main node knows but that has not spoken since its restart.
+- A module can run on an edge: put `node: <edge>` in its line of `modules:`. Your main node keeps and installs it, and the edge runs it, checking the files and the module's health before it switches. See [Running a module on an edge](../using/modules.md#running-a-module-on-an-edge).
 
 ## Backups
 

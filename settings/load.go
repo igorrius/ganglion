@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/igorrius/ganglion/bus"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -283,7 +284,7 @@ func (f File) check() error {
 	if err := checkGroups(f.Telegram.Groups); err != nil {
 		return err
 	}
-	if err := checkDestinations(f.Destinations, f.Modules); err != nil {
+	if err := f.checkModules(); err != nil {
 		return err
 	}
 	if err := checkLinks(f.Links); err != nil {
@@ -412,6 +413,25 @@ func validPublicURL(s string) bool {
 func hasCredentials(s string) bool {
 	u, err := url.Parse(s)
 	return err == nil && u.User != nil
+}
+
+// checkModules refuses a module line's notify_to that names no destination
+// and a node that cannot name an edge.
+func (f File) checkModules() error {
+	if err := checkDestinations(f.Destinations, f.Modules); err != nil {
+		return err
+	}
+	return checkModuleNodes(f.Modules)
+}
+
+// checkModuleNodes refuses a module's node that cannot name an edge.
+func checkModuleNodes(mods []Module) error {
+	for i, m := range mods {
+		if m.Node != "" && m.Node != bus.CoreNode && bus.CheckEdgeName(m.Node) != nil {
+			return pathError("modules["+strconv.Itoa(i)+"].node", "must be an edge's name: one word, no dots, spaces, * or >")
+		}
+	}
+	return nil
 }
 
 // checkDestinations refuses a bad line of destinations, a name listed

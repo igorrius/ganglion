@@ -110,6 +110,7 @@ flowchart TB
     planapp["Plan approval<br/>one press approves exactly<br/>the commands the plan lists"]
     modhost["Module host<br/>the owner's modules: cells, cron jobs,<br/>tools, contract, supervisor"]
     runner["Runner<br/>wazero, manifest grants,<br/>answers checked"]
+    edgedel[("Edge delivery<br/>KV delivery, Object Store modules,<br/>domain core")]
     mcpclientc["MCP client<br/>remote servers over Streamable HTTP,<br/>pinned tool lists, tools on demand"]
     mcpadminc["MCP admin<br/>mcp.connect, mcp.rule, the cards,<br/>the mcp: section, /mcp"]
     mcpsrv(["Remote MCP server<br/>an outside service"])
@@ -180,6 +181,7 @@ flowchart TB
     buildq -- "one build at a time" --> builderc
     builderc -- "writes only its temp folder" --> sandbox
     tools -- "module.install after the press: reload; module.status: the card" --> modhost
+    modhost -- "a module with node: edge:<br/>files, then desired.edge.module" --> edgedel
     modhost -- "own cells only" --> cellsc
     modhost -- "cron jobs" --> sched
     modhost -- "escalation event; module.notify" --> inbox
@@ -240,6 +242,7 @@ flowchart TB
     pol["Local policies<br/>kill switches, ttl, risk class"]
     kv[("Module state<br/>KV")]
     mcp["MCP subprocess host<br/>non-WASM modules, P3"]
+    conv["Converger<br/>watches desired.edge.*, checks the key,<br/>the digest and the health, installs, reloads"]
     bus{{"Bus to core"}}
     dev["Devices and vendor APIs"]
 
@@ -253,6 +256,9 @@ flowchart TB
     host <--> kv
     host -- "event.emit, escalation" --> bus
     bus -- "tool.call, deploy, policy.update" --> sup
+    bus -- "desired and the module's files<br/>(delivery, modules)" --> conv
+    conv -- "install, reload: init" --> sup
+    conv -- "actual: running, refused, removed" --> bus
     sup -.-> mcp
 
     classDef planned stroke-dasharray: 5 5

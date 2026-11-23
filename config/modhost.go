@@ -12,6 +12,7 @@ import (
 	"github.com/igorrius/ganglion/builder"
 	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/cells"
+	"github.com/igorrius/ganglion/edge"
 	templates "github.com/igorrius/ganglion/examples/modules"
 	"github.com/igorrius/ganglion/gitrepo"
 	"github.com/igorrius/ganglion/groups"
@@ -42,6 +43,10 @@ func ModuleHost() do.Provider[*modhost.Host] {
 		if b.EdgeRole {
 			node = b.Settings.Edge.Name
 		}
+		var delivery modhost.Delivery
+		if !b.EdgeRole { // the core delivers the modules its file sends to edges (R-EDGE-6)
+			delivery = edge.Deliverer{Bus: do.MustInvoke[*natsbus.Bus](i)}
+		}
 		h := modhost.New(modhost.Deps{
 			Node:         node,
 			Store:        do.MustInvoke[*modstore.Store](i),
@@ -51,6 +56,7 @@ func ModuleHost() do.Provider[*modhost.Host] {
 			Publisher:    do.MustInvoke[*natsbus.Bus](i),
 			Consumers:    do.MustInvoke[*natsbus.Bus](i),
 			Calls:        do.MustInvoke[*natsbus.Bus](i),
+			Delivery:     delivery,
 			Secrets:      secretsFor(b, store),
 			Forget:       forgetSecrets(store),
 			NodeSecrets:  nodeSecrets(b),

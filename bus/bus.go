@@ -123,6 +123,95 @@ func Call(node, module, port string) (string, error) { return subject("rpc", nod
 // Telemetry is the subject of a node's metrics: g.tel.<node>.
 func Telemetry(node string) (string, error) { return subject("tel", node) }
 
+// Module delivery to edges (R-EDGE-6, ADR-0117): the core keeps a
+// module's files in an Object Store and what each edge should run in a KV
+// bucket; the edge writes back what it runs. Both live in the core's
+// JetStream domain, CoreNode, which an edge reaches across its link.
+const (
+	// BucketDelivery is the KV bucket of desired.<edge>.<module> and
+	// actual.<edge>.<module>.
+	BucketDelivery = "delivery"
+	// ObjectModules is the Object Store of the modules' files.
+	ObjectModules = "modules"
+)
+
+// The first tokens of the delivery keys.
+const (
+	desiredRoot = "desired"
+	actualRoot  = "actual"
+)
+
+// key joins checked tokens with dots: a KV key of one token per part.
+func key(root string, tokens ...string) (string, error) {
+	for _, t := range tokens {
+		if err := CheckToken(t); err != nil {
+			return "", err
+		}
+	}
+	return strings.Join(append([]string{root}, tokens...), "."), nil
+}
+
+// Desired is the key of what edge should run of module:
+// desired.<edge>.<module>, the module by its short name.
+func Desired(edge, module string) (string, error) {
+	if err := CheckEdgeName(edge); err != nil {
+		return "", err
+	}
+	return key(desiredRoot, edge, module)
+}
+
+// Actual is the key of what edge runs of module: actual.<edge>.<module>.
+func Actual(edge, module string) (string, error) {
+	if err := CheckEdgeName(edge); err != nil {
+		return "", err
+	}
+	return key(actualRoot, edge, module)
+}
+
+// DesiredOf is the pattern of every desired key of edge:
+// desired.<edge>.*.
+func DesiredOf(edge string) (string, error) {
+	if err := CheckEdgeName(edge); err != nil {
+		return "", err
+	}
+	return desiredRoot + "." + edge + ".*", nil
+}
+
+// DesiredOfModule is the pattern of module's desired key on every edge:
+// desired.*.<module>.
+func DesiredOfModule(module string) (string, error) {
+	if err := CheckToken(module); err != nil {
+		return "", err
+	}
+	return desiredRoot + ".*." + module, nil
+}
+
+// ParseDesired splits a desired key into its edge and module; false when
+// key is not one.
+func ParseDesired(k string) (edge, module string, ok bool) {
+	parts := strings.Split(k, ".")
+	if len(parts) != 3 || parts[0] != desiredRoot || CheckEdgeName(parts[1]) != nil || CheckToken(parts[2]) != nil {
+		return "", "", false
+	}
+	return parts[1], parts[2], true
+}
+
+// The parts of a module's build in the Object Store.
+const (
+	PartWasm     = "wasm"
+	PartManifest = "yaml"
+)
+
+// ModuleObject is the name of one part of a build in the Object Store:
+// <module>.<digest>.<part>. A build's objects are written once and never
+// changed; the digest in the desired key is what an edge checks them by.
+func ModuleObject(module, digest, part string) (string, error) {
+	if err := CheckToken(module); err != nil {
+		return "", err
+	}
+	return key(module, digest, part)
+}
+
 // CheckURL reports whether s is the address of a NATS server: nats:// or
 // tls:// with a host, and nothing in front of it that holds a secret. An
 // error never repeats the value, which may hold a password.

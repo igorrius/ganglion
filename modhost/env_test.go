@@ -486,6 +486,9 @@ type env struct {
 	pub       modhost.Publisher         // the host's publisher; the loopback when nil
 	consumers modhost.Consumers         // the bus's consumers for the links; none when nil
 	calls     modhost.Calls             // the bus's services and requests for the calls; none when nil
+	modules   modhost.Store             // the module store in place of store, when set (a real one)
+	delivery  modhost.Delivery          // the delivery to edges; none when nil
+	node      string                    // the host's node; the core when ""
 	now       time.Time
 	real      bool // the host runs on the real clock, for a test that waits in real time
 	logs      *bytes.Buffer
@@ -535,8 +538,14 @@ func newEnv(t *testing.T, actives ...modstore.Active) *env {
 
 // newHost is a host over the env's stores: a node that restarted.
 func (e *env) newHost() *modhost.Host {
+	var st modhost.Store = e.store
+	if e.modules != nil {
+		st = e.modules
+	}
 	return modhost.New(modhost.Deps{
-		Store:       e.store,
+		Node:        e.node,
+		Store:       st,
+		Delivery:    e.delivery,
 		Cells:       e.cells,
 		Jobs:        e.jobs,
 		Inbox:       e.inbox,

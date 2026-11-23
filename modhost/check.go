@@ -26,7 +26,8 @@ var errCheckReport = errors.New("modhost: a build under check reports no cell")
 // Check loads build b in a throwaway instance as it would run (its
 // manifest's limits, the node's secrets but never the node's own, config
 // values from cfg) with a state that is dropped and cells it may read but
-// not report, runs its health trigger and closes it. Nothing of the node
+// not report, runs its health trigger and closes it; a module whose line
+// sends it to an edge is only loaded. Nothing of the node
 // changes. An ErrCheckFailed names what failed in the node's words; the
 // module's own text goes to the log only (R-RUN-9, R-RUN-14).
 func (h *Host) Check(ctx context.Context, b modstore.Build, cfg map[string]any) error {
@@ -46,12 +47,24 @@ func (h *Host) Check(ctx context.Context, b modstore.Build, cfg map[string]any) 
 		return fmt.Errorf("%w: it does not load on this node", ErrCheckFailed)
 	}
 	defer func() { _ = mod.Close(context.WithoutCancel(ctx)) }()
+	if h.runsElsewhere(b.Module) {
+		// Its health is its edge's to check, where it runs and reaches what
+		// it reads (ADR-0117); here it only has to load.
+		return nil
+	}
 	if err := mod.Health(ctx); err != nil {
 		k := lifecycleKind(err)
 		log.Warn("modhost: a build's health check failed", "module", b.Module, "kind", string(k), "err", g.logged(err.Error()))
 		return fmt.Errorf("%w: its health check failed (%s)", ErrCheckFailed, k)
 	}
 	return nil
+}
+
+// runsElsewhere reports whether module's line sends it to an edge. A file
+// that cannot be read is no edge: the check is the full one.
+func (h *Host) runsElsewhere(module string) bool {
+	mods, err := h.d.Settings.Modules()
+	return err == nil && h.edgeOf(settingOf(mods, module)) != ""
 }
 
 // checkCells is the cell port of a build under check: it reads as the

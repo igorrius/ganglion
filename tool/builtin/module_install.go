@@ -194,6 +194,9 @@ func (t *ModuleInstall) start(ctx context.Context, b modstore.Build, o modstore.
 		return done + ", but its settings line could not be written, so it runs with its defaults; /status says how it is"
 	case line.Off:
 		return done + "; it stays off, as its settings say, until the owner turns it on"
+	case line.OnEdge() != "":
+		return done + " and sent to the edge " + line.OnEdge() + ", which runs it once it passes its health check there; " +
+			"until then the version before it runs; /modules " + modstore.ShortName(o.Module) + " shows which"
 	}
 	return done + " and running"
 }

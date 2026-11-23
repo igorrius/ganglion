@@ -44,6 +44,25 @@ If a module needs a secret (for example an API key), the agent asks for it and t
 
 Every build is a new version, with a record of who built it and why. A build must carry a higher version than any earlier one. The node keeps the previous version. If a new version does not start, it is rolled back. Module state survives a swap.
 
+## Running a module on an edge
+
+A module can run on an [edge](../running/operations.md#edges), the computer next to your devices, instead of on your main node. Name the edge in the module's line of `modules:` in the node's file:
+
+```yaml
+modules:
+  - name: local/price-watch
+    node: garage
+```
+
+`node` is one word: an edge's name. Left out, or `core`, the module runs on your main node.
+
+- Your main node still builds, keeps and installs the module as usual, with the same install window and the same versions. It does not run it: it sends the active version to the edge, which runs it. An edge that is off or has no link takes the version as soon as it is back.
+- Before the edge switches, it checks that the files are exactly the ones your main node sent and runs the module's health check on a separate copy. If either fails, or the new version does not start, the old version keeps running and `/modules` says why.
+- `/modules` shows such a module as "on the edge" with its name and what runs there: its version, that the edge has not taken the latest yet, or that it refused it and the reason.
+- `/modules rollback <name>` works the same: the previous version goes to the edge, and the edge switches back.
+- The module's settings come from its line in your main node's file. Its secrets are set on the edge's own computer, with `ganglion secret set --module <name> <NAME>` as in [Entering a secret](secrets.md#on-the-host-instead); a secret on your main node does not reach the edge.
+- Removing or turning off the module takes it off the edge.
+
 ## The `/modules` verbs
 
 All of these work in your private chat and none restarts the node.
