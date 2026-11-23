@@ -40,6 +40,7 @@ const (
 	// trigEvent and trigCall are runs a link started (R-BUS-6).
 	trigEvent = "event"
 	trigCall  = "call"
+	trigHTTP  = "http" // a browser asked the edge's loopback listener (R-HTTP-2)
 	// linkArrow separates the two ends of a link as the journal writes it.
 	linkArrow = " → "
 	// hopIndent starts a hop's second line.
@@ -104,6 +105,8 @@ func (a *Agent) runCause(sp texts.Speaker, h modstore.Hop, producer string) stri
 		return sp.Text(texts.RunCauseEvent, texts.Vars{"link": linkShown(h.Link, plainShown)})
 	case trigCall:
 		return sp.Text(texts.RunCauseCall, texts.Vars{"link": linkShown(h.Link, plainShown)})
+	case trigHTTP:
+		return sp.Text(texts.RunCauseHTTP, nil)
 	}
 	return unshown
 }

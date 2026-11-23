@@ -63,6 +63,17 @@ modules:
 - The module's settings come from its line in your main node's file. Its secrets are set on the edge's own computer, with `ganglion secret set --module <name> <NAME>` as in [Entering a secret](secrets.md#on-the-host-instead); a secret on your main node does not reach the edge.
 - Removing or turning off the module takes it off the edge.
 
+## Modules with web pages
+
+A module can also serve a web page. The install window then has a line "Serves web pages at the path `/<module>/` on the node that runs it" with the module's routes (the host and port are that node's `http.local_addr`, `127.0.0.1:8090` unless set), and a new version that adds or changes a route says so in its "New:" line. Open the address in a browser on the computer that runs the module; `http://127.0.0.1:8090/` lists every page there. A node with the edge role serves pages, on the port of its `http.local_addr` setting; see [Pages on the edge](../running/edges.md#pages-on-the-edge).
+
+What your node does so a page is safe to open:
+
+- Only this computer can reach a page. Other computers and the internet cannot.
+- Other websites you have open cannot read a page or press its buttons.
+- A page cannot set cookies, and it can load only its own files, not anything from other sites.
+- A module that fails or answers wrongly shows an error instead of a page, and five failures in an hour turn the module off, as for any other module.
+
 ## The `/modules` verbs
 
 All of these work in your private chat and none restarts the node.

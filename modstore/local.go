@@ -72,6 +72,8 @@ type Rights struct {
 	// Ports the manifest declares, by kind: sorted port names. The implicit
 	// notify output is not repeated here; the notify line covers it.
 	Emits, Accepts, Serves, Calls []string
+	// Pages are the routes of its http trigger, "GET /" (R-HTTP-1): sorted.
+	Pages []string
 }
 
 // Plan is a build checked but not installed.
@@ -314,6 +316,10 @@ func cellIDs(module string, m runner.Manifest) []string {
 	return ids
 }
 
+// PagesOf are the routes of m's http trigger, "GET /", sorted: what the
+// install window lists and the listener's index shows.
+func PagesOf(m runner.Manifest) []string { return baseRights(m).Pages }
+
 // baseRights are the rights a manifest states outright; every declared cell
 // is counted as created until the cells are looked up.
 func baseRights(m runner.Manifest) Rights {
@@ -332,7 +338,15 @@ func baseRights(m runner.Manifest) Rights {
 		if t.Tool != "" {
 			r.Tools = append(r.Tools, t.Tool)
 		}
+		if t.HTTP != nil {
+			for _, rt := range t.HTTP.Routes {
+				for _, m := range rt.Methods {
+					r.Pages = append(r.Pages, m+" "+rt.Path)
+				}
+			}
+		}
 	}
+	r.Pages = sorted(r.Pages)
 	r.Crons, r.Tools = sorted(r.Crons), sorted(r.Tools)
 	for name := range m.Cells.Report {
 		r.CellsCreated = append(r.CellsCreated, name)
@@ -381,7 +395,7 @@ func widening(next Rights, old activeRightsSet) Rights {
 		Memory: wider(next.Memory, old.Memory), Timeout: wider(next.Timeout, old.Timeout),
 		NotifyPerDay: wider(next.NotifyPerDay, old.NotifyPerDay),
 		Emits:        minus(next.Emits, old.Emits), Accepts: minus(next.Accepts, old.Accepts),
-		Serves: minus(next.Serves, old.Serves), Calls: minus(next.Calls, old.Calls),
+		Serves: minus(next.Serves, old.Serves), Calls: minus(next.Calls, old.Calls), Pages: minus(next.Pages, old.Pages),
 	}
 }
 

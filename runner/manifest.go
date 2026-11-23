@@ -44,8 +44,21 @@ type Trigger struct {
 	Cron   string   `yaml:"cron,omitempty"`
 	Tool   string   `yaml:"tool,omitempty"`
 	Cell   []string `yaml:"cell,omitempty"`   // full cell ids it listens to (R-RUN-15)
+	HTTP   *HTTP    `yaml:"http,omitempty"`   // routes the edge's loopback listener serves (R-HTTP-1)
 	About  string   `yaml:"about,omitempty"`  // the tool's description for the agent
 	Output *Shape   `yaml:"output,omitempty"` // required for a tool of a local module
+}
+
+// HTTP is an http trigger: the routes a module answers on the node's
+// loopback listener, under the module's own prefix (R-HTTP-1, ADR-0110).
+type HTTP struct {
+	Routes []Route `yaml:"routes"`
+}
+
+// Route is one path of an http trigger and the methods it answers.
+type Route struct {
+	Path    string   `yaml:"path"`
+	Methods []string `yaml:"methods"`
 }
 
 // Listens is the union of the manifest's cell triggers, sorted ("" none).
@@ -209,19 +222,16 @@ func (m Manifest) checkV2() error {
 // install window would show one tool's about and the node run another's
 // handler) or a cron line given twice (the module would run twice a tick).
 func (m Manifest) checkTriggers() error {
-	tools, crons, cells := map[string]bool{}, map[string]bool{}, false
+	tools, crons, cells, http := map[string]bool{}, map[string]bool{}, false, false
 	for i, t := range m.Triggers {
 		if t.kinds() != 1 {
-			return fmt.Errorf("trigger %d must set exactly one of cron, tool, cell", i)
+			return fmt.Errorf("trigger %d must set exactly one of cron, tool, cell, http", i)
 		}
-		if len(t.Cell) > 0 {
-			if cells {
-				return fmt.Errorf("trigger %d: a module has one cell trigger; list every cell in it", i)
-			}
-			cells = true
-			if err := m.checkListens(i, t.Cell); err != nil {
-				return err
-			}
+		if err := checkHTTP(i, t, &http); err != nil {
+			return err
+		}
+		if err := m.checkCell(i, t, &cells); err != nil {
+			return err
 		}
 		if t.Tool != "" && !toolNamePattern.MatchString(t.Tool) {
 			return fmt.Errorf("tool %q: a name is lower-case letters, digits and _", t.Tool)
@@ -238,10 +248,39 @@ func (m Manifest) checkTriggers() error {
 	return nil
 }
 
-// kinds counts how many of cron, tool and cell the trigger sets.
+// checkCell validates t's cell trigger, the first of the manifest's unless
+// *seen already says there was one.
+func (m Manifest) checkCell(i int, t Trigger, seen *bool) error {
+	if len(t.Cell) == 0 {
+		return nil
+	}
+	if *seen {
+		return fmt.Errorf("trigger %d: a module has one cell trigger; list every cell in it", i)
+	}
+	*seen = true
+	return m.checkListens(i, t.Cell)
+}
+
+// checkHTTP validates t's http trigger, the first of the manifest's unless
+// *seen already says there was one.
+func checkHTTP(i int, t Trigger, seen *bool) error {
+	if t.HTTP == nil {
+		return nil
+	}
+	if *seen {
+		return fmt.Errorf("trigger %d: a module has one http trigger; list every route in it", i)
+	}
+	*seen = true
+	if err := t.HTTP.check(); err != nil {
+		return fmt.Errorf("trigger %d: %w", i, err)
+	}
+	return nil
+}
+
+// kinds counts how many of cron, tool, cell and http the trigger sets.
 func (t Trigger) kinds() int {
 	n := 0
-	for _, set := range []bool{t.Cron != "", t.Tool != "", len(t.Cell) > 0} {
+	for _, set := range []bool{t.Cron != "", t.Tool != "", len(t.Cell) > 0, t.HTTP != nil} {
 		if set {
 			n++
 		}
@@ -261,6 +300,62 @@ func (m Manifest) checkListens(i int, ids []string) error {
 			return fmt.Errorf("trigger %d: cell %q is not in cells.read", i, id)
 		case strings.HasPrefix(id, short+"."):
 			return fmt.Errorf("trigger %d: a module cannot listen to its own cell %q", i, id)
+		}
+	}
+	return nil
+}
+
+// Limits of an http trigger's routes.
+const (
+	MaxRoutes    = 32  // routes in one trigger
+	MaxRoutePath = 128 // bytes of one path
+)
+
+// routeMethods are the methods a route may answer. HEAD and OPTIONS are the
+// node's: a browser's preflight is never the module's to answer (R-HTTP-3).
+var routeMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
+
+// routePathPattern is a route's path: absolute, plain characters, no query.
+var routePathPattern = regexp.MustCompile(`^/[A-Za-z0-9._~/-]*$`)
+
+// check validates the routes: at least one, each path plain and without a
+// dot segment or an empty one, each method one the node allows, and no
+// path and method twice.
+func (h HTTP) check() error {
+	if len(h.Routes) == 0 || len(h.Routes) > MaxRoutes {
+		return fmt.Errorf("http: 1..%d routes", MaxRoutes)
+	}
+	seen := map[string]bool{}
+	for _, r := range h.Routes {
+		if err := r.checkPath(); err != nil {
+			return err
+		}
+		if len(r.Methods) == 0 {
+			return fmt.Errorf("http: route %q needs methods", r.Path)
+		}
+		for _, m := range r.Methods {
+			if !slices.Contains(routeMethods, m) {
+				return fmt.Errorf("http: route %q: method %q is not one of %s", r.Path, m, strings.Join(routeMethods, ", "))
+			}
+			if seen[m+" "+r.Path] {
+				return fmt.Errorf("http: route %s %s is declared twice", m, r.Path)
+			}
+			seen[m+" "+r.Path] = true
+		}
+	}
+	return nil
+}
+
+// checkPath refuses a path that is not plain, or has a dot segment or an
+// empty one before its end ("/a/" is a path of its own).
+func (r Route) checkPath() error {
+	if len(r.Path) > MaxRoutePath || !routePathPattern.MatchString(r.Path) {
+		return fmt.Errorf("http: route path %q: an absolute path of letters, digits and . _ ~ - /, at most %d bytes", r.Path, MaxRoutePath)
+	}
+	segs := strings.Split(r.Path[1:], "/")
+	for i, seg := range segs {
+		if seg == "." || seg == ".." || (seg == "" && i < len(segs)-1) {
+			return fmt.Errorf("http: route path %q has an empty or dot segment", r.Path)
 		}
 	}
 	return nil

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/igorrius/ganglion/cells"
+	"github.com/igorrius/ganglion/modhttp"
 	"github.com/igorrius/ganglion/modstore"
 	"github.com/igorrius/ganglion/runner"
 	"github.com/igorrius/ganglion/schedule"
@@ -28,7 +29,8 @@ type loaded struct {
 	notifyTo                  []string      // the destinations of its messages; none is the owner alone (R-RUN-18)
 	escalate                  map[Kind]bool // the manifest's escalate kinds
 	tools                     []tool.Handler
-	service                   *service // its served ports on the bus, nil when it serves none
+	service                   *service      // its served ports on the bus, nil when it serves none
+	web                       chan struct{} // the slots of its requests (modhttp.MaxAtOnce), nil when it has no http trigger
 }
 
 // recipient is the admin a module belongs to: who installed it, or the
@@ -110,6 +112,9 @@ func (h *Host) prepare(ctx context.Context, a modstore.Active, s settings.Module
 		return nil, stop{reason: ReasonLoad, since: now}, nil
 	}
 	l.tools = h.toolsOf(l)
+	if slices.ContainsFunc(m.Triggers, func(t runner.Trigger) bool { return t.HTTP != nil }) {
+		l.web = make(chan struct{}, modhttp.MaxAtOnce)
+	}
 	return l, stop{}, nil
 }
 

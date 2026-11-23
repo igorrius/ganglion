@@ -813,6 +813,34 @@ func TestModuleInstallWindowShowsPortsAndNewPorts(t *testing.T) {
 	}
 }
 
+// R-HTTP-1, ADR-0110: the window of a page module shows the address it is
+// served at and its routes, and a new version says which routes are new.
+func TestModuleInstallWindowShowsThePagesAddress(t *testing.T) {
+	e := newModuleEnv(t)
+	e.ownSource(t, "demo-reader")
+	page := func(routes string) string {
+		return strings.Replace(demoManifest, "triggers:\n", "triggers:\n  - http: {routes: ["+routes+"]}\n", 1)
+	}
+	first := artifact(page("{path: /, methods: [GET]}"), 161<<10, 1)
+	e.build(t, first)
+	want := strings.Replace(goldenWindow(first.SHA256), "• Reads cells: —\n",
+		"• Reads cells: —\n• Serves web pages at the path `/demo-reader/` on the node that runs it: at its `http.local_addr`, `127.0.0.1:8090` unless set, and none when that is `off`; routes `GET /`\n", 1)
+	c := installCall(first.SHA256)
+	if q := question(t, e, c); q != want {
+		t.Fatalf("window:\n%s\nwant:\n%s", q, want)
+	}
+	if _, err := e.tool(builtin.ModuleInstallTool).Run(context.Background(), pressed(c)); err != nil {
+		t.Fatal(err)
+	}
+	second := artifact(strings.Replace(page("{path: /, methods: [GET]}, {path: /api, methods: [POST]}"), "version: 3", "version: 4", 1), 1024, 2)
+	e.build(t, second)
+	c2 := installCall(second.SHA256)
+	c2.N = 3
+	if first, _, _ := strings.Cut(question(t, e, c2), "\n"); first != "New: serves web pages `POST /api`" {
+		t.Fatalf("first line %q", first)
+	}
+}
+
 func TestModuleInstallWindowEscapesTheManifestsText(t *testing.T) {
 	e := newModuleEnv(t)
 	e.ownSource(t, "demo-reader")

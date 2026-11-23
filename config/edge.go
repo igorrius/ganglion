@@ -101,6 +101,11 @@ func EdgeComponents() do.Provider[[]node.Component] {
 			pub,
 			edgeConverger(i, nb, host),
 		}
+		pages, err := pageListener(i)
+		if err != nil {
+			return nil, err
+		}
+		comps = append(comps, pages...)
 		return append(comps, edgeRenewer(b, nb, log)...), nil
 	}
 }

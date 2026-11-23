@@ -116,6 +116,10 @@ type Bootstrap struct {
 	Telemetry *telemetry.Telemetry
 	// EdgeRole makes the node an edge (R-EDGE-7); Run sets it from the roles.
 	EdgeRole bool
+	// ServesPages is a node with the edge role, alone or beside the core:
+	// it serves modules' pages on http.local_addr (R-EDGE-7, R-HTTP-1). Run
+	// sets it from the roles.
+	ServesPages bool
 }
 
 // SecretValues are the secret values the node read, which logs and command

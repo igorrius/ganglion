@@ -32,6 +32,10 @@ http:
   addr: off
   # The HTTPS address the outside world reaches the listener at.
   # public_url: https://ganglion.example.com
+  # Where a node with the edge role serves the pages of modules that have
+  # an http trigger, at http://<local_addr>/<module>/: a loopback address
+  # only (127.0.0.1, [::1] or localhost), or off.
+  local_addr: 127.0.0.1:8090
 
 telegram:
   # The bot token; the transport does not start without the variable set.

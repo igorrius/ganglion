@@ -9,6 +9,7 @@ package config
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/igorrius/ganglion/agent"
@@ -71,6 +72,7 @@ func Run(ctx context.Context, roles []node.Role, b Bootstrap, logger *slog.Logge
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	b.EdgeRole = EdgeOnly(roles)
+	b.ServesPages = slices.Contains(roles, node.Edge)
 	i := New(ctx, b, logger)
 	do.OverrideValue(i, agent.RestartFunc(func() { cancel(node.ErrRestart) }))
 	if b.EdgeRole {

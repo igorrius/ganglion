@@ -2527,18 +2527,28 @@ Edges ([ADR-0109](adr/0109-a-trust-chain-in-the-vault-and-edges-joined-by-a-one-
 HTTP modules ([ADR-0110](adr/0110-modules-answer-http-on-an-edges-loopback.md)):
 
 - **R-HTTP-1.** A manifest's `http` trigger declares routes and methods. The
-  edge's listener (`http.local_addr`, default `127.0.0.1:8090`) gives each
-  module the prefix `/<module>/` and lists the module pages at `/`.
+  edge's listener (`http.local_addr`, default `127.0.0.1:8090`, `off` for
+  none) gives each module the prefix `/<module>/` and lists the module pages
+  at `/`. A route is an exact path; the methods are `GET`, `POST`, `PUT`,
+  `PATCH` and `DELETE`. The install window shows the path, the setting that gives the host and
+  port on the node that runs the module, and the routes.
 - **R-HTTP-2.** A request starts the module with `Trigger: "http"`: method,
   path inside the prefix, query, a body up to 1 MiB and an allowlist of
-  headers; the answer is a status, an allowlist of headers (`content-type`,
-  `cache-control`, `etag`) and a body. At most 4 requests run at once per
-  module.
+  headers (`accept`, `content-type`, `if-none-match`) as
+  `{method, path, query, headers, body}`; the answer is
+  `{status, headers, body}`: a status of 200..599, an allowlist of headers
+  (`content-type`, `cache-control`, `etag`) and a body up to 4 MiB, bodies in
+  base64. At most 4 requests are admitted at once per module (429 past
+  them); a failed run answers 502, a run past the module's limit 504
+  ([ADR-0118](adr/0118-the-node-owns-the-loopback-listeners-checks-and-headers.md)).
 - **R-HTTP-3.** The listener binds loopback only and refuses a `Host` other
-  than `127.0.0.1` or `localhost` with its port. The node sets
-  `Content-Security-Policy: default-src 'self'` and
-  `X-Content-Type-Options: nosniff`, and drops `Set-Cookie` and every header
-  outside the allowlist.
+  than `127.0.0.1` or `localhost` with its port, a foreign `Origin`, a
+  cross-site write or embed, a path that leaves the prefix, and a body over
+  1 MiB. The node sets `Content-Security-Policy: default-src 'self'` (with
+  `base-uri`, `form-action` and `frame-ancestors`),
+  `X-Content-Type-Options: nosniff` and isolation headers, and drops
+  `Set-Cookie` and every header outside the allowlist
+  ([ADR-0118](adr/0118-the-node-owns-the-loopback-listeners-checks-and-headers.md)).
 - **R-HTTP-4.** A page module reads current values with `cell_get`, keeps its
   own history in `state` from events it accepts, and gets notices through a
   link from `<module>.notify`; it refreshes by polling.

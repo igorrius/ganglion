@@ -107,16 +107,40 @@ func TestParseManifestRejects(t *testing.T) {
 	}
 }
 
+// R-HTTP-1: an http trigger declares its routes and methods.
+func TestParseManifestHTTPTrigger(t *testing.T) {
+	m, err := ParseManifest([]byte("name: x\ntriggers:\n  - http:\n      routes:\n        - {path: /, methods: [GET]}\n        - {path: /api/data.json, methods: [GET, POST]}\n        - {path: /assets/, methods: [GET]}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := m.Triggers[0].HTTP; h == nil || len(h.Routes) != 3 || h.Routes[1].Path != "/api/data.json" || len(h.Routes[1].Methods) != 2 {
+		t.Fatalf("triggers %+v", m.Triggers)
+	}
+}
+
 func TestParseManifestRejectsV2(t *testing.T) {
 	cases := map[string]struct{ src, field string }{
-		"cell kind":   {"cells:\n  report:\n    soc: {kind: switch, type: integer}\n", "soc"},
-		"cell name":   {"cells:\n  report:\n    So-C!: {kind: sensor, type: integer}\n", "So-C!"},
-		"cell type":   {"cells:\n  report:\n    soc: {kind: sensor}\n", "soc"},
-		"read id":     {"cells:\n  read: [soc]\n", "soc"},
-		"config type": {"config:\n  day: {type: date}\n", "day"},
-		"tool name":   {"triggers:\n  - tool: Status\n", "Status"},
-		"tool twice":  {"triggers:\n  - tool: status\n    about: one\n  - tool: status\n    about: other\n", "status is declared twice"},
-		"cron twice":  {"triggers:\n  - cron: \"*/30 * * * *\"\n  - cron: \"*/30  *  * * *\"\n", "repeats the cron line"},
+		"cell kind":          {"cells:\n  report:\n    soc: {kind: switch, type: integer}\n", "soc"},
+		"cell name":          {"cells:\n  report:\n    So-C!: {kind: sensor, type: integer}\n", "So-C!"},
+		"cell type":          {"cells:\n  report:\n    soc: {kind: sensor}\n", "soc"},
+		"read id":            {"cells:\n  read: [soc]\n", "soc"},
+		"config type":        {"config:\n  day: {type: date}\n", "day"},
+		"tool name":          {"triggers:\n  - tool: Status\n", "Status"},
+		"tool twice":         {"triggers:\n  - tool: status\n    about: one\n  - tool: status\n    about: other\n", "status is declared twice"},
+		"cron twice":         {"triggers:\n  - cron: \"*/30 * * * *\"\n  - cron: \"*/30  *  * * *\"\n", "repeats the cron line"},
+		"http twice":         {"triggers:\n  - http: {routes: [{path: /, methods: [GET]}]}\n  - http: {routes: [{path: /a, methods: [GET]}]}\n", "one http trigger"},
+		"http empty":         {"triggers:\n  - http: {routes: []}\n", "1..32 routes"},
+		"http dots":          {"triggers:\n  - http: {routes: [{path: /a/../b, methods: [GET]}]}\n", "dot segment"},
+		"http dot":           {"triggers:\n  - http: {routes: [{path: /./b, methods: [GET]}]}\n", "dot segment"},
+		"http empty segment": {"triggers:\n  - http: {routes: [{path: /a//b, methods: [GET]}]}\n", "empty or dot segment"},
+		"http relative":      {"triggers:\n  - http: {routes: [{path: a, methods: [GET]}]}\n", "absolute path"},
+		"http query":         {"triggers:\n  - http: {routes: [{path: '/a?b=1', methods: [GET]}]}\n", "absolute path"},
+		"http encoded":       {"triggers:\n  - http: {routes: [{path: /a%2fb, methods: [GET]}]}\n", "absolute path"},
+		"http method":        {"triggers:\n  - http: {routes: [{path: /, methods: [OPTIONS]}]}\n", "OPTIONS"},
+		"http head":          {"triggers:\n  - http: {routes: [{path: /, methods: [get]}]}\n", "get"},
+		"http no methods":    {"triggers:\n  - http: {routes: [{path: /}]}\n", "needs methods"},
+		"http route twice":   {"triggers:\n  - http: {routes: [{path: /, methods: [GET]}, {path: /, methods: [POST, GET]}]}\n", "GET / is declared twice"},
+		"http and tool":      {"triggers:\n  - http: {routes: [{path: /, methods: [GET]}]}\n    tool: x\n", "exactly one of cron, tool, cell, http"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

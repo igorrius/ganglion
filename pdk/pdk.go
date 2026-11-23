@@ -180,3 +180,30 @@ func Encode(result any, err error) Output {
 	}
 	return Output{OK: true, Result: b}
 }
+
+// HTTPRequest is the payload of an http trigger (R-HTTP-2): what a browser
+// asked a module's page for, as the node cleaned it. The module is started
+// with Input.Trigger "http" and this as Input.Payload.
+//
+// Path is the path inside the module's prefix, decoded, and always one of
+// the routes the manifest declares; Query is the raw query string without
+// the "?". Headers holds only accept, content-type and if-none-match, with
+// lower-case names. Body is the request's body, at most 1 MiB (base64 in
+// JSON, as Go encodes bytes).
+type HTTPRequest struct {
+	Method  string            `json:"method"`
+	Path    string            `json:"path"`
+	Query   string            `json:"query,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Body    []byte            `json:"body,omitempty"`
+}
+
+// HTTPAnswer is the module's result for an http trigger (R-HTTP-2): the
+// status (200..599), headers of which the node keeps only content-type,
+// cache-control and etag (any case), and the body (base64 in JSON). The node
+// adds the security headers itself and drops everything else.
+type HTTPAnswer struct {
+	Status  int               `json:"status"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Body    []byte            `json:"body,omitempty"`
+}

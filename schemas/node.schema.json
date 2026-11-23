@@ -245,6 +245,11 @@
           "type": "string",
           "format": "uri",
           "pattern": "^https://"
+        },
+        "local_addr": {
+          "description": "The loopback address host:port of the listener that serves the pages of modules with an http trigger, at http://<local_addr>/<module>/; off runs none. The host must be 127.0.0.1, [::1] or localhost: the listener never binds another interface, and refuses a request whose Host is not its own address.",
+          "type": "string",
+          "default": "127.0.0.1:8090"
         }
       }
     },
