@@ -1,4 +1,4 @@
-# ADR-0114: An edge keeps its events in its own JetStream domain, the core's EVENTS stream sources them, and the edge's telemetry is a Prometheus snapshot that also tells the core when to resync
+# ADR-0115: An edge keeps its events in its own JetStream domain, the core's EVENTS stream sources them, and the edge's telemetry is a Prometheus snapshot that also tells the core when to resync
 
 - **Status:** Accepted
 - **Date:** 2026-11-23

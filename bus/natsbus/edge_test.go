@@ -77,7 +77,7 @@ func openEdge(t *testing.T, dir, name, url, creds string) *Bus {
 }
 
 // edgePerms are what the core lets an edge's user do for its events to be
-// sourced (ADR-0114): publish the source's deliveries and replies, and take
+// sourced (ADR-0115): publish the source's deliveries and replies, and take
 // the requests aimed at its own JetStream domain.
 func edgePerms(edge string) UserPermissions {
 	return UserPermissions{

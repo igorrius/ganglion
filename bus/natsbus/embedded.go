@@ -80,7 +80,7 @@ func (b *Bus) startServer(cfg Config) error {
 	return nil
 }
 
-// leafOptions makes opts an edge's leaf node (ADR-0114): the JetStream
+// leafOptions makes opts an edge's leaf node (ADR-0115): the JetStream
 // domain is the edge's name, and the remote is the core's leaf listener.
 // The edge's events are not exported as plain messages: they travel only
 // through the core's stream, which sources the edge's, so a message that

@@ -1,4 +1,4 @@
-// Package edge is the edge role's telemetry (R-EDGE-7, R-OBS-9, ADR-0114):
+// Package edge is the edge role's telemetry (R-EDGE-7, R-OBS-9, ADR-0115):
 // on an edge, a Publisher sends a snapshot of the node every
 // edge.telemetry_every and at once when its link comes up; on the core, a
 // Collector keeps the latest snapshot of each edge, serves the edges'

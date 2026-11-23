@@ -46,7 +46,7 @@ type Config struct {
 	// AuthTimeout is how long a connection to the WebSocket listener may
 	// stay silent before the server closes it.
 	AuthTimeout time.Duration
-	// Leaf makes the embedded server an edge's leaf node (ADR-0114): its own
+	// Leaf makes the embedded server an edge's leaf node (ADR-0115): its own
 	// JetStream domain, and a link to the core that comes and goes. nil is
 	// the core's or a single node's bus. Only for the embedded server, and
 	// not with a Chain: an edge's own server has one user, the edge.

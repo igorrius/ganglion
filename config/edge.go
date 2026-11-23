@@ -117,7 +117,7 @@ func edgeModules(ctx context.Context, h *modhost.Host) ([]edge.Module, error) {
 
 // EdgeCollector provides the core's collector of its edges' telemetry: the
 // edges' series on /metrics, their events copied again when they are heard
-// after a silence, and a /status line per edge (ADR-0114).
+// after a silence, and a /status line per edge (ADR-0115).
 func EdgeCollector() do.Provider[*edge.Collector] {
 	return func(i do.Injector) (*edge.Collector, error) {
 		b, nb := do.MustInvoke[Bootstrap](i), do.MustInvoke[*natsbus.Bus](i)

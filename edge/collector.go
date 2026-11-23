@@ -19,7 +19,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// Caps on what the core keeps of its edges (ADR-0114).
+// Caps on what the core keeps of its edges (ADR-0115).
 const (
 	// MaxEdges is how many edges the core keeps snapshots of.
 	MaxEdges = 64

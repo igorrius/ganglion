@@ -115,7 +115,7 @@ While the link is down, edges keep running on their modules and local
 policies; their events stay in the `EVENTS` stream of the edge's own
 JetStream domain, and the core's `EVENTS` stream sources it, so they arrive
 about a second after the link returns, in order and once
-([ADR-0114](../adr/0114-an-edge-keeps-its-events-in-its-own-domain-and-the-core-sources-them.md)).
+([ADR-0115](../adr/0115-an-edge-keeps-its-events-in-its-own-domain-and-the-core-sources-them.md)).
 Every `edge.telemetry_every` the edge sends a snapshot on `g.tel.<edge>`;
 the core serves the edges' metrics on its own `/metrics` and shows a line
 per edge in `/status`.

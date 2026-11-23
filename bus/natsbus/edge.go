@@ -16,7 +16,7 @@ import (
 
 // edgeStreamMaxBytes caps each stream an edge keeps while its link is down;
 // the oldest messages go first. The core's stream keeps no more than the
-// age limit either way (ADR-0114).
+// age limit either way (ADR-0115).
 const edgeStreamMaxBytes = 256 << 20
 
 // IsEdge reports whether this bus is an edge's leaf node.
@@ -28,7 +28,7 @@ func edgeAPI(edge string) string { return "$JS." + edge + ".API" }
 
 // ensureStream makes one stream as cfg says. The stream of an edge is
 // capped in size; the core's EVENTS stream keeps the edges it sources,
-// which Ensure must not drop (ADR-0114).
+// which Ensure must not drop (ADR-0115).
 func (b *Bus) ensureStream(ctx context.Context, cfg jetstream.StreamConfig) error {
 	if b.IsEdge() {
 		cfg.MaxBytes = edgeStreamMaxBytes
@@ -93,7 +93,7 @@ func (b *Bus) changeSources(ctx context.Context, edge string, add bool) error {
 
 // ResyncEdge starts the copy of edge's events again at once, for an edge
 // whose link has just come back: the server retries a source that failed
-// on its own, but waits up to two minutes between tries (ADR-0114). The
+// on its own, but waits up to two minutes between tries (ADR-0115). The
 // copy goes on from the last event the core holds, so nothing is copied
 // twice. An edge the core does not source is sourced.
 func (b *Bus) ResyncEdge(ctx context.Context, edge string) error {
