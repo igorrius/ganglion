@@ -26,6 +26,11 @@ func (b *Bus) IsEdge() bool { return b.cfg.Leaf != nil }
 // reaches it across the leaf link.
 func edgeAPI(edge string) string { return "$JS." + edge + ".API" }
 
+// edgeDeliver is the subject prefix of the deliveries of one edge's source:
+// the edge may publish under it and under no other edge's prefix, so it
+// cannot write into another edge's copy (#369).
+func edgeDeliver(edge string) string { return "g.src." + edge }
+
 // ensureStream makes one stream as cfg says. The stream of an edge is
 // capped in size; the core's EVENTS stream keeps the edges it sources,
 // which Ensure must not drop (ADR-0115).
@@ -81,7 +86,7 @@ func (b *Bus) changeSources(ctx context.Context, edge string, add bool) error {
 		return nil
 	}
 	if add {
-		cfg.Sources = append(cfg.Sources, &jetstream.StreamSource{Name: bus.StreamEvents, External: &jetstream.ExternalStream{APIPrefix: api}})
+		cfg.Sources = append(cfg.Sources, &jetstream.StreamSource{Name: bus.StreamEvents, External: &jetstream.ExternalStream{APIPrefix: api, DeliverPrefix: edgeDeliver(edge)}})
 	} else {
 		cfg.Sources = slices.DeleteFunc(cfg.Sources, func(x *jetstream.StreamSource) bool { return x.External != nil && x.External.APIPrefix == api })
 	}

@@ -81,7 +81,7 @@ func openEdge(t *testing.T, dir, name, url, creds string) *Bus {
 // the requests aimed at its own JetStream domain.
 func edgePerms(edge string) UserPermissions {
 	return UserPermissions{
-		Publish:   []string{"$JS.S.>", "$JSC.R.>", "g.tel." + edge},
+		Publish:   []string{edgeDeliver(edge) + ".>", "$JSC.R.>", "g.tel." + edge},
 		Subscribe: []string{"$JS." + edge + ".API.>"},
 	}
 }
