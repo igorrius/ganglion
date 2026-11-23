@@ -64,7 +64,7 @@ The node runs a small message server (NATS with JetStream) inside its own proces
 
 An edge is the same `ganglion` binary run with `--roles edge` on another computer, next to your devices. It runs its modules and their schedules, keeps its own message store, and has no Telegram, agent or model: you talk to your main node, and the main node hears from its edges. Give it a name and the main node's bus in [the `edge` section](configuration.md#edge).
 
-- The edge dials out to your main node; it opens no port. When the link is down, its modules keep running and their events stay on the edge (up to 256 MiB, at most 7 days, the oldest go first). About a second after the link returns, your main node has them all, in order and once.
+- The edge dials out to your main node; it opens no port. When the link is down, its modules keep running and their events stay on the edge (up to 256 MiB, at most 7 days, the oldest go first). Within a few seconds of the link coming back, your main node has them all, in order and once.
 - Every `edge.telemetry_every` (30 seconds by default) the edge sends its metrics and its state. Your main node serves the edges' metrics on its own `/metrics`, each series with a `node` label naming the edge, so one dashboard shows every computer.
 - `/status` on your main node shows a line per edge: **linked**, with its modules and their versions and how many of its events are still on the way; **not heard**, with the time of its last word and how many events it held then (the edge is off or its link is down); or **not heard since the node started**, for an edge your main node knows but that has not spoken since its restart.
 

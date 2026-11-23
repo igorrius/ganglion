@@ -58,13 +58,13 @@ func (p *Publisher) Run(ctx context.Context) error {
 			h := p.Health(ctx)
 			linked = h.Linked
 			if h.Linked {
-				p.send(ctx, h)
+				p.send(ctx, h, false)
 			}
 		case <-look.C:
 			h := p.Health(ctx)
 			if h.Linked && !linked {
 				p.Log.Info("edge: link up", "edge", p.Edge)
-				p.send(ctx, h)
+				p.send(ctx, h, true)
 			} else if !h.Linked && linked {
 				p.Log.Warn("edge: link down; events are kept", "edge", p.Edge, "events", h.Events)
 			}
@@ -74,8 +74,8 @@ func (p *Publisher) Run(ctx context.Context) error {
 }
 
 // send publishes one snapshot; a failure is logged, the next one comes.
-func (p *Publisher) send(ctx context.Context, h Health) {
-	data, err := p.snapshot(ctx, h)
+func (p *Publisher) send(ctx context.Context, h Health, relinked bool) {
+	data, err := p.snapshot(ctx, h, relinked)
 	if err == nil {
 		err = p.Publish(p.Edge, data)
 	}
@@ -86,8 +86,8 @@ func (p *Publisher) send(ctx context.Context, h Health) {
 
 // snapshot is the encoded snapshot; metrics that would make it too large
 // are left out.
-func (p *Publisher) snapshot(ctx context.Context, h Health) ([]byte, error) {
-	s := Snapshot{V: Version, At: p.Now().UTC(), Every: p.Every, Linked: h.Linked, Events: h.Events}
+func (p *Publisher) snapshot(ctx context.Context, h Health, relinked bool) ([]byte, error) {
+	s := Snapshot{V: Version, At: p.Now().UTC(), Every: p.Every, Linked: h.Linked, Relinked: relinked, Events: h.Events}
 	mods, err := p.Modules(ctx)
 	if err != nil {
 		p.Log.Warn("edge: modules not read for telemetry", "err", err)

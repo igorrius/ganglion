@@ -33,8 +33,8 @@ const minTelemetryEvery = 5 * time.Second
 
 // check refuses an edge section that cannot run.
 func (e Edge) check() error {
-	if e.Name != "" && bus.CheckToken(e.Name) != nil {
-		return pathError("edge.name", "must be one word: no dots, spaces, * or >")
+	if e.Name != "" && bus.CheckEdgeName(e.Name) != nil {
+		return pathError("edge.name", "must be one word: no dots, spaces, * or >, and not "+bus.CoreNode)
 	}
 	if e.URL != "" {
 		u, err := url.Parse(e.URL)

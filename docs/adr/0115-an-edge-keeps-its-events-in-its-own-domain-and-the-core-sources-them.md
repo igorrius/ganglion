@@ -75,7 +75,7 @@ stream the core's stream sources. Building it leaves these questions:
 
 | Criterion | C1 | C2 |
 |---|---|---|
-| Delay after the link returns | up to 2 minutes | about one second |
+| Delay after the link returns | up to 2 minutes | a few seconds |
 | Risk | none | a remove and add of the source; measured: no message is copied twice or lost, without the help of the duplicate window |
 
 | Criterion | D1 | D2 |
@@ -99,9 +99,15 @@ A1, B1, C2, D1.
   stream to its settings.
 - **Which edges:** the core's telemetry collector sources an edge the first
   time it hears it; `UnsourceEdge` is there for revocation (#322).
-- **Resume:** the edge sends a snapshot as soon as its link comes up; when
-  the core hears an edge for the first time since its start, or after more
-  than three intervals of silence, it resyncs the source.
+- **Resume:** the edge looks at its link every second and, when it comes
+  up, sends a snapshot marked `relinked` at once. The core resyncs the
+  source when it hears an edge for the first time since its start, when a
+  snapshot is marked `relinked`, or when one comes more than one and a half
+  intervals after the last. The core believes an interval between 5 s and
+  5 minutes, whatever the edge claims, so no edge hides its silence from
+  `/status`.
+- **Names:** an edge may not be named `core`, the core's own token in
+  subjects (`bus.CheckEdgeName`), in the settings and in the bus.
 - **Snapshot:** JSON on `g.tel.<edge>` with the version (`v: 1`), the
   time, whether the link is up, the events the edge holds, its modules and
   their versions, and its metrics in the Prometheus text format. The core
@@ -137,13 +143,26 @@ A1, B1, C2, D1.
 ## Consequences
 
 - A lost link loses no event that fits the edge's caps; the core has the
-  events about a second after the link returns.
+  events within a few seconds of the link's return: the edge notices it
+  within a second, and the copy starts when the core takes the snapshot.
 - A new edge appears in `/status` with its first snapshot, before #322
   keeps a list; #322 adds `UnsourceEdge` to revocation and the permissions
   above to the edge's user.
 - The core's `/metrics` grows by every edge's series.
 - Notices of modules on an edge stay in the edge's `NOTIFY` stream until
   the core delivers them by the node's file (#323).
+
+## Open
+
+Tracked in #369, to be done with the join (#322):
+
+- The edge's user publishes `$JS.S.>` and `$JSC.R.>`, wildcards every edge
+  shares, so one edge could write into another's source deliveries and
+  forge its events in the core's `EVENTS`. A per-edge
+  `ExternalStream.DeliverPrefix` would scope them.
+- `changeSources` and `ensureStream` read the stream's configuration and
+  write it back without a compare-and-swap: safe with one caller (the
+  collector), unsafe once join and revoke call them from other goroutines.
 
 ## Revisit when
 

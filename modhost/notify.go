@@ -35,7 +35,7 @@ type Publisher interface {
 
 // CoreNode is the node token of the core's subjects and the first part of
 // its Ganglion-From header; an edge uses its own name (R-EDGE-7).
-const CoreNode = "core"
+const CoreNode = bus.CoreNode
 
 // notifyOutcome is what became of a notify call, for the metrics.
 type notifyOutcome string

@@ -240,18 +240,21 @@ func TestEdgeSourcesAreKeptByEnsure(t *testing.T) {
 	if got := names(); !slices.Equal(got, []string{"e2"}) {
 		t.Fatalf("sources = %v, want e2", got)
 	}
-	if err := hub.SourceEdge(ctx, "a.b"); !errors.Is(err, bus.ErrBadToken) {
-		t.Fatalf("a bad name: %v", err)
+	for _, bad := range []string{"a.b", bus.CoreNode} {
+		if err := hub.SourceEdge(ctx, bad); !errors.Is(err, bus.ErrBadToken) {
+			t.Fatalf("source %q: %v", bad, err)
+		}
 	}
 }
 
 func TestLeafConfigRefusals(t *testing.T) {
 	chain := mustChain(t, newMemStore(), time.Now)
 	cases := map[string]Config{
-		"no domain":      {Mode: bus.ModeEmbedded, Leaf: &Leaf{}},
-		"url, no creds":  {Mode: bus.ModeEmbedded, Leaf: &Leaf{Domain: "e1", URL: "nats-leaf://127.0.0.1:1"}},
-		"with the chain": {Mode: bus.ModeEmbedded, Chain: chain, Leaf: &Leaf{Domain: "e1"}},
-		"external":       {Mode: bus.ModeExternal, URLs: []string{"nats://127.0.0.1:1"}, Leaf: &Leaf{Domain: "e1"}},
+		"no domain":       {Mode: bus.ModeEmbedded, Leaf: &Leaf{}},
+		"the core's name": {Mode: bus.ModeEmbedded, Leaf: &Leaf{Domain: bus.CoreNode}},
+		"url, no creds":   {Mode: bus.ModeEmbedded, Leaf: &Leaf{Domain: "e1", URL: "nats-leaf://127.0.0.1:1"}},
+		"with the chain":  {Mode: bus.ModeEmbedded, Chain: chain, Leaf: &Leaf{Domain: "e1"}},
+		"external":        {Mode: bus.ModeExternal, URLs: []string{"nats://127.0.0.1:1"}, Leaf: &Leaf{Domain: "e1"}},
 	}
 	for name, cfg := range cases {
 		if err := cfg.check(); err == nil {

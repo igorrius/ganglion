@@ -136,8 +136,8 @@ func (c Config) checkLeaf() error {
 		return fmt.Errorf("natsbus: a leaf node is the embedded server")
 	case c.Chain != nil:
 		return fmt.Errorf("natsbus: a leaf node runs without a trust chain: the core's chain does not leave the core")
-	case bus.CheckToken(l.Domain) != nil:
-		return fmt.Errorf("natsbus: the leaf's domain must be the edge's name, one subject token")
+	case bus.CheckEdgeName(l.Domain) != nil:
+		return fmt.Errorf("natsbus: the leaf's domain must be the edge's name, one subject token and not %q", bus.CoreNode)
 	case l.URL != "" && l.CredsFile == "":
 		return fmt.Errorf("natsbus: a leaf link needs the edge's credentials file")
 	}

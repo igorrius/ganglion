@@ -114,6 +114,19 @@ func TestCollectorLinesAndResyncs(t *testing.T) {
 	if got := resyncsQueued(c); len(got) != 0 {
 		t.Fatalf("an edge on time was resynced: %v", got)
 	}
+	// A short outage: one snapshot missed, the next one late; the link
+	// came back, so the kept events are copied at once.
+	clk.t = clk.t.Add(60 * time.Second)
+	c.take("garage", snapshot(t, Snapshot{Linked: true}))
+	if got := resyncsQueued(c); len(got) != 1 {
+		t.Fatalf("an edge back after a short gap was not resynced: %v", got)
+	}
+	// The edge says its link just came up, on time or not.
+	clk.t = clk.t.Add(10 * time.Second)
+	c.take("garage", snapshot(t, Snapshot{Linked: true, Relinked: true}))
+	if got := resyncsQueued(c); len(got) != 1 {
+		t.Fatalf("a relinked edge was not resynced: %v", got)
+	}
 	heardAt := clk.t
 	clk.t = clk.t.Add(2 * time.Minute)
 	if g := lines(t, c)["garage"]; g.State != status.Warn || g.Line != texts.StatusEdgeSilent || !g.Since.Equal(heardAt) {
@@ -122,6 +135,25 @@ func TestCollectorLinesAndResyncs(t *testing.T) {
 	c.take("garage", snapshot(t, Snapshot{Linked: true}))
 	if got := resyncsQueued(c); len(got) != 1 {
 		t.Fatalf("an edge back after a silence was not resynced: %v", got)
+	}
+}
+
+// An edge cannot claim an interval that hides its silence.
+func TestDecodeClampsTheInterval(t *testing.T) {
+	for every, want := range map[time.Duration]time.Duration{time.Hour * 24 * 365: maxEvery, time.Millisecond: minEvery, time.Minute: time.Minute} {
+		s, err := decode(snapshot(t, Snapshot{Every: every}))
+		if err != nil || s.Every != want {
+			t.Errorf("every %s: got %s, %v; want %s", every, s.Every, err, want)
+		}
+	}
+	clk := &clock{t: time.Now()}
+	var resynced []string
+	c := newCollector(clk, nil, &resynced)
+	c.init()
+	c.take("garage", snapshot(t, Snapshot{Every: 100 * time.Hour}))
+	clk.t = clk.t.Add(lateAfter*maxEvery + time.Second)
+	if g := lines(t, c)["garage"]; g.Line != texts.StatusEdgeSilent {
+		t.Fatalf("an edge claiming a long interval is not silent: %+v", g)
 	}
 }
 
@@ -244,7 +276,7 @@ func TestPublisherSendsOnLinkUp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !s.Linked || s.Events != 3 || s.Metrics != "" || len(s.Modules) != 1 || s.Every != time.Hour {
+	if !s.Linked || !s.Relinked || s.Events != 3 || s.Metrics != "" || len(s.Modules) != 1 || s.Every != maxEvery {
 		t.Fatalf("snapshot = %+v", s)
 	}
 }

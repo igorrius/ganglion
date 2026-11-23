@@ -27,6 +27,9 @@ const (
 	MaxSeries = 4000
 	// lateAfter is how many intervals of silence make an edge silent.
 	lateAfter = 3
+	// gapAfter is how late a snapshot may be, in intervals, before the core
+	// takes it as a link that came back and resyncs the edge's events.
+	gapAfter = 1.5
 	// labelNode is the label the core gives an edge's series.
 	labelNode = "node"
 	// varName is the edge's name in a /status line.
@@ -135,7 +138,10 @@ func (c *Collector) take(edge string, data []byte) {
 		c.count(ctx, outcomeFull)
 		return
 	}
-	resync := !known || now.Sub(h.at) > lateAfter*h.snap.Every
+	// An edge seen for the first time, one that says its link just came
+	// up, or one heard after a gap: the server would wait up to two
+	// minutes to copy what it kept.
+	resync := !known || s.Relinked || now.Sub(h.at) > time.Duration(gapAfter*float64(h.snap.Every))
 	c.edges[edge] = &heard{snap: s, at: now}
 	c.mu.Unlock()
 	if resync {

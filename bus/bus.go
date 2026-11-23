@@ -45,6 +45,22 @@ const (
 	TelemetryPrefix = "g.tel."
 )
 
+// CoreNode is the core's token in subjects and its JetStream domain's
+// place: no edge may take this name.
+const CoreNode = "core"
+
+// CheckEdgeName reports whether s can name an edge: one subject token, and
+// not the core's own name.
+func CheckEdgeName(s string) error {
+	if err := CheckToken(s); err != nil {
+		return err
+	}
+	if s == CoreNode {
+		return fmt.Errorf("%w: %q is the core's name", ErrBadToken, s)
+	}
+	return nil
+}
+
 // subjectRoot is the first token of every subject the node uses.
 const subjectRoot = "g"
 

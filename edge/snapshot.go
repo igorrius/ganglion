@@ -30,6 +30,8 @@ type Snapshot struct {
 	Every time.Duration `json:"every"`
 	// Linked is the edge's own view of its link.
 	Linked bool `json:"linked"`
+	// Relinked is true on the first snapshot after the link came up.
+	Relinked bool `json:"relinked,omitempty"`
 	// Events is how many events its stream holds.
 	Events uint64 `json:"events"`
 	// Modules are the modules it runs.
@@ -47,12 +49,20 @@ type Module struct {
 // ErrSnapshot is a snapshot the core does not take.
 var ErrSnapshot = errors.New("edge: not a snapshot")
 
+// The interval the core believes, whatever the edge claims: an edge cannot
+// hide its silence behind a long one.
+const (
+	minEvery = 5 * time.Second
+	maxEvery = 5 * time.Minute
+)
+
 // decode reads a snapshot, refusing one too large, of another version, or
-// with a nonsense interval.
+// with no interval, and clamps the interval.
 func decode(data []byte) (Snapshot, error) {
 	var s Snapshot
 	if len(data) > MaxSnapshot || json.Unmarshal(data, &s) != nil || s.V != Version || s.Every <= 0 {
 		return Snapshot{}, ErrSnapshot
 	}
+	s.Every = min(max(s.Every, minEvery), maxEvery)
 	return s, nil
 }

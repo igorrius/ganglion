@@ -67,7 +67,7 @@ func (b *Bus) changeSources(ctx context.Context, edge string, add bool) error {
 	if b.IsEdge() {
 		return errors.New("natsbus: an edge does not source other edges")
 	}
-	if err := bus.CheckToken(edge); err != nil {
+	if err := bus.CheckEdgeName(edge); err != nil {
 		return err
 	}
 	s, err := b.js.Stream(ctx, bus.StreamEvents)
@@ -201,7 +201,7 @@ func (b *Bus) WatchTelemetry(fn func(edge string, data []byte)) (stop func() err
 	}
 	sub, err := b.nc.Subscribe(bus.SubjectsTelemetry, func(m *nats.Msg) {
 		edge := strings.TrimPrefix(m.Subject, bus.TelemetryPrefix)
-		if bus.CheckToken(edge) != nil {
+		if bus.CheckEdgeName(edge) != nil {
 			return
 		}
 		fn(edge, m.Data)
