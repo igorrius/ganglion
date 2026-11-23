@@ -25,7 +25,6 @@ import (
 	"github.com/igorrius/ganglion/bus"
 	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/secrets"
-	"github.com/nats-io/nkeys"
 )
 
 // Bounds of the join (ADR-0116).
@@ -181,9 +180,9 @@ func Digest(p natsbus.UserPermissions) string {
 	h := sha256.New()
 	for _, l := range [][]string{p.Publish, p.Subscribe} {
 		for _, s := range l {
-			fmt.Fprintf(h, "%d:%s\n", len(s), s)
+			_, _ = fmt.Fprintf(h, "%d:%s\n", len(s), s)
 		}
-		h.Write([]byte{0})
+		_, _ = h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
@@ -259,7 +258,7 @@ func (s *Service) Join(ctx context.Context, plain, pub string) (Answer, error) {
 	if !s.allowed() {
 		return Answer{}, ErrLimited
 	}
-	if !nkeys.IsValidPublicUserKey(pub) || pub == s.cfg.Chain.CorePublicKey() {
+	if !natsbus.IsUserKey(pub) || pub == s.cfg.Chain.CorePublicKey() {
 		s.fail()
 		return Answer{}, ErrBadKey
 	}
@@ -316,9 +315,8 @@ func (s *Service) Renew(ctx context.Context, pub string, at int64, sig string) (
 		return Answer{}, ErrLimited
 	}
 	raw, err := base64.StdEncoding.DecodeString(sig)
-	kp, kerr := nkeys.FromPublicKey(pub)
 	d := s.now().Sub(time.Unix(at, 0))
-	if err != nil || kerr != nil || d > MaxClockSkew || d < -MaxClockSkew || kp.Verify(RenewMessage(pub, at), raw) != nil {
+	if err != nil || d > MaxClockSkew || d < -MaxClockSkew || natsbus.VerifyUser(pub, RenewMessage(pub, at), raw) != nil {
 		s.fail()
 		return Answer{}, ErrBadSignature
 	}

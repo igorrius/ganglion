@@ -13,8 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nats-io/jwt/v2"
-	"github.com/nats-io/nkeys"
+	"github.com/igorrius/ganglion/bus/natsbus"
 )
 
 // Credentials are what an edge keeps after a join: its .creds text (the user
@@ -40,7 +39,7 @@ func Endpoint(raw string) (*url.URL, error) {
 		return nil, errors.New("edgejoin: the address must be the node's public address, such as https://example.com")
 	}
 	loop := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"
-	if u.Scheme != "https" && !(u.Scheme == "http" && loop) {
+	if u.Scheme != "https" && (u.Scheme != "http" || !loop) {
 		return nil, errors.New("edgejoin: the address must start with https://")
 	}
 	u.Path = strings.TrimRight(u.Path, "/")
@@ -65,9 +64,9 @@ func Join(ctx context.Context, hc *http.Client, node, code string) (Credentials,
 	if err != nil {
 		return Credentials{}, err
 	}
-	kp, err := nkeys.CreateUser()
+	kp, err := natsbus.NewUserKey()
 	if err != nil {
-		return Credentials{}, fmt.Errorf("edgejoin: make the key: %w", err)
+		return Credentials{}, err
 	}
 	pub, err := kp.PublicKey()
 	if err != nil {
@@ -88,7 +87,7 @@ func Renew(ctx context.Context, hc *http.Client, node string, creds []byte, now 
 	if err != nil {
 		return Credentials{}, err
 	}
-	kp, err := jwt.ParseDecoratedUserNKey(creds)
+	kp, err := natsbus.UserKeyFromCreds(creds)
 	if err != nil {
 		return Credentials{}, errors.New("edgejoin: the credentials file has no key")
 	}
@@ -108,12 +107,11 @@ func Renew(ctx context.Context, hc *http.Client, node string, creds []byte, now 
 	return finish(kp, base, ans)
 }
 
-func finish(kp nkeys.KeyPair, base *url.URL, ans Answer) (Credentials, error) {
-	seed, err := kp.Seed()
-	if err != nil {
-		return Credentials{}, fmt.Errorf("edgejoin: seed: %w", err)
+func finish(kp natsbus.UserKey, base *url.URL, ans Answer) (Credentials, error) {
+	if ci, err := natsbus.ReadUserJWT(ans.JWT); err != nil || ci.Subject != mustPub(kp) {
+		return Credentials{}, errors.New("edgejoin: the node's answer holds no usable JWT")
 	}
-	creds, err := jwt.FormatUserConfig(ans.JWT, seed)
+	creds, err := kp.Creds(ans.JWT)
 	if err != nil {
 		return Credentials{}, errors.New("edgejoin: the node's answer holds no usable JWT")
 	}
@@ -163,11 +161,15 @@ func post(ctx context.Context, hc *http.Client, base *url.URL, path string, body
 // urlErrorOnly drops the request URL from a transport error: it is the
 // node's address, which the edge's output should not repeat.
 func urlErrorOnly(err error) error {
-	var ue *url.Error
-	if errors.As(err, &ue) {
+	if ue, ok := errors.AsType[*url.Error](err); ok {
 		return ue.Err
 	}
 	return err
+}
+
+func mustPub(k natsbus.UserKey) string {
+	p, _ := k.PublicKey()
+	return p
 }
 
 // RefusedError is the node's refusal: its status and its words.

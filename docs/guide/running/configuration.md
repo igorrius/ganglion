@@ -176,7 +176,7 @@ bus:
 
 ## edge
 
-For a node run as an edge, `ganglion run --roles edge`: a computer next to your devices that runs modules and links to your main node. The section counts only for that role. Only a host edit changes it: the agent cannot. See [Edges](operations.md#edges).
+For a node run as an edge, `ganglion run --roles edge`: a computer next to your devices that runs modules and links to your main node. The section counts only for that role. Only a host edit changes it: the agent cannot. See [Edges](operations.md#edges). To get the credentials file and this block, see [Connecting a computer as an edge](edges.md).
 
 | Key | Default | Meaning |
 |---|---|---|

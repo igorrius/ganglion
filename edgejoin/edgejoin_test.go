@@ -15,9 +15,6 @@ import (
 
 	"github.com/igorrius/ganglion/bus/natsbus"
 	"github.com/igorrius/ganglion/secrets"
-	"github.com/nats-io/jwt/v2"
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nkeys"
 )
 
 type memStore struct {
@@ -122,8 +119,8 @@ func refusedWith(t *testing.T, err error, status int) {
 }
 
 // connect dials the bus's WebSocket entry as the edge.
-func (r *rig) connect(c Credentials) (*nats.Conn, error) {
-	return nats.Connect("ws://"+r.bus.WebSocketAddr(), nats.UserCredentialBytes(c.Creds), nats.Timeout(3*time.Second), nats.MaxReconnects(0))
+func (r *rig) connect(c Credentials) (func(), <-chan struct{}, error) {
+	return natsbus.DialUser("ws://"+r.bus.WebSocketAddr(), c.Creds, 3*time.Second)
 }
 
 func TestJoinGivesAWorkingEdge(t *testing.T) {
@@ -138,11 +135,11 @@ func TestJoinGivesAWorkingEdge(t *testing.T) {
 	if !strings.HasPrefix(creds.BusURL, "ws://127.0.0.1:") || !strings.HasSuffix(creds.BusURL, "/bus") {
 		t.Fatalf("bus url = %s", creds.BusURL)
 	}
-	nc, err := r.connect(creds)
+	done, _, err := r.connect(creds)
 	if err != nil {
 		t.Fatalf("the joined edge could not connect: %v", err)
 	}
-	nc.Close()
+	done()
 	select {
 	case e := <-r.joined:
 		if e.Name != "home" {
@@ -153,7 +150,7 @@ func TestJoinGivesAWorkingEdge(t *testing.T) {
 	}
 	// The seed is made on the edge: the JWT's subject is the key the edge
 	// made, and the node holds only that public key.
-	uc, err := jwt.DecodeUserClaims(jwtOf(t, creds.Creds))
+	uc, err := natsbus.ReadCreds(creds.Creds)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,30 +158,21 @@ func TestJoinGivesAWorkingEdge(t *testing.T) {
 	if len(es) != 1 || es[0].Key != uc.Subject {
 		t.Fatalf("edges = %+v", es)
 	}
+	seedLine := strings.SplitAfter(string(creds.Creds), "SEED-----\n")[1][:58]
 	for _, v := range r.store.m {
-		if strings.Contains(v, "SU") && strings.Contains(v, string(mustSeed(t, creds.Creds))) {
+		if strings.Contains(v, seedLine) {
 			t.Fatal("the edge's seed is in the node's store")
 		}
 	}
 }
 
-func jwtOf(t *testing.T, creds []byte) string {
+func mustSeedCreds(t *testing.T, creds []byte) natsbus.UserKey {
 	t.Helper()
-	tok, err := jwt.ParseDecoratedJWT(creds)
+	kp, err := natsbus.UserKeyFromCreds(creds)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return tok
-}
-
-func mustSeed(t *testing.T, creds []byte) []byte {
-	t.Helper()
-	kp, err := jwt.ParseDecoratedUserNKey(creds)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s, _ := kp.Seed()
-	return s
+	return kp
 }
 
 func TestReusedCodeIsRefused(t *testing.T) {
@@ -332,12 +320,11 @@ func TestRevokedKeyCannotReconnectOrJoinOrRenew(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nc, err := r.connect(creds)
+	done, closed, err := r.connect(creds)
 	if err != nil {
 		t.Fatal(err)
 	}
-	closed := make(chan struct{})
-	nc.SetClosedHandler(func(*nats.Conn) { close(closed) })
+	defer done()
 	if err := r.svc.Revoke(ctx, "home"); err != nil {
 		t.Fatal(err)
 	}
@@ -346,8 +333,8 @@ func TestRevokedKeyCannotReconnectOrJoinOrRenew(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the revoked edge's connection stayed open")
 	}
-	if c2, err := r.connect(creds); err == nil {
-		c2.Close()
+	if d2, _, err := r.connect(creds); err == nil {
+		d2()
 		t.Fatal("a revoked edge reconnected")
 	}
 	if es, _ := r.svc.Edges(ctx); len(es) != 0 {
@@ -356,8 +343,7 @@ func TestRevokedKeyCannotReconnectOrJoinOrRenew(t *testing.T) {
 	// The same key cannot renew, nor join again with a new code.
 	_, err = Renew(ctx, r.srv.Client(), r.srv.URL, creds.Creds, r.clk.now())
 	refusedWith(t, err, http.StatusForbidden)
-	kp, _ := jwt.ParseDecoratedUserNKey(creds.Creds)
-	pub, _ := kp.PublicKey()
+	pub, _ := mustSeedCreds(t, creds.Creds).PublicKey()
 	c := r.code(t, "home")
 	if _, err := r.svc.Join(ctx, c, pub); !errors.Is(err, ErrRevoked) {
 		t.Fatalf("a revoked key joined: %v", err)
@@ -379,7 +365,7 @@ func TestRenewIssuesCurrentPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before, _ := jwt.DecodeUserClaims(jwtOf(t, creds.Creds))
+	before, _ := natsbus.ReadCreds(creds.Creds)
 	r.mu.Lock()
 	r.needs.Calls = []natsbus.PortRef{{Module: "reader", Port: "read"}}
 	r.mu.Unlock()
@@ -388,17 +374,17 @@ func TestRenewIssuesCurrentPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	after, _ := jwt.DecodeUserClaims(jwtOf(t, got.Creds))
-	if len(after.Pub.Allow) != len(before.Pub.Allow)+1 {
-		t.Fatalf("publish before %v after %v", before.Pub.Allow, after.Pub.Allow)
+	after, _ := natsbus.ReadCreds(got.Creds)
+	if len(after.Permissions.Publish) != len(before.Permissions.Publish)+1 {
+		t.Fatalf("publish before %v after %v", before.Permissions.Publish, after.Permissions.Publish)
 	}
-	nc, err := r.connect(got)
+	done, _, err := r.connect(got)
 	if err != nil {
 		t.Fatalf("the renewed JWT does not connect: %v", err)
 	}
-	nc.Close()
+	done()
 	es, _ := r.svc.Edges(ctx)
-	if es[0].Digest != Digest(natsbus.UserPermissions{Publish: after.Pub.Allow, Subscribe: after.Sub.Allow}) {
+	if es[0].Digest != Digest(after.Permissions) {
 		t.Fatal("the list keeps the old digest")
 	}
 }
@@ -410,14 +396,14 @@ func TestRenewRefusals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kp, _ := jwt.ParseDecoratedUserNKey(creds.Creds)
+	kp := mustSeedCreds(t, creds.Creds)
 	pub, _ := kp.PublicKey()
-	sign := func(k nkeys.KeyPair, at int64) string {
+	sign := func(k natsbus.UserKey, at int64) string {
 		sig, _ := k.Sign(RenewMessage(pub, at))
 		return base64.StdEncoding.EncodeToString(sig)
 	}
-	other, _ := nkeys.CreateUser()
-	stranger, _ := nkeys.CreateUser()
+	other, _ := natsbus.NewUserKey()
+	stranger, _ := natsbus.NewUserKey()
 	spub, _ := stranger.PublicKey()
 	type req struct {
 		pub string

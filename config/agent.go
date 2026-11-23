@@ -14,6 +14,7 @@ import (
 	"github.com/igorrius/ganglion/cells"
 	"github.com/igorrius/ganglion/core"
 	"github.com/igorrius/ganglion/diag"
+	"github.com/igorrius/ganglion/edgeadmin"
 	"github.com/igorrius/ganglion/groups"
 	"github.com/igorrius/ganglion/host"
 	"github.com/igorrius/ganglion/internal/buildinfo"
@@ -116,6 +117,7 @@ func agentParts(i do.Injector) (agent.Config, agent.Deps) {
 		Memory:          do.MustInvoke[Remembering](i).View,
 		Secrets:         do.MustInvoke[*vault.Vault](i),
 		MCP:             do.MustInvoke[*mcpadmin.Admin](i),
+		Edges:           do.MustInvoke[*edgeadmin.Admin](i),
 		Private:         telegram.PrivateConv,
 		Reviews:         reviews(i),
 		Review:          do.MustInvoke[Remembering](i).Review,
@@ -213,7 +215,7 @@ func toolHandlers(i do.Injector) []tool.Handler {
 	}, slices.Concat(do.MustInvoke[Remembering](i).Tools, do.MustInvoke[Reading](i).Tools,
 		builtin.NewPlanTools(do.MustInvoke[*plan.Store](i), do.MustInvoke[*builtin.HostExec](i)),
 		builtin.NewDiagTools(do.MustInvoke[*diag.Diag](i), telegram.PrivateConv), do.MustInvoke[Skilled](i).Tools,
-		do.MustInvoke[Moduling](i).Tools, do.MustInvoke[*mcpclient.Hub](i).Tools(), do.MustInvoke[*mcpadmin.Admin](i).Tools(), do.MustInvoke[builtin.Routing](i).Tools(), do.MustInvoke[builtin.Linking](i).Tools(), do.MustInvoke[builtin.Configuring](i).Tools(), metricsTools(do.MustInvoke[Bootstrap](i)))...)
+		do.MustInvoke[Moduling](i).Tools, do.MustInvoke[*mcpclient.Hub](i).Tools(), do.MustInvoke[*mcpadmin.Admin](i).Tools(), do.MustInvoke[*edgeadmin.Admin](i).Tools(), do.MustInvoke[builtin.Routing](i).Tools(), do.MustInvoke[builtin.Linking](i).Tools(), do.MustInvoke[builtin.Configuring](i).Tools(), metricsTools(do.MustInvoke[Bootstrap](i)))...)
 }
 
 // metricsTools is metrics.show when the command line gave a renderer.
@@ -377,6 +379,7 @@ func quickActions(i do.Injector) map[string]pending.QuickAction {
 	maps.Copy(out, do.MustInvoke[groups.Actions](i).QuickActions())
 	maps.Copy(out, do.MustInvoke[builtin.Configuring](i).QuickActions())
 	maps.Copy(out, do.MustInvoke[*mcpadmin.Admin](i).QuickActions())
+	maps.Copy(out, do.MustInvoke[*edgeadmin.Admin](i).QuickActions())
 	return out
 }
 

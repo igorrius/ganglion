@@ -116,13 +116,11 @@ func TestSourceChangesDoNotDropEachOther(t *testing.T) {
 	const n = 12
 	var wg sync.WaitGroup
 	for i := range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := hub.SourceEdge(ctx, fmt.Sprintf("e%d", i)); err != nil {
 				t.Error(err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	got, err := hub.EdgeSources(ctx)
@@ -133,13 +131,11 @@ func TestSourceChangesDoNotDropEachOther(t *testing.T) {
 		t.Fatalf("%d edges sourced, want %d", len(got), n)
 	}
 	for i := range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := hub.UnsourceEdge(ctx, fmt.Sprintf("e%d", i)); err != nil {
 				t.Error(err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if got, _ = hub.EdgeSources(ctx); len(got) != 0 {
